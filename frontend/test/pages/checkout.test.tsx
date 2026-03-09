@@ -19,30 +19,6 @@ vi.mock('@/lib/store', () => ({
   useAuthStore: vi.fn(() => ({ isAuthenticated: true })),
 }));
 
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string, params?: Record<string, unknown>) => {
-      const map: Record<string, string> = {
-        'checkout.title': 'Checkout',
-        'checkout.subtitle': 'Complete your purchase',
-        'checkout.backToPricing': 'Back to pricing',
-        'checkout.continueToPayment': 'Continue to Payment',
-        'checkout.processing': 'Processing...',
-        'checkout.securePayment': 'Secure payment',
-        'checkout.errorLoadPlan': 'Failed to load plan',
-        'checkout.errorInitiateCheckout': 'Could not start checkout',
-        'pricing.unlimited': 'Unlimited',
-        'pricing.trialDays': `${params?.days} day trial`,
-        'plans.month': 'month',
-        'plans.pages': 'pages',
-        'plans.aiReplies': 'AI replies',
-      };
-      return map[key] ?? key;
-    },
-    language: 'en',
-  }),
-}));
-
 vi.mock('@/constants/brand', () => ({
   BRAND_ASSETS: { meta: { appName: 'Jawab24' } },
 }));
@@ -160,7 +136,7 @@ describe('CheckoutPage', () => {
     render(<CheckoutPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Failed to load plan')).toBeInTheDocument();
+      expect(screen.getByText('Failed to load plan details. Please try again later.')).toBeInTheDocument();
     });
   });
 
@@ -182,9 +158,9 @@ describe('CheckoutPage', () => {
 
     await waitFor(() => {
       expect(screen.getByText('$15')).toBeInTheDocument();
-      expect(screen.getByText(/5 pages/)).toBeInTheDocument();
-      expect(screen.getByText(/1,000 AI replies/)).toBeInTheDocument();
-      expect(screen.getByText(/7 day trial/)).toBeInTheDocument();
+      expect(screen.getByText(/5 Pages/)).toBeInTheDocument();
+      expect(screen.getByText(/AI Replies per month/)).toBeInTheDocument();
+      expect(screen.getByText(/7 day free trial/)).toBeInTheDocument();
     });
   });
 

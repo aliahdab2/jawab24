@@ -44,7 +44,7 @@ describe('SwipeableNotificationItem', () => {
     );
 
     // Background should show "mark as read" label on both sides
-    const labels = screen.getAllByText('notifications.markAsRead');
+    const labels = screen.getAllByText('Mark as read');
     expect(labels.length).toBe(2);
   });
 
@@ -55,7 +55,7 @@ describe('SwipeableNotificationItem', () => {
       </SwipeableNotificationItem>
     );
 
-    expect(screen.queryByText('notifications.markAsRead')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mark as read')).not.toBeInTheDocument();
   });
 
   it('should have overflow-hidden on outer container', () => {

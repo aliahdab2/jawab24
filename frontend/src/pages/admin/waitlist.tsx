@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 import { Search, ChevronLeft, ChevronRight, Mail } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { Card } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
@@ -23,7 +24,9 @@ interface Pagination {
 }
 
 export default function AdminWaitlistPage() {
-    const { t, language, intlLocale } = useTranslation();
+    const t = useTranslations('admin');
+    const tc = useTranslations('common');
+    const { language, intlLocale } = useLanguage();
     const isRTL = language === 'ar';
 
     const [entries, setEntries] = useState<WaitlistEntry[]>([]);
@@ -96,27 +99,27 @@ export default function AdminWaitlistPage() {
     };
 
     const getFeatureLabel = (feature: string) => {
-        const key = `admin.waitlist.feature.${feature}` as TranslationKey;
-        const translated = t(key);
-        // If no translation found, t() returns the key — fall back to raw feature name
-        return translated === key ? feature : translated;
+        const key = `waitlist.feature.${feature}`;
+        const translated = t(key as Parameters<typeof t>[0]);
+        // If no translation found, next-intl returns the full path — fall back to raw feature name
+        return (translated === key || translated === `admin.${key}`) ? feature : translated;
     };
 
     return (
-        <AdminLayout title={t('admin.waitlist.title')}>
+        <AdminLayout title={t('waitlist.title')}>
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-display font-bold text-foreground">
-                            {t('admin.waitlist.title')}
+                            {t('waitlist.title')}
                         </h1>
                         <p className="text-muted-foreground mt-1">
-                            {t('admin.waitlist.subtitle')}
+                            {t('waitlist.subtitle')}
                         </p>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {pagination.total} {t('admin.waitlist.totalSignups')}
+                        {pagination.total} {t('waitlist.totalSignups')}
                     </div>
                 </div>
 
@@ -128,8 +131,8 @@ export default function AdminWaitlistPage() {
                             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <input
                                 type="text"
-                                placeholder={t('admin.waitlist.searchPlaceholder')}
-                                aria-label={t('admin.waitlist.searchPlaceholder')}
+                                placeholder={t('waitlist.searchPlaceholder')}
+                                aria-label={t('waitlist.searchPlaceholder')}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 dir="auto"
@@ -141,10 +144,10 @@ export default function AdminWaitlistPage() {
                         <select
                             value={featureFilter}
                             onChange={(e) => setFeatureFilter(e.target.value)}
-                            aria-label={t('admin.waitlist.allFeatures')}
+                            aria-label={t('waitlist.allFeatures')}
                             className="px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
                         >
-                            <option value="">{t('admin.waitlist.allFeatures')}</option>
+                            <option value="">{t('waitlist.allFeatures')}</option>
                             {features.map((feature) => (
                                 <option key={feature} value={feature}>
                                     {getFeatureLabel(feature)}
@@ -158,7 +161,7 @@ export default function AdminWaitlistPage() {
                 <Card padding="none">
                     {loading ? (
                         <div className="p-8 text-center text-muted-foreground">
-                            {t('common.loading')}
+                            {tc('loading')}
                         </div>
                     ) : error ? (
                         <div className="p-8 text-center text-red-500">
@@ -166,7 +169,7 @@ export default function AdminWaitlistPage() {
                         </div>
                     ) : entries.length === 0 ? (
                         <div className="p-8 text-center text-muted-foreground">
-                            {t('admin.waitlist.noSignups')}
+                            {t('waitlist.noSignups')}
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -174,13 +177,13 @@ export default function AdminWaitlistPage() {
                                 <thead className="bg-background border-b border-theme-border">
                                     <tr>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.waitlist.tableEmail')}
+                                            {t('waitlist.tableEmail')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.waitlist.tableFeature')}
+                                            {t('waitlist.tableFeature')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.waitlist.tableSignedUp')}
+                                            {t('waitlist.tableSignedUp')}
                                         </th>
                                     </tr>
                                 </thead>
@@ -252,4 +255,6 @@ export default function AdminWaitlistPage() {
     );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.adminWaitlist]);

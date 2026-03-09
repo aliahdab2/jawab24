@@ -47,20 +47,18 @@ describe('LoginPage - Locale Redirects', () => {
     });
 
     it('should generate redirect URI without prefix for default locale (ar)', async () => {
-        // Mock i18n for Arabic
-        vi.doMock('@/i18n', () => ({
-            useTranslation: () => ({
-                t: (key: string) => key,
-                language: 'ar',
-                setLanguage: vi.fn(),
-            }),
+        // Mock next-intl to return Arabic locale
+        vi.doMock('next-intl', () => ({
+            useTranslations: (ns?: string) => (key: string) => ns ? `${ns}.${key}` : key,
+            useLocale: () => 'ar',
+            NextIntlClientProvider: ({ children }: { children: React.ReactNode }) => children,
         }));
 
         // Re-import component to use new mock
         const { default: Login } = await import('@/pages/login');
         render(<Login />);
 
-        const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+        const loginButton = screen.getByRole('button', { name: /auth\.loginWithFacebook/i });
         fireEvent.click(loginButton);
 
         // Should NOT have /ar/ prefix
@@ -68,20 +66,18 @@ describe('LoginPage - Locale Redirects', () => {
     });
 
     it('should generate redirect URI with prefix for non-default locale (en)', async () => {
-        // Mock i18n for English
-        vi.doMock('@/i18n', () => ({
-            useTranslation: () => ({
-                t: (key: string) => key,
-                language: 'en',
-                setLanguage: vi.fn(),
-            }),
+        // Mock next-intl to return English locale
+        vi.doMock('next-intl', () => ({
+            useTranslations: (ns?: string) => (key: string) => ns ? `${ns}.${key}` : key,
+            useLocale: () => 'en',
+            NextIntlClientProvider: ({ children }: { children: React.ReactNode }) => children,
         }));
 
         // Re-import component to use new mock
         const { default: Login } = await import('@/pages/login');
         render(<Login />);
 
-        const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+        const loginButton = screen.getByRole('button', { name: /auth\.loginWithFacebook/i });
         fireEvent.click(loginButton);
 
         // Should HAVE /en/ prefix

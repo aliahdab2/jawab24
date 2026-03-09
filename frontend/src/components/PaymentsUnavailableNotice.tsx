@@ -1,5 +1,5 @@
 import { AlertCircle, MessageCircle } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 
 // WhatsApp support number
@@ -19,7 +19,7 @@ const WHATSAPP_NUMBER = '46700224720';
  * - Any upgrade modals
  */
 export function PaymentsUnavailableNotice() {
-    const { t } = useTranslation();
+    const t = useTranslations('payment');
     const { user } = useAuthStore();
     const userEmail = user?.email || '';
 
@@ -39,10 +39,10 @@ export function PaymentsUnavailableNotice() {
                 </div>
                 <div className="flex-1">
                     <h3 className="text-lg font-semibold text-white mb-2">
-                        {t('payment.unavailable.title')}
+                        {t('unavailable.title')}
                     </h3>
                     <p className="text-slate-300 text-sm leading-relaxed mb-4">
-                        {t('payment.unavailable.message')}
+                        {t('unavailable.message')}
                     </p>
                     
                     {/* WhatsApp Contact Button - Pre-fills user's email */}
@@ -53,11 +53,11 @@ export function PaymentsUnavailableNotice() {
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors text-sm shadow-lg shadow-green-900/30"
                     >
                         <MessageCircle className="w-4 h-4" />
-                        {t('payment.unavailable.contactWhatsApp')}
+                        {t('unavailable.contactWhatsApp')}
                     </a>
                     
                     <p className="text-slate-400 text-xs mt-4">
-                        {t('payment.unavailable.support')}
+                        {t('unavailable.support')}
                     </p>
                 </div>
             </div>

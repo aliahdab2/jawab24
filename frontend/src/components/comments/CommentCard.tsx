@@ -1,7 +1,8 @@
 import React from 'react';
 import clsx from 'clsx';
 import { Button } from '@/components/ui';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import {
   Clock,
   AlertTriangle,
@@ -87,7 +88,9 @@ export const CommentCard = React.memo(function CommentCard({
   animationDelay = 0,
   className
 }: CommentCardProps) {
-  const { t, dateLocale } = useTranslation();
+  const t = useTranslations('comments');
+  const tc = useTranslations('common');
+  const { dateLocale } = useLanguage();
   const needsAttention = checkNeedsAttention(comment);
 
   const formatTime = (date?: string | Date | null) => {
@@ -144,14 +147,14 @@ export const CommentCard = React.memo(function CommentCard({
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full status-error border text-[10px] font-bold uppercase tracking-wider animate-pulse-soft">
              <AlertTriangle className="w-3 h-3" />
-             {t('comments.needsAttention')}
+             {t('needsAttention')}
            </div>
         </div>
       ) : !comment.replied && (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full status-warning border text-[10px] font-bold uppercase tracking-wider">
               <Clock className="w-3 h-3" />
-              {t('comments.pending')}
+              {t('pending')}
            </div>
         </div>
       )}
@@ -171,7 +174,7 @@ export const CommentCard = React.memo(function CommentCard({
              {/* Name & Time */}
              <div className="flex flex-col px-1 mb-1">
                 <span className="text-sm font-bold text-foreground truncate">
-                   {comment.fromName || t('common.unknownUser')}
+                   {comment.fromName || tc('unknownUser')}
                 </span>
                 <div className="flex items-center gap-2 mt-0.5">
                    <span className="text-[10px] text-muted-foreground">
@@ -246,7 +249,7 @@ export const CommentCard = React.memo(function CommentCard({
                      }}
                      icon={<CheckCheck className="w-3.5 h-3.5" />}
                    >
-                     {t('comments.resolve')}
+                     {t('resolve')}
                    </Button>
                  )}
                  {onQuickReply && (
@@ -260,7 +263,7 @@ export const CommentCard = React.memo(function CommentCard({
                      }}
                      icon={<Zap className="w-3.5 h-3.5" />}
                    >
-                     {t('comments.reply')}
+                     {t('reply')}
                    </Button>
                  )}
              </div>

@@ -1,7 +1,8 @@
 import React from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { BrandLogo, Button, VersionBadge } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -40,11 +41,15 @@ export function PublicLayout({
   _showFooter = false,
   contentClassName = '',
 }: PublicLayoutProps) {
-  const { t, language, setLanguage } = useTranslation();
+  const tLanding = useTranslations('landing');
+  const tc = useTranslations('common');
+  const tNav = useTranslations('nav');
+  const locale = useLocale();
+  const { setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
 
   const toggleLanguage = () => {
-    setLanguage(language === 'ar' ? 'en' : 'ar');
+    setLanguage(locale === 'ar' ? 'en' : 'ar');
   };
 
   const pageTitle = title ? `${title} | ${BRAND_ASSETS.meta.appName}` : BRAND_ASSETS.meta.appTitle;
@@ -94,24 +99,24 @@ export function PublicLayout({
                     href="/pricing"
                     className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
                   >
-                    {t('landing.nav.pricing')}
+                    {tLanding('nav.pricing')}
                   </Link>
                   <button
                     onClick={toggleLanguage}
                     className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
                   >
-                    {t('common.switchLanguage')}
+                    {tc('switchLanguage')}
                   </button>
                   {isAuthenticated ? (
                     <Link href="/dashboard">
                       <Button size="sm" className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5">
-                        {t('nav.dashboard') || 'Dashboard'}
+                        {tNav('dashboard') || 'Dashboard'}
                       </Button>
                     </Link>
                   ) : (
                     <Link href="/login?redirect=%2Fdashboard">
                       <Button variant="secondary" size="sm" className="font-bold border-none bg-surface-100">
-                        {t('landing.nav.login')}
+                        {tLanding('nav.login')}
                       </Button>
                     </Link>
                   )}
@@ -136,7 +141,7 @@ export function PublicLayout({
               onClick={toggleLanguage}
               className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
             >
-              {t('common.switchLanguage')}
+              {tc('switchLanguage')}
             </button>
           </div>
         )}

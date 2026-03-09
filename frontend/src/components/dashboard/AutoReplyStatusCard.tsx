@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { SystemStatusBanner } from '@/components/ui';
 
 interface AutoReplyStatusCardProps {
@@ -14,7 +14,7 @@ interface AutoReplyStatusCardProps {
  * Uses the shared SystemStatusBanner UI component.
  */
 export function AutoReplyStatusCard({ activePages, totalPages, commentsAutoReply, messagesAutoReply }: AutoReplyStatusCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('dashboard');
   const [isDismissed, setIsDismissed] = useState(false);
 
   // Check sessionStorage on mount to see if success banner was dismissed
@@ -45,8 +45,8 @@ export function AutoReplyStatusCard({ activePages, totalPages, commentsAutoReply
       <SystemStatusBanner
         type="success"
         colorScheme="violet"
-        title={t('dashboard.activeRepliesOn')}
-        description={t('dashboard.autoReplyNote')}
+        title={t('activeRepliesOn')}
+        description={t('autoReplyNote')}
         onDismiss={handleDismiss}
       />
     );
@@ -59,10 +59,10 @@ export function AutoReplyStatusCard({ activePages, totalPages, commentsAutoReply
     return (
       <SystemStatusBanner
         type="warning"
-        title={t('dashboard.autoReplyConfiguredButDisabled')}
-        description={t('dashboard.autoReplyConfiguredNote')}
+        title={t('autoReplyConfiguredButDisabled')}
+        description={t('autoReplyConfiguredNote')}
         cta={{
-          label: t('dashboard.goToSettings'),
+          label: t('goToSettings'),
           href: '/settings'
         }}
       />
@@ -73,10 +73,10 @@ export function AutoReplyStatusCard({ activePages, totalPages, commentsAutoReply
   return (
     <SystemStatusBanner
       type="warning"
-      title={t('dashboard.autoReplyConfiguredButDisabled')}
-      description={t('dashboard.autoReplyNoPagesActive')}
+      title={t('autoReplyConfiguredButDisabled')}
+      description={t('autoReplyNoPagesActive')}
       cta={{
-        label: t('dashboard.goToPages'),
+        label: t('goToPages'),
         href: '/pages'
       }}
     />

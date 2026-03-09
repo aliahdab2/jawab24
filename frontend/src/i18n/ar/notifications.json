@@ -1,0 +1,44 @@
+{
+  "title": "الإشعارات",
+  "markAllRead": "تحديد الكل كمقروء",
+  "markAsRead": "تحديد كمقروء",
+  "loading": "جاري التحميل...",
+  "empty": "لا توجد إشعارات",
+  "justNow": "الآن",
+  "minutesAgo": "منذ {count} دقيقة",
+  "hoursAgo": "منذ {count} ساعة",
+  "daysAgo": "منذ {count} يوم",
+  "dismissed": "تم إخفاء الإشعار",
+  "undo": "تراجع",
+  "prePrompt": {
+    "title": "ابقَ على اطلاع",
+    "body": "احصل على إشعار عندما تحتاج التعليقات انتباهك أو عند حدوث شيء مهم في صفحاتك.",
+    "enable": "تفعيل الإشعارات",
+    "later": "ليس الآن"
+  },
+  "close": "إغلاق الإشعارات",
+  "filterLabel": "تصفية الإشعارات",
+  "filter": {
+    "all": "الكل",
+    "comments": "التعليقات",
+    "billing": "الفوترة",
+    "system": "النظام"
+  },
+  "replyNow": "رد الآن",
+  "emptyDescription": "عندما يحتاج شيء ما لانتباهك، سيظهر هنا.",
+  "emptyFiltered": "لا توجد إشعارات {category}",
+  "groupSummary": "{count} إشعارات",
+  "typeLabel": {
+    "stale_comment": "تعليقات بانتظار ردك",
+    "new_comment": "تعليقات جديدة",
+    "flagged_reply": "ردود مُبلَّغ عنها",
+    "payment_failed": "تنبيهات دفع",
+    "subscription_expiring": "اشتراكات منتهية",
+    "trial_ending": "تذكيرات تجريبية",
+    "subscription_renewed": "تأكيدات تجديد",
+    "page_disconnected": "صفحات غير متصلة",
+    "kb_gap": "فجوات معرفية"
+  },
+  "expand": "توسيع المجموعة",
+  "collapse": "طي المجموعة"
+}

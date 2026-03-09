@@ -6,18 +6,18 @@ import {
   BookOpen,
   ShoppingBag,
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 export function LandingFeatures() {
-  const { t } = useTranslation();
+  const t = useTranslations('landing');
 
   const features = [
-    { icon: Bot, title: t('landing.features.aiTitle'), description: t('landing.features.aiDesc') },
-    { icon: Instagram, title: t('landing.features.platformsTitle'), description: t('landing.features.platformsDesc') },
-    { icon: Languages, title: t('landing.features.languageTitle'), description: t('landing.features.languageDesc') },
-    { icon: Zap, title: t('landing.features.instantTitle'), description: t('landing.features.instantDesc') },
-    { icon: BookOpen, title: t('landing.features.knowledgeTitle'), description: t('landing.features.knowledgeDesc') },
-    { icon: ShoppingBag, title: t('landing.features.ecommerceTitle'), description: t('landing.features.ecommerceDesc') },
+    { icon: Bot, title: t('features.aiTitle'), description: t('features.aiDesc') },
+    { icon: Instagram, title: t('features.platformsTitle'), description: t('features.platformsDesc') },
+    { icon: Languages, title: t('features.languageTitle'), description: t('features.languageDesc') },
+    { icon: Zap, title: t('features.instantTitle'), description: t('features.instantDesc') },
+    { icon: BookOpen, title: t('features.knowledgeTitle'), description: t('features.knowledgeDesc') },
+    { icon: ShoppingBag, title: t('features.ecommerceTitle'), description: t('features.ecommerceDesc') },
   ];
 
   return (
@@ -29,7 +29,7 @@ export function LandingFeatures() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-8 sm:mb-16 lg:mb-24">
           <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-3 sm:mb-6 tracking-tight">
-            {t('landing.features.sectionTitle')}
+            {t('features.sectionTitle')}
           </h2>
         </div>
 

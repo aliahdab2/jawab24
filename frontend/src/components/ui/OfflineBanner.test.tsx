@@ -8,19 +8,6 @@ vi.mock('@/lib/capacitor', () => ({
   isNativePlatform: () => mockIsNativePlatform(),
 }));
 
-// Mock translation
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'common.offline': "You're offline",
-      };
-      return map[key] || key;
-    },
-    language: 'en',
-  }),
-}));
-
 // Mock store
 const mockIsOffline = vi.fn(() => false);
 vi.mock('@/lib/store', () => ({

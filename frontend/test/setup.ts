@@ -54,18 +54,41 @@ vi.mock('next/router', () => ({
   }),
 }));
 
-// Mock next-intl (used by useTranslation compatibility shim)
+// Load real English translations from namespace files so tests assert actual user-visible strings.
+// Falls back to 'namespace.key' format for any key not found in the JSON.
+const enModules = import.meta.glob('../src/i18n/en/*.json', { eager: true });
+const EN_MESSAGES: Record<string, Record<string, unknown>> = {};
+for (const [path, mod] of Object.entries(enModules)) {
+  const ns = path.replace('../src/i18n/en/', '').replace('.json', '');
+  EN_MESSAGES[ns] = (mod as { default: Record<string, unknown> }).default;
+}
+
+function resolveNestedKey(obj: Record<string, unknown>, key: string): string | undefined {
+  const parts = key.split('.');
+  let val: unknown = obj;
+  for (const part of parts) {
+    if (typeof val !== 'object' || val === null) return undefined;
+    val = (val as Record<string, unknown>)[part];
+  }
+  return typeof val === 'string' ? val : undefined;
+}
+
+// Mock next-intl: returns real English translation values so tests verify actual UI text.
 vi.mock('next-intl', () => ({
-  useTranslations: () => {
+  useTranslations: (ns?: string) => {
     const t = (key: string, params?: Record<string, unknown>) => {
-      if (!params) return key;
+      const raw = ns
+        ? resolveNestedKey(EN_MESSAGES[ns] ?? {}, key) ?? `${ns}.${key}`
+        : key;
+      if (!params) return raw;
       return Object.entries(params).reduce(
         (str, [k, v]) => str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
-        key,
+        raw,
       );
     };
     t.has = () => true;
-    t.raw = (key: string) => key;
+    t.raw = (key: string) =>
+      ns ? resolveNestedKey(EN_MESSAGES[ns] ?? {}, key) ?? `${ns}.${key}` : key;
     return t;
   },
   useLocale: () => 'en',

@@ -2,11 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import PagesPage from '@/pages/pages';
-import type { Language } from '@/i18n';
 import { pagesApi, api } from '@/lib/api';
 
 // Create mock functions
-const mockT = vi.fn((key: string) => key);
 const mockToastError = vi.fn();
 
 vi.mock('sonner', () => ({
@@ -17,11 +15,8 @@ vi.mock('sonner', () => ({
     },
 }));
 
-vi.mock('@/i18n', () => ({
-    useTranslation: () => ({
-        t: mockT,
-        language: 'en' as Language,
-    }),
+vi.mock('@/i18n/hooks', () => ({
+    useLanguage: () => ({ language: 'en', setLanguage: vi.fn(), dateLocale: {}, intlLocale: 'en-US' }),
 }));
 
 vi.mock('@/lib/store', () => ({
@@ -29,6 +24,8 @@ vi.mock('@/lib/store', () => ({
         isAuthenticated: true,
         fbToken: 'mock-fb-token',
     }),
+    useUIStore: (selector: (s: Record<string, unknown>) => unknown) =>
+        selector({ sidebarOpen: false }),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -118,7 +115,6 @@ const renderPage = (ui: React.ReactElement) => render(ui, { wrapper: createWrapp
 
 describe('PagesPage - Toggle Error Handling', () => {
     beforeEach(() => {
-        mockT.mockClear();
         mockToastError.mockClear();
 
         mockedPagesApi.getAll.mockResolvedValue({
@@ -175,7 +171,7 @@ describe('PagesPage - Toggle Error Handling', () => {
         });
 
         await waitFor(() => {
-            expect(mockToastError).toHaveBeenCalledWith('pages.pageLimitReached');
+            expect(mockToastError).toHaveBeenCalledWith('Page limit reached. Disable another page or upgrade your plan.');
         });
     });
 
@@ -197,7 +193,7 @@ describe('PagesPage - Toggle Error Handling', () => {
         });
 
         await waitFor(() => {
-            expect(mockToastError).toHaveBeenCalledWith('common.error');
+            expect(mockToastError).toHaveBeenCalledWith('Something went wrong');
         });
     });
 
@@ -242,7 +238,7 @@ describe('PagesPage - Toggle Error Handling', () => {
         });
 
         await waitFor(() => {
-            expect(mockToastError).toHaveBeenCalledWith('pages.pageLimitReached');
+            expect(mockToastError).toHaveBeenCalledWith('Page limit reached. Disable another page or upgrade your plan.');
         });
     });
 });

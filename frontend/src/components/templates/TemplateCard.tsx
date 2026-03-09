@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Card, Button, Toggle } from '@/components/ui';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import {
   BookTemplate,
   Edit,
@@ -30,7 +30,8 @@ export function TemplateCard({
   onDelete,
   onToggle,
 }: TemplateCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('templates');
+  const tc = useTranslations('common');
 
   return (
     <Card
@@ -53,7 +54,7 @@ export function TemplateCard({
             {template.usageCount !== undefined && (
               <div className="flex items-center gap-1.5 mt-1 text-[10px] font-bold text-muted-foreground">
                 <Zap className="w-3 h-3 text-amber-500" />
-                <span>{t('templates.usageCount')}: {template.usageCount}</span>
+                <span>{t('usageCount')}: {template.usageCount}</span>
               </div>
             )}
           </div>
@@ -82,11 +83,11 @@ export function TemplateCard({
           <Link2 className="w-3.5 h-3.5 text-icon-muted" />
           {rulesCount > 0 ? (
             <span className="text-[10px] font-bold text-brand-600">
-              {t('templates.usedByRules', { count: rulesCount })}
+              {t('usedByRules', { count: rulesCount })}
             </span>
           ) : (
             <span className="text-[10px] font-medium text-muted-foreground italic">
-              {t('templates.notUsedByRules')}
+              {t('notUsedByRules')}
             </span>
           )}
         </div>
@@ -97,11 +98,11 @@ export function TemplateCard({
         <div className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${template.active ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
           <span className="text-[10px] font-bold text-surface-500 uppercase tracking-widest">
-            {template.active ? t('common.active') : t('common.inactive')}
+            {template.active ? tc('active') : tc('inactive')}
           </span>
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => onEdit(template)} className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30" aria-label={t('common.edit')} title={t('common.edit')}>
+          <Button variant="ghost" size="sm" onClick={() => onEdit(template)} className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30" aria-label={tc('edit')} title={tc('edit')}>
             <Edit className="w-4 h-4" />
           </Button>
           <Button
@@ -109,12 +110,12 @@ export function TemplateCard({
             size="sm"
             onClick={() => onDuplicate(template)}
             className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30"
-            aria-label={t('common.duplicate')}
-            title={t('common.duplicate')}
+            aria-label={tc('duplicate')}
+            title={tc('duplicate')}
           >
             <Copy className="w-4 h-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => onDelete(template.id)} className="text-surface-400 dark:text-surface-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" aria-label={t('common.delete')} title={t('common.delete')}>
+          <Button variant="ghost" size="sm" onClick={() => onDelete(template.id)} className="text-surface-400 dark:text-surface-600 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30" aria-label={tc('delete')} title={tc('delete')}>
             <Trash2 className="w-4 h-4" />
           </Button>
         </div>

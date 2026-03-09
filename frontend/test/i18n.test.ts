@@ -1,8 +1,25 @@
 import { describe, it, expect } from 'vitest';
-import en from '../src/i18n/en.json';
-import ar from '../src/i18n/ar.json';
 
-/** Recursively collect all leaf key paths from a nested object */
+// Load all namespace files from both languages eagerly
+const enModules = import.meta.glob('../src/i18n/en/*.json', { eager: true });
+const arModules = import.meta.glob('../src/i18n/ar/*.json', { eager: true });
+
+function getNamespace(path: string): string {
+    return path.replace(/.*\/([^/]+)\.json$/, '$1');
+}
+
+function mergeNamespaces(modules: Record<string, unknown>): Record<string, Record<string, unknown>> {
+    const merged: Record<string, Record<string, unknown>> = {};
+    for (const [path, mod] of Object.entries(modules)) {
+        const ns = getNamespace(path);
+        merged[ns] = (mod as { default: Record<string, unknown> }).default;
+    }
+    return merged;
+}
+
+const EN = mergeNamespaces(enModules);
+const AR = mergeNamespaces(arModules);
+
 function collectKeys(obj: Record<string, unknown>, prefix = ''): string[] {
     const keys: string[] = [];
     for (const [key, value] of Object.entries(obj)) {
@@ -16,7 +33,6 @@ function collectKeys(obj: Record<string, unknown>, prefix = ''): string[] {
     return keys;
 }
 
-/** Resolve a dot-notation key from nested object */
 function resolve(obj: Record<string, unknown>, key: string): string | undefined {
     const parts = key.split('.');
     let current: unknown = obj;
@@ -27,56 +43,66 @@ function resolve(obj: Record<string, unknown>, key: string): string | undefined 
     return typeof current === 'string' ? current : undefined;
 }
 
-describe('Internationalization (i18n)', () => {
-    it('English and Arabic translation files should have the same keys', () => {
-        const enKeys = collectKeys(en).sort();
-        const arKeys = collectKeys(ar as Record<string, unknown>).sort();
+const enNamespaces = Object.keys(EN).sort();
+const arNamespaces = Object.keys(AR).sort();
 
-        const missingInAr = enKeys.filter(key => !arKeys.includes(key));
-        const extraInAr = arKeys.filter(key => !enKeys.includes(key));
-
-        expect(missingInAr, `Missing keys in ar.json: ${missingInAr.join(', ')}`).toEqual([]);
-        expect(extraInAr, `Extra keys in ar.json (not in en.json): ${extraInAr.join(', ')}`).toEqual([]);
+describe('i18n namespace files', () => {
+    it('EN and AR have the same set of namespace files', () => {
+        const missingInAr = enNamespaces.filter(ns => !arNamespaces.includes(ns));
+        const extraInAr = arNamespaces.filter(ns => !enNamespaces.includes(ns));
+        expect(missingInAr, `Namespaces missing in ar/: ${missingInAr.join(', ')}`).toEqual([]);
+        expect(extraInAr, `Extra namespaces in ar/ not in en/: ${extraInAr.join(', ')}`).toEqual([]);
     });
 
-    it('No translation value should be an empty string', () => {
-        for (const key of collectKeys(en)) {
-            const value = resolve(en, key);
-            expect(value?.trim(), `Empty translation value for English key: ${key}`).not.toBe('');
-        }
-        for (const key of collectKeys(ar as Record<string, unknown>)) {
-            const value = resolve(ar as Record<string, unknown>, key);
-            expect(value?.trim(), `Empty translation value for Arabic key: ${key}`).not.toBe('');
+    it('each namespace has the same keys in EN and AR', () => {
+        for (const ns of enNamespaces) {
+            if (!AR[ns]) continue;
+            const enKeys = collectKeys(EN[ns]).sort();
+            const arKeys = collectKeys(AR[ns]).sort();
+            const missingInAr = enKeys.filter(k => !arKeys.includes(k));
+            const extraInAr = arKeys.filter(k => !enKeys.includes(k));
+            expect(missingInAr, `[${ns}] Missing in ar: ${missingInAr.join(', ')}`).toEqual([]);
+            expect(extraInAr, `[${ns}] Extra in ar: ${extraInAr.join(', ')}`).toEqual([]);
         }
     });
 
-    it('Parameterized strings should have matching placeholders', () => {
-        // ICU MessageFormat uses {var, plural, ...} — skip these and only check simple {var} placeholders
-        const isICUPlural = (value: string) => /\{[^}]+,\s*plural\s*,/.test(value);
+    it('no translation value should be an empty string', () => {
+        for (const ns of enNamespaces) {
+            for (const key of collectKeys(EN[ns])) {
+                const value = resolve(EN[ns], key);
+                expect(value?.trim(), `[en/${ns}] Empty value for key: ${key}`).not.toBe('');
+            }
+        }
+        for (const ns of arNamespaces) {
+            for (const key of collectKeys(AR[ns])) {
+                const value = resolve(AR[ns], key);
+                expect(value?.trim(), `[ar/${ns}] Empty value for key: ${key}`).not.toBe('');
+            }
+        }
+    });
 
-        // Extract simple placeholders like {name}, {amount} — not ICU syntax
-        const getSimplePlaceholders = (value: string) => {
-            if (isICUPlural(value)) return [];
-            const matches = [...value.matchAll(/\{([a-zA-Z_]+)\}/g)].map(m => m[1]);
-            return matches.sort();
+    it('parameterized strings have matching placeholders in EN and AR', () => {
+        const isICUPlural = (v: string) => /\{[^}]+,\s*plural\s*,/.test(v);
+        const getSimplePlaceholders = (v: string) => {
+            if (isICUPlural(v)) return [];
+            return [...v.matchAll(/\{([a-zA-Z_]+)\}/g)].map(m => m[1]).sort();
         };
-
-        for (const key of collectKeys(en)) {
-            const enValue = resolve(en, key);
-            const arValue = resolve(ar as Record<string, unknown>, key);
-            if (!enValue || !arValue) continue;
-
-            // Skip ICU plural keys — their structure differs between languages by design
-            if (isICUPlural(enValue) || isICUPlural(arValue)) continue;
-
-            const enPlaceholders = getSimplePlaceholders(enValue);
-            const arPlaceholders = getSimplePlaceholders(arValue);
-
-            expect(arPlaceholders, `Placeholder mismatch for key "${key}". \nEnglish: "${enValue}" \nArabic: "${arValue}"`).toEqual(enPlaceholders);
+        for (const ns of enNamespaces) {
+            if (!AR[ns]) continue;
+            for (const key of collectKeys(EN[ns])) {
+                const enValue = resolve(EN[ns], key);
+                const arValue = resolve(AR[ns], key);
+                if (!enValue || !arValue) continue;
+                if (isICUPlural(enValue) || isICUPlural(arValue)) continue;
+                expect(
+                    getSimplePlaceholders(arValue),
+                    `[${ns}] Placeholder mismatch for "${key}"\n  EN: "${enValue}"\n  AR: "${arValue}"`
+                ).toEqual(getSimplePlaceholders(enValue));
+            }
         }
     });
 
-    it('Nesting should not exceed 3 levels', () => {
+    it('nesting should not exceed 2 levels within each namespace file', () => {
         function maxDepth(obj: Record<string, unknown>, depth = 1): number {
             let max = depth;
             for (const value of Object.values(obj)) {
@@ -86,8 +112,11 @@ describe('Internationalization (i18n)', () => {
             }
             return max;
         }
-
-        expect(maxDepth(en), 'EN nesting exceeds 3 levels').toBeLessThanOrEqual(3);
-        expect(maxDepth(ar as Record<string, unknown>), 'AR nesting exceeds 3 levels').toBeLessThanOrEqual(3);
+        for (const ns of enNamespaces) {
+            expect(maxDepth(EN[ns]), `[en/${ns}] nesting exceeds 2 levels`).toBeLessThanOrEqual(2);
+        }
+        for (const ns of arNamespaces) {
+            expect(maxDepth(AR[ns]), `[ar/${ns}] nesting exceeds 2 levels`).toBeLessThanOrEqual(2);
+        }
     });
 });

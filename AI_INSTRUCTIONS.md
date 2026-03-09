@@ -110,8 +110,10 @@ className="ps-4 pe-2 ms-auto text-start float-start"
 
 ```tsx
 // ✅ CORRECT - Complete example
-const { t, language } = useTranslation();
-const isRTL = language === 'ar';
+import { useTranslations, useLocale } from 'next-intl';
+const t = useTranslations('settings');   // scoped to 'settings' namespace
+const locale = useLocale();
+const isRTL = locale === 'ar';
 
 return (
   <div dir={isRTL ? 'rtl' : 'ltr'} className="ps-4 pe-6">
@@ -201,12 +203,13 @@ const title = t('common.title');
 
 **Critical Rules:**
 1. **NEVER** use `language === 'ar' ? ... : ...` conditionals for strings
-2. **ALWAYS** use `t('translation.key')` function for all user-facing text
-3. **ALWAYS** add new keys to **both** `en.json` and `ar.json`
-4. The ONLY acceptable use of `language === 'ar'` is for the `dir` attribute:
+2. **ALWAYS** use `t('key')` from `useTranslations('namespace')` for all user-facing text
+3. **ALWAYS** add new keys to **both** `en/<namespace>.json` and `ar/<namespace>.json`
+4. The ONLY acceptable use of `locale === 'ar'` is for the `dir` attribute:
    ```tsx
    // ✅ OK - dir attribute is a technical necessity
-   <div dir={language === 'ar' ? 'rtl' : 'ltr'}>
+   const locale = useLocale();
+   <div dir={locale === 'ar' ? 'rtl' : 'ltr'}>
    ```
 
 **Why this matters:**
@@ -215,30 +218,46 @@ const title = t('common.title');
 - They make translation management impossible
 - They violate single-source-of-truth principle
 
-**Translation Key Structure (nested JSON):**
+**Translation file structure:**
 
-The JSON files (`en.json`, `ar.json`) use **nested objects**. Keys in code use dot-notation: `t('landing.hero.title')`.
-
-```json
-{
-  "common": {
-    "save": "Save",
-    "cancel": "Cancel"
-  },
-  "landing": {
-    "hero": {
-      "title": "Turn Your Page Into a"
-    }
-  }
-}
+Translations live in per-namespace JSON files under `frontend/src/i18n/en/` and `frontend/src/i18n/ar/`:
+```
+src/i18n/en/common.json   src/i18n/ar/common.json
+src/i18n/en/settings.json src/i18n/ar/settings.json
+src/i18n/en/dashboard.json ...
+... (39 namespace files per language)
 ```
 
-- **Level 1**: page or namespace (`common`, `landing`, `settings`, `kb`)
-- **Level 2**: section or feature (`hero`, `businessHours`, `replyStyle`)
-- **Level 3**: specific key (`title`, `label`, `desc`)
-- **NEVER** go deeper than 3 levels — the validator enforces this
-- **NEVER** create a key that is both a value and a parent namespace (e.g., `settings.businessHours` cannot be a string AND have children like `settings.businessHours.label`)
-- Shared keys go under `common.*` (e.g., `common.save`, `common.loading`)
+Each namespace file is a flat-or-1-level-nested JSON:
+```json
+// en/common.json
+{ "save": "Save", "cancel": "Cancel" }
+
+// en/settings.json
+{ "title": "Settings", "businessHours": { "label": "Business Hours" } }
+```
+
+In components, call `useTranslations('namespace')` and use just the local key (no namespace prefix):
+```tsx
+const t = useTranslations('settings');
+t('title');                    // → "Settings"
+t('businessHours.label');      // → "Business Hours"
+
+// For shared strings use a second hook:
+const tc = useTranslations('common');
+tc('save');                    // → "Save"
+```
+
+**Page loading** — each page declares which namespaces it needs:
+```typescript
+import { makeGetStaticProps } from '@/i18n/getMessages';
+export const getStaticProps = makeGetStaticProps(['settings', 'time']);
+```
+
+- **NEVER** go deeper than 2 levels inside a namespace file — the validator enforces this
+- **NEVER** create a key that is both a value and a parent (e.g., `businessHours` cannot be both a string and an object)
+- Shared keys go in `common.json` (e.g., `save`, `loading`, `cancel`)
+- For `language`/`setLanguage`/`dateLocale`, use `useLanguage()` from `@/i18n/hooks` (not `useTranslations`)
 
 **Before committing:**
 - Run `npm run translation:validate` to check for missing keys, nesting depth, and language integrity
@@ -488,17 +507,17 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
 
 10. **UI components must enforce accessibility by default** — The `Input` and `Textarea` components in `components/ui/` auto-generate `id` via `useId()` and link `<label htmlFor>`. When creating or modifying UI wrapper components for form elements, always include this pattern so consumers get accessibility for free without remembering to pass `id`.
 
-11. **E2E tests must import translation JSON files — never hardcode translated strings** — Import `en.json` and `ar.json` in E2E test files and use `en['key']` / `ar['key']` for all UI text assertions. This prevents tests from breaking when translations change and keeps tests aligned with the single source of truth.
+11. **E2E tests must import translation JSON files — never hardcode translated strings** — Import namespace JSON files in E2E tests and use the values for all UI text assertions. This prevents tests from breaking when translations change.
    ```typescript
    // ❌ WRONG - hardcoded strings break when translations change
    await expect(page.locator('h1').filter({ hasText: 'Reply Rules' })).toBeVisible();
    await expect(page.locator('h1').filter({ hasText: /Auto Rules|قواعد الرد/i })).toBeVisible();
 
-   // ✅ CORRECT - import from translation files
-   import en from '../src/i18n/en.json';
-   import ar from '../src/i18n/ar.json';
+   // ✅ CORRECT - import from namespace translation files
+   import enRules from '../src/i18n/en/rules.json';
+   import arRules from '../src/i18n/ar/rules.json';
 
-   await expect(page.locator('h1').filter({ hasText: en['rules.title'] })).toBeVisible();
+   await expect(page.locator('h1').filter({ hasText: enRules.title })).toBeVisible();
    ```
 
 12. **Never use `console.error` for error reporting — use `captureError()` or Sentry directly** — All error logging must go through Sentry so errors are tracked in production. The only acceptable patterns are:
@@ -581,7 +600,7 @@ className="status-warning border"
 │   │   │   └── ui/        # Button, Modal, Card, etc.
 │   │   ├── pages/         # Next.js pages
 │   │   ├── styles/        # globals.css (CSS variables)
-│   │   ├── i18n/          # en.json, ar.json translations
+│   │   ├── i18n/          # en/ and ar/ namespace files, getMessages.ts, hooks.ts
 │   │   └── lib/           # api.ts, store.ts
 │   └── android/           # Capacitor Android project
 │
@@ -699,7 +718,7 @@ This section documents known issues, technical debt, and production readiness ga
 
 1. **~~Thin E2E test coverage~~ — RESOLVED**
    - Full E2E coverage: comments, dashboard, landing, login, messages, pages, payment, pricing, rules, settings, templates, visual
-   - All tests import from `en.json`/`ar.json` instead of hardcoding translated strings
+   - All tests import from `en/<namespace>.json`/`ar/<namespace>.json` instead of hardcoding translated strings
 
 2. **No visual regression testing**
    - Status: No visual regression tests configured
@@ -776,12 +795,24 @@ export default function MyPage() {
 
 ### Translation Pattern
 ```tsx
-const { t, language } = useTranslation();
-const isRTL = language === 'ar';
+import { useTranslations, useLocale } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';  // only when you need language switching
+
+// For UI text (most components):
+const t = useTranslations('dashboard');   // scoped to 'dashboard' namespace
+const tc = useTranslations('common');     // for shared strings
+
+// For locale/direction:
+const locale = useLocale();
+const isRTL = locale === 'ar';
+
+// For language switching or date locale:
+const { language, setLanguage, dateLocale } = useLanguage();
 
 return (
   <div dir={isRTL ? 'rtl' : 'ltr'}>
-    <h1>{t('page.title')}</h1>
+    <h1>{t('title')}</h1>
+    <button>{tc('save')}</button>
   </div>
 );
 ```
@@ -799,9 +830,12 @@ return (
 | Using `left`/`right` in CSS | Use `start`/`end` for RTL |
 | Using `pl-*`/`pr-*` | Use `ps-*`/`pe-*` for RTL |
 | Using `ml-*`/`mr-*` | Use `ms-*`/`me-*` for RTL |
+| `import { useTranslation } from '@/i18n'` (old shim) | Use `import { useTranslations } from 'next-intl'` with a namespace |
+| `useTranslation()` without namespace | Use `useTranslations('namespace')` — every component needs a namespace |
+| `t('namespace.key')` (prefixed key) | Drop the namespace prefix: `t('key')` — the namespace is passed to `useTranslations()` |
 | Hardcoded strings | Use `t('key')` |
-| **Language conditionals for text** | **Use `t('key')` NOT `language === 'ar' ? ... : ...`** |
-| Missing `dir` attribute | Add `dir={isRTL ? 'rtl' : 'ltr'}` |
+| **Language conditionals for text** | **Use `t('key')` NOT `locale === 'ar' ? ... : ...`** |
+| Missing `dir` attribute | Add `dir={locale === 'ar' ? 'rtl' : 'ltr'}` using `useLocale()` |
 | Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
 | Ignoring landscape mode | Test both orientations, use `landscape:` |
 | Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |

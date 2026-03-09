@@ -1,6 +1,6 @@
 import React from 'react';
 import { Check } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useSwipeToDismiss } from '@/hooks/useSwipeToDismiss';
 
 interface SwipeableNotificationItemProps {
@@ -21,7 +21,7 @@ export function SwipeableNotificationItem({
   enabled = true,
   className,
 }: SwipeableNotificationItemProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('notifications');
   const { ref, isDismissing, shouldSuppressClick } = useSwipeToDismiss({
     onDismiss,
     enabled,
@@ -45,12 +45,12 @@ export function SwipeableNotificationItem({
           <div className="flex items-center gap-2">
             <Check className="w-4 h-4 text-brand-600" />
             <span className="text-sm font-medium text-brand-700">
-              {t('notifications.markAsRead')}
+              {t('markAsRead')}
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-brand-700">
-              {t('notifications.markAsRead')}
+              {t('markAsRead')}
             </span>
             <Check className="w-4 h-4 text-brand-600" />
           </div>

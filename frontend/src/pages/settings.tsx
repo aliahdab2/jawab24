@@ -16,7 +16,8 @@ import {
   ChevronUp,
   Settings2,
 } from 'lucide-react';
-import { useTranslation, useLanguage } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import {
@@ -66,8 +67,9 @@ const INITIAL_SETTINGS: SettingsState = {
 };
 
 const SettingsPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
-  const { setLanguage } = useLanguage();
+  const t = useTranslations('settings');
+  const tc = useTranslations('common');
+  const { language, setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const router = useRouter();
@@ -168,7 +170,7 @@ const SettingsPage: NextPageWithLayout = () => {
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
       captureError(error, 'Failed to save settings', { tags: { page: 'settings', action: 'save' } });
-      toast.error(t('common.error'));
+      toast.error(tc('error'));
     } finally {
       setSaving(false);
     }
@@ -196,7 +198,7 @@ const SettingsPage: NextPageWithLayout = () => {
         }, 2500);
         return;
       }
-      toast.error(t('common.error'));
+      toast.error(tc('error'));
     }
   };
 
@@ -207,12 +209,12 @@ const SettingsPage: NextPageWithLayout = () => {
   return (
     <div className="pb-24 landscape:pb-20">
       <PageHeader
-        title={t('settings.title')}
-        description={t('settings.pageContext')}
+        title={t('title')}
+        description={t('pageContext')}
       />
 
       {/* Section: General */}
-      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-2">{t('settings.general')}</p>
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3 mt-2">{t('general')}</p>
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         <LanguageSelector
           settings={settings}
@@ -225,7 +227,7 @@ const SettingsPage: NextPageWithLayout = () => {
       </div>
 
       {/* Section: Auto-Reply */}
-      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('settings.sectionAutoReply')}</p>
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAutoReply')}</p>
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         <CommentsAutoReplyCard settings={settings} setSettings={setSettings} />
 
@@ -233,15 +235,15 @@ const SettingsPage: NextPageWithLayout = () => {
         <div className="space-y-3 landscape:space-y-2">
           <SimpleToggle
             icon={<MessageCircle className="w-6 h-6 landscape:w-5 landscape:h-5" />}
-            title={t('settings.messagesAutoReply')}
-            description={t('settings.messagesAutoReplyDesc')}
+            title={t('messagesAutoReply')}
+            description={t('messagesAutoReplyDesc')}
             enabled={settings.messagesAutoReply}
             onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
           />
           <SimpleToggle
             icon={<Bot className="w-6 h-6 landscape:w-5 landscape:h-5" />}
-            title={t('settings.enableAI')}
-            description={t('settings.aiDescriptionImproved')}
+            title={t('enableAI')}
+            description={t('aiDescriptionImproved')}
             enabled={settings.aiEnabled}
             onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
           />
@@ -251,7 +253,7 @@ const SettingsPage: NextPageWithLayout = () => {
       {/* Section: AI Personality */}
       {settings.aiEnabled && (
         <>
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('settings.sectionAiPersonality')}</p>
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAiPersonality')}</p>
           <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
             <ReplyStyleCard settings={settings} setSettings={setSettings} />
           </div>
@@ -272,10 +274,10 @@ const SettingsPage: NextPageWithLayout = () => {
           </div>
           <div className="text-start">
             <span className={clsx('block font-bold landscape:text-sm', showAdvanced ? 'text-foreground' : 'text-foreground/70')}>
-              {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
+              {showAdvanced ? t('hideAdvanced') : t('showAdvanced')}
             </span>
             <p className="text-xs text-muted-foreground landscape:hidden">
-              {t('settings.advancedDescription')}
+              {t('advancedDescription')}
             </p>
           </div>
         </div>
@@ -322,10 +324,10 @@ const SettingsPage: NextPageWithLayout = () => {
             )}
           >
             {saving
-              ? t('common.saving')
+              ? tc('saving')
               : saved
-                ? t('settings.settingsSaved')
-                : t('settings.saveSettings')
+                ? t('settingsSaved')
+                : t('saveSettings')
             }
           </Button>
         </div>
@@ -345,4 +347,6 @@ SettingsPage.getLayout = (page: ReactElement) => (
 
 export default SettingsPage;
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.settings]);

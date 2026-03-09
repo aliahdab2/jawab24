@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { pagesApi } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
@@ -24,7 +24,9 @@ interface KnowledgeBaseModalProps {
 }
 
 export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: KnowledgeBaseModalProps) {
-  const { t } = useTranslation();
+  const tKb = useTranslations('kb');
+  const tc = useTranslations('common');
+  const tPages = useTranslations('pages');
 
   const [sections, setSections] = useState<KnowledgeSection[]>([]);
   const [expandedId, setExpandedId] = useState<SectionId | null>(null);
@@ -81,11 +83,11 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     if (customCount >= MAX_CUSTOM_SECTIONS) return;
 
     const newId = `custom:${Date.now()}` as CustomSectionId;
-    const defaultTitle = t('kb.defaultSectionTitle');
+    const defaultTitle = tKb('defaultSectionTitle');
 
     setSections((prev) => [...prev, { id: newId, content: '', title: defaultTitle }]);
     setExpandedId(newId);
-  }, [sections, t]);
+  }, [sections, tKb]);
 
   // Delete a custom section
   const handleDeleteCustomSection = useCallback((sectionId: CustomSectionId) => {
@@ -138,8 +140,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     setGaps(prev => prev.filter(g => g.id !== gapId));
     setExpandedGapId(null);
     pagesApi.dismissGap(page.id, gapId).catch(() => {});
-    toast.success(t('kb.gaps.addedHint' as TranslationKey));
-  }, [gaps, page.id, t]);
+    toast.success(tKb('gaps.addedHint'));
+  }, [gaps, page.id, tKb]);
 
   // Gap skipped: resolve without adding content
   const handleGapSkipped = useCallback((gapId: string) => {
@@ -161,7 +163,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-semibold text-foreground">
-                {t('kb.title' as TranslationKey)}
+                {tKb('title')}
               </h2>
               <p className="text-xs sm:text-sm text-muted-foreground landscape:hidden">{page.name}</p>
             </div>
@@ -178,14 +180,14 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
         <div className="flex-1 flex flex-col min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto">
           {/* Description */}
           <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
-            {t('kb.description' as TranslationKey)}
+            {tKb('description')}
           </p>
 
           {/* Facebook import banner */}
           {showFacebookBanner && (
             <div className="flex items-center gap-2 p-3 mb-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-100 dark:border-blue-800/40">
               <span className="text-blue-600 text-xs font-medium">
-                {t('kb.importedFromFacebook' as TranslationKey)}
+                {tKb('importedFromFacebook')}
               </span>
               <button
                 onClick={() => setShowFacebookBanner(false)}
@@ -202,10 +204,10 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               <div className="flex items-center gap-2 px-1">
                 <MessageCircleQuestion className="w-4 h-4 text-amber-600 flex-shrink-0" aria-hidden="true" />
                 <span className="text-xs font-semibold text-amber-800">
-                  {t('kb.gaps.title' as TranslationKey)} ({gaps.length})
+                  {tKb('gaps.title')} ({gaps.length})
                 </span>
               </div>
-              <p className="text-xs text-amber-700 px-1">{t('kb.gaps.hint' as TranslationKey)}</p>
+              <p className="text-xs text-amber-700 px-1">{tKb('gaps.hint')}</p>
               {gaps.map((gap) => (
                 <GapCard
                   key={gap.id}
@@ -224,7 +226,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
             <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border">
               <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
               <p className="text-xs leading-relaxed">
-                {t('kb.thinKbTip' as TranslationKey)}
+                {tKb('thinKbTip')}
               </p>
             </div>
           )}
@@ -235,7 +237,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               value={rawText}
               onChange={setRawText}
               maxLength={MAX_LENGTH}
-              ariaLabel={t('kb.title')}
+              ariaLabel={tKb('title')}
             />
           ) : (
             <KnowledgeBaseSections
@@ -261,19 +263,19 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
             {rawMode ? (
               <>
                 <Eye className="w-3.5 h-3.5" />
-                {t('kb.hideRawText' as TranslationKey)}
+                {tKb('hideRawText')}
               </>
             ) : (
               <>
                 <FileText className="w-3.5 h-3.5" />
-                {t('kb.showRawText' as TranslationKey)}
+                {tKb('showRawText')}
               </>
             )}
           </button>
 
           <div className="flex items-center gap-3 landscape:gap-2">
             <Button variant="secondary" size="sm" onClick={onClose}>
-              {t('common.cancel')}
+              {tc('cancel')}
             </Button>
             <Button
               size="sm"
@@ -282,7 +284,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
               variant={saved ? 'secondary' : 'primary'}
             >
-              {saved ? t('pages.savedStatus') : t('common.save')}
+              {saved ? tPages('savedStatus') : tc('save')}
             </Button>
           </div>
         </div>

@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button } from '@/components/ui';
 import { subscriptionApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { Check, X, Zap, Crown, Sparkles, Store, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
@@ -42,7 +42,7 @@ function PlanCard({
   hasActiveSubscription: boolean;
   onSelect: () => void;
   loading: boolean;
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
   currentPlanPrice: number;
   subscriptionStatus?: string;
   isSanctioned: boolean;
@@ -58,13 +58,13 @@ function PlanCard({
   const monthlyEquivalent = isAnnual && !isFree ? Math.round(displayPrice / 12) : plan.price;
 
   // Translate plan names and descriptions based on slug with fallbacks
-  const planName = t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
-    ? t(`pricing.${plan.slug}` as TranslationKey)
-    : (t(`plans.${plan.slug}.name` as TranslationKey) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name` as TranslationKey) : plan.name);
+  const planName = t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
+    ? t(`pricing.${plan.slug}`)
+    : (t(`plans.${plan.slug}.name`) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name`) : plan.name);
 
-  const planDescription = t(`pricing.${plan.slug}Desc` as TranslationKey) !== `pricing.${plan.slug}Desc`
-    ? t(`pricing.${plan.slug}Desc` as TranslationKey)
-    : (t(`plans.${plan.slug}.description` as TranslationKey) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description` as TranslationKey) : plan.description);
+  const planDescription = t(`pricing.${plan.slug}Desc`) !== `pricing.${plan.slug}Desc`
+    ? t(`pricing.${plan.slug}Desc`)
+    : (t(`plans.${plan.slug}.description`) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description`) : plan.description);
 
   // Format price
   const formatPrice = (price: number) => {
@@ -107,7 +107,7 @@ function PlanCard({
         <div className="absolute -top-4 start-0 end-0 flex justify-center z-20">
           <span className="bg-gradient-to-r from-amber-500 to-amber-600 text-white text-[13px] font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5 shadow-[0_4px_8px_rgba(180,130,0,0.3)] whitespace-nowrap uppercase tracking-wider">
             <Crown className="w-3.5 h-3.5" />
-            {t('pricing.premium' as TranslationKey)}
+            {t('pricing.premium')}
           </span>
         </div>
       )}
@@ -120,7 +120,7 @@ function PlanCard({
             {t('pricing.currentPlan')}
             {subscriptionStatus === 'trialing' && (
               <span className="px-1.5 py-0.5 bg-amber-500 text-white rounded text-[10px] font-black uppercase tracking-wider shadow-sm">
-                {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                {t('pricing.trial') !== 'pricing.trial' ? t('pricing.trial') : 'TRIAL'}
               </span>
             )}
           </span>
@@ -160,18 +160,18 @@ function PlanCard({
         {isAnnual && !isFree && (
           <>
             <p className="text-xs text-muted-foreground mt-1">
-              {t('pricing.billedYearly' as TranslationKey, { amount: formatPrice(displayPrice) })}
+              {t('pricing.billedYearly', { amount: formatPrice(displayPrice) })}
             </p>
             <div className="mt-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200">
-                {t('pricing.annualSavingsAmount' as TranslationKey, { amount: formatPrice(plan.price * 2) })}
+                {t('pricing.annualSavingsAmount', { amount: formatPrice(plan.price * 2) })}
               </span>
             </div>
           </>
         )}
         {!isFree && (
           <p className="text-xs text-muted-foreground mt-1">
-            {t('pricing.sarEquivalent' as TranslationKey, { amount: sarMonthly.toLocaleString() })}
+            {t('pricing.sarEquivalent', { amount: sarMonthly.toLocaleString() })}
           </p>
         )}
         {/* Trial badge — inside the card, visible on all breakpoints */}
@@ -187,30 +187,30 @@ function PlanCard({
       <div className="space-y-1 px-3 flex-1">
         <FeatureRow
           included={true}
-          text={t('pricing.featurePages' as TranslationKey, { count: (plan.maxPages === null ? t('pricing.unlimited' as TranslationKey) : plan.maxPages) as string | number })}
-          subtext={t('pricing.facebookInstagram' as TranslationKey)}
+          text={t('pricing.featurePages', { count: (plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages) as string | number })}
+          subtext={t('pricing.facebookInstagram')}
         />
 
         <FeatureRow
           included={true}
           highlight={true}
-          text={t('pricing.featureAiReplies' as TranslationKey, { count: (plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited' as TranslationKey) : plan.maxAiRepliesPerMonth.toLocaleString()) as string | number })}
-          subtext={t('pricing.aiPowered' as TranslationKey)}
+          text={t('pricing.featureAiReplies', { count: (plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()) as string | number })}
+          subtext={t('pricing.aiPowered')}
         />
 
         <FeatureRow
           included={true}
-          text={t('pricing.featureTemplates' as TranslationKey, { count: (plan.maxTemplates === null ? t('pricing.unlimited' as TranslationKey) : plan.maxTemplates) as string | number })}
+          text={t('pricing.featureTemplates', { count: (plan.maxTemplates === null ? t('pricing.unlimited') : plan.maxTemplates) as string | number })}
         />
 
         <FeatureRow
           included={true}
-          text={t('pricing.featureRules' as TranslationKey, { count: (plan.maxRules === null ? t('pricing.unlimited' as TranslationKey) : plan.maxRules) as string | number })}
+          text={t('pricing.featureRules', { count: (plan.maxRules === null ? t('pricing.unlimited') : plan.maxRules) as string | number })}
         />
 
         <FeatureRow
           included={plan.showBranding === false}
-          text={t('pricing.brandingHidden' as TranslationKey)}
+          text={t('pricing.brandingHidden')}
         />
 
       </div>
@@ -221,7 +221,7 @@ function PlanCard({
           <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg border border-purple-100">
             <Store className="w-4 h-4 text-purple-600 flex-shrink-0" />
             <span className="text-xs font-medium text-purple-700">
-              {t('pricing.shopifyBadge' as TranslationKey)}
+              {t('pricing.shopifyBadge')}
             </span>
           </div>
         </div>
@@ -263,7 +263,7 @@ function PlanCard({
                 <span className="font-bold">{t('pricing.currentPlan')}</span>
                 {(subscriptionStatus === 'trialing' || (isCurrentPlan && plan.price === 0 && plan.trialDays > 0)) && (
                   <span className="text-[10px] alert-warning border px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">
-                    {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                    {t('pricing.trial') !== 'pricing.trial' ? t('pricing.trial') : 'TRIAL'}
                   </span>
                 )}
               </div>
@@ -321,7 +321,7 @@ function FeatureRow({
 const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans }) => {
   const router = useRouter();
   const locale = router.locale;
-  const { t } = useTranslation();
+  const t = useTranslations();
   const { isAuthenticated } = useAuthStore();
   const [plans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -474,15 +474,15 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold text-foreground">
-                    {t(`pricing.${usage.subscription.plan.slug}` as TranslationKey) !== `pricing.${usage.subscription.plan.slug}`
-                      ? t(`pricing.${usage.subscription.plan.slug}` as TranslationKey)
-                      : (t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey) !== `plans.${usage.subscription.plan.slug}.name`
-                        ? t(`plans.${usage.subscription.plan.slug}.name` as TranslationKey)
+                    {t(`pricing.${usage.subscription.plan.slug}`) !== `pricing.${usage.subscription.plan.slug}`
+                      ? t(`pricing.${usage.subscription.plan.slug}`)
+                      : (t(`plans.${usage.subscription.plan.slug}.name`) !== `plans.${usage.subscription.plan.slug}.name`
+                        ? t(`plans.${usage.subscription.plan.slug}.name`)
                         : usage.subscription.plan.name)}
                   </span>
                   {usage.subscription.status === 'trialing' && (
                     <span className="px-2 py-0.5 bg-amber-500 text-white rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm">
-                      {t('pricing.trial' as TranslationKey) !== 'pricing.trial' ? t('pricing.trial' as TranslationKey) : 'TRIAL'}
+                      {t('pricing.trial') !== 'pricing.trial' ? t('pricing.trial') : 'TRIAL'}
                     </span>
                   )}
                 </div>
@@ -494,7 +494,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
               {/* Usage Stats */}
               <div className="flex items-center gap-3 sm:gap-6 text-sm">
                 <div className="flex flex-row items-center gap-1 sm:gap-2">
-                  <span className="text-muted-foreground font-medium">{t('pricing.repliesUsed' as TranslationKey)}</span>
+                  <span className="text-muted-foreground font-medium">{t('pricing.repliesUsed')}</span>
                   <span className="font-bold text-brand-600">
                     {usage.aiReplies.used} / {usage.aiReplies.limit || '∞'}
                   </span>
@@ -536,9 +536,9 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                 <Star key={i} className="w-4 h-4 text-amber-400 fill-amber-400" />
               ))}
             </div>
-            <span className="text-sm font-bold text-foreground/70">{t('pricing.socialProofRating' as TranslationKey)}</span>
+            <span className="text-sm font-bold text-foreground/70">{t('pricing.socialProofRating')}</span>
             <span className="text-subtle" aria-hidden="true">·</span>
-            <span className="text-sm text-muted-foreground">{t('pricing.socialProofReviews' as TranslationKey)}</span>
+            <span className="text-sm text-muted-foreground">{t('pricing.socialProofReviews')}</span>
           </div>
         </div>
 
@@ -561,7 +561,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             >
               {t('pricing.yearly')}
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-green-500 text-white whitespace-nowrap">
-                {t('pricing.savePercent' as TranslationKey)}
+                {t('pricing.savePercent')}
               </span>
             </button>
           </div>
@@ -572,12 +572,12 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           className="grid mx-4 mb-8 border border-theme-border rounded-lg overflow-hidden md:hidden"
           style={{ gridTemplateColumns: `repeat(${activePlans.length}, 1fr)` }}
           role="tablist"
-          aria-label={t('pricing.planTabs' as TranslationKey)}
+          aria-label={t('pricing.planTabs')}
           onKeyDown={handleTabKeyDown}
         >
           {activePlans.map((plan, index) => {
-            const tabLabel = t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
-              ? t(`pricing.${plan.slug}` as TranslationKey)
+            const tabLabel = t(`pricing.${plan.slug}`) !== `pricing.${plan.slug}`
+              ? t(`pricing.${plan.slug}`)
               : plan.name;
             return (
               <button
@@ -651,19 +651,19 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           </span>
           <span className="flex items-center gap-1.5">
             <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" aria-hidden="true" />
-            {t('pricing.trustCancelAnytime' as TranslationKey)}
+            {t('pricing.trustCancelAnytime')}
           </span>
         </div>
 
         {/* FAQ Section */}
         <div className="max-w-3xl mx-auto px-4 pb-12 pt-10 sm:pt-12">
           <h2 className="text-xl font-bold text-foreground text-center mb-6">
-            {t('pricing.faqTitle' as TranslationKey)}
+            {t('pricing.faqTitle')}
           </h2>
           <div className="space-y-3">
             {[1, 2, 3, 4, 5].map((i) => {
-              const qKey = `pricing.faq${i}Q` as TranslationKey;
-              const aKey = `pricing.faq${i}A` as TranslationKey;
+              const qKey = `pricing.faq${i}Q`;
+              const aKey = `pricing.faq${i}A`;
               const faqPanelId = `pricing-faq-panel-${i}`;
               const question = t(qKey);
               // Skip if translation key is missing (returns the key itself)
@@ -711,7 +711,8 @@ export default PricingPage;
  */
 export const getStaticProps: GetStaticProps<PricingPageProps> = async (ctx) => {
   const { getI18nProps } = await import('@/i18n/getMessages');
-  const i18nProps = await getI18nProps(ctx);
+  const { PAGE_NAMESPACES } = await import('@/i18n/namespaces');
+  const i18nProps = await getI18nProps(ctx, [...PAGE_NAMESPACES.pricing]);
 
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';

@@ -36,7 +36,16 @@ vi.mock('../../src/lib/redis', () => ({
         get: vi.fn().mockResolvedValue(null),
         set: vi.fn().mockResolvedValue('OK'),
         del: vi.fn().mockResolvedValue(1),
+        scan: vi.fn().mockResolvedValue(['0', []]),
     },
+}));
+
+// Prevent real OpenAI embedding calls during seedDemoData → seedDemoStore
+vi.mock('../../src/services/kb/ingestion', () => ({
+    KbIngestionService: vi.fn().mockImplementation(() => ({
+        ingestFullPage: vi.fn().mockResolvedValue(undefined),
+        ingestKnowledgeBase: vi.fn().mockResolvedValue(undefined),
+    })),
 }));
 
 // ── 1. Demo seed → workspace-scoped page visibility ───────────────────────────

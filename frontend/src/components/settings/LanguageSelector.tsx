@@ -1,6 +1,6 @@
 import { Card } from '@/components/ui';
 import { Globe } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { settingsApi } from '@/lib/api';
 import { toast } from 'sonner';
 import type { SettingsState } from './types';
@@ -20,7 +20,8 @@ export function LanguageSelector({
   setInitialSettings,
   setLanguage,
 }: LanguageSelectorProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
+  const tc = useTranslations('common');
 
   const handleLanguageChange = async (lang: 'ar' | 'en') => {
     const newSettings = { ...settings, dashboardLanguage: lang };
@@ -30,7 +31,7 @@ export function LanguageSelector({
       await settingsApi.update(newSettings as unknown as Record<string, unknown>);
       setLanguage(lang);
     } catch {
-      toast.error(t('common.error'));
+      toast.error(tc('error'));
     }
   };
 
@@ -42,8 +43,8 @@ export function LanguageSelector({
             <Globe className="w-6 h-6 landscape:w-5 landscape:h-5" />
           </div>
           <div className="text-start">
-            <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('settings.language')}</h3>
-            <p className="text-xs text-muted-foreground mt-1">{t('settings.dashboardLanguage.desc')}</p>
+            <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('language')}</h3>
+            <p className="text-xs text-muted-foreground mt-1">{t('dashboardLanguage.desc')}</p>
           </div>
         </div>
 
@@ -55,7 +56,7 @@ export function LanguageSelector({
               : 'text-muted-foreground hover:text-foreground'
               }`}
           >
-            🇸🇦 {t('common.langArabic')}
+            🇸🇦 {tc('langArabic')}
           </button>
           <button
             onClick={() => handleLanguageChange('en')}
@@ -64,7 +65,7 @@ export function LanguageSelector({
               : 'text-muted-foreground hover:text-foreground'
               }`}
           >
-            🇬🇧 {t('common.langEnglish')}
+            🇬🇧 {tc('langEnglish')}
           </button>
         </div>
       </div>

@@ -104,7 +104,7 @@ describe('PagesPage', () => {
       renderPage(<PagesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('pages.noPages')).toBeInTheDocument();
+        expect(screen.getByText('Get started')).toBeInTheDocument();
       });
     });
 
@@ -113,7 +113,7 @@ describe('PagesPage', () => {
 
       await waitFor(() => {
         // The empty state should have a connect button
-        const buttons = screen.getAllByText('pages.connectPage');
+        const buttons = screen.getAllByText('Connect New Page');
         expect(buttons.length).toBeGreaterThanOrEqual(1);
       });
     });
@@ -140,7 +140,7 @@ describe('PagesPage', () => {
       });
 
       // Empty state should NOT be shown
-      expect(screen.queryByText('pages.noPages')).not.toBeInTheDocument();
+      expect(screen.queryByText('Get started')).not.toBeInTheDocument();
     });
 
     it('should show Facebook badge on page cards', async () => {
@@ -174,18 +174,18 @@ describe('PagesPage', () => {
       renderPage(<PagesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('pages.noPages')).toBeInTheDocument();
+        expect(screen.getByText('Get started')).toBeInTheDocument();
       });
 
       // Click connect button
-      const connectButtons = screen.getAllByText('pages.connectPage');
+      const connectButtons = screen.getAllByText('Connect New Page');
       fireEvent.click(connectButtons[0]);
 
       // Confirmation dialog should appear
       await waitFor(() => {
-        expect(screen.getByText('pages.connectDialogTitle')).toBeInTheDocument();
-        expect(screen.getByText('pages.connectDialogBody')).toBeInTheDocument();
-        expect(screen.getByText('pages.continueToFacebook')).toBeInTheDocument();
+        expect(screen.getByText('Connect a Page')).toBeInTheDocument();
+        expect(screen.getByText(/redirected to Facebook/)).toBeInTheDocument();
+        expect(screen.getByText('Continue to Facebook')).toBeInTheDocument();
       });
     });
 
@@ -195,22 +195,22 @@ describe('PagesPage', () => {
       renderPage(<PagesPage />);
 
       await waitFor(() => {
-        expect(screen.getByText('pages.noPages')).toBeInTheDocument();
+        expect(screen.getByText('Get started')).toBeInTheDocument();
       });
 
       // Open dialog
-      const connectButtons = screen.getAllByText('pages.connectPage');
+      const connectButtons = screen.getAllByText('Connect New Page');
       fireEvent.click(connectButtons[0]);
 
       await waitFor(() => {
-        expect(screen.getByText('pages.connectDialogTitle')).toBeInTheDocument();
+        expect(screen.getByText('Connect a Page')).toBeInTheDocument();
       });
 
       // Click cancel
-      fireEvent.click(screen.getByText('common.cancel'));
+      fireEvent.click(screen.getByText('Cancel'));
 
       await waitFor(() => {
-        expect(screen.queryByText('pages.connectDialogTitle')).not.toBeInTheDocument();
+        expect(screen.queryByText('Connect a Page')).not.toBeInTheDocument();
       });
     });
   });
@@ -267,12 +267,12 @@ describe('PagesPage', () => {
       });
 
       // Click the "Add business info" button
-      const businessInfoButton = screen.getByText('pages.addBusinessInfo');
+      const businessInfoButton = screen.getByText('Add Your Business Info');
       fireEvent.click(businessInfoButton);
 
       // Modal should be open
       await waitFor(() => {
-        expect(screen.getByText('kb.title')).toBeInTheDocument();
+        expect(screen.getByText('Your Business Info')).toBeInTheDocument();
       });
     });
   });

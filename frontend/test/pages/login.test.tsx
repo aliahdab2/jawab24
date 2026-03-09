@@ -21,12 +21,13 @@ vi.mock('next/router', () => ({
     })),
 }));
 
-// Mock translation hook
-vi.mock('@/i18n', () => ({
-    useTranslation: () => ({
-        t: (key: string) => key,
+// Mock language hook
+vi.mock('@/i18n/hooks', () => ({
+    useLanguage: () => ({
         language: 'en',
         setLanguage: vi.fn(),
+        dateLocale: {},
+        intlLocale: 'en-US',
     }),
 }));
 
@@ -135,12 +136,12 @@ describe('LoginPage', () => {
     
             render(<LoginPage />);
     
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
             await act(async () => {
                 loginButton.click();
             });
     
-            expect(toastErrorSpy).toHaveBeenCalledWith('auth.loginError');
+            expect(toastErrorSpy).toHaveBeenCalledWith('Login failed. Please try again.');
             expect(window.location.href).toBe(''); // Should not redirect
     
             process.env.NEXT_PUBLIC_FB_APP_ID = originalEnv;
@@ -154,7 +155,7 @@ describe('LoginPage', () => {
     
             render(<LoginPage />);
     
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
             await act(async () => {
                 loginButton.click();
             });
@@ -202,7 +203,7 @@ describe('LoginPage', () => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
             await act(async () => {
                 loginButton.click();
             });
@@ -240,14 +241,14 @@ describe('LoginPage', () => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
             await act(async () => {
                 loginButton.click();
             });
 
             await vi.waitFor(() => {
                 // User cancellation shows info, not error
-                expect(toastInfoSpy).toHaveBeenCalledWith('auth.loginCancelled');
+                expect(toastInfoSpy).toHaveBeenCalledWith('Login was cancelled');
             });
             
             // Should NOT navigate
@@ -270,7 +271,7 @@ describe('LoginPage', () => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
             await act(async () => {
                 loginButton.click();
             });
@@ -304,7 +305,7 @@ describe('LoginPage', () => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
             await act(async () => {
                 loginButton.click();
             });
@@ -336,7 +337,7 @@ describe('LoginPage', () => {
                 expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
-            const loginButton = screen.getByRole('button', { name: /auth.loginWithFacebook/i });
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
             await act(async () => {
                 loginButton.click();
             });

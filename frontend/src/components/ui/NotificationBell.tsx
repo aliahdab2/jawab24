@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/lib/store';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
 import { SwipeableNotificationItem } from './SwipeableNotificationItem';
@@ -173,7 +173,8 @@ interface NotificationBellProps {
 export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const isDark = variant === 'dark';
     const { isAuthenticated } = useAuthStore();
-    const { t, language } = useTranslation();
+    const t = useTranslations('notifications');
+    const locale = useLocale();
     const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -260,10 +261,10 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
         const diffHours = Math.floor(diffMins / 60);
         const diffDays = Math.floor(diffHours / 24);
 
-        if (diffMins < 1) return t('notifications.justNow');
-        if (diffMins < 60) return t('notifications.minutesAgo', { count: diffMins });
-        if (diffHours < 24) return t('notifications.hoursAgo', { count: diffHours });
-        return t('notifications.daysAgo', { count: diffDays });
+        if (diffMins < 1) return t('justNow');
+        if (diffMins < 60) return t('minutesAgo', { count: diffMins });
+        if (diffHours < 24) return t('hoursAgo', { count: diffHours });
+        return t('daysAgo', { count: diffDays });
     };
 
     const handleMarkAsRead = async (notificationId: string) => {
@@ -317,10 +318,10 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
             }
         }, 5000);
 
-        toast(t('notifications.dismissed'), {
+        toast(t('dismissed'), {
             duration: 4000,
             action: {
-                label: t('notifications.undo'),
+                label: t('undo'),
                 onClick: () => {
                     undone = true;
                     clearTimeout(apiTimer);
@@ -353,7 +354,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
             if (!n.read) markNotificationAsRead(n.id);
         }
 
-        toast(t('notifications.dismissed'), { duration: 4000 });
+        toast(t('dismissed'), { duration: 4000 });
     };
 
     const toggleGroup = (groupId: string) => {
@@ -444,10 +445,10 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                         handleReplyNow(notification);
                                     }}
                                     className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-900/50 transition-colors"
-                                    aria-label={t('notifications.replyNow')}
+                                    aria-label={t('replyNow')}
                                 >
                                     <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
-                                    {t('notifications.replyNow')}
+                                    {t('replyNow')}
                                 </button>
                             )}
                         </div>
@@ -466,7 +467,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                         handleMarkAsRead(notification.id);
                                     }}
                                     className="p-1.5 rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/30 text-surface-400 dark:text-surface-600 hover:text-brand-600 transition-colors"
-                                    title={t('notifications.markAsRead')}
+                                    title={t('markAsRead')}
                                 >
                                     <Check className="w-4 h-4" />
                                 </button>
@@ -481,7 +482,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const renderGroupedItem = (group: GroupedNotifications) => {
         const style = getNotificationStyle(group.type);
         const isExpanded = expandedGroups.has(group.id);
-        const typeLabelKey = `notifications.typeLabel.${group.type}` as TranslationKey;
+        const typeLabelKey = `typeLabel.${group.type}` as Parameters<typeof t>[0];
 
         return (
             <div key={group.id} className="border-b border-theme-border">
@@ -532,7 +533,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             ? 'bg-brand-100 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300'
                             : 'hover:bg-muted text-muted-foreground',
                 )}
-                aria-label={t('notifications.title')}
+                aria-label={t('title')}
             >
                 <Bell className={clsx('w-5 h-5', unreadCount > 0 && 'animate-pulse-soft')} />
                 {unreadCount > 0 && (
@@ -559,13 +560,13 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         'max-h-[60vh] lg:max-h-[70vh] sm:end-auto sm:start-[272px] sm:w-[420px]',
                     )}
                     style={{ top: 'calc(var(--sai-top) + 4.5rem)' }}
-                    dir={language === 'ar' ? 'rtl' : 'ltr'}
+                    dir={locale === 'ar' ? 'rtl' : 'ltr'}
                 >
                     {/* Header Row 1: Title + Close */}
                     <div className="flex items-center justify-between px-5 pt-3.5 pb-2 bg-gradient-to-b from-muted to-card">
                         <div className="flex items-center gap-2.5">
                             <h3 className="font-bold text-foreground">
-                                {t('notifications.title')}
+                                {t('title')}
                             </h3>
                             {unreadCount > 0 && (
                                 <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[11px] font-bold text-brand-700 dark:text-brand-300 bg-brand-100 dark:bg-brand-900/50 rounded-full">
@@ -576,7 +577,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         <button
                             onClick={() => setIsOpen(false)}
                             className="p-1.5 rounded-lg hover:bg-muted text-surface-400 dark:text-surface-600 hover:text-muted-foreground transition-colors"
-                            aria-label={t('notifications.close')}
+                            aria-label={t('close')}
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -590,7 +591,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 className="text-xs font-medium text-brand-600 hover:text-brand-700 dark:hover:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-900/30 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
                             >
                                 <CheckCheck className="w-3.5 h-3.5" />
-                                {t('notifications.markAllRead')}
+                                {t('markAllRead')}
                             </button>
                         </div>
                     )}
@@ -612,14 +613,14 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         {loading ? (
                             <div className="p-10 text-center">
                                 <div className="w-8 h-8 border-[3px] border-brand-200 border-t-brand-500 rounded-full animate-spin mx-auto mb-3" />
-                                <p className="text-sm text-muted-foreground">{t('notifications.loading')}</p>
+                                <p className="text-sm text-muted-foreground">{t('loading')}</p>
                             </div>
                         ) : notifications.length === 0 ? (
                             <NotificationEmptyState variant="global" />
                         ) : filteredAndGrouped.length === 0 ? (
                             <NotificationEmptyState
                                 variant="filtered"
-                                filterName={t(`notifications.filter.${activeFilter}`)}
+                                filterName={t(`filter.${activeFilter}` as Parameters<typeof t>[0])}
                             />
                         ) : (
                             filteredAndGrouped.map((item) =>

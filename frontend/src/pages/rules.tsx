@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactElement } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Select, Modal, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, CharCounter } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
 import { extractArrayData } from '@/lib/api-utils';
@@ -14,7 +14,9 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
 const RulesPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const t = useTranslations('rules');
+  const tc = useTranslations('common');
+  const tTemplates = useTranslations('templates');
   const { isAuthenticated } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -153,7 +155,7 @@ const RulesPage: NextPageWithLayout = () => {
     if (active) {
       const rule = rules.find(r => r.id === id);
       if (rule?.templateId && !templates.find(tp => tp.id === rule.templateId)) {
-        toast.error(t('rules.cannotEnableMissingTemplate' as TranslationKey));
+        toast.error(t('cannotEnableMissingTemplate'));
         return;
       }
     }
@@ -234,16 +236,16 @@ const RulesPage: NextPageWithLayout = () => {
     const kw = singleWordKeyword;
     return [
       {
-        text: t('rules.demoDirectQuestion' as TranslationKey).replace('{keyword}', kw),
+        text: t('demoDirectQuestion').replace('{keyword}', kw),
         type: 'match' as const,
       },
       {
-        text: t('rules.demoFalsePositive' as TranslationKey).replace('{keyword}', kw),
+        text: t('demoFalsePositive').replace('{keyword}', kw),
         type: 'warning' as const,
-        hint: t('rules.demoFalsePositiveHint' as TranslationKey),
+        hint: t('demoFalsePositiveHint'),
       },
       {
-        text: t('rules.demoNoMatch' as TranslationKey),
+        text: t('demoNoMatch'),
         type: 'nomatch' as const,
       },
     ];
@@ -301,16 +303,16 @@ const RulesPage: NextPageWithLayout = () => {
     <>
       {/* Header */}
       <PageHeader
-        title={t('rules.title')}
+        title={t('title')}
         description={
           <>
-            {t('rules.description')}
-            <span className="block text-xs text-muted-foreground mt-1">{t('rules.firstMatchHint' as TranslationKey)}</span>
+            {t('description')}
+            <span className="block text-xs text-muted-foreground mt-1">{t('firstMatchHint')}</span>
           </>
         }
         action={
           <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-            {t('rules.addRule')}
+            {t('addRule')}
           </Button>
         }
       />
@@ -338,11 +340,11 @@ const RulesPage: NextPageWithLayout = () => {
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
           <EmptyState
             icon={Zap}
-            title={t('rules.noRules')}
-            description={t('rules.noRulesDesc')}
+            title={t('noRules')}
+            description={t('noRulesDesc')}
             action={
               <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-                {t('rules.addRule')}
+                {t('addRule')}
               </Button>
             }
           />
@@ -353,24 +355,24 @@ const RulesPage: NextPageWithLayout = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingRule ? t('rules.editRule') : t('rules.addRule')}
+        title={editingRule ? t('editRule') : t('addRule')}
       >
         <div className="space-y-4">
           <div className="grid grid-cols-1 landscape:grid-cols-2 md:grid-cols-2 gap-4">
             <Input
-              label={t('rules.ruleName')}
-              placeholder={t('rules.ruleNamePlaceholder')}
+              label={t('ruleName')}
+              placeholder={t('ruleNamePlaceholder')}
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               className="!py-2.5 sm:!py-3"
             />
 
             <Input
-              label={t('rules.condition')}
-              placeholder={t('rules.keywordsPlaceholder' as TranslationKey)}
+              label={t('condition')}
+              placeholder={t('keywordsPlaceholder')}
               value={formData.keywords}
               onChange={(e) => setFormData({ ...formData, keywords: e.target.value })}
-              helperText={t('rules.keywordsHelper' as TranslationKey)}
+              helperText={t('keywordsHelper')}
               className="!py-2.5 sm:!py-3"
             />
           </div>
@@ -379,7 +381,7 @@ const RulesPage: NextPageWithLayout = () => {
               <div className="flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-bold">{t('rules.duplicateKeywordsInModal' as TranslationKey)}</span>
+                  <span className="font-bold">{t('duplicateKeywordsInModal')}</span>
                   <ul className="mt-1 space-y-0.5 list-disc ps-4">
                     {uniqueConflictKeywords.map(kw => {
                       const ruleNames = modalKeywordConflicts.filter(c => c.keyword === kw).map(c => c.ruleName);
@@ -397,12 +399,12 @@ const RulesPage: NextPageWithLayout = () => {
 
           <div>
             <Select
-              label={t('rules.actions.replyWithTemplate')}
-              placeholder={`${t('rules.actions.replyWithTemplate')}...`}
+              label={t('actions.replyWithTemplate')}
+              placeholder={`${t('actions.replyWithTemplate')}...`}
               value={formData.templateId}
               onChange={(value) => setFormData({ ...formData, templateId: value })}
               options={[
-                { value: '', label: `${t('rules.actions.replyWithTemplate')}...` },
+                { value: '', label: `${t('actions.replyWithTemplate')}...` },
                 ...templates.map((template) => ({
                   value: template.id,
                   label: getTemplatePreview(template)
@@ -418,22 +420,22 @@ const RulesPage: NextPageWithLayout = () => {
                 className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-brand-600 hover:text-brand-700 transition-colors"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>{t('rules.newTemplate' as TranslationKey)}</span>
+                <span>{t('newTemplate')}</span>
               </button>
             ) : (
               <div className="mt-3 p-4 rounded-2xl bg-background border border-theme-border space-y-3 animate-slide-up">
                 <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
                   <BookTemplate className="w-3 h-3" />
-                  <span>{t('rules.quickCreateTemplate' as TranslationKey)}</span>
+                  <span>{t('quickCreateTemplate')}</span>
                 </div>
                 <Input
-                  placeholder={t('templates.templateNamePlaceholder' as TranslationKey)}
+                  placeholder={tTemplates('templateNamePlaceholder')}
                   value={quickTemplate.name}
                   onChange={(e) => setQuickTemplate({ ...quickTemplate, name: e.target.value })}
                   className="!py-2"
                 />
                 <Textarea
-                  placeholder={t('templates.templateContent')}
+                  placeholder={tTemplates('templateContent')}
                   value={quickTemplate.text}
                   onChange={(e) => setQuickTemplate({ ...quickTemplate, text: e.target.value })}
                   className="!py-2 min-h-[60px]"
@@ -448,14 +450,14 @@ const RulesPage: NextPageWithLayout = () => {
                     size="sm"
                     onClick={() => { setShowQuickCreate(false); setQuickTemplate({ name: '', text: '' }); }}
                   >
-                    {t('common.cancel')}
+                    {tc('cancel')}
                   </Button>
                   <Button
                     size="sm"
                     onClick={handleQuickCreateTemplate}
                     disabled={!quickTemplate.name.trim() || !quickTemplate.text.trim() || savingTemplate}
                   >
-                    {savingTemplate ? '...' : t('common.add')}
+                    {savingTemplate ? '...' : tc('add')}
                   </Button>
                 </div>
               </div>
@@ -466,7 +468,7 @@ const RulesPage: NextPageWithLayout = () => {
           <div className="p-4 rounded-2xl bg-background border border-theme-border space-y-3">
             <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
               <FlaskConical className="w-3 h-3" />
-              <span>{t('rules.testTitle' as TranslationKey)}</span>
+              <span>{t('testTitle')}</span>
             </div>
 
             {/* Auto-demo: animated examples for single-word keywords */}
@@ -500,7 +502,7 @@ const RulesPage: NextPageWithLayout = () => {
                 ))}
                 {demoVisibleCount >= demoMessages.length && (
                   <p className="text-xs text-muted-foreground mt-1 animate-slide-up">
-                    {t('rules.demoTip' as TranslationKey)}
+                    {t('demoTip')}
                   </p>
                 )}
               </div>
@@ -511,7 +513,7 @@ const RulesPage: NextPageWithLayout = () => {
               <>
                 <div className="flex gap-2">
                   <Input
-                    placeholder={t('rules.testPlaceholder' as TranslationKey)}
+                    placeholder={t('testPlaceholder')}
                     value={testInput}
                     onChange={(e) => { setTestInput(e.target.value); setTestResult(null); }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleTestRule(); } }}
@@ -525,7 +527,7 @@ const RulesPage: NextPageWithLayout = () => {
                     disabled={!testInput.trim()}
                     className="flex-shrink-0"
                   >
-                    {t('rules.testButton' as TranslationKey)}
+                    {t('testButton')}
                   </Button>
                 </div>
                 {testResult && (
@@ -537,11 +539,11 @@ const RulesPage: NextPageWithLayout = () => {
                     )}
                     <span>
                       {testResult.matches
-                        ? t('rules.testMatch' as TranslationKey)
-                        : t('rules.testNoMatch' as TranslationKey)}
+                        ? t('testMatch')
+                        : t('testNoMatch')}
                       {testResult.matchedKeyword && (
                         <span className="text-xs text-muted-foreground ms-2">
-                          ({t('rules.testMatchedKeyword' as TranslationKey).replace('{keyword}', testResult.matchedKeyword)})
+                          ({t('testMatchedKeyword').replace('{keyword}', testResult.matchedKeyword)})
                         </span>
                       )}
                     </span>
@@ -549,16 +551,16 @@ const RulesPage: NextPageWithLayout = () => {
                 )}
               </>
             ) : (
-              <p className="text-xs text-muted-foreground">{t('rules.testNoKeywords' as TranslationKey)}</p>
+              <p className="text-xs text-muted-foreground">{t('testNoKeywords')}</p>
             )}
           </div>
 
           <div className="flex justify-end gap-3 pt-6 border-t border-theme-border mt-6 pb-2 sm:pb-0">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
-              {t('common.cancel')}
+              {tc('cancel')}
             </Button>
             <Button onClick={handleSave} disabled={!formData.name.trim() || !formData.keywords.trim() || !formData.templateId}>
-              {editingRule ? t('common.save') : t('common.add')}
+              {editingRule ? tc('save') : tc('add')}
             </Button>
           </div>
         </div>
@@ -569,9 +571,9 @@ const RulesPage: NextPageWithLayout = () => {
         isOpen={!!deleteConfirmationId}
         onClose={() => setDeleteConfirmationId(null)}
         onConfirm={handleConfirmDelete}
-        title={t('rules.deleteRule')}
-        message={t('rules.deleteRuleConfirm')}
-        confirmText={t('common.delete')}
+        title={t('deleteRule')}
+        message={t('deleteRuleConfirm')}
+        confirmText={tc('delete')}
         variant="danger"
       />
     </>
@@ -585,4 +587,6 @@ RulesPage.getLayout = (page: ReactElement) => (
 
 export default RulesPage;
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.rules]);

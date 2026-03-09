@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { ChevronDown, Trash2 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { CUSTOM_SECTION_MARKER } from './types';
 import type { KnowledgeSection } from './types';
 
@@ -21,7 +21,7 @@ export function KnowledgeBaseCustomSection({
   onTitleChange,
   onDelete,
 }: KnowledgeBaseCustomSectionProps) {
-  const { t } = useTranslation();
+  const tKb = useTranslations('kb');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const hasContent = section.content.trim().length > 0;
@@ -50,12 +50,12 @@ export function KnowledgeBaseCustomSection({
   // Preview: first line of content, truncated
   const preview = hasContent
     ? section.content.split('\n')[0].slice(0, 60) + (section.content.length > 60 ? '...' : '')
-    : t('kb.section.tapToAdd' as TranslationKey);
+    : tKb('section.tapToAdd');
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (hasContent) {
-      if (!window.confirm(t('kb.customSection.deleteConfirm' as TranslationKey))) return;
+      if (!window.confirm(tKb('customSection.deleteConfirm'))) return;
     }
     onDelete();
   };
@@ -93,14 +93,14 @@ export function KnowledgeBaseCustomSection({
               value={section.title || ''}
               onChange={handleTitleChange}
               onClick={(e) => e.stopPropagation()}
-              placeholder={t('kb.customSection.titlePlaceholder' as TranslationKey)}
-              aria-label={t('kb.customSection.titlePlaceholder' as TranslationKey)}
+              placeholder={tKb('customSection.titlePlaceholder')}
+              aria-label={tKb('customSection.titlePlaceholder')}
               maxLength={40}
               dir="auto"
             />
           ) : (
             <p className={`text-sm font-bold ${hasContent ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {section.title || t('kb.customSection.titlePlaceholder' as TranslationKey)}
+              {section.title || tKb('customSection.titlePlaceholder')}
             </p>
           )}
           {!isExpanded && (
@@ -138,13 +138,13 @@ export function KnowledgeBaseCustomSection({
       {isExpanded && (
         <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
           <p className="text-xs text-muted-foreground mb-2">
-            {t('kb.customSection.desc' as TranslationKey)}
+            {tKb('customSection.desc')}
           </p>
           <textarea
             ref={textareaRef}
             className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground"
-            placeholder={t('kb.customSection.placeholder' as TranslationKey)}
-            aria-label={t('kb.customSection.placeholder' as TranslationKey)}
+            placeholder={tKb('customSection.placeholder')}
+            aria-label={tKb('customSection.placeholder')}
             value={section.content}
             onChange={(e) => onChange(e.target.value)}
             onInput={autoResize}
@@ -155,7 +155,7 @@ export function KnowledgeBaseCustomSection({
             <p className={`text-end text-xs mt-1 ${
               section.content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
             }`}>
-              {t('kb.charCount' as TranslationKey, { count: section.content.length, max: 5000 })}
+              {tKb('charCount', { count: section.content.length, max: 5000 })}
             </p>
           )}
         </div>

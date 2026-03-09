@@ -52,7 +52,7 @@ describe('AutoReplyStatusCard', () => {
     );
 
     // Should show title (Modified: No count suffix)
-    expect(screen.getByText('dashboard.activeRepliesOn')).toBeInTheDocument();
+    expect(screen.getByText('Auto-replies active')).toBeInTheDocument();
     
     // Rule #5: Success has X (Dismissible)
     const dismissBtn = screen.getByLabelText('Dismiss');
@@ -60,20 +60,20 @@ describe('AutoReplyStatusCard', () => {
 
     // Rule #5: Success NOT expandable (clicking it shouldn't change height/visibility)
     // There are 2 descriptions (desktop static, mobile expandable). We want the mobile one.
-    const notes = screen.getAllByText('dashboard.autoReplyNote');
+    const notes = screen.getAllByText("We'll auto-reply to your customers' comments and messages");
     const mobileNote = notes.find(n => !n.className.includes('hidden sm:block'));
     
     // It's collapsed on mobile
     expect(mobileNote?.parentElement).toHaveClass('max-h-0');
 
-    fireEvent.click(screen.getByText('dashboard.activeRepliesOn'));
+    fireEvent.click(screen.getByText('Auto-replies active'));
     
     // Should still be collapsed (not expandable)
     expect(mobileNote?.parentElement).toHaveClass('max-h-0');
 
     // Handle Dismiss
     fireEvent.click(dismissBtn);
-    expect(screen.queryByText('dashboard.activeRepliesOn')).not.toBeInTheDocument();
+    expect(screen.queryByText('Auto-replies active')).not.toBeInTheDocument();
     expect(sessionStorage.getItem('dashboard_success_banner_dismissed')).toBe('true');
   });
 
@@ -116,17 +116,17 @@ describe('AutoReplyStatusCard', () => {
       />
     );
 
-    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
+    expect(screen.getByText('Auto-replies disabled')).toBeInTheDocument();
 
     // Rule #5: Warning is NOT dismissible (No X)
     expect(screen.queryByLabelText('Dismiss')).not.toBeInTheDocument();
 
     // Clicking the card navigates to settings (whole-card click)
-    fireEvent.click(screen.getByText('dashboard.autoReplyConfiguredButDisabled'));
+    fireEvent.click(screen.getByText('Auto-replies disabled'));
     expect(mockPush).toHaveBeenCalledWith('/settings');
 
     // CTAs should be present
-    const ctas = screen.getAllByText('dashboard.goToSettings');
+    const ctas = screen.getAllByText('Go to Settings');
     expect(ctas.length).toBeGreaterThan(0);
   });
 
@@ -141,7 +141,7 @@ describe('AutoReplyStatusCard', () => {
     );
 
     // Should show warning, not be empty
-    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
+    expect(screen.getByText('Auto-replies disabled')).toBeInTheDocument();
   });
 
   it('should show warning when toggles are on but no pages have autoReplyEnabled', () => {
@@ -155,6 +155,6 @@ describe('AutoReplyStatusCard', () => {
     );
 
     // activePages=0 means no page has autoReplyEnabled, so it's not truly active
-    expect(screen.getByText('dashboard.autoReplyConfiguredButDisabled')).toBeInTheDocument();
+    expect(screen.getByText('Auto-replies disabled')).toBeInTheDocument();
   });
 });

@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { Card, Button, Toggle, Badge } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import {
   Edit,
   Trash2,
@@ -38,11 +38,12 @@ export function RuleCard({
   onToggle,
   onPriorityChange,
 }: RuleCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('rules');
+  const tc = useTranslations('common');
 
   const getTemplateName = (id: string | null) => {
-    if (!id) return t('common.unknown');
-    return templates.find(tp => tp.id === id)?.name || t('common.unknown');
+    if (!id) return tc('unknown');
+    return templates.find(tp => tp.id === id)?.name || tc('unknown');
   };
 
   const getTemplateStatus = (templateId: string | null): 'missing' | 'inactive' | 'ok' => {
@@ -123,7 +124,7 @@ export function RuleCard({
             <div className="p-4 rounded-2xl bg-blue-50/30 dark:bg-blue-900/30 border border-blue-100/50 dark:border-blue-700/50 relative group/condition">
               <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-blue-600 dark:text-blue-300">
                 <Tag className="w-3 h-3" />
-                <span>{t('rules.condition')}</span>
+                <span>{t('condition')}</span>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {(rule.keywords || []).map((keyword) => (
@@ -135,7 +136,7 @@ export function RuleCard({
               {duplicateKeywords.length > 0 && (
                 <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
                   <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                  <span>{t('rules.duplicateKeywordsWarning' as TranslationKey, { count: duplicateKeywords.length })}</span>
+                  <span>{t('duplicateKeywordsWarning', { count: duplicateKeywords.length })}</span>
                 </div>
               )}
             </div>
@@ -144,21 +145,21 @@ export function RuleCard({
             <div className="p-4 rounded-2xl bg-brand-50/30 dark:bg-brand-900/30 border border-brand-100/50 dark:border-brand-700/50 relative group/action">
               <div className="flex items-center gap-2 mb-2 text-[10px] font-bold text-brand-600 dark:text-brand-300">
                 <BookTemplate className="w-3 h-3" />
-                <span>{t('rules.action')}</span>
+                <span>{t('action')}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-surface-500 dark:text-surface-600">{t('rules.actions.replyWithTemplate')}:</span>
+                <span className="text-sm font-medium text-surface-500 dark:text-surface-600">{t('actions.replyWithTemplate')}:</span>
                 <span className="text-sm font-bold text-brand-900 dark:text-brand-200">{getTemplateName(rule.templateId)}</span>
                 {getTemplateStatus(rule.templateId) === 'missing' && (
                   <Badge variant="error" size="sm" className="ms-2">
                     <AlertTriangle className="w-3 h-3 me-1" />
-                    {t('rules.templateMissing' as TranslationKey)}
+                    {t('templateMissing')}
                   </Badge>
                 )}
                 {getTemplateStatus(rule.templateId) === 'inactive' && (
                   <Badge variant="warning" size="sm" className="ms-2">
                     <AlertTriangle className="w-3 h-3 me-1" />
-                    {t('rules.templateInactive' as TranslationKey)}
+                    {t('templateInactive')}
                   </Badge>
                 )}
               </div>
@@ -173,37 +174,37 @@ export function RuleCard({
             size="sm"
             onClick={() => onEdit(rule)}
             className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
-            aria-label={t('common.edit')}
-            title={t('common.edit')}
+            aria-label={tc('edit')}
+            title={tc('edit')}
           >
             <Edit className="w-4 h-4" />
-            <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.edit')}</span>
+            <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{tc('edit')}</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onDuplicate(rule)}
             className="text-surface-400 dark:text-surface-600 hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/30 flex items-center gap-2"
-            aria-label={t('common.duplicate')}
-            title={t('common.duplicate')}
+            aria-label={tc('duplicate')}
+            title={tc('duplicate')}
           >
             <Copy className="w-4 h-4" />
-            <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{t('common.duplicate')}</span>
+            <span className="lg:hidden text-xs font-bold uppercase tracking-wider">{tc('duplicate')}</span>
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => onDelete(rule.id)}
             className="text-surface-400 dark:text-surface-600 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 flex items-center gap-2"
-            aria-label={t('common.delete')}
-            title={t('common.delete')}
+            aria-label={tc('delete')}
+            title={tc('delete')}
           >
             <Trash2 className="w-4 h-4" />
-            <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">{t('common.delete')}</span>
+            <span className="lg:hidden text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400">{tc('delete')}</span>
           </Button>
           {rule.matchCount !== undefined && (
             <div className="mt-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-              {rule.matchCount} {t('rules.matches')}
+              {rule.matchCount} {t('matches')}
             </div>
           )}
         </div>

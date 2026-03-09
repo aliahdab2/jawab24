@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { Badge, Button } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useAiGeneration } from '@/hooks/useAiGeneration';
@@ -57,7 +57,11 @@ export function MessageDetailModal({
   pageName,
   pageUrl,
 }: MessageDetailModalProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('messages');
+  const tc = useTranslations('common');
+  const tComments = useTranslations('comments');
+  const tDashboard = useTranslations('dashboard');
+  const tPricing = useTranslations('pricing');
 
   // Check for held low-confidence reply and pre-fill textarea
   const heldMessage = conversation.messages.find(
@@ -218,9 +222,9 @@ export function MessageDetailModal({
       >
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
-          <span className="font-medium">{t('messages.title')}</span>
+          <span className="font-medium">{t('title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
-          <span className="font-semibold text-muted-foreground truncate">{conversation.senderName || t('common.user' as TranslationKey)}</span>
+          <span className="font-semibold text-muted-foreground truncate">{conversation.senderName || tc('user')}</span>
         </div>
 
         {/* Header */}
@@ -234,16 +238,16 @@ export function MessageDetailModal({
             </div>
             <div className="text-start min-w-0">
               <h2 className="text-lg font-semibold text-foreground leading-tight truncate">
-                {conversation.senderName || t('common.user' as TranslationKey)}
+                {conversation.senderName || tc('user')}
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-start">
-                  {t('messages.msgCount' as TranslationKey, { count: conversation.messages.length })}
+                  {t('msgCount', { count: conversation.messages.length })}
                 </span>
                 {conversation.needsHumanAttention && (
                   <Badge variant="warning" size="sm">
                     <AlertTriangle className="w-3 h-3 me-1" />
-                    {t('messages.needsHuman')}
+                    {t('needsHuman')}
                   </Badge>
                 )}
               </div>
@@ -268,7 +272,7 @@ export function MessageDetailModal({
           </div>
           <button
             onClick={onClose}
-            aria-label={t('comments.close' as TranslationKey)}
+            aria-label={tComments('close')}
             className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5" />
@@ -305,17 +309,17 @@ export function MessageDetailModal({
                       {msg.replyMethod === 'ai' ? (
                         <>
                           <Sparkles className="w-2.5 h-2.5" />
-                          {t('dashboard.aiReply')}
+                          {tDashboard('aiReply')}
                         </>
                       ) : msg.replyMethod === 'template' ? (
                         <>
                           <CheckCircle className="w-2.5 h-2.5" />
-                          {t('dashboard.templateReply')}
+                          {tDashboard('templateReply')}
                         </>
                       ) : (
                         <>
                           <UserCheck className="w-2.5 h-2.5" />
-                          {t('common.manual' as TranslationKey)}
+                          {tc('manual')}
                         </>
                       )}
                     </div>
@@ -334,7 +338,7 @@ export function MessageDetailModal({
               className="pointer-events-auto flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-500 text-white text-xs font-semibold shadow-lg shadow-brand-500/30 hover:bg-brand-600 transition-all animate-in fade-in slide-in-from-bottom-2 duration-200"
             >
               <ArrowDown className="w-3.5 h-3.5" />
-              {t('messages.newMessage' as TranslationKey)}
+              {t('newMessage')}
             </button>
           </div>
         )}
@@ -346,7 +350,7 @@ export function MessageDetailModal({
           {heldMessage && (
             <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
               <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>{t('comments.heldReplyBanner')}</span>
+              <span>{tComments('heldReplyBanner')}</span>
             </div>
           )}
 
@@ -359,7 +363,7 @@ export function MessageDetailModal({
           {/* Smart Reply button */}
           {hasUnrepliedIncoming && (
             <div className="flex items-center justify-between mb-2">
-              {replyText && !isGenerating && <span className="text-xs text-muted-foreground">{t('comments.aiSuggestedReply' as TranslationKey)}</span>}
+              {replyText && !isGenerating && <span className="text-xs text-muted-foreground">{tComments('aiSuggestedReply')}</span>}
               <div className="flex-1" />
               <div className="relative group/tooltip inline-block">
                 <Button
@@ -374,17 +378,17 @@ export function MessageDetailModal({
                   icon={<Bot className="w-4 h-4" />}
                 >
                   {isGenerating
-                    ? generationStatus || t('common.loading')
+                    ? generationStatus || tc('loading')
                     : !aiLimit.allowed
-                      ? t('pricing.limitReached')
+                      ? tPricing('limitReached')
                       : replyText
-                        ? t('comments.regenerate' as TranslationKey)
-                        : t('dashboard.aiReply')}
+                        ? tComments('regenerate')
+                        : tDashboard('aiReply')}
                 </Button>
 
                 {!aiLimit.allowed && (
                   <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                    {aiLimit.reason || t('pricing.limitReached')}
+                    {aiLimit.reason || tPricing('limitReached')}
                   </div>
                 )}
               </div>
@@ -403,8 +407,8 @@ export function MessageDetailModal({
                 }
               }}
               dir="auto"
-              placeholder={t('messages.typeReply' as TranslationKey)}
-              aria-label={t('messages.typeReply' as TranslationKey)}
+              placeholder={t('typeReply')}
+              aria-label={t('typeReply')}
               rows={1}
               className="flex-1 min-w-0 resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
               style={{ height: '42px', maxHeight: '120px' }}
@@ -413,7 +417,7 @@ export function MessageDetailModal({
             <button
               onClick={handleSend}
               disabled={!replyText.trim() || isReplying || isGenerating}
-              aria-label={t('comments.reply' as TranslationKey)}
+              aria-label={tComments('reply')}
               className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
             >
               {isReplying
@@ -436,7 +440,7 @@ export function MessageDetailModal({
                     }
                   }}
                   disabled={isPausing || isResuming}
-                  aria-label={isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}
+                  aria-label={isPaused ? t('resumeSmartReply') : t('pauseSmartReply')}
                   className={clsx(
                     'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
                     isPaused
@@ -445,11 +449,11 @@ export function MessageDetailModal({
                   )}
                 >
                   {isPaused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
-                  <span>{isPaused ? t('messages.resumeSmartReply' as TranslationKey) : t('messages.pauseSmartReply' as TranslationKey)}</span>
+                  <span>{isPaused ? t('resumeSmartReply') : t('pauseSmartReply')}</span>
                 </button>
                 {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null && (
                   <span className="text-[10px] font-medium text-violet-500">
-                    {t('messages.smartReplyPausedRemaining' as TranslationKey, { minutes: conversation.pauseStatus.remainingMinutes })}
+                    {t('smartReplyPausedRemaining', { minutes: conversation.pauseStatus.remainingMinutes })}
                   </span>
                 )}
               </div>
@@ -462,12 +466,12 @@ export function MessageDetailModal({
                 className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30"
               >
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                {t('comments.resolve' as TranslationKey)}
+                {tComments('resolve')}
               </button>
             ) : hasResolvedIncoming ? (
               <span className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400">
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                {t('messages.resolved' as TranslationKey)}
+                {t('resolved')}
               </span>
             ) : null}
           </div>

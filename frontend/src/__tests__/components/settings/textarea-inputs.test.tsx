@@ -5,13 +5,6 @@ import { BusinessHoursCard } from '@/components/settings/BusinessHoursCard';
 import { CommentsAutoReplyCard } from '@/components/settings/CommentsAutoReplyCard';
 import type { SettingsState } from '@/components/settings/types';
 
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    language: 'en',
-  }),
-}));
-
 vi.mock('@/components/ui', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div className={className}>{children}</div>
@@ -52,6 +45,10 @@ function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
     greetingMessage: '',
     replyDelay: 3,
     dualReplyNudge: '',
+    brandVoiceNotesMulti: {},
+    replyStyle: 'professional',
+    brandVoiceNotes: '',
+    holdLowConfidence: false,
     commentEscalationMinutes: 30,
     messageEscalationMinutes: 30,
     handoffPauseDurationMinutes: 60,

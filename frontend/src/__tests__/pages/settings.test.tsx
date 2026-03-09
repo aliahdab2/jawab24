@@ -1,21 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import SettingsPage from '@/pages/settings';
-import type { Language } from '@/i18n';
 import { settingsApi } from '@/lib/api';
 
 // Create mock functions
-const mockT = vi.fn((key: string) => key);
 const mockSetLanguage = vi.fn();
 
 // Mock the dependencies
-vi.mock('@/i18n', () => ({
-    useTranslation: () => ({
-        t: mockT,
-        language: 'en' as Language,
-    }),
+vi.mock('@/i18n/hooks', () => ({
     useLanguage: () => ({
+        language: 'en',
         setLanguage: mockSetLanguage,
+        dateLocale: {},
+        intlLocale: 'en-US',
     }),
 }));
 
@@ -73,7 +70,6 @@ describe('SettingsPage - Infinite Loop Prevention', () => {
     beforeEach(() => {
         fetchCallCount = 0;
         mockSetLanguage.mockClear();
-        mockT.mockClear();
 
         // Track fetch calls with mocked settingsApi
         mockedSettingsApi.get.mockImplementation(async () => {

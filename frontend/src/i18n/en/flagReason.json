@@ -1,0 +1,14 @@
+{
+  "offensive_or_abusive": "Offensive or abusive",
+  "angry_customer": "Angry customer",
+  "low_confidence": "Low confidence reply",
+  "price_not_in_kb": "Price not in knowledge base",
+  "redirect_to_human": "Redirect to human",
+  "complaint": "Complaint",
+  "offensive": "Offensive",
+  "invalid_json": "Reply processing error",
+  "fallback_reply": "Fallback reply",
+  "info_not_in_kb": "Information not in knowledge base",
+  "held_low_confidence": "Low confidence reply",
+  "slaNoReply": "No reply after {minutes} min"
+}

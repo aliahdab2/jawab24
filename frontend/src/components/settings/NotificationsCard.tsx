@@ -5,18 +5,18 @@ import {
   Clock,
   Check,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
 
 export function NotificationsCard({ settings, setSettings }: SettingsCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
 
   const durationPresets = [
-    { value: 15, label: t('settings.duration15min' as TranslationKey) },
-    { value: 30, label: t('settings.duration30min' as TranslationKey) },
-    { value: 60, label: t('settings.duration1hr' as TranslationKey) },
-    { value: 120, label: t('settings.duration2hr' as TranslationKey) },
-    { value: 240, label: t('settings.duration4hr' as TranslationKey) },
+    { value: 15, label: t('duration15min') },
+    { value: 30, label: t('duration30min') },
+    { value: 60, label: t('duration1hr') },
+    { value: 120, label: t('duration2hr') },
+    { value: 240, label: t('duration4hr') },
   ];
 
   return (
@@ -27,11 +27,11 @@ export function NotificationsCard({ settings, setSettings }: SettingsCardProps) 
             <Bell className="w-4 h-4" />
           </div>
           <div className="text-start">
-            <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.reminders.title')}</h4>
-            <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.reminders.desc')}</p>
+            <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('reminders.title')}</h4>
+            <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('reminders.desc')}</p>
           </div>
         </div>
-        <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} aria-label={t('settings.reminders.title')} />
+        <Toggle enabled={settings.notificationsEnabled} onChange={(enabled) => setSettings({ ...settings, notificationsEnabled: enabled })} aria-label={t('reminders.title')} />
       </div>
       <div
         className={clsx(
@@ -39,11 +39,11 @@ export function NotificationsCard({ settings, setSettings }: SettingsCardProps) 
           !settings.notificationsEnabled && "opacity-50 pointer-events-none"
         )}
       >
-      <p className="text-xs text-muted-foreground font-medium mb-3">{t('settings.reminders.helpText')}</p>
+      <p className="text-xs text-muted-foreground font-medium mb-3">{t('reminders.helpText')}</p>
       <div className="space-y-4">
         {/* Comment reminder presets */}
         <div>
-          <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('settings.reminders.commentLabel')}</label>
+          <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('reminders.commentLabel')}</label>
           <div className="flex flex-wrap gap-2">
             {durationPresets.map((opt) => (
               <button
@@ -66,7 +66,7 @@ export function NotificationsCard({ settings, setSettings }: SettingsCardProps) 
         </div>
         {/* Message reminder presets */}
         <div>
-          <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('settings.reminders.messageLabel')}</label>
+          <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('reminders.messageLabel')}</label>
           <div className="flex flex-wrap gap-2">
             {durationPresets.map((opt) => (
               <button

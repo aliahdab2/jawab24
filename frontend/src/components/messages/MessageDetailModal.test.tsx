@@ -9,14 +9,7 @@ vi.mock('@/lib/openExternalUrl', () => ({
   openExternalUrl: vi.fn()
 }));
 
-// Mock translation hook
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    language: 'en',
-    dateLocale: undefined,
-  }),
-}));
+// Translation mocked globally via test/setup.ts (next-intl mock returns the key as-is)
 
 // Mock useEscapeKey hook
 vi.mock('@/hooks/useEscapeKey', () => ({
@@ -138,8 +131,8 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByPlaceholderText('messages.typeReply')).toBeInTheDocument();
-    expect(screen.getByLabelText('comments.reply')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Type your reply...')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reply')).toBeInTheDocument();
   });
 
   it('calls onReply when send button is clicked', () => {
@@ -153,10 +146,10 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText('messages.typeReply');
+    const textarea = screen.getByPlaceholderText('Type your reply...');
     fireEvent.change(textarea, { target: { value: 'My reply' } });
 
-    const sendButton = screen.getByLabelText('comments.reply');
+    const sendButton = screen.getByLabelText('Reply');
     fireEvent.click(sendButton);
 
     expect(onReply).toHaveBeenCalledWith('1', 'My reply');
@@ -173,7 +166,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText('messages.typeReply');
+    const textarea = screen.getByPlaceholderText('Type your reply...');
     fireEvent.change(textarea, { target: { value: 'Enter reply' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
 
@@ -191,7 +184,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    const textarea = screen.getByPlaceholderText('messages.typeReply');
+    const textarea = screen.getByPlaceholderText('Type your reply...');
     fireEvent.change(textarea, { target: { value: 'Line 1' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
 
@@ -211,7 +204,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('comments.resolve')).toBeInTheDocument();
+    expect(screen.getByText('Resolve')).toBeInTheDocument();
   });
 
   it('hides resolve button when all messages are resolved', () => {
@@ -228,8 +221,8 @@ describe('MessageDetailModal', () => {
     );
 
     // The clickable resolve button should not appear (only the resolved badge)
-    expect(screen.queryByText('comments.resolve')).not.toBeInTheDocument();
-    expect(screen.getByText('messages.resolved')).toBeInTheDocument();
+    expect(screen.queryByText('Resolve')).not.toBeInTheDocument();
+    expect(screen.getByText('Resolved')).toBeInTheDocument();
   });
 
   it('calls onResolve with senderId and pageId', () => {
@@ -248,7 +241,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('comments.resolve'));
+    fireEvent.click(screen.getByText('Resolve'));
     expect(onResolve).toHaveBeenCalledWith('sender1', 'page1');
   });
 
@@ -260,7 +253,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'messages.pauseSmartReply' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Pause Smart Reply' })).toBeInTheDocument();
   });
 
   it('shows resume button when conversation is paused', () => {
@@ -273,7 +266,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'messages.resumeSmartReply' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Resume Smart Reply' })).toBeInTheDocument();
   });
 
   it('shows remaining minutes when paused', () => {
@@ -286,7 +279,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('messages.smartReplyPausedRemaining')).toBeInTheDocument();
+    expect(screen.getByText('10 min remaining')).toBeInTheDocument();
   });
 
   it('calls onClose when close button is clicked', () => {
@@ -300,7 +293,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByLabelText('comments.close'));
+    fireEvent.click(screen.getByLabelText('Close'));
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -327,7 +320,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('messages.needsHuman')).toBeInTheDocument();
+    expect(screen.getByText('Needs Human')).toBeInTheDocument();
   });
 
   describe('page name link', () => {
@@ -404,7 +397,7 @@ describe('MessageDetailModal', () => {
     );
 
     // The reply method badge is inside the message bubble metadata
-    const badges = screen.getAllByText('dashboard.aiReply');
+    const badges = screen.getAllByText('Smart Reply');
     expect(badges.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -426,8 +419,8 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      expect(screen.getByText('comments.heldReplyBanner')).toBeInTheDocument();
-      const textarea = screen.getByPlaceholderText('messages.typeReply');
+      expect(screen.getByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).toBeInTheDocument();
+      const textarea = screen.getByPlaceholderText('Type your reply...');
       expect(textarea).toHaveValue('AI suggested draft reply');
     });
 
@@ -444,7 +437,7 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
 
     it('does not show held reply banner when aiOriginalReply exists but flagReason is different', () => {
@@ -464,7 +457,7 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
   });
 
@@ -479,9 +472,9 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      // Smart Reply button uses 'dashboard.aiReply' text
+      // Smart Reply button uses 'Smart Reply' text
       const buttons = screen.getAllByRole('button');
-      const smartReplyBtn = buttons.find(btn => btn.textContent?.includes('dashboard.aiReply'));
+      const smartReplyBtn = buttons.find(btn => btn.textContent?.includes('Smart Reply'));
       expect(smartReplyBtn).toBeDefined();
     });
 
@@ -505,12 +498,13 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      // Only the badge text should appear, not a button with Bot icon
+      // Smart Reply generate button should not be visible (all incoming are replied)
+      // The Pause Smart Reply button is separate; check there's no generate button with exact "Smart Reply" text
       const buttons = screen.getAllByRole('button');
-      const smartReplyBtn = buttons.find(
-        btn => btn.textContent?.includes('dashboard.aiReply') && btn.querySelector('svg')
+      const smartReplyGenerateBtn = buttons.find(
+        btn => btn.textContent?.trim() === 'Smart Reply'
       );
-      expect(smartReplyBtn).toBeUndefined();
+      expect(smartReplyGenerateBtn).toBeUndefined();
     });
 
     it('disables Smart Reply button and textarea while generating', () => {
@@ -524,7 +518,7 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      const textarea = screen.getByPlaceholderText('messages.typeReply');
+      const textarea = screen.getByPlaceholderText('Type your reply...');
       // Textarea should not be disabled by default (isGenerating = false)
       expect(textarea).not.toBeDisabled();
     });

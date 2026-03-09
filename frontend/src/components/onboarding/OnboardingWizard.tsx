@@ -16,7 +16,7 @@ import {
   Check,
 } from 'lucide-react';
 import { Button, Toggle } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { pagesApi, api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
@@ -28,8 +28,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 
-// Type for the translation function
-type TFunction = (key: TranslationKey, params?: Record<string, string | number>) => string;
+type TFunction = (key: string, params?: Record<string, string | number>) => string;
 
 interface OnboardingWizardProps {
   onComplete: () => void;
@@ -83,12 +82,12 @@ function PickPageStep({
         <div className="w-12 h-12 rounded-full icon-bg-red flex items-center justify-center mx-auto mb-4">
           <X className="w-6 h-6" />
         </div>
-        <p className="text-muted-foreground font-medium">{t('onboarding.fetchError' as TranslationKey)}</p>
+        <p className="text-muted-foreground font-medium">{t('onboarding.fetchError')}</p>
         <button
           onClick={onRetry}
           className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
         >
-          {t('errors.tryAgain' as TranslationKey)}
+          {t('errors.tryAgain')}
         </button>
       </div>
     );
@@ -99,12 +98,12 @@ function PickPageStep({
       <div className="text-center py-8">
         <FileText className="w-12 h-12 text-icon-muted mx-auto mb-4" />
         <p className="text-muted-foreground font-medium">{t('pages.noPages')}</p>
-        <p className="text-muted-foreground text-sm mt-2">{t('onboarding.noPagesHelp' as TranslationKey)}</p>
+        <p className="text-muted-foreground text-sm mt-2">{t('onboarding.noPagesHelp')}</p>
         <button
           onClick={onRetry}
           className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors"
         >
-          {t('onboarding.refreshPages' as TranslationKey)}
+          {t('onboarding.refreshPages')}
         </button>
       </div>
     );
@@ -134,7 +133,7 @@ function PickPageStep({
           {t('onboarding.pickPageDesc')}
           {pageLimit !== null && (
             <span className="block text-xs text-muted-foreground mt-1">
-              {t('onboarding.pageLimitInfo' as TranslationKey, { limit: pageLimit })}
+              {t('onboarding.pageLimitInfo', { limit: pageLimit })}
             </span>
           )}
         </p>
@@ -236,7 +235,7 @@ function ReviewInfoStep({
           <CheckCircle2 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
           <div className="min-w-0">
             <p className="text-sm font-semibold truncate">{selectedPage.name}</p>
-            <p className="text-xs opacity-80">{t('onboarding.readySummary' as TranslationKey)}</p>
+            <p className="text-xs opacity-80">{t('onboarding.readySummary')}</p>
           </div>
         </div>
       )}
@@ -315,7 +314,7 @@ function ReviewInfoStep({
       {/* Suggestion chips — "Add more details" */}
       <div className="text-start">
         <p className={`font-semibold text-foreground ${isLandscape ? 'text-xs mb-2' : 'text-sm mb-2'}`}>
-          {t('onboarding.addMore' as TranslationKey)}
+          {t('onboarding.addMore')}
         </p>
         <div className="flex flex-wrap gap-2 mb-2">
           {SUGGESTION_CHIPS.map((chip) => {
@@ -335,7 +334,7 @@ function ReviewInfoStep({
                 }`}
               >
                 <span>{chip.emoji}</span>
-                <span>{t(chip.labelKey as TranslationKey)}</span>
+                <span>{t(chip.labelKey)}</span>
                 {hasContent && !isActive && <Check className="w-3.5 h-3.5 text-brand-500" />}
               </button>
             );
@@ -351,8 +350,8 @@ function ReviewInfoStep({
               className={`w-full p-3 border-2 border-brand-200 dark:border-brand-800 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none text-foreground bg-background text-sm placeholder:text-muted-foreground ${
                 isLandscape ? 'min-h-[60px]' : 'min-h-[80px]'
               }`}
-              placeholder={t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.placeholderKey as TranslationKey)}
-              aria-label={t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.labelKey as TranslationKey)}
+              placeholder={t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.placeholderKey)}
+              aria-label={t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.labelKey)}
               dir="auto"
               autoFocus
             />
@@ -363,7 +362,7 @@ function ReviewInfoStep({
                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 hover:bg-brand-50 dark:hover:bg-brand-950/30 rounded-lg transition-colors"
               >
                 <Check className="w-3.5 h-3.5" />
-                {t('onboarding.addMoreDone' as TranslationKey)}
+                {t('onboarding.addMoreDone')}
               </button>
             </div>
           </div>
@@ -374,8 +373,26 @@ function ReviewInfoStep({
 }
 
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
-  const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
+  const tOnboarding = useTranslations('onboarding');
+  const tc = useTranslations('common');
+  const tPages = useTranslations('pages');
+  const tErrors = useTranslations('errors');
+  const tPricing = useTranslations('pricing');
+  const locale = useLocale();
+  const isRTL = locale === 'ar';
+
+  // Legacy wrapper: sub-components still expect a single t(fullKey) function.
+  // TODO: refactor PickPageStep/ReviewInfoStep to accept namespace translators directly.
+  const t = useCallback((key: string, params?: Record<string, string | number>): string => {
+    const [ns, ...rest] = key.split('.');
+    const subKey = rest.join('.');
+    if (ns === 'onboarding') return tOnboarding(subKey as Parameters<typeof tOnboarding>[0], params);
+    if (ns === 'common') return tc(subKey as Parameters<typeof tc>[0], params);
+    if (ns === 'pages') return tPages(subKey as Parameters<typeof tPages>[0], params);
+    if (ns === 'errors') return tErrors(subKey as Parameters<typeof tErrors>[0], params);
+    if (ns === 'pricing') return tPricing(subKey as Parameters<typeof tPricing>[0], params);
+    return key;
+  }, [tOnboarding, tc, tPages, tErrors, tPricing]) as TFunction;
   const { fbToken } = useAuthStore();
   const [currentStep, setCurrentStep] = useState(0);
   const [pages, setPages] = useState<Page[]>([]);
@@ -456,7 +473,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       const targetPage = pages.find(p => p.id === pageId);
       const targetAlreadyEnabled = targetPage?.autoReplyEnabled || targetPage?.instagramAutoReplyEnabled;
       if (!targetAlreadyEnabled && enabledPages >= pageLimit) {
-        toast.error(t('onboarding.pageLimitReached' as TranslationKey, { limit: pageLimit }));
+        toast.error(t('onboarding.pageLimitReached', { limit: pageLimit }));
         return;
       }
     }
@@ -480,9 +497,9 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       captureError(error, 'Onboarding: failed to toggle page', { tags: { component: 'onboarding' } });
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t('onboarding.pageLimitReached' as TranslationKey, { limit: pageLimit ?? 1 }));
+        toast.error(t('onboarding.pageLimitReached', { limit: pageLimit ?? 1 }));
       } else {
-        toast.error(t('errors.somethingWentWrong' as TranslationKey));
+        toast.error(t('errors.somethingWentWrong'));
       }
       // Revert optimistic update
       setPages(prev => prev.map(p =>
@@ -508,7 +525,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       const content = chipData[chip.id]?.trim();
       if (!content) continue;
 
-      const label = t(chip.labelKey as TranslationKey);
+      const label = t(chip.labelKey);
       const section = `${chip.emoji} ${label}:\n${content}`;
       finalKb = finalKb ? `${finalKb}\n\n${section}` : section;
     }
@@ -620,7 +637,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         <div className={`flex-shrink-0 border-t border-theme-border ${isLandscape ? 'px-6 py-3' : 'px-6 py-4'}`}>
           {/* Step label */}
           <p className="text-center text-xs text-muted-foreground mb-2">
-            {t('onboarding.stepOf' as TranslationKey, { step: currentStep + 1, total: totalSteps })}
+            {t('onboarding.stepOf', { step: currentStep + 1, total: totalSteps })}
           </p>
 
           {/* Progress dots */}

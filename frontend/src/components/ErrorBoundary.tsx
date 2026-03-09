@@ -1,13 +1,13 @@
 import React, { Component, ErrorInfo, PropsWithChildren } from 'react';
 import * as Sentry from '@sentry/nextjs';
-import { useTranslation, type TranslationKey } from '../i18n';
+import { useTranslations, useLocale } from 'next-intl';
 
 // Props for the error boundary class component
 interface ErrorBoundaryClassProps extends PropsWithChildren {
   fallback?: React.ReactNode;
   name?: string;
   resetKeys?: string;
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string;
+  t: (key: string) => string;
   language: string;
 }
 
@@ -100,9 +100,9 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
 
             {/* Error Message */}
             <h1 className="text-xl font-semibold text-white mb-2">
-              {t('errorBoundary.title')}
+              {t('title')}
             </h1>
-            <p className="text-zinc-400 mb-6">{t('errorBoundary.description')}</p>
+            <p className="text-zinc-400 mb-6">{t('description')}</p>
 
             {/* Error Details (only in development) */}
             {process.env.NODE_ENV === 'development' && this.state.error && (
@@ -119,13 +119,13 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
                 onClick={this.handleReload}
                 className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium transition-colors"
               >
-                {t('errorBoundary.refreshButton')}
+                {t('refreshButton')}
               </button>
               <button
                 onClick={this.handleGoHome}
                 className="px-5 py-2.5 bg-zinc-700 hover:bg-zinc-600 text-white rounded-lg font-medium transition-colors"
               >
-                {t('errorBoundary.homeButton')}
+                {t('homeButton')}
               </button>
             </div>
           </div>
@@ -142,10 +142,11 @@ class ErrorBoundaryClass extends Component<ErrorBoundaryClassProps, State> {
  * Provides translation hook to the class component
  */
 export function ErrorBoundary({ children, ...props }: Omit<ErrorBoundaryClassProps, 't' | 'language'>) {
-  const { t, language } = useTranslation();
+  const t = useTranslations('errorBoundary');
+  const locale = useLocale();
 
   return (
-    <ErrorBoundaryClass t={t} language={language} {...props}>
+    <ErrorBoundaryClass t={t} language={locale} {...props}>
       {children}
     </ErrorBoundaryClass>
   );

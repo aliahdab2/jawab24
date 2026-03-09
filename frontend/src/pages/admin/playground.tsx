@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Send, Database, AlertTriangle, Zap, MessageSquare, ChevronDown, ChevronUp, Trash2, FlaskConical, X, Sparkles, Plus, Minus, Pin, Check, Pencil, Copy, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -137,7 +138,9 @@ function MethodIcon({ method }: { method: string }) {
 // ────────────────────────────────────────────
 
 export default function AdminPlaygroundPage() {
-    const { t, language } = useTranslation();
+    const t = useTranslations('admin');
+    const tc = useTranslations('common');
+    const { language } = useLanguage();
     const isRTL = language === 'ar';
 
     // Core state
@@ -288,7 +291,7 @@ export default function AdminPlaygroundPage() {
                 role: 'assistant',
                 text: '',
                 timestamp: new Date(),
-                error: err instanceof Error ? err.message : t('admin.playground.errorGeneric'),
+                error: err instanceof Error ? err.message : t('playground.errorGeneric'),
             };
             setMessages(prev => [...prev, assistantMsg]);
             captureError(err, 'Failed to test reply', { tags: { page: 'admin-playground', action: 'testReply' } });
@@ -307,7 +310,7 @@ export default function AdminPlaygroundPage() {
     const handleCopy = useCallback(async (text: string) => {
         try {
             await navigator.clipboard.writeText(text);
-            toast.success(t('admin.playground.copied'));
+            toast.success(t('playground.copied'));
         } catch {
             // Clipboard API not available — not critical
         }
@@ -397,31 +400,31 @@ export default function AdminPlaygroundPage() {
     // ── Render ──
 
     return (
-        <AdminLayout title={t('admin.playground.title')}>
+        <AdminLayout title={t('playground.title')}>
             <div dir={isRTL ? 'rtl' : 'ltr'} className="flex flex-col h-[calc(100vh-8rem)]">
 
                 {/* ── Controls Bar ── */}
                 <div className="border-b border-theme-border bg-card rounded-t-xl flex-shrink-0">
                     {/* Row 1: Page selection */}
                     <div className="flex items-center gap-3 px-4 pt-3 pb-1.5">
-                        <label htmlFor="email-filter" className="sr-only">{t('admin.playground.emailFilter')}</label>
+                        <label htmlFor="email-filter" className="sr-only">{t('playground.emailFilter')}</label>
                         <input
                             id="email-filter"
                             type="text"
                             dir="auto"
                             value={emailFilter}
                             onChange={(e) => setEmailFilter(e.target.value)}
-                            placeholder={t('admin.playground.emailFilterPlaceholder')}
+                            placeholder={t('playground.emailFilterPlaceholder')}
                             className="max-w-[180px] px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder:text-muted-foreground"
                         />
-                        <label htmlFor="page-select" className="sr-only">{t('admin.playground.selectPage')}</label>
+                        <label htmlFor="page-select" className="sr-only">{t('playground.selectPage')}</label>
                         <select
                             id="page-select"
                             value={selectedPageId}
                             onChange={(e) => setSelectedPageId(e.target.value)}
                             className="flex-1 px-3 py-1.5 border border-surface-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
                         >
-                            <option value="">{t('admin.playground.selectPagePlaceholder')}</option>
+                            <option value="">{t('playground.selectPagePlaceholder')}</option>
                             {filteredPages.map((p) => (
                                 <option key={p.id} value={p.id}>
                                     {p.name} {p.userEmail ? `(${p.userEmail})` : ''} {p.kbActiveVersion === null ? '— no chunks' : `— v${p.kbActiveVersion}`}
@@ -443,7 +446,7 @@ export default function AdminPlaygroundPage() {
                                         : 'bg-card text-muted-foreground hover:bg-background'
                                 )}
                             >
-                                {t('admin.playground.comment')}
+                                {t('playground.comment')}
                             </button>
                             <button
                                 type="button"
@@ -455,7 +458,7 @@ export default function AdminPlaygroundPage() {
                                         : 'bg-card text-muted-foreground hover:bg-background'
                                 )}
                             >
-                                {t('admin.playground.dm')}
+                                {t('playground.dm')}
                             </button>
                         </div>
 
@@ -470,7 +473,7 @@ export default function AdminPlaygroundPage() {
                                     ? 'bg-brand-100 text-brand-700'
                                     : 'text-muted-foreground hover:bg-muted'
                             )}
-                            aria-label={t('admin.playground.toggleSidebar')}
+                            aria-label={t('playground.toggleSidebar')}
                         >
                             <Database className="w-4 h-4" aria-hidden="true" />
                         </button>
@@ -480,7 +483,7 @@ export default function AdminPlaygroundPage() {
                             onClick={handleClear}
                             disabled={messages.length === 0}
                             className="p-2 rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                            aria-label={t('admin.playground.clearChat')}
+                            aria-label={t('playground.clearChat')}
                         >
                             <Trash2 className="w-4 h-4" aria-hidden="true" />
                         </button>
@@ -498,13 +501,13 @@ export default function AdminPlaygroundPage() {
                                     <div className="flex items-center justify-between mb-1.5">
                                         <label htmlFor="post-context" className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                             <Pin className="w-3 h-3" aria-hidden="true" />
-                                            {t('admin.playground.postContext')}
+                                            {t('playground.postContext')}
                                         </label>
                                         <button
                                             type="button"
                                             onClick={() => setContextExpanded(false)}
                                             className="p-1 rounded text-muted-foreground hover:text-muted-foreground transition-colors"
-                                            aria-label={t('admin.playground.collapseContext')}
+                                            aria-label={t('playground.collapseContext')}
                                         >
                                             <ChevronUp className="w-4 h-4" aria-hidden="true" />
                                         </button>
@@ -516,7 +519,7 @@ export default function AdminPlaygroundPage() {
                                         value={postMessage}
                                         onChange={(e) => setPostMessage(e.target.value)}
                                         onInput={autoResizeContext}
-                                        placeholder={t('admin.playground.postContextPlaceholder')}
+                                        placeholder={t('playground.postContextPlaceholder')}
                                         rows={6}
                                         className={clsx(
                                             'w-full resize-y rounded-lg border border-theme-border bg-card px-3 py-2 text-sm',
@@ -540,20 +543,20 @@ export default function AdminPlaygroundPage() {
                                             ? 'bg-brand-50/50 border-brand-200 hover:bg-brand-50'
                                             : 'bg-background/50 border-theme-border border-dashed hover:bg-muted'
                                     )}
-                                    aria-label={t('admin.playground.expandContext')}
+                                    aria-label={t('playground.expandContext')}
                                 >
                                     <Pin className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
                                     <span className="text-sm text-foreground/70 truncate flex-1" dir="auto">
                                         {postMessage.trim()
                                             ? postMessage.split('\n')[0].slice(0, 80) + (postMessage.length > 80 ? '...' : '')
-                                            : t('admin.playground.postContextEmpty')
+                                            : t('playground.postContextEmpty')
                                         }
                                     </span>
                                     <button
                                         type="button"
                                         onClick={(e) => { e.stopPropagation(); setContextExpanded(true); }}
                                         className="p-1 rounded text-muted-foreground hover:text-muted-foreground transition-colors flex-shrink-0"
-                                        aria-label={t('admin.playground.expandContext')}
+                                        aria-label={t('playground.expandContext')}
                                     >
                                         <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
                                     </button>
@@ -562,7 +565,7 @@ export default function AdminPlaygroundPage() {
                                             type="button"
                                             onClick={(e) => { e.stopPropagation(); setPostMessage(''); }}
                                             className="p-1 rounded text-muted-foreground hover:text-red-500 transition-colors flex-shrink-0"
-                                            aria-label={t('admin.playground.clearContext')}
+                                            aria-label={t('playground.clearContext')}
                                         >
                                             <X className="w-3.5 h-3.5" aria-hidden="true" />
                                         </button>
@@ -579,7 +582,7 @@ export default function AdminPlaygroundPage() {
                                     <div className="flex items-center justify-between mb-1.5">
                                         <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                                             <MessageSquare className="w-3 h-3" aria-hidden="true" />
-                                            {t('admin.playground.conversationHistory')}
+                                            {t('playground.conversationHistory')}
                                         </label>
                                         <div className="flex items-center gap-2">
                                             <button
@@ -588,20 +591,20 @@ export default function AdminPlaygroundPage() {
                                                 className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 transition-colors"
                                             >
                                                 <Plus className="w-3 h-3" aria-hidden="true" />
-                                                {t('admin.playground.addMessage')}
+                                                {t('playground.addMessage')}
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setHistoryExpanded(false)}
                                                 className="p-1 rounded text-muted-foreground hover:text-muted-foreground transition-colors"
-                                                aria-label={t('admin.playground.collapseHistory')}
+                                                aria-label={t('playground.collapseHistory')}
                                             >
                                                 <ChevronUp className="w-4 h-4" aria-hidden="true" />
                                             </button>
                                         </div>
                                     </div>
                                     {conversationHistory.length === 0 ? (
-                                        <p className="text-xs text-muted-foreground italic">{t('admin.playground.conversationHistoryHint')}</p>
+                                        <p className="text-xs text-muted-foreground italic">{t('playground.conversationHistoryHint')}</p>
                                     ) : (
                                         <div className="space-y-2 max-h-40 overflow-y-auto">
                                             {conversationHistory.map((msg, i) => (
@@ -610,24 +613,24 @@ export default function AdminPlaygroundPage() {
                                                         value={msg.role}
                                                         onChange={(e) => updateHistoryMessage(i, 'role', e.target.value)}
                                                         className="flex-shrink-0 rounded-lg border border-theme-border bg-card px-2 py-1.5 text-xs text-foreground/70 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
-                                                        aria-label={`${t('admin.playground.conversationHistory')} ${i + 1}`}
+                                                        aria-label={`${t('playground.conversationHistory')} ${i + 1}`}
                                                     >
-                                                        <option value="user">{t('admin.playground.roleCustomer')}</option>
-                                                        <option value="assistant">{t('admin.playground.roleBusiness')}</option>
+                                                        <option value="user">{t('playground.roleCustomer')}</option>
+                                                        <option value="assistant">{t('playground.roleBusiness')}</option>
                                                     </select>
                                                     <input
                                                         type="text"
                                                         dir="auto"
                                                         value={msg.content}
                                                         onChange={(e) => updateHistoryMessage(i, 'content', e.target.value)}
-                                                        placeholder={t('admin.playground.messagePlaceholder')}
+                                                        placeholder={t('playground.messagePlaceholder')}
                                                         className="flex-1 rounded-lg border border-theme-border bg-card px-3 py-1.5 text-sm text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none"
                                                     />
                                                     <button
                                                         type="button"
                                                         onClick={() => removeHistoryMessage(i)}
                                                         className="flex-shrink-0 p-1.5 text-muted-foreground hover:text-red-500 transition-colors"
-                                                        aria-label={t('admin.playground.removeMessage')}
+                                                        aria-label={t('playground.removeMessage')}
                                                     >
                                                         <Minus className="w-3.5 h-3.5" aria-hidden="true" />
                                                     </button>
@@ -649,13 +652,13 @@ export default function AdminPlaygroundPage() {
                                             ? 'bg-brand-50/50 border-brand-200 hover:bg-brand-50'
                                             : 'bg-background/50 border-theme-border border-dashed hover:bg-muted'
                                     )}
-                                    aria-label={t('admin.playground.expandHistory')}
+                                    aria-label={t('playground.expandHistory')}
                                 >
                                     <MessageSquare className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
                                     <span className="text-sm text-foreground/70 truncate flex-1">
                                         {conversationHistory.length > 0
                                             ? t('admin.playground.historyCount', { count: conversationHistory.length })
-                                            : t('admin.playground.conversationHistoryHint')
+                                            : t('playground.conversationHistoryHint')
                                         }
                                     </span>
                                     <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
@@ -682,10 +685,10 @@ export default function AdminPlaygroundPage() {
                                             <FlaskConical className="w-7 h-7 text-brand-500" aria-hidden="true" />
                                         </div>
                                         <h3 className="text-lg font-display font-bold text-foreground mb-2">
-                                            {t('admin.playground.emptyTitle')}
+                                            {t('playground.emptyTitle')}
                                         </h3>
                                         <p className="text-sm text-muted-foreground mb-6">
-                                            {t('admin.playground.emptyDescription')}
+                                            {t('playground.emptyDescription')}
                                         </p>
 
                                         {/* Steps */}
@@ -704,7 +707,7 @@ export default function AdminPlaygroundPage() {
                                                     {selectedPageId ? <Check className="w-3.5 h-3.5" aria-hidden="true" /> : '1'}
                                                 </div>
                                                 <span className={clsx('text-sm', selectedPageId ? 'text-green-700' : 'text-brand-700')}>
-                                                    {t('admin.playground.step1')}
+                                                    {t('playground.step1')}
                                                 </span>
                                             </div>
 
@@ -717,9 +720,9 @@ export default function AdminPlaygroundPage() {
                                                     2
                                                 </div>
                                                 <span className="text-sm text-muted-foreground flex-1">
-                                                    {t('admin.playground.step2')}
+                                                    {t('playground.step2')}
                                                 </span>
-                                                <Badge className="bg-muted text-muted-foreground">{t('common.optional')}</Badge>
+                                                <Badge className="bg-muted text-muted-foreground">{tc('optional')}</Badge>
                                             </div>
 
                                             {/* Step 3: Type question */}
@@ -731,7 +734,7 @@ export default function AdminPlaygroundPage() {
                                                     3
                                                 </div>
                                                 <span className="text-sm text-muted-foreground">
-                                                    {t('admin.playground.step3')}
+                                                    {t('playground.step3')}
                                                 </span>
                                             </div>
                                         </div>
@@ -772,7 +775,7 @@ export default function AdminPlaygroundPage() {
                                                                 <div className="flex items-center gap-1.5 mb-2">
                                                                     <MessageSquare className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
                                                                     <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                                                                        {t('admin.playground.commentReply')}
+                                                                        {t('playground.commentReply')}
                                                                     </span>
                                                                 </div>
                                                                 <p className="text-sm leading-relaxed text-foreground">
@@ -784,7 +787,7 @@ export default function AdminPlaygroundPage() {
                                                                 <div className="flex items-center gap-1.5 mb-2">
                                                                     <MethodIcon method={msg.metadata.replyMethod} />
                                                                     <span className="text-[10px] font-medium uppercase tracking-wider text-brand-700">
-                                                                        {t('admin.playground.privateMessage')} · {t(`admin.playground.${msg.metadata.replyMethod}`)}
+                                                                        {t('playground.privateMessage')} · {t(`admin.playground.${msg.metadata.replyMethod}`)}
                                                                     </span>
                                                                 </div>
                                                                 <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
@@ -804,7 +807,7 @@ export default function AdminPlaygroundPage() {
                                                                 <div className="flex items-center gap-1.5 mb-2">
                                                                     {msg.metadata.commentReplyMode === 'private' && (
                                                                         <span className="text-[10px] font-medium uppercase tracking-wider text-brand-600">
-                                                                            {t('admin.playground.privateMessage')} ·{' '}
+                                                                            {t('playground.privateMessage')} ·{' '}
                                                                         </span>
                                                                     )}
                                                                     <MethodIcon method={msg.metadata.replyMethod} />
@@ -823,19 +826,19 @@ export default function AdminPlaygroundPage() {
                                                             {msg.text ? (
                                                                 <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
                                                             ) : (
-                                                                <p className="text-sm text-red-600 italic">{t('admin.playground.noReply')}</p>
+                                                                <p className="text-sm text-red-600 italic">{t('playground.noReply')}</p>
                                                             )}
 
                                                             {/* Copy & Retry actions */}
                                                             {msg.text && (
                                                                 <div className="flex items-center gap-1 mt-2 pt-2 border-t border-theme-border">
-                                                                    <button type="button" onClick={() => handleCopy(msg.text)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-muted-foreground hover:bg-background transition-colors" aria-label={t('admin.playground.copyReply')}>
+                                                                    <button type="button" onClick={() => handleCopy(msg.text)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-muted-foreground hover:bg-background transition-colors" aria-label={t('playground.copyReply')}>
                                                                         <Copy className="w-3 h-3" aria-hidden="true" />
-                                                                        {t('admin.playground.copyReply')}
+                                                                        {t('playground.copyReply')}
                                                                     </button>
-                                                                    <button type="button" onClick={() => handleRetry(msg.id)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-muted-foreground hover:bg-background transition-colors" aria-label={t('admin.playground.retryQuestion')}>
+                                                                    <button type="button" onClick={() => handleRetry(msg.id)} className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground hover:text-muted-foreground hover:bg-background transition-colors" aria-label={t('playground.retryQuestion')}>
                                                                         <RefreshCw className="w-3 h-3" aria-hidden="true" />
-                                                                        {t('admin.playground.retryQuestion')}
+                                                                        {t('playground.retryQuestion')}
                                                                     </button>
                                                                 </div>
                                                             )}
@@ -867,7 +870,7 @@ export default function AdminPlaygroundPage() {
                                                         {msg.metadata.cached && (
                                                             <Badge className="bg-brand-100 text-brand-800">
                                                                 <Zap className="w-3 h-3 me-0.5" aria-hidden="true" />
-                                                                {t('admin.playground.cached')}
+                                                                {t('playground.cached')}
                                                             </Badge>
                                                         )}
                                                     </div>
@@ -878,13 +881,13 @@ export default function AdminPlaygroundPage() {
                                                         {msg.metadata.tokensUsed > 0 && (
                                                             <>
                                                                 <span aria-hidden="true">·</span>
-                                                                <span>{msg.metadata.tokensUsed} {t('admin.playground.tokens')}</span>
+                                                                <span>{msg.metadata.tokensUsed} {t('playground.tokens')}</span>
                                                             </>
                                                         )}
                                                         {msg.metadata.gapRecorded && (
                                                             <>
                                                                 <span aria-hidden="true">·</span>
-                                                                <Badge className="status-warning">{t('admin.playground.gapRecorded')}</Badge>
+                                                                <Badge className="status-warning">{t('playground.gapRecorded')}</Badge>
                                                             </>
                                                         )}
                                                     </div>
@@ -898,7 +901,7 @@ export default function AdminPlaygroundPage() {
                                                                     <Badge key={flag} className="bg-red-100 text-red-700">{flag}</Badge>
                                                                 ))}
                                                                 {msg.metadata.needsAttention && (
-                                                                    <span className="text-xs text-red-700 font-medium">{t('admin.playground.needsAttention')}</span>
+                                                                    <span className="text-xs text-red-700 font-medium">{t('playground.needsAttention')}</span>
                                                                 )}
                                                             </div>
                                                         </div>
@@ -917,10 +920,10 @@ export default function AdminPlaygroundPage() {
                                                     >
                                                         <Database className="w-3 h-3" aria-hidden="true" />
                                                         <span>
-                                                            {msg.metadata.chunksRetrieved} {t('admin.playground.chunks')}
+                                                            {msg.metadata.chunksRetrieved} {t('playground.chunks')}
                                                             {msg.metadata.chunks.length > 0 && (
                                                                 <span className="text-muted-foreground ms-1">
-                                                                    ({t('admin.playground.bestScore')}: {Math.max(...msg.metadata.chunks.map(c => c.score)).toFixed(2)})
+                                                                    ({t('playground.bestScore')}: {Math.max(...msg.metadata.chunks.map(c => c.score)).toFixed(2)})
                                                                 </span>
                                                             )}
                                                         </span>
@@ -969,7 +972,7 @@ export default function AdminPlaygroundPage() {
                                     <div className="bg-card border border-theme-border rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm">
                                         <div className="flex items-center gap-2">
                                             <div className="w-4 h-4 border-2 border-brand-500/30 border-t-brand-500 rounded-full animate-spin" />
-                                            <span className="text-sm text-muted-foreground">{t('admin.playground.testing')}</span>
+                                            <span className="text-sm text-muted-foreground">{t('playground.testing')}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -983,7 +986,7 @@ export default function AdminPlaygroundPage() {
                         <div className="p-3 sm:p-4 border-t border-theme-border bg-card flex-shrink-0 rounded-b-xl">
                             <div className="flex items-end gap-2 sm:gap-3">
                                 <div className="flex-1">
-                                    <label htmlFor="playground-input" className="sr-only">{t('admin.playground.question')}</label>
+                                    <label htmlFor="playground-input" className="sr-only">{t('playground.question')}</label>
                                     <textarea
                                         id="playground-input"
                                         ref={inputRef}
@@ -999,7 +1002,7 @@ export default function AdminPlaygroundPage() {
                                                 handleSend();
                                             }
                                         }}
-                                        placeholder={selectedPageId ? t('admin.playground.questionPlaceholder') : t('admin.playground.selectPagePlaceholder')}
+                                        placeholder={selectedPageId ? t('playground.questionPlaceholder') : t('playground.selectPagePlaceholder')}
                                         rows={1}
                                         disabled={loading || !selectedPageId}
                                         className={clsx(
@@ -1017,7 +1020,7 @@ export default function AdminPlaygroundPage() {
                                     onClick={handleSend}
                                     disabled={!selectedPageId || !question.trim() || loading}
                                     className="flex-shrink-0 p-2.5 sm:p-3 bg-brand-600 text-white rounded-xl hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                    aria-label={t('admin.playground.test')}
+                                    aria-label={t('playground.test')}
                                 >
                                     {loading ? (
                                         <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -1027,7 +1030,7 @@ export default function AdminPlaygroundPage() {
                                 </button>
                             </div>
                             <p className="text-[10px] text-muted-foreground mt-1.5 text-end">
-                                {t('admin.playground.sendHintEnter')}
+                                {t('playground.sendHintEnter')}
                             </p>
                         </div>
                     </div>
@@ -1048,12 +1051,12 @@ export default function AdminPlaygroundPage() {
                             )}>
                                 {/* Mobile close header */}
                                 <div className="flex items-center justify-between p-4 border-b border-theme-border lg:hidden">
-                                    <h3 className="text-sm font-display font-semibold text-foreground">{t('admin.playground.kbStatus')}</h3>
+                                    <h3 className="text-sm font-display font-semibold text-foreground">{t('playground.kbStatus')}</h3>
                                     <button
                                         type="button"
                                         onClick={() => setSidebarOpen(false)}
                                         className="p-1 text-muted-foreground hover:text-foreground/70"
-                                        aria-label={t('admin.playground.toggleSidebar')}
+                                        aria-label={t('playground.toggleSidebar')}
                                     >
                                         <X className="w-4 h-4" aria-hidden="true" />
                                     </button>
@@ -1066,39 +1069,39 @@ export default function AdminPlaygroundPage() {
                                             <div className="flex items-center gap-2 mb-4">
                                                 <Database className="w-4 h-4 text-brand-600" aria-hidden="true" />
                                                 <h3 className="text-sm font-display font-semibold text-foreground">
-                                                    {t('admin.playground.kbStatus')}
+                                                    {t('playground.kbStatus')}
                                                 </h3>
                                             </div>
 
                                             {kbStatus.kbActiveVersion === null && (
                                                 <div className="p-3 alert-warning border rounded-lg mb-3">
-                                                    <p className="text-xs">{t('admin.playground.noActiveVersion')}</p>
+                                                    <p className="text-xs">{t('playground.noActiveVersion')}</p>
                                                 </div>
                                             )}
 
                                             <dl className="space-y-2 text-sm">
                                                 <div className="flex justify-between">
-                                                    <dt className="text-muted-foreground">{t('admin.playground.kbVersion')}</dt>
+                                                    <dt className="text-muted-foreground">{t('playground.kbVersion')}</dt>
                                                     <dd className="font-medium text-foreground">{kbStatus.kbVersion}</dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-muted-foreground">{t('admin.playground.activeVersion')}</dt>
+                                                    <dt className="text-muted-foreground">{t('playground.activeVersion')}</dt>
                                                     <dd className="font-medium text-foreground">
                                                         {kbStatus.kbActiveVersion ?? '—'}
                                                     </dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-muted-foreground">{t('admin.playground.chunksCount')}</dt>
+                                                    <dt className="text-muted-foreground">{t('playground.chunksCount')}</dt>
                                                     <dd className="font-medium text-foreground">{kbStatus.chunksCount}</dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-muted-foreground">{t('admin.playground.gapsCount')}</dt>
+                                                    <dt className="text-muted-foreground">{t('playground.gapsCount')}</dt>
                                                     <dd className="font-medium text-foreground">{kbStatus.gapsCount}</dd>
                                                 </div>
                                                 <div className="flex justify-between">
-                                                    <dt className="text-muted-foreground">{t('admin.playground.kbLength')}</dt>
+                                                    <dt className="text-muted-foreground">{t('playground.kbLength')}</dt>
                                                     <dd className="font-medium text-foreground">
-                                                        {kbStatus.kbLength.toLocaleString()} {t('admin.playground.chars')}
+                                                        {kbStatus.kbLength.toLocaleString()} {t('playground.chars')}
                                                     </dd>
                                                 </div>
                                             </dl>
@@ -1107,7 +1110,7 @@ export default function AdminPlaygroundPage() {
                                             <div className="mt-4">
                                                 <div className="flex items-center justify-between mb-2">
                                                     <h4 className="text-xs font-medium text-muted-foreground">
-                                                        {t('admin.playground.kbContent')}
+                                                        {t('playground.kbContent')}
                                                     </h4>
                                                     <div className="flex items-center gap-2">
                                                         {kbEditing && kbDirty && (
@@ -1121,7 +1124,7 @@ export default function AdminPlaygroundPage() {
                                                                     'disabled:opacity-50 disabled:cursor-not-allowed'
                                                                 )}
                                                             >
-                                                                {kbSaving ? t('common.saving') : t('common.save')}
+                                                                {kbSaving ? tc('saving') : tc('save')}
                                                             </button>
                                                         )}
                                                         <button
@@ -1135,14 +1138,14 @@ export default function AdminPlaygroundPage() {
                                                             }}
                                                             className="text-xs text-brand-600 hover:text-brand-700 transition-colors"
                                                         >
-                                                            {kbEditing ? t('common.cancel') : t('admin.playground.editKb')}
+                                                            {kbEditing ? tc('cancel') : t('playground.editKb')}
                                                         </button>
                                                     </div>
                                                 </div>
                                                 {kbEditing ? (
                                                     <>
                                                         <label htmlFor="kb-editor" className="sr-only">
-                                                            {t('admin.playground.kbContent')}
+                                                            {t('playground.kbContent')}
                                                         </label>
                                                         <textarea
                                                             id="kb-editor"
@@ -1169,15 +1172,15 @@ export default function AdminPlaygroundPage() {
                                                             !kbText && 'italic text-muted-foreground'
                                                         )}
                                                     >
-                                                        {kbText || t('admin.playground.kbEmpty')}
+                                                        {kbText || t('playground.kbEmpty')}
                                                     </div>
                                                 )}
                                             </div>
                                         </div>
                                     ) : selectedPageId ? (
-                                        <p className="text-sm text-muted-foreground italic">{t('common.loading')}</p>
+                                        <p className="text-sm text-muted-foreground italic">{tc('loading')}</p>
                                     ) : (
-                                        <p className="text-sm text-muted-foreground italic">{t('admin.playground.selectPagePlaceholder')}</p>
+                                        <p className="text-sm text-muted-foreground italic">{t('playground.selectPagePlaceholder')}</p>
                                     )}
 
                                     {/* KB Gaps */}
@@ -1186,12 +1189,12 @@ export default function AdminPlaygroundPage() {
                                             <div className="flex items-center gap-2 mb-4">
                                                 <MessageSquare className="w-4 h-4 text-amber-600" aria-hidden="true" />
                                                 <h3 className="text-sm font-display font-semibold text-foreground">
-                                                    {t('admin.playground.gaps')} {gaps.length > 0 && `(${gaps.length})`}
+                                                    {t('playground.gaps')} {gaps.length > 0 && `(${gaps.length})`}
                                                 </h3>
                                             </div>
 
                                             {gaps.length === 0 ? (
-                                                <p className="text-sm text-muted-foreground italic">{t('admin.playground.noGaps')}</p>
+                                                <p className="text-sm text-muted-foreground italic">{t('playground.noGaps')}</p>
                                             ) : (
                                                 <div className="space-y-3 max-h-96 overflow-y-auto">
                                                     {gaps.map((gap) => (
@@ -1208,7 +1211,7 @@ export default function AdminPlaygroundPage() {
                                                                 </Badge>
                                                                 {gap.resolved && (
                                                                     <Badge className="status-success">
-                                                                        {t('admin.playground.gapResolved')}
+                                                                        {t('playground.gapResolved')}
                                                                     </Badge>
                                                                 )}
                                                             </div>
@@ -1228,4 +1231,6 @@ export default function AdminPlaygroundPage() {
     );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.adminPlayground]);

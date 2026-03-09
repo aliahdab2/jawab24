@@ -1,0 +1,18 @@
+{
+  "helpful": "Helpful",
+  "notHelpful": "Not Helpful",
+  "thankYou": "Thanks for your feedback!",
+  "error": "Could not save feedback",
+  "thanks": "Thanks for your feedback!",
+  "reasons": {
+    "incorrectInfo": "Incorrect information",
+    "notRelevant": "Not relevant",
+    "badTone": "Bad tone",
+    "wrongLanguage": "Wrong language",
+    "other": "Other"
+  },
+  "whatWentWrong": "What went wrong?",
+  "optional": "(Optional)",
+  "send": "Send Feedback",
+  "skip": "Skip"
+}

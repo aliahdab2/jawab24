@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { messagesApi } from '@/lib/api';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { Conversation } from '@/components/messages';
 
 interface UseConversationActionsOptions {
@@ -15,7 +15,8 @@ interface UseConversationActionsOptions {
  * Used by both the Messages page and the Dashboard inline modal.
  */
 export function useConversationActions(opts: UseConversationActionsOptions = {}) {
-  const { t } = useTranslation();
+  const t = useTranslations('messages');
+  const tc = useTranslations('common');
   const queryClient = useQueryClient();
   const { extraInvalidateKeys = [] } = opts;
 
@@ -43,7 +44,7 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       invalidateShared();
     },
     onError: (error: Error) => {
-      toast.error(error.message || t('messages.replyFailed' as TranslationKey));
+      toast.error(error.message || t('replyFailed'));
     },
   });
 
@@ -63,10 +64,10 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
         ...prev,
         pauseStatus: { paused: true, pausedUntil: _data.pausedUntil, remainingMinutes: null },
       } : null);
-      toast.warning(t('messages.pauseSuccess' as TranslationKey), { id: 'smart-reply-status' });
+      toast.warning(t('pauseSuccess'), { id: 'smart-reply-status' });
     },
     onError: () => {
-      toast.error(t('messages.pauseFailed' as TranslationKey), { id: 'smart-reply-status' });
+      toast.error(t('pauseFailed'), { id: 'smart-reply-status' });
     },
   });
 
@@ -86,10 +87,10 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
         ...prev,
         pauseStatus: { paused: false, pausedUntil: null, remainingMinutes: null },
       } : null);
-      toast.success(t('messages.resumeSuccess' as TranslationKey), { id: 'smart-reply-status' });
+      toast.success(t('resumeSuccess'), { id: 'smart-reply-status' });
     },
     onError: () => {
-      toast.error(t('messages.resumeFailed' as TranslationKey), { id: 'smart-reply-status' });
+      toast.error(t('resumeFailed'), { id: 'smart-reply-status' });
     },
   });
 
@@ -102,14 +103,14 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     try {
       await messagesApi.resolveConversation(senderId, pageId);
       invalidateShared();
-      toast.success(t('messages.resolveSuccess' as TranslationKey));
+      toast.success(t('resolveSuccess'));
       if (selectedConversation?.senderId === senderId) {
         setSelectedConversation(null);
       }
     } catch {
-      toast.error(t('common.error' as TranslationKey));
+      toast.error(tc('error'));
     }
-  }, [invalidateShared, t, selectedConversation]);
+  }, [invalidateShared, t, tc, selectedConversation]);
 
   // --- Pause status query ---
   const { data: pauseStatusData } = useQuery({

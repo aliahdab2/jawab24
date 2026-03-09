@@ -1,7 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { ChevronDown, Clock, type LucideIcon } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 interface NotificationGroupHeaderProps {
     icon: LucideIcon;
@@ -30,7 +30,7 @@ export function NotificationGroupHeader({
     onToggle,
     getRelativeTime,
 }: NotificationGroupHeaderProps) {
-    const { t } = useTranslation();
+    const t = useTranslations('notifications');
     const hasUnread = unreadCount > 0;
 
     return (
@@ -43,7 +43,7 @@ export function NotificationGroupHeader({
                     : 'hover:bg-background',
             )}
             aria-expanded={isExpanded}
-            aria-label={isExpanded ? t('notifications.collapse') : t('notifications.expand')}
+            aria-label={isExpanded ? t('collapse') : t('expand')}
         >
             <div className="flex items-center gap-3.5">
                 {/* Icon */}
@@ -64,7 +64,7 @@ export function NotificationGroupHeader({
                                 ? 'font-semibold text-foreground'
                                 : 'font-normal text-muted-foreground',
                         )}>
-                            {t('notifications.groupSummary', { count })} — {typeLabel}
+                            {t('groupSummary', { count })} — {typeLabel}
                         </p>
                         {hasUnread && (
                             <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[10px] font-bold text-white bg-brand-500 rounded-full flex-shrink-0">

@@ -1,0 +1,22 @@
+{
+  "title": "Subscription",
+  "currentPlan": "Current Plan",
+  "usage": "Usage",
+  "aiRepliesUsed": "Jawab Replies Used",
+  "pagesUsed": "Pages Connected",
+  "templatesUsed": "Templates Used",
+  "rulesUsed": "Rules Used",
+  "renewsOn": "Renews on",
+  "trialBadge": "TRIAL",
+  "trialEndsIn": "Trial ends in",
+  "days": "days",
+  "upgradePlan": "Upgrade Plan",
+  "upgradeDesc": "You can upgrade anytime to unlock more features.",
+  "managePlan": "Manage Plan",
+  "cancelPlan": "Cancel Subscription",
+  "pausePlan": "Pause Subscription",
+  "resumePlan": "Resume Subscription",
+  "limitReached": "Limit Reached",
+  "upgradeToUnlock": "Upgrade to unlock more",
+  "usagePercent": "{percent}% used"
+}

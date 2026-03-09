@@ -9,12 +9,12 @@ import {
   Unlink,
   CheckCircle2,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 
 /** @deprecated Use EcommerceSection instead */
 export function ShopifySection() {
-  const { t } = useTranslation();
+  const t = useTranslations('shopify');
   const [store, setStore] = useState<EcommerceStore | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -55,32 +55,32 @@ export function ShopifySection() {
     setSyncing(true);
     try {
       await ecommerceApi.syncProducts();
-      toast.success(t('shopify.syncSuccess' as TranslationKey));
+      toast.success(t('syncSuccess'));
       await fetchStore();
     } catch {
-      toast.error(t('shopify.syncError' as TranslationKey));
+      toast.error(t('syncError'));
     } finally {
       if (isMounted.current) setSyncing(false);
     }
   };
 
   const handleDisconnect = async () => {
-    if (!confirm(t('shopify.disconnectConfirm' as TranslationKey))) return;
+    if (!confirm(t('disconnectConfirm'))) return;
     try {
       await ecommerceApi.disconnectStore();
       if (isMounted.current) setStore(null);
-      toast.warning(t('shopify.disconnected' as TranslationKey));
+      toast.warning(t('disconnected'));
     } catch {
-      toast.error(t('shopify.disconnectError' as TranslationKey));
+      toast.error(t('disconnectError'));
     }
   };
 
   const handleLinkPage = async (pageId: string) => {
     try {
       await ecommerceApi.linkPage(pageId);
-      toast.success(t('shopify.pageLinked' as TranslationKey));
+      toast.success(t('pageLinked'));
     } catch {
-      toast.error(t('shopify.pageLinkError' as TranslationKey));
+      toast.error(t('pageLinkError'));
     }
   };
 
@@ -95,8 +95,8 @@ export function ShopifySection() {
             <ShoppingBag className="w-5 h-5 text-green-600" />
           </div>
           <div>
-            <h3 className="font-bold text-lg">{t('shopify.title' as TranslationKey)}</h3>
-            <p className="text-sm text-surface-500">{t('shopify.desc' as TranslationKey)}</p>
+            <h3 className="font-bold text-lg">{t('title')}</h3>
+            <p className="text-sm text-surface-500">{t('desc')}</p>
           </div>
         </div>
 
@@ -105,26 +105,26 @@ export function ShopifySection() {
             <div>
               <p className="font-semibold text-green-800">{store.storeName || store.storeDomain}</p>
               <p className="text-xs text-green-600">
-                {t('shopify.products' as TranslationKey)}: {store.productCount} &middot;{' '}
-                {t('shopify.lastSync' as TranslationKey)}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleDateString() : t('shopify.never' as TranslationKey)}
+                {t('products')}: {store.productCount} &middot;{' '}
+                {t('lastSync')}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleDateString() : t('never')}
               </p>
             </div>
             <div className="flex gap-2">
               <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
                 <RefreshCw className={`w-4 h-4 me-1 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? t('shopify.syncing' as TranslationKey) : t('shopify.syncNow' as TranslationKey)}
+                {syncing ? t('syncing') : t('syncNow')}
               </Button>
               <Button variant="secondary" size="sm" onClick={handleDisconnect}>
                 <Unlink className="w-4 h-4 me-1" />
-                {t('shopify.disconnect' as TranslationKey)}
+                {t('disconnect')}
               </Button>
             </div>
           </div>
 
           {pages.length > 0 && (
             <div>
-              <p className="text-sm font-medium mb-2">{t('shopify.linkPage' as TranslationKey)}</p>
-              <p className="text-xs text-surface-500 mb-2">{t('shopify.linkPageDesc' as TranslationKey)}</p>
+              <p className="text-sm font-medium mb-2">{t('linkPage')}</p>
+              <p className="text-xs text-surface-500 mb-2">{t('linkPageDesc')}</p>
               <div className="flex flex-wrap gap-2">
                 {pages.map((page) => (
                   <button

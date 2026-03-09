@@ -4,7 +4,8 @@ import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import {
@@ -26,7 +27,11 @@ import { formatConnectedDate } from '@/utils/formatConnectedDate';
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
-  const { t, language } = useTranslation();
+  const t = useTranslations('pages');
+  const tc = useTranslations('common');
+  const tDash = useTranslations('dashboard');
+  const tTime = useTranslations('time');
+  const { language } = useLanguage();
   const { isAuthenticated, fbToken } = useAuthStore();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
@@ -166,10 +171,10 @@ const PagesPage: NextPageWithLayout = () => {
       ));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t('pages.pageLimitReached' as TranslationKey));
+        toast.error(t('pageLimitReached'));
       } else {
         captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
-        toast.error(t('common.error'));
+        toast.error(tc('error'));
       }
     }
   };
@@ -189,30 +194,30 @@ const PagesPage: NextPageWithLayout = () => {
       ));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t('pages.pageLimitReached' as TranslationKey));
+        toast.error(t('pageLimitReached'));
       } else {
         captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
-        toast.error(t('common.error'));
+        toast.error(tc('error'));
       }
     }
   };
 
   const formatTime = (epochMs: number) => {
-    if (!epochMs) return t('common.noData');
+    if (!epochMs) return tc('noData');
     const diffMs = Date.now() - epochMs;
     const minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) return t('time.justNow' as TranslationKey);
-    if (minutes === 1) return t('time.minuteAgo' as TranslationKey);
-    if (minutes < 60) return t('time.minutesAgo' as TranslationKey, { count: minutes });
+    if (minutes < 1) return tTime('justNow');
+    if (minutes === 1) return tTime('minuteAgo');
+    if (minutes < 60) return tTime('minutesAgo', { count: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours === 1) return t('time.hourAgo' as TranslationKey);
-    if (hours < 24) return t('time.hoursAgo' as TranslationKey, { count: hours });
+    if (hours === 1) return tTime('hourAgo');
+    if (hours < 24) return tTime('hoursAgo', { count: hours });
     const days = Math.floor(hours / 24);
-    if (days === 1) return t('time.dayAgo' as TranslationKey);
-    return t('time.daysAgo' as TranslationKey, { count: days });
+    if (days === 1) return tTime('dayAgo');
+    return tTime('daysAgo', { count: days });
   };
 
-  const formatDate = (dateStr: string | null) => formatConnectedDate(dateStr, t);
+  const formatDate = (dateStr: string | null) => formatConnectedDate(dateStr, t, tc('noData'));
 
   const openKnowledgeBase = (page: Page) => {
     setEditingPage(page);
@@ -232,15 +237,15 @@ const PagesPage: NextPageWithLayout = () => {
     <>
       {/* Header */}
       <PageHeader
-        title={t('pages.title')}
-        description={t('pages.description')}
+        title={t('title')}
+        description={t('description')}
         action={
           <Button
             onClick={() => setShowConnectDialog(true)}
             disabled={syncing}
             icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
           >
-            {syncing ? t('pages.syncing' as TranslationKey) : t('pages.connectPage')}
+            {syncing ? t('syncing') : t('connectPage')}
           </Button>
         }
       />
@@ -283,7 +288,7 @@ const PagesPage: NextPageWithLayout = () => {
                   target="_blank"
                   rel="noopener noreferrer"
                   className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-muted-foreground transition-colors flex-shrink-0"
-                  aria-label={`${t('common.openOn')} Facebook`}
+                  aria-label={`${tc('openOn')} Facebook`}
                 >
                   <ExternalLink className="w-4 h-4" />
                 </a>
@@ -301,14 +306,14 @@ const PagesPage: NextPageWithLayout = () => {
                       <div className="min-w-0">
                         <p className={`text-sm font-bold ${page.autoReplyEnabled ? 'text-blue-900 dark:text-blue-300' : 'text-muted-foreground'}`}>Facebook</p>
                         <p className={`text-xs font-medium ${page.autoReplyEnabled ? 'text-blue-500 dark:text-blue-400' : 'text-muted-foreground'}`}>
-                          {page.autoReplyEnabled ? t('common.enabled') : t('common.disabled')}
+                          {page.autoReplyEnabled ? tc('enabled') : tc('disabled')}
                         </p>
                       </div>
                     </div>
                     <Toggle
                       enabled={page.autoReplyEnabled ?? false}
                       onChange={(enabled) => handleToggle(page.id, enabled)}
-                      aria-label={`${t('pages.autoReply' as TranslationKey)} Facebook - ${page.name}`}
+                      aria-label={`${t('autoReply')} Facebook - ${page.name}`}
                     />
                   </div>
 
@@ -345,7 +350,7 @@ const PagesPage: NextPageWithLayout = () => {
                         )}>
                           {page.instagramUsername
                             ? `@${page.instagramUsername}`
-                            : t('pages.instagramTooltip' as TranslationKey)}
+                            : t('instagramTooltip')}
                         </p>
                       </div>
                     </div>
@@ -353,7 +358,7 @@ const PagesPage: NextPageWithLayout = () => {
                       <Toggle
                         enabled={page.instagramAutoReplyEnabled ?? false}
                         onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
-                        aria-label={`${t('pages.autoReply' as TranslationKey)} Instagram - ${page.name}`}
+                        aria-label={`${t('autoReply')} Instagram - ${page.name}`}
                       />
                     )}
                   </div>
@@ -362,15 +367,15 @@ const PagesPage: NextPageWithLayout = () => {
                 {/* Stats Grid */}
                 <div className="grid grid-cols-3 gap-3 px-1 py-1 rounded-2xl bg-background border border-theme-border">
                   <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('pages.totalIncoming' as TranslationKey)}</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('totalIncoming')}</p>
                     <p className="text-lg font-bold text-foreground leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center border-x border-theme-border">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('dashboard.autoReplies')}</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{tDash('autoReplies')}</p>
                     <p className="text-lg font-bold text-foreground leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('dashboard.replyRate')}</p>
+                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{tDash('replyRate')}</p>
                     <p className="text-lg font-bold text-emerald-600 leading-none">{page.replyRate || 0}%</p>
                   </div>
                 </div>
@@ -381,7 +386,7 @@ const PagesPage: NextPageWithLayout = () => {
                   aria-hidden={!page.ecommerceStoreId}
                 >
                   <ShoppingBag className="w-4 h-4 text-white" aria-hidden="true" />
-                  <span className="text-white text-[12px] font-semibold">{t('pages.shopifyConnectedBadge')}</span>
+                  <span className="text-white text-[12px] font-semibold">{t('shopifyConnectedBadge')}</span>
                 </div>
 
                 {/* Knowledge Base CTA - More prominent */}
@@ -400,14 +405,14 @@ const PagesPage: NextPageWithLayout = () => {
                       <div className="text-start">
                         <p className={`text-sm font-bold ${page.knowledgeBase ? 'text-brand-900 dark:text-brand-300' : 'text-foreground/70'}`}>
                           {page.knowledgeBase
-                            ? t('pages.businessInfoActive')
-                            : t('pages.addBusinessInfo')
+                            ? t('businessInfoActive')
+                            : t('addBusinessInfo')
                           }
                         </p>
                         <p className="text-xs font-medium text-muted-foreground uppercase tracking-tight mt-0.5">
                           {page.knowledgeBase
-                            ? t('pages.clickToEdit')
-                            : t('pages.improveAIQuality')
+                            ? t('clickToEdit')
+                            : t('improveAIQuality')
                           }
                         </p>
                       </div>
@@ -422,14 +427,14 @@ const PagesPage: NextPageWithLayout = () => {
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    {(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? t('common.active') : t('common.inactive')}
+                    {(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? tc('active') : tc('inactive')}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 text-muted-foreground">
                   <Clock className="w-3.5 h-3.5" aria-hidden="true" />
                   <span
                     className="text-xs font-bold uppercase tracking-tighter"
-                    title={page.lastActivity ? t('pages.lastActivity' as TranslationKey) : ''}
+                    title={page.lastActivity ? t('lastActivity') : ''}
                   >
                     {page.lastActivity ? formatTime(page.lastActivity) : formatDate(page.createdAt as unknown as string)}
                   </span>
@@ -442,11 +447,11 @@ const PagesPage: NextPageWithLayout = () => {
         <Card>
           <EmptyState
             icon={FileText}
-            title={t('pages.noPages')}
-            description={t('pages.noPagesDesc')}
+            title={t('noPages')}
+            description={t('noPagesDesc')}
             action={
               <Button onClick={() => setShowConnectDialog(true)}>
-                {t('pages.connectPage')}
+                {t('connectPage')}
               </Button>
             }
           />
@@ -487,9 +492,9 @@ const PagesPage: NextPageWithLayout = () => {
           setShowConnectDialog(false);
           handleReconnectFacebook();
         }}
-        title={t('pages.connectDialogTitle' as TranslationKey)}
-        message={t('pages.connectDialogBody' as TranslationKey)}
-        confirmText={t('pages.continueToFacebook' as TranslationKey)}
+        title={t('connectDialogTitle')}
+        message={t('connectDialogBody')}
+        confirmText={t('continueToFacebook')}
         variant="info"
       />
     </>
@@ -503,4 +508,6 @@ PagesPage.getLayout = (page: ReactElement) => (
 
 export default PagesPage;
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.pages]);

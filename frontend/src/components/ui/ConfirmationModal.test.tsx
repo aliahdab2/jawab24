@@ -2,13 +2,6 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
 import { ConfirmationModal } from './ConfirmationModal';
 
-// Mock translation
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-  }),
-}));
-
 // Mock Modal since it uses portals
 vi.mock('./Modal', () => ({
   Modal: ({ children, isOpen, onClose, title }: any) => isOpen ? (
@@ -33,19 +26,19 @@ describe('ConfirmationModal', () => {
     render(<ConfirmationModal {...defaultProps} />);
     expect(screen.getByText('Test Title')).toBeInTheDocument();
     expect(screen.getByText('Test Message')).toBeInTheDocument();
-    expect(screen.getByText('common.confirm')).toBeInTheDocument();
-    expect(screen.getByText('common.cancel')).toBeInTheDocument();
+    expect(screen.getByText('Confirm')).toBeInTheDocument();
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
   });
 
   it('calls onConfirm when confirm button is clicked', () => {
     render(<ConfirmationModal {...defaultProps} />);
-    fireEvent.click(screen.getByText('common.confirm'));
+    fireEvent.click(screen.getByText('Confirm'));
     expect(defaultProps.onConfirm).toHaveBeenCalled();
   });
 
   it('calls onClose when cancel button is clicked', () => {
     render(<ConfirmationModal {...defaultProps} />);
-    fireEvent.click(screen.getByText('common.cancel'));
+    fireEvent.click(screen.getByText('Cancel'));
     expect(defaultProps.onClose).toHaveBeenCalled();
   });
 
@@ -63,10 +56,10 @@ describe('ConfirmationModal', () => {
 
   it('disables buttons when loading', () => {
     render(<ConfirmationModal {...defaultProps} loading={true} />);
-    const cancelBtn = screen.getByText('common.cancel').closest('button');
+    const cancelBtn = screen.getByText('Cancel').closest('button');
     expect(cancelBtn).toBeDisabled();
     
-    const confirmBtn = screen.getByText('common.confirm').closest('button');
+    const confirmBtn = screen.getByText('Confirm').closest('button');
     expect(confirmBtn).toBeDisabled();
   });
 });

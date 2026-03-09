@@ -1,0 +1,14 @@
+{
+  "dShort": "d",
+  "hShort": "h",
+  "mShort": "m",
+  "sShort": "s",
+  "justNow": "Just now",
+  "minuteAgo": "1 min ago",
+  "minutesAgo": "{count} min ago",
+  "hourAgo": "1 hour ago",
+  "hoursAgo": "{count} hours ago",
+  "dayAgo": "1 day ago",
+  "daysAgo": "{count} days ago",
+  "weeksAgo": "{count} weeks ago"
+}

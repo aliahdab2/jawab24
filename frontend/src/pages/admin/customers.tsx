@@ -3,7 +3,8 @@ import { useRouter } from 'next/router';
 
 import { Search, ChevronLeft, ChevronRight, User } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { Card } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
@@ -44,7 +45,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function AdminCustomersPage() {
     const router = useRouter();
-    const { t, language, intlLocale } = useTranslation();
+    const t = useTranslations('admin');
+    const tc = useTranslations('common');
+    const { language, intlLocale } = useLanguage();
     const isRTL = language === 'ar';
 
     const [customers, setCustomers] = useState<Customer[]>([]);
@@ -133,20 +136,20 @@ export default function AdminCustomersPage() {
     };
 
     return (
-        <AdminLayout title={t('admin.customers.title')}>
+        <AdminLayout title={t('customers.title')}>
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-display font-bold text-foreground">
-                            {t('admin.customers.title')}
+                            {t('customers.title')}
                         </h1>
                         <p className="text-muted-foreground mt-1">
-                            {t('admin.customers.subtitle')}
+                            {t('customers.subtitle')}
                         </p>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                        {pagination.total} {t('admin.customers.totalCustomers')}
+                        {pagination.total} {t('customers.totalCustomers')}
                     </div>
                 </div>
 
@@ -158,8 +161,8 @@ export default function AdminCustomersPage() {
                             <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <input
                                 type="text"
-                                placeholder={t('admin.customers.searchPlaceholder')}
-                                aria-label={t('admin.customers.searchPlaceholder')}
+                                placeholder={t('customers.searchPlaceholder')}
+                                aria-label={t('customers.searchPlaceholder')}
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
                                 className="w-full ps-10 pe-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm"
@@ -170,24 +173,24 @@ export default function AdminCustomersPage() {
                         <select
                             value={statusFilter}
                             onChange={(e) => setStatusFilter(e.target.value)}
-                            aria-label={t('admin.customers.allStatuses')}
+                            aria-label={t('customers.allStatuses')}
                             className="px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
                         >
-                            <option value="">{t('admin.customers.allStatuses')}</option>
-                            <option value="active">{t('admin.customers.statusActive')}</option>
-                            <option value="trialing">{t('admin.customers.statusTrialing')}</option>
-                            <option value="past_due">{t('admin.customers.statusPast_due')}</option>
-                            <option value="canceled">{t('admin.customers.statusCanceled')}</option>
+                            <option value="">{t('customers.allStatuses')}</option>
+                            <option value="active">{t('customers.statusActive')}</option>
+                            <option value="trialing">{t('customers.statusTrialing')}</option>
+                            <option value="past_due">{t('customers.statusPast_due')}</option>
+                            <option value="canceled">{t('customers.statusCanceled')}</option>
                         </select>
 
                         {/* Plan Filter */}
                         <select
                             value={planFilter}
                             onChange={(e) => setPlanFilter(e.target.value)}
-                            aria-label={t('admin.customers.allPlans')}
+                            aria-label={t('customers.allPlans')}
                             className="px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
                         >
-                            <option value="">{t('admin.customers.allPlans')}</option>
+                            <option value="">{t('customers.allPlans')}</option>
                             {plans.filter(p => p.isActive).map((plan) => (
                                 <option key={plan.id} value={plan.slug}>
                                     {plan.name}
@@ -201,7 +204,7 @@ export default function AdminCustomersPage() {
                 <Card padding="none">
                     {loading ? (
                         <div className="p-8 text-center text-muted-foreground">
-                            {t('common.loading')}
+                            {tc('loading')}
                         </div>
                     ) : error ? (
                         <div className="p-8 text-center text-red-500">
@@ -209,7 +212,7 @@ export default function AdminCustomersPage() {
                         </div>
                     ) : customers.length === 0 ? (
                         <div className="p-8 text-center text-muted-foreground">
-                            {t('admin.customers.noCustomers')}
+                            {t('customers.noCustomers')}
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
@@ -217,19 +220,19 @@ export default function AdminCustomersPage() {
                                 <thead className="bg-background border-b border-theme-border">
                                     <tr>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.tableCustomer')}
+                                            {t('customers.tableCustomer')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.tablePlan')}
+                                            {t('customers.tablePlan')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.tableStatus')}
+                                            {t('customers.tableStatus')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.tablePeriodEnd')}
+                                            {t('customers.tablePeriodEnd')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                            {t('admin.customers.tableSignedUp')}
+                                            {t('customers.tableSignedUp')}
                                         </th>
                                     </tr>
                                 </thead>
@@ -247,17 +250,17 @@ export default function AdminCustomersPage() {
                                                     </div>
                                                     <div>
                                                         <div className="font-medium text-foreground">
-                                                            {customer.name || t('admin.customers.noName')}
+                                                            {customer.name || t('customers.noName')}
                                                         </div>
                                                         <div className="text-sm text-muted-foreground">
-                                                            {customer.email || t('admin.customers.noEmail')}
+                                                            {customer.email || t('customers.noEmail')}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </td>
                                             <td className="px-4 py-4">
                                                 <span className="text-sm font-medium text-foreground/70">
-                                                    {customer.subscription?.planName || t('admin.customers.noPlan')}
+                                                    {customer.subscription?.planName || t('customers.noPlan')}
                                                 </span>
                                             </td>
                                             <td className="px-4 py-4">
@@ -266,7 +269,7 @@ export default function AdminCustomersPage() {
                                                         'inline-flex px-2 py-1 text-xs font-medium rounded-full',
                                                         STATUS_COLORS[customer.subscription.status] || 'bg-muted text-muted-foreground'
                                                     )}>
-                                                        {t(`admin.customers.status.${customer.subscription.status}` as TranslationKey) || customer.subscription.status}
+                                                        {t(`admin.customers.status.${customer.subscription.status}`) || customer.subscription.status}
                                                     </span>
                                                 ) : (
                                                     <span className="text-muted-foreground text-sm">-</span>
@@ -322,4 +325,6 @@ export default function AdminCustomersPage() {
     );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.adminCustomers]);

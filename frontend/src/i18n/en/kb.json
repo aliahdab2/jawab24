@@ -1,0 +1,37 @@
+{
+  "title": "Your Business Info",
+  "description": "Tell Jawab about your business so it can reply accurately.",
+  "thinKbTip": "The more details you add, the better Jawab answers your customers. Think about what your customers ask most often.",
+  "gaps": {
+    "title": "Unanswered Questions",
+    "hint": "Customers asked these but your KB couldn't answer. Tap to add an answer.",
+    "times": "{count}x",
+    "answerPlaceholder": "Type your answer...",
+    "addToKb": "Add to KB",
+    "skip": "Skip",
+    "addedHint": "Answer added — click Save to update your KB."
+  },
+  "progress": "{filled} of {total} filled",
+  "progressComplete": "All sections filled!",
+  "importedFromFacebook": "We pulled some info from your Facebook page — feel free to edit before saving.",
+  "showRawText": "Show Raw Text",
+  "hideRawText": "Back to Sections",
+  "section": {
+    "tapToAdd": "Tap to add",
+    "notesLabel": "Other Notes",
+    "productsLabel": "Products & Services",
+    "productsDesc": "What do you offer and at what price?",
+    "productsPlaceholder": "What do your customers ask about most? Write your products, services, and prices — for example:\n- Basic package: 500 SAR/month\n- Kindergarten: 15,000 SAR/year\n- Consultation: 300 SAR/hour",
+    "notesDesc": "Anything else the AI should know",
+    "notesPlaceholder": "What else should Jawab know? Working hours, return policy, delivery areas, location — anything customers ask about."
+  },
+  "charCount": "{count} / {max}",
+  "addCustomSection": "Add new section",
+  "customSection": {
+    "titlePlaceholder": "Section name (e.g., Menu, Team, Branches)",
+    "desc": "Add any info about your business",
+    "placeholder": "Type your info here...",
+    "deleteConfirm": "Delete this section and its content?"
+  },
+  "defaultSectionTitle": "New Section"
+}

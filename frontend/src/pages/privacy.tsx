@@ -1,70 +1,72 @@
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { LegalPageLayout } from '@/components/layout/LegalPageLayout';
 import { BRAND_ASSETS } from '@/constants/brand';
 
 export default function PrivacyPolicy() {
-  const { t } = useTranslation();
+  const t = useTranslations('privacy');
 
   const sections = [
-    { title: t('privacy.introTitle'), text: t('privacy.introText') },
+    { title: t('introTitle'), text: t('introText') },
     {
-      title: t('privacy.collectTitle'),
-      text: t('privacy.collectText'),
-      items: [t('privacy.collectItem1'), t('privacy.collectItem2'), t('privacy.collectItem3'), t('privacy.collectItem4')]
+      title: t('collectTitle'),
+      text: t('collectText'),
+      items: [t('collectItem1'), t('collectItem2'), t('collectItem3'), t('collectItem4')]
     },
     {
-      title: t('privacy.useTitle'),
-      text: t('privacy.useText'),
-      items: [t('privacy.useItem1'), t('privacy.useItem2'), t('privacy.useItem3'), t('privacy.useItem4')]
+      title: t('useTitle'),
+      text: t('useText'),
+      items: [t('useItem1'), t('useItem2'), t('useItem3'), t('useItem4')]
     },
-    { title: t('privacy.geoTitle'), text: t('privacy.geoText') },
+    { title: t('geoTitle'), text: t('geoText') },
     {
-      title: t('privacy.shareTitle'),
-      text: t('privacy.shareText'),
-      items: [t('privacy.shareItem1'), t('privacy.shareItem2'), t('privacy.shareItem3')]
+      title: t('shareTitle'),
+      text: t('shareText'),
+      items: [t('shareItem1'), t('shareItem2'), t('shareItem3')]
     },
-    { title: t('privacy.securityTitle'), text: t('privacy.securityText') },
-    { title: t('privacy.retentionTitle'), text: t('privacy.retentionText') },
+    { title: t('securityTitle'), text: t('securityText') },
+    { title: t('retentionTitle'), text: t('retentionText') },
     {
-      title: t('privacy.rightsTitle'),
-      text: t('privacy.rightsText'),
-      items: [t('privacy.rightsItem1'), t('privacy.rightsItem2'), t('privacy.rightsItem3'), t('privacy.rightsItem4'), t('privacy.rightsItem5')]
-    },
-    {
-      title: t('privacy.deletionTitle'),
-      text: t('privacy.deletionText'),
-      items: [t('privacy.deletionItem1'), t('privacy.deletionItem2'), t('privacy.deletionItem3')]
-    },
-    { title: t('privacy.changesTitle'), text: t('privacy.changesText') },
-    {
-      title: t('privacy.contactTitle'),
-      text: t('privacy.contactText'),
-      email: t('privacy.contactEmail')
+      title: t('rightsTitle'),
+      text: t('rightsText'),
+      items: [t('rightsItem1'), t('rightsItem2'), t('rightsItem3'), t('rightsItem4'), t('rightsItem5')]
     },
     {
-      title: t('privacy.corporateTitle'),
-      text: t('privacy.corporateText'),
+      title: t('deletionTitle'),
+      text: t('deletionText'),
+      items: [t('deletionItem1'), t('deletionItem2'), t('deletionItem3')]
+    },
+    { title: t('changesTitle'), text: t('changesText') },
+    {
+      title: t('contactTitle'),
+      text: t('contactText'),
+      email: t('contactEmail')
+    },
+    {
+      title: t('corporateTitle'),
+      text: t('corporateText'),
       corporate: {
-        name: t('privacy.corporateName'),
-        type: t('privacy.corporateType'),
-        orgNr: t('privacy.corporateOrgNr'),
-        address: t('privacy.corporateAddress')
+        name: t('corporateName'),
+        type: t('corporateType'),
+        orgNr: t('corporateOrgNr'),
+        address: t('corporateAddress')
       }
     },
   ];
 
   return (
     <LegalPageLayout
-      title={t('privacy.title')}
-      seoTitle={t('privacy.seoTitle')}
-      metaDescription={t('privacy.metaDescription')}
+      title={t('title')}
+      seoTitle={t('seoTitle')}
+      metaDescription={t('metaDescription')}
       canonicalUrl={BRAND_ASSETS.urls.canonical('/privacy')}
-      lastUpdatedLabel={t('privacy.lastUpdated')}
-      lastUpdatedDate={t('privacy.updateDate')}
-      backToHomeLabel={t('privacy.backToHome')}
+      lastUpdatedLabel={t('lastUpdated')}
+      lastUpdatedDate={t('updateDate')}
+      backToHomeLabel={t('backToHome')}
       sections={sections}
     />
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.privacy]);

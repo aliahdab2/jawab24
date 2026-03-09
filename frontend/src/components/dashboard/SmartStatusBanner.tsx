@@ -9,7 +9,7 @@ import {
   Clock,
 } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 // Unified item type for both comments and messages needing attention
 export interface NeedsAttentionItem {
@@ -51,22 +51,22 @@ function isNotableFlagReason(flagReason: string | null): boolean {
 
 function getReasonTag(
   flagReason: string | null,
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+  tFlagReason: (key: string) => string,
+  tDash: (key: string) => string,
 ): string {
   if (flagReason) {
-    const key = `flagReason.${flagReason}` as TranslationKey;
-    const translated = t(key);
+    const translated = tFlagReason(flagReason);
     // If the translation key exists (not returned as-is), use it
-    if (translated !== key) return translated;
+    if (translated !== flagReason) return translated;
     // Fallback: format the raw reason
     return flagReason.replace(/_/g, ' ');
   }
-  return t('dashboard.smartBanner.reasonNoReply' as TranslationKey);
+  return tDash('smartBanner.reasonNoReply');
 }
 
 function formatRelativeTime(
   date: string | Date | null,
-  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+  tTime: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   if (!date) return '';
   const d = typeof date === 'string' ? new Date(date) : date;
@@ -75,10 +75,10 @@ function formatRelativeTime(
   const diffHr = Math.floor(diffMs / 3_600_000);
   const diffDay = Math.floor(diffMs / 86_400_000);
 
-  if (diffMin < 1) return t('time.justNow' as TranslationKey);
-  if (diffMin < 60) return t('time.minutesAgo' as TranslationKey, { count: diffMin });
-  if (diffHr < 24) return t('time.hoursAgo' as TranslationKey, { count: diffHr });
-  return t('time.daysAgo' as TranslationKey, { count: diffDay });
+  if (diffMin < 1) return tTime('justNow');
+  if (diffMin < 60) return tTime('minutesAgo', { count: diffMin });
+  if (diffHr < 24) return tTime('hoursAgo', { count: diffHr });
+  return tTime('daysAgo', { count: diffDay });
 }
 
 export function SmartStatusBanner({
@@ -87,7 +87,12 @@ export function SmartStatusBanner({
   items,
   onMessageItemClick,
 }: SmartStatusBannerProps) {
-  const { t } = useTranslation();
+  const tDash = useTranslations('dashboard');
+  const tComments = useTranslations('comments');
+  const tMessages = useTranslations('messages');
+  const tc = useTranslations('common');
+  const tFlagReason = useTranslations('flagReason');
+  const tTime = useTranslations('time');
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
@@ -112,12 +117,12 @@ export function SmartStatusBanner({
   const breakdownParts: string[] = [];
   if (commentNeedsAction > 0) {
     breakdownParts.push(
-      `${commentNeedsAction} ${t('comments.title' as TranslationKey).toLowerCase()}`
+      `${commentNeedsAction} ${tComments('title').toLowerCase()}`
     );
   }
   if (messageNeedsAction > 0) {
     breakdownParts.push(
-      `${messageNeedsAction} ${t('messages.title' as TranslationKey).toLowerCase()}`
+      `${messageNeedsAction} ${tMessages('title').toLowerCase()}`
     );
   }
   const breakdown = breakdownParts.join(' · ');
@@ -127,29 +132,31 @@ export function SmartStatusBanner({
   const hasMore = totalCount > 5;
 
   // Build "View all" links
+  /* eslint-disable @typescript-eslint/no-explicit-any -- next-intl deep nested keys need cast */
   const viewAllLinks: { label: string; href: string }[] = [];
   if (hasMore) {
     if (commentNeedsAction > 0 && messageNeedsAction > 0) {
       viewAllLinks.push({
-        label: t('dashboard.smartBanner.viewAllComments' as TranslationKey, { count: commentNeedsAction }),
+        label: tDash('smartBanner.viewAllComments' as any, { count: commentNeedsAction }),
         href: '/comments?filter=needs_action',
       });
       viewAllLinks.push({
-        label: t('dashboard.smartBanner.viewAllMessages' as TranslationKey, { count: messageNeedsAction }),
+        label: tDash('smartBanner.viewAllMessages' as any, { count: messageNeedsAction }),
         href: '/messages?filter=needs_action',
       });
     } else if (commentNeedsAction > 0) {
       viewAllLinks.push({
-        label: t('dashboard.smartBanner.viewAllItems' as TranslationKey, { count: totalCount }),
+        label: tDash('smartBanner.viewAllItems' as any, { count: totalCount }),
         href: '/comments?filter=needs_action',
       });
     } else {
       viewAllLinks.push({
-        label: t('dashboard.smartBanner.viewAllItems' as TranslationKey, { count: totalCount }),
+        label: tDash('smartBanner.viewAllItems' as any, { count: totalCount }),
         href: '/messages?filter=needs_action',
       });
     }
   }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   return (
     <Card
@@ -166,7 +173,8 @@ export function SmartStatusBanner({
         onClick={toggle}
         className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-5 text-start cursor-pointer select-none"
         aria-expanded={expanded}
-        aria-label={t('dashboard.smartBanner.needsAttention' as TranslationKey, { count: totalCount })}
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- next-intl deep nested key
+        aria-label={tDash('smartBanner.needsAttention' as any, { count: totalCount })}
       >
         {/* Warning icon */}
         <div className={clsx(
@@ -179,7 +187,8 @@ export function SmartStatusBanner({
         {/* Title + breakdown */}
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm sm:text-base leading-tight">
-            {t('dashboard.smartBanner.needsAttention' as TranslationKey, { count: totalCount })}
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- next-intl deep nested key */}
+            {tDash('smartBanner.needsAttention' as any, { count: totalCount })}
           </p>
           {breakdown && (
             <p className="text-xs sm:text-sm text-amber-700/80 mt-0.5 truncate">
@@ -213,15 +222,15 @@ export function SmartStatusBanner({
                   const snippet = item.text.length > 60
                     ? `${item.text.slice(0, 60)}…`
                     : item.text;
-                  const reason = getReasonTag(item.flagReason, t);
+                  const reason = getReasonTag(item.flagReason, tFlagReason, tDash);
 
                   const useInlineClick = item.type === 'message' && onMessageItemClick;
                   const hasMultiple = item.messageCount && item.messageCount > 1;
                   const showReasonTag = isNotableFlagReason(item.flagReason);
                   // For grouped conversations, show "waiting since" (earliest); otherwise show latest
                   const displayTime = hasMultiple && item.earliestAt
-                    ? t('dashboard.smartBanner.waitingSince' as TranslationKey, { time: formatRelativeTime(item.earliestAt, t) })
-                    : formatRelativeTime(item.createdAt, t);
+                    ? tDash('smartBanner.waitingSince', { time: formatRelativeTime(item.earliestAt, tTime) })
+                    : formatRelativeTime(item.createdAt, tTime);
 
                   const itemContent = (
                     <>
@@ -234,7 +243,7 @@ export function SmartStatusBanner({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-sm font-semibold text-amber-900 truncate">
-                            {item.senderName || t('common.unknownUser' as TranslationKey)}
+                            {item.senderName || tc('unknownUser')}
                             {hasMultiple && (
                               <span className="text-amber-700/70 font-bold"> ({item.messageCount})</span>
                             )}
@@ -283,7 +292,7 @@ export function SmartStatusBanner({
               </ul>
             ) : (
               <div className="px-4 py-3 text-xs text-amber-700/70">
-                {t('common.loading' as TranslationKey)}
+                {tc('loading')}
               </div>
             )}
 

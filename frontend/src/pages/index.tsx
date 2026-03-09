@@ -1,14 +1,14 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useLocale } from 'next-intl';
 import { AppSkeleton } from '@/components/ui';
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
-  const { language } = useTranslation();
-  const isRTL = language === 'ar';
+  const locale = useLocale();
+  const isRTL = locale === 'ar';
   const [mounted, setMounted] = useState(false);
   
   // Use ref for router to avoid dependency issues
@@ -46,4 +46,6 @@ export default function Home() {
   return <AppSkeleton variant={isAuthenticated ? 'dashboard' : 'landing'} />;
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.index]);

@@ -20,30 +20,6 @@ vi.mock('@/lib/store', () => ({
   })),
 }));
 
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'profile.title': 'Complete Your Profile',
-        'profile.emailRequired': 'Email is required',
-        'profile.emailAddress': 'Email Address',
-        'profile.emailPlaceholder': 'you@example.com',
-        'profile.invalidEmail': 'Please enter a valid email',
-        'profile.complete': 'Profile Complete',
-        'profile.redirecting': 'Redirecting...',
-        'profile.privacyNote': 'Privacy Note',
-        'profile.encrypted': 'Encrypted',
-        'profile.neverShared': 'Never shared',
-        'profile.saveFailed': 'Save failed',
-        'common.saving': 'Saving...',
-        'common.continue': 'Continue',
-      };
-      return map[key] ?? key;
-    },
-    language: 'en',
-  }),
-}));
-
 vi.mock('@/lib/api', () => ({
   api: {
     patch: vi.fn(),
@@ -130,7 +106,7 @@ describe('CompleteProfilePage', () => {
   // ─── Email validation ────────────────────────────────────
   it('should not show validation error before user interacts', () => {
     render(<CompleteProfilePage />);
-    expect(screen.queryByText('Please enter a valid email')).not.toBeInTheDocument();
+    expect(screen.queryByText('Please enter a valid email address')).not.toBeInTheDocument();
   });
 
   it('should show error on blur with invalid email', () => {
@@ -140,7 +116,7 @@ describe('CompleteProfilePage', () => {
     fireEvent.change(input, { target: { value: 'not-an-email' } });
     fireEvent.blur(input);
 
-    expect(screen.getByText('Please enter a valid email')).toBeInTheDocument();
+    expect(screen.getByText('Please enter a valid email address')).toBeInTheDocument();
   });
 
   it('should not show error for valid email', () => {
@@ -150,7 +126,7 @@ describe('CompleteProfilePage', () => {
     fireEvent.change(input, { target: { value: 'test@example.com' } });
     fireEvent.blur(input);
 
-    expect(screen.queryByText('Please enter a valid email')).not.toBeInTheDocument();
+    expect(screen.queryByText('Please enter a valid email address')).not.toBeInTheDocument();
   });
 
   it('should reject emails without @ symbol', () => {
@@ -160,7 +136,7 @@ describe('CompleteProfilePage', () => {
     fireEvent.change(input, { target: { value: 'testexample.com' } });
     fireEvent.blur(input);
 
-    expect(screen.getByText('Please enter a valid email')).toBeInTheDocument();
+    expect(screen.getByText('Please enter a valid email address')).toBeInTheDocument();
   });
 
   it('should reject emails without domain', () => {
@@ -170,7 +146,7 @@ describe('CompleteProfilePage', () => {
     fireEvent.change(input, { target: { value: 'test@' } });
     fireEvent.blur(input);
 
-    expect(screen.getByText('Please enter a valid email')).toBeInTheDocument();
+    expect(screen.getByText('Please enter a valid email address')).toBeInTheDocument();
   });
 
   it('should accept plus-addressing', () => {
@@ -180,7 +156,7 @@ describe('CompleteProfilePage', () => {
     fireEvent.change(input, { target: { value: 'test+tag@example.com' } });
     fireEvent.blur(input);
 
-    expect(screen.queryByText('Please enter a valid email')).not.toBeInTheDocument();
+    expect(screen.queryByText('Please enter a valid email address')).not.toBeInTheDocument();
   });
 
   it('should clear error when user starts typing', () => {
@@ -190,7 +166,7 @@ describe('CompleteProfilePage', () => {
     // Trigger error
     fireEvent.change(input, { target: { value: 'bad' } });
     fireEvent.blur(input);
-    expect(screen.getByText('Please enter a valid email')).toBeInTheDocument();
+    expect(screen.getByText('Please enter a valid email address')).toBeInTheDocument();
 
     // Submit to trigger the server error path
     fireEvent.submit(input.closest('form')!);
@@ -261,7 +237,7 @@ describe('CompleteProfilePage', () => {
     fireEvent.submit(input.closest('form')!);
 
     await waitFor(() => {
-      expect(screen.getByText('Profile Complete')).toBeInTheDocument();
+      expect(screen.getByText('Profile Complete!')).toBeInTheDocument();
     });
   });
 
@@ -295,7 +271,7 @@ describe('CompleteProfilePage', () => {
     fireEvent.submit(input.closest('form')!);
 
     await waitFor(() => {
-      expect(screen.getByText('Save failed')).toBeInTheDocument();
+      expect(screen.getByText('Failed to save email. Please try again.')).toBeInTheDocument();
     });
   });
 

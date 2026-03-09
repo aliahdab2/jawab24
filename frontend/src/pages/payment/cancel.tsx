@@ -1,16 +1,16 @@
 import Head from 'next/head';
 import Link from 'next/link';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { XCircle } from 'lucide-react';
 
 export default function PaymentCancelPage() {
-  const { t } = useTranslation();
+  const t = useTranslations('payment');
 
   return (
     <>
       <Head>
-        <title>{t('payment.cancel.title')} - Jawab24</title>
+        <title>{t('cancel.title')} - Jawab24</title>
       </Head>
 
       <div className="min-h-[100dvh] bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center px-4">
@@ -25,22 +25,22 @@ export default function PaymentCancelPage() {
 
             {/* Cancel Message */}
             <h1 className="text-3xl font-bold text-foreground mb-4">
-              {t('payment.cancel.title')}
+              {t('cancel.title')}
             </h1>
             <p className="text-muted-foreground mb-6">
-              {t('payment.cancel.message')}
+              {t('cancel.message')}
             </p>
 
             {/* Actions */}
             <div className="space-y-3">
               <Link href="/pricing" className="block">
                 <Button size="lg" className="w-full">
-                  {t('payment.cancel.backToPricing')}
+                  {t('cancel.backToPricing')}
                 </Button>
               </Link>
               <Link href="/dashboard" className="block">
                 <Button variant="secondary" size="lg" className="w-full">
-                  {t('payment.cancel.goToDashboard')}
+                  {t('cancel.goToDashboard')}
                 </Button>
               </Link>
             </div>
@@ -56,4 +56,6 @@ export default function PaymentCancelPage() {
 }
 
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.paymentCancel]);

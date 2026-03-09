@@ -3,13 +3,6 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { CommentCard, checkNeedsAttention } from './CommentCard';
 import type { Comment } from '@jawab24/shared';
 
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    dateLocale: undefined,
-  }),
-}));
-
 const baseComment: Comment = {
   id: 'c1',
   postId: 'p1',
@@ -64,17 +57,17 @@ describe('CommentCard', () => {
 
   it('shows unknown user when fromName is null', () => {
     render(<CommentCard {...defaultProps} comment={{ ...baseComment, fromName: null }} />);
-    expect(screen.getByText('common.unknownUser')).toBeInTheDocument();
+    expect(screen.getByText('Unknown User')).toBeInTheDocument();
   });
 
   it('shows pending badge for unreplied comments', () => {
     render(<CommentCard {...defaultProps} />);
-    expect(screen.getByText('comments.pending')).toBeInTheDocument();
+    expect(screen.getByText('In queue')).toBeInTheDocument();
   });
 
   it('shows needs attention badge for flagged comments', () => {
     render(<CommentCard {...defaultProps} comment={{ ...baseComment, needsAttention: true }} />);
-    expect(screen.getByText('comments.needsAttention')).toBeInTheDocument();
+    expect(screen.getByText('Needs attention')).toBeInTheDocument();
   });
 
   it('does not show pending badge when comment is replied', () => {
@@ -85,7 +78,7 @@ describe('CommentCard', () => {
       replyMethod: 'ai',
     };
     render(<CommentCard {...defaultProps} comment={replied} />);
-    expect(screen.queryByText('comments.pending')).not.toBeInTheDocument();
+    expect(screen.queryByText('In queue')).not.toBeInTheDocument();
   });
 
   it('shows reply bubble when comment is replied', () => {
@@ -115,12 +108,12 @@ describe('CommentCard', () => {
 
   it('shows resolve button when onResolve is provided', () => {
     render(<CommentCard {...defaultProps} onResolve={vi.fn()} onQuickReply={vi.fn()} />);
-    expect(screen.getByText('comments.resolve')).toBeInTheDocument();
+    expect(screen.getByText('Resolve')).toBeInTheDocument();
   });
 
   it('shows reply button when onQuickReply is provided', () => {
     render(<CommentCard {...defaultProps} onQuickReply={vi.fn()} />);
-    expect(screen.getByText('comments.reply')).toBeInTheDocument();
+    expect(screen.getByText('Reply')).toBeInTheDocument();
   });
 
   it('does not show resolve/reply buttons when comment is already replied', () => {
@@ -131,7 +124,7 @@ describe('CommentCard', () => {
       replyMethod: 'ai',
     };
     render(<CommentCard {...defaultProps} comment={replied} onResolve={vi.fn()} onQuickReply={vi.fn()} />);
-    expect(screen.queryByText('comments.resolve')).not.toBeInTheDocument();
+    expect(screen.queryByText('Resolve')).not.toBeInTheDocument();
   });
 
   it('calls onClick when card is clicked', () => {
@@ -146,7 +139,7 @@ describe('CommentCard', () => {
     const onResolve = vi.fn();
     render(<CommentCard {...defaultProps} onClick={onClick} onResolve={onResolve} onQuickReply={vi.fn()} />);
 
-    fireEvent.click(screen.getByText('comments.resolve'));
+    fireEvent.click(screen.getByText('Resolve'));
     expect(onResolve).toHaveBeenCalled();
     // onClick should NOT be called — stopPropagation
     expect(onClick).not.toHaveBeenCalled();
@@ -157,7 +150,7 @@ describe('CommentCard', () => {
     const onQuickReply = vi.fn();
     render(<CommentCard {...defaultProps} onClick={onClick} onQuickReply={onQuickReply} />);
 
-    fireEvent.click(screen.getByText('comments.reply'));
+    fireEvent.click(screen.getByText('Reply'));
     expect(onQuickReply).toHaveBeenCalled();
     expect(onClick).not.toHaveBeenCalled();
   });

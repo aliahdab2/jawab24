@@ -10,12 +10,13 @@ import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { publicApi } from '@/lib/api';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { captureError } from '@/lib/sentryHelpers';
 
 export function useDemoMode() {
   const router = useRouter();
-  const { t, language } = useTranslation();
+  const t = useTranslations('auth');
+  const locale = useLocale();
   const setAuth = useAuthStore((state) => state.setAuth);
   
   const [isEnabled, setIsEnabled] = useState(false);
@@ -43,7 +44,7 @@ export function useDemoMode() {
       
       setAuth(user, token, 'demo_token');
       
-      const finalLocale = settings?.dashboardLanguage || language || 'ar';
+      const finalLocale = settings?.dashboardLanguage || locale || 'ar';
       useUIStore.getState().setLanguage(finalLocale);
 
       const returnUrl = router.query.redirect as string || '/dashboard';
@@ -51,11 +52,11 @@ export function useDemoMode() {
       
     } catch (error: unknown) {
       captureError(error, 'Demo login error', { level: 'warning', tags: { context: 'demo' } });
-      toast.error(t('auth.demoError'));
+      toast.error(t('demoError'));
     } finally {
       setIsLoading(false);
     }
-  }, [router, t, language, setAuth]);
+  }, [router, t, locale, setAuth]);
 
   return {
     isEnabled,

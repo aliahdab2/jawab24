@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useAuthStore, useUIStore, type Language } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { AppSkeleton } from '@/components/ui';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -11,7 +11,8 @@ import { captureError } from '@/lib/sentryHelpers';
 export default function AuthCallback() {
   const router = useRouter();
   const { setAuth, setWorkspaces } = useAuthStore();
-  const { t } = useTranslation();
+  const t = useTranslations('auth');
+  const tErrors = useTranslations('errors');
   const [error, setError] = useState<string | null>(null);
   const authAttemptedRef = useRef(false);
 
@@ -43,7 +44,7 @@ export default function AuthCallback() {
     
     if (fbError) {
       authAttemptedRef.current = true;
-      setError(t('auth.loginCancelled'));
+      setError(t('loginCancelled'));
       setTimeout(() => routerRef.current.push('/login'), 3000);
       return;
     }
@@ -62,7 +63,7 @@ export default function AuthCallback() {
 
       // Create a timeout promise (15 seconds)
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(t('auth.loginTimeout'))), 15000);
+        setTimeout(() => reject(new Error(t('loginTimeout'))), 15000);
       });
 
       // Determine appropriate origin based on platform
@@ -98,7 +99,7 @@ export default function AuthCallback() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || t('auth.loginError'));
+        throw new Error(data.message || t('loginError'));
       }
 
       const data = await response.json();
@@ -194,12 +195,12 @@ export default function AuthCallback() {
       captureError(err, 'Auth callback error', { tags: { page: 'auth-callback' } });
       
       // Provide user-friendly error messages
-      let errorMessage = t('auth.loginError');
+      let errorMessage = t('loginError');
       if (err instanceof Error) {
         if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
           // Network connectivity issue
-          errorMessage = t('errors.networkError');
-        } else if (err.message === t('auth.loginTimeout')) {
+          errorMessage = tErrors('networkError');
+        } else if (err.message === t('loginTimeout')) {
           // Timeout
           errorMessage = err.message;
         } else if (err.message) {
@@ -211,7 +212,7 @@ export default function AuthCallback() {
       setError(errorMessage);
       setTimeout(() => routerRef.current.push('/login'), 3000);
     }
-  }, [t]);
+  }, [t, tErrors]);
 
   useEffect(() => {
     if (router.isReady) {
@@ -232,9 +233,9 @@ export default function AuthCallback() {
         <div className="flex-1 overflow-y-auto flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4"><span className="text-red-500 text-2xl font-bold" aria-hidden="true">&times;</span></div>
-          <h1 className="text-xl font-semibold text-foreground mb-2">{t('auth.loginError')}</h1>
+          <h1 className="text-xl font-semibold text-foreground mb-2">{t('loginError')}</h1>
           <p className="text-muted-foreground mb-4">{error}</p>
-          <p className="text-sm text-muted-foreground">{t('auth.redirecting')}</p>
+          <p className="text-sm text-muted-foreground">{t('redirecting')}</p>
         </div>
       </div>
       </>
@@ -250,4 +251,6 @@ export default function AuthCallback() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.authCallback]);

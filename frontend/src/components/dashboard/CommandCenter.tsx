@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 import { Sparkles, CheckCircle, Gauge, Timer } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { formatDuration } from '@/lib/formatDuration';
 
 interface CommandCenterProps {
@@ -14,7 +14,7 @@ interface CommandCenterProps {
 }
 
 interface MetricCell {
-  labelKey: TranslationKey;
+  label: string;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
   borderColor: string;
@@ -30,15 +30,17 @@ export function CommandCenter({
   hasError,
   onRetry,
 }: CommandCenterProps) {
-  const { t } = useTranslation();
+  const tDash = useTranslations('dashboard');
+  const tErrors = useTranslations('errors');
+  const tTime = useTranslations('time');
 
   const speedDisplay = avgSpeedSeconds != null
-    ? formatDuration(avgSpeedSeconds, t)
+    ? formatDuration(avgSpeedSeconds, tTime)
     : '—';
 
   const metrics: MetricCell[] = [
     {
-      labelKey: 'dashboard.aiReplies' as TranslationKey,
+      label: tDash('aiReplies'),
       value: smartReplies.toLocaleString(),
       icon: Sparkles,
       borderColor: 'border-s-brand-500',
@@ -46,7 +48,7 @@ export function CommandCenter({
       iconColor: '',
     },
     {
-      labelKey: 'dashboard.commandCenter.repliedToday' as TranslationKey,
+      label: tDash('commandCenter.repliedToday'),
       value: repliedToday.toLocaleString(),
       icon: CheckCircle,
       borderColor: 'border-s-emerald-500',
@@ -54,7 +56,7 @@ export function CommandCenter({
       iconColor: '',
     },
     {
-      labelKey: 'dashboard.commandCenter.replyRate' as TranslationKey,
+      label: tDash('commandCenter.replyRate'),
       value: `${replyRate}%`,
       icon: Gauge,
       borderColor: 'border-s-amber-500',
@@ -62,7 +64,7 @@ export function CommandCenter({
       iconColor: '',
     },
     {
-      labelKey: 'dashboard.commandCenter.avgSpeed' as TranslationKey,
+      label: tDash('commandCenter.avgSpeed'),
       value: speedDisplay,
       icon: Timer,
       borderColor: 'border-s-violet-500',
@@ -75,13 +77,13 @@ export function CommandCenter({
     return (
       <Card className="mb-8 border-none shadow-sm bg-card" padding="none">
         <div className="flex items-center justify-center gap-2 py-6 text-surface-500">
-          <span className="text-sm">{t('dashboard.sectionLoadError')}</span>
+          <span className="text-sm">{tDash('sectionLoadError')}</span>
           {onRetry && (
             <button
               onClick={onRetry}
               className="text-sm font-semibold text-brand-600 hover:text-brand-700 underline"
             >
-              {t('errors.tryAgain')}
+              {tErrors('tryAgain')}
             </button>
           )}
         </div>
@@ -94,12 +96,12 @@ export function CommandCenter({
       className="mb-8 border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden animate-slide-up"
       padding="none"
       role="region"
-      aria-label={t('dashboard.overview')}
+      aria-label={tDash('overview')}
     >
       {/* Period Label */}
       <div className="px-4 py-2.5 sm:px-5 border-b border-theme-border">
         <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-surface-400 dark:text-surface-700">
-          {t('dashboard.last30Days' as TranslationKey)}
+          {tDash('last30Days')}
         </span>
       </div>
 
@@ -124,7 +126,7 @@ export function CommandCenter({
                     {metric.value}
                   </p>
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5">
-                    {t(metric.labelKey)}
+                      {metric.label}
                   </p>
                 </div>
                 <div className={clsx(

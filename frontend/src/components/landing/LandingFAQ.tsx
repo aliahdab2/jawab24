@@ -1,17 +1,17 @@
 import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 export function LandingFAQ() {
-  const { t } = useTranslation();
+  const t = useTranslations('landing');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const faqs = [
-    { question: t('landing.faq.q1'), answer: t('landing.faq.a1') },
-    { question: t('landing.faq.q2'), answer: t('landing.faq.a2') },
-    { question: t('landing.faq.q3'), answer: t('landing.faq.a3') },
-    { question: t('landing.faq.q4'), answer: t('landing.faq.a4') },
-    { question: t('landing.faq.q5'), answer: t('landing.faq.a5') },
+    { question: t('faq.q1'), answer: t('faq.a1') },
+    { question: t('faq.q2'), answer: t('faq.a2') },
+    { question: t('faq.q3'), answer: t('faq.a3') },
+    { question: t('faq.q4'), answer: t('faq.a4') },
+    { question: t('faq.q5'), answer: t('faq.a5') },
   ];
 
   return (
@@ -23,7 +23,7 @@ export function LandingFAQ() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center mb-8 sm:mb-20">
           <h2 className="text-2xl sm:text-4xl font-display font-extrabold text-foreground mb-2 sm:mb-4">
-            {t('landing.faq.title')}
+            {t('faq.title')}
           </h2>
         </div>
 

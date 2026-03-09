@@ -54,7 +54,7 @@ describe('MessagesPage', () => {
     render(<MessagesPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('messages.emptyNeedsAction')).toBeInTheDocument();
+      expect(screen.getByText('All messages handled')).toBeInTheDocument();
     });
   });
 

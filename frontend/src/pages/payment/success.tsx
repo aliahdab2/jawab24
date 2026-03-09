@@ -2,14 +2,14 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { CheckCircle2 } from 'lucide-react';
 
 export default function PaymentSuccessPage() {
   const router = useRouter();
   const { session_id } = router.query;
-  const { t } = useTranslation();
+  const t = useTranslations('payment');
   const [countdown, setCountdown] = useState(5);
   
   // Use ref for router to avoid dependency issues
@@ -38,7 +38,7 @@ export default function PaymentSuccessPage() {
   return (
     <>
       <Head>
-        <title>{t('payment.success.title')} - Jawab24</title>
+        <title>{t('success.title')} - Jawab24</title>
       </Head>
 
       <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4">
@@ -53,16 +53,16 @@ export default function PaymentSuccessPage() {
 
             {/* Success Message */}
             <h1 className="text-3xl font-bold text-foreground mb-4">
-              {t('payment.success.title')}
+              {t('success.title')}
             </h1>
             <p className="text-muted-foreground mb-6">
-              {t('payment.success.message')}
+              {t('success.message')}
             </p>
 
             {/* Redirect Info */}
             <div className="bg-brand-50 rounded-lg p-4 mb-6">
               <p className="text-sm text-brand-700">
-                {t('payment.success.redirecting')} {countdown}s...
+                {t('success.redirecting')} {countdown}s...
               </p>
             </div>
 
@@ -70,12 +70,12 @@ export default function PaymentSuccessPage() {
             <div className="space-y-3">
               <Link href="/dashboard" className="block">
                 <Button size="lg" className="w-full">
-                  {t('payment.success.goToDashboard')}
+                  {t('success.goToDashboard')}
                 </Button>
               </Link>
               <Link href="/pricing" className="block">
                 <Button variant="secondary" size="lg" className="w-full">
-                  {t('payment.success.backToPricing')}
+                  {t('success.backToPricing')}
                 </Button>
               </Link>
             </div>
@@ -91,4 +91,6 @@ export default function PaymentSuccessPage() {
 }
 
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.paymentSuccess]);

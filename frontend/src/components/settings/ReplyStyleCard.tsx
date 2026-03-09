@@ -2,13 +2,13 @@ import { useState } from 'react';
 import clsx from 'clsx';
 import { Card, Toggle } from '@/components/ui';
 import { Sparkles, Check } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
 
 const STYLES = ['professional', 'casual', 'enthusiastic'] as const;
 
 export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
   const currentLangForVoice = settings.dashboardLanguage;
   const hasSavedVoiceNotes = !!(settings.brandVoiceNotesMulti?.[currentLangForVoice]);
   const [voiceNotesOpen, setVoiceNotesOpen] = useState(hasSavedVoiceNotes);
@@ -20,8 +20,8 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
           <Sparkles className="w-5 h-5" />
         </div>
         <div className="text-start">
-          <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.replyStyle.title')}</h4>
-          <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.replyStyle.desc')}</p>
+          <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('replyStyle.title')}</h4>
+          <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('replyStyle.desc')}</p>
         </div>
       </div>
 
@@ -39,7 +39,8 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
             )}
           >
             {settings.replyStyle === style && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
-            {t(`settings.replyStyle.${style}`)}
+            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic key from style list */}
+            {t(`replyStyle.${style}` as any)}
           </button>
         ))}
       </div>
@@ -50,7 +51,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
         onClick={() => setVoiceNotesOpen(!voiceNotesOpen)}
         className="text-sm font-medium text-brand-500 dark:text-brand-400 hover:text-brand-600 dark:hover:text-brand-300 transition-colors cursor-pointer min-h-[44px] flex items-center"
       >
-        {voiceNotesOpen ? t('settings.replyStyle.hideBrandVoice') : t('settings.replyStyle.addBrandVoice')}
+        {voiceNotesOpen ? t('replyStyle.hideBrandVoice') : t('replyStyle.addBrandVoice')}
       </button>
       <div
         className={clsx(
@@ -64,16 +65,16 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
           const sourceLang = settings.brandVoiceNotesMulti?.sourceLang;
           const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
           const displayValue = isAutoTranslated ? '' : value;
-          const placeholder = isAutoTranslated && value ? value : t('settings.replyStyle.brandVoicePlaceholder');
+          const placeholder = isAutoTranslated && value ? value : t('replyStyle.brandVoicePlaceholder');
 
           return (
             <>
               <label htmlFor="brandVoiceNotes" className="sr-only">
-                {t('settings.replyStyle.brandVoice')}
+                {t('replyStyle.brandVoice')}
               </label>
               <textarea
                 id="brandVoiceNotes"
-                aria-label={t('settings.replyStyle.brandVoice')}
+                aria-label={t('replyStyle.brandVoice')}
                 className={clsx(
                   'input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic',
                   isAutoTranslated && 'placeholder:italic',
@@ -107,13 +108,13 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
       {/* Hold low-confidence toggle */}
       <div className="flex items-center justify-between gap-3 mt-4 pt-4 border-t border-theme-border">
         <div className="text-start">
-          <p className="text-sm font-medium text-foreground/70">{t('settings.replyStyle.holdLowConfidence')}</p>
-          <p className="text-xs text-muted-foreground">{t('settings.replyStyle.holdLowConfidenceDesc')}</p>
+          <p className="text-sm font-medium text-foreground/70">{t('replyStyle.holdLowConfidence')}</p>
+          <p className="text-xs text-muted-foreground">{t('replyStyle.holdLowConfidenceDesc')}</p>
         </div>
         <Toggle
           enabled={settings.holdLowConfidence}
           onChange={(v) => setSettings({ ...settings, holdLowConfidence: v })}
-          aria-label={t('settings.replyStyle.holdLowConfidence')}
+          aria-label={t('replyStyle.holdLowConfidence')}
         />
       </div>
     </Card>

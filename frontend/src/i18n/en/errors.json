@@ -1,0 +1,21 @@
+{
+  "somethingWentWrong": "Something went wrong",
+  "tryAgain": "Try again",
+  "networkError": "Network error",
+  "timeout": "Request timed out. Please check your internet connection and try again.",
+  "cannotConnect": "Cannot connect to server. Please check your internet connection.",
+  "tooManyRequests": "Too many requests. Please try again later.",
+  "serverErrorRetry": "Server error. Please try again later.",
+  "unexpectedError": "An unexpected error occurred. Please try again.",
+  "unauthorized": "Unauthorized",
+  "notFound": "Not found",
+  "notFoundTitle": "Page Not Found",
+  "notFoundDesc": "The page you're looking for doesn't exist or has been moved.",
+  "serverError": "Server error",
+  "serverErrorTitle": "Server Error",
+  "serverErrorDesc": "Something went wrong on our end. We're working on it — please try again shortly.",
+  "contactSupport": "Contact Support",
+  "refreshPage": "Refresh Page",
+  "goHome": "Go Home",
+  "goBack": "Go Back"
+}

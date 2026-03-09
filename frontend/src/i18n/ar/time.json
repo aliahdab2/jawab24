@@ -1,0 +1,14 @@
+{
+  "dShort": "ي",
+  "hShort": "س",
+  "mShort": "د",
+  "sShort": "ث",
+  "justNow": "الآن",
+  "minuteAgo": "منذ دقيقة",
+  "minutesAgo": "منذ {count} دقيقة",
+  "hourAgo": "منذ ساعة",
+  "hoursAgo": "منذ {count} ساعة",
+  "dayAgo": "منذ يوم",
+  "daysAgo": "منذ {count} يوم",
+  "weeksAgo": "منذ {count} أسبوع"
+}

@@ -8,11 +8,11 @@ import {
   ArrowRight,
   Mail,
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
 
 export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
   const [diagramKey, setDiagramKey] = useState(0);
 
   const dualNudgeInput = settings.dualReplyNudgeMulti?.[settings.dashboardLanguage] || '';
@@ -28,15 +28,15 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
             <MessageSquare className="w-4 h-4" />
           </div>
           <div className="text-start">
-            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900 dark:text-brand-300' : 'text-foreground'}`}>{t('settings.commentsAutoReply')}</h3>
-            <p className="text-sm text-muted-foreground font-medium landscape:text-xs">{t('settings.commentsAutoReplyDesc')}</p>
-            <p className="text-xs text-muted-foreground mt-1 landscape:hidden">{t('settings.commentsAutoReplyHelper')}</p>
+            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900 dark:text-brand-300' : 'text-foreground'}`}>{t('commentsAutoReply')}</h3>
+            <p className="text-sm text-muted-foreground font-medium landscape:text-xs">{t('commentsAutoReplyDesc')}</p>
+            <p className="text-xs text-muted-foreground mt-1 landscape:hidden">{t('commentsAutoReplyHelper')}</p>
           </div>
         </div>
         <Toggle
           enabled={settings.commentsAutoReply}
           onChange={(enabled) => setSettings({ ...settings, commentsAutoReply: enabled })}
-          aria-label={t('settings.commentsAutoReply')}
+          aria-label={t('commentsAutoReply')}
         />
       </div>
 
@@ -49,7 +49,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
       >
           <h4 id="comment-reply-mode-label" className="text-sm font-bold text-foreground mb-3 landscape:mb-2 flex items-center gap-2">
             <Settings2 className="w-4 h-4" />
-            {t('settings.commentReplyMode.question')}
+            {t('commentReplyMode.question')}
           </h4>
 
           <Select
@@ -60,18 +60,18 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
               setDiagramKey(prev => prev + 1);
             }}
             options={[
-              { value: 'dual', label: `${t('settings.commentReplyMode.dual')} (${t('settings.recommended')})` },
-              { value: 'public', label: t('settings.commentReplyMode.publicOnly') },
-              { value: 'private', label: t('settings.commentReplyMode.privateOnly') },
+              { value: 'dual', label: `${t('commentReplyMode.dual')} (${t('recommended')})` },
+              { value: 'public', label: t('commentReplyMode.publicOnly') },
+              { value: 'private', label: t('commentReplyMode.privateOnly') },
             ]}
             disabled={!settings.commentsAutoReply}
           />
 
           {/* Dynamic description */}
           <p className="mt-2 text-sm text-muted-foreground animate-in fade-in">
-            {settings.commentReplyMode === 'dual' && t('settings.commentReplyMode.dualDesc')}
-            {settings.commentReplyMode === 'public' && t('settings.commentReplyMode.publicDesc')}
-            {settings.commentReplyMode === 'private' && t('settings.commentReplyMode.privateDesc')}
+            {settings.commentReplyMode === 'dual' && t('commentReplyMode.dualDesc')}
+            {settings.commentReplyMode === 'public' && t('commentReplyMode.publicDesc')}
+            {settings.commentReplyMode === 'private' && t('commentReplyMode.privateDesc')}
           </p>
 
           {/* Flow Diagram */}
@@ -92,7 +92,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                 <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
               </div>
               <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[75px]">
-                {t('settings.flowNewComment')}
+                {t('flowNewComment')}
               </span>
             </div>
 
@@ -113,7 +113,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                     <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                   </div>
                   <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[75px]">
-                    {t('settings.flowPublicReply')}
+                    {t('flowPublicReply')}
                   </span>
                 </div>
                 {settings.commentReplyMode === 'dual' && (
@@ -136,7 +136,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[75px]">
-                  {t('settings.flowPrivateMessage')}
+                  {t('flowPrivateMessage')}
                 </span>
               </div>
             )}
@@ -152,9 +152,9 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
             )}
           >
             <div className="p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-950/20 border border-brand-200/50 dark:border-brand-800/40">
-              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-3">{t('settings.dualReplyConfigTitle.improved')}</h4>
+              <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-3">{t('dualReplyConfigTitle.improved')}</h4>
               <Input
-                aria-label={t('settings.dualReplyConfigTitle.improved')}
+                aria-label={t('dualReplyConfigTitle.improved')}
                 value={(() => {
                   const currentLang = settings.dashboardLanguage;
                   const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
@@ -180,19 +180,19 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                   const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
                   const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
                   const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-                  return isAutoTranslated && value ? value : t('settings.publicReplyPlaceholder');
+                  return isAutoTranslated && value ? value : t('publicReplyPlaceholder');
                 })()}
                 className="bg-card !py-2.5 placeholder:text-muted-foreground placeholder:italic"
                 maxLength={80}
               />
 
               <div className="flex items-center justify-between text-xs mt-1.5">
-                <span className="text-brand-700 dark:text-brand-400 font-medium">{t('settings.dualReplyConfigHelper')}</span>
+                <span className="text-brand-700 dark:text-brand-400 font-medium">{t('dualReplyConfigHelper')}</span>
                 <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-500'}`}>
                   {dualNudgeInput.length}/80
                 </span>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">{t('settings.dualReplyVariationsHint')}</p>
+              <p className="text-xs text-muted-foreground mt-1">{t('dualReplyVariationsHint')}</p>
             </div>
           </div>
       </div>

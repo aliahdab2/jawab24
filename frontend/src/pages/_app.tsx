@@ -10,7 +10,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { AppShell } from '@/components/layout/AppShell';
 import { useUIStore, useAuthStore } from '@/lib/store';
-import { createT, type Language } from '@/i18n';
+import type { Language } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { Toaster } from 'sonner';
 import { AppSkeleton } from '@/components/ui';
@@ -354,8 +355,8 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   // This prevents DashboardLayout (and Sidebar) from remounting on navigation
   const getLayout = Component.getLayout ?? ((page) => page);
 
-  // Translated meta descriptions (locale-aware)
-  const t = createT((locale || 'ar') as Language);
+  // Translated meta descriptions (locale-aware, scoped to 'meta' namespace)
+  const tMeta = useTranslations('meta');
 
   // Compute page-aware paths for hreflang, canonical, and og:url
   // Uses asPath (resolved URL) not pathname (which has [slug] placeholders)
@@ -386,7 +387,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           <Head>
             <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
             <title>{BRAND_ASSETS.meta.appTitle}</title>
-            <meta name="description" content={t('meta.description')} />
+            <meta name="description" content={tMeta('description')} />
             <meta name="theme-color" content={BRAND_ASSETS.meta.themeColor} />
             <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
 
@@ -402,7 +403,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
             <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
             <meta property="og:site_name" content={BRAND_ASSETS.meta.appName} />
             <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
-            <meta property="og:description" content={t('meta.ogDescription')} />
+            <meta property="og:description" content={tMeta('ogDescription')} />
             <meta property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
             <meta property="og:image:width" content="1200" />
             <meta property="og:image:height" content="630" />
@@ -414,7 +415,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
             <meta name="twitter:card" content="summary_large_image" />
             <meta name="twitter:site" content="@jawab24" />
             <meta name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
-            <meta name="twitter:description" content={t('meta.twitterDescription')} />
+            <meta name="twitter:description" content={tMeta('twitterDescription')} />
             <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
 
             <meta name="mobile-web-app-capable" content="yes" />

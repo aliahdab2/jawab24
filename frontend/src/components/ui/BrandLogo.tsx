@@ -1,5 +1,5 @@
 import React from 'react';
-import { useTranslation } from '@/i18n';
+import { useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
 
 interface BrandLogoProps extends React.ImgHTMLAttributes<HTMLImageElement> {
@@ -19,9 +19,9 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     alt,
     ...props
 }) => {
-    const { language } = useTranslation();
+    const locale = useLocale();
     // Reversed: English uses RTL version, Arabic uses standard
-    const shouldUseRtlVersion = language === 'en';
+    const shouldUseRtlVersion = locale === 'en';
 
     // Determine the correct source
     let src = BRAND_ASSETS.logo[variant];

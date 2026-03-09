@@ -4,7 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 interface DangerZoneProps {
   onDeleteAccount: () => Promise<void>;
@@ -12,7 +12,8 @@ interface DangerZoneProps {
 }
 
 export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
+  const tc = useTranslations('common');
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [isDeleted, setIsDeleted] = useState(false);
@@ -29,17 +30,17 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
           <div className="flex-1 text-start">
             <h4 className="font-bold danger-zone-title text-lg landscape:text-base mb-2 flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 danger-zone-icon" />
-              {t('settings.dangerZone')}
+              {t('dangerZone')}
             </h4>
             <p className="text-sm danger-zone-text font-medium leading-relaxed max-w-xl landscape:text-xs">
-              {t('settings.deleteAccountWarning')}
+              {t('deleteAccountWarning')}
             </p>
           </div>
           <button
             onClick={() => setShowDeleteModal(true)}
             className="inline-flex items-center whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-bold danger-zone-btn"
           >
-            {t('settings.deleteAccount')}
+            {t('deleteAccount')}
           </button>
         </Card>
       </div>
@@ -50,7 +51,7 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
           setShowDeleteModal(false);
           setDeleteConfirmation('');
         }}
-        title={t('settings.deleteAccount')}
+        title={t('deleteAccount')}
       >
         <div className="space-y-6">
           {isDeleted ? (
@@ -59,7 +60,7 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
                 <CheckCircle2 className="w-10 h-10" />
               </div>
               <h3 className="text-2xl font-bold text-foreground mb-2">
-                {t('settings.deleteSuccess')}
+                {t('deleteSuccess')}
               </h3>
             </div>
           ) : (
@@ -67,19 +68,19 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
               <div className="p-4 rounded-xl alert-error border">
                 <p className="font-bold mb-2 flex items-center gap-2">
                   <span className="text-xl">⚠️</span>
-                  {t('common.warning')}
+                  {tc('warning')}
                 </p>
-                <p className="text-sm leading-relaxed">{t('settings.deleteAccountWarning')}</p>
+                <p className="text-sm leading-relaxed">{t('deleteAccountWarning')}</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-foreground mb-2">
-                  {t('settings.deleteConfirmLabel')}
+                  {t('deleteConfirmLabel')}
                 </label>
                 <Input
                   value={deleteConfirmation}
                   onChange={(e) => setDeleteConfirmation(e.target.value)}
-                  placeholder={t('settings.deleteConfirmPlaceholder' as TranslationKey)}
+                  placeholder={t('deleteConfirmPlaceholder')}
                   className="danger-input"
                 />
               </div>
@@ -93,7 +94,7 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
                     setDeleteConfirmation('');
                   }}
                 >
-                  {t('common.cancel')}
+                  {tc('cancel')}
                 </Button>
                 <Button
                   variant="danger"
@@ -102,7 +103,7 @@ export function DangerZone({ onDeleteAccount, saving }: DangerZoneProps) {
                   loading={saving}
                   disabled={deleteConfirmation.trim().toUpperCase() !== 'DELETE'}
                 >
-                  {t('settings.deleteAccount')}
+                  {t('deleteAccount')}
                 </Button>
               </div>
             </>

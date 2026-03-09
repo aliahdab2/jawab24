@@ -5,7 +5,8 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell } from '@/components/ui';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
@@ -27,8 +28,14 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, title, isPublic = false, skipTitle = false }: DashboardLayoutProps) {
   const router = useRouter();
-  const { t, language, setLanguage } = useTranslation();
-  const isRTL = language === 'ar';
+  const tDashboard = useTranslations('dashboard');
+  const tNav = useTranslations('nav');
+  const tc = useTranslations('common');
+  const tLanding = useTranslations('landing');
+  const tLogout = useTranslations('logout');
+  const locale = useLocale();
+  const { setLanguage } = useLanguage();
+  const isRTL = locale === 'ar';
   const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
   const { sidebarOpen, isOnboardingVisible } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
@@ -42,11 +49,11 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   useEscapeKey(() => setMobileMenuOpen(false), mobileMenuOpen && !showLogoutCheck);
 
   const toggleLanguage = () => {
-    const newLang = language === 'ar' ? 'en' : 'ar';
+    const newLang = locale === 'ar' ? 'en' : 'ar';
     setLanguage(newLang);
   };
 
-  const pageTitle = title || t('dashboard.title');
+  const pageTitle = title || tDashboard('title');
 
   useEffect(() => {
     // Session Verification for Web (Cookie-based)
@@ -141,32 +148,32 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                   {/* Pricing link - hidden on mobile */}
                   {isNativePlatform() ? (
                     <button
-                      onClick={() => openExternalUrl(`https://jawab24.com${language === 'en' ? '/en' : ''}/pricing`)}
+                      onClick={() => openExternalUrl(`https://jawab24.com${locale === 'en' ? '/en' : ''}/pricing`)}
                       className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
                     >
-                      {t('landing.nav.pricing' as TranslationKey)}
+                      {tLanding('nav.pricing')}
                     </button>
                   ) : (
                     <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
-                      {t('landing.nav.pricing' as TranslationKey)}
+                      {tLanding('nav.pricing')}
                     </Link>
                   )}
                   <button
                     onClick={toggleLanguage}
                     className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
                   >
-                    {t('common.switchLanguage')}
+                    {tc('switchLanguage')}
                   </button>
                   {isAuthenticated ? (
                     <Link href="/dashboard">
                       <button className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 bg-brand-500 text-white rounded-xl hover:bg-brand-600 transition-all">
-                        {t('nav.dashboard')}
+                        {tNav('dashboard')}
                       </button>
                     </Link>
                   ) : (
                     <Link href="/login?redirect=%2Fdashboard">
                       <button className="font-bold border-none px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 text-brand-600 rounded-lg hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
-                        {t('landing.nav.login' as TranslationKey)}
+                        {tLanding('nav.login')}
                       </button>
                     </Link>
                   )}
@@ -241,27 +248,27 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
               <MobileNavButton
                 onClick={() => router.push('/dashboard')}
                 icon={<LayoutDashboard className="w-7 h-7" />}
-                label={t('nav.dashboard')}
+                label={tNav('dashboard')}
                 active={router.pathname === '/dashboard'}
               />
               <MobileNavButton
                 onClick={() => router.push('/comments')}
                 icon={<MessageSquare className="w-7 h-7" />}
-                label={t('nav.comments')}
+                label={tNav('comments')}
                 active={router.pathname === '/comments'}
                 badge={unreadComments}
               />
               <MobileNavButton
                 onClick={() => router.push('/messages')}
                 icon={<MessageCircle className="w-7 h-7" />}
-                label={t('nav.messages')}
+                label={tNav('messages')}
                 active={router.pathname === '/messages'}
                 badge={unreadMessages}
               />
               <MobileNavButton
                 onClick={() => setMobileMenuOpen(true)}
                 icon={<MoreHorizontal className="w-7 h-7" />}
-                label={t('nav.more') || 'More'}
+                label={tNav('more') || 'More'}
                 active={mobileMenuOpen || ['/pages', '/templates', '/rules', '/pricing', '/settings'].includes(router.pathname)}
               />
             </nav>
@@ -275,7 +282,6 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             onClose={() => setMobileMenuOpen(false)}
             isRTL={isRTL}
             router={router}
-            t={t}
             onLogout={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
           />
         )}
@@ -286,24 +292,24 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             <div className="bg-card rounded-2xl w-full max-w-sm shadow-xl animate-in zoom-in-95" onClick={(e) => e.stopPropagation()}>
               <div className="px-6 pt-6 pb-4 border-b border-theme-border">
                 <h3 className="text-lg font-bold text-foreground text-center">
-                  {t('logout.confirmTitle')}
+                  {tLogout('confirmTitle')}
                 </h3>
               </div>
               <p className="text-muted-foreground text-center px-6 pt-4 pb-6">
-                {t('logout.confirmBody')}
+                {tLogout('confirmBody')}
               </p>
               <div className="flex gap-3 px-6 pb-6">
                 <button
                   onClick={() => setShowLogoutCheck(false)}
                   className="flex-1 py-3 rounded-xl font-semibold text-foreground/80 bg-muted hover:bg-surface-200 transition-colors"
                 >
-                  {t('common.cancel')}
+                  {tc('cancel')}
                 </button>
                 <button
                   onClick={() => { logout(); router.push('/login'); }}
                   className="flex-1 py-3 rounded-xl font-semibold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors"
                 >
-                  {t('nav.logout')}
+                  {tNav('logout')}
                 </button>
               </div>
             </div>
@@ -366,34 +372,34 @@ function MobileNavButton({ onClick, icon, label, active, badge }: {
  * - Horizontal layout in landscape for better space utilization
  * - Proper animation patterns (slide-up portrait, fade-in landscape)
  */
-function MobileMenuOverlay({ 
-  isOpen, 
-  onClose, 
-  isRTL, 
-  router, 
-  t, 
-  onLogout 
+function MobileMenuOverlay({
+  isOpen,
+  onClose,
+  isRTL,
+  router,
+  onLogout
 }: {
   isOpen: boolean;
   onClose: () => void;
   isRTL: boolean;
   router: ReturnType<typeof useRouter>;
-  t: (key: TranslationKey) => string;
   onLogout: () => void;
 }) {
+  const tNav = useTranslations('nav');
+  const tPricing = useTranslations('pricing');
   // Reusable hooks
   const isLandscape = useLandscape();
   useBodyScrollLock(isOpen);
 
   const menuItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: t('nav.dashboard') },
-    { path: '/pages', icon: FileText, label: t('nav.pages') },
-    { path: '/comments', icon: MessageSquare, label: t('nav.comments') },
-    { path: '/messages', icon: MessageCircle, label: t('nav.messages') },
-    { path: '/templates', icon: BookTemplate, label: t('nav.templates') },
-    { path: '/rules', icon: Zap, label: t('nav.rules') },
-    { path: '/pricing', icon: CreditCard, label: t('pricing.title') },
-    { path: '/settings', icon: Settings, label: t('nav.settings') },
+    { path: '/dashboard', icon: LayoutDashboard, label: tNav('dashboard') },
+    { path: '/pages', icon: FileText, label: tNav('pages') },
+    { path: '/comments', icon: MessageSquare, label: tNav('comments') },
+    { path: '/messages', icon: MessageCircle, label: tNav('messages') },
+    { path: '/templates', icon: BookTemplate, label: tNav('templates') },
+    { path: '/rules', icon: Zap, label: tNav('rules') },
+    { path: '/pricing', icon: CreditCard, label: tPricing('title') },
+    { path: '/settings', icon: Settings, label: tNav('settings') },
   ];
 
   const handleNavigate = (path: string) => {
@@ -414,7 +420,7 @@ function MobileMenuOverlay({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={t('nav.menu') || 'Menu'}
+      aria-label={tNav('menu') || 'Menu'}
     >
       {/* Backdrop - darker in landscape for better contrast */}
       <div className={clsx(
@@ -455,7 +461,7 @@ function MobileMenuOverlay({
             "font-semibold text-foreground",
             isLandscape ? "text-base" : "text-lg"
           )}>
-            {t('nav.menu') || 'Menu'}
+            {tNav('menu') || 'Menu'}
           </h3>
           <button
             onClick={onClose}
@@ -534,7 +540,7 @@ function MobileMenuOverlay({
       <span className={clsx(
               isLandscape ? "text-sm" : "text-base"
       )}>
-              {t('nav.logout')}
+              {tNav('logout')}
       </span>
     </button>
         </div>

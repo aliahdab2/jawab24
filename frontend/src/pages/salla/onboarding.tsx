@@ -13,18 +13,19 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { toast } from 'sonner';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { sallaApi, pagesApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 
-type TFunc = (key: TranslationKey | string, params?: Record<string, string | number>) => string;
+
 
 const TOTAL_STEPS = 4;
 
 export default function SallaOnboarding() {
   const router = useRouter();
-  const { t } = useTranslation();
+  const t = useTranslations('salla');
+  const tc = useTranslations('common');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [step, setStep] = useState(0);
   const [store, setStore] = useState<EcommerceStore | null>(null);
@@ -106,7 +107,7 @@ export default function SallaOnboarding() {
       setLinkedPageName(page?.name || null);
       setStep(3);
     } catch {
-      toast.error(t('salla.pageLinkError' as TranslationKey));
+      toast.error(t('pageLinkError'));
     }
     setLinking(false);
   };
@@ -114,15 +115,15 @@ export default function SallaOnboarding() {
   if (!isAuthenticated) return null;
 
   const benefits = [
-    (t as TFunc)('salla.onboarding.welcomeBenefit1'),
-    (t as TFunc)('salla.onboarding.welcomeBenefit2'),
-    (t as TFunc)('salla.onboarding.welcomeBenefit3'),
+    t('onboarding.welcomeBenefit1'),
+    t('onboarding.welcomeBenefit2'),
+    t('onboarding.welcomeBenefit3'),
   ];
 
   return (
     <>
       <Head>
-        <title>{(t as TFunc)('salla.onboarding.title')} | Jawab24</title>
+        <title>{t('onboarding.title')} | Jawab24</title>
       </Head>
       <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-brand-50 flex items-center justify-center p-4">
         <div className="w-full max-w-lg">
@@ -149,10 +150,10 @@ export default function SallaOnboarding() {
 
                   <div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      {(t as TFunc)('salla.onboarding.welcomeTitle')}
+                      {t('onboarding.welcomeTitle')}
                     </h2>
                     <p className="text-muted-foreground text-sm">
-                      {(t as TFunc)('salla.onboarding.welcomeSubtitle')}
+                      {t('onboarding.welcomeSubtitle')}
                     </p>
                   </div>
 
@@ -171,7 +172,7 @@ export default function SallaOnboarding() {
                     className="w-full bg-teal-700 hover:bg-teal-800 text-white rounded-2xl py-4"
                   >
                     <div className="flex items-center justify-center gap-2">
-                      <span>{(t as TFunc)('salla.onboarding.welcomeCta')}</span>
+                      <span>{t('onboarding.welcomeCta')}</span>
                       <ArrowRight className="w-4 h-4 rtl:rotate-180" />
                     </div>
                   </Button>
@@ -187,16 +188,16 @@ export default function SallaOnboarding() {
 
                   <div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      {(t as TFunc)('salla.onboarding.storeConnected')}
+                      {t('onboarding.storeConnected')}
                     </h2>
                     {storeLoading ? (
                       <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-sm">{(t as TFunc)('common.loading')}</span>
+                        <span className="text-sm">{tc('loading')}</span>
                       </div>
                     ) : storeError ? (
                       <p className="text-red-500 text-sm">
-                        {(t as TFunc)('salla.onboarding.storeNotFound')}
+                        {t('onboarding.storeNotFound')}
                       </p>
                     ) : (
                       <p className="text-muted-foreground font-mono text-sm">
@@ -210,14 +211,14 @@ export default function SallaOnboarding() {
                     {syncStatus === 'syncing' && (
                       <div className="flex items-center justify-center gap-2 text-muted-foreground">
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span className="text-sm font-medium">{(t as TFunc)('salla.onboarding.syncingProducts')}</span>
+                        <span className="text-sm font-medium">{t('onboarding.syncingProducts')}</span>
                       </div>
                     )}
                     {syncStatus === 'done' && (
                       <div className="flex items-center justify-center gap-2 text-teal-700">
                         <CheckCircle2 className="w-5 h-5" />
                         <span className="text-sm font-medium">
-                          {(t as TFunc)('salla.onboarding.productsSynced', { count: syncResult.synced || 0 })}
+                          {t('onboarding.productsSynced', { count: syncResult.synced || 0 })}
                         </span>
                       </div>
                     )}
@@ -225,7 +226,7 @@ export default function SallaOnboarding() {
                       <div className="space-y-3">
                         <div className="flex items-center justify-center gap-2 text-amber-600">
                           <XCircle className="w-4 h-4" />
-                          <span className="text-sm">{(t as TFunc)('salla.onboarding.syncError')}</span>
+                          <span className="text-sm">{t('onboarding.syncError')}</span>
                         </div>
                         <div className="flex justify-center">
                           <button
@@ -233,20 +234,20 @@ export default function SallaOnboarding() {
                             className="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-xl text-sm font-medium hover:bg-amber-200 transition-colors"
                           >
                             <RefreshCw className="w-4 h-4" />
-                            {(t as TFunc)('salla.onboarding.retrySync')}
+                            {t('onboarding.retrySync')}
                           </button>
                         </div>
                       </div>
                     )}
                     {syncStatus === 'idle' && (
-                      <span className="text-sm text-muted-foreground">{(t as TFunc)('salla.onboarding.syncingProducts')}</span>
+                      <span className="text-sm text-muted-foreground">{t('onboarding.syncingProducts')}</span>
                     )}
                   </div>
 
                   {/* Allow continue during sync */}
                   {syncStatus === 'syncing' && !storeLoading && !storeError && (
                     <p className="text-xs text-muted-foreground">
-                      {(t as TFunc)('salla.onboarding.syncBackground')}
+                      {t('onboarding.syncBackground')}
                     </p>
                   )}
 
@@ -257,7 +258,7 @@ export default function SallaOnboarding() {
                     className="w-full bg-teal-700 hover:bg-teal-800 text-white rounded-2xl py-4"
                   >
                     <div className="flex items-center justify-center gap-2">
-                      <span>{(t as TFunc)('salla.onboarding.connectPage')}</span>
+                      <span>{t('onboarding.connectPage')}</span>
                       <ArrowRight className="w-4 h-4 rtl:rotate-180" />
                     </div>
                   </Button>
@@ -272,10 +273,10 @@ export default function SallaOnboarding() {
                       <Globe className="w-8 h-8 text-blue-600" />
                     </div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      {(t as TFunc)('salla.onboarding.connectPage')}
+                      {t('onboarding.connectPage')}
                     </h2>
                     <p className="text-muted-foreground text-sm">
-                      {(t as TFunc)('salla.onboarding.connectPageDesc')}
+                      {t('onboarding.connectPageDesc')}
                     </p>
                   </div>
 
@@ -286,7 +287,7 @@ export default function SallaOnboarding() {
                   ) : pages.length === 0 ? (
                     <div className="text-center py-8">
                       <p className="text-muted-foreground text-sm">
-                        {(t as TFunc)('salla.onboarding.noPages')}
+                        {t('onboarding.noPages')}
                       </p>
                     </div>
                   ) : (
@@ -325,7 +326,7 @@ export default function SallaOnboarding() {
                       variant="ghost"
                       className="flex-1 rounded-2xl"
                     >
-                      {(t as TFunc)('common.back')}
+                      {tc('back')}
                     </Button>
                     <Button
                       onClick={handleLinkPage}
@@ -336,7 +337,7 @@ export default function SallaOnboarding() {
                       {linking ? (
                         <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
-                        (t as TFunc)('salla.onboarding.linkPage')
+                        t('onboarding.linkPage')
                       )}
                     </Button>
                   </div>
@@ -345,7 +346,7 @@ export default function SallaOnboarding() {
                     onClick={() => router.push('/dashboard')}
                     className="w-full text-center text-sm text-muted-foreground hover:text-muted-foreground transition-colors"
                   >
-                    {(t as TFunc)('salla.onboarding.skipForNow')}
+                    {t('onboarding.skipForNow')}
                   </button>
                 </div>
               )}
@@ -358,10 +359,10 @@ export default function SallaOnboarding() {
                   </div>
                   <div>
                     <h2 className="text-2xl font-bold text-foreground mb-2">
-                      {(t as TFunc)('salla.onboarding.done')}
+                      {t('onboarding.done')}
                     </h2>
                     <p className="text-muted-foreground text-sm leading-relaxed">
-                      {(t as TFunc)('salla.onboarding.doneDesc')}
+                      {t('onboarding.doneDesc')}
                     </p>
                   </div>
 
@@ -371,7 +372,7 @@ export default function SallaOnboarding() {
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
                         <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
                         <span className="text-sm text-foreground font-medium">
-                          {(t as TFunc)('salla.onboarding.doneCheckProducts', { count: syncResult.synced || 0 })}
+                          {t('onboarding.doneCheckProducts', { count: syncResult.synced || 0 })}
                         </span>
                       </div>
                     )}
@@ -379,14 +380,14 @@ export default function SallaOnboarding() {
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
                         <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
                         <span className="text-sm text-foreground font-medium">
-                          {(t as TFunc)('salla.onboarding.doneCheckPage', { name: linkedPageName })}
+                          {t('onboarding.doneCheckPage', { name: linkedPageName })}
                         </span>
                       </div>
                     )}
                     <div className="flex items-center gap-3 p-3 rounded-xl bg-teal-50 border border-teal-200">
                       <CheckCircle2 className="w-5 h-5 text-teal-700 flex-shrink-0" />
                       <span className="text-sm text-foreground font-medium">
-                        {(t as TFunc)('salla.onboarding.doneCheckActive')}
+                        {t('onboarding.doneCheckActive')}
                       </span>
                     </div>
                   </div>
@@ -396,7 +397,7 @@ export default function SallaOnboarding() {
                     size="lg"
                     className="w-full bg-teal-700 hover:bg-teal-800 text-white rounded-2xl py-4"
                   >
-                    {(t as TFunc)('salla.onboarding.goToDashboard')}
+                    {t('onboarding.goToDashboard')}
                   </Button>
                 </div>
               )}
@@ -408,4 +409,6 @@ export default function SallaOnboarding() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.sallaOnboard]);

@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import type { KbGap } from './types';
 
@@ -13,7 +13,7 @@ interface GapCardProps {
 }
 
 export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCardProps) {
-  const { t } = useTranslation();
+  const tKb = useTranslations('kb');
   const [answer, setAnswer] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -49,7 +49,7 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
           {gap.queryText}
         </span>
         <span className="flex-shrink-0 text-xs font-medium text-amber-600">
-          {t('kb.gaps.times' as TranslationKey, { count: String(gap.occurrenceCount) })}
+          {tKb('gaps.times', { count: String(gap.occurrenceCount) })}
         </span>
         <ChevronDown
           className={`w-3.5 h-3.5 text-amber-400 flex-shrink-0 transition-transform duration-200 ${
@@ -64,8 +64,8 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
           <textarea
             ref={textareaRef}
             className="w-full min-h-[56px] p-2.5 border border-amber-200 rounded-lg bg-card focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground resize-none"
-            placeholder={t('kb.gaps.answerPlaceholder' as TranslationKey)}
-            aria-label={t('kb.gaps.answerPlaceholder' as TranslationKey)}
+            placeholder={tKb('gaps.answerPlaceholder')}
+            aria-label={tKb('gaps.answerPlaceholder')}
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             onInput={autoResize}
@@ -78,7 +78,7 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
               onClick={onSkip}
               className="px-3 py-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-lg transition-colors"
             >
-              {t('kb.gaps.skip' as TranslationKey)}
+              {tKb('gaps.skip')}
             </button>
             <Button
               size="sm"
@@ -87,7 +87,7 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
               disabled={!answer.trim()}
               className="text-xs"
             >
-              {t('kb.gaps.addToKb' as TranslationKey)}
+              {tKb('gaps.addToKb')}
             </Button>
           </div>
         </div>

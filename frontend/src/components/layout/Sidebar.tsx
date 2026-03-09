@@ -17,7 +17,7 @@ import {
   Plug
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { BrandLogo, NotificationBell } from '@/components/ui';
@@ -155,9 +155,20 @@ export const Sidebar = memo(function Sidebar() {
   const unreadComments = useUIStore((s) => s.unreadComments);
   const unreadMessages = useUIStore((s) => s.unreadMessages);
   const sseStatus = useUIStore((s) => s.sseStatus);
-  const { t } = useTranslation();
+  const tNav = useTranslations('nav');
+  const tSidebar = useTranslations('sidebar');
+  const tPricing = useTranslations('pricing');
+  const tAdmin = useTranslations('admin');
+  const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
   const navigationGroups = getNavigationGroups(user?.hasEcommerceStore ?? false);
+
+  // Helper to resolve navigation item translation keys across namespaces
+  const resolveItemKey = (key: string): string => {
+    if (key.startsWith('nav.')) return tNav(key.replace('nav.', '') as Parameters<typeof tNav>[0]);
+    if (key.startsWith('pricing.')) return tPricing(key.replace('pricing.', '') as Parameters<typeof tPricing>[0]);
+    return key;
+  };
 
   // Memoize logout handler to prevent unnecessary re-renders
   const handleLogout = useCallback(() => {
@@ -192,7 +203,7 @@ export const Sidebar = memo(function Sidebar() {
 
   // Memoize user data to prevent ProfileAvatar re-renders
   const userPicture = pictureOverride ?? user?.picture;
-  const userName = isDemoUser ? t('auth.demoUserName') : user?.name;
+  const userName = isDemoUser ? tAuth('demoUserName') : user?.name;
 
   return (
     <aside
@@ -215,7 +226,7 @@ export const Sidebar = memo(function Sidebar() {
           "ltr:right-0 ltr:translate-x-1/2",
           "opacity-0 group-hover/sidebar:opacity-100 focus:opacity-100 transition-opacity duration-300"
         )}
-        aria-label={sidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
+        aria-label={sidebarOpen ? tSidebar('collapse') : tSidebar('expand')}
       >
         {sidebarOpen ? (
           <>
@@ -265,7 +276,7 @@ export const Sidebar = memo(function Sidebar() {
             {/* Group label — visible only when sidebar is expanded */}
             {sidebarOpen && (
               <p className="px-3 mb-2 text-[11px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
-                {t(group.labelKey as TranslationKey)}
+                {tSidebar(group.labelKey.replace('sidebar.', '') as Parameters<typeof tSidebar>[0])}
               </p>
             )}
             {/* Collapsed divider — thin line between groups */}
@@ -291,7 +302,7 @@ export const Sidebar = memo(function Sidebar() {
                       "w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110",
                       isActive ? "text-brand-400" : "text-surface-500 group-hover/nav:text-brand-400"
                     )} />
-                    {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t(item.key as TranslationKey)}</span>}
+                    {sidebarOpen && <span className="font-bold text-sm tracking-tight">{resolveItemKey(item.key)}</span>}
 
                     {/* Unread badge */}
                     {item.href === '/comments' && unreadComments > 0 && (
@@ -314,7 +325,7 @@ export const Sidebar = memo(function Sidebar() {
                     {/* Tooltip — visible only when sidebar is collapsed */}
                     {!sidebarOpen && (
                       <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
-                        {t(item.key as TranslationKey)}
+                        {resolveItemKey(item.key)}
                       </span>
                     )}
 
@@ -349,10 +360,10 @@ export const Sidebar = memo(function Sidebar() {
                 "w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110",
                 router.pathname.startsWith('/admin') ? "text-white" : "text-amber-500 group-hover/nav:text-amber-400"
               )} />
-              {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('admin.title' as TranslationKey)}</span>}
+              {sidebarOpen && <span className="font-bold text-sm tracking-tight">{tAdmin('title')}</span>}
               {!sidebarOpen && (
                 <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
-                  {t('admin.title' as TranslationKey)}
+                  {tAdmin('title')}
                 </span>
               )}
 
@@ -392,10 +403,10 @@ export const Sidebar = memo(function Sidebar() {
           )}
         >
           <LogOut className="w-6 h-6 flex-shrink-0 group-hover/nav:-translate-x-1 transition-transform" />
-          {sidebarOpen && <span className="font-bold text-sm tracking-tight">{t('nav.logout' as TranslationKey)}</span>}
+          {sidebarOpen && <span className="font-bold text-sm tracking-tight">{tNav('logout')}</span>}
           {!sidebarOpen && (
             <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
-              {t('nav.logout' as TranslationKey)}
+              {tNav('logout')}
             </span>
           )}
         </button>

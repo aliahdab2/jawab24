@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -17,37 +18,41 @@ import {
 } from '@/components/landing';
 
 export default function LandingPage() {
-  const { t, language, setLanguage } = useTranslation();
+  const t = useTranslations('landing');
+  const tc = useTranslations('common');
+  const tNav = useTranslations('nav');
+  const locale = useLocale();
+  const { setLanguage } = useLanguage();
   // SSR renders with isAuthenticated=false (shows login button).
   // After hydration, swaps to dashboard button if authenticated.
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const isAuthenticated = mounted ? useAuthStore.getState().isAuthenticated : false;
 
-  const isRTL = language === 'ar';
+  const isRTL = locale === 'ar';
   const dir = isRTL ? 'rtl' : 'ltr';
 
   const toggleLanguage = () => {
-    setLanguage(language === 'ar' ? 'en' : 'ar');
+    setLanguage(locale === 'ar' ? 'en' : 'ar');
   };
 
   const faqs = [
-    { question: t('landing.faq.q1'), answer: t('landing.faq.a1') },
-    { question: t('landing.faq.q2'), answer: t('landing.faq.a2') },
-    { question: t('landing.faq.q3'), answer: t('landing.faq.a3') },
-    { question: t('landing.faq.q4'), answer: t('landing.faq.a4') },
+    { question: t('faq.q1'), answer: t('faq.a1') },
+    { question: t('faq.q2'), answer: t('faq.a2') },
+    { question: t('faq.q3'), answer: t('faq.a3') },
+    { question: t('faq.q4'), answer: t('faq.a4') },
   ];
 
   const statsList = [
-    { value: '24/7', label: t('landing.stats.available') },
-    { value: '<1s', label: t('landing.stats.speed') },
+    { value: '24/7', label: t('stats.available') },
+    { value: '<1s', label: t('stats.speed') },
   ];
 
   return (
     <div dir={dir} className="flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200 relative">
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle}</title>
-        <meta name="description" content={t('landing.seoDescription')} />
+        <meta name="description" content={t('seoDescription')} />
         <link rel="canonical" href={BRAND_ASSETS.urls.canonical('/landing')} />
         <script
           type="application/ld+json"
@@ -93,24 +98,24 @@ export default function LandingPage() {
 
             <div className="flex items-center gap-1 sm:gap-4">
               <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all">
-                {t('landing.nav.pricing')}
+                {t('nav.pricing')}
               </Link>
               <button
                 onClick={toggleLanguage}
                 className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all"
               >
-                {t('common.switchLanguage')}
+                {tc('switchLanguage')}
               </button>
               {isAuthenticated ? (
                 <Link href="/dashboard">
                   <Button size="sm" className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5">
-                    {t('nav.dashboard')}
+                    {tNav('dashboard')}
                   </Button>
                 </Link>
               ) : (
                 <Link href="/login?redirect=%2Fdashboard">
                   <Button variant="secondary" size="sm" className="font-bold border-none bg-muted">
-                    {t('landing.nav.login')}
+                    {t('nav.login')}
                   </Button>
                 </Link>
               )}
@@ -155,4 +160,6 @@ export default function LandingPage() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.landing]);

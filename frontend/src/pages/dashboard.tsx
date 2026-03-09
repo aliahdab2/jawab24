@@ -5,7 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
 import { OnboardingWizard } from '@/components/onboarding';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
+
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
 import type { AnalyticsOverview } from '@/lib/api';
@@ -33,16 +35,17 @@ import { useConversationActions } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
-  const { t } = useTranslation();
+  const t = useTranslations('dashboard');
+  const tErr = useTranslations('errors');
   return (
     <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
       <AlertTriangle className="w-4 h-4 text-amber-500" aria-hidden="true" />
-      <span className="text-sm">{t('dashboard.sectionLoadError')}</span>
+      <span className="text-sm">{t('sectionLoadError')}</span>
       <button
         onClick={onRetry}
         className="text-sm font-semibold text-brand-600 hover:text-brand-700 underline"
       >
-        {t('errors.tryAgain')}
+        {tErr('tryAgain')}
       </button>
     </div>
   );
@@ -99,14 +102,22 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
 const ONBOARDING_COMPLETE_KEY = 'jawab24_onboarding_complete';
 
 // Map plan names from backend to existing translation keys
-const PLAN_NAME_KEYS: Record<string, TranslationKey> = {
-  'Starter': 'plans.starter.name' as TranslationKey,
-  'Business': 'plans.business.name' as TranslationKey,
-  'Pro': 'plans.pro.name' as TranslationKey,
+type PlanTranslationKey = 'starter.name' | 'business.name' | 'pro.name';
+const PLAN_NAME_KEYS: Record<string, PlanTranslationKey> = {
+  'Starter': 'starter.name',
+  'Business': 'business.name',
+  'Pro': 'pro.name',
 };
 
 const DashboardPage: NextPageWithLayout = () => {
-  const { t, language, intlLocale } = useTranslation();
+  const t = useTranslations('dashboard');
+  const tc = useTranslations('common');
+  const tTime = useTranslations('time');
+  const tSub = useTranslations('subscription');
+  const tMsg = useTranslations('messages');
+  const tPages = useTranslations('pages');
+  const tPlans = useTranslations('plans');
+  const { language, intlLocale } = useLanguage();
   const { isAuthenticated, fbToken, user } = useAuthStore();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
@@ -428,12 +439,12 @@ const DashboardPage: NextPageWithLayout = () => {
   // --- Message conversation modal handlers ---
 
   const openConversationModal = useCallback(async (senderId: string, pageId: string, senderName: string | null) => {
-    const loadingToastId = toast.loading(t('common.loading'));
+    const loadingToastId = toast.loading(tc('loading'));
     try {
       const res = await messagesApi.getConversation(senderId, { pageId, limit: 50 });
       const msgs = Array.isArray(res.data) ? res.data : [];
       if (msgs.length === 0) {
-        toast.error(t('common.noData'), { id: loadingToastId });
+        toast.error(tc('noData'), { id: loadingToastId });
         return;
       }
       toast.dismiss(loadingToastId);
@@ -449,9 +460,9 @@ const DashboardPage: NextPageWithLayout = () => {
       });
     } catch (err) {
       captureError(err, 'Failed to load conversation', { tags: { page: 'dashboard', action: 'open-conversation' } });
-      toast.error(t('dashboard.sectionLoadError'), { id: loadingToastId });
+      toast.error(t('sectionLoadError'), { id: loadingToastId });
     }
-  }, [t, setSelectedConversation]);
+  }, [t, tc, setSelectedConversation]);
 
   const handleAttentionItemClick = useCallback((item: NeedsAttentionItem) => {
     if (item.type === 'message' && item.senderId && item.pageId) {
@@ -500,10 +511,10 @@ const DashboardPage: NextPageWithLayout = () => {
         title={(() => {
           const firstName = user?.name?.split(' ')[0];
           return firstName
-            ? `${t('dashboard.greeting')}, ${firstName}`
-            : t('dashboard.title');
+            ? `${t('greeting')}, ${firstName}`
+            : t('title');
         })()}
-        description={`${t('dashboard.overview')} · ${new Date().toLocaleDateString(intlLocale, { weekday: 'long', month: 'long', day: 'numeric' })}`}
+        description={`${t('overview')} · ${new Date().toLocaleDateString(intlLocale, { weekday: 'long', month: 'long', day: 'numeric' })}`}
       />
 
       {/* Smart status message */}
@@ -544,10 +555,10 @@ const DashboardPage: NextPageWithLayout = () => {
           const diffMin = Math.floor(diffMs / 60_000);
           const diffHr = Math.floor(diffMs / 3_600_000);
           const diffDay = Math.floor(diffMs / 86_400_000);
-          if (diffMin < 1) return t('time.justNow' as TranslationKey);
-          if (diffMin < 60) return t('time.minutesAgo' as TranslationKey, { count: diffMin });
-          if (diffHr < 24) return t('time.hoursAgo' as TranslationKey, { count: diffHr });
-          return t('time.daysAgo' as TranslationKey, { count: diffDay });
+          if (diffMin < 1) return tTime('justNow');
+          if (diffMin < 60) return tTime('minutesAgo', { count: diffMin });
+          if (diffHr < 24) return tTime('hoursAgo', { count: diffHr });
+          return tTime('daysAgo', { count: diffDay });
         };
 
         // Determine max items to show — cap at 5, match shorter column
@@ -562,7 +573,7 @@ const DashboardPage: NextPageWithLayout = () => {
               <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
                 <div className="flex items-center gap-2.5">
                   <MessageSquare className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('dashboard.recentComments')}</h2>
+                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('recentComments')}</h2>
                   {statsData.commentsNeedsAction > 0 && (
                     <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full bg-red-500 text-white">
                       {statsData.commentsNeedsAction > 99 ? '99+' : statsData.commentsNeedsAction}
@@ -571,7 +582,7 @@ const DashboardPage: NextPageWithLayout = () => {
                 </div>
                 {commentItems.length > 0 && (
                   <Link href="/comments" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
-                    <span>{t('common.viewAll')}</span>
+                    <span>{tc('viewAll')}</span>
                     <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
                   </Link>
                 )}
@@ -604,7 +615,7 @@ const DashboardPage: NextPageWithLayout = () => {
                           <div className="flex items-center justify-between gap-2 mb-0.5">
                             <div className="flex items-center gap-2 min-w-0">
                               <span className="text-sm font-semibold text-foreground truncate">
-                                {comment.fromName || t('common.unknownUser' as TranslationKey)}
+                                {comment.fromName || tc('unknownUser')}
                               </span>
                               {commentPageName && (
                                 <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 bg-muted rounded truncate max-w-[100px] flex-shrink-0">
@@ -632,12 +643,12 @@ const DashboardPage: NextPageWithLayout = () => {
                       <MessageSquare className="w-6 h-6 text-icon-muted" />
                     </div>
                     <p className="text-sm font-medium text-muted-foreground mb-1">
-                      {t('dashboard.noRecentComments')}
+                      {t('noRecentComments')}
                     </p>
                     {pages.length === 0 && (
                       <Link href="/pages">
                         <Button variant="primary" size="sm" className="mt-3">
-                          {t('pages.connectPage')}
+                          {tPages('connectPage')}
                         </Button>
                       </Link>
                     )}
@@ -651,7 +662,7 @@ const DashboardPage: NextPageWithLayout = () => {
               <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
                 <div className="flex items-center gap-2.5">
                   <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('messages.title')}</h2>
+                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{tMsg('title')}</h2>
                   {statsData.messagesNeedsAction > 0 && (
                     <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full bg-red-500 text-white">
                       {statsData.messagesNeedsAction > 99 ? '99+' : statsData.messagesNeedsAction}
@@ -660,7 +671,7 @@ const DashboardPage: NextPageWithLayout = () => {
                 </div>
                 {messageItems.length > 0 && (
                   <Link href="/messages" className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700 group whitespace-nowrap">
-                    <span>{t('common.viewAll')}</span>
+                    <span>{tc('viewAll')}</span>
                     <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1" />
                   </Link>
                 )}
@@ -691,7 +702,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-0.5">
                             <span className="text-sm font-semibold text-foreground truncate">
-                              {msg.senderName || t('common.unknownUser' as TranslationKey)}
+                              {msg.senderName || tc('unknownUser')}
                             </span>
                             {timeLabel && (
                               <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
@@ -713,7 +724,7 @@ const DashboardPage: NextPageWithLayout = () => {
                       <MessageCircle className="w-6 h-6 text-icon-muted" aria-hidden="true" />
                     </div>
                     <p className="text-sm font-medium text-muted-foreground mb-1">
-                      {t('dashboard.noMessagesYet')}
+                      {t('noMessagesYet')}
                     </p>
                   </div>
                 )}
@@ -743,12 +754,12 @@ const DashboardPage: NextPageWithLayout = () => {
                           <Crown className="w-6 h-6 sm:w-7 sm:h-7" />
                         </div>
                         <div className="min-w-0 flex-1 text-start">
-                          <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{t('subscription.currentPlan')}</p>
+                          <p className="text-[10px] font-bold text-brand-600 uppercase tracking-[0.2em] mb-1">{tSub('currentPlan')}</p>
                           <h3 className="text-base sm:text-lg lg:text-xl font-display font-bold text-foreground tracking-tight flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span>{PLAN_NAME_KEYS[usage.subscription.plan.name] ? t(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}</span>
+                            <span>{PLAN_NAME_KEYS[usage.subscription.plan.name] ? tPlans(PLAN_NAME_KEYS[usage.subscription.plan.name]) : usage.subscription.plan.name}</span>
                             {isTrialing && (
                               <span className="inline-flex items-center alert-warning border px-2 py-0.5 rounded text-[10px] font-extrabold">
-                                {t('subscription.trialBadge' as TranslationKey)}
+                                {tSub('trialBadge')}
                               </span>
                             )}
                           </h3>
@@ -761,7 +772,7 @@ const DashboardPage: NextPageWithLayout = () => {
                             <Zap className="w-4 h-4" />
                           </div>
                           <span className="text-xs font-bold leading-relaxed">
-                            {t('subscription.trialEndsIn')} {usage.subscription.trialDaysRemaining} {t('subscription.days')}
+                            {tSub('trialEndsIn')} {usage.subscription.trialDaysRemaining} {tSub('days')}
                           </span>
                         </div>
                       )}
@@ -776,7 +787,7 @@ const DashboardPage: NextPageWithLayout = () => {
                               variant="secondary"
                               className="w-full py-3.5 text-sm border-surface-400 dark:border-surface-400 hover:border-brand-500 dark:hover:border-brand-500"
                             >
-                              {t('subscription.managePlan')}
+                              {tSub('managePlan')}
                             </Button>
                           </button>
                         ) : (
@@ -785,7 +796,7 @@ const DashboardPage: NextPageWithLayout = () => {
                               variant="secondary"
                               className="w-full py-3.5 text-sm border-surface-400 dark:border-surface-400 hover:border-brand-500 dark:hover:border-brand-500"
                             >
-                              {t('subscription.managePlan')}
+                              {tSub('managePlan')}
                             </Button>
                           </Link>
                         )
@@ -800,7 +811,7 @@ const DashboardPage: NextPageWithLayout = () => {
                               className="w-full py-4 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
                               icon={<Sparkles className="w-5 h-5" />}
                             >
-                              {t('subscription.upgradePlan')}
+                              {tSub('upgradePlan')}
                             </Button>
                           </button>
                         ) : (
@@ -810,7 +821,7 @@ const DashboardPage: NextPageWithLayout = () => {
                               className="w-full py-4 text-base shadow-[0_12px_32px_rgba(20,184,166,0.24)]"
                               icon={<Sparkles className="w-5 h-5" />}
                             >
-                              {t('subscription.upgradePlan')}
+                              {tSub('upgradePlan')}
                             </Button>
                           </Link>
                         )
@@ -823,11 +834,11 @@ const DashboardPage: NextPageWithLayout = () => {
                     {/* Section B: Quota Usage */}
                     <div className="p-6 sm:p-8">
                       <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-[0.2em] mb-5">
-                        {t('subscription.usage')}
+                        {tSub('usage')}
                       </p>
                       <div className="space-y-6">
                         <UsageProgress
-                          label={t('subscription.aiRepliesUsed')}
+                          label={tSub('aiRepliesUsed')}
                           used={usage.aiReplies.used}
                           limit={usage.aiReplies.limit}
                           percent={usage.aiReplies.percentUsed}
@@ -839,7 +850,7 @@ const DashboardPage: NextPageWithLayout = () => {
                             : usage.pages.limit;
                           return (
                             <UsageProgress
-                              label={t('subscription.pagesUsed')}
+                              label={tSub('pagesUsed')}
                               used={effectivePagesUsed}
                               limit={effectivePagesLimit}
                               percent={effectivePagesLimit ? (effectivePagesUsed / effectivePagesLimit) * 100 : 0}
@@ -864,12 +875,12 @@ const DashboardPage: NextPageWithLayout = () => {
                 <div className="flex items-start gap-3 p-4 rounded-2xl alert-warning border mb-0">
                   <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">{t('dashboard.kbNudgeTitle' as TranslationKey)}</p>
-                    <p className="text-xs mt-0.5 opacity-80">{t('dashboard.kbNudgeDesc' as TranslationKey)}</p>
+                    <p className="text-sm font-semibold">{t('kbNudgeTitle')}</p>
+                    <p className="text-xs mt-0.5 opacity-80">{t('kbNudgeDesc')}</p>
                     <div className="flex items-center gap-3 mt-2">
                       <Link href="/pages">
                         <Button size="sm" variant="primary" className="text-xs">
-                          {t('dashboard.kbNudgeCta' as TranslationKey)}
+                          {t('kbNudgeCta')}
                         </Button>
                       </Link>
                       <button
@@ -880,7 +891,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         }}
                         className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        {t('common.dismiss' as TranslationKey)}
+                        {tc('dismiss')}
                       </button>
                     </div>
                   </div>
@@ -893,8 +904,8 @@ const DashboardPage: NextPageWithLayout = () => {
           {/* Top Pages */}
           <Card padding="none" className="border-none shadow-2xl shadow-surface-200/50 bg-card overflow-hidden">
             <div className="p-5 sm:p-6 border-b border-theme-border bg-background/50">
-              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{t('dashboard.topPages')}</h2>
-              <p className="text-sm font-medium text-muted-foreground mt-1">{t('dashboard.topPagesDesc')}</p>
+              <h2 className="text-lg font-display font-bold text-foreground tracking-tight">{t('topPages')}</h2>
+              <p className="text-sm font-medium text-muted-foreground mt-1">{t('topPagesDesc')}</p>
             </div>
             <div className={clsx(
               'divide-y divide-theme-border',
@@ -923,10 +934,10 @@ const DashboardPage: NextPageWithLayout = () => {
                   <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
                     <FileText className="w-6 h-6 text-icon-muted" aria-hidden="true" />
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">{t('pages.noPagesDesc')}</p>
+                  <p className="text-sm text-muted-foreground mb-3">{tPages('noPagesDesc')}</p>
                   <Link href="/pages">
                     <Button variant="primary" size="sm">
-                      {t('pages.connectPage')}
+                      {tPages('connectPage')}
                     </Button>
                   </Link>
                 </div>
@@ -973,4 +984,6 @@ DashboardPage.getLayout = (page: ReactElement) => (
 
 export default DashboardPage;
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.dashboard]);

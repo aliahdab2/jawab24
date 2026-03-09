@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { BrandLogo, Button } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { Home, ArrowLeft, ArrowRight, MessageCircle, Search, HelpCircle } from 'lucide-react';
@@ -9,9 +9,10 @@ import { Home, ArrowLeft, ArrowRight, MessageCircle, Search, HelpCircle } from '
 const WHATSAPP_NUMBER = '46700224720';
 
 export default function Custom404() {
-  const { t, language } = useTranslation();
+  const t = useTranslations('errors');
+  const locale = useLocale();
   const router = useRouter();
-  const isRTL = language === 'ar';
+  const isRTL = locale === 'ar';
   const attemptedPath = router.asPath;
   const supportMessage = encodeURIComponent('Hi, I need help — I reached a broken page on Jawab24.');
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
@@ -59,10 +60,10 @@ export default function Custom404() {
             404
           </p>
           <h1 className="text-2xl font-bold text-foreground mb-2">
-            {t('errors.notFoundTitle')}
+            {t('notFoundTitle')}
           </h1>
           <p className="text-muted-foreground mb-4 leading-relaxed">
-            {t('errors.notFoundDesc')}
+            {t('notFoundDesc')}
           </p>
 
           {/* Broken path — gives the user context on what URL failed */}
@@ -80,7 +81,7 @@ export default function Custom404() {
               icon={<Home className="w-5 h-5" aria-hidden="true" />}
               onClick={() => router.push('/dashboard')}
             >
-              {t('errors.goHome')}
+              {t('goHome')}
             </Button>
             <Button
               variant="secondary"
@@ -88,7 +89,7 @@ export default function Custom404() {
               icon={<BackArrow className="w-5 h-5" aria-hidden="true" />}
               onClick={() => router.back()}
             >
-              {t('errors.goBack')}
+              {t('goBack')}
             </Button>
           </div>
 
@@ -101,7 +102,7 @@ export default function Custom404() {
               className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-brand-600 transition-colors"
             >
               <MessageCircle className="w-4 h-4" aria-hidden="true" />
-              {t('errors.contactSupport')}
+              {t('contactSupport')}
             </a>
           </div>
         </div>
@@ -110,4 +111,6 @@ export default function Custom404() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.error404]);

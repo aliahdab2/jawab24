@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { Home, MessageCircle, RefreshCw, AlertTriangle } from 'lucide-react';
@@ -9,9 +9,10 @@ import { Home, MessageCircle, RefreshCw, AlertTriangle } from 'lucide-react';
 const WHATSAPP_NUMBER = '46700224720';
 
 export default function Custom500() {
-  const { t, language } = useTranslation();
+  const t = useTranslations('errors');
+  const locale = useLocale();
   const router = useRouter();
-  const isRTL = language === 'ar';
+  const isRTL = locale === 'ar';
 
   const supportMessage = encodeURIComponent('Hi, I hit a server error on Jawab24 and need help.');
 
@@ -47,10 +48,10 @@ export default function Custom500() {
         <div className="text-center max-w-md">
           <p className="text-7xl font-display font-extrabold text-red-400 mb-4">500</p>
           <h1 className="text-2xl font-bold text-foreground mb-2">
-            {t('errors.serverErrorTitle')}
+            {t('serverErrorTitle')}
           </h1>
           <p className="text-muted-foreground mb-8 leading-relaxed">
-            {t('errors.serverErrorDesc')}
+            {t('serverErrorDesc')}
           </p>
 
           {/* Recovery actions */}
@@ -60,7 +61,7 @@ export default function Custom500() {
               className="inline-flex items-center gap-2 px-6 py-3 bg-brand-500 text-white font-bold rounded-xl hover:bg-brand-600 transition-colors shadow-lg shadow-brand-500/20"
             >
               <RefreshCw className="w-5 h-5" />
-              {t('errors.refreshPage')}
+              {t('refreshPage')}
             </button>
 
             <Link
@@ -68,7 +69,7 @@ export default function Custom500() {
               className="inline-flex items-center gap-2 px-6 py-3 border border-theme-border text-foreground/70 font-bold rounded-xl hover:bg-muted transition-colors"
             >
               <Home className="w-5 h-5" />
-              {t('errors.goHome')}
+              {t('goHome')}
             </Link>
 
             <a
@@ -78,7 +79,7 @@ export default function Custom500() {
               className="inline-flex items-center gap-2 px-6 py-3 text-muted-foreground font-bold rounded-xl hover:bg-muted transition-colors"
             >
               <MessageCircle className="w-5 h-5" />
-              {t('errors.contactSupport')}
+              {t('contactSupport')}
             </a>
           </div>
         </div>
@@ -87,4 +88,6 @@ export default function Custom500() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.error500]);

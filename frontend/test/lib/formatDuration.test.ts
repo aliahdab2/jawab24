@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { formatDuration } from '@/lib/formatDuration';
 
-// Simple mock t function that returns unit abbreviations like the EN translations
+// Simulates useTranslations('time') — scoped keys only
 const t = (key: string): string => {
   const map: Record<string, string> = {
-    'time.dShort': 'd',
-    'time.hShort': 'h',
-    'time.mShort': 'm',
-    'time.sShort': 's',
+    dShort: 'd',
+    hShort: 'h',
+    mShort: 'm',
+    sShort: 's',
   };
   return map[key] ?? key;
 };
@@ -89,10 +89,10 @@ describe('formatDuration', () => {
   describe('with Arabic translations', () => {
     const tAr = (key: string): string => {
       const map: Record<string, string> = {
-        'time.dShort': 'ي',
-        'time.hShort': 'س',
-        'time.mShort': 'د',
-        'time.sShort': 'ث',
+        dShort: 'ي',
+        hShort: 'س',
+        mShort: 'د',
+        sShort: 'ث',
       };
       return map[key] ?? key;
     };

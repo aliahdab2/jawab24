@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
@@ -19,7 +19,9 @@ import type { Plan } from '@jawab24/shared';
 export default function CheckoutPage() {
   const router = useRouter();
   const { planId } = router.query;
-  const { t } = useTranslation();
+  const t = useTranslations('checkout');
+  const tPricing = useTranslations('pricing');
+  const tPlans = useTranslations('plans');
   const { isAuthenticated } = useAuthStore();
 
   // On native (Android/iOS), redirect to web checkout — Google Play prohibits Stripe in-app
@@ -37,7 +39,7 @@ export default function CheckoutPage() {
   const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null); // null = checking
 
   // Extract translated string before useEffect to avoid dependency on t
-  const errorLoadPlanMessage = t('checkout.errorLoadPlan');
+  const errorLoadPlanMessage = t('errorLoadPlan');
 
   // SANCTIONS CHECK: Check geo on page load
   useEffect(() => {
@@ -140,7 +142,7 @@ export default function CheckoutPage() {
         return;
       }
 
-      setError(errorData?.error || errorData?.message || t('checkout.errorInitiateCheckout'));
+      setError(errorData?.error || errorData?.message || t('errorInitiateCheckout'));
       setLoading(false);
     }
   };
@@ -160,7 +162,7 @@ export default function CheckoutPage() {
     return (
       <>
         <Head>
-          <title>{t('checkout.title')} - Jawab24</title>
+          <title>{t('title')} - Jawab24</title>
           <meta name="robots" content="noindex, follow" />
         </Head>
 
@@ -175,7 +177,7 @@ export default function CheckoutPage() {
                   className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                  {t('checkout.backToPricing')}
+                  {t('backToPricing')}
                 </Link>
 
                 <Link href="/" className="inline-flex items-center gap-2 group">
@@ -189,7 +191,7 @@ export default function CheckoutPage() {
               {/* Title */}
               <div className="text-center mb-8 sm:mb-10">
                 <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">
-                  {t('checkout.title')}
+                  {t('title')}
                 </h1>
               </div>
 
@@ -215,8 +217,8 @@ export default function CheckoutPage() {
   return (
     <>
       <Head>
-        <title>{t('checkout.title')} - Jawab24</title>
-        <meta name="description" content={t('checkout.subtitle')} />
+        <title>{t('title')} - Jawab24</title>
+        <meta name="description" content={t('subtitle')} />
         <link rel="canonical" href="https://jawab24.com/checkout" />
         <meta name="robots" content="noindex, follow" />
       </Head>
@@ -233,7 +235,7 @@ export default function CheckoutPage() {
                 className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
               >
                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                {t('checkout.backToPricing')}
+                {t('backToPricing')}
               </Link>
 
               <Link href="/" className="inline-flex items-center gap-2 group">
@@ -250,10 +252,10 @@ export default function CheckoutPage() {
             {/* Title */}
             <div className="text-center mb-8 sm:mb-10">
               <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">
-                {t('checkout.title')}
+                {t('title')}
               </h1>
               <p className="text-muted-foreground text-base">
-                {t('checkout.subtitle')}
+                {t('subtitle')}
               </p>
             </div>
 
@@ -266,24 +268,26 @@ export default function CheckoutPage() {
             {plan && (
               <div className="bg-card rounded-3xl p-6 sm:p-8 shadow-xl shadow-surface-900/5 border border-theme-border">
                 {/* Plan Details */}
+                {/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plan slug keys */}
                 <div className="border-b border-theme-border pb-6 mb-6 text-start">
                   <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-1">
-                    {t(`pricing.${plan.slug}` as TranslationKey) !== `pricing.${plan.slug}`
-                      ? t(`pricing.${plan.slug}` as TranslationKey)
-                      : (t(`plans.${plan.slug}.name` as TranslationKey) !== `plans.${plan.slug}.name` ? t(`plans.${plan.slug}.name` as TranslationKey) : plan.name)}
+                    {tPricing(plan.slug as any) !== plan.slug
+                      ? tPricing(plan.slug as any)
+                      : (tPlans(`${plan.slug}.name` as any) !== `${plan.slug}.name` ? tPlans(`${plan.slug}.name` as any) : plan.name)}
                   </h2>
                   <p className="text-muted-foreground text-sm mb-5">
-                    {t(`pricing.${plan.slug}Desc` as TranslationKey) !== `pricing.${plan.slug}Desc`
-                      ? t(`pricing.${plan.slug}Desc` as TranslationKey)
-                      : (t(`plans.${plan.slug}.description` as TranslationKey) !== `plans.${plan.slug}.description` ? t(`plans.${plan.slug}.description` as TranslationKey) : plan.description)}
+                    {tPricing(`${plan.slug}Desc` as any) !== `${plan.slug}Desc`
+                      ? tPricing(`${plan.slug}Desc` as any)
+                      : (tPlans(`${plan.slug}.description` as any) !== `${plan.slug}.description` ? tPlans(`${plan.slug}.description` as any) : plan.description)}
                   </p>
+                {/* eslint-enable @typescript-eslint/no-explicit-any */}
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-4xl sm:text-5xl font-bold text-brand-600 font-display">
                       ${(plan.price / 100).toFixed(2).split('.')[0]}
                       <span className="text-2xl sm:text-3xl opacity-70">.{(plan.price / 100).toFixed(2).split('.')[1]}</span>
                     </span>
                     <span className="text-muted-foreground font-medium">
-                      / {t('plans.month')}
+                      / {tPlans('month')}
                     </span>
                   </div>
                 </div>
@@ -295,7 +299,7 @@ export default function CheckoutPage() {
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                     </div>
                     <span className="text-foreground/70 font-medium text-start">
-                      {plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages} {t('plans.pages')}
+                      {plan.maxPages === null ? tPricing('unlimited') : plan.maxPages} {tPlans('pages')}
                     </span>
                   </div>
                   <div className="flex items-center gap-3">
@@ -303,7 +307,7 @@ export default function CheckoutPage() {
                       <CheckCircle2 className="w-4 h-4 text-green-600" />
                     </div>
                     <span className="text-foreground/70 font-medium text-start">
-                      {plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {t('plans.aiReplies')}
+                      {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
                     </span>
                   </div>
                   {plan.trialDays > 0 && (
@@ -312,7 +316,7 @@ export default function CheckoutPage() {
                         <CheckCircle2 className="w-4 h-4 text-green-600" />
                       </div>
                       <span className="text-foreground/70 font-medium text-start">
-                        {t('pricing.trialDays', { days: plan.trialDays })}
+                        {tPricing('trialDays', { days: plan.trialDays })}
                       </span>
                     </div>
                   )}
@@ -327,18 +331,18 @@ export default function CheckoutPage() {
                   {loading ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      {t('checkout.processing')}
+                      {t('processing')}
                     </>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span>{t('checkout.continueToPayment')}</span>
+                      <span>{t('continueToPayment')}</span>
                       <ArrowRight className="w-5 h-5 transition-transform rtl:rotate-180" />
                     </div>
                   )}
                 </Button>
 
                 <p className="text-center text-xs text-muted-foreground mt-5 font-medium">
-                  {t('checkout.securePayment')}
+                  {t('securePayment')}
                 </p>
               </div>
             )}
@@ -349,4 +353,6 @@ export default function CheckoutPage() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.checkout]);

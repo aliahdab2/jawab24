@@ -1,18 +1,17 @@
 import { Card } from '@/components/ui';
 import { Sun, Moon, Monitor } from 'lucide-react';
-import { useTranslation } from '@/i18n';
-import type { TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useTheme } from '@/hooks';
 import type { Theme } from '@/lib/store';
 
-const THEME_OPTIONS: { value: Theme; icon: typeof Sun; labelKey: TranslationKey }[] = [
-  { value: 'light', icon: Sun, labelKey: 'settings.lightTheme' },
-  { value: 'dark', icon: Moon, labelKey: 'settings.darkTheme' },
-  { value: 'system', icon: Monitor, labelKey: 'settings.autoTheme' },
+const THEME_OPTIONS: { value: Theme; icon: typeof Sun; labelKey: string }[] = [
+  { value: 'light', icon: Sun, labelKey: 'lightTheme' },
+  { value: 'dark', icon: Moon, labelKey: 'darkTheme' },
+  { value: 'system', icon: Monitor, labelKey: 'autoTheme' },
 ];
 
 export function ThemeSelector() {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
   const { theme, setTheme } = useTheme();
 
   return (
@@ -30,7 +29,7 @@ export function ThemeSelector() {
           </div>
           <div className="text-start">
             <h3 className="font-bold text-foreground text-base landscape:text-sm">
-              {t('settings.theme')}
+              {t('theme')}
             </h3>
           </div>
         </div>
@@ -38,7 +37,7 @@ export function ThemeSelector() {
         <div
           className="flex gap-1 p-1 bg-muted rounded-xl"
           role="radiogroup"
-          aria-label={t('settings.theme')}
+          aria-label={t('theme')}
         >
           {THEME_OPTIONS.map(({ value, icon: Icon, labelKey }) => (
             <button
@@ -53,7 +52,8 @@ export function ThemeSelector() {
               }`}
             >
               <Icon className="w-4 h-4" aria-hidden="true" />
-              <span className="hidden sm:inline">{t(labelKey)}</span>
+              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic key from config */}
+              <span className="hidden sm:inline">{t(labelKey as any)}</span>
             </button>
           ))}
         </div>

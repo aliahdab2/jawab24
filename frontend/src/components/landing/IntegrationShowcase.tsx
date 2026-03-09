@@ -1,4 +1,4 @@
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { ShopifyIcon } from './LandingHero';
 
 interface IntegrationShowcaseProps {
@@ -240,13 +240,13 @@ function ChatMockup() {
 }
 
 export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('landing');
 
   const features = [
-    t('landing.showcase.feature1'),
-    t('landing.showcase.feature2'),
-    t('landing.showcase.feature3'),
-    t('landing.showcase.feature4'),
+    t('showcase.feature1'),
+    t('showcase.feature2'),
+    t('showcase.feature3'),
+    t('showcase.feature4'),
   ];
 
   const integrationsLink = isAuthenticated
@@ -273,7 +273,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 borderRadius: 100,
               }}
             >
-              {t('landing.showcase.badge')}
+              {t('showcase.badge')}
             </div>
 
             {/* Heading */}
@@ -286,14 +286,14 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 lineHeight: 1.2,
               }}
             >
-              {t('landing.showcase.heading1')}
+              {t('showcase.heading1')}
               <br />
-              {t('landing.showcase.heading2')}
+              {t('showcase.heading2')}
             </h2>
 
             {/* Description */}
             <p className="mb-7" style={{ fontSize: 17, color: '#6b7280', lineHeight: 1.7 }}>
-              {t('landing.showcase.description')}
+              {t('showcase.description')}
             </p>
 
             {/* Checkmark features */}
@@ -316,7 +316,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 letterSpacing: '0.05em',
               }}
             >
-              {t('landing.showcase.availableOn')}
+              {t('showcase.availableOn')}
             </div>
 
             {/* Store badges */}
@@ -336,8 +336,8 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               >
                 <ShopifyIcon className="w-6 h-7" />
                 <div>
-                  <div style={{ fontSize: 10, color: '#6b7280' }}>{t('landing.showcase.availableOn')}</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{t('landing.showcase.shopifyStore')}</div>
+                  <div style={{ fontSize: 10, color: '#6b7280' }}>{t('showcase.availableOn')}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{t('showcase.shopifyStore')}</div>
                 </div>
               </a>
               <a
@@ -355,8 +355,8 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               >
                 <SallaBadgeLogo />
                 <div>
-                  <div style={{ fontSize: 10, color: '#6b7280' }}>{t('landing.showcase.availableOn')}</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{t('landing.showcase.sallaStore')}</div>
+                  <div style={{ fontSize: 10, color: '#6b7280' }}>{t('showcase.availableOn')}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{t('showcase.sallaStore')}</div>
                 </div>
               </a>
             </div>

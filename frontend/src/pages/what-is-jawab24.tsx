@@ -1,7 +1,7 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
 
 interface FeatureSection {
@@ -59,41 +59,42 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 }
 
 export default function WhatIsJawab24() {
-  const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
+  const t = useTranslations('about');
+  const locale = useLocale();
+  const isRTL = locale === 'ar';
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
 
   const faqs = [
-    { question: t('about.faq.q1'), answer: t('about.faq.a1') },
-    { question: t('about.faq.q2'), answer: t('about.faq.a2') },
-    { question: t('about.faq.q3'), answer: t('about.faq.a3') },
-    { question: t('about.faq.q4'), answer: t('about.faq.a4') },
-    { question: t('about.faq.q5'), answer: t('about.faq.a5') },
-    { question: t('about.faq.q6'), answer: t('about.faq.a6') },
-    { question: t('about.faq.q7'), answer: t('about.faq.a7') },
-    { question: t('about.faq.q8'), answer: t('about.faq.a8') },
-    { question: t('about.faq.q9'), answer: t('about.faq.a9') },
-    { question: t('about.faq.q10'), answer: t('about.faq.a10') },
-    { question: t('about.faq.q11'), answer: t('about.faq.a11') },
+    { question: t('faq.q1'), answer: t('faq.a1') },
+    { question: t('faq.q2'), answer: t('faq.a2') },
+    { question: t('faq.q3'), answer: t('faq.a3') },
+    { question: t('faq.q4'), answer: t('faq.a4') },
+    { question: t('faq.q5'), answer: t('faq.a5') },
+    { question: t('faq.q6'), answer: t('faq.a6') },
+    { question: t('faq.q7'), answer: t('faq.a7') },
+    { question: t('faq.q8'), answer: t('faq.a8') },
+    { question: t('faq.q9'), answer: t('faq.a9') },
+    { question: t('faq.q10'), answer: t('faq.a10') },
+    { question: t('faq.q11'), answer: t('faq.a11') },
   ];
 
   return (
     <>
       <Head>
-        <title>{t('about.seoTitle')}</title>
-        <meta name="description" content={t('about.seoDescription')} />
-        <meta name="keywords" content={t('about.seoKeywords')} />
+        <title>{t('seoTitle')}</title>
+        <meta name="description" content={t('seoDescription')} />
+        <meta name="keywords" content={t('seoKeywords')} />
         <link rel="canonical" href={BRAND_ASSETS.urls.canonical('/what-is-jawab24')} />
 
-        <meta property="og:title" content={t('about.seoTitle')} />
-        <meta property="og:description" content={t('about.seoDescription')} />
+        <meta property="og:title" content={t('seoTitle')} />
+        <meta property="og:description" content={t('seoDescription')} />
         <meta property="og:url" content={BRAND_ASSETS.urls.canonical('/what-is-jawab24')} />
         <meta property="og:image" content="https://jawab24.com/brand/og-social.png" />
         <meta property="og:type" content="website" />
 
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={t('about.seoTitle')} />
-        <meta name="twitter:description" content={t('about.seoDescription')} />
+        <meta name="twitter:title" content={t('seoTitle')} />
+        <meta name="twitter:description" content={t('seoDescription')} />
         <meta name="twitter:image" content="https://jawab24.com/brand/og-social.png" />
 
         {/* WebPage structured data for AI extraction */}
@@ -103,8 +104,8 @@ export default function WhatIsJawab24() {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebPage",
-              "name": t('about.title'),
-              "description": t('about.seoDescription'),
+              "name": t('title'),
+              "description": t('seoDescription'),
               "url": "https://jawab24.com/what-is-jawab24",
               "isPartOf": {
                 "@type": "WebSite",
@@ -175,202 +176,202 @@ export default function WhatIsJawab24() {
             className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
           >
             <BackArrow className="w-5 h-5" />
-            {t('about.backToHome')}
+            {t('backToHome')}
           </Link>
 
-          <h1 className="text-4xl font-bold mb-3">{t('about.title')}</h1>
+          <h1 className="text-4xl font-bold mb-3">{t('title')}</h1>
           <p className="text-lg text-foreground/70 leading-relaxed mb-8">
-            {t('about.subtitle')}
+            {t('subtitle')}
           </p>
 
           <div className="space-y-10">
             {/* Introduction */}
             <Section
-              title={t('about.intro.title')}
-              text={t('about.intro.text')}
-              text2={t('about.intro.text2')}
+              title={t('intro.title')}
+              text={t('intro.text')}
+              text2={t('intro.text2')}
             />
 
             {/* How It Works — 3 Layer System */}
             <section>
               <h2 className="text-2xl font-semibold text-brand-400 mb-3">
-                {t('about.howItWorks.title')}
+                {t('howItWorks.title')}
               </h2>
               <p className="text-foreground/80 leading-relaxed mb-4">
-                {t('about.howItWorks.text')}
+                {t('howItWorks.text')}
               </p>
               <div className="space-y-3">
                 <LayerCard
-                  title={t('about.howItWorks.layer1Title')}
-                  text={t('about.howItWorks.layer1Text')}
+                  title={t('howItWorks.layer1Title')}
+                  text={t('howItWorks.layer1Text')}
                 />
                 <LayerCard
-                  title={t('about.howItWorks.layer2Title')}
-                  text={t('about.howItWorks.layer2Text')}
+                  title={t('howItWorks.layer2Title')}
+                  text={t('howItWorks.layer2Text')}
                 />
                 <LayerCard
-                  title={t('about.howItWorks.layer3Title')}
-                  text={t('about.howItWorks.layer3Text')}
+                  title={t('howItWorks.layer3Title')}
+                  text={t('howItWorks.layer3Text')}
                 />
               </div>
             </section>
 
             {/* Supported Platforms */}
             <Section
-              title={t('about.platforms.title')}
-              text={t('about.platforms.text')}
+              title={t('platforms.title')}
+              text={t('platforms.text')}
               features={[
-                t('about.platforms.facebook'),
-                t('about.platforms.instagram'),
-                t('about.platforms.shopify'),
-                t('about.platforms.salla'),
+                t('platforms.facebook'),
+                t('platforms.instagram'),
+                t('platforms.shopify'),
+                t('platforms.salla'),
               ]}
             />
 
             {/* Knowledge Base */}
             <Section
-              title={t('about.knowledgeBase.title')}
-              text={t('about.knowledgeBase.text')}
-              text2={t('about.knowledgeBase.text2')}
+              title={t('knowledgeBase.title')}
+              text={t('knowledgeBase.text')}
+              text2={t('knowledgeBase.text2')}
               features={[
-                t('about.knowledgeBase.feature1'),
-                t('about.knowledgeBase.feature2'),
-                t('about.knowledgeBase.feature3'),
-                t('about.knowledgeBase.feature4'),
+                t('knowledgeBase.feature1'),
+                t('knowledgeBase.feature2'),
+                t('knowledgeBase.feature3'),
+                t('knowledgeBase.feature4'),
               ]}
             />
 
             {/* E-Commerce Integration */}
             <Section
-              title={t('about.ecommerce.title')}
-              text={t('about.ecommerce.text')}
+              title={t('ecommerce.title')}
+              text={t('ecommerce.text')}
               features={[
-                t('about.ecommerce.feature1'),
-                t('about.ecommerce.feature2'),
-                t('about.ecommerce.feature3'),
-                t('about.ecommerce.feature4'),
+                t('ecommerce.feature1'),
+                t('ecommerce.feature2'),
+                t('ecommerce.feature3'),
+                t('ecommerce.feature4'),
               ]}
             />
 
             {/* Smart Reply Features */}
             <Section
-              title={t('about.smartReply.title')}
-              text={t('about.smartReply.text')}
+              title={t('smartReply.title')}
+              text={t('smartReply.text')}
               features={[
-                t('about.smartReply.feature1'),
-                t('about.smartReply.feature2'),
-                t('about.smartReply.feature3'),
-                t('about.smartReply.feature4'),
-                t('about.smartReply.feature5'),
-                t('about.smartReply.feature6'),
+                t('smartReply.feature1'),
+                t('smartReply.feature2'),
+                t('smartReply.feature3'),
+                t('smartReply.feature4'),
+                t('smartReply.feature5'),
+                t('smartReply.feature6'),
               ]}
             />
 
             {/* Template Replies */}
             <Section
-              title={t('about.templateReply.title')}
-              text={t('about.templateReply.text')}
+              title={t('templateReply.title')}
+              text={t('templateReply.text')}
               features={[
-                t('about.templateReply.feature1'),
-                t('about.templateReply.feature2'),
-                t('about.templateReply.feature3'),
-                t('about.templateReply.feature4'),
+                t('templateReply.feature1'),
+                t('templateReply.feature2'),
+                t('templateReply.feature3'),
+                t('templateReply.feature4'),
               ]}
             />
 
             {/* Bilingual Support */}
             <Section
-              title={t('about.bilingual.title')}
-              text={t('about.bilingual.text')}
+              title={t('bilingual.title')}
+              text={t('bilingual.text')}
               features={[
-                t('about.bilingual.feature1'),
-                t('about.bilingual.feature2'),
-                t('about.bilingual.feature3'),
-                t('about.bilingual.feature4'),
+                t('bilingual.feature1'),
+                t('bilingual.feature2'),
+                t('bilingual.feature3'),
+                t('bilingual.feature4'),
               ]}
             />
 
             {/* Business Hours */}
             <Section
-              title={t('about.businessHours.title')}
-              text={t('about.businessHours.text')}
+              title={t('businessHours.title')}
+              text={t('businessHours.text')}
               features={[
-                t('about.businessHours.feature1'),
-                t('about.businessHours.feature2'),
-                t('about.businessHours.feature3'),
-                t('about.businessHours.feature4'),
+                t('businessHours.feature1'),
+                t('businessHours.feature2'),
+                t('businessHours.feature3'),
+                t('businessHours.feature4'),
               ]}
             />
 
             {/* Dashboard & Analytics */}
             <Section
-              title={t('about.analytics.title')}
-              text={t('about.analytics.text')}
+              title={t('analytics.title')}
+              text={t('analytics.text')}
               features={[
-                t('about.analytics.feature1'),
-                t('about.analytics.feature2'),
-                t('about.analytics.feature3'),
-                t('about.analytics.feature4'),
+                t('analytics.feature1'),
+                t('analytics.feature2'),
+                t('analytics.feature3'),
+                t('analytics.feature4'),
               ]}
             />
 
             {/* Mobile App */}
             <Section
-              title={t('about.mobile.title')}
-              text={t('about.mobile.text')}
+              title={t('mobile.title')}
+              text={t('mobile.text')}
             />
 
             {/* Security */}
             <Section
-              title={t('about.security.title')}
-              text={t('about.security.text')}
+              title={t('security.title')}
+              text={t('security.text')}
               features={[
-                t('about.security.feature1'),
-                t('about.security.feature2'),
-                t('about.security.feature3'),
-                t('about.security.feature4'),
+                t('security.feature1'),
+                t('security.feature2'),
+                t('security.feature3'),
+                t('security.feature4'),
               ]}
             />
 
             {/* Who Should Use */}
             <Section
-              title={t('about.whoShouldUse.title')}
-              text={t('about.whoShouldUse.text')}
+              title={t('whoShouldUse.title')}
+              text={t('whoShouldUse.text')}
               features={[
-                t('about.whoShouldUse.user1'),
-                t('about.whoShouldUse.user2'),
-                t('about.whoShouldUse.user3'),
-                t('about.whoShouldUse.user4'),
-                t('about.whoShouldUse.user5'),
+                t('whoShouldUse.user1'),
+                t('whoShouldUse.user2'),
+                t('whoShouldUse.user3'),
+                t('whoShouldUse.user4'),
+                t('whoShouldUse.user5'),
               ]}
             />
 
             {/* Why Different */}
             <Section
-              title={t('about.whyDifferent.title')}
-              text={t('about.whyDifferent.text')}
+              title={t('whyDifferent.title')}
+              text={t('whyDifferent.text')}
             />
 
             {/* Pricing */}
             <Section
-              title={t('about.pricing.title')}
-              text={t('about.pricing.text')}
+              title={t('pricing.title')}
+              text={t('pricing.text')}
             />
 
             {/* Get Started */}
             <section>
               <h2 className="text-2xl font-semibold text-brand-400 mb-3">
-                {t('about.getStarted.title')}
+                {t('getStarted.title')}
               </h2>
               <p className="text-foreground/80 leading-relaxed">
-                {t('about.getStarted.text')}
+                {t('getStarted.text')}
               </p>
               <NumberedSteps
                 steps={[
-                  t('about.getStarted.step1'),
-                  t('about.getStarted.step2'),
-                  t('about.getStarted.step3'),
-                  t('about.getStarted.step4'),
+                  t('getStarted.step1'),
+                  t('getStarted.step2'),
+                  t('getStarted.step3'),
+                  t('getStarted.step4'),
                 ]}
               />
               <div className="mt-6">
@@ -378,7 +379,7 @@ export default function WhatIsJawab24() {
                   href="/login"
                   className="inline-flex items-center px-6 py-3 bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors font-medium"
                 >
-                  {t('about.getStarted.cta')}
+                  {t('getStarted.cta')}
                 </Link>
               </div>
             </section>
@@ -386,7 +387,7 @@ export default function WhatIsJawab24() {
             {/* FAQ */}
             <section>
               <h2 className="text-2xl font-semibold text-brand-400 mb-4">
-                {t('about.faq.title')}
+                {t('faq.title')}
               </h2>
               <div className="space-y-6">
                 {faqs.map((faq, i) => (
@@ -416,4 +417,6 @@ export default function WhatIsJawab24() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.whatIsJawab24]);

@@ -159,7 +159,7 @@ describe('NotificationBell', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText('notifications.title')).toBeInTheDocument();
+            expect(screen.getByText('Notifications')).toBeInTheDocument();
         });
     });
 
@@ -201,7 +201,7 @@ describe('NotificationBell', () => {
         });
 
         await waitFor(() => {
-            expect(screen.getByText('notifications.empty')).toBeInTheDocument();
+            expect(screen.getByText('No notifications')).toBeInTheDocument();
         });
     });
 
@@ -256,12 +256,12 @@ describe('NotificationBell', () => {
 
         // Wait for "Mark all read" button to appear
         await waitFor(() => {
-            expect(screen.getByText('notifications.markAllRead')).toBeInTheDocument();
+            expect(screen.getByText('Mark all read')).toBeInTheDocument();
         });
 
         // Click mark all read
         await act(async () => {
-            fireEvent.click(screen.getByText('notifications.markAllRead'));
+            fireEvent.click(screen.getByText('Mark all read'));
         });
 
         await waitFor(() => {
@@ -387,7 +387,7 @@ describe('NotificationBell', () => {
             });
 
             expect(screen.getByText('Someone commented on your post.')).toBeInTheDocument();
-            expect(screen.getByText('notifications.justNow')).toBeInTheDocument();
+            expect(screen.getByText('Just now')).toBeInTheDocument();
         });
 
         it('should show background label for unread notifications only', async () => {
@@ -406,7 +406,7 @@ describe('NotificationBell', () => {
             // The SwipeableNotificationItem shows "markAsRead" labels for enabled (unread) items
             // Unread notification1 has enabled=true so its wrapper shows background labels
             // The text "notifications.markAsRead" appears in the swipe background (2 per unread item: left + right)
-            const markAsReadTexts = screen.getAllByText('notifications.markAsRead');
+            const markAsReadTexts = screen.getAllByText('Mark as read');
             // At least 2 from the background (one unread notification) + possibly 1 from the check button
             expect(markAsReadTexts.length).toBeGreaterThanOrEqual(2);
         });
@@ -513,7 +513,7 @@ describe('NotificationBell', () => {
 
             await waitFor(() => {
                 // Should show group summary instead of individual items
-                expect(screen.getByText(/notifications\.groupSummary/)).toBeInTheDocument();
+                expect(screen.getByText(/\d+ notifications/)).toBeInTheDocument();
             });
 
             // Individual notification titles should NOT be visible (group is collapsed)
@@ -530,7 +530,7 @@ describe('NotificationBell', () => {
             fireEvent.click(screen.getByRole('button'));
 
             await waitFor(() => {
-                expect(screen.getByText(/notifications\.groupSummary/)).toBeInTheDocument();
+                expect(screen.getByText(/\d+ notifications/)).toBeInTheDocument();
             });
 
             // Click the group header to expand
@@ -584,7 +584,7 @@ describe('NotificationBell', () => {
             });
 
             // No group summary should appear
-            expect(screen.queryByText(/notifications\.groupSummary/)).not.toBeInTheDocument();
+            expect(screen.queryByText(/\d+ notifications/)).not.toBeInTheDocument();
         });
     });
 
@@ -653,7 +653,7 @@ describe('NotificationBell', () => {
             });
 
             // Click "Comments" filter
-            const commentsTab = screen.getByText('notifications.filter.comments');
+            const commentsTab = screen.getByText('Comments');
             await act(async () => {
                 fireEvent.click(commentsTab);
             });
@@ -678,12 +678,12 @@ describe('NotificationBell', () => {
             });
 
             // Click "System" filter (no system notifications)
-            const systemTab = screen.getByText('notifications.filter.system');
+            const systemTab = screen.getByText('System');
             await act(async () => {
                 fireEvent.click(systemTab);
             });
 
-            expect(screen.getByText(/notifications\.emptyFiltered/)).toBeInTheDocument();
+            expect(screen.getByText(/No .+ notifications/)).toBeInTheDocument();
         });
     });
 
@@ -706,7 +706,7 @@ describe('NotificationBell', () => {
             fireEvent.click(screen.getByRole('button'));
 
             await waitFor(() => {
-                expect(screen.getByText('notifications.replyNow')).toBeInTheDocument();
+                expect(screen.getByText('Reply now')).toBeInTheDocument();
             });
         });
 
@@ -726,7 +726,7 @@ describe('NotificationBell', () => {
                 expect(screen.getByText('Payment Failed')).toBeInTheDocument();
             });
 
-            expect(screen.queryByText('notifications.replyNow')).not.toBeInTheDocument();
+            expect(screen.queryByText('Reply now')).not.toBeInTheDocument();
         });
     });
 
@@ -742,12 +742,12 @@ describe('NotificationBell', () => {
             fireEvent.click(screen.getByRole('button'));
 
             await waitFor(() => {
-                expect(screen.getByText('notifications.markAllRead')).toBeInTheDocument();
+                expect(screen.getByText('Mark all read')).toBeInTheDocument();
             });
 
             // Mark all read and close should be in different containers
-            const markAllBtn = screen.getByText('notifications.markAllRead').closest('div[class*="px-5"]');
-            const closeBtn = screen.getByLabelText('notifications.close').closest('div[class*="px-5"]');
+            const markAllBtn = screen.getByText('Mark all read').closest('div[class*="px-5"]');
+            const closeBtn = screen.getByLabelText('Close notifications').closest('div[class*="px-5"]');
             expect(markAllBtn).not.toBe(closeBtn);
         });
     });
@@ -763,8 +763,8 @@ describe('NotificationBell', () => {
             fireEvent.click(screen.getByRole('button'));
 
             await waitFor(() => {
-                expect(screen.getByText('notifications.empty')).toBeInTheDocument();
-                expect(screen.getByText('notifications.emptyDescription')).toBeInTheDocument();
+                expect(screen.getByText('No notifications')).toBeInTheDocument();
+                expect(screen.getByText('When something needs your attention, it will show up here.')).toBeInTheDocument();
             });
         });
     });

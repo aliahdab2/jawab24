@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 export type NotificationFilter = 'all' | 'comments' | 'billing' | 'system';
 
@@ -18,10 +18,10 @@ interface NotificationFilterPillsProps {
 }
 
 const FILTERS: { value: NotificationFilter; labelKey: string }[] = [
-    { value: 'all', labelKey: 'notifications.filter.all' },
-    { value: 'comments', labelKey: 'notifications.filter.comments' },
-    { value: 'billing', labelKey: 'notifications.filter.billing' },
-    { value: 'system', labelKey: 'notifications.filter.system' },
+    { value: 'all', labelKey: 'filter.all' },
+    { value: 'comments', labelKey: 'filter.comments' },
+    { value: 'billing', labelKey: 'filter.billing' },
+    { value: 'system', labelKey: 'filter.system' },
 ];
 
 export function NotificationFilterPills({
@@ -29,15 +29,15 @@ export function NotificationFilterPills({
     onChange,
     counts,
 }: NotificationFilterPillsProps) {
-    const { t } = useTranslation();
+    const t = useTranslations('notifications');
 
     return (
         <div
             className="flex items-center gap-1.5 px-5 py-2 overflow-x-auto"
             role="tablist"
-            aria-label={t('notifications.filterLabel')}
+            aria-label={t('filterLabel')}
         >
-            {FILTERS.map(({ value, labelKey }) => {
+            {FILTERS.map(({ value }) => {
                 const isActive = activeFilter === value;
                 const count = value === 'all' ? undefined : counts[value];
 
@@ -54,7 +54,7 @@ export function NotificationFilterPills({
                                 : 'bg-muted text-muted-foreground hover:bg-muted hover:text-foreground/80',
                         )}
                     >
-                        {t(labelKey as TranslationKey)}
+                        {t(`filter.${value}` as Parameters<typeof t>[0])}
                         {count !== undefined && count > 0 && (
                             <span className={clsx(
                                 'min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full',

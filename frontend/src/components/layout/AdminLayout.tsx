@@ -4,7 +4,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Shield, Users, ArrowLeft, FlaskConical, Bell } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import clsx from 'clsx';
 
 interface AdminLayoutProps {
@@ -13,9 +13,9 @@ interface AdminLayoutProps {
 }
 
 const adminNavItems = [
-    { href: '/admin/customers', icon: Users, labelKey: 'admin.nav.customers' as const },
-    { href: '/admin/waitlist', icon: Bell, labelKey: 'admin.nav.waitlist' as const },
-    { href: '/admin/playground', icon: FlaskConical, labelKey: 'admin.nav.playground' as const },
+    { href: '/admin/customers', icon: Users, labelKey: 'nav.customers' as const },
+    { href: '/admin/waitlist', icon: Bell, labelKey: 'nav.waitlist' as const },
+    { href: '/admin/playground', icon: FlaskConical, labelKey: 'nav.playground' as const },
 ];
 
 /**
@@ -24,8 +24,10 @@ const adminNavItems = [
  */
 export function AdminLayout({ children, title }: AdminLayoutProps) {
     const router = useRouter();
-    const { t, language } = useTranslation();
-    const isRTL = language === 'ar';
+    const tAdmin = useTranslations('admin');
+    const tc = useTranslations('common');
+    const locale = useLocale();
+    const isRTL = locale === 'ar';
     const { user, isAuthenticated, _hasHydrated } = useAuthStore();
     const [mounted, setMounted] = useState(false);
 
@@ -51,7 +53,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
         return (
             <div className="min-h-screen bg-surface-50 flex items-center justify-center">
                 <div className="animate-pulse text-muted-foreground">
-                    {t('common.loading')}
+                    {tc('loading')}
                 </div>
             </div>
         );
@@ -74,14 +76,14 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                                 <Link
                                     href="/dashboard"
                                     className="p-2 hover:bg-zinc-800 rounded-lg transition-colors"
-                                    title={t('admin.backToDashboard')}
+                                    title={tAdmin('backToDashboard')}
                                 >
                                     <ArrowLeft className={clsx('w-5 h-5', isRTL && 'rotate-180')} />
                                 </Link>
                                 <div className="flex items-center gap-2">
                                     <Shield className="w-5 h-5 text-brand-400" />
                                     <span className="font-display font-bold text-lg">
-                                        {t('admin.title')}
+                                        {tAdmin('title')}
                                     </span>
                                 </div>
                             </div>
@@ -103,7 +105,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                                         >
                                             <item.icon className="w-4 h-4" />
                                             <span className="hidden sm:inline">
-                                                {t(item.labelKey)}
+                                                {tAdmin(item.labelKey)}
                                             </span>
                                         </Link>
                                     );

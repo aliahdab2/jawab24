@@ -1,7 +1,7 @@
 import { Button } from './Button';
 import { Modal } from './Modal';
 import { AlertTriangle, Info } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 interface ConfirmationModalProps {
   isOpen: boolean;
@@ -26,7 +26,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
   variant = 'danger',
   loading = false,
 }) => {
-  const { t } = useTranslation();
+  const tc = useTranslations('common');
 
   const getIcon = () => {
     switch (variant) {
@@ -78,14 +78,14 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
             onClick={onClose}
             disabled={loading}
           >
-            {cancelText || t('common.cancel')}
+            {cancelText || tc('cancel')}
           </Button>
           <Button
             variant={variant === 'danger' ? 'danger' : 'primary'}
             onClick={onConfirm}
             loading={loading}
           >
-            {confirmText || t('common.confirm')}
+            {confirmText || tc('confirm')}
           </Button>
         </div>
       </div>

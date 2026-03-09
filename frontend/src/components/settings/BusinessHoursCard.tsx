@@ -8,7 +8,7 @@ import {
   MessageCircle,
   Mail,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
 
 interface BusinessHoursCardProps extends SettingsCardProps {
@@ -16,12 +16,12 @@ interface BusinessHoursCardProps extends SettingsCardProps {
 }
 
 export function BusinessHoursCard({ settings, setSettings, currentTime }: BusinessHoursCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
 
   const handleToggle = (enabled: boolean) => {
     const updates: Record<string, unknown> = { businessHoursOnly: enabled };
     if (enabled) {
-      const defaultMsg = t('settings.awayMessageDefault' as TranslationKey);
+      const defaultMsg = t('awayMessageDefault');
       const currentLang = settings.dashboardLanguage;
       if (!settings.awayMessageMulti?.[currentLang]) {
         updates.awayMessageMulti = {
@@ -50,7 +50,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           </div>
           <div className="text-start">
             <div className="flex items-center gap-2">
-              <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('settings.businessHoursLabel')}</h4>
+              <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('businessHoursLabel')}</h4>
               {settings.businessHoursOnly && (() => {
                 const parts = new Intl.DateTimeFormat('en-US', {
                   timeZone: settings.timezone,
@@ -63,7 +63,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                     onClick={() => {
                       const updates: Record<string, unknown> = { businessHoursOnly: !settings.businessHoursOnly };
                       if (!settings.businessHoursOnly) {
-                        const defaultMsg = t('settings.awayMessageDefault' as TranslationKey);
+                        const defaultMsg = t('awayMessageDefault');
                         const currentLang = settings.dashboardLanguage;
                         if (!settings.awayMessageMulti?.[currentLang]) {
                           updates.awayMessageMulti = {
@@ -81,15 +81,15 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                         : 'status-error hover:bg-red-200 dark:hover:bg-red-900/50'
                     )}
                   >
-                    {isActive ? '🟢' : '🔴'} {isActive ? t('settings.businessHours.statusActive' as TranslationKey) : t('settings.businessHours.statusInactive' as TranslationKey)}
+                    {isActive ? '🟢' : '🔴'} {isActive ? t('businessHours.statusActive') : t('businessHours.statusInactive')}
                   </button>
                 );
               })()}
             </div>
-            <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('settings.businessHoursDesc')}</p>
+            <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('businessHoursDesc')}</p>
           </div>
         </div>
-        <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('settings.businessHoursLabel')} />
+        <Toggle enabled={settings.businessHoursOnly} onChange={handleToggle} aria-label={t('businessHoursLabel')} />
       </div>
 
       <div
@@ -107,7 +107,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                   <Clock className="w-7 h-7" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('settings.businessHours.duringLabel')}
+                  {t('businessHours.duringLabel')}
                 </span>
               </div>
               <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
@@ -116,7 +116,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                   <Zap className="w-7 h-7" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('settings.businessHours.autoReplyActive')}
+                  {t('businessHours.autoReplyActive')}
                 </span>
               </div>
             </div>
@@ -128,7 +128,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                   <Clock className="w-7 h-7" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('settings.businessHours.outsideLabel')}
+                  {t('businessHours.outsideLabel')}
                 </span>
               </div>
               <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
@@ -137,7 +137,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                   <Mail className="w-7 h-7" />
                 </div>
                 <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('settings.businessHours.awayMessage')}
+                  {t('businessHours.awayMessage')}
                 </span>
               </div>
             </div>
@@ -147,7 +147,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-muted border border-theme-border">
               <div>
-                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('settings.businessHoursStart')}</label>
+                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('businessHoursStart')}</label>
                 <Select
                   value={settings.businessHoursStart}
                   onChange={(val) => setSettings({ ...settings, businessHoursStart: val })}
@@ -160,7 +160,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                 />
               </div>
               <div>
-                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('settings.businessHoursEnd')}</label>
+                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('businessHoursEnd')}</label>
                 <Select
                   value={settings.businessHoursEnd}
                   onChange={(val) => setSettings({ ...settings, businessHoursEnd: val })}
@@ -179,8 +179,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               <div className="flex items-start gap-2 p-3 rounded-xl alert-error border animate-in fade-in slide-in-from-top-1">
                 <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-bold text-red-700">{t('settings.businessHoursErrorMsg' as TranslationKey)}</p>
-                  <p className="text-xs text-red-600 mt-0.5">{t('settings.businessHoursError.hint' as TranslationKey)}</p>
+                  <p className="text-sm font-bold text-red-700">{t('businessHoursErrorMsg')}</p>
+                  <p className="text-xs text-red-600 mt-0.5">{t('businessHoursError.hint')}</p>
                 </div>
               </div>
             )}
@@ -193,8 +193,8 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                 <MessageCircle className="w-4 h-4" />
               </div>
               <div className="text-start">
-                  <h5 className="font-bold text-foreground text-sm">{t('settings.awayMessage.title')}</h5>
-                <p className="text-[11px] text-muted-foreground font-medium">{t('settings.awayMessage.desc')}</p>
+                  <h5 className="font-bold text-foreground text-sm">{t('awayMessage.title')}</h5>
+                <p className="text-[11px] text-muted-foreground font-medium">{t('awayMessage.desc')}</p>
               </div>
             </div>
 
@@ -204,12 +204,12 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
               const sourceLang = settings.awayMessageMulti?.sourceLang;
               const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
               const displayValue = isAutoTranslated ? '' : value;
-              const placeholder = isAutoTranslated && value ? value : t('settings.awayMessagePlaceholder');
+              const placeholder = isAutoTranslated && value ? value : t('awayMessagePlaceholder');
 
               return (
                 <textarea
                   disabled={!settings.businessHoursOnly}
-                  aria-label={t('settings.awayMessage.title')}
+                  aria-label={t('awayMessage.title')}
                   className="input min-h-[56px] landscape:min-h-[44px] border-none bg-card focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-muted-foreground placeholder:italic"
                   placeholder={placeholder}
                   dir={displayValue ? 'auto' : undefined}

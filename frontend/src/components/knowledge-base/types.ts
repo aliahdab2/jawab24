@@ -28,18 +28,22 @@ export interface KnowledgeSection {
   title?: string; // User-provided title for custom sections
 }
 
+export type KbTitleKey = 'section.productsLabel' | 'section.notesLabel';
+export type KbDescKey = 'section.productsDesc' | 'section.notesDesc';
+export type KbPlaceholderKey = 'section.productsPlaceholder' | 'section.notesPlaceholder';
+
 export interface SectionConfig {
   id: PresetSectionId;
   emoji: string;
-  titleKey: string;
-  descKey: string;
-  placeholderKey: string;
+  titleKey: KbTitleKey;
+  descKey: KbDescKey;
+  placeholderKey: KbPlaceholderKey;
 }
 
 /** Ordered list of preset section configs (2 core sections) */
 export const SECTION_CONFIGS: SectionConfig[] = [
-  { id: 'products', emoji: '💰', titleKey: 'kb.section.productsLabel', descKey: 'kb.section.productsDesc', placeholderKey: 'kb.section.productsPlaceholder' },
-  { id: 'notes',    emoji: '📝', titleKey: 'kb.section.notesLabel',    descKey: 'kb.section.notesDesc',    placeholderKey: 'kb.section.notesPlaceholder' },
+  { id: 'products', emoji: '💰', titleKey: 'section.productsLabel', descKey: 'section.productsDesc', placeholderKey: 'section.productsPlaceholder' },
+  { id: 'notes',    emoji: '📝', titleKey: 'section.notesLabel',    descKey: 'section.notesDesc',    placeholderKey: 'section.notesPlaceholder' },
 ];
 
 /** Map emoji → presetSectionId */

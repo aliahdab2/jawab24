@@ -1,11 +1,12 @@
 import Link from 'next/link';
 import { MessageCircle, Facebook, Mail, Zap, Clock, Phone } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 
 export function LandingFooter() {
-  const { t } = useTranslation();
+  const t = useTranslations('landing');
+  const tDataDeletion = useTranslations('dataDeletion');
 
   return (
     <footer className="landing-section-dark dark:bg-surface-50 pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
@@ -22,14 +23,14 @@ export function LandingFooter() {
               <span className="font-display font-bold text-xl sm:text-2xl tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <p className="text-surface-400 text-sm sm:text-lg max-w-sm mb-6 sm:mb-10 leading-relaxed font-medium">
-              {t('landing.footer.description')}
+              {t('footer.description')}
             </p>
             <div className="flex items-center gap-3 sm:gap-4">
               <a
-                href={`https://wa.me/46700224720?text=${encodeURIComponent(t('landing.footer.whatsappMessage' as TranslationKey))}`}
+                href={`https://wa.me/46700224720?text=${encodeURIComponent(t('footer.whatsappMessage'))}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={t('landing.footer.whatsappAriaLabel' as TranslationKey)}
+                aria-label={t('footer.whatsappAriaLabel')}
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#25D366]/10 flex items-center justify-center hover:bg-[#25D366] transition-colors border border-[#25D366]/20 group"
               >
                 <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-[#25D366] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
@@ -38,14 +39,14 @@ export function LandingFooter() {
                 href="https://facebook.com/jawab24app"
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label={t('landing.footer.facebookAriaLabel' as TranslationKey)}
+                aria-label={t('footer.facebookAriaLabel')}
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-[#1877F2]/10 flex items-center justify-center hover:bg-[#1877F2] transition-colors border border-[#1877F2]/20 group"
               >
                 <Facebook className="w-4 h-4 sm:w-5 sm:h-5 text-[#1877F2] group-hover:text-white group-hover:scale-110 transition-all" aria-hidden="true" />
               </a>
               <a
                 href="mailto:support@jawab24.com"
-                aria-label={t('landing.footer.emailAriaLabel' as TranslationKey)}
+                aria-label={t('footer.emailAriaLabel')}
                 className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg sm:rounded-xl bg-white/5 flex items-center justify-center hover:bg-brand-600 transition-colors border border-white/10 group"
               >
                 <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
@@ -54,18 +55,18 @@ export function LandingFooter() {
           </div>
 
           <div>
-            <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.quickLinks')}</h3>
+            <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('footer.quickLinks')}</h3>
             <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
-              <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.whatIsJawab24' as TranslationKey)}</Link></li>
-              <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.contactUs' as TranslationKey)}</Link></li>
-              <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.termsOfService')}</Link></li>
-              <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('landing.footer.privacyPolicy')}</Link></li>
-              <li><Link href="/data-deletion" className="text-surface-400 hover:text-brand-400 transition-colors">{t('dataDeletion.footerLink' as TranslationKey)}</Link></li>
+              <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.whatIsJawab24')}</Link></li>
+              <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.contactUs')}</Link></li>
+              <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.termsOfService')}</Link></li>
+              <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.privacyPolicy')}</Link></li>
+              <li><Link href="/data-deletion" className="text-surface-400 hover:text-brand-400 transition-colors">{tDataDeletion('footerLink')}</Link></li>
             </ul>
           </div>
 
           <div>
-            <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('landing.footer.support')}</h3>
+            <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('footer.support')}</h3>
             <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
               <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
@@ -77,13 +78,13 @@ export function LandingFooter() {
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400 flex-shrink-0">
                   <Phone className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
-                <a href="tel:+46700224720" className="text-xs sm:text-sm whitespace-nowrap hover:text-brand-400 transition-colors" dir="ltr">{t('landing.footer.phoneNumber' as TranslationKey)}</a>
+                <a href="tel:+46700224720" className="text-xs sm:text-sm whitespace-nowrap hover:text-brand-400 transition-colors" dir="ltr">{t('footer.phoneNumber')}</a>
               </li>
               <li className="text-surface-400 flex items-center gap-2 sm:gap-3">
                 <div className="w-6 h-6 sm:w-8 sm:h-8 rounded-md sm:rounded-lg bg-white/5 flex items-center justify-center text-brand-400">
                   <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
                 </div>
-                <span className="text-xs sm:text-base whitespace-nowrap">{t('landing.footer.responseTime')}</span>
+                <span className="text-xs sm:text-base whitespace-nowrap">{t('footer.responseTime')}</span>
               </li>
             </ul>
           </div>
@@ -91,17 +92,17 @@ export function LandingFooter() {
 
         <div className="pt-4 sm:pt-6 border-t border-white/10 pb-safe">
           <p className="text-center text-[10px] sm:text-xs leading-relaxed text-surface-400 mb-2" dir="auto">
-            {t('landing.footer.seoTagline' as TranslationKey)}
+            {t('footer.seoTagline')}
           </p>
           <p className="text-center text-[10px] sm:text-xs leading-relaxed text-surface-500" dir="ltr">
-            {t('landing.footer.operatedBy' as TranslationKey)}{' '}
-            <span className="text-surface-400 font-medium">{t('landing.footer.operatorName' as TranslationKey)}</span>
-            {' · '}{t('landing.footer.orgNumber' as TranslationKey)}
-            {' · '}{t('landing.footer.businessInfo' as TranslationKey)}
+            {t('footer.operatedBy')}{' '}
+            <span className="text-surface-400 font-medium">{t('footer.operatorName')}</span>
+            {' · '}{t('footer.orgNumber')}
+            {' · '}{t('footer.businessInfo')}
             <br className="sm:hidden" />
             <span className="hidden sm:inline">{' · '}</span>
             <span className="sm:hidden">{' '}</span>
-            © {new Date().getFullYear()} Jawab24. {t('landing.footer.copyright')}
+            © {new Date().getFullYear()} Jawab24. {t('footer.copyright')}
           </p>
         </div>
       </div>

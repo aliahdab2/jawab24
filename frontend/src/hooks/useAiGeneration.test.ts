@@ -17,13 +17,6 @@ vi.mock('@/lib/sentryHelpers', () => ({
   captureError: vi.fn(),
 }));
 
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    language: 'en',
-  }),
-}));
-
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
@@ -189,7 +182,7 @@ describe('useAiGeneration', () => {
 
     await waitFor(() => {
       expect(result.current.isGenerating).toBe(false);
-      expect(toast.error).toHaveBeenCalledWith('common.error');
+      expect(toast.error).toHaveBeenCalledWith('Something went wrong');
     }, { timeout: 3000 });
   });
 });

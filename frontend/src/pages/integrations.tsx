@@ -15,7 +15,7 @@ import {
   ArrowRight,
   Check,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 import type { NextPageWithLayout } from './_app';
@@ -26,8 +26,8 @@ import type { NextPageWithLayout } from './_app';
 
 interface PlatformConfig {
   id: string;
-  nameKey: TranslationKey;
-  descKey: TranslationKey;
+  nameKey: string;
+  descKey: string;
   icon: React.ReactNode;
   iconClass: string;
   storeMetaClass: string;
@@ -41,23 +41,23 @@ interface PlatformConfig {
   disconnectStore: () => Promise<unknown>;
   linkPage: (pageId: string) => Promise<unknown>;
   unlinkPage: (pageId: string) => Promise<unknown>;
-  disconnectConfirmKey: TranslationKey;
-  syncSuccessKey: TranslationKey;
-  syncErrorKey: TranslationKey;
-  disconnectedKey: TranslationKey;
-  disconnectErrorKey: TranslationKey;
-  pageLinkedKey: TranslationKey;
-  pageLinkErrorKey: TranslationKey;
-  pageUnlinkedKey: TranslationKey;
-  pageUnlinkErrorKey: TranslationKey;
-  productsKey: TranslationKey;
-  lastSyncKey: TranslationKey;
-  syncNowKey: TranslationKey;
-  syncingKey: TranslationKey;
-  disconnectKey: TranslationKey;
-  neverKey: TranslationKey;
-  linkPageKey: TranslationKey;
-  linkPageDescKey: TranslationKey;
+  disconnectConfirmKey: string;
+  syncSuccessKey: string;
+  syncErrorKey: string;
+  disconnectedKey: string;
+  disconnectErrorKey: string;
+  pageLinkedKey: string;
+  pageLinkErrorKey: string;
+  pageUnlinkedKey: string;
+  pageUnlinkErrorKey: string;
+  productsKey: string;
+  lastSyncKey: string;
+  syncNowKey: string;
+  syncingKey: string;
+  disconnectKey: string;
+  neverKey: string;
+  linkPageKey: string;
+  linkPageDescKey: string;
   /** Whether connect flow requires a shop domain input (Shopify = true, Salla = false) */
   requiresDomain: boolean;
   /** Initiate the connect flow. Returns { authUrl } for redirect. */
@@ -67,8 +67,8 @@ interface PlatformConfig {
 const PLATFORMS: PlatformConfig[] = [
   {
     id: 'shopify',
-    nameKey: 'shopify.title' as TranslationKey,
-    descKey: 'integrations.shopifyDesc' as TranslationKey,
+    nameKey: 'shopify.title',
+    descKey: 'integrations.shopifyDesc',
     icon: <ShoppingBag className="w-8 h-8" />,
     iconClass: 'icon-bg-emerald',
     storeMetaClass: 'alert-success border',
@@ -78,30 +78,30 @@ const PLATFORMS: PlatformConfig[] = [
     disconnectStore: ecommerceApi.disconnectStore,
     linkPage: ecommerceApi.linkPage,
     unlinkPage: ecommerceApi.unlinkPage,
-    disconnectConfirmKey: 'shopify.disconnectConfirm' as TranslationKey,
-    syncSuccessKey: 'shopify.syncSuccess' as TranslationKey,
-    syncErrorKey: 'shopify.syncError' as TranslationKey,
-    disconnectedKey: 'shopify.disconnected' as TranslationKey,
-    disconnectErrorKey: 'shopify.disconnectError' as TranslationKey,
-    pageLinkedKey: 'shopify.pageLinked' as TranslationKey,
-    pageLinkErrorKey: 'shopify.pageLinkError' as TranslationKey,
-    pageUnlinkedKey: 'shopify.pageUnlinked' as TranslationKey,
-    pageUnlinkErrorKey: 'shopify.pageUnlinkError' as TranslationKey,
-    productsKey: 'shopify.products' as TranslationKey,
-    lastSyncKey: 'shopify.lastSync' as TranslationKey,
-    syncNowKey: 'shopify.syncNow' as TranslationKey,
-    syncingKey: 'shopify.syncing' as TranslationKey,
-    disconnectKey: 'shopify.disconnect' as TranslationKey,
-    neverKey: 'shopify.never' as TranslationKey,
-    linkPageKey: 'shopify.linkPage' as TranslationKey,
-    linkPageDescKey: 'shopify.linkPageDesc' as TranslationKey,
+    disconnectConfirmKey: 'shopify.disconnectConfirm',
+    syncSuccessKey: 'shopify.syncSuccess',
+    syncErrorKey: 'shopify.syncError',
+    disconnectedKey: 'shopify.disconnected',
+    disconnectErrorKey: 'shopify.disconnectError',
+    pageLinkedKey: 'shopify.pageLinked',
+    pageLinkErrorKey: 'shopify.pageLinkError',
+    pageUnlinkedKey: 'shopify.pageUnlinked',
+    pageUnlinkErrorKey: 'shopify.pageUnlinkError',
+    productsKey: 'shopify.products',
+    lastSyncKey: 'shopify.lastSync',
+    syncNowKey: 'shopify.syncNow',
+    syncingKey: 'shopify.syncing',
+    disconnectKey: 'shopify.disconnect',
+    neverKey: 'shopify.never',
+    linkPageKey: 'shopify.linkPage',
+    linkPageDescKey: 'shopify.linkPageDesc',
     requiresDomain: true,
     connectStore: (shopDomain) => ecommerceApi.connectStore(shopDomain!),
   },
   {
     id: 'salla',
-    nameKey: 'salla.title' as TranslationKey,
-    descKey: 'integrations.sallaDesc' as TranslationKey,
+    nameKey: 'salla.title',
+    descKey: 'integrations.sallaDesc',
     icon: <Store className="w-8 h-8" />,
     iconClass: 'icon-bg-brand',
     storeMetaClass: 'status-brand border',
@@ -111,23 +111,23 @@ const PLATFORMS: PlatformConfig[] = [
     disconnectStore: sallaApi.disconnectStore,
     linkPage: sallaApi.linkPage,
     unlinkPage: sallaApi.unlinkPage,
-    disconnectConfirmKey: 'salla.disconnectConfirm' as TranslationKey,
-    syncSuccessKey: 'salla.syncSuccess' as TranslationKey,
-    syncErrorKey: 'salla.syncError' as TranslationKey,
-    disconnectedKey: 'salla.disconnected' as TranslationKey,
-    disconnectErrorKey: 'salla.disconnectError' as TranslationKey,
-    pageLinkedKey: 'salla.pageLinked' as TranslationKey,
-    pageLinkErrorKey: 'salla.pageLinkError' as TranslationKey,
-    pageUnlinkedKey: 'salla.pageUnlinked' as TranslationKey,
-    pageUnlinkErrorKey: 'salla.pageUnlinkError' as TranslationKey,
-    productsKey: 'salla.products' as TranslationKey,
-    lastSyncKey: 'salla.lastSync' as TranslationKey,
-    syncNowKey: 'salla.syncNow' as TranslationKey,
-    syncingKey: 'salla.syncing' as TranslationKey,
-    disconnectKey: 'salla.disconnect' as TranslationKey,
-    neverKey: 'salla.never' as TranslationKey,
-    linkPageKey: 'salla.linkPage' as TranslationKey,
-    linkPageDescKey: 'salla.linkPageDesc' as TranslationKey,
+    disconnectConfirmKey: 'salla.disconnectConfirm',
+    syncSuccessKey: 'salla.syncSuccess',
+    syncErrorKey: 'salla.syncError',
+    disconnectedKey: 'salla.disconnected',
+    disconnectErrorKey: 'salla.disconnectError',
+    pageLinkedKey: 'salla.pageLinked',
+    pageLinkErrorKey: 'salla.pageLinkError',
+    pageUnlinkedKey: 'salla.pageUnlinked',
+    pageUnlinkErrorKey: 'salla.pageUnlinkError',
+    productsKey: 'salla.products',
+    lastSyncKey: 'salla.lastSync',
+    syncNowKey: 'salla.syncNow',
+    syncingKey: 'salla.syncing',
+    disconnectKey: 'salla.disconnect',
+    neverKey: 'salla.never',
+    linkPageKey: 'salla.linkPage',
+    linkPageDescKey: 'salla.linkPageDesc',
     requiresDomain: false,
     connectStore: () => sallaApi.connectStore(),
   },
@@ -152,7 +152,7 @@ function ConnectedStoreCard({
   onDisconnect: () => void;
   onLinkPage: (pageId: string) => void;
 }) {
-  const { t } = useTranslation();
+  const t = useTranslations();
   const [syncing, setSyncing] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -278,7 +278,7 @@ function ConnectedStoreCard({
 /* ------------------------------------------------------------------ */
 
 function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store: EcommerceStore }) {
-  const { t } = useTranslation();
+  const t = useTranslations();
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
   const handleReconnect = () => {
@@ -298,10 +298,10 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
       </div>
 
       <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-theme-border">
-        <p className="text-sm text-muted-foreground">{t('integrations.disconnectedState' as TranslationKey)}</p>
+        <p className="text-sm text-muted-foreground">{t('integrations.disconnectedState')}</p>
         <Button variant="primary" size="sm" onClick={handleReconnect}>
           <PlugZap className="w-4 h-4 me-1" aria-hidden="true" />
-          {t('integrations.reconnect' as TranslationKey)}
+          {t('integrations.reconnect')}
         </Button>
       </div>
     </Card>
@@ -313,21 +313,21 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
 /* ------------------------------------------------------------------ */
 
 function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
-  const { t } = useTranslation();
+  const t = useTranslations();
   const [shopDomain, setShopDomain] = useState('');
   const [connecting, setConnecting] = useState(false);
 
   const pid = platform.id; // 'shopify' | 'salla'
   const benefits = [
-    t(`integrations.notConnected.${pid}.benefit1` as TranslationKey),
-    t(`integrations.notConnected.${pid}.benefit2` as TranslationKey),
-    t(`integrations.notConnected.${pid}.benefit3` as TranslationKey),
+    t(`integrations.notConnected.${pid}.benefit1`),
+    t(`integrations.notConnected.${pid}.benefit2`),
+    t(`integrations.notConnected.${pid}.benefit3`),
   ];
 
   const steps = [
-    t('integrations.notConnected.step1' as TranslationKey),
-    t('integrations.notConnected.step2' as TranslationKey),
-    t('integrations.notConnected.step3' as TranslationKey),
+    t('integrations.notConnected.step1'),
+    t('integrations.notConnected.step2'),
+    t('integrations.notConnected.step3'),
   ];
 
   const handleConnect = async () => {
@@ -339,7 +339,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
       );
       window.location.href = authUrl;
     } catch {
-      toast.error(t('common.error' as TranslationKey));
+      toast.error(t('common.error'));
       setConnecting(false);
     }
   };
@@ -359,14 +359,14 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             <h3 className="font-bold text-lg landscape:text-base">{t(platform.nameKey)}</h3>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
               <Sparkles className="w-3 h-3" aria-hidden="true" />
-              {t('integrations.notConnected.freeLabel' as TranslationKey)}
+              {t('integrations.notConnected.freeLabel')}
             </span>
           </div>
         </div>
 
         {/* Headline */}
         <p className="text-sm font-semibold text-foreground mb-3">
-          {t(`integrations.notConnected.${pid}.headline` as TranslationKey)}
+          {t(`integrations.notConnected.${pid}.headline`)}
         </p>
 
         {/* Benefits */}
@@ -382,7 +382,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
         {/* How it works — 3 simple steps */}
         <div className="mb-5 p-3 rounded-xl bg-muted/50">
           <p className="text-xs font-semibold text-muted-foreground mb-2">
-            {t('integrations.notConnected.howItWorks' as TranslationKey)}
+            {t('integrations.notConnected.howItWorks')}
           </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {steps.map((step, i) => (
@@ -407,7 +407,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
           {platform.requiresDomain && (
             <div>
               <label htmlFor={`domain-${pid}`} className="block text-xs font-medium text-muted-foreground mb-1">
-                {t(`integrations.notConnected.${pid}.domainLabel` as TranslationKey)}
+                {t(`integrations.notConnected.${pid}.domainLabel`)}
               </label>
               <input
                 id={`domain-${pid}`}
@@ -416,7 +416,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
                 value={shopDomain}
                 onChange={(e) => setShopDomain(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-                placeholder={t(`integrations.notConnected.${pid}.domainPlaceholder` as TranslationKey)}
+                placeholder={t(`integrations.notConnected.${pid}.domainPlaceholder`)}
                 className={clsx(
                   'w-full px-3 py-2 rounded-lg text-sm border border-theme-border',
                   'bg-background text-foreground placeholder:text-muted-foreground',
@@ -424,7 +424,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
                 )}
               />
               <p className="text-[11px] text-muted-foreground mt-1">
-                {t(`integrations.notConnected.${pid}.domainHint` as TranslationKey)}
+                {t(`integrations.notConnected.${pid}.domainHint`)}
               </p>
             </div>
           )}
@@ -440,11 +440,11 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             ) : (
               <ArrowRight className="w-4 h-4 me-1.5" aria-hidden="true" />
             )}
-            {t('integrations.notConnected.connectBtn' as TranslationKey)}
+            {t('integrations.notConnected.connectBtn')}
           </Button>
           {!platform.requiresDomain && (
             <p className="text-[11px] text-muted-foreground">
-              {t(`integrations.notConnected.${pid}.connectHint` as TranslationKey)}
+              {t(`integrations.notConnected.${pid}.connectHint`)}
             </p>
           )}
         </div>
@@ -458,7 +458,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
 /* ------------------------------------------------------------------ */
 
 const IntegrationsPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const t = useTranslations();
   const { isAuthenticated } = useAuthStore();
 
   const [stores, setStores] = useState<Record<string, EcommerceStore | null>>({});
@@ -515,8 +515,8 @@ const IntegrationsPage: NextPageWithLayout = () => {
   return (
     <>
       <PageHeader
-        title={t('integrations.title' as TranslationKey)}
-        description={t('integrations.subtitle' as TranslationKey)}
+        title={t('integrations.title')}
+        description={t('integrations.subtitle')}
       />
 
       <div className="space-y-6 landscape:space-y-4">
@@ -552,4 +552,6 @@ IntegrationsPage.getLayout = (page: ReactElement) => (
 
 export default IntegrationsPage;
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.integrations]);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { Button } from '@/components/ui';
 import { Loader2, Mail, CheckCircle2, AlertCircle, Shield, Lock } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -13,8 +13,10 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function CompleteProfilePage() {
   const router = useRouter();
-  const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
+  const t = useTranslations('profile');
+  const tc = useTranslations('common');
+  const locale = useLocale();
+  const isRTL = locale === 'ar';
   const { user, setAuth, _hasHydrated } = useAuthStore();
   
   const [email, setEmail] = useState('');
@@ -72,7 +74,7 @@ export default function CompleteProfilePage() {
     
     // Validate email
     if (!email || !isEmailValid) {
-      setError(t('profile.invalidEmail'));
+      setError(t('invalidEmail'));
       return;
     }
 
@@ -102,7 +104,7 @@ export default function CompleteProfilePage() {
     } catch (err: unknown) {
       captureError(err, 'Save email error', { tags: { page: 'complete-profile' } });
       const axiosErr = err as { response?: { data?: { error?: string } } };
-      setError(axiosErr.response?.data?.error || t('profile.saveFailed'));
+      setError(axiosErr.response?.data?.error || t('saveFailed'));
       setSaving(false);
     }
   };
@@ -130,7 +132,7 @@ export default function CompleteProfilePage() {
       <div 
         className="flex-1 overflow-y-auto bg-background px-4 py-8"
         role="main"
-        aria-label={t('profile.complete')}
+        aria-label={t('complete')}
       >
         <div className="bg-card rounded-2xl shadow-xl p-8 max-w-md w-full mx-auto text-center animate-fade-in">
           {/* Animated success icon */}
@@ -139,11 +141,11 @@ export default function CompleteProfilePage() {
           </div>
           
           <h2 className="text-2xl font-bold text-foreground mb-2">
-            {t('profile.complete')}
+            {t('complete')}
           </h2>
 
           <p className="text-muted-foreground mb-6">
-            {t('profile.redirecting')}
+            {t('redirecting')}
           </p>
           
           {/* Progress bar animation */}
@@ -158,8 +160,8 @@ export default function CompleteProfilePage() {
   return (
     <>
       <Head>
-        <title>{t('profile.title')} - Jawab24</title>
-        <meta name="description" content={t('profile.emailRequired')} />
+        <title>{t('title')} - Jawab24</title>
+        <meta name="description" content={t('emailRequired')} />
       </Head>
 
       <div 
@@ -173,10 +175,10 @@ export default function CompleteProfilePage() {
               <Mail className="w-8 h-8 text-brand-600" aria-hidden="true" />
             </div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              {t('profile.title')}
+              {t('title')}
             </h1>
             <p className="text-muted-foreground">
-              {t('profile.emailRequired')}
+              {t('emailRequired')}
             </p>
           </div>
 
@@ -187,7 +189,7 @@ export default function CompleteProfilePage() {
                 htmlFor="email" 
                 className="block text-sm font-medium text-foreground/70 mb-2 text-start"
               >
-                {t('profile.emailAddress')}
+                {t('emailAddress')}
               </label>
               
               {/* Email input with validation icons */}
@@ -198,7 +200,7 @@ export default function CompleteProfilePage() {
                   value={email}
                   onChange={handleEmailChange}
                   onBlur={handleEmailBlur}
-                  placeholder={t('profile.emailPlaceholder')}
+                  placeholder={t('emailPlaceholder')}
                   className={`w-full px-4 py-3 pe-12 border rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:border-transparent ${
                     showEmailError 
                       ? 'border-red-300 focus:ring-red-500 bg-red-50' 
@@ -234,7 +236,7 @@ export default function CompleteProfilePage() {
                   role="alert"
                 >
                   <AlertCircle className="w-4 h-4" aria-hidden="true" />
-                  {t('profile.invalidEmail')}
+                  {t('invalidEmail')}
                 </p>
               )}
             </div>
@@ -262,10 +264,10 @@ export default function CompleteProfilePage() {
               {saving ? (
                 <span className="flex items-center justify-center gap-2">
                   <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                  {t('common.saving')}
+                  {tc('saving')}
                 </span>
               ) : (
-                t('common.continue')
+                tc('continue')
               )}
             </Button>
           </form>
@@ -274,16 +276,16 @@ export default function CompleteProfilePage() {
           <div className="mt-8 pt-6 border-t border-theme-border">
             <div className="flex items-center justify-center gap-2 text-muted-foreground mb-3">
               <Shield className="w-4 h-4" aria-hidden="true" />
-              <span className="text-xs font-medium">{t('profile.privacyNote')}</span>
+              <span className="text-xs font-medium">{t('privacyNote')}</span>
             </div>
             
             <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Lock className="w-3 h-3" aria-hidden="true" />
-                {t('profile.encrypted')}
+                {t('encrypted')}
               </span>
               <span>•</span>
-              <span>{t('profile.neverShared')}</span>
+              <span>{t('neverShared')}</span>
             </div>
           </div>
         </div>
@@ -327,4 +329,6 @@ export default function CompleteProfilePage() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.completeProfile]);

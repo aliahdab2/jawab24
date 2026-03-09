@@ -1,6 +1,6 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { KnowledgeSection, SectionId, CustomSectionId } from './types';
 import { SECTION_CONFIGS, MAX_CUSTOM_SECTIONS, isCustomSection } from './types';
 import { calculateProgress } from './knowledgeBaseParser';
@@ -26,7 +26,7 @@ export function KnowledgeBaseSections({
   onDeleteCustomSection,
   onCustomTitleChange,
 }: KnowledgeBaseSectionsProps) {
-  const { t } = useTranslation();
+  const tKb = useTranslations('kb');
   const { filled, total } = calculateProgress(sections);
 
   const handleToggle = (id: SectionId) => {
@@ -51,8 +51,8 @@ export function KnowledgeBaseSections({
         </div>
         <span className="text-xs font-medium text-surface-500 flex-shrink-0">
           {filled === total
-            ? t('kb.progressComplete' as TranslationKey)
-            : t('kb.progress' as TranslationKey)
+            ? tKb('progressComplete')
+            : tKb('progress')
                 .replace('{filled}', String(filled))
                 .replace('{total}', String(total))}
         </span>
@@ -97,7 +97,7 @@ export function KnowledgeBaseSections({
         >
           <Plus className="w-4 h-4" />
           <span className="text-sm font-medium">
-            {t('kb.addCustomSection' as TranslationKey)}
+            {tKb('addCustomSection')}
           </span>
         </button>
       )}

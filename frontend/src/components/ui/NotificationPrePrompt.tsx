@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, X } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 
 interface NotificationPrePromptProps {
   onEnable: () => void;
@@ -8,7 +8,8 @@ interface NotificationPrePromptProps {
 }
 
 export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePromptProps) {
-  const { t, language } = useTranslation();
+  const t = useTranslations('notifications');
+  const locale = useLocale();
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
           ? 'opacity-100 translate-y-0 scale-100'
           : 'opacity-0 translate-y-8 scale-95'
       }`}
-      dir={language === 'ar' ? 'rtl' : 'ltr'}
+      dir={locale === 'ar' ? 'rtl' : 'ltr'}
     >
       <div className="relative bg-card rounded-3xl shadow-2xl border border-theme-border/60 overflow-hidden">
         {/* Decorative gradient top bar */}
@@ -58,10 +59,10 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
             </div>
             <div className="flex-1 min-w-0 pe-6">
               <p className="text-[15px] font-bold text-foreground mb-1">
-                {t('notifications.prePrompt.title' as TranslationKey)}
+                {t('prePrompt.title')}
               </p>
               <p className="text-[13px] text-muted-foreground leading-relaxed">
-                {t('notifications.prePrompt.body' as TranslationKey)}
+                {t('prePrompt.body')}
               </p>
             </div>
           </div>
@@ -73,14 +74,14 @@ export function NotificationPrePrompt({ onEnable, onDismiss }: NotificationPrePr
               onClick={handleEnable}
               className="flex-1 py-3 px-5 rounded-2xl bg-gradient-to-r from-brand-600 to-brand-500 text-white text-sm font-bold shadow-md shadow-brand-500/20 hover:shadow-lg hover:shadow-brand-500/30 hover:-translate-y-0.5 active:scale-[0.97] active:translate-y-0 transition-all duration-200"
             >
-              {t('notifications.prePrompt.enable' as TranslationKey)}
+              {t('prePrompt.enable')}
             </button>
             <button
               type="button"
               onClick={handleDismiss}
               className="py-3 px-5 rounded-2xl text-muted-foreground text-sm font-medium hover:text-foreground hover:bg-muted active:scale-[0.97] transition-all duration-200"
             >
-              {t('notifications.prePrompt.later' as TranslationKey)}
+              {t('prePrompt.later')}
             </button>
           </div>
         </div>

@@ -23,7 +23,8 @@ import {
   Loader2,
   type LucideIcon,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
@@ -63,7 +64,11 @@ function getApiParams(filter: FilterType): MessagesQueryParams {
 const MESSAGES_PER_PAGE = 50;
 
 const MessagesPage: NextPageWithLayout = () => {
-  const { t, language, dateLocale } = useTranslation();
+  const t = useTranslations('messages');
+  const tc = useTranslations('common');
+  const tExport = useTranslations('export');
+  const tComments = useTranslations('comments');
+  const { language, dateLocale } = useLanguage();
   const { isAuthenticated } = useAuthStore();
   const resetUnreadMessages = useUIStore((s) => s.resetUnreadMessages);
   const router = useRouter();
@@ -303,7 +308,7 @@ const MessagesPage: NextPageWithLayout = () => {
     if (found) {
       setSelectedConversation(found);
     } else if (allMessages.length > 0) {
-      toast.info(t('messages.deepLinkNotFound' as TranslationKey));
+      toast.info(t('deepLinkNotFound'));
     }
     pendingDeepLinkRef.current = null;
   }, [conversations, allMessages, isLoading, filter, t, setSelectedConversation]);
@@ -357,16 +362,16 @@ const MessagesPage: NextPageWithLayout = () => {
     setExporting(true);
     try {
       const headers = [
-        t('export.pageName'), t('export.contact'), t('export.message'),
-        t('export.direction'), t('export.replied'), t('messages.resolved' as TranslationKey),
-        t('export.reply'), t('export.method'), t('export.date'), t('export.repliedAt'),
+        tExport('pageName'), tExport('contact'), tExport('message'),
+        tExport('direction'), tExport('replied'), t('resolved'),
+        tExport('reply'), tExport('method'), tExport('date'), tExport('repliedAt'),
       ];
       const rows = allMessages.map(msg => {
         const page = pages.find(p => p.id === msg.pageId);
         return [
           page?.name || '', msg.senderName || '', msg.message || '',
-          msg.direction, msg.replied ? t('common.yes') : t('common.no'),
-          msg.resolved ? t('common.yes') : t('common.no'),
+          msg.direction, msg.replied ? tc('yes') : tc('no'),
+          msg.resolved ? tc('yes') : tc('no'),
           msg.replyText || '', msg.replyMethod || '',
           formatDateForExport(msg.createdAt, language),
           formatDateForExport(msg.repliedAt, language),
@@ -386,32 +391,32 @@ const MessagesPage: NextPageWithLayout = () => {
 
   const emptyStateContent = useMemo((): EmptyConfig => {
     if (searchQuery) {
-      return { icon: Search, variant: 'search', title: t('common.noData'), subtitle: '' };
+      return { icon: Search, variant: 'search', title: tc('noData'), subtitle: '' };
     }
     const config: Record<FilterType, EmptyConfig> = {
       needs_action: {
         icon: CheckCircle,
         variant: 'success',
-        title: t('messages.emptyNeedsAction' as TranslationKey),
-        subtitle: t('messages.emptyNeedsActionSub' as TranslationKey),
+        title: t('emptyNeedsAction'),
+        subtitle: t('emptyNeedsActionSub'),
       },
       all: {
         icon: MessageCircle,
         variant: 'empty',
-        title: t('messages.emptyAll' as TranslationKey),
-        subtitle: t('messages.emptyAllSub' as TranslationKey),
+        title: t('emptyAll'),
+        subtitle: t('emptyAllSub'),
       },
       auto_replied: {
         icon: Sparkles,
         variant: 'empty',
         iconColorClass: 'text-violet-500',
         iconBgClass: 'icon-bg-violet-light',
-        title: t('messages.emptyAutoReplied' as TranslationKey),
-        subtitle: t('messages.emptyAutoRepliedSub' as TranslationKey),
+        title: t('emptyAutoReplied'),
+        subtitle: t('emptyAutoRepliedSub'),
       },
     };
     return config[filter];
-  }, [filter, searchQuery, t]);
+  }, [filter, searchQuery, t, tc]);
 
   if (isLoading && !data) {
     return <PageSkeleton type="list" />;
@@ -420,14 +425,14 @@ const MessagesPage: NextPageWithLayout = () => {
   return (
     <>
       <PageHeader
-        title={t('messages.title')}
-        description={t('messages.description')}
+        title={t('title')}
+        description={t('description')}
         action={
           <div ref={menuRef} className="relative">
             <button
               onClick={() => setMenuOpen(prev => !prev)}
               className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
-              aria-label={t('common.export' as TranslationKey)}
+              aria-label={tc('export')}
               aria-expanded={menuOpen}
             >
               <MoreVertical className="w-5 h-5" />
@@ -440,7 +445,7 @@ const MessagesPage: NextPageWithLayout = () => {
                   className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 text-sm text-foreground/70 hover:bg-background transition-colors disabled:opacity-50"
                 >
                   <Download className="w-4 h-4 flex-shrink-0" />
-                  {t('comments.exportCSV')}
+                  {tComments('exportCSV')}
                 </button>
               </div>
             )}
@@ -452,9 +457,9 @@ const MessagesPage: NextPageWithLayout = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
         <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap items-center gap-2">
           {([
-            { key: 'needs_action' as FilterType, label: t('messages.needsAction' as TranslationKey), count: stats.needsAction },
-            { key: 'all' as FilterType, label: t('messages.allMessages' as TranslationKey), count: stats.total },
-            { key: 'auto_replied' as FilterType, label: t('messages.autoReplied' as TranslationKey), count: stats.autoReplied },
+            { key: 'needs_action' as FilterType, label: t('needsAction'), count: stats.needsAction },
+            { key: 'all' as FilterType, label: t('allMessages'), count: stats.total },
+            { key: 'auto_replied' as FilterType, label: t('autoReplied'), count: stats.autoReplied },
           ]).map(chip => (
             <button
               key={chip.key}
@@ -478,7 +483,7 @@ const MessagesPage: NextPageWithLayout = () => {
           ))}
         </div>
 
-        <div role="search" aria-label={t('common.search')} className="relative group w-full sm:w-[300px] sm:flex-none">
+        <div role="search" aria-label={tc('search')} className="relative group w-full sm:w-[300px] sm:flex-none">
           <Search
             className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4.5 h-4.5 text-muted-foreground group-focus-within:text-brand-500 transition-colors z-10"
           />
@@ -486,8 +491,8 @@ const MessagesPage: NextPageWithLayout = () => {
             type="search"
             inputMode="search"
             autoComplete="off"
-            aria-label={t('common.search')}
-            placeholder={t('common.search') + '...'}
+            aria-label={tc('search')}
+            placeholder={tc('search') + '...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="py-2.5 ps-10 pe-10 rounded-full bg-background border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all text-sm"
@@ -509,8 +514,8 @@ const MessagesPage: NextPageWithLayout = () => {
       {conversations.length > 0 && conversations.length !== allMessages.length && (
         <p className="text-xs text-muted-foreground mb-3 -mt-2">
           {conversations.length === 1
-            ? t('messages.oneConversation' as TranslationKey, { msgCount: allMessages.length })
-            : t('messages.conversationCount' as TranslationKey, { count: conversations.length, msgCount: allMessages.length })
+            ? t('oneConversation', { msgCount: allMessages.length })
+            : t('conversationCount', { count: conversations.length, msgCount: allMessages.length })
           }
         </p>
       )}
@@ -545,7 +550,7 @@ const MessagesPage: NextPageWithLayout = () => {
             {isFetchingNextPage ? (
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
-                <span className="ms-3 text-sm text-muted-foreground">{t('common.loading')}...</span>
+                <span className="ms-3 text-sm text-muted-foreground">{tc('loading')}...</span>
               </div>
             ) : hasNextPage ? (
               <div className="flex justify-center py-8">
@@ -555,12 +560,12 @@ const MessagesPage: NextPageWithLayout = () => {
                   onClick={() => fetchNextPage()}
                   className="rounded-full px-6"
                 >
-                  {t('common.loadMore')}
+                  {tc('loadMore')}
                 </Button>
               </div>
             ) : conversations.length > 0 ? (
               <div className="text-center py-8 text-sm text-muted-foreground">
-                <Check className="w-3.5 h-3.5 inline-block" /> {t('common.allLoaded')}
+                <Check className="w-3.5 h-3.5 inline-block" /> {tc('allLoaded')}
               </div>
             ) : null}
           </div>
@@ -606,4 +611,6 @@ MessagesPage.getLayout = (page: ReactElement) => (
 
 export default MessagesPage;
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.messages]);

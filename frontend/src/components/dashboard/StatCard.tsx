@@ -3,10 +3,8 @@ import clsx from 'clsx';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
-
 interface StatCardProps {
-  nameKey: TranslationKey;
+  name: string;
   value: string;
   icon: React.ComponentType<{ className?: string }>;
   color: 'brand' | 'emerald' | 'amber' | 'violet' | 'red';
@@ -16,8 +14,7 @@ interface StatCardProps {
   isActive?: boolean;
 }
 
-export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, href, isActive }: StatCardProps) {
-  const { t } = useTranslation();
+export function StatCard({ name, value, icon: Icon, color, index, onClick, href, isActive }: StatCardProps) {
 
   const iconColorClasses =
     color === 'brand' ? 'icon-bg-brand-light' :
@@ -45,7 +42,7 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
             "text-xs font-bold uppercase tracking-widest line-clamp-2 leading-tight",
             labelColorClasses
           )}>
-            {t(nameKey)}
+            {name}
           </p>
         </div>
         <div className={clsx(
@@ -71,7 +68,7 @@ export function StatCard({ nameKey, value, icon: Icon, color, index, onClick, hr
           "text-[10px] font-bold uppercase tracking-wider line-clamp-2 leading-tight",
           labelColorClasses
         )}>
-          {t(nameKey)}
+          {name}
         </p>
       </div>
     </div>

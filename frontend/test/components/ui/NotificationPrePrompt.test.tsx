@@ -23,15 +23,15 @@ describe('NotificationPrePrompt', () => {
   it('should render title and body text', () => {
     render(<NotificationPrePrompt onEnable={vi.fn()} onDismiss={vi.fn()} />);
 
-    expect(screen.getByText('notifications.prePrompt.title')).toBeInTheDocument();
-    expect(screen.getByText('notifications.prePrompt.body')).toBeInTheDocument();
+    expect(screen.getByText('Stay in the loop')).toBeInTheDocument();
+    expect(screen.getByText('Get notified when comments need your attention or when something important happens with your pages.')).toBeInTheDocument();
   });
 
   it('should render enable and later buttons', () => {
     render(<NotificationPrePrompt onEnable={vi.fn()} onDismiss={vi.fn()} />);
 
-    expect(screen.getByText('notifications.prePrompt.enable')).toBeInTheDocument();
-    expect(screen.getByText('notifications.prePrompt.later')).toBeInTheDocument();
+    expect(screen.getByText('Enable notifications')).toBeInTheDocument();
+    expect(screen.getByText('Not now')).toBeInTheDocument();
   });
 
   it('should start invisible and animate in after 100ms', () => {
@@ -55,7 +55,7 @@ describe('NotificationPrePrompt', () => {
     // Make visible
     act(() => { vi.advanceTimersByTime(100); });
 
-    fireEvent.click(screen.getByText('notifications.prePrompt.enable'));
+    fireEvent.click(screen.getByText('Enable notifications'));
 
     // Should not call immediately (waits 300ms for fade-out animation)
     expect(onEnable).not.toHaveBeenCalled();
@@ -70,7 +70,7 @@ describe('NotificationPrePrompt', () => {
 
     act(() => { vi.advanceTimersByTime(100); });
 
-    fireEvent.click(screen.getByText('notifications.prePrompt.later'));
+    fireEvent.click(screen.getByText('Not now'));
 
     expect(onDismiss).not.toHaveBeenCalled();
 
@@ -87,8 +87,8 @@ describe('NotificationPrePrompt', () => {
     // The X button is the first button (before enable/later)
     const buttons = screen.getAllByRole('button');
     const xButton = buttons.find(
-      b => !b.textContent?.includes('notifications.prePrompt.enable') &&
-           !b.textContent?.includes('notifications.prePrompt.later')
+      b => !b.textContent?.includes('Enable notifications') &&
+           !b.textContent?.includes('Not now')
     );
     expect(xButton).toBeDefined();
     fireEvent.click(xButton!);
@@ -107,7 +107,7 @@ describe('NotificationPrePrompt', () => {
     const wrapper = container.firstElementChild;
     expect(wrapper?.className).toContain('opacity-100');
 
-    fireEvent.click(screen.getByText('notifications.prePrompt.enable'));
+    fireEvent.click(screen.getByText('Enable notifications'));
 
     // Should now be invisible (setVisible(false) was called)
     expect(wrapper?.className).toContain('opacity-0');

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 
 interface LandingHowItWorksProps {
@@ -9,12 +9,13 @@ interface LandingHowItWorksProps {
 }
 
 export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('landing');
+  const tNav = useTranslations('nav');
 
   const howItWorks = [
-    { step: '1', title: t('landing.howItWorks.step1Title'), description: t('landing.howItWorks.step1Desc') },
-    { step: '2', title: t('landing.howItWorks.step2Title'), description: t('landing.howItWorks.step2Desc') },
-    { step: '3', title: t('landing.howItWorks.step3Title'), description: t('landing.howItWorks.step3Desc') },
+    { step: '1', title: t('howItWorks.step1Title'), description: t('howItWorks.step1Desc') },
+    { step: '2', title: t('howItWorks.step2Title'), description: t('howItWorks.step2Desc') },
+    { step: '3', title: t('howItWorks.step3Title'), description: t('howItWorks.step3Desc') },
   ];
 
   return (
@@ -28,8 +29,8 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
           {/* Steps */}
           <div className="space-y-4 sm:space-y-8 col-span-1">
             <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-4 sm:mb-8 leading-relaxed text-start">
-              {t('landing.howItWorks.title1')}
-              <span className="block text-brand-600 mt-2">{t('landing.howItWorks.title2')}</span>
+              {t('howItWorks.title1')}
+              <span className="block text-brand-600 mt-2">{t('howItWorks.title2')}</span>
             </h2>
             <div className="space-y-3 sm:space-y-6 lg:space-y-10">
               {howItWorks.map((item, i) => (
@@ -48,7 +49,7 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
               <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="inline-block mt-4 sm:mt-12">
                 <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                   <span className="flex items-center gap-2">
-                    {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.howItWorks.cta')}
+                    {isAuthenticated ? (tNav('dashboard') || 'Dashboard') : t('howItWorks.cta')}
                     <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
                   </span>
                 </Button>
@@ -61,7 +62,7 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
             <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700 bg-surface-50">
               <Image
                 src="/images/social-icons-3d.png"
-                alt={t('landing.images.dashboardPreview' as TranslationKey) as string}
+                alt={t('images.dashboardPreview')}
                 width={1200}
                 height={675}
                 className="w-full h-auto"

@@ -1,0 +1,18 @@
+{
+  "month": "month",
+  "pages": "Pages",
+  "aiReplies": "AI Replies per month",
+  "trialDays": "days free trial",
+  "starter": {
+    "name": "Starter",
+    "description": "Perfect for small businesses getting started"
+  },
+  "business": {
+    "name": "Business",
+    "description": "Auto-reply to Facebook/Instagram pages with unlimited templates"
+  },
+  "pro": {
+    "name": "Pro",
+    "description": "For agencies and large businesses with unlimited needs"
+  }
+}

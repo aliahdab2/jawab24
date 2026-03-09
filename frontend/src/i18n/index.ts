@@ -1,6 +1,9 @@
-// Re-export everything
-export { translations, createT, ar, en } from './translations';
-export type { Language, TranslationKey } from './translations';
+// next-intl hooks (standard API)
+export { useTranslations, useLocale } from 'next-intl';
 
-export { useTranslation, useLanguage, getDateLocale, getIntlLocale } from './hooks';
-export { getI18nProps, getStaticProps, getServerSideProps } from './getMessages';
+// Custom hooks (language switching, date/intl helpers)
+export { useLanguage, getDateLocale, getIntlLocale, type Language } from './hooks';
+
+// getStaticProps helpers
+export { getI18nProps, makeGetStaticProps, makeGetServerSideProps } from './getMessages';
+export { PAGE_NAMESPACES } from './namespaces';

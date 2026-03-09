@@ -1,0 +1,44 @@
+{
+  "title": "Notifications",
+  "markAllRead": "Mark all read",
+  "markAsRead": "Mark as read",
+  "loading": "Loading...",
+  "empty": "No notifications",
+  "justNow": "Just now",
+  "minutesAgo": "{count}m ago",
+  "hoursAgo": "{count}h ago",
+  "daysAgo": "{count}d ago",
+  "dismissed": "Notification dismissed",
+  "undo": "Undo",
+  "prePrompt": {
+    "title": "Stay in the loop",
+    "body": "Get notified when comments need your attention or when something important happens with your pages.",
+    "enable": "Enable notifications",
+    "later": "Not now"
+  },
+  "close": "Close notifications",
+  "filterLabel": "Filter notifications",
+  "filter": {
+    "all": "All",
+    "comments": "Comments",
+    "billing": "Billing",
+    "system": "System"
+  },
+  "replyNow": "Reply now",
+  "emptyDescription": "When something needs your attention, it will show up here.",
+  "emptyFiltered": "No {category} notifications",
+  "groupSummary": "{count} notifications",
+  "typeLabel": {
+    "stale_comment": "comments waiting for your reply",
+    "new_comment": "new comments",
+    "flagged_reply": "flagged replies",
+    "payment_failed": "payment alerts",
+    "subscription_expiring": "expiring subscriptions",
+    "trial_ending": "trial reminders",
+    "subscription_renewed": "renewal confirmations",
+    "page_disconnected": "disconnected pages",
+    "kb_gap": "knowledge gaps"
+  },
+  "expand": "Expand group",
+  "collapse": "Collapse group"
+}

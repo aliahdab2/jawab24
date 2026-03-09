@@ -4,7 +4,8 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import { Button, Badge } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
@@ -47,7 +48,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   pageName,
   pageUrl,
 }) => {
-  const { t, dateLocale } = useTranslation();
+  const t = useTranslations('comments');
+  const tc = useTranslations('common');
+  const tDashboard = useTranslations('dashboard');
+  const tPricing = useTranslations('pricing');
+  const tMessages = useTranslations('messages');
+  const { dateLocale } = useLanguage();
   
   // Close on ESC
   useEscapeKey(onClose);
@@ -155,20 +161,20 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     setIsSending(true);
     try {
       await commentsApi.reply(comment.id, replyText);
-      toast.success(t('common.success'));
+      toast.success(tc('success'));
       onReplySuccess();
       onClose();
     } catch (error) {
       const axiosErr = error as { response?: { status?: number } };
       if (axiosErr.response?.status === 404) {
         // Comment was deleted or already handled between loading and replying
-        toast.error(t('comments.replyNotFound' as TranslationKey));
+        toast.error(t('replyNotFound'));
         onReplySuccess(); // refresh the list
         onClose();
         return;
       }
       captureError(error, 'Failed to send reply', { tags: { component: 'comment-detail', action: 'send-reply' } });
-      toast.error(t('common.error'));
+      toast.error(tc('error'));
     } finally {
       setIsSending(false);
     }
@@ -193,9 +199,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       >
         {/* Breadcrumb */}
         <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
-          <span className="font-medium">{t('comments.title')}</span>
+          <span className="font-medium">{t('title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
-          <span className="font-semibold text-muted-foreground truncate">{comment.fromName || t('common.unknownUser')}</span>
+          <span className="font-semibold text-muted-foreground truncate">{comment.fromName || tc('unknownUser')}</span>
         </div>
 
         {/* Modal Header */}
@@ -206,10 +212,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">
-                {mode === 'quick' ? t('comments.reply') : t('comments.commentDetails')}
+                {mode === 'quick' ? t('reply') : t('commentDetails')}
               </h2>
               <p className="text-sm text-muted-foreground">
-                {comment.fromName || t('common.unknownUser')}
+                {comment.fromName || tc('unknownUser')}
               </p>
               {pageName && (
                 externalUrl ? (
@@ -234,19 +240,19 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             {pauseStatus?.paused && (
               <Badge variant="info">
                 <PauseCircle className="w-3 h-3 me-1" />
-                {t('messages.smartReplyPaused')}
+                {tMessages('smartReplyPaused')}
               </Badge>
             )}
             {needsAttention && (
               <Badge variant="warning">
                 <AlertTriangle className="w-3 h-3 me-1" />
-                {t('comments.needsAttention')}
+                {t('needsAttention')}
               </Badge>
             )}
             <button
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
-              aria-label={t('comments.close')}
+              aria-label={t('close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -275,7 +281,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           {mode === 'full' && comment.replied && comment.replyText && (
             <div>
               <h3 className="text-sm font-medium text-muted-foreground mb-2">
-                {t('comments.reply')}
+                {t('reply')}
               </h3>
               <div className="bg-brand-50 dark:bg-brand-950/30 rounded-xl p-4 border-s-4 border-brand-500">
                 <p className="text-foreground whitespace-pre-wrap">{comment.replyText}</p>
@@ -284,10 +290,10 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
                     {comment.replyMethod === 'ai' ? (
                       <span className="flex items-center gap-1">
-                        <Bot className="w-3 h-3" /> {t('dashboard.aiReply')}
+                        <Bot className="w-3 h-3" /> {tDashboard('aiReply')}
                       </span>
                     ) : (
-                      <>{t('dashboard.templateReply')}</>
+                      <>{tDashboard('templateReply')}</>
                     )}
                   </Badge>
                 </div>
@@ -304,14 +310,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               {isHeldReply && (
                 <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
                   <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>{t('comments.heldReplyBanner')}</span>
+                  <span>{t('heldReplyBanner')}</span>
                 </div>
               )}
               <div className="flex justify-between items-center mb-2">
                 <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground">
-                  {t('comments.reply')}
+                  {t('reply')}
                   {replyText && !isGenerating && (
-                    <span className="text-xs font-normal text-muted-foreground ms-2">{t('comments.aiSuggestedReply')}</span>
+                    <span className="text-xs font-normal text-muted-foreground ms-2">{t('aiSuggestedReply')}</span>
                   )}
                 </label>
                 
@@ -329,18 +335,18 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                       icon={<Bot className="w-4 h-4" />}
                     >
                       {isGenerating
-                        ? generationStatus || t('common.loading')
+                        ? generationStatus || tc('loading')
                         : !aiLimit.allowed
-                          ? t('pricing.limitReached')
+                          ? tPricing('limitReached')
                           : replyText
-                            ? t('comments.regenerate')
-                            : t('dashboard.aiReply')}
+                            ? t('regenerate')
+                            : tDashboard('aiReply')}
                     </Button>
 
                     {/* Tooltip for disabled state */}
                     {!aiLimit.allowed && (
                       <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                        {aiLimit.reason || t('pricing.limitReached')}
+                        {aiLimit.reason || tPricing('limitReached')}
                       </div>
                     )}
                   </div>
@@ -350,7 +356,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 id="comment-reply-textarea"
                 ref={textareaRef}
                 className="w-full p-3 rounded-lg border border-theme-border focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right resize-y"
-                placeholder={t('comments.typeReply')}
+                placeholder={t('typeReply')}
                 value={replyText}
                 onChange={(e) => setReplyText(e.target.value)}
                 disabled={isGenerating || isSending}
@@ -364,13 +370,13 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors disabled:opacity-50"
                   >
                     <CheckCircle className="w-3.5 h-3.5" />
-                    {t('comments.resolve')}
+                    {t('resolve')}
                   </button>
                 </div>
               )}
               <div className="flex justify-end mt-3 gap-2">
                 <Button variant="secondary" onClick={onClose} disabled={isSending}>
-                   {t('common.cancel')}
+                   {tc('cancel')}
                 </Button>
                 <Button
                   variant="primary"
@@ -379,7 +385,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   disabled={!replyText.trim() || isGenerating}
                   icon={<Reply className="w-4 h-4" />}
                 >
-                  {t('comments.sendReply')}
+                  {t('sendReply')}
                 </Button>
               </div>
             </div>
@@ -408,12 +414,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   {pauseStatus?.paused ? (
                     <>
                       <PlayCircle className="w-3.5 h-3.5" />
-                      {t('messages.resumeSmartReply')}
+                      {tMessages('resumeSmartReply')}
                     </>
                   ) : (
                     <>
                       <PauseCircle className="w-3.5 h-3.5" />
-                      {t('messages.pauseSmartReply')}
+                      {tMessages('pauseSmartReply')}
                     </>
                   )}
                 </button>

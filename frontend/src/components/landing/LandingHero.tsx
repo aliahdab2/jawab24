@@ -7,7 +7,7 @@ import {
   Check,
   ShoppingBag,
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 
 export function ShopifyIcon({ className }: { className?: string }) {
@@ -33,7 +33,8 @@ interface LandingHeroProps {
 }
 
 export function LandingHero({ isAuthenticated }: LandingHeroProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('landing');
+  const tNav = useTranslations('nav');
 
   return (
     <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
@@ -50,32 +51,32 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
           {/* Text Content */}
           <div className="text-start order-1">
             <h1 className="text-xl min-[375px]:text-2xl sm:text-5xl lg:text-6xl font-display font-extrabold text-foreground mb-3 sm:mb-8 leading-tight tracking-tight animate-slide-up">
-              {t('landing.hero.title1')}
+              {t('hero.title1')}
               <span className="block bg-gradient-to-r from-brand-600 via-blue-600 to-violet-600 bg-clip-text text-transparent pb-1 sm:pb-2 mt-1 sm:mt-2">
-                {t('landing.hero.title2')}
+                {t('hero.title2')}
               </span>
             </h1>
 
             <p className="text-xs min-[375px]:text-sm sm:text-lg lg:text-xl text-muted-foreground mb-4 sm:mb-12 leading-relaxed animate-slide-up animation-delay-100">
-              {t('landing.hero.description')}
+              {t('hero.description')}
             </p>
 
             <div className="flex flex-col items-center sm:items-start gap-3 sm:gap-5 mb-4 sm:mb-12 animate-slide-up animation-delay-200">
               <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="w-full sm:w-auto">
                 <Button size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center shadow-2xl shadow-brand-500/40 px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl transition-transform hover:scale-105 active:scale-95">
-                  {isAuthenticated ? (t('nav.dashboard') || 'Dashboard') : t('landing.hero.cta1')}
+                  {isAuthenticated ? (tNav('dashboard') || 'Dashboard') : t('hero.cta1')}
                 </Button>
               </Link>
               {!isAuthenticated && (
                 <p className="flex items-center gap-1.5 text-xs sm:text-sm text-surface-500 font-medium">
                   <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-500" aria-hidden="true" />
-                  {t('landing.cta.note')}
+                  {t('cta.note')}
                 </p>
               )}
               {!isAuthenticated && (
                 <Link href="/pricing" className="w-full sm:w-auto">
                   <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-theme-border hover:border-brand-500 bg-card hover:bg-card transition-all shadow-lg dark:shadow-black/20">
-                    {t('landing.hero.cta2')}
+                    {t('hero.cta2')}
                   </Button>
                 </Link>
               )}
@@ -85,19 +86,19 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
             <div className="hidden sm:flex items-center gap-3 sm:gap-6 animate-slide-up animation-delay-300">
               <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-facebook font-bold text-sm sm:text-base transition-all cursor-default">
                 <Facebook className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>{t('landing.platforms.facebook')}</span>
+                <span>{t('platforms.facebook')}</span>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-instagram font-bold text-sm sm:text-base transition-all cursor-default">
                 <Instagram className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>{t('landing.platforms.instagram')}</span>
+                <span>{t('platforms.instagram')}</span>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-shopify font-bold text-sm sm:text-base transition-all cursor-default">
                 <ShopifyIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>{t('landing.platforms.shopify')}</span>
+                <span>{t('platforms.shopify')}</span>
               </div>
               <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-salla font-bold text-sm sm:text-base transition-all cursor-default">
                 <SallaIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>{t('landing.platforms.salla')}</span>
+                <span>{t('platforms.salla')}</span>
               </div>
             </div>
           </div>
@@ -136,12 +137,12 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                           <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-surface-600" />
                         </div>
                         <div className="landing-chat-bubble rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-sm max-w-full">
-                          <p className="text-[8px] sm:text-[11px] lg:text-base text-surface-700 font-medium leading-tight lg:leading-relaxed">{t('landing.hero.chatQuery')}</p>
+                          <p className="text-[8px] sm:text-[11px] lg:text-base text-surface-700 font-medium leading-tight lg:leading-relaxed">{t('hero.chatQuery')}</p>
                         </div>
                       </div>
                       <div className="flex items-end gap-1 sm:gap-1.5 lg:gap-2 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
                         <div className="bg-brand-500 rounded-xl sm:rounded-2xl rounded-br-none rtl:rounded-br-xl sm:rtl:rounded-br-2xl rtl:rounded-bl-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-lg shadow-brand-500/20 max-w-[85%]">
-                          <p className="text-[8px] sm:text-[11px] lg:text-base text-white font-bold leading-tight lg:leading-relaxed">{t('landing.hero.chatResponse')}</p>
+                          <p className="text-[8px] sm:text-[11px] lg:text-base text-white font-bold leading-tight lg:leading-relaxed">{t('hero.chatResponse')}</p>
                         </div>
                         <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
                           <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-brand-500" />

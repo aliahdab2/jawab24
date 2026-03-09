@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import { Button } from '@/components/ui';
 import { commentsApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 interface ReplyFeedbackProps {
   commentId: string;
@@ -13,7 +13,7 @@ interface ReplyFeedbackProps {
 }
 
 export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
-  const { t } = useTranslation();
+  const t = useTranslations('feedback');
   const [feedback, setFeedback] = useState<'positive' | 'negative' | null>(null);
   const [showFollowUp, setShowFollowUp] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -29,10 +29,10 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
           feedback: 'positive',
           source: 'modal'
         });
-        toast.success(t('feedback.thanks' as TranslationKey) || 'Thanks for your feedback!', { duration: 1500 });
+        toast.success(t('thanks') || 'Thanks for your feedback!', { duration: 1500 });
       } catch (error) {
         captureError(error, 'Failed to submit positive feedback', { tags: { component: 'reply-feedback' } });
-        toast.error(t('feedback.error' as TranslationKey) || "Couldn't save feedback. Try again.");
+        toast.error(t('error') || "Couldn't save feedback. Try again.");
         setFeedback(null); // Allow retry
       }
     } else {
@@ -49,11 +49,11 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
         reason: selectedReasons,
         source: 'modal'
       });
-      toast.success(t('feedback.thanks' as TranslationKey) || 'Thanks for your feedback!', { duration: 1500 });
+      toast.success(t('thanks') || 'Thanks for your feedback!', { duration: 1500 });
       setShowFollowUp(false);
     } catch (error) {
       captureError(error, 'Failed to submit negative feedback', { tags: { component: 'reply-feedback' } });
-      toast.error(t('feedback.error' as TranslationKey) || "Couldn't save feedback. Try again.");
+      toast.error(t('error') || "Couldn't save feedback. Try again.");
       // Don't reset feedback state here? User specs say "Buttons remain active" if fail.
       // But specs also say "Buttons become disabled" *after submission*.
       // If fail, we should probably allow retry.
@@ -74,11 +74,11 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
   };
 
   const reasons = [
-    { id: 'incorrect_info', label: t('feedback.reasons.incorrectInfo') || 'Incorrect information' },
-    { id: 'not_relevant', label: t('feedback.reasons.notRelevant') || 'Not relevant' },
-    { id: 'bad_tone', label: t('feedback.reasons.badTone') || 'Bad tone' },
-    { id: 'wrong_language', label: t('feedback.reasons.wrongLanguage') || 'Wrong language' },
-    { id: 'other', label: t('feedback.reasons.other') || 'Other' },
+    { id: 'incorrect_info', label: t('reasons.incorrectInfo') || 'Incorrect information' },
+    { id: 'not_relevant', label: t('reasons.notRelevant') || 'Not relevant' },
+    { id: 'bad_tone', label: t('reasons.badTone') || 'Bad tone' },
+    { id: 'wrong_language', label: t('reasons.wrongLanguage') || 'Wrong language' },
+    { id: 'other', label: t('reasons.other') || 'Other' },
   ];
 
   if (showFollowUp) {
@@ -87,7 +87,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
         <div className="bg-background rounded-xl p-4 border border-theme-border">
           <div className="flex justify-between items-start mb-3">
             <h4 className="text-sm font-semibold text-foreground">
-              {t('feedback.whatWentWrong')} <span className="text-muted-foreground font-normal">{t('feedback.optional')}</span>
+              {t('whatWentWrong')} <span className="text-muted-foreground font-normal">{t('optional')}</span>
             </h4>
             <button onClick={() => setShowFollowUp(false)} className="text-muted-foreground hover:text-muted-foreground">
                <X className="w-4 h-4" />
@@ -115,7 +115,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
               onClick={handleDislikeSubmit}
               loading={isSubmitting}
             >
-              {t('feedback.send')}
+              {t('send')}
             </Button>
             <Button 
               size="sm" 
@@ -123,7 +123,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
               onClick={handleDislikeSkip}
               disabled={isSubmitting}
             >
-              {t('feedback.skip')}
+              {t('skip')}
             </Button>
           </div>
         </div>
@@ -134,7 +134,7 @@ export const ReplyFeedback: React.FC<ReplyFeedbackProps> = ({ commentId }) => {
   return (
     <div className="mt-4 flex flex-col items-start gap-2">
       <span className="text-[13px] font-medium text-muted-foreground">
-        {t('feedback.helpful' as TranslationKey) || 'Was this reply helpful?'}
+        {t('helpful') || 'Was this reply helpful?'}
       </span>
       <div className="flex items-center gap-2">
         <button

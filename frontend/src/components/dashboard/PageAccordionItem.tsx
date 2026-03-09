@@ -7,7 +7,7 @@ import {
   Instagram,
   ArrowRight,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { formatConnectedDate } from '@/utils/formatConnectedDate';
 import type { Page } from '@jawab24/shared';
 
@@ -30,7 +30,10 @@ export function PageAccordionItem({
   pendingCount,
   animationDelay,
 }: PageAccordionItemProps) {
-  const { t } = useTranslation();
+  const tDash = useTranslations('dashboard');
+  const tc = useTranslations('common');
+  const tComments = useTranslations('comments');
+  const tPages = useTranslations('pages');
   const itemRef = useRef<HTMLDivElement>(null);
 
   // Scroll expanded item into view after animation
@@ -92,11 +95,11 @@ export function PageAccordionItem({
           </p>
           <div className="flex items-center gap-3 mt-1.5">
             <span className="text-xs text-muted-foreground">
-              {page.commentsCount || 0} {t('dashboard.comments')}
+              {page.commentsCount || 0} {tDash('comments')}
             </span>
             {pendingCount > 0 && (
               <span className="text-xs font-semibold status-warning px-1.5 py-0.5 rounded">
-                {pendingCount} {t('dashboard.pending')}
+                {pendingCount} {tDash('pending')}
               </span>
             )}
           </div>
@@ -133,7 +136,7 @@ export function PageAccordionItem({
                   {(page.commentsCount ?? 0).toLocaleString()}
                 </p>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5">
-                  {t('comments.title')}
+                  {tComments('title')}
                 </p>
               </div>
               <div className="bg-card rounded-xl p-3 text-center shadow-sm">
@@ -141,7 +144,7 @@ export function PageAccordionItem({
                   {(page.repliesCount ?? 0).toLocaleString()}
                 </p>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5">
-                  {t('dashboard.autoReplies')}
+                  {tDash('autoReplies')}
                 </p>
               </div>
               <div className="bg-card rounded-xl p-3 text-center shadow-sm">
@@ -149,7 +152,7 @@ export function PageAccordionItem({
                   {page.replyRate ?? 0}%
                 </p>
                 <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mt-1.5">
-                  {t('dashboard.replyRate')}
+                  {tDash('replyRate')}
                 </p>
               </div>
             </div>
@@ -170,7 +173,7 @@ export function PageAccordionItem({
                       : 'bg-muted text-muted-foreground'
                   )}
                 >
-                  {page.autoReplyEnabled ? t('common.active') : t('common.inactive')}
+                  {page.autoReplyEnabled ? tc('active') : tc('inactive')}
                 </span>
               </div>
 
@@ -188,7 +191,7 @@ export function PageAccordionItem({
                       : 'bg-muted text-muted-foreground'
                   )}
                 >
-                  {page.instagramAutoReplyEnabled ? t('common.active') : t('common.inactive')}
+                  {page.instagramAutoReplyEnabled ? tc('active') : tc('inactive')}
                 </span>
               </div>
             </div>
@@ -201,12 +204,12 @@ export function PageAccordionItem({
                   isActive ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
                 )} />
                 <span className="text-xs font-bold text-muted-foreground">
-                  {t('dashboard.pageAccordion.status' as TranslationKey)}:{' '}
-                  {isActive ? t('common.active') : t('common.inactive')}
+                  {tDash('pageAccordion.status')}:{' '}
+                  {isActive ? tc('active') : tc('inactive')}
                 </span>
               </div>
               <span className="text-xs text-muted-foreground">
-                {formatConnectedDate(page.createdAt as string, t)}
+                {formatConnectedDate(page.createdAt as string, tPages, tc('noData'))}
               </span>
             </div>
 
@@ -215,7 +218,7 @@ export function PageAccordionItem({
               href={`/pages#page-${page.id}`}
               className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-700 transition-colors"
             >
-              {t('dashboard.pageAccordion.managePage' as TranslationKey)}
+              {tDash('pageAccordion.managePage')}
               <ArrowRight className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
             </Link>
           </div>

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { aiApi, subscriptionApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
 interface AiLimit {
   allowed: boolean;
@@ -21,7 +21,8 @@ interface UseAiGenerationOptions {
 
 export function useAiGeneration(options: UseAiGenerationOptions = {}) {
   const { fetchLimitsOnMount = true } = options;
-  const { t } = useTranslation();
+  const tc = useTranslations('common');
+  const tPricing = useTranslations('pricing');
 
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStatus, setGenerationStatus] = useState('');
@@ -58,7 +59,7 @@ export function useAiGeneration(options: UseAiGenerationOptions = {}) {
     if (!aiLimit.allowed) return;
 
     setIsGenerating(true);
-    setGenerationStatus(t('common.loading'));
+    setGenerationStatus(tc('loading'));
 
     try {
       const { data: job } = await aiApi.generateAsync(params);
@@ -84,9 +85,9 @@ export function useAiGeneration(options: UseAiGenerationOptions = {}) {
             stopPolling();
             setIsGenerating(false);
             setGenerationStatus('');
-            toast.error(t('common.error'));
+            toast.error(tc('error'));
           } else {
-            setGenerationStatus(t('common.loading'));
+            setGenerationStatus(tc('loading'));
           }
         } catch {
           stopPolling();
@@ -100,7 +101,7 @@ export function useAiGeneration(options: UseAiGenerationOptions = {}) {
           stopPolling();
           setIsGenerating(false);
           setGenerationStatus('');
-          toast.error(t('common.error'));
+          toast.error(tc('error'));
         }
       }, 60000);
 
@@ -112,16 +113,16 @@ export function useAiGeneration(options: UseAiGenerationOptions = {}) {
       if (axiosErr.response?.status === 403) {
         setGenerationStatus('');
         fetchLimits();
-        toast.error(axiosErr.response?.data?.error || t('common.error'), {
+        toast.error(axiosErr.response?.data?.error || tc('error'), {
           duration: 5000,
           action: {
-            label: t('pricing.upgrade'),
+            label: tPricing('upgrade'),
             onClick: () => window.location.href = '/settings'
           }
         });
       }
     }
-  }, [aiLimit.allowed, fetchLimits, t]);
+  }, [aiLimit.allowed, fetchLimits, tc, tPricing]);
 
   const reset = useCallback(() => {
     setGeneratedReply(null);

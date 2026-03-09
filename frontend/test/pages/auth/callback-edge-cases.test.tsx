@@ -14,22 +14,6 @@ vi.mock('@/lib/store', () => ({
   },
 }));
 
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'auth.loginCancelled': 'Login cancelled',
-        'auth.loginError': 'Login error',
-        'auth.loginTimeout': 'Login timed out',
-        'auth.redirecting': 'Redirecting...',
-        'errors.networkError': 'Network error',
-      };
-      return map[key] ?? key;
-    },
-    language: 'ar',
-  }),
-}));
-
 vi.mock('@/constants/auth', () => ({
   FB_CALLBACK_PATH: '/auth/callback',
 }));
@@ -102,7 +86,7 @@ describe('AuthCallback - edge cases', () => {
 
     render(<AuthCallback />);
 
-    expect(screen.getByText('Login cancelled')).toBeInTheDocument();
+    expect(screen.getByText('Login was cancelled')).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
 
     // Should redirect after 3 seconds
@@ -148,7 +132,7 @@ describe('AuthCallback - edge cases', () => {
       await vi.advanceTimersByTimeAsync(15100);
     });
 
-    expect(screen.getByText('Login timed out')).toBeInTheDocument();
+    expect(screen.getByText('Facebook is not responding. Please try again.')).toBeInTheDocument();
 
     // Should redirect to login after 3s
     await act(async () => {
@@ -356,7 +340,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     // Should NOT show error UI for AbortError
-    expect(screen.queryByText('Login error')).not.toBeInTheDocument();
+    expect(screen.queryByText('Login failed. Please try again.')).not.toBeInTheDocument();
     expect(screen.queryByText('Network error')).not.toBeInTheDocument();
   });
 });

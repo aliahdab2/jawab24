@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo, type ReactElement } from 're
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Modal, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, CharCounter } from '@/components/ui';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { templatesApi, rulesApi } from '@/lib/api';
 import { extractArrayData } from '@/lib/api-utils';
@@ -13,7 +13,8 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 
 const TemplatesPage: NextPageWithLayout = () => {
-  const { t } = useTranslation();
+  const t = useTranslations('templates');
+  const tc = useTranslations('common');
   const { isAuthenticated } = useAuthStore();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -144,11 +145,11 @@ const TemplatesPage: NextPageWithLayout = () => {
     <>
       {/* Header */}
       <PageHeader
-        title={t('templates.title')}
-        description={t('templates.description')}
+        title={t('title')}
+        description={t('description')}
         action={
           <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-            {t('templates.addTemplate')}
+            {t('addTemplate')}
           </Button>
         }
       />
@@ -173,11 +174,11 @@ const TemplatesPage: NextPageWithLayout = () => {
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
           <EmptyState
             icon={FileText}
-            title={t('templates.noTemplates')}
-            description={t('templates.noTemplatesDesc')}
+            title={t('noTemplates')}
+            description={t('noTemplatesDesc')}
             action={
               <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-                {t('templates.addTemplate')}
+                {t('addTemplate')}
               </Button>
             }
           />
@@ -188,36 +189,36 @@ const TemplatesPage: NextPageWithLayout = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={editingTemplate ? t('templates.editTemplate') : t('templates.addTemplate')}
+        title={editingTemplate ? t('editTemplate') : t('addTemplate')}
         size="md"
       >
         <div className="space-y-4">
           <div>
             <Input
-              label={t('templates.templateName')}
-              placeholder={t('templates.templateNamePlaceholder')}
+              label={t('templateName')}
+              placeholder={t('templateNamePlaceholder')}
               value={formData.name}
               onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
               className={clsx("!py-2.5", nameError && "!border-red-300 !ring-red-500")}
             />
             {nameError && (
-              <p className="text-xs text-red-500 mt-1">{t('templates.templateNameRequired')}</p>
+              <p className="text-xs text-red-500 mt-1">{t('templateNameRequired')}</p>
             )}
           </div>
 
           <div>
             <Textarea
-              label={t('templates.templateContent')}
-              placeholder={t('templates.messagePlaceholder')}
+              label={t('templateContent')}
+              placeholder={t('messagePlaceholder')}
               value={formData.message}
               onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-              helperText={t('templates.variablesDesc')}
+              helperText={t('variablesDesc')}
               className="!py-2.5 min-h-[100px]"
               dir={formData.message ? 'auto' : undefined}
             />
             <div className="flex items-center justify-between text-xs mt-1.5">
               {messageError ? (
-                <p className="text-red-500">{t('templates.messageRequired')}</p>
+                <p className="text-red-500">{t('messageRequired')}</p>
               ) : (
                 <span />
               )}
@@ -227,10 +228,10 @@ const TemplatesPage: NextPageWithLayout = () => {
 
           <div className="flex justify-end gap-3 pt-4 border-t border-theme-border">
             <Button variant="secondary" onClick={() => setIsModalOpen(false)}>
-              {t('common.cancel')}
+              {tc('cancel')}
             </Button>
             <Button onClick={handleSave}>
-              {editingTemplate ? t('common.save') : t('common.add')}
+              {editingTemplate ? tc('save') : tc('add')}
             </Button>
           </div>
         </div>
@@ -241,13 +242,13 @@ const TemplatesPage: NextPageWithLayout = () => {
         isOpen={!!deleteConfirmationId}
         onClose={() => setDeleteConfirmationId(null)}
         onConfirm={handleConfirmDelete}
-        title={t('templates.deleteTemplate')}
+        title={t('deleteTemplate')}
         message={
           deleteConfirmationId && (rulesCountMap[deleteConfirmationId] || 0) > 0
-            ? t('templates.deleteTemplateUsedByRules' as TranslationKey, { count: rulesCountMap[deleteConfirmationId] })
-            : t('templates.deleteTemplateConfirm')
+            ? t('deleteTemplateUsedByRules', { count: rulesCountMap[deleteConfirmationId] })
+            : t('deleteTemplateConfirm')
         }
-        confirmText={t('common.delete')}
+        confirmText={tc('delete')}
         variant={
           deleteConfirmationId && (rulesCountMap[deleteConfirmationId] || 0) > 0
             ? 'warning'
@@ -265,4 +266,6 @@ TemplatesPage.getLayout = (page: ReactElement) => (
 
 export default TemplatesPage;
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.templates]);

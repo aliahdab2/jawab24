@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import {
   Clock,
   AlertTriangle,
@@ -38,7 +39,11 @@ export const MessageCard = React.memo(function MessageCard({
   animationDelay = 0,
   className,
 }: MessageCardProps) {
-  const { t, dateLocale } = useTranslation();
+  const t = useTranslations('comments');
+  const tc = useTranslations('common');
+  const tDashboard = useTranslations('dashboard');
+  const tMessages = useTranslations('messages');
+  const { dateLocale } = useLanguage();
 
   const isPending = !conv.lastMessage.replied && conv.lastMessage.direction === 'incoming';
 
@@ -76,7 +81,7 @@ export const MessageCard = React.memo(function MessageCard({
             isAI ? 'text-violet-600' : 'text-emerald-600'
           )}
         >
-          {isAI ? t('dashboard.aiReply') : t('dashboard.templateReply')}
+          {isAI ? tDashboard('aiReply') : tDashboard('templateReply')}
         </span>
       </div>
     );
@@ -138,14 +143,14 @@ export const MessageCard = React.memo(function MessageCard({
         <div className="absolute top-3 end-3 sm:top-4 sm:end-4 z-10 animate-fade-in">
           <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full status-violet border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
             <PauseCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-            {t('messages.smartReplyPaused')}
+            {tMessages('smartReplyPaused')}
           </div>
         </div>
       ) : conv.needsHumanAttention ? (
         <div className="absolute top-3 end-3 sm:top-4 sm:end-4 z-10 animate-fade-in">
           <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full status-error border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider animate-pulse-soft">
             <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-            {t('comments.needsAttention')}
+            {t('needsAttention')}
           </div>
         </div>
       ) : (
@@ -153,7 +158,7 @@ export const MessageCard = React.memo(function MessageCard({
           <div className="absolute top-3 end-3 sm:top-4 sm:end-4 z-10 animate-fade-in">
             <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full status-warning border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
               <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-              {t('comments.pending')}
+              {t('pending')}
             </div>
           </div>
         )
@@ -171,7 +176,7 @@ export const MessageCard = React.memo(function MessageCard({
           <div className="flex flex-col items-start min-w-0">
             <div className="flex flex-col px-1">
               <span className="text-sm font-bold text-foreground truncate">
-                {conv.senderName || t('common.unknownUser')}
+                {conv.senderName || tc('unknownUser')}
               </span>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] text-muted-foreground">
@@ -197,14 +202,14 @@ export const MessageCard = React.memo(function MessageCard({
               className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-muted text-muted-foreground border-theme-border hover:bg-muted/80 hover:text-foreground"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              {t('comments.resolve')}
+              {t('resolve')}
             </button>
           ) : <div />}
 
           {!hasOutgoingInLastTwo && (
             <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600 opacity-60 group-hover:opacity-100 transition-opacity animate-fade-in">
               <MessageCircle className="w-3.5 h-3.5" />
-              <span>{t('comments.reply')}</span>
+              <span>{t('reply')}</span>
             </div>
           )}
         </div>

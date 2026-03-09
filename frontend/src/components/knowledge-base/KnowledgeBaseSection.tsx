@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { KnowledgeSection, SectionConfig } from './types';
 
 interface KnowledgeBaseSectionProps {
@@ -18,7 +18,7 @@ export function KnowledgeBaseSection({
   onToggle,
   onChange,
 }: KnowledgeBaseSectionProps) {
-  const { t } = useTranslation();
+  const tKb = useTranslations('kb');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasContent = section.content.trim().length > 0;
 
@@ -41,7 +41,7 @@ export function KnowledgeBaseSection({
   // Preview: first line of content, truncated
   const preview = hasContent
     ? section.content.split('\n')[0].slice(0, 60) + (section.content.length > 60 ? '...' : '')
-    : t('kb.section.tapToAdd' as TranslationKey);
+    : tKb('section.tapToAdd');
 
   return (
     <div
@@ -65,7 +65,7 @@ export function KnowledgeBaseSection({
         {/* Title + preview */}
         <div className="flex-1 min-w-0">
           <p className={`text-sm font-bold ${hasContent || isExpanded ? 'text-foreground' : 'text-muted-foreground'}`}>
-            {t(config.titleKey as TranslationKey)}
+            {tKb(config.titleKey)}
           </p>
           {!isExpanded && (
             <p className={`text-xs mt-0.5 truncate ${hasContent ? 'text-surface-500 dark:text-surface-700' : 'text-muted-foreground'}`}>
@@ -93,13 +93,13 @@ export function KnowledgeBaseSection({
       {isExpanded && (
         <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
           <p className="text-xs text-muted-foreground mb-2">
-            {t(config.descKey as TranslationKey)}
+            {tKb(config.descKey)}
           </p>
           <textarea
             ref={textareaRef}
             className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground"
-            placeholder={t(config.placeholderKey as TranslationKey)}
-            aria-label={t(config.titleKey as TranslationKey)}
+            placeholder={tKb(config.placeholderKey)}
+            aria-label={tKb(config.titleKey)}
             value={section.content}
             onChange={(e) => onChange(e.target.value)}
             onInput={autoResize}
@@ -110,7 +110,7 @@ export function KnowledgeBaseSection({
             <p className={`text-end text-xs mt-1 ${
               section.content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
             }`}>
-              {t('kb.charCount' as TranslationKey, { count: section.content.length, max: 5000 })}
+              {tKb('charCount', { count: section.content.length, max: 5000 })}
             </p>
           )}
         </div>

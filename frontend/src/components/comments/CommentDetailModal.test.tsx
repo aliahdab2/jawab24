@@ -27,13 +27,6 @@ vi.mock('@/lib/api', () => ({
   }
 }));
 
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    language: 'en',
-    dateLocale: undefined
-  })
-}));
 
 vi.mock('sonner', () => ({
   toast: {
@@ -92,7 +85,7 @@ describe('CommentDetailModal', () => {
 
     await waitFor(() => {
       // Button text shows the translation key for "Limit Reached" when disabled
-      const button = screen.getByRole('button', { name: /pricing\.limitReached/i });
+      const button = screen.getByRole('button', { name: /Limit Reached/i });
       expect(button).toBeDisabled();
     });
   });
@@ -107,12 +100,12 @@ describe('CommentDetailModal', () => {
 
     await renderModal();
 
-    const generateBtn = screen.getByRole('button', { name: /dashboard.aiReply/i });
+    const generateBtn = screen.getByRole('button', { name: /Smart Reply/i });
     fireEvent.click(generateBtn);
 
     // After generation, button shows "Regenerate" and stays enabled
     await waitFor(() => {
-      const regenBtn = screen.getByRole('button', { name: /comments\.regenerate/i });
+      const regenBtn = screen.getByRole('button', { name: /Regenerate/i });
       expect(regenBtn).toBeInTheDocument();
       expect(regenBtn).not.toBeDisabled();
     }, { timeout: 3000 });
@@ -158,7 +151,7 @@ describe('CommentDetailModal', () => {
 
     await waitFor(() => {
       expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /comments\.resolve/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Resolve/i })).toBeInTheDocument();
     });
   });
 
@@ -177,10 +170,10 @@ describe('CommentDetailModal', () => {
 
     await waitFor(() => {
       expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /comments\.resolve/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Resolve/i })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /comments\.resolve/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Resolve/i }));
     expect(onResolve).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
@@ -199,7 +192,7 @@ describe('CommentDetailModal', () => {
     });
 
     // Reply section is hidden for replied comments, so resolve button shouldn't exist
-    expect(screen.queryByRole('button', { name: /comments\.resolve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Resolve/i })).not.toBeInTheDocument();
   });
 
   it('shows comment message in the modal body', async () => {
@@ -225,15 +218,15 @@ describe('CommentDetailModal', () => {
 
       await renderModal({ comment: heldComment });
 
-      expect(screen.getByText('comments.heldReplyBanner')).toBeInTheDocument();
-      const textarea = screen.getByPlaceholderText('comments.typeReply');
+      expect(screen.getByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).toBeInTheDocument();
+      const textarea = screen.getByPlaceholderText('Type your reply here...');
       expect(textarea).toHaveValue('AI draft: Thanks for your interest!');
     });
 
     it('does not show held reply banner for normal unreplied comments', async () => {
       await renderModal();
 
-      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
 
     it('does not show held reply banner when flagReason is not held_low_confidence', async () => {
@@ -246,7 +239,7 @@ describe('CommentDetailModal', () => {
 
       await renderModal({ comment: flaggedComment });
 
-      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
 
     it('does not show held reply banner when comment is already replied', async () => {
@@ -261,7 +254,7 @@ describe('CommentDetailModal', () => {
 
       await renderModal({ comment: repliedComment });
 
-      expect(screen.queryByText('comments.heldReplyBanner')).not.toBeInTheDocument();
+      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
   });
 

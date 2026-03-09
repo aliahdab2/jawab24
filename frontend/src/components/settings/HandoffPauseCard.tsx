@@ -3,18 +3,18 @@ import {
   AlertTriangle,
   Check,
 } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
 
 export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
-  const { t } = useTranslation();
+  const t = useTranslations('settings');
 
   const presets = [
-    { value: 15, label: t('settings.duration15min' as TranslationKey) },
-    { value: 30, label: t('settings.duration30min' as TranslationKey) },
-    { value: 60, label: t('settings.duration1hr' as TranslationKey) },
-    { value: 120, label: t('settings.duration2hr' as TranslationKey) },
-    { value: 1440, label: t('settings.duration24hr' as TranslationKey) },
+    { value: 15, label: t('duration15min') },
+    { value: 30, label: t('duration30min') },
+    { value: 60, label: t('duration1hr') },
+    { value: 120, label: t('duration2hr') },
+    { value: 1440, label: t('duration24hr') },
   ];
 
   return (
@@ -24,11 +24,11 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
           <AlertTriangle className="w-6 h-6 landscape:w-5 landscape:h-5" />
         </div>
         <div className="text-start">
-          <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('settings.handoffPause.title')}</h3>
-          <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">{t('settings.handoffPause.warning' as TranslationKey)}</p>
+          <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('handoffPause.title')}</h3>
+          <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">{t('handoffPause.warning')}</p>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground font-medium mb-3">{t('settings.handoffPause.desc')}</p>
+      <p className="text-xs text-muted-foreground font-medium mb-3">{t('handoffPause.desc')}</p>
       <div className="flex flex-wrap gap-2">
         {presets.map((opt) => (
           <button

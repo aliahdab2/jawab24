@@ -2,7 +2,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
-import { useTranslation, type TranslationKey } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
 import {
   getAllCompetitorSlugs,
@@ -11,8 +11,9 @@ import {
   type Competitor,
 } from '@/data/competitors';
 
-/** Cast a dynamic compare key to TranslationKey — all keys are validated at build time via translation:validate */
-const k = (key: string) => key as TranslationKey;
+/** Cast a dynamic compare key for next-intl — all keys are validated at build time via translation:validate */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic keys from competitor slug
+const k = (key: string) => key as any;
 
 interface ComparePageProps {
   competitor: Competitor;
@@ -29,50 +30,51 @@ function FeatureValue({ value }: { value: boolean | string }) {
 }
 
 function FeatureLabel({ value }: { value: boolean | string }) {
-  const { t } = useTranslation();
+  const t = useTranslations('compare');
   if (typeof value === 'string') return null;
   return (
     <span className="sr-only">
-      {value ? t('compare.yes') : t('compare.no')}
+      {value ? t('yes') : t('no')}
     </span>
   );
 }
 
 export default function ComparePage({ competitor }: ComparePageProps) {
-  const { t, language } = useTranslation();
-  const isRTL = language === 'ar';
+  const t = useTranslations('compare');
+  const locale = useLocale();
+  const isRTL = locale === 'ar';
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const slug = competitor.slug;
 
   const faqs = [
-    { question: t(k(`compare.${slug}.faq.q1`)), answer: t(k(`compare.${slug}.faq.a1`)) },
-    { question: t(k(`compare.${slug}.faq.q2`)), answer: t(k(`compare.${slug}.faq.a2`)) },
-    { question: t(k(`compare.${slug}.faq.q3`)), answer: t(k(`compare.${slug}.faq.a3`)) },
+    { question: t(k(`${slug}.faq.q1`)), answer: t(k(`${slug}.faq.a1`)) },
+    { question: t(k(`${slug}.faq.q2`)), answer: t(k(`${slug}.faq.a2`)) },
+    { question: t(k(`${slug}.faq.q3`)), answer: t(k(`${slug}.faq.a3`)) },
   ];
 
   const advantages = [
-    t(k(`compare.${slug}.advantage1`)),
-    t(k(`compare.${slug}.advantage2`)),
-    t(k(`compare.${slug}.advantage3`)),
-    t(k(`compare.${slug}.advantage4`)),
+    t(k(`${slug}.advantage1`)),
+    t(k(`${slug}.advantage2`)),
+    t(k(`${slug}.advantage3`)),
+    t(k(`${slug}.advantage4`)),
   ];
 
   return (
     <>
       <Head>
-        <title>{t(k(`compare.${slug}.seoTitle`))}</title>
-        <meta name="description" content={t(k(`compare.${slug}.seoDescription`))} />
+        <title>{t(k(`${slug}.seoTitle`))}</title>
+        <meta name="description" content={t(k(`${slug}.seoDescription`))} />
         <link rel="canonical" href={BRAND_ASSETS.urls.canonical(`/compare/${slug}`)} />
 
-        <meta property="og:title" content={t(k(`compare.${slug}.seoTitle`))} />
-        <meta property="og:description" content={t(k(`compare.${slug}.seoDescription`))} />
+        <meta property="og:title" content={t(k(`${slug}.seoTitle`))} />
+        <meta property="og:description" content={t(k(`${slug}.seoDescription`))} />
         <meta property="og:url" content={BRAND_ASSETS.urls.canonical(`/compare/${slug}`)} />
         <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
         <meta property="og:type" content="website" />
 
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content={t(k(`compare.${slug}.seoTitle`))} />
-        <meta name="twitter:description" content={t(k(`compare.${slug}.seoDescription`))} />
+        <meta name="twitter:title" content={t(k(`${slug}.seoTitle`))} />
+        <meta name="twitter:description" content={t(k(`${slug}.seoDescription`))} />
         <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
 
         {/* WebPage structured data for AI extraction */}
@@ -82,8 +84,8 @@ export default function ComparePage({ competitor }: ComparePageProps) {
             __html: JSON.stringify({
               '@context': 'https://schema.org',
               '@type': 'WebPage',
-              'name': t(k(`compare.${slug}.seoTitle`)),
-              'description': t(k(`compare.${slug}.seoDescription`)),
+              'name': t(k(`${slug}.seoTitle`)),
+              'description': t(k(`${slug}.seoDescription`)),
               'url': `https://jawab24.com/compare/${slug}`,
               'isPartOf': {
                 '@type': 'WebSite',
@@ -125,21 +127,21 @@ export default function ComparePage({ competitor }: ComparePageProps) {
             className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
           >
             <BackArrow className="w-5 h-5" />
-            {t('compare.backToHome')}
+            {t('backToHome')}
           </Link>
 
           {/* Hero */}
           <h1 className="text-4xl font-bold mb-3">
-            {t('compare.vsTitle', { name: competitor.name })}
+            {t('vsTitle', { name: competitor.name })}
           </h1>
           <p className="text-lg text-foreground/70 leading-relaxed mb-10">
-            {t(k(`compare.${slug}.subtitle`))}
+            {t(k(`${slug}.subtitle`))}
           </p>
 
           {/* Feature Comparison Table */}
           <section className="mb-12">
             <h2 className="text-2xl font-semibold text-brand-400 mb-4">
-              {t('compare.featureComparison')}
+              {t('featureComparison')}
             </h2>
 
             {/* Desktop table */}
@@ -148,7 +150,7 @@ export default function ComparePage({ competitor }: ComparePageProps) {
                 <thead>
                   <tr className="bg-muted/50">
                     <th className="text-start py-3 px-4 font-semibold text-foreground">
-                      {t('compare.feature')}
+                      {t('feature')}
                     </th>
                     <th className="text-center py-3 px-4 font-semibold text-brand-500 w-32">
                       Jawab24
@@ -165,7 +167,8 @@ export default function ComparePage({ competitor }: ComparePageProps) {
                     return (
                       <tr key={key} className="border-t border-theme-border hover:bg-muted/30 transition-colors">
                         <td className="py-3 px-4 text-foreground">
-                          {t(`compare.feat.${key}`)}
+                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic feature key */}
+                          {t(`feat.${key}` as any)}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <FeatureValue value={feature.jawab24} />
@@ -186,7 +189,7 @@ export default function ComparePage({ competitor }: ComparePageProps) {
           {/* Why Choose Jawab24 */}
           <section className="mb-12">
             <h2 className="text-2xl font-semibold text-brand-400 mb-4">
-              {t('compare.whyChoose')}
+              {t('whyChoose')}
             </h2>
             <div className="space-y-3">
               {advantages.map((advantage, i) => (
@@ -201,7 +204,7 @@ export default function ComparePage({ competitor }: ComparePageProps) {
           {/* FAQ */}
           <section className="mb-12">
             <h2 className="text-2xl font-semibold text-brand-400 mb-4">
-              {t('compare.faqTitle')}
+              {t('faqTitle')}
             </h2>
             <div className="space-y-6">
               {faqs.map((faq, i) => (
@@ -215,13 +218,13 @@ export default function ComparePage({ competitor }: ComparePageProps) {
 
           {/* CTA */}
           <section className="text-center py-8 mb-8">
-            <h2 className="text-2xl font-bold mb-3">{t('compare.ctaTitle')}</h2>
-            <p className="text-foreground/70 mb-6">{t('compare.ctaDescription')}</p>
+            <h2 className="text-2xl font-bold mb-3">{t('ctaTitle')}</h2>
+            <p className="text-foreground/70 mb-6">{t('ctaDescription')}</p>
             <Link
               href="/login"
               className="inline-flex items-center px-8 py-3 bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors font-medium text-lg"
             >
-              {t('compare.cta')}
+              {t('cta')}
             </Link>
           </section>
 
@@ -254,7 +257,8 @@ export const getStaticPaths: GetStaticPaths = async () => {
 
 export const getStaticProps: GetStaticProps<ComparePageProps> = async (ctx) => {
   const { getI18nProps } = await import('@/i18n/getMessages');
-  const i18nProps = await getI18nProps(ctx);
+  const { PAGE_NAMESPACES } = await import('@/i18n/namespaces');
+  const i18nProps = await getI18nProps(ctx, [...PAGE_NAMESPACES.compare]);
   const slug = ctx.params?.slug as string;
   const competitor = getCompetitor(slug);
 

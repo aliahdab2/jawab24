@@ -4,13 +4,6 @@ import { MessageCard, Conversation } from './MessageCard';
 import type { Message } from '@/lib/api';
 
 // Mock translation hook
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => key,
-    dateLocale: undefined,
-  }),
-}));
-
 // Mock date-fns to return stable values
 vi.mock('date-fns', () => ({
   formatDistanceToNow: () => '5 minutes ago',
@@ -145,7 +138,7 @@ describe('MessageCard', () => {
 
       expect(screen.getByText('Unanswered question')).toBeInTheDocument();
       // Reply link should be shown
-      expect(screen.getByText('comments.reply')).toBeInTheDocument();
+      expect(screen.getByText('Reply')).toBeInTheDocument();
     });
 
     it('shows outgoing bubble even when needsHumanAttention is true', () => {
@@ -235,7 +228,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('comments.pending')).toBeInTheDocument();
+      expect(screen.getByText('In queue')).toBeInTheDocument();
     });
 
     it('shows NEEDS ATTENTION badge when flagged', () => {
@@ -252,7 +245,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('comments.needsAttention')).toBeInTheDocument();
+      expect(screen.getByText('Needs attention')).toBeInTheDocument();
     });
   });
 
@@ -272,7 +265,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('comments.resolve')).toBeInTheDocument();
+      expect(screen.getByText('Resolve')).toBeInTheDocument();
     });
 
     it('does not show resolve button when onResolve is not provided', () => {
@@ -288,7 +281,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.queryByText('comments.resolve')).not.toBeInTheDocument();
+      expect(screen.queryByText('Resolve')).not.toBeInTheDocument();
     });
 
     it('calls onResolve without triggering onClick', async () => {
@@ -308,7 +301,7 @@ describe('MessageCard', () => {
         />
       );
 
-      const resolveBtn = screen.getByText('comments.resolve');
+      const resolveBtn = screen.getByText('Resolve');
       resolveBtn.click();
 
       expect(onResolve).toHaveBeenCalledTimes(1);
@@ -338,7 +331,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('dashboard.templateReply')).toBeInTheDocument();
+      expect(screen.getByText('Template Reply')).toBeInTheDocument();
     });
 
     it('shows SMART REPLY badge for AI replies', () => {
@@ -361,7 +354,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('dashboard.aiReply')).toBeInTheDocument();
+      expect(screen.getByText('Smart Reply')).toBeInTheDocument();
     });
   });
 });

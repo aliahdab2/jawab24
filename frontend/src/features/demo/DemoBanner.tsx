@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react';
 import { Info, X } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { useIsDemoUser } from './useDemoMode';
 
 const DISMISS_KEY = 'jawab24_demo_banner_dismissed';
@@ -18,7 +18,8 @@ interface DemoBannerProps {
 }
 
 export function DemoBanner({ className = '' }: DemoBannerProps) {
-  const { t } = useTranslation();
+  const tAuth = useTranslations('auth');
+  const tc = useTranslations('common');
   const isDemoUser = useIsDemoUser();
   const [dismissed, setDismissed] = useState(false);
 
@@ -39,11 +40,11 @@ export function DemoBanner({ className = '' }: DemoBannerProps) {
     <div className={`alert-warning border-b px-3 py-1.5 ${className}`}>
       <div className="flex items-center justify-center gap-2">
         <Info className="w-3.5 h-3.5 flex-shrink-0" />
-        <span className="text-xs font-medium">{t('auth.demoBanner')}</span>
+        <span className="text-xs font-medium">{tAuth('demoBanner')}</span>
         <button
           onClick={handleDismiss}
           className="ms-auto p-0.5 rounded hover:bg-black/10 transition-colors flex-shrink-0"
-          aria-label={t('common.close')}
+          aria-label={tc('close')}
         >
           <X className="w-3.5 h-3.5" />
         </button>

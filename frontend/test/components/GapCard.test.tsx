@@ -2,23 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GapCard } from '@/components/knowledge-base/GapCard';
 
-// Mock translation hook
-vi.mock('@/i18n', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const keys: Record<string, string> = {
-        'kb.gaps.times': '{count}x',
-        'kb.gaps.answerPlaceholder': 'Type your answer...',
-        'kb.gaps.addToKb': 'Add to KB',
-        'kb.gaps.skip': 'Skip',
-      };
-      return keys[key] ?? key;
-    },
-    language: 'en',
-    setLanguage: vi.fn(),
-    isRTL: false,
-  }),
-}));
+// Translation mocked globally via test/setup.ts (next-intl mock returns real English strings)
 
 const mockGap = {
   id: 'gap-1',
@@ -39,8 +23,7 @@ describe('GapCard', () => {
     );
 
     expect(screen.getByText('do you have a warranty?')).toBeInTheDocument();
-    // Mock t() doesn't interpolate — renders the raw template
-    expect(screen.getByText('{count}x')).toBeInTheDocument();
+    expect(screen.getByText('3x')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Type your answer...')).not.toBeInTheDocument();
   });
 

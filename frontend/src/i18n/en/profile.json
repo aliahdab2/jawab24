@@ -1,0 +1,13 @@
+{
+  "title": "Complete Your Profile",
+  "emailRequired": "Please provide your email address to continue. We'll use it for account notifications and receipts.",
+  "emailAddress": "Email Address",
+  "emailPlaceholder": "your@email.com",
+  "privacyNote": "Your privacy is protected",
+  "complete": "Profile Complete!",
+  "redirecting": "Redirecting you now...",
+  "invalidEmail": "Please enter a valid email address",
+  "saveFailed": "Failed to save email. Please try again.",
+  "encrypted": "Encrypted",
+  "neverShared": "Never shared"
+}

@@ -1,0 +1,14 @@
+{
+  "dashboard": "Home",
+  "pages": "My Pages",
+  "comments": "Comments",
+  "messages": "Messages",
+  "templates": "Reply Templates",
+  "rules": "Reply Rules",
+  "settings": "Settings",
+  "logout": "Logout",
+  "advanced": "Advanced Settings",
+  "menu": "Menu",
+  "more": "More",
+  "integrations": "Stores"
+}

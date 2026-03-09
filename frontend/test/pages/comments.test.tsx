@@ -56,7 +56,7 @@ describe('CommentsPage', () => {
 
     render(<CommentsPage />);
 
-    expect(await screen.findByText(/comments.connectPage/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Connect a Page/i)).toBeInTheDocument();
   });
 
   it('renders comments list', async () => {

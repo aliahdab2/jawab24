@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
 import type { SSEEvent } from '@jawab24/shared';
 
@@ -35,7 +35,7 @@ const NATIVE_POLL_INTERVAL = 60_000;
 export function useSSE(): void {
     const queryClient = useQueryClient();
     const router = useRouter();
-    const { t } = useTranslation();
+    const t = useTranslations('sse');
 
     const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
@@ -89,8 +89,8 @@ export function useSSE(): void {
             incrementUnreadComments();
             if (!isOnPage('/comments')) {
                 showToast(
-                    t('sse.newComment', { name: event.data.fromName || '' }),
-                    { label: t('sse.view'), onClick: () => router.push('/comments') },
+                    t('newComment', { name: event.data.fromName || '' }),
+                    { label: t('view'), onClick: () => router.push('/comments') },
                 );
             }
         });
@@ -100,7 +100,7 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['comments'] });
             queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
             if (!isOnPage('/comments') && event.data.replyMethod === 'ai') {
-                showToast(t('sse.aiRepliedComment'));
+                showToast(t('aiRepliedComment'));
             }
         });
 
@@ -117,8 +117,8 @@ export function useSSE(): void {
             incrementUnreadMessages();
             if (!isOnPage('/messages')) {
                 showToast(
-                    t('sse.newMessage', { name: event.data.senderName || '' }),
-                    { label: t('sse.view'), onClick: () => router.push('/messages') },
+                    t('newMessage', { name: event.data.senderName || '' }),
+                    { label: t('view'), onClick: () => router.push('/messages') },
                 );
             }
         });
@@ -128,7 +128,7 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
             if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
-                showToast(t('sse.aiRepliedMessage'));
+                showToast(t('aiRepliedMessage'));
             }
         });
 

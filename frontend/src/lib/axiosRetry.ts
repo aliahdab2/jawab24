@@ -1,5 +1,9 @@
 import { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import { createT, type Language } from '../i18n';
+import type { Language } from '../i18n';
+import enErrors from '../i18n/en/errors.json';
+import arErrors from '../i18n/ar/errors.json';
+
+const ERROR_MESSAGES: Record<string, Record<string, string>> = { en: enErrors, ar: arErrors };
 
 /**
  * Configuration for retry logic
@@ -111,24 +115,25 @@ export function isTimeoutError(error: unknown): boolean {
  * Get user-friendly error message
  */
 export function getErrorMessage(error: unknown, language: Language = 'en'): string {
-    const t = createT(language);
+    const msgs = ERROR_MESSAGES[language] ?? ERROR_MESSAGES.en;
+    const t = (key: string) => msgs[key] ?? key;
 
     if (isTimeoutError(error)) {
-        return t('errors.timeout');
+        return t('timeout');
     }
 
     if (isNetworkError(error)) {
-        return t('errors.cannotConnect');
+        return t('cannotConnect');
     }
 
     const e = error as AxiosError;
     if (e?.response?.status === 429) {
-        return t('errors.tooManyRequests');
+        return t('tooManyRequests');
     }
 
     if (e?.response?.status && e.response.status >= 500) {
-        return t('errors.serverErrorRetry');
+        return t('serverErrorRetry');
     }
 
-    return t('errors.unexpectedError');
+    return t('unexpectedError');
 }

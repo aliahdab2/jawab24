@@ -13,7 +13,8 @@ import {
   Star,
   ShoppingBag
 } from 'lucide-react';
-import { useTranslation } from '@/i18n';
+import { useTranslations, useLocale } from 'next-intl';
+import { useLanguage } from '@/i18n/hooks';
 import { Button, BrandLogo, FacebookIcon, AppSkeleton } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -26,7 +27,12 @@ import { DemoLoginButton } from '@/features/demo';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { t, language, setLanguage } = useTranslation();
+  const t = useTranslations('auth');
+  const tc = useTranslations('common');
+  const tShopify = useTranslations('shopify');
+  const tSalla = useTranslations('salla');
+  const locale = useLocale();
+  const { setLanguage } = useLanguage();
   const setAuth = useAuthStore((state) => state.setAuth);
 
   const [mounted, setMounted] = useState(false);
@@ -92,7 +98,7 @@ export default function LoginPage() {
     // Check for Facebook App ID
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     if (!fbAppId) {
-      toast.error(t('auth.loginError'));
+      toast.error(t('loginError'));
       return;
     }
 
@@ -139,7 +145,7 @@ export default function LoginPage() {
         /* eslint-enable @typescript-eslint/no-explicit-any */
 
         if (!result.accessToken) {
-          toast.info(t('auth.loginCancelled'));
+          toast.info(t('loginCancelled'));
           return;
         }
 
@@ -150,7 +156,7 @@ export default function LoginPage() {
 
         setAuth(user, token, result.accessToken.token);
 
-        const finalLocale = settings?.dashboardLanguage || language || 'ar';
+        const finalLocale = settings?.dashboardLanguage || locale || 'ar';
         useUIStore.getState().setLanguage(finalLocale);
 
         const returnUrl = router.query.redirect as string || '/dashboard';
@@ -162,7 +168,7 @@ export default function LoginPage() {
         const msg = error instanceof Error ? error.message : '';
         const code = (error as { code?: string }).code;
         if (msg.includes('cancel') || msg.includes('Cancel')) {
-          toast.info(t('auth.loginCancelled'));
+          toast.info(t('loginCancelled'));
           return;
         }
 
@@ -176,11 +182,11 @@ export default function LoginPage() {
           const { Browser } = await import('@capacitor/browser');
           const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
           const normalizedOrigin = siteUrl.replace(/\/$/, '');
-          const localePath = language === 'ar' ? '' : `/${language}`;
+          const localePath = locale === 'ar' ? '' : `/${locale}`;
           const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
           const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
           const returnUrl = router.query.redirect as string || '/dashboard';
-          const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
+          const state = encodeURIComponent(`${returnUrl}|mobile|${locale}`);
           const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
           await Browser.open({ url: oauthUrl });
         } catch (fallbackError: unknown) {
@@ -189,13 +195,13 @@ export default function LoginPage() {
           });
 
           if (msg === 'TIMEOUT') {
-            toast.error(t('auth.loginTimeout'));
+            toast.error(t('loginTimeout'));
           } else if (msg.includes('network') || code === 'NETWORK_ERROR') {
-            toast.error(t('auth.networkError'));
+            toast.error(t('networkError'));
           } else if ((error as { response?: { data?: { message?: string } } }).response?.data?.message) {
             toast.error((error as { response: { data: { message: string } } }).response.data.message);
           } else {
-            toast.error(t('auth.loginError'));
+            toast.error(t('loginError'));
           }
         }
       }
@@ -211,33 +217,33 @@ export default function LoginPage() {
 
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
         const normalizedOrigin = siteUrl.replace(/\/$/, '');
-        const localePath = language === 'ar' ? '' : `/${language}`;
+        const localePath = locale === 'ar' ? '' : `/${locale}`;
         const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
         const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
         const returnUrl = router.query.redirect as string || '/dashboard';
-        const state = encodeURIComponent(`${returnUrl}|mobile|${language}`);
+        const state = encodeURIComponent(`${returnUrl}|mobile|${locale}`);
 
         const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
 
         await Browser.open({ url: oauthUrl });
       } catch (error: unknown) {
         captureError(error, 'iOS login error', { tags: { page: 'login', platform: 'ios' } });
-        toast.error(t('auth.loginError'));
+        toast.error(t('loginError'));
       }
 
     } else {
       // --- WEB BROWSER LOGIN FLOW ---
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
-      const localePath = language === 'ar' ? '' : `/${language}`;
+      const localePath = locale === 'ar' ? '' : `/${locale}`;
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
       const urlParams = new URLSearchParams(window.location.search);
       const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
-      const state = encodeURIComponent(`${returnUrl}|web|${language}`);
+      const state = encodeURIComponent(`${returnUrl}|web|${locale}`);
 
       const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const displayMode = isMobileWeb ? 'touch' : 'page';
@@ -247,28 +253,28 @@ export default function LoginPage() {
   }
 
   const toggleLanguage = () => {
-    setLanguage(language === 'ar' ? 'en' : 'ar');
+    setLanguage(locale === 'ar' ? 'en' : 'ar');
   };
 
   const features = [
     {
       icon: Zap,
-      title: t('auth.instantSetup'),
-      desc: t('auth.instantSetupDesc'),
+      title: t('instantSetup'),
+      desc: t('instantSetupDesc'),
       color: 'text-amber-500 dark:text-brand-400',
       bg: 'bg-amber-50 dark:bg-brand-400/10'
     },
     {
       icon: ShieldCheck,
-      title: t('auth.secureOfficial'),
-      desc: t('auth.secureOfficialDesc'),
+      title: t('secureOfficial'),
+      desc: t('secureOfficialDesc'),
       color: 'text-brand-600 dark:text-brand-400',
       bg: 'bg-brand-50 dark:bg-brand-400/10'
     },
     {
       icon: MessageSquare,
-      title: t('auth.amazingAccuracy'),
-      desc: t('auth.amazingAccuracyDesc'),
+      title: t('amazingAccuracy'),
+      desc: t('amazingAccuracyDesc'),
       color: 'text-violet-600 dark:text-[#bfe1d4]',
       bg: 'bg-violet-50 dark:bg-[rgba(191,225,212,0.08)]'
     }
@@ -277,12 +283,12 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>{BRAND_ASSETS.meta.appTitle} - {t('auth.login')}</title>
-        <meta name="description" content={t('auth.seoDescription')} />
-        <meta name="keywords" content={t('auth.seoKeywords')} />
+        <title>{BRAND_ASSETS.meta.appTitle} - {t('login')}</title>
+        <meta name="description" content={t('seoDescription')} />
+        <meta name="keywords" content={t('seoKeywords')} />
         <link rel="canonical" href={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/login' : '/login')} />
-        <meta property="og:title" content={t('auth.ogTitle')} />
-        <meta property="og:description" content={t('auth.ogDescription')} />
+        <meta property="og:title" content={t('ogTitle')} />
+        <meta property="og:description" content={t('ogDescription')} />
         <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/login' : '/login')} />
       </Head>
 
@@ -305,17 +311,17 @@ export default function LoginPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 border border-white/10 mb-6 animate-slide-up">
               <Sparkles className="w-4 h-4 text-brand-400" />
               <span className="text-xs font-bold text-brand-400 uppercase tracking-widest">
-                {t('auth.nextGenAutoReplies')}
+                {t('nextGenAutoReplies')}
               </span>
             </div>
 
             <h1 className="text-3xl xl:text-4xl font-display font-extrabold text-white mb-4 leading-tight tracking-tight animate-slide-up animation-delay-100">
-              {t('auth.startYourJourney')}
-              <span className="block text-brand-500">{t('auth.smartGrowthJourney')}</span>
+              {t('startYourJourney')}
+              <span className="block text-brand-500">{t('smartGrowthJourney')}</span>
             </h1>
 
             <p className="text-base text-white/60 mb-8 leading-relaxed font-medium animate-slide-up animation-delay-200">
-              {t('auth.journeyDesc')}
+              {t('journeyDesc')}
             </p>
 
             <div className="grid grid-cols-1 gap-4 animate-slide-up animation-delay-300">
@@ -338,13 +344,13 @@ export default function LoginPage() {
                 {[1, 2, 3, 4, 5].map(s => <Star key={s} className="w-3 h-3 text-amber-400 fill-amber-400 dark:text-[#bfe1d4] dark:fill-[#bfe1d4]" />)}
               </div>
               <p className="text-sm text-white font-medium italic mb-3">
-                "{t('auth.testimonialQuote')}"
+                "{t('testimonialQuote')}"
               </p>
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-brand-500 dark:bg-brand-400 flex items-center justify-center text-white font-bold text-xs">MA</div>
                 <div>
                   <div className="text-white font-bold text-xs">Mohammed A.</div>
-                  <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">{t('auth.testimonialAuthor')}</div>
+                  <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">{t('testimonialAuthor')}</div>
                 </div>
               </div>
             </div>
@@ -370,7 +376,7 @@ export default function LoginPage() {
               onClick={toggleLanguage}
               className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 dark:hover:text-brand-400 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-400/10 transition-all"
             >
-              {t('common.switchLanguage')}
+              {tc('switchLanguage')}
             </button>
           </div>
 
@@ -382,27 +388,27 @@ export default function LoginPage() {
             <div className="w-full max-w-lg mx-auto pt-6 lg:pt-8">
               <div className="text-center lg:text-start mb-6">
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-3 tracking-tight">
-                  {t('auth.welcome')}
+                  {t('welcome')}
                 </h2>
                 <p className="text-base sm:text-lg lg:text-xl text-muted-foreground font-medium">
-                  {t('auth.welcomeBackDesc')}
+                  {t('welcomeBackDesc')}
                 </p>
 
                 {/* Trust signals */}
                 <div className="hidden lg:flex items-center gap-6 mt-5">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
-                    <span className="text-sm font-bold text-muted-foreground">{t('auth.stat1Label')}</span>
+                    <span className="text-sm font-bold text-muted-foreground">{t('stat1Label')}</span>
                   </div>
                   <div className="w-px h-4 bg-theme-border" aria-hidden="true" />
                   <div className="flex items-center gap-2">
                     <Zap className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
-                    <span className="text-sm font-bold text-muted-foreground">{t('auth.stat2Label')}</span>
+                    <span className="text-sm font-bold text-muted-foreground">{t('stat2Label')}</span>
                   </div>
                   <div className="w-px h-4 bg-theme-border" aria-hidden="true" />
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="w-3.5 h-3.5 text-brand-500" aria-hidden="true" />
-                    <span className="text-sm font-bold text-muted-foreground">{t('auth.stat3Label')}</span>
+                    <span className="text-sm font-bold text-muted-foreground">{t('stat3Label')}</span>
                   </div>
                 </div>
               </div>
@@ -438,10 +444,10 @@ export default function LoginPage() {
                       </div>
                       <div>
                         <p className="font-bold text-emerald-900 dark:text-emerald-300 text-sm">
-                          {t('shopify.installDetected')}
+                          {tShopify('installDetected')}
                         </p>
                         <p className="text-emerald-700 dark:text-emerald-400 text-sm mt-1">
-                          {t('shopify.loginToConnect')}
+                          {tShopify('loginToConnect')}
                         </p>
                       </div>
                     </div>
@@ -451,7 +457,7 @@ export default function LoginPage() {
                 {urlParams?.get('shopify_error') === 'already_connected' && (
                   <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
                     <p className="font-bold text-red-900 dark:text-red-300 text-sm">
-                      {t('shopify.errorAlreadyConnected')}
+                      {tShopify('errorAlreadyConnected')}
                     </p>
                   </div>
                 )}
@@ -459,7 +465,7 @@ export default function LoginPage() {
                 {urlParams?.get('shopify_error') === 'auth_failed' && (
                   <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
                     <p className="font-bold text-red-900 dark:text-red-300 text-sm">
-                      {t('shopify.errorAuthFailed')}
+                      {tShopify('errorAuthFailed')}
                     </p>
                   </div>
                 )}
@@ -473,10 +479,10 @@ export default function LoginPage() {
                       </div>
                       <div>
                         <p className="font-bold text-teal-900 dark:text-teal-300 text-sm">
-                          {t('salla.installDetected')}
+                          {tSalla('installDetected')}
                         </p>
                         <p className="text-teal-700 dark:text-teal-400 text-sm mt-1">
-                          {t('salla.loginToConnect')}
+                          {tSalla('loginToConnect')}
                         </p>
                       </div>
                     </div>
@@ -486,7 +492,7 @@ export default function LoginPage() {
                 {urlParams?.get('salla_error') === 'already_connected' && (
                   <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
                     <p className="font-bold text-red-900 dark:text-red-300 text-sm">
-                      {t('salla.errorAlreadyConnected')}
+                      {tSalla('errorAlreadyConnected')}
                     </p>
                   </div>
                 )}
@@ -494,7 +500,7 @@ export default function LoginPage() {
                 {urlParams?.get('salla_error') === 'auth_failed' && (
                   <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
                     <p className="font-bold text-red-900 dark:text-red-300 text-sm">
-                      {t('salla.errorAuthFailed')}
+                      {tSalla('errorAuthFailed')}
                     </p>
                   </div>
                 )}
@@ -506,9 +512,9 @@ export default function LoginPage() {
                       <Bot className="w-5 h-5 text-brand-600 dark:text-brand-400" aria-hidden="true" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-0.5">{t('auth.didYouKnow')}</h3>
+                      <h3 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-0.5">{t('didYouKnow')}</h3>
                       <p className="text-brand-700 dark:text-brand-400/80 text-sm font-medium leading-relaxed">
-                        {t('auth.didYouKnowDesc')}
+                        {t('didYouKnowDesc')}
                       </p>
                     </div>
                   </div>
@@ -523,7 +529,7 @@ export default function LoginPage() {
                   >
                     <div className="flex items-center justify-center gap-3 text-white">
                       <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
-                      <span className="text-white">{t('auth.loginWithFacebook')}</span>
+                      <span className="text-white">{t('loginWithFacebook')}</span>
                     </div>
                   </Button>
 
@@ -536,11 +542,11 @@ export default function LoginPage() {
             {/* Terms */}
             <div className="w-full max-w-lg mx-auto mt-6 py-4 lg:py-8 lg:mt-8 text-center lg:text-start">
               <p className="text-sm text-muted-foreground font-medium">
-                {t('auth.termsAgreement')}
+                {t('termsAgreement')}
                 <br className="sm:hidden" />
-                <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.termsOfService')}</Link>
-                {t('auth.and')}
-                <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('auth.privacyPolicy')}</Link>
+                <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('termsOfService')}</Link>
+                {t('and')}
+                <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('privacyPolicy')}</Link>
               </p>
             </div>
           </div>
@@ -563,4 +569,6 @@ export default function LoginPage() {
   );
 }
 
-export { getStaticProps } from '@/i18n/getMessages';
+import { makeGetStaticProps } from '@/i18n/getMessages';
+import { PAGE_NAMESPACES } from '@/i18n/namespaces';
+export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.login]);
