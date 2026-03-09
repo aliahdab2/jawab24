@@ -382,43 +382,37 @@ smoke_test_content() {
 
     F_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "frontend-$DEPLOY_ENV")
 
-    # Warm up the frontend — Next.js standalone may need a few requests before CSS is in the response
-    local CSS_FOUND=false
-    for i in 1 2 3 4 5; do
-        DASHBOARD_HTML=$(docker exec "$F_ID" wget -qO- http://127.0.0.1:3001/en/dashboard 2>/dev/null || echo "FETCH_FAILED")
-        if echo "$DASHBOARD_HTML" | grep -q '/_next/static/css/'; then
-            CSS_FOUND=true
-            break
-        fi
-        echo "   ⏳ Warm-up request $i (CSS not yet in response, retrying...)"
-        sleep 3
-    done
+    # Use /en/login for smoke test — it's a public page with full SSR (CSS always present).
+    # Dashboard pages render client-side skeletons in standalone mode and may lack CSS refs.
+    local SMOKE_URL="http://127.0.0.1:3001/en/login"
+    local SMOKE_HTML
+    SMOKE_HTML=$(docker exec "$F_ID" wget -qO- "$SMOKE_URL" 2>/dev/null || echo "FETCH_FAILED")
 
-    if echo "$DASHBOARD_HTML" | grep -q "FETCH_FAILED"; then
-        echo "   ❌ Could not fetch /en/dashboard from frontend container"
+    if echo "$SMOKE_HTML" | grep -q "FETCH_FAILED"; then
+        echo "   ❌ Could not fetch /en/login from frontend container"
         exit 1
     fi
 
     # Verify it's actual HTML (not a redirect, image, or error)
-    if ! echo "$DASHBOARD_HTML" | grep -qi "</html>"; then
-        echo "   ❌ /en/dashboard did not return valid HTML!"
+    if ! echo "$SMOKE_HTML" | grep -qi "</html>"; then
+        echo "   ❌ /en/login did not return valid HTML!"
         echo "   First 500 chars of response:"
-        echo "$DASHBOARD_HTML" | head -c 500
+        echo "$SMOKE_HTML" | head -c 500
         exit 1
     fi
 
     # Verify the page contains Next.js app markers (script tags, __next div)
-    if ! echo "$DASHBOARD_HTML" | grep -q "__next"; then
-        echo "   ❌ /en/dashboard is missing Next.js app container (__next)"
+    if ! echo "$SMOKE_HTML" | grep -q "__next"; then
+        echo "   ❌ /en/login is missing Next.js app container (__next)"
         echo "   The frontend may not have built correctly."
         exit 1
     fi
 
-    echo "   ✅ Dashboard page returns valid HTML with Next.js content"
+    echo "   ✅ Login page returns valid HTML with Next.js content"
 
     # Verify CSS is loaded (catches missing postcss.config.js / tailwind failures)
-    if [ "$CSS_FOUND" != "true" ]; then
-        echo "   ❌ No CSS stylesheet reference found after 5 warm-up attempts!"
+    if ! echo "$SMOKE_HTML" | grep -q '/_next/static/css/'; then
+        echo "   ❌ No CSS stylesheet reference found in /en/login HTML!"
         echo "   This likely means Tailwind CSS was not built correctly."
         echo "   Check that postcss.config.js and tailwind.config.js exist."
         exit 1
