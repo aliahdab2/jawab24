@@ -382,18 +382,27 @@ smoke_test_content() {
 
     F_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "frontend-$DEPLOY_ENV")
 
-    # Use /en/login for smoke test — it's a public page with full SSR (CSS always present).
-    # Dashboard pages render client-side skeletons in standalone mode and may lack CSS refs.
-    local SMOKE_URL="http://127.0.0.1:3001/en/login"
+    # Verify CSS was built by checking static files on disk.
+    # SSR HTML from the standalone server inconsistently includes CSS link tags
+    # (depends on warm-up state), so checking the filesystem is more reliable.
+    local CSS_FILES
+    CSS_FILES=$(docker exec "$F_ID" ls /app/frontend/.next/static/css/ 2>/dev/null)
+    if echo "$CSS_FILES" | grep -q '\.css'; then
+        echo "   ✅ CSS stylesheets built successfully"
+    else
+        echo "   ❌ No CSS files in .next/static/css/ — Tailwind CSS was not built!"
+        exit 1
+    fi
+
+    # Verify /en/login returns valid HTML with Next.js content
     local SMOKE_HTML
-    SMOKE_HTML=$(docker exec "$F_ID" wget -qO- "$SMOKE_URL" 2>/dev/null || echo "FETCH_FAILED")
+    SMOKE_HTML=$(docker exec "$F_ID" wget -qO- http://127.0.0.1:3001/en/login 2>/dev/null || echo "FETCH_FAILED")
 
     if echo "$SMOKE_HTML" | grep -q "FETCH_FAILED"; then
         echo "   ❌ Could not fetch /en/login from frontend container"
         exit 1
     fi
 
-    # Verify it's actual HTML (not a redirect, image, or error)
     if ! echo "$SMOKE_HTML" | grep -qi "</html>"; then
         echo "   ❌ /en/login did not return valid HTML!"
         echo "   First 500 chars of response:"
@@ -401,7 +410,6 @@ smoke_test_content() {
         exit 1
     fi
 
-    # Verify the page contains Next.js app markers (script tags, __next div)
     if ! echo "$SMOKE_HTML" | grep -q "__next"; then
         echo "   ❌ /en/login is missing Next.js app container (__next)"
         echo "   The frontend may not have built correctly."
@@ -409,25 +417,6 @@ smoke_test_content() {
     fi
 
     echo "   ✅ Login page returns valid HTML with Next.js content"
-
-    # Verify CSS is loaded (catches missing postcss.config.js / tailwind failures)
-    # Next.js standalone may inline styles or reference CSS via /_next/static/css/
-    if echo "$SMOKE_HTML" | grep -q '/_next/static/css/'; then
-        echo "   ✅ CSS stylesheets are present (external links)"
-    elif echo "$SMOKE_HTML" | grep -q '<style'; then
-        echo "   ✅ CSS styles are present (inline)"
-    else
-        echo "   ⚠️  No CSS link tags found in SSR HTML (CSS loads client-side in standalone mode)"
-        # Verify CSS files exist in the static directory instead
-        local CSS_COUNT
-        CSS_COUNT=$(docker exec "$F_ID" ls /app/frontend/.next/static/css/*.css 2>/dev/null | wc -l)
-        if [ "$CSS_COUNT" -gt 0 ]; then
-            echo "   ✅ Found $CSS_COUNT CSS file(s) in .next/static/css/ — build is valid"
-        else
-            echo "   ❌ No CSS files in .next/static/css/ — Tailwind CSS was not built!"
-            exit 1
-        fi
-    fi
 
     # Also verify the API health endpoint
     B_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "backend-$DEPLOY_ENV")
