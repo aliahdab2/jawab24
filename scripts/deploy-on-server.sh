@@ -382,6 +382,10 @@ smoke_test_content() {
 
     F_ID=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "frontend-$DEPLOY_ENV")
 
+    # Warm up the frontend (first request after cold start may lack CSS links)
+    docker exec "$F_ID" wget -qO /dev/null http://127.0.0.1:3001/en/dashboard 2>/dev/null || true
+    sleep 3
+
     # Check that the dashboard page returns HTML with expected content markers
     DASHBOARD_HTML=$(docker exec "$F_ID" wget -qO- http://127.0.0.1:3001/en/dashboard 2>/dev/null || echo "FETCH_FAILED")
 
