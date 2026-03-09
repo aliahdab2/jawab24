@@ -11,7 +11,7 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "npm run lint && next build",
-    "build:mobile": "NEXT_PUBLIC_BUILD_TIME=$(date +%s%3N) IS_MOBILE_BUILD=true next build && rm -rf out && cp -R .next-mobile out",
+    "build:mobile": "rm -rf .next .next-mobile out && NEXT_PUBLIC_BUILD_TIME=$(date +%s%3N) IS_MOBILE_BUILD=true next build && cp -R .next-mobile out",
     "build:mobile:clean": "rm -rf .next-mobile out && cd android && ./gradlew clean && cd .. && npm run build:mobile && npx cap sync android && cd android && ./gradlew assembleDebug",
     "build:ios:sync": "rm -rf .next-mobile out && npm run build:mobile && npx cap sync ios",
     "build:ios:open": "npm run build:ios:sync && npx cap open ios",
