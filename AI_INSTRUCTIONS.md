@@ -111,9 +111,10 @@ className="ps-4 pe-2 ms-auto text-start float-start"
 ```tsx
 // ✅ CORRECT - Complete example
 import { useTranslations, useLocale } from 'next-intl';
+import { isRTLLocale } from '@/utils/locale';
 const t = useTranslations('settings');   // scoped to 'settings' namespace
 const locale = useLocale();
-const isRTL = locale === 'ar';
+const isRTL = isRTLLocale(locale);       // use utility — never locale === 'ar' directly
 
 return (
   <div dir={isRTL ? 'rtl' : 'ltr'} className="ps-4 pe-6">
@@ -205,12 +206,15 @@ const title = t('common.title');
 1. **NEVER** use `language === 'ar' ? ... : ...` conditionals for strings
 2. **ALWAYS** use `t('key')` from `useTranslations('namespace')` for all user-facing text
 3. **ALWAYS** add new keys to **both** `en/<namespace>.json` and `ar/<namespace>.json`
-4. The ONLY acceptable use of `locale === 'ar'` is for the `dir` attribute:
+4. For RTL detection, use `isRTLLocale(locale)` from `@/utils/locale` — never hardcode `locale === 'ar'`:
    ```tsx
-   // ✅ OK - dir attribute is a technical necessity
+   // ✅ CORRECT — extensible, works for all RTL locales (ar, he, fa, ur)
+   import { isRTLLocale } from '@/utils/locale';
    const locale = useLocale();
-   <div dir={locale === 'ar' ? 'rtl' : 'ltr'}>
+   const isRTL = isRTLLocale(locale);
    ```
+   - Only set `dir` on elements that render **outside the normal DOM** (portals, modals, floating widgets)
+   - Regular page containers do NOT need `dir` — they inherit it from `<html dir>` set in `_document.tsx`
 
 **Why this matters:**
 - Language conditionals bypass translation validation
@@ -797,20 +801,23 @@ export default function MyPage() {
 ```tsx
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';  // only when you need language switching
+import { isRTLLocale } from '@/utils/locale'; // for RTL detection
 
 // For UI text (most components):
 const t = useTranslations('dashboard');   // scoped to 'dashboard' namespace
 const tc = useTranslations('common');     // for shared strings
 
-// For locale/direction:
+// For locale/direction (only when needed — e.g. icon rotation, portal components):
 const locale = useLocale();
-const isRTL = locale === 'ar';
+const isRTL = isRTLLocale(locale);       // use utility — never locale === 'ar' directly
 
 // For language switching or date locale:
 const { language, setLanguage, dateLocale } = useLanguage();
 
+// NOTE: Most page containers do NOT need dir= — they inherit from <html dir> in _document.tsx
+// Only set dir on portal/overlay components (modals rendered outside the DOM tree).
 return (
-  <div dir={isRTL ? 'rtl' : 'ltr'}>
+  <div>
     <h1>{t('title')}</h1>
     <button>{tc('save')}</button>
   </div>
@@ -835,7 +842,8 @@ return (
 | `t('namespace.key')` (prefixed key) | Drop the namespace prefix: `t('key')` — the namespace is passed to `useTranslations()` |
 | Hardcoded strings | Use `t('key')` |
 | **Language conditionals for text** | **Use `t('key')` NOT `locale === 'ar' ? ... : ...`** |
-| Missing `dir` attribute | Add `dir={locale === 'ar' ? 'rtl' : 'ltr'}` using `useLocale()` |
+| `locale === 'ar'` for RTL detection | Use `isRTLLocale(locale)` from `@/utils/locale` — extensible, works for all RTL locales |
+| Adding `dir` to normal page containers | Don't — they inherit from `<html dir>` in `_document.tsx`. Only add `dir` to portal/overlay components |
 | Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
 | Ignoring landscape mode | Test both orientations, use `landscape:` |
 | Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
