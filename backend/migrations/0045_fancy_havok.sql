@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "idx_comments_action_required" ON "comments" ("post_id","resolved","replied","needs_attention","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_ig_comments_action_required" ON "instagram_comments" ("media_id","resolved","replied","needs_attention","created_at");
