@@ -223,7 +223,7 @@ export default function AdminWaitlistPage() {
                     {pagination.totalPages > 1 && (
                         <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between">
                             <div className="text-sm text-muted-foreground">
-                                {t('admin.waitlist.paginationShowing', {
+                                {t('waitlist.paginationShowing', {
                                     from: (pagination.page - 1) * pagination.limit + 1,
                                     to: Math.min(pagination.page * pagination.limit, pagination.total),
                                     total: pagination.total,

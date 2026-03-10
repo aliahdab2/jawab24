@@ -44,6 +44,14 @@ const STATUS_COLORS: Record<string, string> = {
     paused: 'bg-muted text-muted-foreground',
 };
 
+const STATUS_KEYS: Record<string, string> = {
+    active: 'customers.statusActive',
+    trialing: 'customers.statusTrialing',
+    past_due: 'customers.statusPast_due',
+    canceled: 'customers.statusCanceled',
+    paused: 'customers.statusPaused',
+};
+
 export default function AdminCustomersPage() {
     const router = useRouter();
     const t = useTranslations('admin');
@@ -270,7 +278,7 @@ export default function AdminCustomersPage() {
                                                         'inline-flex px-2 py-1 text-xs font-medium rounded-full',
                                                         STATUS_COLORS[customer.subscription.status] || 'bg-muted text-muted-foreground'
                                                     )}>
-                                                        {t(`admin.customers.status.${customer.subscription.status}`) || customer.subscription.status}
+                                                        {STATUS_KEYS[customer.subscription.status] ? t(STATUS_KEYS[customer.subscription.status] as Parameters<typeof t>[0]) : customer.subscription.status}
                                                     </span>
                                                 ) : (
                                                     <span className="text-muted-foreground text-sm">-</span>
@@ -293,7 +301,7 @@ export default function AdminCustomersPage() {
                     {pagination.totalPages > 1 && (
                         <div className="px-4 py-3 border-t border-theme-border flex items-center justify-between">
                             <div className="text-sm text-muted-foreground">
-                                {t('admin.customers.paginationShowing', {
+                                {t('customers.paginationShowing', {
                                     from: (pagination.page - 1) * pagination.limit + 1,
                                     to: Math.min(pagination.page * pagination.limit, pagination.total),
                                     total: pagination.total,

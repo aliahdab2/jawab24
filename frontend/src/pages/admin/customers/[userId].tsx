@@ -56,6 +56,14 @@ const STATUS_COLORS: Record<string, string> = {
     paused: 'bg-muted text-muted-foreground border-theme-border',
 };
 
+const STATUS_KEYS: Record<string, string> = {
+    active: 'customers.statusActive',
+    trialing: 'customers.statusTrialing',
+    past_due: 'customers.statusPast_due',
+    canceled: 'customers.statusCanceled',
+    paused: 'customers.statusPaused',
+};
+
 export default function AdminCustomerDetailPage() {
     const router = useRouter();
     const { userId } = router.query;
@@ -322,7 +330,7 @@ export default function AdminCustomerDetailPage() {
                                             'inline-flex px-3 py-1 text-sm font-medium rounded-full border',
                                             STATUS_COLORS[customer.subscription.status] || 'bg-gray-100 text-gray-800 border-gray-200'
                                         )}>
-                                            {t(`admin.customers.status.${customer.subscription.status}`) || customer.subscription.status}
+                                            {STATUS_KEYS[customer.subscription.status] ? t(STATUS_KEYS[customer.subscription.status] as Parameters<typeof t>[0]) : customer.subscription.status}
                                         </span>
                                     </div>
                                     <div>

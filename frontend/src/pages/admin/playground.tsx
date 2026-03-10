@@ -656,7 +656,7 @@ export default function AdminPlaygroundPage() {
                                     <MessageSquare className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />
                                     <span className="text-sm text-foreground/70 truncate flex-1">
                                         {conversationHistory.length > 0
-                                            ? t('admin.playground.historyCount', { count: conversationHistory.length })
+                                            ? t('playground.historyCount', { count: conversationHistory.length })
                                             : t('playground.conversationHistoryHint')
                                         }
                                     </span>
@@ -786,7 +786,7 @@ export default function AdminPlaygroundPage() {
                                                                 <div className="flex items-center gap-1.5 mb-2">
                                                                     <MethodIcon method={msg.metadata.replyMethod} />
                                                                     <span className="text-[10px] font-medium uppercase tracking-wider text-brand-700">
-                                                                        {t('playground.privateMessage')} · {t(`admin.playground.${msg.metadata.replyMethod}`)}
+                                                                        {t('playground.privateMessage')} · {t(`playground.${msg.metadata.replyMethod}`)}
                                                                     </span>
                                                                 </div>
                                                                 <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{msg.text}</p>
@@ -816,7 +816,7 @@ export default function AdminPlaygroundPage() {
                                                                             : msg.metadata.replyMethod === 'template' ? 'text-emerald-600'
                                                                                 : 'text-red-600'
                                                                     )}>
-                                                                        {t(`admin.playground.${msg.metadata.replyMethod}`)}
+                                                                        {t(`playground.${msg.metadata.replyMethod}`)}
                                                                         {msg.metadata.templateName && ` · ${msg.metadata.templateName}`}
                                                                     </span>
                                                                 </div>
