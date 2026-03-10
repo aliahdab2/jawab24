@@ -218,6 +218,8 @@ export const comments = pgTable('comments', {
         resolvedIdx: index('idx_comments_resolved').on(table.resolved),
         createdAtIdx: index('idx_comments_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_comments_created_time').on(table.createdTime),
+        // Composite index for actionRequired filter: (resolved=false AND (replied=false OR needsAttention=true)) ORDER BY createdAt DESC
+        actionRequiredIdx: index('idx_comments_action_required').on(table.postId, table.resolved, table.replied, table.needsAttention, table.createdAt),
     };
 });
 
@@ -252,6 +254,8 @@ export const instagramComments = pgTable('instagram_comments', {
         resolvedIdx: index('idx_instagram_comments_resolved').on(table.resolved),
         createdAtIdx: index('idx_instagram_comments_created_at').on(table.createdAt),
         createdTimeIdx: index('idx_instagram_comments_created_time').on(table.createdTime),
+        // Composite index for actionRequired filter (mirrors comments table)
+        actionRequiredIdx: index('idx_ig_comments_action_required').on(table.mediaId, table.resolved, table.replied, table.needsAttention, table.createdAt),
     };
 });
 

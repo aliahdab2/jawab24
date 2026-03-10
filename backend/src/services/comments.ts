@@ -51,17 +51,16 @@ export class CommentsService {
         const limit = options?.limit || 50;
 
         // Resolve cursor timestamp once (could be FB or IG comment)
+        // Run both lookups in parallel to avoid sequential N+1 queries
         let cursorDate: Date | null = null;
         if (options?.cursor) {
-            const fbCursor = await db.select({ createdAt: comments.createdAt })
-                .from(comments).where(eq(comments.id, options.cursor)).limit(1);
-            if (fbCursor[0]) {
-                cursorDate = fbCursor[0].createdAt;
-            } else {
-                const igCursor = await db.select({ createdAt: instagramComments.createdAt })
-                    .from(instagramComments).where(eq(instagramComments.id, options.cursor)).limit(1);
-                if (igCursor[0]) cursorDate = igCursor[0].createdAt;
-            }
+            const [fbCursor, igCursor] = await Promise.all([
+                db.select({ createdAt: comments.createdAt })
+                    .from(comments).where(eq(comments.id, options.cursor)).limit(1),
+                db.select({ createdAt: instagramComments.createdAt })
+                    .from(instagramComments).where(eq(instagramComments.id, options.cursor)).limit(1),
+            ]);
+            cursorDate = fbCursor[0]?.createdAt ?? igCursor[0]?.createdAt ?? null;
         }
 
         // --- Facebook comments query ---

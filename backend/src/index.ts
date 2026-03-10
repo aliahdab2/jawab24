@@ -11,7 +11,6 @@ import helmet from "@fastify/helmet";
 import compress from "@fastify/compress";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
-import Redis from "ioredis";
 import healthRoutes from "./routes/health";
 import authRoutes from "./routes/auth";
 import webhookRoutes from "./routes/webhook";
@@ -166,17 +165,11 @@ const start = async () => {
     });
 
     // Register rate limiting
-    // Use Redis for rate limiting to ensure consistency across blue/green deployments
-    const redisClient = new Redis({
-      host: config.redis.host,
-      port: config.redis.port,
-      password: config.redis.password,
-    });
-
+    // Use shared Redis instance for consistency across blue/green deployments
     await server.register(rateLimit, {
       max: 2000, // 2000 requests per 15 minutes
       timeWindow: "15 minutes",
-      redis: redisClient,
+      redis,
       errorResponseBuilder: (request, context) => ({
         error: true,
         message: "Rate limit exceeded. Please try again later.",

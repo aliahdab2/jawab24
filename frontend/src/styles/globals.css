@@ -1175,6 +1175,30 @@
   animation-delay: 1s;
 }
 
+/* Respect user's motion preferences (accessibility + battery saving on low-end devices).
+   - Infinite/looping animations (float, pulse, orbit) → disabled completely.
+   - One-shot entrance animations (fade-in, slide-up) → instant (no motion, still appear). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-float-rotate,
+  .animate-float-orbit,
+  .animate-float-pulse,
+  .animate-bounce-slow,
+  .animate-empty-state-icon,
+  .animate-bounce-subtle {
+    animation: none !important;
+  }
+
+  .animate-fade-in,
+  .animate-fade-in-up,
+  .animate-fade-in-right,
+  .animate-fade-in-left,
+  .animate-slide-up {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    SAFE AREA STRATEGY - INDUSTRY BEST PRACTICES (Facebook, Instagram, WhatsApp)
    
