@@ -37,13 +37,13 @@ export const PAGE_NAMESPACES = {
   completeProfile:    ['profile'],
 
   // ── Payment flow ──────────────────────────────────────────────
-  checkout:           ['checkout', 'plans', 'pricing'],
+  checkout:           ['checkout', 'payment', 'plans', 'pricing'],
   paymentSuccess:     ['payment'],
   paymentCancel:      ['payment'],
 
   // ── Dashboard pages (include DASHBOARD_LAYOUT) ────────────────
   pricing:            [...DASHBOARD_LAYOUT, 'payment', 'subscription'],
-  dashboard:          [...DASHBOARD_LAYOUT, 'messages', 'pages', 'subscription', 'time'],
+  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'messages', 'pages', 'subscription', 'time'],
   comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback'],
   messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'messages'],
   templates:          [...DASHBOARD_LAYOUT, 'templates'],

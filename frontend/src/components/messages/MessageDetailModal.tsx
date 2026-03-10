@@ -410,8 +410,8 @@ export function MessageDetailModal({
               placeholder={t('typeReply')}
               aria-label={t('typeReply')}
               rows={1}
-              className="flex-1 min-w-0 resize-none rounded-full border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
-              style={{ height: '42px', maxHeight: '120px' }}
+              className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+              style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
               disabled={isReplying || isGenerating}
             />
             <button
