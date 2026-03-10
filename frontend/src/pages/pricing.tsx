@@ -192,25 +192,25 @@ function PlanCard({
       <div className="space-y-1 px-3 flex-1">
         <FeatureRow
           included={true}
-          text={t('pricing.featurePages', { count: (plan.maxPages === null ? t('pricing.unlimited') : plan.maxPages) as string | number })}
+          text={plan.maxPages === null ? t('pricing.featurePagesUnlimited') : t('pricing.featurePages', { count: plan.maxPages })}
           subtext={t('pricing.facebookInstagram')}
         />
 
         <FeatureRow
           included={true}
           highlight={true}
-          text={t('pricing.featureAiReplies', { count: (plan.maxAiRepliesPerMonth === null ? t('pricing.unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()) as string | number })}
+          text={plan.maxAiRepliesPerMonth === null ? t('pricing.featureAiRepliesUnlimited') : t('pricing.featureAiReplies', { count: plan.maxAiRepliesPerMonth })}
           subtext={t('pricing.aiPowered')}
         />
 
         <FeatureRow
           included={true}
-          text={t('pricing.featureTemplates', { count: (plan.maxTemplates === null ? t('pricing.unlimited') : plan.maxTemplates) as string | number })}
+          text={plan.maxTemplates === null ? t('pricing.featureTemplatesUnlimited') : t('pricing.featureTemplates', { count: plan.maxTemplates })}
         />
 
         <FeatureRow
           included={true}
-          text={t('pricing.featureRules', { count: (plan.maxRules === null ? t('pricing.unlimited') : plan.maxRules) as string | number })}
+          text={plan.maxRules === null ? t('pricing.featureRulesUnlimited') : t('pricing.featureRules', { count: plan.maxRules })}
         />
 
         <FeatureRow
@@ -535,7 +535,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         )}
 
         {/* Page title */}
-        <div className="text-center px-4 pt-2 sm:pt-5 md:pt-6 mb-4 sm:mb-6">
+        <div className="text-center px-4 pt-8 sm:pt-10 md:pt-12 mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-5xl font-display font-bold text-foreground leading-tight max-w-4xl mx-auto">
             {t('pricing.choosePlan')}
           </h1>
