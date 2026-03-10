@@ -43,12 +43,12 @@ export const PAGE_NAMESPACES = {
 
   // ── Dashboard pages (include DASHBOARD_LAYOUT) ────────────────
   pricing:            [...DASHBOARD_LAYOUT, 'payment', 'subscription'],
-  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'messages', 'onboarding', 'pages', 'subscription', 'time'],
+  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'messages', 'onboarding', 'pages', 'plans', 'subscription', 'time'],
   comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback'],
   messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'messages'],
   templates:          [...DASHBOARD_LAYOUT, 'templates'],
   rules:              [...DASHBOARD_LAYOUT, 'rules', 'templates'],
-  pages:              [...DASHBOARD_LAYOUT, 'pages', 'time', 'onboarding'],
+  pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'time', 'logout'],
   integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'salla', 'shopify'],
 
