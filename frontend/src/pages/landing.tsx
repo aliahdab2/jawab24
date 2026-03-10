@@ -124,9 +124,6 @@ export default function LandingPage() {
         </div>
       </nav>
 
-      {/* Spacer: matches full nav height (safe area + header). */}
-      <div className="h-16 sm:h-20 pt-safe box-content" />
-
       <LandingHero isAuthenticated={isAuthenticated} />
 
       {/* Stats Section */}

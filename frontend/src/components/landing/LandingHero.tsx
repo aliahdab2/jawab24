@@ -37,7 +37,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
   const tNav = useTranslations('nav');
 
   return (
-    <section className="relative pt-8 sm:pt-12 lg:pt-20 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
+    <section className="relative pt-24 sm:pt-32 lg:pt-40 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
       {/* Animated Background Elements */}
       <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 dark:bg-blue-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
       <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 dark:bg-indigo-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
