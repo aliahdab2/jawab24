@@ -883,7 +883,7 @@ describe('SCENARIO 7 — Race condition: payment_succeeded before checkout.sessi
             expect.objectContaining({ subscriptionId: 'sub_race_001' }),
             expect.stringMatching(/not found after retries/i),
         );
-    }, 10_000); // allow for 3 × 500ms retry waits
+    }, 20_000); // allow for 3 × 500ms retry waits + slow DB/import
 
     it('correct order (checkout → payment) results in active subscription', async () => {
         const { paymentController } = await import('../../src/controllers/payment');

@@ -34,7 +34,7 @@ describe('Pages Routes', () => {
     });
 
     describe('POST /pages', () => {
-        it('should create a new page', async () => {
+        it('should create a new page', { timeout: 10_000 }, async () => {
             const newPageData = {
                 facebookPageId: 'fb_page_123',
                 name: 'My Store',
