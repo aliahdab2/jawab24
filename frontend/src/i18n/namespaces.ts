@@ -15,7 +15,7 @@ const ADMIN_LAYOUT = ['admin'] as const;
 
 export const PAGE_NAMESPACES = {
   // ── Public pages ──────────────────────────────────────────────
-  landing:            ['landing', 'pricing'],
+  landing:            ['landing', 'pricing', 'dataDeletion'],
   login:              ['auth', 'salla', 'shopify'],
   index:              ['landing'],
   whatIsJawab24:      ['about'],
