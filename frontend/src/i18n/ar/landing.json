@@ -65,7 +65,19 @@
     "feature4": "يرد بطبيعية بالعربي والإنجليزي",
     "availableOn": "متوفر على",
     "shopifyStore": "Shopify App Store",
-    "sallaStore": "Salla App Store"
+    "sallaStore": "Salla App Store",
+    "chatHeader": "محادثة عميل",
+    "chatChannel": "عبر انستقرام",
+    "chatCustomer1": "أبي شنطة جلد تناسب اللابتوب، مو كبيرة وايد. عندكم شي؟ 🤔",
+    "chatReply1Intro": "أهلاً! عندي خيارين يناسبونك 👇",
+    "chatProduct1Name": "Classic Leather Sleeve",
+    "chatProduct1Details": "199 ر.س · مقاس 14\" · نحيف",
+    "chatProduct2Name": "Executive Messenger",
+    "chatProduct2Details": "279 ر.س · مقاس 15\" · مع حزام",
+    "chatReply1Outro": "الأولى أنحف وأخف، والثانية فيها حزام كتف وجيب إضافي. أيهم تحب تعرف عنها أكثر؟ 😊",
+    "chatCustomer2": "الثانية، هل الجلد طبيعي؟",
+    "chatReply2": "إي نعم! جلد بقري طبيعي 100% مع بطانة مخمل تحمي اللابتوب. متوفرة بالأسود والبني ✅",
+    "chatPoweredBy": "مدعوم بذكاء جواب + بيانات متجرك"
   },
   "howItWorks": {
     "title1": "ابدأ في أقل من",

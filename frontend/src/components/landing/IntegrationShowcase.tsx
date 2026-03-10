@@ -27,7 +27,7 @@ function SallaBadgeLogo() {
   );
 }
 
-function ChatMockup() {
+function ChatMockup({ t }: { t: (key: string) => string }) {
   return (
     <div
       style={{
@@ -68,15 +68,15 @@ function ChatMockup() {
           </svg>
         </div>
         <div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>Customer Chat</div>
-          <div style={{ fontSize: 10, color: '#9ca3af' }}>via Instagram DM</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{t('showcase.chatHeader')}</div>
+          <div style={{ fontSize: 10, color: '#9ca3af' }}>{t('showcase.chatChannel')}</div>
         </div>
       </div>
 
       {/* Customer message 1 */}
       <div style={{ marginBottom: 12 }}>
         <div
-          dir="rtl"
+          dir="auto"
           style={{
             background: '#e5e7eb',
             padding: '10px 14px',
@@ -87,14 +87,14 @@ function ChatMockup() {
             lineHeight: 1.6,
           }}
         >
-          {'\u0623\u0628\u064a \u0634\u0646\u0637\u0629 \u062c\u0644\u062f \u062a\u0646\u0627\u0633\u0628 \u0627\u0644\u0644\u0627\u0628\u062a\u0648\u0628\u060c \u0645\u0648 \u0643\u0628\u064a\u0631\u0629 \u0648\u0627\u064a\u062f. \u0639\u0646\u062f\u0643\u0645 \u0634\u064a\u061f \ud83e\udd14'}
+          {t('showcase.chatCustomer1')}
         </div>
       </div>
 
       {/* AI reply with product cards */}
       <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
         <div
-          dir="rtl"
+          dir="auto"
           style={{
             background: '#0d9488',
             padding: '12px 14px',
@@ -103,7 +103,7 @@ function ChatMockup() {
           }}
         >
           <div style={{ fontSize: 13, color: '#fff', marginBottom: 8, lineHeight: 1.6 }}>
-            {'\u0623\u0647\u0644\u0627\u064b! \u0639\u0646\u062f\u064a \u062e\u064a\u0627\u0631\u064a\u0646 \u064a\u0646\u0627\u0633\u0628\u0648\u0646\u0643 \ud83d\udc47'}
+            {t('showcase.chatReply1Intro')}
           </div>
 
           {/* Product card 1 */}
@@ -137,8 +137,8 @@ function ChatMockup() {
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Classic Leather Sleeve</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>{`199 SAR \u00b7 Fits 14" \u00b7 Slim`}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>{t('showcase.chatProduct1Name')}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>{t('showcase.chatProduct1Details')}</div>
             </div>
           </div>
 
@@ -173,13 +173,13 @@ function ChatMockup() {
               </svg>
             </div>
             <div>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>Executive Messenger</div>
-              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>{`279 SAR \u00b7 Fits 15" \u00b7 With strap`}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>{t('showcase.chatProduct2Name')}</div>
+              <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>{t('showcase.chatProduct2Details')}</div>
             </div>
           </div>
 
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6 }}>
-            {'\u0627\u0644\u0623\u0648\u0644\u0649 \u0623\u0646\u062d\u0641 \u0648\u0623\u062e\u0641\u060c \u0648\u0627\u0644\u062b\u0627\u0646\u064a\u0629 \u0641\u064a\u0647\u0627 \u062d\u0632\u0627\u0645 \u0643\u062a\u0641 \u0648\u062c\u064a\u0628 \u0625\u0636\u0627\u0641\u064a. \u0623\u064a\u0647\u0645 \u062a\u062d\u0628 \u062a\u0639\u0631\u0641 \u0639\u0646\u0647\u0627 \u0623\u0643\u062b\u0631\u061f \ud83d\ude0a'}
+            {t('showcase.chatReply1Outro')}
           </div>
         </div>
       </div>
@@ -187,7 +187,7 @@ function ChatMockup() {
       {/* Customer follow-up */}
       <div style={{ marginBottom: 10 }}>
         <div
-          dir="rtl"
+          dir="auto"
           style={{
             background: '#e5e7eb',
             padding: '10px 14px',
@@ -198,14 +198,14 @@ function ChatMockup() {
             lineHeight: 1.6,
           }}
         >
-          {'\u0627\u0644\u062b\u0627\u0646\u064a\u0629\u060c \u0647\u0644 \u0627\u0644\u062c\u0644\u062f \u0637\u0628\u064a\u0639\u064a\u061f'}
+          {t('showcase.chatCustomer2')}
         </div>
       </div>
 
       {/* AI follow-up reply */}
       <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'flex-end' }}>
         <div
-          dir="rtl"
+          dir="auto"
           style={{
             background: '#0d9488',
             padding: '12px 14px',
@@ -216,7 +216,7 @@ function ChatMockup() {
             lineHeight: 1.6,
           }}
         >
-          {'\u0625\u064a \u0646\u0639\u0645! \u062c\u0644\u062f \u0628\u0642\u0631\u064a \u0637\u0628\u064a\u0639\u064a 100% \u0645\u0639 \u0628\u0637\u0627\u0646\u0629 \u0645\u062e\u0645\u0644 \u062a\u062d\u0645\u064a \u0627\u0644\u0644\u0627\u0628\u062a\u0648\u0628. \u0645\u062a\u0648\u0641\u0631\u0629 \u0628\u0627\u0644\u0623\u0633\u0648\u062f \u0648\u0627\u0644\u0628\u0646\u064a \u2705'}
+          {t('showcase.chatReply2')}
         </div>
       </div>
 
@@ -233,7 +233,7 @@ function ChatMockup() {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
-        <span style={{ fontSize: 10, color: '#9ca3af' }}>Powered by Jawab AI + your store data</span>
+        <span style={{ fontSize: 10, color: '#9ca3af' }}>{t('showcase.chatPoweredBy')}</span>
       </div>
     </div>
   );
@@ -364,7 +364,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
 
           {/* Right column — chat mockup */}
           <div className="w-full md:w-[45%] flex justify-center">
-            <ChatMockup />
+            <ChatMockup t={t} />
           </div>
         </div>
       </div>

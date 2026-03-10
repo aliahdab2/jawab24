@@ -65,7 +65,19 @@
     "feature4": "Responds naturally in Arabic and English",
     "availableOn": "Available on",
     "shopifyStore": "Shopify App Store",
-    "sallaStore": "Salla App Store"
+    "sallaStore": "Salla App Store",
+    "chatHeader": "Customer Chat",
+    "chatChannel": "via Instagram DM",
+    "chatCustomer1": "I'm looking for a leather laptop bag, not too big. Do you have anything? 🤔",
+    "chatReply1Intro": "Hi! I have two options that would suit you 👇",
+    "chatProduct1Name": "Classic Leather Sleeve",
+    "chatProduct1Details": "199 SAR · Fits 14\" · Slim",
+    "chatProduct2Name": "Executive Messenger",
+    "chatProduct2Details": "279 SAR · Fits 15\" · With strap",
+    "chatReply1Outro": "The first is slimmer and lighter, and the second has a shoulder strap and an extra pocket. Which one would you like to know more about? 😊",
+    "chatCustomer2": "The second one, is the leather real?",
+    "chatReply2": "Yes! 100% genuine cowhide leather with a velvet lining to protect your laptop. Available in black and brown ✅",
+    "chatPoweredBy": "Powered by Jawab AI + your store data"
   },
   "howItWorks": {
     "title1": "Get Started in Under",
