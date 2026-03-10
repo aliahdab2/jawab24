@@ -27,7 +27,7 @@
   "replyNow": "Reply now",
   "emptyDescription": "When something needs your attention, it will show up here.",
   "emptyFiltered": "No {category} notifications",
-  "groupSummary": "{count} notifications",
+  "groupSummary": "{count, plural, one {# notification} other {# notifications}}",
   "typeLabel": {
     "stale_comment": "comments waiting for your reply",
     "new_comment": "new comments",

@@ -73,6 +73,19 @@ function resolveNestedKey(obj: Record<string, unknown>, key: string): string | u
   return typeof val === 'string' ? val : undefined;
 }
 
+/** Resolve ICU plural format: "{count, plural, one {# item} other {# items}}" */
+function resolveICUPlural(str: string, params: Record<string, unknown>): string {
+  return str.replace(/\{(\w+),\s*plural\s*,([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g, (_, varName, cases) => {
+    const count = Number(params[varName] ?? 0);
+    const form = new Intl.PluralRules('en').select(count);
+    // Try to match the exact form, then fall back to 'other'
+    const formMatch = cases.match(new RegExp(`${form}\\s*\\{([^}]*)\\}`));
+    const otherMatch = cases.match(/other\s*\{([^}]*)\}/);
+    const text = (formMatch?.[1] ?? otherMatch?.[1] ?? String(count)).trim();
+    return text.replace(/#/g, String(count));
+  });
+}
+
 // Mock next-intl: returns real English translation values so tests verify actual UI text.
 vi.mock('next-intl', () => ({
   useTranslations: (ns?: string) => {
@@ -81,9 +94,11 @@ vi.mock('next-intl', () => ({
         ? resolveNestedKey(EN_MESSAGES[ns] ?? {}, key) ?? `${ns}.${key}`
         : key;
       if (!params) return raw;
+      // First resolve ICU plural expressions, then do simple {key} substitution
+      const afterPlural = resolveICUPlural(raw, params);
       return Object.entries(params).reduce(
         (str, [k, v]) => str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v)),
-        raw,
+        afterPlural,
       );
     };
     t.has = () => true;

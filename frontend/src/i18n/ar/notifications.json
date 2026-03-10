@@ -27,7 +27,7 @@
   "replyNow": "رد الآن",
   "emptyDescription": "عندما يحتاج شيء ما لانتباهك، سيظهر هنا.",
   "emptyFiltered": "لا توجد إشعارات {category}",
-  "groupSummary": "{count} إشعارات",
+  "groupSummary": "{count, plural, one {إشعار واحد} two {إشعاران} few {# إشعارات} many {# إشعار} other {# إشعار}}",
   "typeLabel": {
     "stale_comment": "تعليقات بانتظار ردك",
     "new_comment": "تعليقات جديدة",

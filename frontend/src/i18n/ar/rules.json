@@ -28,7 +28,7 @@
   "templateMissing": "القالب محذوف",
   "templateInactive": "القالب متوقف",
   "cannotEnableMissingTemplate": "لا يمكن تفعيل القاعدة — القالب المرتبط تم حذفه. يرجى تعديل القاعدة واختيار قالب جديد.",
-  "duplicateKeywordsWarning": "{count} كلمة مفتاحية مستخدمة في قواعد أخرى",
+  "duplicateKeywordsWarning": "{count, plural, one {كلمة مفتاحية واحدة} two {كلمتان مفتاحيتان} few {# كلمات مفتاحية} many {# كلمة مفتاحية} other {# كلمة مفتاحية}} مستخدمة في قواعد أخرى",
   "duplicateKeywordsInModal": "بعض الكلمات المفتاحية مكررة في قواعد أخرى:",
   "conditions": {
     "contains": "يحتوي على",

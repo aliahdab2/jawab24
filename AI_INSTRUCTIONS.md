@@ -263,6 +263,38 @@ export const getStaticProps = makeGetStaticProps(['settings', 'time']);
 - Shared keys go in `common.json` (e.g., `save`, `loading`, `cancel`)
 - For `language`/`setLanguage`/`dateLocale`, use `useLanguage()` from `@/i18n/hooks` (not `useTranslations`)
 
+**Pluralization — use ICU Message Format (REQUIRED)**
+
+Never use `(s)` workarounds or hardcoded plural strings. next-intl supports ICU format natively — use it for any count/quantity.
+
+```json
+// ❌ WRONG — ugly, grammatically wrong in Arabic
+"itemCount": "{count} item(s)"
+"pageLimit": "Up to {limit} page(s)"
+
+// ✅ CORRECT — English (2 forms: one, other)
+"itemCount": "{count, plural, one {# item} other {# items}}"
+"pageLimit": "Up to {limit, plural, one {# page} other {# pages}}"
+
+// ✅ CORRECT — Arabic (6 forms: zero, one, two, few, many, other)
+"itemCount": "{count, plural, zero {لا عناصر} one {عنصر واحد} two {عنصران} few {# عناصر} many {# عنصر} other {# عنصر}}"
+```
+
+In components, pass the variable — no other changes needed:
+```tsx
+t('itemCount', { count: 3 })   // → "3 items" / "3 عناصر"
+t('itemCount', { count: 1 })   // → "1 item" / "عنصر واحد"
+```
+
+Arabic plural rules (CLDR):
+- `one`: exactly 1
+- `two`: exactly 2
+- `few`: 3–10
+- `many`: 11–99 (and larger multiples of 100)
+- `other`: 0, 100, 101, 102... (fractional numbers, other cases)
+
+Always include all 6 forms for Arabic keys.
+
 **Before committing:**
 - Run `npm run translation:validate` to check for missing keys, nesting depth, and language integrity
 - See `frontend/docs/TRANSLATION_GUIDE.md` for full rules (key naming, RTL, interpolation, brand terms)
@@ -862,6 +894,7 @@ return (
 | `placeholder:text-surface-300` or `placeholder:text-surface-400` | Use `placeholder:text-muted-foreground` — matches the standard `input` component pattern in `globals.css` |
 | Duplicating logic (fallback chains, selection, formatting) across files | Extract a shared utility function and import it everywhere — single source of truth |
 | Adding new behavior to an unrelated service file | Create a dedicated file when the function is used by multiple callers (adapter, controller, route) |
+| `"{count} item(s)"` or `"{limit} page(s)"` in translation files | **NEVER use `(s)` workarounds** — use ICU plural format: `"{count, plural, one {# item} other {# items}}"` for EN; include all 6 CLDR forms for AR |
 
 ---
 

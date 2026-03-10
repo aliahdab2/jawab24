@@ -158,7 +158,7 @@
     "kbContent": "محتوى قاعدة المعرفة",
     "editKb": "تعديل",
     "kbEmpty": "لا يوجد محتوى في قاعدة المعرفة",
-    "historyCount": "{count, plural, one {# رسالة في السجل} other {# رسائل في السجل}}"
+    "historyCount": "{count, plural, one {# رسالة في السجل} two {# رسالتان في السجل} few {# رسائل في السجل} many {# رسالة في السجل} other {# رسائل في السجل}}"
   },
   "waitlist": {
     "title": "تسجيلات قائمة الانتظار",

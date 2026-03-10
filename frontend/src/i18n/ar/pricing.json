@@ -74,7 +74,7 @@
   "featureShopify": "ربط متجر شوبيفاي",
   "shopifyBadge": "يشمل ربط شوبيفاي",
   "usageReplies": "الردود: {used}/{limit}",
-  "daysLeftCount": "متبقي {count} يوم",
+  "daysLeftCount": "{count, plural, one {يوم واحد متبقي} two {يومان متبقيان} few {# أيام متبقية} many {# يوم متبقي} other {# يوم متبقي}}",
   "fallbackTitle": "عرض الأسعار المخزنة مؤقتاً",
   "fallbackMessage": "قد تكون الأسعار غير متاحة مؤقتاً أو قديمة. يتم تأكيد السعر النهائي عند الدفع.",
   "savePercent": "وفّر ~17%",

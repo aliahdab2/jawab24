@@ -7,8 +7,8 @@
  * Only list the ADDITIONAL namespaces each page needs.
  */
 
-/** Namespaces used by DashboardLayout (sidebar, nav, upgrade CTA) */
-const DASHBOARD_LAYOUT = ['dashboard', 'landing', 'logout', 'pricing', 'sidebar'] as const;
+/** Namespaces used by DashboardLayout (sidebar, nav, upgrade CTA, demo banner) */
+const DASHBOARD_LAYOUT = ['auth', 'admin', 'dashboard', 'landing', 'logout', 'pricing', 'sidebar'] as const;
 
 /** Namespaces used by AdminLayout */
 const ADMIN_LAYOUT = ['admin'] as const;
@@ -43,7 +43,7 @@ export const PAGE_NAMESPACES = {
 
   // ── Dashboard pages (include DASHBOARD_LAYOUT) ────────────────
   pricing:            [...DASHBOARD_LAYOUT, 'payment', 'subscription'],
-  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'messages', 'pages', 'subscription', 'time'],
+  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'messages', 'onboarding', 'pages', 'subscription', 'time'],
   comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback'],
   messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'messages'],
   templates:          [...DASHBOARD_LAYOUT, 'templates'],

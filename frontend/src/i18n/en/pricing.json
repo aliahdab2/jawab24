@@ -74,7 +74,7 @@
   "featureShopify": "Shopify Integration",
   "shopifyBadge": "Includes Shopify Integration",
   "usageReplies": "Replies: {used}/{limit}",
-  "daysLeftCount": "{count} days left",
+  "daysLeftCount": "{count, plural, one {# day left} other {# days left}}",
   "fallbackTitle": "Displaying Cached Pricing",
   "fallbackMessage": "Prices may be temporarily unavailable or outdated. Final pricing is confirmed at checkout.",
   "savePercent": "Save ~17%",

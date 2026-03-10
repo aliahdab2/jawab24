@@ -20,6 +20,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { pagesApi, api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
+import { isRTLLocale } from '@/utils/locale';
 import { toast } from 'sonner';
 import type { Page } from '@jawab24/shared';
 
@@ -379,7 +380,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
   const tErrors = useTranslations('errors');
   const tPricing = useTranslations('pricing');
   const locale = useLocale();
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
 
   // Legacy wrapper: sub-components still expect a single t(fullKey) function.
   // TODO: refactor PickPageStep/ReviewInfoStep to accept namespace translators directly.

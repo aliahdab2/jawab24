@@ -28,7 +28,7 @@
   "templateMissing": "Template deleted",
   "templateInactive": "Template off",
   "cannotEnableMissingTemplate": "Cannot enable rule — the linked template has been deleted. Please edit the rule and select a new template.",
-  "duplicateKeywordsWarning": "{count} keyword(s) also used in other rules",
+  "duplicateKeywordsWarning": "{count, plural, one {# keyword} other {# keywords}} also used in other rules",
   "duplicateKeywordsInModal": "Some keywords overlap with other rules:",
   "conditions": {
     "contains": "Contains",

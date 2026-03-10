@@ -119,4 +119,76 @@ describe('i18n namespace files', () => {
             expect(maxDepth(AR[ns]), `[ar/${ns}] nesting exceeds 2 levels`).toBeLessThanOrEqual(2);
         }
     });
+
+    it('no translation value should use the (s) plural workaround', () => {
+        // ICU plural format must be used instead of "(s)" suffixes.
+        // ❌ "item(s)" → ✅ "{count, plural, one {# item} other {# items}}"
+        const sWorkaround = /\(\s*s\s*\)/i;
+        for (const ns of enNamespaces) {
+            for (const key of collectKeys(EN[ns])) {
+                const value = resolve(EN[ns], key);
+                expect(
+                    value,
+                    `[en/${ns}.${key}] Uses "(s)" workaround — use ICU plural: "{count, plural, one {# item} other {# items}}"`
+                ).not.toMatch(sWorkaround);
+            }
+        }
+        // Arabic plural workarounds (e.g. "صفحة/صفحات") are enforced via the ICU consistency tests below:
+        // if a key has an EN ICU plural, the AR version must also use ICU plural (not a slash workaround).
+    });
+
+    it('ICU plural strings in AR include the 5 required CLDR forms', () => {
+        // Arabic requires: one, two, few, many, other (zero is optional — handled by "other")
+        const icuPluralPattern = /\{[^}]+,\s*plural\s*,/;
+        const requiredForms = ['one', 'two', 'few', 'many', 'other'];
+        for (const ns of arNamespaces) {
+            for (const key of collectKeys(AR[ns])) {
+                const value = resolve(AR[ns], key);
+                if (!value || !icuPluralPattern.test(value)) continue;
+                for (const form of requiredForms) {
+                    expect(
+                        value,
+                        `[ar/${ns}.${key}] ICU plural missing "${form}" form — Arabic requires one, two, few, many, other`
+                    ).toContain(`${form} {`);
+                }
+            }
+        }
+    });
+
+    it('ICU plural strings in EN include the required one and other forms', () => {
+        const icuPluralPattern = /\{[^}]+,\s*plural\s*,/;
+        for (const ns of enNamespaces) {
+            for (const key of collectKeys(EN[ns])) {
+                const value = resolve(EN[ns], key);
+                if (!value || !icuPluralPattern.test(value)) continue;
+                expect(value, `[en/${ns}.${key}] ICU plural missing "one" form`).toContain('one {');
+                expect(value, `[en/${ns}.${key}] ICU plural missing "other" form`).toContain('other {');
+            }
+        }
+    });
+
+    it('keys using ICU plural in one language also use ICU plural in the other', () => {
+        // Prevents mixing ICU in EN with (s) workaround in AR, or vice versa.
+        const isICUPlural = (v: string) => /\{[^}]+,\s*plural\s*,/.test(v);
+        for (const ns of enNamespaces) {
+            if (!AR[ns]) continue;
+            for (const key of collectKeys(EN[ns])) {
+                const enValue = resolve(EN[ns], key);
+                const arValue = resolve(AR[ns], key);
+                if (!enValue || !arValue) continue;
+                if (isICUPlural(enValue)) {
+                    expect(
+                        isICUPlural(arValue),
+                        `[${ns}.${key}] EN uses ICU plural but AR does not`
+                    ).toBe(true);
+                }
+                if (isICUPlural(arValue)) {
+                    expect(
+                        isICUPlural(enValue),
+                        `[${ns}.${key}] AR uses ICU plural but EN does not`
+                    ).toBe(true);
+                }
+            }
+        }
+    });
 });

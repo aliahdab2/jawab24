@@ -513,7 +513,7 @@ describe('NotificationBell', () => {
 
             await waitFor(() => {
                 // Should show group summary instead of individual items
-                expect(screen.getByText(/\d+ notifications/)).toBeInTheDocument();
+                expect(screen.getByText(/\d+ notifications?/)).toBeInTheDocument();
             });
 
             // Individual notification titles should NOT be visible (group is collapsed)
@@ -530,7 +530,7 @@ describe('NotificationBell', () => {
             fireEvent.click(screen.getByRole('button'));
 
             await waitFor(() => {
-                expect(screen.getByText(/\d+ notifications/)).toBeInTheDocument();
+                expect(screen.getByText(/\d+ notifications?/)).toBeInTheDocument();
             });
 
             // Click the group header to expand
@@ -584,7 +584,7 @@ describe('NotificationBell', () => {
             });
 
             // No group summary should appear
-            expect(screen.queryByText(/\d+ notifications/)).not.toBeInTheDocument();
+            expect(screen.queryByText(/\d+ notifications?/)).not.toBeInTheDocument();
         });
     });
 
