@@ -2,6 +2,9 @@
 # APK output folder
 dist/
 
+# Bundled APK in Capacitor assets (should not be in repo)
+android/app/src/main/assets/public/apk/*.apk
+
 # Playwright
 test-results/
 playwright-report/

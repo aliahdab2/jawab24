@@ -474,6 +474,21 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         <meta property="og:title" content={t('pricing.ogTitle')} />
         <meta property="og:description" content={t('pricing.ogDescription')} />
         <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/pricing' : '/pricing')} />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [1, 2, 3, 4, 5].map(i => ({
+              "@type": "Question",
+              "name": t(`pricing.faq${i}Q`),
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": t(`pricing.faq${i}A`),
+              },
+            })),
+          }) }}
+        />
       </Head>
         <div>
 
