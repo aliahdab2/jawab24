@@ -23,9 +23,15 @@ export const FlagTag = React.memo(function FlagTag({ flagReason, className }: Fl
 
   const { cssClass, urgent } = getFlagTagStyle(primaryFlag);
 
-  // Translate the flag key; fall back to raw key if no translation
-  const translated = tf(primaryFlag);
-  const label = translated === primaryFlag ? primaryFlag.replace(/_/g, ' ') : translated;
+  // Handle structured SLA format: "sla_no_reply:60"
+  const slaMatch = primaryFlag.match(/^sla_no_reply:(\d+)$/);
+  let label: string;
+  if (slaMatch) {
+    label = tf('slaNoReply', { minutes: slaMatch[1] });
+  } else {
+    const translated = tf(primaryFlag);
+    label = translated === primaryFlag ? primaryFlag.replace(/_/g, ' ') : translated;
+  }
 
   return (
     <div

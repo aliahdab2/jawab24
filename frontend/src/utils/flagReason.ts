@@ -26,7 +26,9 @@ export interface FlagTagStyle {
  * Urgent flags get red styling; non-urgent get amber/warning.
  */
 export function getFlagTagStyle(flagKey: string): FlagTagStyle {
-    if (URGENT_FLAGS.has(flagKey)) {
+    // Strip SLA suffix (e.g. "sla_no_reply:60" → "sla_no_reply") for lookup
+    const baseKey = flagKey.replace(/:.*$/, '');
+    if (URGENT_FLAGS.has(baseKey)) {
         return { cssClass: 'status-error', urgent: true };
     }
     return { cssClass: 'status-warning', urgent: false };

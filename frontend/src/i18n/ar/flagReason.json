@@ -13,5 +13,7 @@
   "cancellation_request": "طلب إلغاء",
   "refund_request": "طلب استرجاع",
   "exchange_request": "طلب استبدال",
+  "negative_sentiment": "مشاعر سلبية",
+  "human_requested": "طلب تحويل لموظف",
   "slaNoReply": "لم يتم الرد خلال {minutes} دقيقة"
 }

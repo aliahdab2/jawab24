@@ -69,6 +69,22 @@ describe('FlagTag', () => {
     expect(tag.className).not.toContain('animate-pulse-soft');
   });
 
+  it('renders translated SLA flag with minutes', () => {
+    render(<FlagTag flagReason="sla_no_reply:60" />);
+    // slaNoReply template: "No reply after {minutes} min"
+    expect(screen.getByText('No reply after 60 min')).toBeInTheDocument();
+  });
+
+  it('renders translated negative_sentiment flag', () => {
+    render(<FlagTag flagReason="negative_sentiment" />);
+    expect(screen.getByText(enFlagReason.negative_sentiment)).toBeInTheDocument();
+  });
+
+  it('renders translated human_requested flag', () => {
+    render(<FlagTag flagReason="human_requested" />);
+    expect(screen.getByText(enFlagReason.human_requested)).toBeInTheDocument();
+  });
+
   it('accepts custom className', () => {
     const { container } = render(<FlagTag flagReason="low_confidence" className="mt-2" />);
     const tag = container.firstChild as HTMLElement;

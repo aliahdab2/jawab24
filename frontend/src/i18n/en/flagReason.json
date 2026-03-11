@@ -13,5 +13,7 @@
   "cancellation_request": "Cancellation request",
   "refund_request": "Refund request",
   "exchange_request": "Exchange request",
+  "negative_sentiment": "Negative sentiment",
+  "human_requested": "Human requested",
   "slaNoReply": "No reply after {minutes} min"
 }
