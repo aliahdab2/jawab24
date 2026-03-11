@@ -2,6 +2,7 @@ import { db } from '../db';
 import { deviceTokens, notifications, settings } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
+import { URGENT_FLAG_MAP } from './reply/urgentFlags';
 
 // Notification types
 export type NotificationType =
@@ -89,10 +90,11 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
     },
 };
 
-/** Arabic translations for flag reason strings used in notifications */
+/** Arabic translations for flag reason strings used in notifications.
+ *  High-stakes flags (cancellation, refund, etc.) are derived from URGENT_FLAG_MAP
+ *  to avoid duplication — see messageProcessor.ts for the single source of truth. */
 const FLAG_REASON_AR: Record<string, string> = {
     'offensive_or_abusive': 'محتوى مسيء',
-    'angry_customer': 'عميل غاضب',
     'low_confidence': 'ثقة منخفضة في الرد',
     'held_low_confidence': 'ثقة منخفضة في الرد',
     'price_not_in_kb': 'سعر غير موجود في قاعدة المعرفة',
@@ -103,12 +105,32 @@ const FLAG_REASON_AR: Record<string, string> = {
     'invalid_json': 'خطأ في معالجة الرد',
     'fallback_reply': 'رد احتياطي',
     'AI flagged this reply': 'تم تمييز هذا الرد بواسطة الذكاء الاصطناعي',
+    // Derived from URGENT_FLAG_MAP: snake_case keys + English label keys → Arabic
+    ...Object.fromEntries(
+        Object.entries(URGENT_FLAG_MAP).flatMap(([key, { en, ar }]) => [
+            [key, ar],   // e.g. 'cancellation_request' → 'طلب إلغاء'
+            [en, ar],    // e.g. 'Cancellation Request' → 'طلب إلغاء'
+        ]),
+    ),
 };
 
 /** Arabic fallback for 'Unknown' sender name */
 const UNKNOWN_SENDER_AR = 'مجهول';
 
 function translateFlagReason(reason: string): string {
+    // Exact match (simple flags like "angry_customer")
+    if (FLAG_REASON_AR[reason]) return FLAG_REASON_AR[reason];
+
+    // Enriched reasons like "Cancellation Request — order #5678":
+    // translate the label prefix and keep the suffix (order number).
+    // Only match when suffix starts with ' ' (not comma-separated flags).
+    for (const [en, ar] of Object.entries(FLAG_REASON_AR)) {
+        if (reason.startsWith(en) && reason.length > en.length && reason[en.length] === ' ') {
+            return ar + reason.slice(en.length);
+        }
+    }
+
+    // Comma-separated fallback (e.g., "angry_customer,cancellation_request")
     return reason.split(',')
         .map(f => FLAG_REASON_AR[f.trim()] || f.trim())
         .join('، ');
@@ -313,6 +335,7 @@ class NotificationService {
             const body = userLanguage === 'ar' ? payload.bodyAr : payload.bodyEn;
 
             // Send to all tokens
+            const isUrgent = payload.data?.urgent === true;
             const message = {
                 notification: {
                     title,
@@ -328,6 +351,11 @@ class NotificationService {
                     ...(payload.data ? { customData: JSON.stringify(payload.data) } : {}),
                 },
                 tokens,
+                // High priority for urgent notifications — wakes device immediately
+                ...(isUrgent ? {
+                    android: { priority: 'high' as const },
+                    apns: { headers: { 'apns-priority': '10' } },
+                } : {}),
             };
 
             const response = await admin.messaging().sendEachForMulticast(message);

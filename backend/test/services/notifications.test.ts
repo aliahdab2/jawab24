@@ -321,6 +321,96 @@ describe('NotificationService', () => {
             // Should fall back to the raw string
             expect(payload.bodyAr).toContain('some_unknown_flag');
         });
+
+        it('should translate enriched reason like "Cancellation Request — order #5678" to Arabic', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-enrich' }]),
+                }),
+            });
+
+            const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification(
+                'user-123',
+                'flagged_reply',
+                { senderName: 'Customer', reason: 'Cancellation Request — order #5678' },
+            );
+
+            const payload = sendNotificationSpy.mock.calls[0][1];
+            // Arabic body should translate the label but keep the order suffix
+            expect(payload.bodyAr).toContain('طلب إلغاء');
+            expect(payload.bodyAr).toContain('5678');
+            // English body keeps the original enriched reason
+            expect(payload.bodyEn).toContain('Cancellation Request — order #5678');
+        });
+
+        it('should translate new high-stakes flags (cancellation, refund, exchange)', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-hs' }]),
+                }),
+            });
+
+            const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
+
+            // Test each new flag
+            for (const [flag, arTranslation] of [
+                ['Cancellation Request', 'طلب إلغاء'],
+                ['Refund Request', 'طلب استرجاع'],
+                ['Exchange Request', 'طلب استبدال'],
+            ] as const) {
+                sendNotificationSpy.mockClear();
+
+                await notificationService.sendTemplateNotification(
+                    'user-123',
+                    'flagged_reply',
+                    { senderName: 'Test', reason: flag },
+                );
+
+                const payload = sendNotificationSpy.mock.calls[0][1];
+                expect(payload.bodyAr).toContain(arTranslation);
+            }
+        });
+
+        it('should pass urgent data through to sendNotification payload', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            });
+
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-urgent' }]),
+                }),
+            });
+
+            const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
+
+            await notificationService.sendTemplateNotification(
+                'user-123',
+                'flagged_reply',
+                { senderName: 'Customer', reason: 'Cancellation Request' },
+                { messageId: 'msg-1', type: 'message', urgent: true },
+            );
+
+            const payload = sendNotificationSpy.mock.calls[0][1];
+            // The urgent flag should be passed through in the data field
+            expect(payload.data).toEqual(expect.objectContaining({ urgent: true }));
+        });
     });
 
     describe('getNotifications', () => {

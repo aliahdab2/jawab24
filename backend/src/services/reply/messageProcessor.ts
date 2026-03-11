@@ -13,6 +13,7 @@ import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { getStoreContextForAI } from '../ecommerce';
 import { publishSSEEvent } from '../../lib/eventBus';
+import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 
 /**
  * Unified Message Processor
@@ -303,6 +304,7 @@ export class MessageProcessor {
                         senderName,
                         replyStyle: userSettings.replyStyle,
                         brandVoiceNotes,
+                        ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                     },
                     userSettings.aiEnabled ?? false,
                 );
@@ -398,13 +400,21 @@ export class MessageProcessor {
                 this.logger.info(`[${platform}] Marked older debounced messages as replied`, { count: markedOlder, senderId });
             }
 
-            // 17. Notify if flagged
+            // 17. Notify if flagged — use enriched reason for high-stakes flags
             if (needsAttention && page.userId) {
+                const notifyReason = buildNotificationReason(flagReason, consolidatedText);
+                const urgent = isUrgentFlag(flagReason);
+
                 notificationService.sendTemplateNotification(
                     page.userId,
                     'flagged_reply',
-                    { senderName: senderName || senderId, reason: flagReason || 'AI flagged this reply' },
-                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                    { senderName: senderName || senderId, reason: notifyReason },
+                    {
+                        messageId: storedMessage.id,
+                        type: 'message',
+                        deepLink: '/messages?filter=flagged',
+                        ...(urgent ? { urgent: true } : {}),
+                    },
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
@@ -466,3 +476,8 @@ export class MessageProcessor {
 }
 
 export const messageProcessor = new MessageProcessor();
+
+// --- Urgent notification helpers ---
+
+// Re-export for backward compatibility (tests and other importers)
+export { URGENT_FLAG_MAP, isUrgentFlag, buildNotificationReason } from './urgentFlags';

@@ -361,3 +361,130 @@ describe('MessageProcessor — Guard Conditions', () => {
         expect(result.error).toBe('Page has no associated workspace');
     });
 });
+
+describe('MessageProcessor — High-Stakes Notification Wiring', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+    });
+
+    it('should send urgent notification with enriched reason for cancellation_request', async () => {
+        // AI flags reply as cancellation_request + needsAttention
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا.',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'cancellation_request',
+            aiIntent: 'COMPLAINT',
+            aiConfidence: 'high',
+        });
+
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'ابي الغي طلبي رقم 5678', createdTime: new Date() } as any,
+        ]);
+
+        const adapter = createMockAdapter();
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'ابي الغي طلبي رقم 5678', 'msg-1',
+        );
+
+        // Import the mock to check calls
+        const { notificationService } = await import('../../src/services/notifications');
+        const sendMock = vi.mocked(notificationService.sendTemplateNotification);
+
+        expect(sendMock).toHaveBeenCalledWith(
+            'user-uuid',
+            'flagged_reply',
+            expect.objectContaining({
+                reason: expect.stringContaining('Cancellation Request'),
+            }),
+            expect.objectContaining({
+                urgent: true,
+                type: 'message',
+            }),
+        );
+
+        // Verify the enriched reason includes the order number
+        const reasonArg = sendMock.mock.calls[0][2].reason;
+        expect(reasonArg).toContain('5678');
+    });
+
+    it('should NOT set urgent for non-urgent flags like low_confidence', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Some reply',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'low_confidence',
+            aiIntent: 'QUESTION',
+            aiConfidence: 'low',
+        });
+
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'random question', createdTime: new Date() } as any,
+        ]);
+
+        const adapter = createMockAdapter();
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'random question', 'msg-1',
+        );
+
+        const { notificationService } = await import('../../src/services/notifications');
+        const sendMock = vi.mocked(notificationService.sendTemplateNotification);
+
+        expect(sendMock).toHaveBeenCalledWith(
+            'user-uuid',
+            'flagged_reply',
+            expect.anything(),
+            expect.not.objectContaining({ urgent: true }),
+        );
+    });
+
+    it('should send urgent notification for refund_request', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'سنعالج طلبك فوراً',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'refund_request',
+            aiIntent: 'COMPLAINT',
+            aiConfidence: 'high',
+        });
+
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'I want a refund', createdTime: new Date() } as any,
+        ]);
+
+        const adapter = createMockAdapter();
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'I want a refund', 'msg-1',
+        );
+
+        const { notificationService } = await import('../../src/services/notifications');
+        const sendMock = vi.mocked(notificationService.sendTemplateNotification);
+
+        expect(sendMock).toHaveBeenCalledWith(
+            'user-uuid',
+            'flagged_reply',
+            expect.objectContaining({
+                reason: 'Refund Request',
+            }),
+            expect.objectContaining({
+                urgent: true,
+            }),
+        );
+    });
+});

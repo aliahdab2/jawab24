@@ -204,7 +204,7 @@ export class OpenAIService {
      * When history > 8 messages, older messages (all except the last 4) are compressed
      * into a short summary line to preserve context while saving tokens.
      */
-    private buildMessages(request: GenerateRequest, systemPrompt: string): { messages: OpenAI.ChatCompletionMessageParam[]; tokenInfo: TokenInfo } {
+    buildMessages(request: GenerateRequest, systemPrompt: string): { messages: OpenAI.ChatCompletionMessageParam[]; tokenInfo: TokenInfo } {
         const messages: OpenAI.ChatCompletionMessageParam[] = [
             { role: 'system', content: systemPrompt },
         ];
@@ -277,7 +277,7 @@ export class OpenAIService {
     /**
      * Build system prompt for the AI
      */
-    private buildSystemPrompt(request: GenerateRequest): string {
+    buildSystemPrompt(request: GenerateRequest): string {
         const rawPageName = request.context?.pageName || 'our page';
         // Sanitize to prevent prompt injection via page name
         const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
@@ -489,6 +489,9 @@ IMPORTANT: Output a JSON object with these fields:
   - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
   - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in <business_knowledge>
   - "angry_customer" — apply when the customer shows strong negative emotion, frustration, or threats. Trigger if ANY of these appear: (1) excessive exclamation marks or aggressive tone, (2) strong negative words like "worst"/"unacceptable"/"terrible"/"سيئة جداً"/"اسوأ"/"زفت"/"فشل" (these are examples — any expression of strong dissatisfaction counts), (3) refund demands: "I want my money back"/"I want a refund"/"ارجع فلوسي"/"ابي فلوسي", (4) complaints about being ignored: "no response"/"no one responds"/"محد يرد", (5) escalation/threat language (legal action, public complaints), (6) any other expression that clearly conveys anger, outrage, or strong frustration — use your judgment. NOTE: a polite complaint alone does NOT mean angry_customer — but clear anger, strong frustration, or refund demands MUST trigger this flag.
+  - "cancellation_request" — customer explicitly asks to cancel an order, subscription, or purchase. Examples: "cancel my order", "ابي الغي الطلب", "الغي طلبي". Can co-occur with "angry_customer" if the tone is also angry.
+  - "refund_request" — customer explicitly asks for money back or a refund. Examples: "I want a refund", "ارجعوا فلوسي", "ابي استرجاع المبلغ". Can co-occur with "angry_customer".
+  - "exchange_request" — customer explicitly asks to exchange or replace a product. Examples: "I want to exchange this", "ابي ابدل المنتج", "can I swap this for a different size".
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
@@ -519,7 +522,11 @@ Customer: "واو شو هالخدمة الرائعة 🙄"
 
 Example 6 — Angry customer:
 Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً"
-{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","flags":["angry_customer"]}
+{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","flags":["angry_customer","refund_request"]}
+
+Example 6b — Cancellation request (calm tone):
+Customer: "ابي الغي طلبي رقم 5678"
+{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","flags":["cancellation_request"]}
 
 Example 7 — Geographic specificity (partial KB match):
 Customer: "هل التوصيل مجاني لجدة؟" | KB says "توصيل مجاني لمناطق الرياض"

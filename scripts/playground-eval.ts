@@ -648,6 +648,104 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'No customer context — baseline, should reply normally without any name',
     },
+
+    // ===== Category 20: High-Stakes Intent Flags =====
+
+    // 20.1 — Explicit cancellation request in Arabic
+    {
+        id: 126, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'ابي الغي طلبي رقم 5678',
+        page: 'electronics',
+        expected: {
+            flags: ['cancellation_request'],
+            needsAttention: true,
+            intent: ['COMPLAINT'],
+        },
+        notes: 'Clear cancellation request — must flag cancellation_request and need attention',
+    },
+
+    // 20.2 — Explicit refund request in Arabic
+    {
+        id: 127, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'ارجعوا فلوسي، المنتج ما يشتغل',
+        page: 'electronics',
+        expected: {
+            flags: ['refund_request'],
+            needsAttention: true,
+        },
+        notes: 'Clear refund demand — must flag refund_request',
+    },
+
+    // 20.3 — Exchange request in Arabic
+    {
+        id: 128, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'ابي ابدل الجوال بلون ثاني',
+        page: 'electronics',
+        expected: {
+            flags: ['exchange_request'],
+            needsAttention: true,
+        },
+        notes: 'Product exchange request — must flag exchange_request',
+    },
+
+    // 20.4 — Cancellation in English
+    {
+        id: 129, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'I want to cancel my order #9012',
+        page: 'electronics',
+        expected: {
+            flags: ['cancellation_request'],
+            needsAttention: true,
+        },
+        notes: 'English cancellation — flags should work for both languages',
+    },
+
+    // 20.5 — Refund request in English
+    {
+        id: 130, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'I need a full refund please, the item arrived damaged',
+        page: 'electronics',
+        expected: {
+            flags: ['refund_request'],
+            needsAttention: true,
+        },
+        notes: 'English refund request with reason',
+    },
+
+    // 20.6 — General complaint should NOT trigger high-stakes flags
+    {
+        id: 131, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'الخدمة بطيئة والتوصيل تأخر',
+        page: 'electronics',
+        expected: {
+            flagsAbsent: ['cancellation_request', 'refund_request', 'exchange_request'],
+        },
+        notes: 'Generic complaint about slow service — should NOT trigger cancellation/refund/exchange flags',
+    },
+
+    // 20.7 — Product question should NOT trigger high-stakes flags
+    {
+        id: 132, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'هل عندكم ايفون 15 متوفر؟',
+        page: 'electronics',
+        expected: {
+            flagsAbsent: ['cancellation_request', 'refund_request', 'exchange_request'],
+            intent: ['QUESTION', 'PURCHASE_INTENT'],
+        },
+        notes: 'Product availability question — no high-stakes flags',
+    },
+
+    // 20.8 — Angry customer with cancellation (dual flags)
+    {
+        id: 133, category: 20, categoryName: 'High-Stakes Intent Flags', channel: 'dm',
+        message: 'اسوأ خدمة! الغوا طلبي فوراً ولا بشتكي عليكم',
+        page: 'electronics',
+        expected: {
+            flags: ['cancellation_request'],
+            needsAttention: true,
+        },
+        notes: 'Angry cancellation — must at least have cancellation_request flag, may also have angry_customer',
+    },
 ];
 
 // ---------------------------------------------------------------------------
