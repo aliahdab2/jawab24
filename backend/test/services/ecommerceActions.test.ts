@@ -1,0 +1,545 @@
+/**
+ * Tests for E-Commerce Tool Executor
+ *
+ * Covers:
+ * - Input sanitization (order number, product name, phone)
+ * - Name/phone matching for identity verification
+ * - executeToolCall routing, caching, verification flow, error handling
+ */
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+    sanitizeOrderNumber,
+    sanitizeProductName,
+    sanitizePhone,
+    namesMatch,
+    phonesMatch,
+    executeToolCall,
+} from '../../src/services/ecommerceActions';
+import type { EcommerceToolCall } from '@jawab24/shared';
+
+// ---------- Mocks ----------
+
+const mockRedisGet = vi.fn();
+const mockRedisSet = vi.fn();
+
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: (...args: unknown[]) => mockRedisGet(...args),
+        set: (...args: unknown[]) => mockRedisSet(...args),
+    },
+}));
+
+const mockGetStoreById = vi.fn();
+vi.mock('../../src/services/ecommerce', () => ({
+    getStoreById: (...args: unknown[]) => mockGetStoreById(...args),
+}));
+
+const mockLookupOrder = vi.fn();
+const mockGetShipmentTracking = vi.fn();
+const mockCheckInventory = vi.fn();
+
+vi.mock('../../src/services/shopify', () => ({
+    lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
+    getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
+    checkInventory: (...args: unknown[]) => mockCheckInventory(...args),
+}));
+
+vi.mock('../../src/services/salla', () => ({
+    lookupOrder: (...args: unknown[]) => mockLookupOrder(...args),
+    getShipmentTracking: (...args: unknown[]) => mockGetShipmentTracking(...args),
+    checkInventory: (...args: unknown[]) => mockCheckInventory(...args),
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
+}));
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    mockRedisGet.mockResolvedValue(null);
+    mockRedisSet.mockResolvedValue('OK');
+});
+
+// ==========================================
+// sanitizeOrderNumber
+// ==========================================
+describe('sanitizeOrderNumber', () => {
+    it('accepts plain digits', () => {
+        expect(sanitizeOrderNumber('1234')).toBe('1234');
+    });
+
+    it('strips leading #', () => {
+        expect(sanitizeOrderNumber('#5678')).toBe('5678');
+    });
+
+    it('trims whitespace', () => {
+        expect(sanitizeOrderNumber('  999  ')).toBe('999');
+    });
+
+    it('accepts digits with hyphens (some platforms)', () => {
+        expect(sanitizeOrderNumber('123-456')).toBe('123-456');
+    });
+
+    it('rejects empty string', () => {
+        expect(sanitizeOrderNumber('')).toBeNull();
+    });
+
+    it('rejects letters', () => {
+        expect(sanitizeOrderNumber('abc')).toBeNull();
+    });
+
+    it('rejects injection attempts', () => {
+        expect(sanitizeOrderNumber('1234; DROP TABLE')).toBeNull();
+        expect(sanitizeOrderNumber('1234<script>')).toBeNull();
+    });
+
+    it('rejects strings longer than 20 chars', () => {
+        expect(sanitizeOrderNumber('123456789012345678901')).toBeNull();
+    });
+
+    it('accepts max length (20 digits)', () => {
+        expect(sanitizeOrderNumber('12345678901234567890')).toBe('12345678901234567890');
+    });
+});
+
+// ==========================================
+// sanitizeProductName
+// ==========================================
+describe('sanitizeProductName', () => {
+    it('accepts normal product names', () => {
+        expect(sanitizeProductName('iPhone 15 Pro')).toBe('iPhone 15 Pro');
+    });
+
+    it('accepts Arabic product names', () => {
+        expect(sanitizeProductName('عطر العود')).toBe('عطر العود');
+    });
+
+    it('strips injection characters', () => {
+        // Regex strips < and > but not tag names — resulting in "productscriptalert(1)/script"
+        expect(sanitizeProductName('product<script>alert(1)</script>')).toBe('productscriptalert(1)/script');
+    });
+
+    it('strips brackets and backslash', () => {
+        expect(sanitizeProductName('test[1]{2}\\3')).toBe('test123');
+    });
+
+    it('truncates to 200 chars', () => {
+        const long = 'a'.repeat(250);
+        expect(sanitizeProductName(long)?.length).toBe(200);
+    });
+
+    it('rejects empty string', () => {
+        expect(sanitizeProductName('')).toBeNull();
+    });
+
+    it('rejects whitespace-only', () => {
+        expect(sanitizeProductName('   ')).toBeNull();
+    });
+});
+
+// ==========================================
+// sanitizePhone
+// ==========================================
+describe('sanitizePhone', () => {
+    it('accepts Saudi phone number', () => {
+        expect(sanitizePhone('+966501234567')).toBe('+966501234567');
+    });
+
+    it('strips spaces and dashes', () => {
+        expect(sanitizePhone('+966 50 123 4567')).toBe('+966501234567');
+    });
+
+    it('strips parentheses', () => {
+        expect(sanitizePhone('(050) 123-4567')).toBe('0501234567');
+    });
+
+    it('rejects too-short numbers', () => {
+        expect(sanitizePhone('12345')).toBeNull();
+    });
+
+    it('rejects too-long numbers (>15 digits)', () => {
+        expect(sanitizePhone('1234567890123456')).toBeNull();
+    });
+
+    it('rejects letters', () => {
+        expect(sanitizePhone('abc12345678')).toBeNull();
+    });
+
+    it('rejects empty string', () => {
+        expect(sanitizePhone('')).toBeNull();
+    });
+});
+
+// ==========================================
+// namesMatch
+// ==========================================
+describe('namesMatch', () => {
+    it('matches exact same name', () => {
+        expect(namesMatch('محمد العلي', 'محمد العلي')).toBe(true);
+    });
+
+    it('matches case-insensitive', () => {
+        expect(namesMatch('Ahmed Ali', 'ahmed ali')).toBe(true);
+    });
+
+    it('matches first name only (stored full, provided first)', () => {
+        expect(namesMatch('محمد العلي', 'محمد')).toBe(true);
+    });
+
+    it('matches first name only (stored first, provided full)', () => {
+        expect(namesMatch('محمد', 'محمد العلي')).toBe(true);
+    });
+
+    it('does not match middle name (startsWith only, no substring search)', () => {
+        // Security: substring matching was removed to prevent brute-force attacks
+        expect(namesMatch('Abdullah Mohammed Al Rashid', 'Mohammed')).toBe(false);
+    });
+
+    it('does not match completely different names', () => {
+        expect(namesMatch('محمد', 'فاطمة')).toBe(false);
+    });
+
+    it('returns false for empty stored name', () => {
+        expect(namesMatch('', 'محمد')).toBe(false);
+    });
+
+    it('returns false for empty provided name', () => {
+        expect(namesMatch('محمد', '')).toBe(false);
+    });
+
+    it('returns false for single-character provided name (min 2 chars required)', () => {
+        expect(namesMatch('Ahmad', 'a')).toBe(false);
+    });
+});
+
+// ==========================================
+// phonesMatch
+// ==========================================
+describe('phonesMatch', () => {
+    it('matches identical numbers', () => {
+        expect(phonesMatch('0501234567', '0501234567')).toBe(true);
+    });
+
+    it('matches with/without country code (+966)', () => {
+        expect(phonesMatch('+966501234567', '0501234567')).toBe(true);
+    });
+
+    it('matches when both have country code', () => {
+        expect(phonesMatch('+966501234567', '+966501234567')).toBe(true);
+    });
+
+    it('does not match different numbers', () => {
+        expect(phonesMatch('+966501234567', '+966509876543')).toBe(false);
+    });
+
+    it('returns false for too-short numbers', () => {
+        expect(phonesMatch('123', '123')).toBe(false);
+    });
+});
+
+// ==========================================
+// executeToolCall
+// ==========================================
+describe('executeToolCall', () => {
+    const storeId = 'store-123';
+
+    it('rejects unknown tool names', async () => {
+        const result = await executeToolCall(storeId, {
+            name: 'drop_table' as 'lookup_order',
+            arguments: {},
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('unknown_tool');
+    });
+
+    it('returns store_not_connected when store is inactive', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: false, platform: 'shopify' });
+
+        const result = await executeToolCall(storeId, {
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('store_not_connected');
+    });
+
+    it('returns store_not_connected when store not found', async () => {
+        mockGetStoreById.mockResolvedValue(null);
+
+        const result = await executeToolCall(storeId, {
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('store_not_connected');
+    });
+
+    it('returns cached result when available', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        const cached = { tool_name: 'check_inventory', success: true, data: { available: true } };
+        mockRedisGet.mockResolvedValue(JSON.stringify(cached));
+
+        const result = await executeToolCall(storeId, {
+            name: 'check_inventory',
+            arguments: { product_name: 'iPhone' },
+        });
+        expect(result).toEqual(cached);
+        expect(mockCheckInventory).not.toHaveBeenCalled();
+    });
+
+    it('calls shopify service for lookup_order on shopify stores', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        mockLookupOrder.mockResolvedValue({
+            orderNumber: '1234',
+            status: 'paid',
+            customerFirstName: 'محمد',
+            customerPhone: '+966501234567',
+            orderDate: '2026-01-01',
+            items: [],
+            totalAmount: '100',
+            currency: 'SAR',
+            paymentStatus: 'paid',
+        });
+
+        const result = await executeToolCall(storeId, {
+            name: 'lookup_order',
+            arguments: { order_number: '1234' },
+        });
+
+        expect(result.success).toBe(true);
+        // Phase 1: should return verification challenge, NOT order details
+        expect(result.data).toHaveProperty('orderFound', true);
+        expect(result.data).toHaveProperty('message');
+        expect(result.data).not.toHaveProperty('status');
+        expect(result.data).not.toHaveProperty('customerFirstName');
+    });
+
+    it('returns order_not_found when shopify returns null', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        mockLookupOrder.mockResolvedValue(null);
+
+        const result = await executeToolCall(storeId, {
+            name: 'lookup_order',
+            arguments: { order_number: '9999' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('order_not_found');
+    });
+
+    it('returns invalid_order_number for bad input', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+
+        const result = await executeToolCall(storeId, {
+            name: 'lookup_order',
+            arguments: { order_number: 'abc' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('invalid_order_number');
+    });
+
+    it('returns invalid_product_name for empty product name', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+
+        const result = await executeToolCall(storeId, {
+            name: 'check_inventory',
+            arguments: { product_name: '' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('invalid_product_name');
+    });
+
+    it('returns unsupported_platform for unknown platforms', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'woocommerce' });
+
+        const result = await executeToolCall(storeId, {
+            name: 'check_inventory',
+            arguments: { product_name: 'iPhone' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('unsupported_platform');
+    });
+
+    it('returns insufficient_permissions for 403 errors', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        mockCheckInventory.mockRejectedValue(new Error('403 Forbidden'));
+
+        const result = await executeToolCall(storeId, {
+            name: 'check_inventory',
+            arguments: { product_name: 'iPhone' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('insufficient_permissions');
+    });
+
+    it('returns api_error for unexpected errors', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        mockCheckInventory.mockRejectedValue(new Error('network timeout'));
+
+        const result = await executeToolCall(storeId, {
+            name: 'check_inventory',
+            arguments: { product_name: 'iPhone' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('api_error');
+    });
+
+    it('caches successful results in Redis', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        mockCheckInventory.mockResolvedValue({
+            productName: 'iPhone',
+            available: true,
+            quantity: 5,
+        });
+
+        await executeToolCall(storeId, {
+            name: 'check_inventory',
+            arguments: { product_name: 'iPhone' },
+        });
+
+        expect(mockRedisSet).toHaveBeenCalledWith(
+            expect.stringContaining('ecom:tool:'),
+            expect.any(String),
+            'EX',
+            300,
+        );
+    });
+
+    it('handles Redis unavailability gracefully', async () => {
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+        mockRedisGet.mockRejectedValue(new Error('Redis down'));
+        mockCheckInventory.mockResolvedValue({
+            productName: 'iPhone',
+            available: true,
+            quantity: 5,
+        });
+
+        const result = await executeToolCall(storeId, {
+            name: 'check_inventory',
+            arguments: { product_name: 'iPhone' },
+        });
+        // Should still succeed — Redis is non-critical
+        expect(result.success).toBe(true);
+    });
+});
+
+// ==========================================
+// Verification flow (Phase 2)
+// ==========================================
+describe('executeToolCall — verification', () => {
+    const storeId = 'store-123';
+
+    it('returns verification_expired when no pending data in Redis', async () => {
+        mockRedisGet.mockResolvedValue(null);
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('verification_expired');
+    });
+
+    it('returns verification_failed when name does not match', async () => {
+        mockRedisGet.mockResolvedValue(JSON.stringify({
+            orderNumber: '1234',
+            status: 'paid',
+            customerFirstName: 'محمد',
+            customerPhone: '+966501234567',
+            orderDate: '2026-01-01',
+            items: [],
+            totalAmount: '100',
+            currency: 'SAR',
+            paymentStatus: 'paid',
+        }));
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'فاطمة' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('verification_failed');
+    });
+
+    it('returns order data when name matches', async () => {
+        mockRedisGet.mockResolvedValue(JSON.stringify({
+            orderNumber: '1234',
+            status: 'paid',
+            customerFirstName: 'محمد العلي',
+            customerPhone: '+966501234567',
+            orderDate: '2026-01-01',
+            items: [{ name: 'عطر', quantity: 1, price: '100' }],
+            totalAmount: '100',
+            currency: 'SAR',
+            paymentStatus: 'paid',
+        }));
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_name: 'محمد' },
+        });
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('orderNumber', '1234');
+        expect(result.data).toHaveProperty('status', 'paid');
+        // PII must be stripped
+        expect(result.data).not.toHaveProperty('customerFirstName');
+        expect(result.data).not.toHaveProperty('customerPhone');
+    });
+
+    it('returns data when phone matches', async () => {
+        mockRedisGet.mockResolvedValue(JSON.stringify({
+            orderNumber: '1234',
+            status: 'shipped',
+            customerFirstName: 'محمد',
+            customerPhone: '+966501234567',
+            orderDate: '2026-01-01',
+            items: [],
+            totalAmount: '200',
+            currency: 'SAR',
+            paymentStatus: 'paid',
+        }));
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234', provided_phone: '0501234567' },
+        });
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('status', 'shipped');
+    });
+
+    it('returns name_or_phone_required when neither is provided', async () => {
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: '1234' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('name_or_phone_required');
+    });
+
+    it('returns invalid_order_number for bad order number in verification', async () => {
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_order',
+            arguments: { order_number: 'abc', provided_name: 'محمد' },
+        });
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('invalid_order_number');
+    });
+
+    it('handles shipment verification the same way', async () => {
+        mockRedisGet.mockResolvedValue(JSON.stringify({
+            orderNumber: '5678',
+            status: 'in_transit',
+            trackingNumber: 'TRACK123',
+            courierName: 'Aramex',
+            customerFirstName: 'سارة',
+            customerPhone: '+966509876543',
+        }));
+
+        const result = await executeToolCall(storeId, {
+            name: 'verify_and_get_shipment',
+            arguments: { order_number: '5678', provided_name: 'سارة' },
+        });
+        expect(result.success).toBe(true);
+        expect(result.data).toHaveProperty('trackingNumber', 'TRACK123');
+        expect(result.data).not.toHaveProperty('customerFirstName');
+    });
+});

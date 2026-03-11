@@ -60,7 +60,7 @@ export const config = {
     shopify: {
         apiKey: process.env.SHOPIFY_API_KEY || '',
         apiSecret: process.env.SHOPIFY_API_SECRET || '',
-        scopes: 'read_products,read_content',
+        scopes: 'read_products,read_content,read_orders,read_fulfillments,read_inventory',
         hostName: process.env.SHOPIFY_HOST_NAME || '',
         tokenEncryptionKey: process.env.SHOPIFY_TOKEN_ENCRYPTION_KEY || '',
     },
@@ -71,7 +71,7 @@ export const config = {
         clientSecret: process.env.SALLA_CLIENT_SECRET || '',
         hostName: process.env.SALLA_HOST_NAME || '',
         webhookSecret: process.env.SALLA_WEBHOOK_SECRET || '',
-        scopes: 'offline_access products.read_write settings.read webhooks.read_write',
+        scopes: 'offline_access products.read_write settings.read webhooks.read_write orders.read_write',
     },
 
     // Zid App (disabled until credentials are set)

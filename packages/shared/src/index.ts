@@ -10,6 +10,9 @@ export { matchesKeyword, testKeywordsMatch } from './utils/keyword-matching';
 // --- SSE Event Types ---
 export * from './sse-events';
 
+// --- E-commerce Tool Types ---
+export * from './ecommerce-tools';
+
 // --- Message Types ---
 export interface Message {
   id: string;
@@ -326,7 +329,7 @@ export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
 
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
-export const PROMPT_VERSION = 'v20';
+export const PROMPT_VERSION = 'v21';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [

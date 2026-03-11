@@ -63,6 +63,8 @@ export interface GenerateReplyContext {
     // Reply customization
     replyStyle?: string;
     brandVoiceNotes?: string;
+    // E-commerce tools (DMs only)
+    ecommerceStoreId?: string;
 }
 
 export type CommentReplyMode = 'public' | 'private' | 'dual';
@@ -215,11 +217,22 @@ export class ReplyGenerator {
                 );
 
                 const msgLang = detectLanguageCode(text);
-                const aiResponse = await aiService.generateReply({
+                const aiRequest = {
                     comment: text,
                     language: msgLang !== 'unknown' ? msgLang : undefined,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext }
-                });
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext, ecommerceStoreId: context.ecommerceStoreId },
+                };
+
+                // When an e-commerce store is linked, use the tool loop
+                // so the AI can call lookup_order / track_shipment / check_inventory.
+                // Otherwise, use the standard aiService (zero behavior change).
+                let aiResponse: AiGenerateResponse;
+                if (context.ecommerceStoreId) {
+                    const { generateReplyWithTools } = await import('../ecommerceToolLoop');
+                    aiResponse = await generateReplyWithTools(aiRequest);
+                } else {
+                    aiResponse = await aiService.generateReply(aiRequest);
+                }
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
             }

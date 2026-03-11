@@ -539,3 +539,302 @@ export async function fullSync(storeId: string) {
 
     return result;
 }
+
+// --- E-Commerce Agent Tools (read-only order/tracking/inventory) ---
+
+import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
+
+/**
+ * Resolve store credentials for a given storeId.
+ * Returns storeDomain + decrypted accessToken, or null if store missing/inactive.
+ */
+async function resolveStoreCredentials(storeId: string): Promise<{ storeDomain: string; accessToken: string } | null> {
+    const store = await getStoreById(storeId);
+    if (!store || !store.isActive) return null;
+    const accessToken = resolveStoreToken(store);
+    return { storeDomain: store.storeDomain, accessToken };
+}
+
+/**
+ * Look up an order by order number via Shopify GraphQL.
+ * Returns normalized OrderInfo or null if not found.
+ */
+export async function lookupOrder(storeId: string, orderNumber: string): Promise<OrderInfoFull | null> {
+    const creds = await resolveStoreCredentials(storeId);
+    if (!creds) return null;
+
+    // Shopify order names include '#' prefix (e.g. "#1234")
+    const cleanNumber = orderNumber.replace(/^#/, '');
+
+    const data = await shopifyGraphQL<{
+        data: {
+            orders: {
+                edges: Array<{
+                    node: {
+                        name: string;
+                        createdAt: string;
+                        displayFinancialStatus: string;
+                        displayFulfillmentStatus: string;
+                        totalPriceSet: { shopMoney: { amount: string; currencyCode: string } };
+                        lineItems: { edges: Array<{ node: { title: string; quantity: number; originalUnitPriceSet: { shopMoney: { amount: string; currencyCode: string } } } }> };
+                        shippingAddress: { city: string; province: string } | null;
+                        customer: { firstName: string; phone: string | null } | null;
+                        refunds: Array<{ totalRefundedSet: { shopMoney: { amount: string; currencyCode: string } } }>;
+                    };
+                }>;
+            };
+        };
+    }>(creds.storeDomain, creds.accessToken, `{
+        orders(first: 1, query: "name:#${cleanNumber}") {
+            edges {
+                node {
+                    name
+                    createdAt
+                    displayFinancialStatus
+                    displayFulfillmentStatus
+                    totalPriceSet { shopMoney { amount currencyCode } }
+                    lineItems(first: 20) {
+                        edges {
+                            node {
+                                title
+                                quantity
+                                originalUnitPriceSet { shopMoney { amount currencyCode } }
+                            }
+                        }
+                    }
+                    shippingAddress { city province }
+                    customer { firstName phone }
+                    refunds {
+                        totalRefundedSet { shopMoney { amount currencyCode } }
+                    }
+                }
+            }
+        }
+    }`);
+
+    const order = data.data.orders.edges[0]?.node;
+    if (!order) return null;
+
+    const totalRefund = order.refunds.reduce(
+        (sum, r) => sum + parseFloat(r.totalRefundedSet.shopMoney.amount || '0'), 0,
+    );
+
+    return {
+        orderNumber: order.name.replace(/^#/, ''),
+        customerFirstName: order.customer?.firstName || '',
+        customerPhone: order.customer?.phone || undefined,
+        status: mapShopifyFulfillmentStatus(order.displayFulfillmentStatus),
+        orderDate: order.createdAt,
+        items: order.lineItems.edges.map(e => ({
+            name: e.node.title,
+            quantity: e.node.quantity,
+            price: `${e.node.originalUnitPriceSet.shopMoney.amount} ${e.node.originalUnitPriceSet.shopMoney.currencyCode}`,
+        })),
+        totalAmount: order.totalPriceSet.shopMoney.amount,
+        currency: order.totalPriceSet.shopMoney.currencyCode,
+        paymentStatus: mapShopifyFinancialStatus(order.displayFinancialStatus),
+        refundAmount: totalRefund > 0 ? `${totalRefund} ${order.totalPriceSet.shopMoney.currencyCode}` : undefined,
+        shippingCity: order.shippingAddress?.city || undefined,
+        shippingDistrict: order.shippingAddress?.province || undefined,
+    };
+}
+
+/**
+ * Get shipment tracking info for an order via Shopify GraphQL.
+ * Returns normalized ShipmentInfo or null if not found.
+ */
+export async function getShipmentTracking(storeId: string, orderNumber: string): Promise<ShipmentInfoFull | null> {
+    const creds = await resolveStoreCredentials(storeId);
+    if (!creds) return null;
+
+    const cleanNumber = orderNumber.replace(/^#/, '');
+
+    const data = await shopifyGraphQL<{
+        data: {
+            orders: {
+                edges: Array<{
+                    node: {
+                        name: string;
+                        displayFulfillmentStatus: string;
+                        shippingAddress: { city: string } | null;
+                        customer: { firstName: string; phone: string | null } | null;
+                        fulfillments: Array<{
+                            status: string;
+                            estimatedDeliveryAt: string | null;
+                            trackingInfo: Array<{
+                                number: string;
+                                url: string | null;
+                                company: string | null;
+                            }>;
+                        }>;
+                    };
+                }>;
+            };
+        };
+    }>(creds.storeDomain, creds.accessToken, `{
+        orders(first: 1, query: "name:#${cleanNumber}") {
+            edges {
+                node {
+                    name
+                    displayFulfillmentStatus
+                    shippingAddress { city }
+                    customer { firstName phone }
+                    fulfillments(first: 5) {
+                        status
+                        estimatedDeliveryAt
+                        trackingInfo {
+                            number
+                            url
+                            company
+                        }
+                    }
+                }
+            }
+        }
+    }`);
+
+    const order = data.data.orders.edges[0]?.node;
+    if (!order) return null;
+
+    const fulfillment = order.fulfillments[0];
+    const tracking = fulfillment?.trackingInfo[0];
+
+    return {
+        orderNumber: order.name.replace(/^#/, ''),
+        customerFirstName: order.customer?.firstName || '',
+        customerPhone: order.customer?.phone || undefined,
+        status: mapShopifyFulfillmentStatus(order.displayFulfillmentStatus),
+        trackingNumber: tracking?.number || undefined,
+        courierName: tracking?.company || undefined,
+        trackingUrl: tracking?.url || undefined,
+        estimatedDelivery: fulfillment?.estimatedDeliveryAt || undefined,
+        shippingCity: order.shippingAddress?.city || undefined,
+    };
+}
+
+/**
+ * Check real-time inventory for a product by name search via Shopify GraphQL.
+ * Returns normalized InventoryInfo or null if no matching product found.
+ */
+export async function checkInventory(storeId: string, productName: string, variant?: string): Promise<InventoryInfo | null> {
+    const creds = await resolveStoreCredentials(storeId);
+    if (!creds) return null;
+
+    const data = await shopifyGraphQL<{
+        data: {
+            products: {
+                edges: Array<{
+                    node: {
+                        title: string;
+                        handle: string;
+                        totalInventory: number;
+                        priceRangeV2: { minVariantPrice: { amount: string; currencyCode: string } };
+                        variants: {
+                            edges: Array<{
+                                node: {
+                                    title: string;
+                                    inventoryQuantity: number | null;
+                                    selectedOptions: Array<{ name: string; value: string }>;
+                                };
+                            }>;
+                        };
+                    };
+                }>;
+            };
+        };
+    }>(creds.storeDomain, creds.accessToken, `{
+        products(first: 5, query: "title:*${sanitizeGraphQLString(productName)}* status:active") {
+            edges {
+                node {
+                    title
+                    handle
+                    totalInventory
+                    priceRangeV2 { minVariantPrice { amount currencyCode } }
+                    variants(first: 30) {
+                        edges {
+                            node {
+                                title
+                                inventoryQuantity
+                                selectedOptions { name value }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }`);
+
+    const products = data.data.products.edges.map(e => e.node);
+    if (products.length === 0) return null;
+
+    // Find best match by title similarity (case-insensitive contains)
+    const lowerQuery = productName.toLowerCase();
+    const bestMatch = products.find(p => p.title.toLowerCase().includes(lowerQuery)) || products[0];
+
+    const allVariants = bestMatch.variants.edges.map(e => e.node);
+
+    // If a specific variant was requested, filter to matching variants
+    let filteredVariants = allVariants;
+    if (variant) {
+        const lowerVariant = variant.toLowerCase();
+        filteredVariants = allVariants.filter(v =>
+            v.title.toLowerCase().includes(lowerVariant) ||
+            v.selectedOptions.some(opt => opt.value.toLowerCase().includes(lowerVariant))
+        );
+    }
+
+    const variantResults = (filteredVariants.length > 0 ? filteredVariants : allVariants).map(v => ({
+        name: v.title,
+        available: (v.inventoryQuantity ?? 0) > 0,
+        quantity: v.inventoryQuantity ?? 0,
+    }));
+
+    const totalAvailable = variant
+        ? variantResults.reduce((sum, v) => sum + v.quantity, 0)
+        : bestMatch.totalInventory;
+
+    return {
+        productName: bestMatch.title,
+        available: totalAvailable > 0,
+        quantity: totalAvailable,
+        variants: variantResults.length > 1 || variant ? variantResults : undefined,
+        price: `${bestMatch.priceRangeV2.minVariantPrice.amount} ${bestMatch.priceRangeV2.minVariantPrice.currencyCode}`,
+        currency: bestMatch.priceRangeV2.minVariantPrice.currencyCode,
+        productUrl: bestMatch.handle ? `https://${creds.storeDomain}/products/${bestMatch.handle}` : undefined,
+    };
+}
+
+// --- Helper functions for status mapping ---
+
+function mapShopifyFulfillmentStatus(status: string): string {
+    const map: Record<string, string> = {
+        'UNFULFILLED': 'pending',
+        'PARTIALLY_FULFILLED': 'partially_shipped',
+        'FULFILLED': 'shipped',
+        'RESTOCKED': 'cancelled',
+        'PENDING_FULFILLMENT': 'pending',
+        'OPEN': 'pending',
+        'IN_PROGRESS': 'processing',
+        'ON_HOLD': 'on_hold',
+        'SCHEDULED': 'scheduled',
+    };
+    return map[status] || status.toLowerCase();
+}
+
+function mapShopifyFinancialStatus(status: string): string {
+    const map: Record<string, string> = {
+        'PENDING': 'pending',
+        'AUTHORIZED': 'pending',
+        'PARTIALLY_PAID': 'partially_paid',
+        'PAID': 'paid',
+        'PARTIALLY_REFUNDED': 'partially_refunded',
+        'REFUNDED': 'refunded',
+        'VOIDED': 'cancelled',
+    };
+    return map[status] || status.toLowerCase();
+}
+
+/** Sanitize user input for use in Shopify GraphQL query strings */
+function sanitizeGraphQLString(input: string): string {
+    return input.replace(/["\\\n\r]/g, '').slice(0, 100);
+}

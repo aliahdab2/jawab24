@@ -86,6 +86,8 @@ export interface AiGenerateRequest {
         replyStyle?: string;
         brandVoiceNotes?: string;
         customerContext?: string;
+        ecommerceStoreId?: string;
+        ecommerceToolsEnabled?: boolean;
     };
 }
 

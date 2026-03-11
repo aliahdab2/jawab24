@@ -465,3 +465,211 @@ export async function refreshExpiringTokens(): Promise<number> {
 
     return refreshed;
 }
+
+// --- E-Commerce Agent Tools (read-only order/tracking/inventory) ---
+
+import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
+
+/**
+ * Resolve store credentials for a given storeId.
+ * Ensures token is valid (refreshes if needed) and returns decrypted accessToken.
+ */
+async function resolveStoreCredentials(storeId: string): Promise<string | null> {
+    await ensureValidToken(storeId);
+    const store = await getStoreById(storeId);
+    if (!store || !store.isActive) return null;
+    if (!store.accessToken || !store.accessTokenIv) return null;
+    return decrypt(store.accessToken, store.accessTokenIv);
+}
+
+// --- Salla Order Response Types ---
+
+interface SallaOrderItem {
+    name: string;
+    quantity: number;
+    amounts: { price_without_tax: { amount: number }; total: { amount: number; currency: string } };
+}
+
+interface SallaShipment {
+    tracking_number: string | null;
+    courier_name: string | null;
+    tracking_link: string | null;
+    shipped_at: string | null;
+}
+
+interface SallaOrder {
+    id: number;
+    reference_id: string;
+    status: { slug: string; name: string };
+    payment_method: string;
+    amounts: { total: { amount: number; currency: string }; cash_on_delivery: { amount: number } };
+    customer: { first_name: string; mobile: string | null };
+    shipping: { address: { city: string; district: string } | null } | null;
+    items: SallaOrderItem[];
+    shipments?: SallaShipment[];
+    date: { date: string };
+    is_refunded?: boolean;
+    refund_amount?: { amount: number; currency: string };
+}
+
+interface SallaOrdersResponse {
+    data: SallaOrder[];
+}
+
+interface SallaOrderDetailResponse {
+    data: SallaOrder;
+}
+
+/**
+ * Look up an order by order number via Salla REST API.
+ * Returns normalized OrderInfo or null if not found.
+ */
+export async function lookupOrder(storeId: string, orderNumber: string): Promise<OrderInfoFull | null> {
+    const accessToken = await resolveStoreCredentials(storeId);
+    if (!accessToken) return null;
+
+    const data = await sallaApiGet<SallaOrdersResponse>(
+        `https://api.salla.dev/admin/v2/orders?keyword=${encodeURIComponent(orderNumber)}`,
+        accessToken,
+    );
+
+    const order = data.data[0];
+    if (!order) return null;
+
+    return mapSallaOrderToOrderInfo(order);
+}
+
+/**
+ * Get shipment tracking info for an order via Salla REST API.
+ * Returns normalized ShipmentInfo or null if not found.
+ */
+export async function getShipmentTracking(storeId: string, orderNumber: string): Promise<ShipmentInfoFull | null> {
+    const accessToken = await resolveStoreCredentials(storeId);
+    if (!accessToken) return null;
+
+    // First find the order by keyword search
+    const searchData = await sallaApiGet<SallaOrdersResponse>(
+        `https://api.salla.dev/admin/v2/orders?keyword=${encodeURIComponent(orderNumber)}`,
+        accessToken,
+    );
+
+    const orderSummary = searchData.data[0];
+    if (!orderSummary) return null;
+
+    // Fetch full order details (includes shipments)
+    const detailData = await sallaApiGet<SallaOrderDetailResponse>(
+        `https://api.salla.dev/admin/v2/orders/${orderSummary.id}`,
+        accessToken,
+    );
+
+    const order = detailData.data;
+    const shipment = order.shipments?.[0];
+
+    return {
+        orderNumber: order.reference_id,
+        customerFirstName: order.customer?.first_name || '',
+        customerPhone: order.customer?.mobile || undefined,
+        status: mapSallaOrderStatus(order.status.slug),
+        trackingNumber: shipment?.tracking_number || undefined,
+        courierName: shipment?.courier_name || undefined,
+        trackingUrl: shipment?.tracking_link || undefined,
+        estimatedDelivery: undefined, // Salla doesn't provide estimated delivery date
+        shippingCity: order.shipping?.address?.city || undefined,
+    };
+}
+
+/**
+ * Check real-time inventory for a product by name search via Salla REST API.
+ * Returns normalized InventoryInfo or null if no matching product found.
+ */
+export async function checkInventory(storeId: string, productName: string, variant?: string): Promise<InventoryInfo | null> {
+    const accessToken = await resolveStoreCredentials(storeId);
+    if (!accessToken) return null;
+
+    const data = await sallaApiGet<{ data: SallaProduct[] }>(
+        `https://api.salla.dev/admin/v2/products?keyword=${encodeURIComponent(productName)}&per_page=5`,
+        accessToken,
+    );
+
+    const products = data.data.filter(p => p.status !== 'deleted');
+    if (products.length === 0) return null;
+
+    // Find best match by title similarity (case-insensitive contains)
+    const lowerQuery = productName.toLowerCase();
+    const bestMatch = products.find(p => p.name.toLowerCase().includes(lowerQuery)) || products[0];
+
+    // Map options to variant format
+    const allVariants = (bestMatch.options || []).flatMap(opt =>
+        opt.values.map(v => ({
+            name: `${opt.name}: ${v.name}`,
+            available: (bestMatch.quantity ?? 0) > 0, // Salla doesn't have per-variant inventory in list
+            quantity: bestMatch.quantity ?? 0,
+        }))
+    );
+
+    // If specific variant requested, filter
+    let filteredVariants = allVariants;
+    if (variant) {
+        const lowerVariant = variant.toLowerCase();
+        filteredVariants = allVariants.filter(v => v.name.toLowerCase().includes(lowerVariant));
+    }
+
+    const storeDomain = await getStoreDomainForProduct(storeId);
+
+    return {
+        productName: bestMatch.name,
+        available: (bestMatch.quantity ?? 0) > 0,
+        quantity: bestMatch.quantity ?? 0,
+        variants: (filteredVariants.length > 0 ? filteredVariants : allVariants).length > 0
+            ? (filteredVariants.length > 0 ? filteredVariants : allVariants)
+            : undefined,
+        price: `${bestMatch.price.amount} ${bestMatch.price.currency}`,
+        currency: bestMatch.price.currency,
+        productUrl: bestMatch.slug && storeDomain ? `https://${storeDomain}/p/${bestMatch.slug}` : undefined,
+    };
+}
+
+// --- Mapping helpers ---
+
+function mapSallaOrderToOrderInfo(order: SallaOrder): OrderInfoFull {
+    const isRefunded = order.is_refunded || order.status.slug === 'refunded';
+
+    return {
+        orderNumber: order.reference_id,
+        customerFirstName: order.customer?.first_name || '',
+        customerPhone: order.customer?.mobile || undefined,
+        status: mapSallaOrderStatus(order.status.slug),
+        orderDate: order.date.date,
+        items: order.items.map(item => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: `${item.amounts.total.amount} ${item.amounts.total.currency}`,
+        })),
+        totalAmount: String(order.amounts.total.amount),
+        currency: order.amounts.total.currency,
+        paymentStatus: isRefunded ? 'refunded' : (order.status.slug === 'payment_pending' ? 'pending' : 'paid'),
+        refundAmount: order.refund_amount ? `${order.refund_amount.amount} ${order.refund_amount.currency}` : undefined,
+        shippingCity: order.shipping?.address?.city || undefined,
+        shippingDistrict: order.shipping?.address?.district || undefined,
+    };
+}
+
+function mapSallaOrderStatus(slug: string): string {
+    const map: Record<string, string> = {
+        'under_review': 'pending',
+        'payment_pending': 'pending',
+        'in_progress': 'processing',
+        'completed': 'delivered',
+        'shipped': 'shipped',
+        'cancelled': 'cancelled',
+        'refunded': 'refunded',
+        'restored': 'cancelled',
+    };
+    return map[slug] || slug;
+}
+
+/** Get store domain for building product URLs */
+async function getStoreDomainForProduct(storeId: string): Promise<string | null> {
+    const store = await getStoreById(storeId);
+    return store?.storeDomain || null;
+}

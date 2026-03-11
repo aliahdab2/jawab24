@@ -1,8 +1,10 @@
 import { FastifyInstance } from 'fastify';
 import { openaiService, GenerateRequest } from './services/openai';
+import { generateWithTools, generateWithToolResults, type ToolEnabledResponse } from './services/ecommerceToolHandler';
 import { translationService, generateNudgeVariations, type TranslateRequest } from './services/translation';
 import { Sentry } from './lib/sentry';
 import { config } from './config';
+import type { EcommerceToolResult } from '@jawab24/shared';
 
 async function routes(server: FastifyInstance) {
     // Health check (no rate limit)
@@ -46,6 +48,49 @@ async function routes(server: FastifyInstance) {
             request.log.error(error, 'Failed to generate reply');
             Sentry.captureException(error, { extra: { comment, language } });
             return reply.status(500).send({ error: 'Failed to generate reply' });
+        }
+    });
+
+    // Generate reply with e-commerce tools available (initial call)
+    server.post<{ Body: GenerateRequest }>('/generate-with-tools', async (request, reply) => {
+        const { comment, language, context } = request.body;
+
+        if (!comment || comment.trim().length === 0) {
+            return reply.status(400).send({ error: 'Comment is required' });
+        }
+
+        try {
+            const result = await generateWithTools({ comment, language, context });
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error, 'Failed to generate reply with tools');
+            Sentry.captureException(error, { extra: { comment, language } });
+            return reply.status(500).send({ error: 'Failed to generate reply with tools' });
+        }
+    });
+
+    // Complete generation after tool results are available
+    server.post<{
+        Body: {
+            originalRequest: GenerateRequest;
+            toolResults: EcommerceToolResult[];
+            originalToolCalls: Array<{ name: string; arguments: Record<string, string> }>;
+        };
+    }>('/generate-with-tool-results', async (request, reply) => {
+        const { originalRequest, toolResults, originalToolCalls } = request.body;
+
+        if (!originalRequest?.comment || !Array.isArray(toolResults) || !Array.isArray(originalToolCalls)
+            || toolResults.length === 0 || toolResults.length !== originalToolCalls.length) {
+            return reply.status(400).send({ error: 'originalRequest, toolResults (array), and originalToolCalls (array, same length) are required' });
+        }
+
+        try {
+            const result = await generateWithToolResults(originalRequest, toolResults, originalToolCalls);
+            return reply.send(result);
+        } catch (error) {
+            request.log.error(error, 'Failed to generate reply with tool results');
+            Sentry.captureException(error, { extra: { toolCount: toolResults.length } });
+            return reply.status(500).send({ error: 'Failed to generate reply with tool results' });
         }
     });
 
