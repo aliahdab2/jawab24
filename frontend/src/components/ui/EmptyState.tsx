@@ -7,7 +7,7 @@ type EmptyStateVariant = 'empty' | 'success' | 'search';
 interface EmptyStateProps {
   icon: LucideIcon;
   title: string;
-  description: string;
+  description?: string;
   action?: React.ReactNode;
   secondaryAction?: React.ReactNode;
   variant?: EmptyStateVariant;
@@ -62,9 +62,11 @@ export function EmptyState({
         {title}
       </h2>
 
-      <p className="text-sm sm:text-base text-muted-foreground max-w-md mb-6 sm:mb-8 leading-relaxed">
-        {description}
-      </p>
+      {description && (
+        <p className="text-sm sm:text-base text-muted-foreground max-w-md mb-6 sm:mb-8 leading-relaxed">
+          {description}
+        </p>
+      )}
 
       {action && (
         <div className="transition-transform hover:scale-[1.02] active:scale-95 duration-200">
