@@ -48,6 +48,18 @@ describe('Language Detection Utility', () => {
             expect(result.language).toBe('sv');
         });
 
+        it('should detect Swedish text with å character', () => {
+            const result = detectLanguage('Vi går till parken');
+            expect(result.language).toBe('sv');
+            expect(result.confidence).toBeGreaterThanOrEqual(0.9);
+        });
+
+        it('should detect Swedish by common words without special chars', () => {
+            // Needs at least 2 Swedish common words (och, det, att, som, etc.)
+            const result = detectLanguage('det och att som test');
+            expect(result.language).toBe('sv');
+        });
+
         it('should handle empty text', () => {
             const result = detectLanguage('');
             expect(result.language).toBe('unknown');
@@ -62,6 +74,12 @@ describe('Language Detection Utility', () => {
         it('should detect Turkish text', () => {
             const result = detectLanguage('Merhaba, nasılsınız? Teşekkürler.');
             expect(result.language).toBe('tr');
+        });
+
+        it('should detect Turkish text with common words and unique chars', () => {
+            const result = detectLanguage('Bu bir şey için ve bu da güzel');
+            expect(result.language).toBe('tr');
+            expect(result.confidence).toBeGreaterThanOrEqual(0.85);
         });
 
         it('should detect German text', () => {
