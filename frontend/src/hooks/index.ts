@@ -17,3 +17,4 @@ export { useSSE } from './useSSE';
 export { useTheme } from './useTheme';
 export { useAiGeneration } from './useAiGeneration';
 export { useConversationActions } from './useConversationActions';
+export { useMobileMessages } from './useMobileMessages';

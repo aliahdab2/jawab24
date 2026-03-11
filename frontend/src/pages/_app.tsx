@@ -17,6 +17,7 @@ import { Toaster } from 'sonner';
 import { AppSkeleton } from '@/components/ui';
 import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
+import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useSSE, useTheme } from '@/hooks';
@@ -356,8 +357,13 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   const getLayout = Component.getLayout ?? ((page) => page);
 
   // Effective locale: router > Zustand store > default 'ar'
-  // Mobile builds have no router locale, so fall back to store
-  const effectiveLocale = locale || useUIStore.getState().language || 'ar';
+  // Mobile builds have no router locale, so fall back to store (reactive subscription)
+  const storeLanguage = useUIStore((s) => s.language);
+  const effectiveLocale = locale || storeLanguage || 'ar';
+
+  // On mobile (static export), translations are baked at build time for one locale.
+  // Reload the correct messages client-side when language changes.
+  const mobileMessages = useMobileMessages(effectiveLocale);
 
   // Always wrap in QueryClientProvider so hooks in child components can access it.
   // The hydration guard is inside the provider to avoid the "No QueryClient set" error
@@ -366,7 +372,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     <QueryClientProvider client={queryClient}>
       <NextIntlClientProvider
         locale={effectiveLocale}
-        messages={pageProps.messages || {}}
+        messages={mobileMessages || pageProps.messages || {}}
         timeZone="Asia/Riyadh"
       >
       {!hasHydrated ? (

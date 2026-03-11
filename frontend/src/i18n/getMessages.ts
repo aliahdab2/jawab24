@@ -131,12 +131,22 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/time': enTime,             'ar/time': arTime,
 };
 
+// All namespace names (derived from lookup table keys)
+const ALL_NAMESPACE_NAMES = [...new Set(
+  Object.keys(NS).filter(k => k.startsWith('en/')).map(k => k.replace('en/', '')),
+)];
+
 /** Load and merge namespace files for a locale */
-function loadNamespaces(locale: string, namespaces: string[]) {
+export function loadNamespaces(locale: string, namespaces: string[]) {
   const all = [...new Set([...GLOBAL_NAMESPACES, ...namespaces])];
   return Object.fromEntries(
     all.map((ns) => [ns, NS[`${locale}/${ns}`] ?? {}]),
   );
+}
+
+/** Load ALL namespace translations for a locale (used for mobile client-side switching) */
+export function loadAllNamespaces(locale: string) {
+  return loadNamespaces(locale, ALL_NAMESPACE_NAMES);
 }
 
 /**

@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { ar, enUS } from 'date-fns/locale';
 import type { Locale } from 'date-fns';
 import { useUIStore } from '@/lib/store';
+import { isNativePlatform } from '@/lib/capacitor';
 export type Language = 'ar' | 'en';
 
 const DATE_LOCALES: Record<string, Locale> = { ar, en: enUS };
@@ -34,7 +35,13 @@ export function useLanguage() {
   const setLanguage = useCallback(
     (newLang: Language) => {
       useUIStore.getState().setLanguage(newLang);
-      router.push(router.pathname, router.asPath, { locale: newLang });
+      if (isNativePlatform()) {
+        // Mobile (static export): no i18n routing — update dir/lang directly
+        document.documentElement.dir = newLang === 'ar' ? 'rtl' : 'ltr';
+        document.documentElement.lang = newLang;
+      } else {
+        router.push(router.pathname, router.asPath, { locale: newLang });
+      }
     },
     [router],
   );
