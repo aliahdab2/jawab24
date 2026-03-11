@@ -10,5 +10,8 @@
   "fallback_reply": "Fallback reply",
   "info_not_in_kb": "Information not in knowledge base",
   "held_low_confidence": "Low confidence reply",
+  "cancellation_request": "Cancellation request",
+  "refund_request": "Refund request",
+  "exchange_request": "Exchange request",
   "slaNoReply": "No reply after {minutes} min"
 }

@@ -45,7 +45,7 @@ export const PAGE_NAMESPACES = {
   pricing:            [...DASHBOARD_LAYOUT, 'payment', 'subscription'],
   dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'messages', 'onboarding', 'pages', 'plans', 'subscription', 'time'],
   comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback'],
-  messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'messages'],
+  messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'messages'],
   templates:          [...DASHBOARD_LAYOUT, 'templates'],
   rules:              [...DASHBOARD_LAYOUT, 'rules', 'templates'],
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],

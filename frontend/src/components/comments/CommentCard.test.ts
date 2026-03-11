@@ -1,19 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { translateFlagReason } from './CommentCard';
+import { translateFlagReason } from '@/utils/flagReason';
 
 describe('translateFlagReason', () => {
-    // Mock t() that returns translation for known keys, raw key otherwise
+    // Mock t() scoped to flagReason namespace (no prefix needed)
     const mockTranslations: Record<string, string> = {
-        'flagReason.offensive_or_abusive': 'Offensive or abusive',
-        'flagReason.angry_customer': 'Angry customer',
-        'flagReason.low_confidence': 'Low confidence reply',
-        'flagReason.price_not_in_kb': 'Price not in knowledge base',
+        'offensive_or_abusive': 'Offensive or abusive',
+        'angry_customer': 'Angry customer',
+        'low_confidence': 'Low confidence reply',
+        'price_not_in_kb': 'Price not in knowledge base',
     };
     const mockTranslationsAr: Record<string, string> = {
-        'flagReason.offensive_or_abusive': 'محتوى مسيء',
-        'flagReason.angry_customer': 'عميل غاضب',
-        'flagReason.low_confidence': 'ثقة منخفضة في الرد',
-        'flagReason.price_not_in_kb': 'سعر غير موجود في قاعدة المعرفة',
+        'offensive_or_abusive': 'محتوى مسيء',
+        'angry_customer': 'عميل غاضب',
+        'low_confidence': 'ثقة منخفضة في الرد',
+        'price_not_in_kb': 'سعر غير موجود في قاعدة المعرفة',
     };
 
     const tEn = (key: string) => mockTranslations[key] ?? key;

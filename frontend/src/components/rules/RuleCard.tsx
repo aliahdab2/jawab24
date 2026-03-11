@@ -130,11 +130,8 @@ export function RuleCard({
         {/* Condition (IF) */}
         <div className="p-3 sm:p-4 rounded-2xl bg-blue-50/30 dark:bg-blue-900/20 border border-blue-100/50 dark:border-blue-700/50">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] font-extrabold text-blue-500 dark:text-blue-400 bg-blue-100 dark:bg-blue-800/50 px-1.5 py-0.5 rounded">
-              {t('conditionLabel')}
-            </span>
-            <Tag className="w-3 h-3 text-blue-500 dark:text-blue-400" aria-hidden="true" />
-            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-300">{t('condition')}</span>
+            <Tag className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400" aria-hidden="true" />
+            <span className="text-xs font-bold text-blue-600 dark:text-blue-300">{t('condition')}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {(rule.keywords || []).map((keyword) => (
@@ -157,11 +154,8 @@ export function RuleCard({
         {/* Action (THEN) */}
         <div className="p-3 sm:p-4 rounded-2xl bg-brand-50/30 dark:bg-brand-900/20 border border-brand-100/50 dark:border-brand-700/50">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[10px] font-extrabold text-brand-500 dark:text-brand-400 bg-brand-100 dark:bg-brand-800/50 px-1.5 py-0.5 rounded">
-              {t('actionLabel')}
-            </span>
-            <BookTemplate className="w-3 h-3 text-brand-500 dark:text-brand-400" aria-hidden="true" />
-            <span className="text-[10px] font-bold text-brand-600 dark:text-brand-300">{t('action')}</span>
+            <BookTemplate className="w-3.5 h-3.5 text-brand-500 dark:text-brand-400" aria-hidden="true" />
+            <span className="text-xs font-bold text-brand-600 dark:text-brand-300">{t('action')}</span>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm font-medium text-muted-foreground">{t('actions.replyWithTemplate')}:</span>

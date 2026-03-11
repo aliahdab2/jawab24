@@ -50,8 +50,6 @@
   "demoFalsePositiveHint": "نية مختلفة، نفس الكلمة!",
   "demoTip": "نصيحة: استخدم عبارات محددة مثل \"كم السعر\" أو \"بكم المنتج\" بدلاً من كلمة واحدة للحصول على دقة أفضل.",
   "priorityTooltip": "أولوية التنفيذ",
-  "conditionLabel": "إذا",
-  "actionLabel": "إذاً",
   "searchPlaceholder": "ابحث في القواعد...",
   "filterActive": "النشطة فقط",
   "disabledBadge": "معطّل"

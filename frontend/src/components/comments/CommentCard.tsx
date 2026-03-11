@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button } from '@/components/ui';
+import { Button, FlagTag } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import {
@@ -11,7 +11,7 @@ import {
   CheckCircle,
   CheckCheck,
   User,
-  FileText
+  FileText,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Comment } from '@jawab24/shared';
@@ -46,36 +46,8 @@ export function checkNeedsAttention(comment: Comment): boolean {
   return ATTENTION_KEYWORDS.some(kw => messageText.includes(kw));
 }
 
-/**
- * Translate a comma-separated flagReason string using i18n keys.
- * Falls back to the raw reason if no translation exists.
- */
-export function translateFlagReason(
-  flagReason: string | null | undefined,
-  t: (key: string, params?: Record<string, string>) => string,
-  locale: string,
-): string {
-  if (!flagReason) return '';
-  const separator = locale === 'ar' ? '، ' : ', ';
-  return flagReason.split(',')
-    .map(f => {
-      const trimmed = f.trim();
-      // New structured format: "sla_no_reply:60"
-      const slaMatch = trimmed.match(/^sla_no_reply:(\d+)$/);
-      if (slaMatch) {
-        return t('flagReason.slaNoReply', { minutes: slaMatch[1] });
-      }
-      // Legacy format: "SLA: no reply after 60 min"
-      const legacySlaMatch = trimmed.match(/^SLA: no reply after (\d+) min$/);
-      if (legacySlaMatch) {
-        return t('flagReason.slaNoReply', { minutes: legacySlaMatch[1] });
-      }
-      const key = `flagReason.${trimmed}`;
-      const translated = t(key);
-      return translated === key ? trimmed : translated;
-    })
-    .join(separator);
-}
+// Re-export for backward compatibility (modals and detail views import from here)
+export { translateFlagReason } from '@/utils/flagReason';
 
 export const CommentCard = React.memo(function CommentCard({
   comment,
@@ -187,6 +159,7 @@ export const CommentCard = React.memo(function CommentCard({
                      </span>
                    )}
                 </div>
+                <FlagTag flagReason={comment.flagReason} />
              </div>
 
              {/* Post Context */}

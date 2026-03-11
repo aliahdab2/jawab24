@@ -2,6 +2,7 @@ import React from 'react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
+import { FlagTag } from '@/components/ui';
 import {
   Clock,
   AlertTriangle,
@@ -187,6 +188,7 @@ export const MessageCard = React.memo(function MessageCard({
                   {conv.messages.length}
                 </span>
               </div>
+              <FlagTag flagReason={conv.lastMessage.flagReason} />
             </div>
           </div>
         </div>
