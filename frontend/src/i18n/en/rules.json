@@ -48,5 +48,11 @@
   "demoFalsePositive": "I have a question, does the {keyword} include delivery?",
   "demoNoMatch": "Thank you for your help!",
   "demoFalsePositiveHint": "Different intent, same keyword!",
-  "demoTip": "Tip: Use specific phrases like \"how much\" or \"what's the price\" instead of single words for better accuracy."
+  "demoTip": "Tip: Use specific phrases like \"how much\" or \"what's the price\" instead of single words for better accuracy.",
+  "priorityTooltip": "Execution priority",
+  "conditionLabel": "IF",
+  "actionLabel": "THEN",
+  "searchPlaceholder": "Search rules...",
+  "filterActive": "Active only",
+  "disabledBadge": "Disabled"
 }

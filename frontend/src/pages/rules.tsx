@@ -1,11 +1,13 @@
 import { useState, useEffect, useCallback, useMemo, useRef, type ReactElement } from 'react';
+import clsx from 'clsx';
+import { useRouter } from 'next/router';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, Textarea, Select, Modal, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, CharCounter } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { rulesApi, templatesApi } from '@/lib/api';
 import { extractArrayData } from '@/lib/api-utils';
-import { Zap, Plus, BookTemplate, AlertTriangle, FlaskConical, Check, X } from 'lucide-react';
+import { Zap, Plus, BookTemplate, AlertTriangle, FlaskConical, Check, X, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { RuleCard } from '@/components/rules';
 import type { Rule, Template } from '@jawab24/shared';
@@ -17,6 +19,7 @@ const RulesPage: NextPageWithLayout = () => {
   const t = useTranslations('rules');
   const tc = useTranslations('common');
   const tTemplates = useTranslations('templates');
+  const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const [rules, setRules] = useState<Rule[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -28,6 +31,10 @@ const RulesPage: NextPageWithLayout = () => {
     keywords: '',
     templateId: '',
   });
+
+  // Search & filter
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterActiveOnly, setFilterActiveOnly] = useState(false);
 
   // Test rule state
   const [testInput, setTestInput] = useState('');
@@ -64,6 +71,30 @@ const RulesPage: NextPageWithLayout = () => {
       fetchData();
     }
   }, [isAuthenticated, fetchData]);
+
+  // Handle deep-link query params from Templates page
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (loading || deepLinkHandled.current) return;
+    const { templateId, newRuleTemplateId } = router.query;
+
+    if (typeof newRuleTemplateId === 'string' && templates.length > 0) {
+      // Open "Add Rule" modal with this template pre-selected
+      setEditingRule(null);
+      setFormData({ name: '', keywords: '', templateId: newRuleTemplateId });
+      setIsModalOpen(true);
+      deepLinkHandled.current = true;
+      router.replace('/rules', undefined, { shallow: true });
+    } else if (typeof templateId === 'string') {
+      // Filter rules to show only those using this template
+      const templateName = templates.find(tp => tp.id === templateId)?.name;
+      if (templateName) {
+        setSearchQuery(templateName);
+      }
+      deepLinkHandled.current = true;
+      router.replace('/rules', undefined, { shallow: true });
+    }
+  }, [loading, router, templates]);
 
   // Map each keyword to the list of rule names that use it (for duplicate detection)
   const keywordRulesMap = useMemo(() => {
@@ -299,6 +330,20 @@ const RulesPage: NextPageWithLayout = () => {
 
   const uniqueConflictKeywords = [...new Set(modalKeywordConflicts.map(c => c.keyword))];
 
+  const filteredRules = rules.filter(rule => {
+    if (filterActiveOnly && !rule.active) return false;
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    if (rule.name.toLowerCase().includes(q)) return true;
+    if (rule.keywords?.some(kw => kw.toLowerCase().includes(q))) return true;
+    // Also match by linked template name (for deep-link from Templates page)
+    if (rule.templateId) {
+      const tmplName = templates.find(tp => tp.id === rule.templateId)?.name;
+      if (tmplName?.toLowerCase().includes(q)) return true;
+    }
+    return false;
+  });
+
   return (
     <>
       {/* Header */}
@@ -317,14 +362,44 @@ const RulesPage: NextPageWithLayout = () => {
         }
       />
 
+      {/* Search & Filter */}
+      {rules.length > 0 && (
+        <div className="flex items-center gap-3 mb-4 sm:mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-icon-muted pointer-events-none" aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="w-full ps-9 pe-3 py-2 rounded-xl border border-theme-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+              dir="auto"
+              aria-label={tc('search')}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setFilterActiveOnly(!filterActiveOnly)}
+            className={clsx(
+              'text-xs font-bold px-3 py-2 rounded-xl border transition-colors whitespace-nowrap',
+              filterActiveOnly
+                ? 'bg-brand-50 dark:bg-brand-900/30 border-brand-200 dark:border-brand-700 text-brand-700 dark:text-brand-300'
+                : 'bg-background border-theme-border text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {t('filterActive')}
+          </button>
+        </div>
+      )}
+
       {/* Rules List */}
-      {rules.length > 0 ? (
+      {filteredRules.length > 0 ? (
         <div className="space-y-4 sm:space-y-6 pb-4 sm:pb-6">
-          {rules.map((rule, i) => (
+          {filteredRules.map((rule) => (
             <RuleCard
               key={rule.id}
               rule={rule}
-              index={i}
+              index={rules.indexOf(rule)}
               totalRules={rules.length}
               templates={templates}
               keywordRulesMap={keywordRulesMap}
@@ -336,6 +411,14 @@ const RulesPage: NextPageWithLayout = () => {
             />
           ))}
         </div>
+      ) : rules.length > 0 ? (
+        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
+          <EmptyState
+            icon={Search}
+            title={tc('noData')}
+            variant="search"
+          />
+        </Card>
       ) : (
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
           <EmptyState

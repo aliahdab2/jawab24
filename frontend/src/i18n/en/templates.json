@@ -22,5 +22,13 @@
   "variablesDesc": "Use {{name}} to insert commenter's name",
   "preview": "Preview",
   "usedByRules": "{count, plural, one {Used by # rule} two {Used by # rules} few {Used by # rules} many {Used by # rules} other {Used by # rules}}",
-  "notUsedByRules": "Not used by any rule"
+  "notUsedByRules": "Not used by any rule",
+  "notLinkedWarning": "Not linked to any rule",
+  "linkToRule": "Link to rule",
+  "linkedRules": "Linked rules",
+  "showMore": "Show all",
+  "showLess": "Show less",
+  "searchPlaceholder": "Search templates...",
+  "disabledBadge": "Disabled",
+  "charCount": "{count} chars"
 }

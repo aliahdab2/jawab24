@@ -22,5 +22,13 @@
   "variablesDesc": "استخدم {{name}} لإضافة اسم الشخص بشكل تلقائي في الرد",
   "preview": "معاينة الرد",
   "usedByRules": "{count, plural, one {مستخدم في قاعدة واحدة} two {مستخدم في قاعدتين} few {مستخدم في # قواعد} many {مستخدم في # قاعدة} other {مستخدم في # قاعدة}}",
-  "notUsedByRules": "غير مستخدم في أي قاعدة"
+  "notUsedByRules": "غير مستخدم في أي قاعدة",
+  "notLinkedWarning": "غير مرتبط بأي قاعدة",
+  "linkToRule": "ربط بقاعدة",
+  "linkedRules": "القواعد المرتبطة",
+  "showMore": "عرض الكل",
+  "showLess": "عرض أقل",
+  "searchPlaceholder": "ابحث في القوالب...",
+  "disabledBadge": "معطّل",
+  "charCount": "{count} حرف"
 }

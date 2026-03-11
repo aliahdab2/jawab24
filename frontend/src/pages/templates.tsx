@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { templatesApi, rulesApi } from '@/lib/api';
 import { extractArrayData } from '@/lib/api-utils';
-import { FileText, Plus } from 'lucide-react';
+import { FileText, Plus, Search } from 'lucide-react';
 import { TemplateCard } from '@/components/templates';
 import type { Template, Rule } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
@@ -28,6 +28,7 @@ const TemplatesPage: NextPageWithLayout = () => {
   });
 
   const [showFormErrors, setShowFormErrors] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isFormValid = formData.name.trim() !== '' && formData.message.trim() !== '';
   const nameError = showFormErrors && formData.name.trim() === '';
@@ -141,6 +142,14 @@ const TemplatesPage: NextPageWithLayout = () => {
     return <PageSkeleton />;
   }
 
+  const filteredTemplates = templates.filter(tmpl => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    if (tmpl.name.toLowerCase().includes(q)) return true;
+    if (tmpl.message?.toLowerCase().includes(q)) return true;
+    return false;
+  });
+
   return (
     <>
       {/* Header */}
@@ -154,10 +163,28 @@ const TemplatesPage: NextPageWithLayout = () => {
         }
       />
 
-      {/* Templates Grid */}
-      {templates.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 pb-4 sm:pb-6">
-          {templates.map((template, i) => (
+      {/* Search */}
+      {templates.length > 0 && (
+        <div className="mb-4 sm:mb-6">
+          <div className="relative">
+            <Search className="absolute start-3 top-1/2 -translate-y-1/2 w-4 h-4 text-icon-muted pointer-events-none" aria-hidden="true" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t('searchPlaceholder')}
+              className="w-full ps-9 pe-3 py-2 rounded-xl border border-theme-border bg-background text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+              dir="auto"
+              aria-label={tc('search')}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Templates List */}
+      {filteredTemplates.length > 0 ? (
+        <div className="space-y-4 sm:space-y-6 pb-4 sm:pb-6">
+          {filteredTemplates.map((template, i) => (
             <TemplateCard
               key={template.id}
               template={template}
@@ -170,6 +197,14 @@ const TemplatesPage: NextPageWithLayout = () => {
             />
           ))}
         </div>
+      ) : templates.length > 0 ? (
+        <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
+          <EmptyState
+            icon={Search}
+            title={tc('noData')}
+            variant="search"
+          />
+        </Card>
       ) : (
         <Card className="border-none shadow-md shadow-surface-200/20 rounded-2xl">
           <EmptyState
