@@ -64,7 +64,8 @@ export async function geoMiddleware(request: FastifyRequest, _reply: FastifyRepl
     // Using geoip-lite for fast, local, offline resolution
     const ip = request.ip;
     if (ip && ip !== '127.0.0.1' && ip !== '::1') {
-        const geoip = await import('geoip-lite');
+        const geoipModule = await import('geoip-lite');
+        const geoip = geoipModule.default || geoipModule;
         const geoData = geoip.lookup(ip);
 
         if (geoData && geoData.country) {

@@ -28,6 +28,12 @@ export class PgVectorStore implements VectorStore {
 
         // Use a transaction so partial failures don't leave orphaned rows
         await db.transaction(async (tx) => {
+            // Delete existing chunks for this page+version to prevent duplicates
+            const kbVersion = chunks[0].kbVersion;
+            await tx.delete(kbChunks).where(
+                and(eq(kbChunks.pageId, pageId), eq(kbChunks.kbVersion, kbVersion))
+            );
+
             for (const chunk of chunks) {
                 validateVector(chunk.embedding, EMBEDDING_DIMENSIONS);
 

@@ -1281,10 +1281,10 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         await refreshDemoNotifications(userId, logger);
 
         const electronicsRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_electronics');
-        if (electronicsRefresh) await seedDemoStore(userId, electronicsRefresh.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
+        if (electronicsRefresh) await seedDemoStore(userId, workspaceId, electronicsRefresh.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
 
         const fashionRefresh = demoExistingPages.find(p => p.facebookPageId === 'demo_page_fashion');
-        if (fashionRefresh) await seedDemoStore(userId, fashionRefresh.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
+        if (fashionRefresh) await seedDemoStore(userId, workspaceId, fashionRefresh.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
 
         return;
     }
@@ -1438,10 +1438,10 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
 
     // Seed e-commerce demo stores linked to their pages
     const electronicsPage = createdPages.find(p => p.facebookPageId === 'demo_page_electronics');
-    if (electronicsPage) await seedDemoStore(userId, electronicsPage.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
+    if (electronicsPage) await seedDemoStore(userId, workspaceId, electronicsPage.id, DEMO_SHOPIFY_STORE, DEMO_SHOPIFY_PRODUCTS, logger);
 
     const fashionPage = createdPages.find(p => p.facebookPageId === 'demo_page_fashion');
-    if (fashionPage) await seedDemoStore(userId, fashionPage.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
+    if (fashionPage) await seedDemoStore(userId, workspaceId, fashionPage.id, DEMO_SALLA_STORE, DEMO_SALLA_PRODUCTS, logger);
 
     // Create demo notifications (varied types, timestamps, and read states)
     await refreshDemoNotifications(userId, logger);
@@ -1461,6 +1461,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
  */
 async function seedDemoStore(
     userId: string,
+    workspaceId: string,
     pageId: string,
     storeConfig: typeof DEMO_SHOPIFY_STORE | typeof DEMO_SALLA_STORE,
     products: typeof DEMO_SHOPIFY_PRODUCTS | typeof DEMO_SALLA_PRODUCTS,
@@ -1474,6 +1475,7 @@ async function seedDemoStore(
     const lastSyncAt = new Date(Date.now() - 2 * 60 * 60 * 1000); // 2h ago
     const [store] = await db.insert(ecommerceStores).values({
         userId,
+        workspaceId,
         ...storeConfig,
         lastSyncAt,
         isActive: true,

@@ -690,6 +690,21 @@ npm run build:mobile
 npx cap sync android
 cd android && ./gradlew assembleDebug
 
+# Shopify Integration Tests (local dev)
+# Use the /shopify-dev skill or run manually:
+# Prerequisites: ngrok authtoken configured, Jawab24-Dev Shopify app credentials in backend/.env
+# 1. Start environment (ngrok + backend + frontend):
+/shopify-dev
+# Or manually:
+#   ngrok http 3000  →  update SHOPIFY_HOST_NAME in backend/.env  →  restart backend
+# 2. Connect dev store via UI (one-time OAuth):
+#   http://localhost:3001/en/integrations  →  enter your-store.myshopify.com
+# 3. Run tests (no OAuth needed after first connect):
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+ADMIN_TOKEN="$ADMIN_TOKEN" npm run test:ecommerce:shopify
+# Dev app credentials: in backend/.env (Jawab24-Dev app in Shopify Partners — never commit keys here)
+# Prod: restore SHOPIFY_HOST_NAME=jawab24.com in backend/.env before deploying!
+
 # AI Reply Quality Eval (98 test cases)
 # Prerequisites: backend (port 3000) + ai-worker (port 3002) running, demo mode enabled
 # 1. Start services:
@@ -743,6 +758,74 @@ The project uses **GitHub Actions** for continuous integration and deployment.
 # Manual deployment (emergency/hotfix):
 # Go to Actions tab → Deploy → Run workflow
 ```
+
+---
+
+## 🧪 Testing Strategy
+
+The project has **three tiers** of testing. Tier 1 and 2 run automatically in CI and deploy. Tier 3 is manual — run it before releasing changes to integrations or AI.
+
+### Tier 1 — Automatic (CI + `pre-deploy-check.sh`)
+
+These run on every push, PR, and deploy. All must pass to merge or deploy.
+
+| Test Suite | Command | What It Covers |
+|-----------|---------|---------------|
+| **Backend unit tests** | `npm run test:coverage -w jawab24-backend` | All services, controllers, routes (mocked DB/APIs). 80% coverage threshold. |
+| **Frontend unit tests** | `npm run test -w jawab24-frontend` | Components, hooks, utils. Real English translations loaded in mocks. |
+| **AI worker unit tests** | `npm run test -w jawab24-ai-worker` | AI pipeline, prompt building, caching logic. |
+| **Backend integration tests** | `npm run test:integration -w jawab24-backend` | Real Postgres (CI service container). Messages, payments, pages, adapters, workspace. |
+| **E2E tests (Playwright)** | `cd frontend && npx playwright test` | All pages: comments, dashboard, landing, login, messages, pages, payment, pricing, rules, settings, templates, integrations. APIs mocked. |
+| **Lighthouse CI** | `.lighthouserc.json` | Accessibility (>90), CLS (<0.1) on `/landing`, `/pricing`, `/login`. |
+
+**Shopify-specific unit tests (16+ files):**
+- `backend/test/services/shopify.test.ts` — Core Shopify service (sync, webhooks, GraphQL)
+- `backend/test/services/shopifyCrypto.test.ts` — AES-256-GCM token encryption
+- `backend/test/services/shopifyPendingInstall.test.ts` — OAuth pending install flow
+- `backend/test/services/shopify.ecommerce-refactor.test.ts` — ecommerceStoreId migration
+- `backend/test/controllers/shopify.test.ts` — Controller endpoints
+- `backend/test/controllers/auth.shopify-claim.test.ts` — OAuth claim after login
+- `backend/test/routes/shopify.test.ts` — Route registration and auth guards
+- `backend/test/services/ecommerce*.test.ts` — Shared e-commerce logic (crypto, actions, RAG, tool loop)
+- `frontend/e2e/integrations.spec.ts` — Integrations page UI (connect, sync, disconnect, page linking)
+
+### Tier 2 — Automatic (deploy only)
+
+| Check | Where |
+|-------|-------|
+| **Docker smoke tests** | CI builds all 3 images, verifies each container starts |
+| **Post-deploy health checks** | 6-point verification (backend, frontend, DB, API, HTTPS, containers) |
+| **Content smoke test** | Verifies HTML response contains expected content before switching traffic |
+
+### Tier 3 — Manual (before releasing integration or AI changes)
+
+These require real running services and can't run in CI (need API keys, connected stores, or live AI).
+
+| Test | Command | When to Run | Prerequisites |
+|------|---------|-------------|---------------|
+| **E-commerce integration test** | `npm run test:ecommerce:shopify` | Before releasing Shopify changes | Backend running, demo store in DB |
+| **E-commerce integration test (Salla)** | `npm run test:ecommerce:salla` | Before releasing Salla changes | Backend running, Salla store in DB |
+| **AI eval (full — 125 cases)** | `npm run eval` | Before releasing AI/prompt changes | Backend + AI worker running |
+| **AI eval (e-commerce only)** | `CATEGORY=13 npm run eval` | Before releasing e-commerce KB/RAG changes | Backend + AI worker running |
+
+**How to run Tier 3 Shopify tests:**
+```bash
+# Option A: Use the /shopify-dev skill (recommended)
+/shopify-dev test
+
+# Option B: Manual (if backend is already running)
+ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+ADMIN_TOKEN="$ADMIN_TOKEN" npm run test:ecommerce:shopify
+
+# Option C: Run e-commerce eval tests too
+ADMIN_TOKEN="$ADMIN_TOKEN" CATEGORY=13 VERBOSE=1 npm run eval
+```
+
+**Important notes:**
+- `POST /auth/demo` reseeds demo data — call it once, reuse the token
+- Integration tests use demo-seeded data (no real Shopify API calls needed)
+- Eval tests need AI worker on port 3002 (uses OpenAI API)
+- Salla tests (138-149) require a "fashion" demo page — only available when Salla is configured
 
 ---
 

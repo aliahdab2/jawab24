@@ -90,7 +90,10 @@ export function verifyWebhookHmac(body: string, hmacHeader: string): boolean {
     return crypto.timingSafeEqual(hashBuf, hmacBuf);
 }
 
-export async function registerWebhooks(shop: string, accessToken: string): Promise<void> {
+export type { WebhookRegistrationResult as WebhookStatus } from './ecommerce';
+import type { WebhookRegistrationResult } from './ecommerce';
+
+export async function registerWebhooks(shop: string, accessToken: string): Promise<WebhookRegistrationResult> {
     const webhookUrl = `https://${config.shopify.hostName}/shopify/webhooks`;
     const topics = [
         { topic: 'app/uninstalled', address: `${webhookUrl}/uninstall` },
@@ -98,6 +101,9 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
         { topic: 'products/update', address: `${webhookUrl}/products-update` },
         { topic: 'products/delete', address: `${webhookUrl}/products-update` },
     ];
+
+    const registered: string[] = [];
+    const failed: Array<{ topic: string; status?: number; error?: string }> = [];
 
     for (const { topic, address } of topics) {
         try {
@@ -113,14 +119,38 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
             });
             if (!response.ok) {
                 const text = await response.text();
-                if (response.status !== 422) {
+                if (response.status === 422) {
+                    // 422 = already registered, treat as success
+                    registered.push(topic);
+                } else {
+                    failed.push({ topic, status: response.status, error: text.slice(0, 200) });
                     captureError(new Error(`Shopify webhook registration failed: ${topic} ${response.status}`), `Shopify webhook registration failed: ${topic}`, { tags: { service: 'shopify' }, extra: { topic, status: response.status, body: text } });
                 }
+            } else {
+                registered.push(topic);
             }
         } catch (err) {
+            failed.push({ topic, error: err instanceof Error ? err.message : String(err) });
             captureError(err, `Shopify webhook registration error: ${topic}`, { tags: { service: 'shopify' } });
         }
     }
+
+    return { registered, failed, lastAttempt: new Date().toISOString() };
+}
+
+/**
+ * Save webhook registration status into the store's platformData JSONB field.
+ * Merges with existing platformData so other keys (e.g. planName) are preserved.
+ */
+export async function saveWebhookStatus(storeId: string, webhookStatus: WebhookRegistrationResult): Promise<void> {
+    const [store] = await db.select({ platformData: ecommerceStores.platformData })
+        .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
+
+    const existing = (store?.platformData as Record<string, unknown>) || {};
+    await db.update(ecommerceStores).set({
+        platformData: { ...existing, webhookStatus },
+        updatedAt: new Date(),
+    }).where(eq(ecommerceStores.id, storeId));
 }
 
 // --- Shopify-default wrappers (bind platform='shopify' for backward compat) ---
@@ -180,7 +210,7 @@ export function createPendingInstall(data: {
 }
 
 export function claimPendingInstall(pendingId: string, userId: string) {
-    return _claimPendingInstall(pendingId, userId, 'shopify', registerWebhooks);
+    return _claimPendingInstall(pendingId, userId, 'shopify', registerWebhooks, saveWebhookStatus);
 }
 
 export function cleanupExpiredInstalls(): Promise<number> {

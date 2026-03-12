@@ -142,8 +142,10 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
             const workspaceId = workspaces[0]?.id || null;
             const store = await shopifyService.createStore(userId, shop, accessToken, undefined, workspaceId);
 
-            // Register webhooks (non-blocking)
-            shopifyService.registerWebhooks(shop, accessToken).catch(err => {
+            // Register webhooks and persist status to store record
+            shopifyService.registerWebhooks(shop, accessToken).then(webhookStatus => {
+                return shopifyService.saveWebhookStatus(store.id, webhookStatus);
+            }).catch(err => {
                 request.log.error({ err }, 'Failed to register Shopify webhooks');
             });
 

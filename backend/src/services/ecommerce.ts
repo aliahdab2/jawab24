@@ -13,9 +13,16 @@ import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redis } from '../lib/redis';
 
-// --- Constants ---
+// --- Constants & Types ---
 
 export type EcommercePlatform = 'shopify' | 'salla' | 'zid';
+
+/** Webhook registration result returned by platform-specific registerWebhooks functions */
+export interface WebhookRegistrationResult {
+    registered: string[];
+    failed: Array<{ topic: string; status?: number; error?: string }>;
+    lastAttempt: string;
+}
 
 export const KB_MAX_CHARS = 8000; // Must match ai-worker's KB_MAX_CHARS
 
@@ -528,7 +535,8 @@ export async function claimPendingInstall(
     pendingId: string,
     userId: string,
     platform: EcommercePlatform,
-    registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<void>,
+    registerWebhooksFn?: (storeDomain: string, accessToken: string) => Promise<WebhookRegistrationResult | void>,
+    saveWebhookStatusFn?: (storeId: string, webhookStatus: WebhookRegistrationResult) => Promise<void>,
 ) {
     const result = await db.select().from(pendingEcommerceInstalls)
         .where(eq(pendingEcommerceInstalls.id, pendingId))
@@ -570,9 +578,13 @@ export async function claimPendingInstall(
         claimedByUserId: userId,
     }).where(eq(pendingEcommerceInstalls.id, pendingId));
 
-    // Register webhooks (non-blocking) if callback provided
+    // Register webhooks (non-blocking) and persist status if callbacks provided
     if (registerWebhooksFn) {
-        registerWebhooksFn(pending.storeDomain, accessToken).catch(err => {
+        registerWebhooksFn(pending.storeDomain, accessToken).then(webhookStatus => {
+            if (saveWebhookStatusFn && webhookStatus) {
+                return saveWebhookStatusFn(store.id, webhookStatus);
+            }
+        }).catch(err => {
             captureError(err, `${platform} webhook registration after claim failed`, { tags: { service: platform } });
         });
     }
