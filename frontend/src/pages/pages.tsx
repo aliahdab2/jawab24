@@ -18,7 +18,8 @@ import {
   ShoppingBag,
   ExternalLink,
   AlertTriangle,
-  LinkIcon
+  LinkIcon,
+  Info
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
@@ -367,16 +368,26 @@ const PagesPage: NextPageWithLayout = () => {
                             ? (page.instagramAutoReplyEnabled ? 'text-pink-900 dark:text-pink-300' : 'text-muted-foreground')
                             : 'text-muted-foreground'
                         )}>Instagram</p>
-                        <p className={clsx(
-                          'text-xs font-medium',
-                          page.instagramUsername
-                            ? (page.instagramAutoReplyEnabled ? 'text-pink-500 dark:text-pink-400' : 'text-muted-foreground')
-                            : 'text-muted-foreground'
-                        )}>
-                          {page.instagramUsername
-                            ? `@${page.instagramUsername}`
-                            : t('instagramTooltip')}
-                        </p>
+                        <div className="flex items-center gap-1">
+                          <p className={clsx(
+                            'text-xs font-medium',
+                            page.instagramUsername
+                              ? (page.instagramAutoReplyEnabled ? 'text-pink-500 dark:text-pink-400' : 'text-muted-foreground')
+                              : 'text-muted-foreground'
+                          )}>
+                            {page.instagramUsername
+                              ? `@${page.instagramUsername}`
+                              : t('instagramNotConnected')}
+                          </p>
+                          {!page.instagramUsername && (
+                            <span className="relative group">
+                              <Info className="w-3.5 h-3.5 text-icon-muted cursor-help" aria-label={t('instagramTooltip')} />
+                              <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-56 text-center z-10">
+                                {t('instagramTooltip')}
+                              </span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     {page.instagramUsername && (
