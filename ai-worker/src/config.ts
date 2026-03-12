@@ -25,6 +25,11 @@ export const config = {
         timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),
     },
 
+    // Anthropic (for Claude models in playground + failover)
+    anthropic: {
+        apiKey: process.env.ANTHROPIC_API_KEY || '',
+    },
+
     // Queue settings
     queue: {
         name: process.env.QUEUE_NAME || 'ai:pending',

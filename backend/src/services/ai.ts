@@ -223,21 +223,26 @@ export class AiService {
             customerContext: request.context?.customerContext,
         };
 
+        // Non-default model (playground A/B) → skip all caches (different models produce different replies)
+        const isNonDefaultModel = !!request.model && request.model !== DEFAULT_AI_MODEL;
+
         // Layer 1: Exact cache (scoped per page + KB version + post context)
-        const cachedData = await this.checkCache(request.comment, cacheCtx);
-        if (cachedData) {
-            // Fire-and-forget: log zero-cost cache hit
-            if (userId) {
-                this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
+        if (!isNonDefaultModel) {
+            const cachedData = await this.checkCache(request.comment, cacheCtx);
+            if (cachedData) {
+                // Fire-and-forget: log zero-cost cache hit
+                if (userId) {
+                    this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
+                }
+                return {
+                    reply: cachedData.reply,
+                    language: request.language || 'auto',
+                    cached: true,
+                    intent: cachedData.intent,
+                    confidence: cachedData.confidence,
+                    flags: cachedData.flags,
+                };
             }
-            return {
-                reply: cachedData.reply,
-                language: request.language || 'auto',
-                cached: true,
-                intent: cachedData.intent,
-                confidence: cachedData.confidence,
-                flags: cachedData.flags,
-            };
         }
 
         // If AI is disabled, return a default message
@@ -254,7 +259,7 @@ export class AiService {
         let queryEmbedding: number[] | null = request.context?.queryEmbedding || null;
         let detectedPreGptIntent: string | null = null;
 
-        if (pageId && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+        if (!isNonDefaultModel && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined) {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
                 // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
@@ -328,6 +333,7 @@ export class AiService {
                             comment: request.comment,
                             language: request.language,
                             context: request.context,
+                            ...(isNonDefaultModel ? { model: request.model } : {}),
                         },
                         {
                             timeout: 30000,
@@ -345,8 +351,11 @@ export class AiService {
             };
 
             // Save to exact cache (scoped by KB version + post context)
-            const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
-            await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
+            // Skip for non-default models — different models produce different replies
+            if (!isNonDefaultModel) {
+                const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
+                await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
+            }
 
             // Fire-and-forget: log real token usage
             if (userId) {
@@ -355,8 +364,8 @@ export class AiService {
                 this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
             }
 
-            // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent
-            if (pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent and non-default models
+            if (!isNonDefaultModel && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,
@@ -378,7 +387,7 @@ export class AiService {
                 reply: aiReply,
                 language: detectedLanguage,
                 cached: false,
-                model: config.ai.model,
+                model: isNonDefaultModel ? request.model : config.ai.model,
                 intent: response.data.intent,
                 confidence: response.data.confidence,
                 flags: response.data.flags,

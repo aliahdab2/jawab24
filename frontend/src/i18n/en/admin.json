@@ -92,6 +92,7 @@
     "latency": "Latency",
     "tokens": "Tokens",
     "model": "Model",
+    "modelLabel": "AI Model",
     "flags": "Flags",
     "noFlags": "None",
     "needsAttention": "Needs Attention",

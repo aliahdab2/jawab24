@@ -66,6 +66,7 @@ export interface GenerateRequest {
 export interface GenerateResponse {
     reply: string;
     language: string;
+    model?: string;
     tokensUsed?: number;
     tokensIn?: number;
     tokensOut?: number;
@@ -630,7 +631,8 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
      * BEFORE returning the result. Catches issues the prompt alone
      * can't reliably prevent. No additional API calls (zero extra cost).
      */
-    private validateReply(
+    /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
+    validateReply(
         parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] },
         request: GenerateRequest,
     ): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
@@ -757,7 +759,8 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
     /**
      * Get fallback reply when AI is unavailable
      */
-    private getFallbackReply(request: GenerateRequest): GenerateResponse {
+    /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
+    getFallbackReply(request: GenerateRequest): GenerateResponse {
         const language = request.language || this.detectLanguage(request.comment);
         const channel = request.context?.channel
             || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');

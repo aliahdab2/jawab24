@@ -2,8 +2,10 @@ import { FastifyInstance } from 'fastify';
 import { openaiService, GenerateRequest } from './services/openai';
 import { generateWithTools, generateWithToolResults, type ToolEnabledResponse } from './services/ecommerceToolHandler';
 import { translationService, generateNudgeVariations, type TranslateRequest } from './services/translation';
+import { generateReplyWithProvider, VALID_MODELS } from './services/providers';
 import { Sentry } from './lib/sentry';
 import { config } from './config';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { EcommerceToolResult } from '@jawab24/shared';
 
 async function routes(server: FastifyInstance) {
@@ -34,13 +36,29 @@ async function routes(server: FastifyInstance) {
     });
 
     // Generate reply endpoint
-    server.post<{ Body: GenerateRequest }>('/generate', async (request, reply) => {
-        const { comment, language, context } = request.body;
+    server.post<{ Body: GenerateRequest & { model?: string } }>('/generate', async (request, reply) => {
+        const { comment, language, context, model } = request.body;
 
         if (!comment || comment.trim().length === 0) {
             return reply.status(400).send({ error: 'Comment is required' });
         }
 
+        // Non-default model → route through provider abstraction
+        if (model && model !== DEFAULT_AI_MODEL) {
+            if (!VALID_MODELS.has(model)) {
+                return reply.status(400).send({ error: `Unknown model: ${model}` });
+            }
+            try {
+                const result = await generateReplyWithProvider({ comment, language, context }, model);
+                return reply.send(result);
+            } catch (error) {
+                request.log.error(error, 'Failed to generate reply with provider');
+                Sentry.captureException(error, { extra: { comment, language, model } });
+                return reply.status(500).send({ error: 'Failed to generate reply' });
+            }
+        }
+
+        // Default model → unchanged production path
         try {
             const result = await openaiService.generateReply({ comment, language, context });
             return reply.send(result);

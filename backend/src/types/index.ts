@@ -68,6 +68,8 @@ export interface RetrievedChunkContext {
 export interface AiGenerateRequest {
     comment: string;
     language?: string;
+    /** When set, ai-worker routes through the provider abstraction instead of the default OpenAI path. */
+    model?: string;
     context?: {
         userId?: string;
         pageId?: string;

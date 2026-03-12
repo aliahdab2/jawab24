@@ -814,10 +814,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          * POST /admin/ai/playground - Test AI reply with full metadata
          * Body: { pageId, question, channel }
          */
-        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string } }>('/ai/playground', {
+        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string; model?: string } }>('/ai/playground', {
             schema: { tags: ['Admin'], summary: 'Test AI reply generation with full metadata', security: auth },
-        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string } }>, reply: FastifyReply) => {
-            const { pageId, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes, customerContext } = request.body;
+        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string; model?: string } }>, reply: FastifyReply) => {
+            const { pageId, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = request.body;
             const startTime = Date.now();
 
             if (!pageId || !question?.trim()) {
@@ -1005,6 +1005,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 const aiResponse = await aiService.generateReply({
                     comment: question,
                     language: questionLang !== 'unknown' ? questionLang : undefined,
+                    ...(model ? { model } : {}),
                     context: {
                         pageId,
                         pageName: page.name ?? undefined,

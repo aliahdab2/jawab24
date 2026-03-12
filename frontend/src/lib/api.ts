@@ -460,6 +460,10 @@ export const adminApi = {
     channel: 'comment' | 'dm';
     postMessage?: string;
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+    replyStyle?: string;
+    brandVoiceNotes?: string;
+    customerContext?: string;
+    model?: string;
   }) => {
     const response = await api.post('/admin/ai/playground', data);
     return response.data;
