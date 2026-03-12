@@ -33,9 +33,9 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-type FilterType = 'needs_action' | 'all' | 'auto_replied';
+type FilterType = 'needs_action' | 'all' | 'auto_replied' | 'handled';
 
-const VALID_FILTERS: FilterType[] = ['needs_action', 'all', 'auto_replied'];
+const VALID_FILTERS: FilterType[] = ['needs_action', 'all', 'auto_replied', 'handled'];
 
 // Map legacy/dashboard filter values to valid filter types
 const FILTER_ALIASES: Record<string, FilterType> = {
@@ -57,6 +57,8 @@ function getApiParams(filter: FilterType): CommentsQueryParams {
       return { actionRequired: true };
     case 'auto_replied':
       return { replied: true };
+    case 'handled':
+      return { resolved: true };
     case 'all':
     default:
       return {};
@@ -169,6 +171,7 @@ const CommentsPage: NextPageWithLayout = () => {
         total: statsData.total,
         actionRequired: statsData.actionRequired ?? statsData.unreplied,
         autoReplied: statsData.byMethod.ai + statsData.byMethod.template,
+        handled: statsData.resolved ?? 0,
       };
     }
 
@@ -176,6 +179,7 @@ const CommentsPage: NextPageWithLayout = () => {
       total: 0,
       actionRequired: 0,
       autoReplied: 0,
+      handled: 0,
     };
   }, [statsData]);
 
@@ -279,11 +283,24 @@ const CommentsPage: NextPageWithLayout = () => {
       await commentsApi.resolve(commentId);
       queryClient.invalidateQueries({ queryKey: ['comments'] });
       queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+      toast.success(t('resolveSuccess'));
     } catch (err) {
       captureError(err, 'Failed to resolve comment', { tags: { page: 'comments', action: 'resolve' } });
       toast.error(tc('error'));
     }
-  }, [queryClient, tc]);
+  }, [queryClient, t, tc]);
+
+  const handleUnresolve = useCallback(async (commentId: string) => {
+    try {
+      await commentsApi.unresolve(commentId);
+      queryClient.invalidateQueries({ queryKey: ['comments'] });
+      queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+      toast.success(t('unresolveSuccess'));
+    } catch (err) {
+      captureError(err, 'Failed to unresolve comment', { tags: { page: 'comments', action: 'unresolve' } });
+      toast.error(tc('error'));
+    }
+  }, [queryClient, t, tc]);
 
   const exportToCSV = () => {
     setExporting(true);
@@ -340,6 +357,12 @@ const CommentsPage: NextPageWithLayout = () => {
         iconBgClass: 'icon-bg-violet-light',
         title: t('emptyAutoReplied'),
         subtitle: t('emptyAutoRepliedSub'),
+      },
+      handled: {
+        icon: CheckCircle,
+        variant: 'empty',
+        title: t('emptyHandled'),
+        subtitle: t('emptyHandledSub'),
       },
     };
     return { ...config[filter], showConnectCta: false };
@@ -427,6 +450,7 @@ const CommentsPage: NextPageWithLayout = () => {
             { key: 'needs_action' as FilterType, label: t('needsAction'), count: stats.actionRequired },
             { key: 'all' as FilterType, label: t('allComments'), count: stats.total },
             { key: 'auto_replied' as FilterType, label: t('autoReplied'), count: stats.autoReplied },
+            { key: 'handled' as FilterType, label: t('handled'), count: stats.handled },
           ]).map(chip => (
             <button
               key={chip.key}
@@ -499,6 +523,7 @@ const CommentsPage: NextPageWithLayout = () => {
                   onClick={() => setSelectedComment(comment)}
                   onQuickReply={() => setSelectedComment(comment)}
                   onResolve={!comment.resolved ? () => handleResolve(comment.id) : undefined}
+                  onUnresolve={comment.resolved ? () => handleUnresolve(comment.id) : undefined}
                 />
               );
             })}
@@ -556,6 +581,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onClose={() => setSelectedComment(null)}
           onReplySuccess={() => refetch()}
           onResolve={!selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
+          onUnresolve={selectedComment.resolved ? () => handleUnresolve(selectedComment.id) : undefined}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
         />

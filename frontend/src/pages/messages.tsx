@@ -31,9 +31,9 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-type FilterType = 'needs_action' | 'all' | 'auto_replied';
+type FilterType = 'needs_action' | 'all' | 'auto_replied' | 'handled';
 
-const VALID_FILTERS: FilterType[] = ['needs_action', 'all', 'auto_replied'];
+const VALID_FILTERS: FilterType[] = ['needs_action', 'all', 'auto_replied', 'handled'];
 
 // Map legacy/dashboard filter values to valid filter types
 const FILTER_ALIASES: Record<string, FilterType> = {
@@ -55,6 +55,8 @@ function getApiParams(filter: FilterType): MessagesQueryParams {
       return { actionRequired: true };
     case 'auto_replied':
       return { replied: true };
+    case 'handled':
+      return { resolved: true };
     case 'all':
     default:
       return {};
@@ -145,6 +147,7 @@ const MessagesPage: NextPageWithLayout = () => {
     handlePause,
     handleResume,
     handleResolve,
+    handleUnresolve,
     isReplying,
     isPausing,
     isResuming,
@@ -182,9 +185,10 @@ const MessagesPage: NextPageWithLayout = () => {
         pending: statsData.pending,
         autoReplied: statsData.autoReplied ?? 0,
         needsAction: statsData.actionRequired ?? statsData.pending,
+        handled: statsData.resolved ?? 0,
       };
     }
-    return { total: 0, pending: 0, autoReplied: 0, needsAction: 0 };
+    return { total: 0, pending: 0, autoReplied: 0, needsAction: 0, handled: 0 };
   }, [statsData]);
 
   // Infinite Query — with server-side filter params
@@ -414,6 +418,12 @@ const MessagesPage: NextPageWithLayout = () => {
         title: t('emptyAutoReplied'),
         subtitle: t('emptyAutoRepliedSub'),
       },
+      handled: {
+        icon: CheckCircle,
+        variant: 'empty',
+        title: t('emptyHandled'),
+        subtitle: t('emptyHandledSub'),
+      },
     };
     return config[filter];
   }, [filter, searchQuery, t, tc]);
@@ -460,6 +470,7 @@ const MessagesPage: NextPageWithLayout = () => {
             { key: 'needs_action' as FilterType, label: t('needsAction'), count: stats.needsAction },
             { key: 'all' as FilterType, label: t('allMessages'), count: stats.total },
             { key: 'auto_replied' as FilterType, label: t('autoReplied'), count: stats.autoReplied },
+            { key: 'handled' as FilterType, label: t('handled'), count: stats.handled },
           ]).map(chip => (
             <button
               key={chip.key}
@@ -591,6 +602,7 @@ const MessagesPage: NextPageWithLayout = () => {
           onClose={() => setSelectedConversation(null)}
           onReply={handleReply}
           onResolve={handleResolve}
+          onUnresolve={handleUnresolve}
           onPause={handlePause}
           onResume={handleResume}
           isReplying={isReplying}

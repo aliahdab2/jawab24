@@ -33,6 +33,7 @@ interface MessageDetailModalProps {
   onClose: () => void;
   onReply: (messageId: string, text: string) => void;
   onResolve: (senderId: string, pageId: string) => void;
+  onUnresolve?: (senderId: string, pageId: string) => void;
   onPause: (senderId: string, pageId: string) => void;
   onResume: (senderId: string, pageId: string) => void;
   isReplying: boolean;
@@ -48,6 +49,7 @@ export function MessageDetailModal({
   onClose,
   onReply,
   onResolve,
+  onUnresolve,
   onPause,
   onResume,
   isReplying,
@@ -459,7 +461,7 @@ export function MessageDetailModal({
               </div>
             </div>
 
-            {/* Resolve — end-aligned */}
+            {/* Resolve / Unresolve — end-aligned */}
             {hasUnresolvedUnreplied ? (
               <button
                 onClick={() => onResolve(conversation.senderId, pageId)}
@@ -467,6 +469,14 @@ export function MessageDetailModal({
               >
                 <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 {tComments('resolve')}
+              </button>
+            ) : hasResolvedIncoming && onUnresolve ? (
+              <button
+                onClick={() => onUnresolve(conversation.senderId, pageId)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
+              >
+                <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                {tComments('unresolve')}
               </button>
             ) : hasResolvedIncoming ? (
               <span className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400">

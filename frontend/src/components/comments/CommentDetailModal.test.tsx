@@ -151,7 +151,7 @@ describe('CommentDetailModal', () => {
 
     await waitFor(() => {
       expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /Resolve/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Mark as handled/i })).toBeInTheDocument();
     });
   });
 
@@ -170,10 +170,10 @@ describe('CommentDetailModal', () => {
 
     await waitFor(() => {
       expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
-      expect(screen.getByRole('button', { name: /Resolve/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Mark as handled/i })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Resolve/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Mark as handled/i }));
     expect(onResolve).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
@@ -192,7 +192,7 @@ describe('CommentDetailModal', () => {
     });
 
     // Reply section is hidden for replied comments, so resolve button shouldn't exist
-    expect(screen.queryByRole('button', { name: /Resolve/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mark as handled/i })).not.toBeInTheDocument();
   });
 
   it('shows comment message in the modal body', async () => {

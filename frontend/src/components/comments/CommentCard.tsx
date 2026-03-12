@@ -21,6 +21,7 @@ export interface CommentCardProps {
   onClick: () => void;
   onQuickReply?: (e: React.MouseEvent) => void;
   onResolve?: (e: React.MouseEvent) => void;
+  onUnresolve?: (e: React.MouseEvent) => void;
   variant?: 'compact' | 'full';
   pageName?: string;
   showPlatformIcon?: boolean;
@@ -54,6 +55,7 @@ export const CommentCard = React.memo(function CommentCard({
   onClick,
   onQuickReply,
   onResolve,
+  onUnresolve,
   variant = 'compact',
   pageName,
   showPlatformIcon = false,
@@ -114,8 +116,15 @@ export const CommentCard = React.memo(function CommentCard({
       style={{ animationDelay: `${animationDelay}s` } as React.CSSProperties}
     >
 
-      {/* Needs Attention Badge */}
-      {needsAttention ? (
+      {/* Status Badge */}
+      {comment.resolved ? (
+        <div className="absolute top-4 end-4 z-10 animate-fade-in">
+           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full status-success border text-[10px] font-bold uppercase tracking-wider">
+             <CheckCheck className="w-3 h-3" />
+             {t('resolved')}
+           </div>
+        </div>
+      ) : needsAttention ? (
         <div className="absolute top-4 end-4 z-10 animate-fade-in">
            <div className="flex items-center gap-1.5 px-2 py-1 rounded-full status-error border text-[10px] font-bold uppercase tracking-wider animate-pulse-soft">
              <AlertTriangle className="w-3 h-3" />
@@ -241,6 +250,24 @@ export const CommentCard = React.memo(function CommentCard({
                  )}
              </div>
            )
+        )}
+
+        {/* Unresolve action (shown for handled comments) */}
+        {onUnresolve && (
+          <div className="flex items-center justify-end mt-2 animate-fade-in">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="rounded-xl px-4 py-2 text-xs font-bold"
+              onClick={(e) => {
+                e.stopPropagation();
+                onUnresolve(e);
+              }}
+              icon={<CheckCheck className="w-3.5 h-3.5" />}
+            >
+              {t('unresolve')}
+            </Button>
+          </div>
         )}
       </div>
       

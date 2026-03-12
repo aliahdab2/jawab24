@@ -16,6 +16,8 @@
   "emptyAllSub": "Manage Instagram and Facebook DMs without switching apps.",
   "emptyAutoReplied": "No auto-replied messages yet",
   "emptyAutoRepliedSub": "Conversations handled by Smart Reply will appear here once auto-reply is active.",
+  "emptyHandled": "No handled conversations",
+  "emptyHandledSub": "Conversations you mark as handled will appear here.",
   "deepLinkNotFound": "This conversation may have already been handled or removed.",
   "typeReply": "Type your reply...",
   "replySent": "Reply sent successfully",
@@ -30,10 +32,11 @@
   "pauseFailed": "Failed to pause smart reply",
   "resumeFailed": "Failed to resume smart reply",
   "needsAction": "Needs Action",
+  "handled": "Handled",
   "allMessages": "All Messages",
   "autoReplied": "Auto-replied",
-  "resolveSuccess": "Conversation resolved",
-  "unresolveSuccess": "Conversation unresolved",
-  "resolved": "Resolved",
+  "resolveSuccess": "Marked as handled",
+  "unresolveSuccess": "Marked as unhandled",
+  "resolved": "Handled",
   "newMessage": "New message"
 }

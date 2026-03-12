@@ -204,7 +204,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('Resolve')).toBeInTheDocument();
+    expect(screen.getByText('Mark as handled')).toBeInTheDocument();
   });
 
   it('hides resolve button when all messages are resolved', () => {
@@ -221,8 +221,8 @@ describe('MessageDetailModal', () => {
     );
 
     // The clickable resolve button should not appear (only the resolved badge)
-    expect(screen.queryByText('Resolve')).not.toBeInTheDocument();
-    expect(screen.getByText('Resolved')).toBeInTheDocument();
+    expect(screen.queryByText('Mark as handled')).not.toBeInTheDocument();
+    expect(screen.getByText('Handled')).toBeInTheDocument();
   });
 
   it('calls onResolve with senderId and pageId', () => {
@@ -241,7 +241,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Resolve'));
+    fireEvent.click(screen.getByText('Mark as handled'));
     expect(onResolve).toHaveBeenCalledWith('sender1', 'page1');
   });
 

@@ -112,6 +112,17 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     }
   }, [invalidateShared, t, tc, selectedConversation]);
 
+  // --- Unresolve ---
+  const handleUnresolve = useCallback(async (senderId: string, pageId: string) => {
+    try {
+      await messagesApi.unresolveConversation(senderId, pageId);
+      invalidateShared();
+      toast.success(t('unresolveSuccess'));
+    } catch {
+      toast.error(tc('error'));
+    }
+  }, [invalidateShared, t, tc]);
+
   // --- Pause status query ---
   const { data: pauseStatusData } = useQuery({
     queryKey: ['pause-status', selectedConversation?.senderId],
@@ -138,6 +149,7 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     handlePause,
     handleResume,
     handleResolve,
+    handleUnresolve,
     isReplying: sendReplyMutation.isPending,
     isPausing: pauseMutation.isPending,
     isResuming: resumeMutation.isPending,

@@ -34,6 +34,7 @@ interface CommentDetailModalProps {
   onClose: () => void;
   onReplySuccess: () => void;
   onResolve?: () => void;
+  onUnresolve?: () => void;
   mode?: 'full' | 'quick';
   pageName?: string;
   pageUrl?: string;
@@ -44,6 +45,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   onClose,
   onReplySuccess,
   onResolve,
+  onUnresolve,
   mode = 'full',
   pageName,
   pageUrl,
@@ -371,6 +373,18 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   >
                     <CheckCircle className="w-3.5 h-3.5" />
                     {t('resolve')}
+                  </button>
+                </div>
+              )}
+              {onUnresolve && (
+                <div className="flex justify-center mt-3">
+                  <button
+                    onClick={() => { onUnresolve(); onClose(); }}
+                    disabled={isSending}
+                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  >
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    {t('unresolve')}
                   </button>
                 </div>
               )}

@@ -108,7 +108,7 @@ describe('CommentCard', () => {
 
   it('shows resolve button when onResolve is provided', () => {
     render(<CommentCard {...defaultProps} onResolve={vi.fn()} onQuickReply={vi.fn()} />);
-    expect(screen.getByText('Resolve')).toBeInTheDocument();
+    expect(screen.getByText('Mark as handled')).toBeInTheDocument();
   });
 
   it('shows reply button when onQuickReply is provided', () => {
@@ -124,7 +124,7 @@ describe('CommentCard', () => {
       replyMethod: 'ai',
     };
     render(<CommentCard {...defaultProps} comment={replied} onResolve={vi.fn()} onQuickReply={vi.fn()} />);
-    expect(screen.queryByText('Resolve')).not.toBeInTheDocument();
+    expect(screen.queryByText('Mark as handled')).not.toBeInTheDocument();
   });
 
   it('calls onClick when card is clicked', () => {
@@ -139,7 +139,7 @@ describe('CommentCard', () => {
     const onResolve = vi.fn();
     render(<CommentCard {...defaultProps} onClick={onClick} onResolve={onResolve} onQuickReply={vi.fn()} />);
 
-    fireEvent.click(screen.getByText('Resolve'));
+    fireEvent.click(screen.getByText('Mark as handled'));
     expect(onResolve).toHaveBeenCalled();
     // onClick should NOT be called — stopPropagation
     expect(onClick).not.toHaveBeenCalled();
