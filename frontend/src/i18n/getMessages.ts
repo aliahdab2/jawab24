@@ -85,7 +85,7 @@ import arTerms         from './ar/terms.json';
 import arTime          from './ar/time.json';
 
 // Global namespaces loaded on every page
-const GLOBAL_NAMESPACES = ['common', 'nav', 'notifications', 'errors', 'errorBoundary', 'meta'];
+const GLOBAL_NAMESPACES = ['common', 'nav', 'notifications', 'errors', 'errorBoundary', 'meta', 'sse'];
 
 // Lookup table keyed by "locale/namespace"
 const NS: Record<string, Record<string, unknown>> = {
