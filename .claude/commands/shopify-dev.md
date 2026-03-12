@@ -91,26 +91,46 @@ If arguments include "test", run tests automatically (see "Running tests" sectio
 
 ## Running tests (when arguments include "test")
 
-Skip steps 1-5 (assume backend is already running). Just:
+Skip steps 1-5 (ngrok + frontend). But DO ensure backend and AI worker are running:
 
-1. Verify backend is healthy: `curl -s http://localhost:3000/health`
-2. Get admin token (step 6 above) — call `POST /auth/demo` ONCE
-3. Clear AI caches before eval:
+1. Check if backend is healthy: `curl -s http://localhost:3000/health`
+   If NOT running, start it:
+   ```bash
+   export $(grep -v '^#' backend/.env | xargs) && nohup npx tsx backend/src/index.ts > /tmp/backend.log 2>&1 &
+   ```
+   Wait up to 15 seconds, then verify health again. If still not healthy, check `/tmp/backend.log` for errors.
+
+2. Check if AI worker is healthy: `curl -s http://localhost:3002/health`
+   If NOT running, start it:
+   ```bash
+   export $(grep -v '^#' ai-worker/.env | xargs) && export PORT=3002 && nohup npx tsx ai-worker/src/index.ts > /tmp/ai-worker.log 2>&1 &
+   ```
+   Wait up to 10 seconds, then verify health again. If still not healthy, check `/tmp/ai-worker.log` for errors (usually missing OPENAI_API_KEY).
+
+3. Get admin token — call `POST /auth/demo` ONCE:
+   ```bash
+   curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))"
+   ```
+   **IMPORTANT**: This reseeds ALL demo data. Call ONCE and reuse the token.
+
+4. Clear AI caches before eval:
    ```bash
    psql "postgres://aliahdab@localhost:5432/postgres" -c "DELETE FROM ai_cache; DELETE FROM semantic_cache;" 2>/dev/null || true
    ```
-4. Run integration test:
+
+5. Run integration test:
    ```bash
    ADMIN_TOKEN=<token> PLATFORM=shopify npx tsx scripts/ecommerce-integration-test.ts
    ```
-5. Check if AI worker is running (port 3002). If yes, also run e-commerce eval:
+
+6. If AI worker is running (verified in step 2), also run e-commerce eval:
    ```bash
-   curl -s http://localhost:3002/health
    ADMIN_TOKEN=<token> CATEGORY=13 VERBOSE=1 npx tsx scripts/playground-eval.ts
    ```
-   If AI worker is not running, skip eval and tell the user:
-   "AI worker not running on port 3002 — skipping eval tests. Start it with `/dev` or manually to run eval."
-6. Report results summary (pass/fail counts for both test suites)
+   If AI worker failed to start, skip eval and tell the user:
+   "AI worker not running on port 3002 — skipping eval tests. Check `/tmp/ai-worker.log` for errors."
+
+7. Report results summary (pass/fail counts for both test suites)
 
 ## Troubleshooting (common issues from past sessions)
 
