@@ -462,6 +462,13 @@ if [ ! -d "frontend/.next" ]; then
     fi
 fi
 
+# Standalone output requires static files copied into the standalone dir.
+# Without this, the standalone server.js can't serve CSS/JS/images.
+if [ -d "frontend/.next/standalone" ]; then
+    cp -r frontend/.next/static frontend/.next/standalone/frontend/.next/static 2>/dev/null || true
+    cp -r frontend/public frontend/.next/standalone/frontend/public 2>/dev/null || true
+fi
+
 # Kill any existing process on port 3001 so Playwright can start its own server
 if lsof -ti:3001 > /dev/null 2>&1; then
     echo "   Stopping existing process on port 3001..."

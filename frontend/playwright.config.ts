@@ -23,10 +23,11 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // CI: use production server (next start) — no HMR/Fast Refresh, so .next files
-    // are never rewritten mid-test (eliminates ENOENT race conditions).
+    // CI: use standalone server (output: 'standalone' in next.config.js).
+    // `next start` does NOT work with standalone — must use the standalone server.js.
+    // Monorepo layout puts it at .next/standalone/frontend/server.js.
     // Local: use dev server (reuseExistingServer reuses whatever is on :3001).
-    command: process.env.CI ? 'npm run start' : 'npm run dev',
+    command: process.env.CI ? 'PORT=3001 node .next/standalone/frontend/server.js' : 'npm run dev',
     url: 'http://localhost:3001/en/login',
     timeout: 120 * 1000,
     reuseExistingServer: !process.env.CI,
