@@ -13,6 +13,7 @@ vi.mock('../../src/config', () => ({
             appSecret: 'test_app_secret',
             redirectUri: 'http://localhost:3000/auth/callback',
             graphApiVersion: 'v18.0',
+            webhookVerifyToken: 'test_verify_token',
         },
     },
 }));
@@ -340,6 +341,39 @@ describe('Facebook Service', () => {
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
 
             expect(result).toBeNull();
+        });
+    });
+
+    describe('subscribePageToWebhooks', () => {
+        it('should subscribe a page to feed + messages', async () => {
+            vi.mocked(axios.post).mockResolvedValue({ data: { success: true } });
+
+            const result = await service.subscribePageToWebhooks('page_123', 'page_token_abc');
+
+            expect(result).toBe(true);
+            expect(axios.post).toHaveBeenCalledWith(
+                'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
+                null,
+                {
+                    params: {
+                        subscribed_fields: 'feed,messages',
+                        access_token: 'page_token_abc',
+                    },
+                }
+            );
+        });
+
+        it('should return false on API failure', async () => {
+            const axiosError = Object.assign(new Error('Forbidden'), {
+                isAxiosError: true,
+                response: { data: { error: { message: 'Permission denied' } } },
+            });
+            vi.mocked(axios.post).mockRejectedValue(axiosError);
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+
+            const result = await service.subscribePageToWebhooks('page_123', 'bad_token');
+
+            expect(result).toBe(false);
         });
     });
 

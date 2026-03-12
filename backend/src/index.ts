@@ -50,7 +50,7 @@ import { config } from "./config";
 import demoPlugin from "./plugins/demo";
 import swaggerPlugin from "./plugins/swagger";
 import { ensureAdminUsers } from "./utils/adminSetup";
-import { facebookService } from "./services/facebook";
+import { ensureMetaWebhookSubscriptions } from "./services/metaWebhooks";
 import { sanitizeRequestHeaders } from "./utils/logSanitizer";
 
 // ⚡ Validate environment variables on startup
@@ -285,17 +285,16 @@ const start = async () => {
       }
     }, 6 * 60 * 60 * 1000); // Every 6 hours
 
-    // Verify app-level webhook subscription with Facebook on startup
+    // Verify app-level webhook subscriptions with Meta on startup
     // This ensures the callback URL is verified after every deploy
-    facebookService.setLogger(createRequestLogger(server.log));
-    facebookService.ensureAppWebhookSubscription(config.webhookCallbackUrl).then(ok => {
+    ensureMetaWebhookSubscriptions(config.webhookCallbackUrl, createRequestLogger(server.log)).then(ok => {
       if (ok) {
-        console.log(`✅ Facebook webhook subscription verified (${config.webhookCallbackUrl})`);
+        console.log(`✅ Meta webhook subscriptions verified (${config.webhookCallbackUrl})`);
       } else {
-        console.warn(`⚠️  Facebook webhook subscription verification failed — webhooks may not be delivered`);
+        console.warn(`⚠️  One or more Meta webhook subscriptions failed — some webhooks may not be delivered`);
       }
     }).catch(err => {
-      server.log.error(err, 'Facebook webhook subscription check failed');
+      server.log.error(err, 'Meta webhook subscription check failed');
       Sentry.captureException(err);
     });
   } catch (err) {
