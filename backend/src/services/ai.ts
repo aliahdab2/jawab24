@@ -14,6 +14,7 @@ import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { estimateCostUsd } from '../config/aiPricing';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { classifyFallback, classifyFallbackIntent } from './reply/fallbackClassifier';
+import { notificationService } from './notifications';
 
 /** Context used to scope exact-cache lookups and writes. */
 interface CacheContext {
@@ -395,7 +396,92 @@ export class AiService {
             };
         } catch (error) {
             if (error instanceof CircuitOpenError) {
-                this.logger.warn('AI circuit breaker open — using fallback');
+                this.logger.warn('AI circuit breaker open — attempting provider failover');
+
+                // Bypass circuit breaker: call ai-worker directly via axios.post()
+                // The circuit wraps ALL HTTP calls to ai-worker, but ai-worker itself is fine —
+                // it's OpenAI that's down. The fallback uses Claude (different API key, different provider).
+                try {
+                    const fallbackModel = config.ai.fallbackModel;
+                    const failoverResponse = await Sentry.startSpan(
+                        { name: 'ai.failover.http', op: 'http.client', attributes: { 'ai.model': fallbackModel } },
+                        () => axios.post<{
+                            reply: string;
+                            language: string;
+                            intent?: string;
+                            confidence?: string;
+                            flags?: string[];
+                            tokensUsed?: number;
+                            tokensIn?: number;
+                            tokensOut?: number;
+                        }>(
+                            `${config.ai.serviceUrl}/generate`,
+                            {
+                                comment: request.comment,
+                                language: request.language,
+                                context: request.context,
+                                model: fallbackModel,
+                            },
+                            { timeout: 30000 },
+                        ),
+                    );
+
+                    this.logger.info('Provider failover succeeded', { model: fallbackModel });
+                    Sentry.captureMessage('AI provider failover active', {
+                        level: 'warning',
+                        tags: { fallbackModel },
+                    });
+
+                    // Send deduplicated push notification to admin
+                    // Redis key with 1-hour TTL prevents notification storms during outage
+                    if (userId) {
+                        const dedupKey = `failover:notified:${userId}`;
+                        try {
+                            const alreadyNotified = await redis.get(dedupKey);
+                            if (!alreadyNotified) {
+                                await redis.set(dedupKey, '1', 'EX', 3600);
+                                notificationService.sendTemplateNotification(
+                                    userId,
+                                    'provider_failover',
+                                    { fallbackModel },
+                                    { urgent: true },
+                                ).catch(() => {}); // fire-and-forget
+                            }
+                        } catch {
+                            // Redis unavailable — skip dedup, still return the reply
+                        }
+                    }
+
+                    // Fire-and-forget: log token usage for failover model
+                    if (userId) {
+                        const tokensIn = failoverResponse.data.tokensIn ?? 0;
+                        const tokensOut = failoverResponse.data.tokensOut ?? 0;
+                        this.logUsage({ userId, pageId, model: fallbackModel, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
+                    }
+
+                    // Cache write intentionally SKIPPED:
+                    // We're in the catch block (outside the try block's cache-write logic).
+                    // Different model = different quality characteristics; we don't want
+                    // fallback model responses cached under the primary model's cache keys.
+
+                    const failoverFlags = [...(failoverResponse.data.flags || []), 'provider_failover'];
+
+                    return {
+                        reply: failoverResponse.data.reply,
+                        language: failoverResponse.data.language || request.language || 'en',
+                        cached: false,
+                        model: fallbackModel,
+                        intent: failoverResponse.data.intent,
+                        confidence: failoverResponse.data.confidence,
+                        flags: failoverFlags,
+                        tokensUsed: failoverResponse.data.tokensUsed,
+                    };
+                } catch (failoverError) {
+                    this.logger.error('Provider failover also failed', {
+                        error: failoverError instanceof Error ? failoverError.message : String(failoverError),
+                    });
+                    // Fall through to static fallback below
+                }
             } else {
                 this.logger.error('AI Service error', {
                     error: error instanceof Error ? error.message : String(error),

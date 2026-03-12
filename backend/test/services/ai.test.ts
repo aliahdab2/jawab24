@@ -869,6 +869,304 @@ describe('AI Service - Semantic Cache Integration', () => {
     });
 });
 
+describe('AI Service - Provider Failover', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    function setupFailoverMocks(overrides: {
+        failoverReply?: Record<string, unknown>;
+        failoverError?: Error;
+        redisGet?: string | null;
+    } = {}) {
+        vi.doMock('../../src/lib/redis', () => ({
+            redis: {
+                get: vi.fn().mockResolvedValue(overrides.redisGet ?? null),
+                set: vi.fn().mockResolvedValue('OK'),
+                quit: vi.fn(),
+                incr: vi.fn().mockResolvedValue(1),
+            },
+        }));
+
+        vi.doMock('../../src/db', () => ({
+            db: {
+                select: vi.fn().mockReturnValue({
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue([]),
+                    }),
+                }),
+                insert: vi.fn().mockReturnValue({
+                    values: vi.fn().mockReturnValue({
+                        onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+                        returning: vi.fn().mockResolvedValue([{ id: 'notif-1' }]),
+                    }),
+                }),
+                update: vi.fn().mockReturnValue({
+                    set: vi.fn().mockReturnValue({
+                        where: vi.fn().mockResolvedValue(undefined),
+                    }),
+                }),
+                delete: vi.fn().mockReturnValue({
+                    from: vi.fn().mockResolvedValue(undefined),
+                }),
+            },
+        }));
+
+        vi.doMock('../../src/db/schema', () => ({
+            aiCache: {},
+            aiUsageLog: {},
+            deviceTokens: {},
+            notifications: {},
+            settings: {},
+        }));
+
+        vi.doMock('drizzle-orm', () => ({
+            eq: vi.fn(),
+            and: vi.fn(),
+            desc: vi.fn(),
+            count: vi.fn(),
+            sql: vi.fn().mockReturnValue('sql-mock'),
+        }));
+
+        // Circuit breaker throws CircuitOpenError (simulating open circuit)
+        const CircuitOpenErrorClass = class CircuitOpenError extends Error {
+            constructor() { super('Circuit open'); this.name = 'CircuitOpenError'; }
+        };
+        vi.doMock('../../src/lib/circuitBreaker', () => ({
+            aiWorkerCircuit: {
+                execute: vi.fn().mockRejectedValue(new CircuitOpenErrorClass()),
+                getState: vi.fn().mockResolvedValue('open'),
+            },
+            CircuitOpenError: CircuitOpenErrorClass,
+        }));
+
+        // Axios: failover call
+        const axiosMock = {
+            post: vi.fn(),
+        };
+        if (overrides.failoverError) {
+            axiosMock.post.mockRejectedValue(overrides.failoverError);
+        } else {
+            axiosMock.post.mockResolvedValue({
+                data: overrides.failoverReply ?? {
+                    reply: 'Claude fallback reply',
+                    language: 'en',
+                    intent: 'QUESTION',
+                    confidence: 'high',
+                    flags: [],
+                    tokensIn: 100,
+                    tokensOut: 50,
+                },
+            });
+        }
+        vi.doMock('axios', () => ({ default: axiosMock }));
+
+        vi.doMock('../../src/config', () => ({
+            config: {
+                ai: {
+                    enabled: true,
+                    cacheEnabled: true,
+                    serviceUrl: 'http://localhost:3002',
+                    model: 'gpt-4.1-mini',
+                    fallbackModel: 'claude-haiku-4-5-20251001',
+                },
+                openai: { apiKey: '' },
+            },
+        }));
+
+        vi.doMock('@sentry/node', () => ({
+            startSpan: vi.fn((_opts: unknown, fn: () => unknown) => fn()),
+            captureException: vi.fn(),
+            captureMessage: vi.fn(),
+            addBreadcrumb: vi.fn(),
+        }));
+
+        return { axiosMock };
+    }
+
+    it('should failover to Claude when circuit breaker is open', async () => {
+        setupFailoverMocks();
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({
+            comment: 'What is the price?',
+            context: { userId: 'user-1' },
+        });
+
+        expect(result.reply).toBe('Claude fallback reply');
+        expect(result.model).toBe('claude-haiku-4-5-20251001');
+        expect(result.cached).toBe(false);
+        expect(result.flags).toContain('provider_failover');
+    });
+
+    it('should append provider_failover to existing flags', async () => {
+        setupFailoverMocks({
+            failoverReply: {
+                reply: 'Reply from Claude',
+                language: 'ar',
+                intent: 'COMPLAINT',
+                confidence: 'high',
+                flags: ['angry_customer'],
+                tokensIn: 200,
+                tokensOut: 100,
+            },
+        });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({
+            comment: 'هذا المنتج سيء جداً!',
+            context: { userId: 'user-1' },
+        });
+
+        expect(result.flags).toEqual(['angry_customer', 'provider_failover']);
+        expect(result.intent).toBe('COMPLAINT');
+        expect(result.language).toBe('ar');
+    });
+
+    it('should call ai-worker directly (bypass circuit breaker) for failover', async () => {
+        const { axiosMock } = setupFailoverMocks();
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { userId: 'user-1' },
+        });
+
+        // Verify direct axios.post call with fallback model
+        expect(axiosMock.post).toHaveBeenCalledWith(
+            'http://localhost:3002/generate',
+            expect.objectContaining({
+                comment: 'Hello',
+                model: 'claude-haiku-4-5-20251001',
+            }),
+            expect.objectContaining({ timeout: 30000 }),
+        );
+    });
+
+    it('should send Sentry warning on successful failover', async () => {
+        setupFailoverMocks();
+
+        const sentry = await import('@sentry/node');
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { userId: 'user-1' },
+        });
+
+        expect(sentry.captureMessage).toHaveBeenCalledWith(
+            'AI provider failover active',
+            expect.objectContaining({
+                level: 'warning',
+                tags: { fallbackModel: 'claude-haiku-4-5-20251001' },
+            }),
+        );
+    });
+
+    it('should send deduplicated push notification on failover', async () => {
+        setupFailoverMocks();
+
+        const { redis } = await import('../../src/lib/redis');
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { userId: 'user-1' },
+        });
+
+        // Should check Redis for dedup key
+        expect(redis.get).toHaveBeenCalledWith('failover:notified:user-1');
+        // Should set dedup key with 1-hour TTL
+        expect(redis.set).toHaveBeenCalledWith('failover:notified:user-1', '1', 'EX', 3600);
+    });
+
+    it('should skip notification when already notified (dedup key exists)', async () => {
+        setupFailoverMocks({ redisGet: '1' });
+
+        const { redis } = await import('../../src/lib/redis');
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { userId: 'user-1' },
+        });
+
+        // Should check for dedup key
+        expect(redis.get).toHaveBeenCalledWith('failover:notified:user-1');
+        // Should NOT set a new dedup key (already exists)
+        const setCalls = vi.mocked(redis.set).mock.calls.filter(
+            (call) => call[0] === 'failover:notified:user-1',
+        );
+        expect(setCalls).toHaveLength(0);
+    });
+
+    it('should fall through to static fallback when failover also fails', async () => {
+        setupFailoverMocks({ failoverError: new Error('Claude API also down') });
+
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({
+            comment: 'Hello',
+            context: { userId: 'user-1' },
+        });
+
+        expect(result.reply).toBe('Thank you for your comment!');
+        expect(result.model).toBe('fallback');
+        // Should have lightweight classification from fallbackClassifier
+        expect(result.intent).toBe('GREETING');
+    });
+
+    it('should not write to cache during failover', async () => {
+        setupFailoverMocks();
+
+        const { redis } = await import('../../src/lib/redis');
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { userId: 'user-1' },
+        });
+
+        // Redis set should only be called for dedup key, NOT for cache
+        const cacheSetCalls = vi.mocked(redis.set).mock.calls.filter(
+            (call) => String(call[0]).startsWith('cache:'),
+        );
+        expect(cacheSetCalls).toHaveLength(0);
+    });
+
+    it('should instrument failover HTTP call with Sentry span', async () => {
+        setupFailoverMocks();
+
+        const sentry = await import('@sentry/node');
+        const { AiService: FreshService } = await import('../../src/services/ai');
+        const service = new FreshService();
+
+        await service.generateReply({
+            comment: 'Hello',
+            context: { userId: 'user-1' },
+        });
+
+        expect(sentry.startSpan).toHaveBeenCalledWith(
+            expect.objectContaining({
+                name: 'ai.failover.http',
+                op: 'http.client',
+            }),
+            expect.any(Function),
+        );
+    });
+});
+
 describe('AI Service (disabled)', () => {
     beforeEach(() => {
         vi.resetModules();

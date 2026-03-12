@@ -46,6 +46,8 @@ export const config = {
         cacheEnabled: process.env.AI_CACHE_ENABLED !== 'false',
         // Always use DEFAULT_AI_MODEL for cost efficiency - not configurable by users
         model: DEFAULT_AI_MODEL,
+        // Fallback model when primary provider (OpenAI) is unreachable
+        fallbackModel: process.env.AI_FALLBACK_MODEL || 'claude-haiku-4-5-20251001',
     },
 
     // OpenAI (for KB embeddings — same key as ai-worker)
