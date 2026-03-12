@@ -1,6 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import type { WorkspaceRequest } from '../middleware/workspace';
-import { pagesService } from '../services/pages';
+import { pagesService, isPageDisconnected } from '../services/pages';
 import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
@@ -213,6 +213,15 @@ export class InstagramController {
         try {
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
+                // Block enabling if page access was revoked in Facebook
+                const existingPage = await pagesService.getPage(workspaceId, id);
+                if (isPageDisconnected(existingPage)) {
+                    return reply.status(400).send({
+                        error: 'This page is disconnected. Please reconnect via Facebook to resume auto-replies.',
+                        code: 'PAGE_DISCONNECTED',
+                    });
+                }
+
                 const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     return reply.status(403).send({

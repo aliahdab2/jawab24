@@ -13,6 +13,7 @@ vi.mock('../../src/services/pages', () => ({
         toggleAutoReply: vi.fn(),
         syncFromFacebook: vi.fn(),
     },
+    isPageDisconnected: (page: { accessToken: string } | null | undefined) => !!page && page.accessToken === '',
 }));
 
 vi.mock('../../src/services/subscriptions', () => ({
@@ -58,7 +59,7 @@ describe('Pages Controller', () => {
     // ---- create ----
     describe('create', () => {
         it('should create a page successfully', async () => {
-            const newPage = { id: 'page-1', name: 'Test Page' };
+            const newPage = { id: 'page-1', name: 'Test Page', accessToken: 'tok' };
             vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 1 } as any);
             vi.mocked(pagesService.createPage).mockResolvedValue(newPage as any);
             mockRequest.body = { facebookPageId: 'fb-page-1', name: 'Test Page', accessToken: 'tok' };
@@ -66,7 +67,7 @@ describe('Pages Controller', () => {
             await pagesController.create(mockRequest as any, mockReply as FastifyReply);
 
             expect(mockReply.status).toHaveBeenCalledWith(201);
-            expect(mockReply.send).toHaveBeenCalledWith(newPage);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ id: 'page-1', name: 'Test Page', isConnected: true }));
         });
 
         it('should return 403 when subscription limit reached', async () => {
@@ -86,28 +87,32 @@ describe('Pages Controller', () => {
 
     // ---- getAll ----
     describe('getAll', () => {
-        it('should return all pages for the user', async () => {
-            const pages = [{ id: 'page-1' }, { id: 'page-2' }];
+        it('should return all pages for the user with isConnected', async () => {
+            const pages = [{ id: 'page-1', accessToken: 'tok1' }, { id: 'page-2', accessToken: 'tok2' }];
             vi.mocked(pagesService.getPages).mockResolvedValue(pages as any);
 
             await pagesController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
             expect(pagesService.getPages).toHaveBeenCalledWith('test_workspace_id');
-            expect(mockReply.send).toHaveBeenCalledWith(pages);
+            // serializePage strips accessToken and adds isConnected
+            expect(mockReply.send).toHaveBeenCalledWith([
+                expect.objectContaining({ id: 'page-1', isConnected: true }),
+                expect.objectContaining({ id: 'page-2', isConnected: true }),
+            ]);
         });
     });
 
     // ---- getOne ----
     describe('getOne', () => {
-        it('should return a single page', async () => {
-            const page = { id: 'page-1', name: 'My Page' };
+        it('should return a single page with isConnected', async () => {
+            const page = { id: 'page-1', name: 'My Page', accessToken: 'tok' };
             vi.mocked(pagesService.getPage).mockResolvedValue(page as any);
             mockRequest.params = { id: 'page-1' };
 
             await pagesController.getOne(mockRequest as any, mockReply as FastifyReply);
 
             expect(pagesService.getPage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
-            expect(mockReply.send).toHaveBeenCalledWith(page);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ id: 'page-1', name: 'My Page', isConnected: true }));
         });
 
         it('should return 404 when page not found', async () => {
@@ -124,7 +129,7 @@ describe('Pages Controller', () => {
     // ---- update ----
     describe('update', () => {
         it('should update a page successfully', async () => {
-            const updated = { id: 'page-1', name: 'Updated' };
+            const updated = { id: 'page-1', name: 'Updated', accessToken: 'tok' };
             vi.mocked(pagesService.updatePage).mockResolvedValue(updated as any);
             mockRequest.params = { id: 'page-1' };
             mockRequest.body = { name: 'Updated' };
@@ -132,7 +137,7 @@ describe('Pages Controller', () => {
             await pagesController.update(mockRequest as any, mockReply as FastifyReply);
 
             expect(pagesService.updatePage).toHaveBeenCalledWith('test_workspace_id', 'page-1', { name: 'Updated' });
-            expect(mockReply.send).toHaveBeenCalledWith(updated);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ id: 'page-1', name: 'Updated', isConnected: true }));
         });
     });
 
@@ -153,7 +158,8 @@ describe('Pages Controller', () => {
     // ---- toggleAutoReply ----
     describe('toggleAutoReply', () => {
         it('should toggle auto-reply successfully', async () => {
-            const toggled = { id: 'page-1', autoReplyEnabled: true };
+            const toggled = { id: 'page-1', autoReplyEnabled: true, accessToken: 'tok' };
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', accessToken: 'tok' } as any);
             vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 0, remaining: 5 } as any);
             vi.mocked(pagesService.toggleAutoReply).mockResolvedValue(toggled as any);
             mockRequest.params = { id: 'page-1' };
@@ -162,22 +168,36 @@ describe('Pages Controller', () => {
             await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
 
             expect(pagesService.toggleAutoReply).toHaveBeenCalledWith('test_workspace_id', 'page-1', true);
-            expect(mockReply.send).toHaveBeenCalledWith(toggled);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ id: 'page-1', isConnected: true }));
+        });
+
+        it('should return 400 when toggling on a disconnected page', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', accessToken: '' } as any);
+            mockRequest.params = { id: 'page-1' };
+            mockRequest.body = { enabled: true };
+
+            await pagesController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'PAGE_DISCONNECTED' }));
         });
     });
 
     // ---- sync ----
     describe('sync', () => {
         it('should sync pages from Facebook successfully', async () => {
-            const syncedPages = [{ id: 'page-1' }];
+            const syncedPages = [{ id: 'page-1', accessToken: 'tok' }];
             vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 1, remaining: 4 } as any);
-            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages, skippedCount: 0 } as any);
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages, skippedCount: 0, revokedCount: 0 } as any);
             mockRequest.body = { accessToken: 'fb-token-abc' };
 
             await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
 
             expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user-123', 'fb-token-abc');
-            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ synced: 1, pages: syncedPages }));
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
+                synced: 1,
+                pages: [expect.objectContaining({ id: 'page-1', isConnected: true })],
+            }));
         });
 
         it('should return 400 when accessToken is missing', async () => {

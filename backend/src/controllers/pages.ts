@@ -1,11 +1,17 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { pagesService } from '../services/pages';
+import { pagesService, isPageDisconnected } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
+
+/** Add isConnected flag and strip accessToken from page response */
+function serializePage<T extends { accessToken?: string | null }>(page: T) {
+    const { accessToken, ...rest } = page;
+    return { ...rest, isConnected: !!accessToken && accessToken !== '' };
+}
 
 export class PagesController {
     /**
@@ -39,7 +45,7 @@ export class PagesController {
                 await facebookService.subscribePageToWebhooks(request.body.facebookPageId, request.body.accessToken);
             }
 
-            return reply.status(201).send(page);
+            return reply.status(201).send(serializePage(page));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to create page' });
@@ -58,7 +64,7 @@ export class PagesController {
 
         try {
             const pages = await pagesService.getPages(req.workspaceId);
-            return reply.send(pages);
+            return reply.send(pages.map(serializePage));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch pages' });
@@ -81,7 +87,7 @@ export class PagesController {
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
-            return reply.send(page);
+            return reply.send(serializePage(page));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch page' });
@@ -104,7 +110,7 @@ export class PagesController {
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
-            return reply.send(page);
+            return reply.send(serializePage(page));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update page' });
@@ -154,6 +160,15 @@ export class PagesController {
         try {
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
+                // Block enabling if page access was revoked in Facebook
+                const existingPage = await pagesService.getPage(workspaceId, id);
+                if (isPageDisconnected(existingPage)) {
+                    return reply.status(400).send({
+                        error: 'This page is disconnected. Please reconnect via Facebook to resume auto-replies.',
+                        code: 'PAGE_DISCONNECTED',
+                    });
+                }
+
                 const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     return reply.status(403).send({
@@ -169,7 +184,7 @@ export class PagesController {
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
-            return reply.send(page);
+            return reply.send(serializePage(page));
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to toggle auto-reply' });
@@ -199,12 +214,12 @@ export class PagesController {
         // Demo users have no real Facebook token — return their seeded pages directly
         if (req.user.facebookId === config.demo.userFacebookId) {
             const pages = await pagesService.getPages(workspaceId);
-            return reply.send({ synced: pages.length, pages, skipped: 0 });
+            return reply.send({ synced: pages.length, pages: pages.map(serializePage), skipped: 0 });
         }
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+            const { syncedPages, skippedCount, revokedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
 
             if (syncedPages.length === 0) {
                 return reply.send({
@@ -214,11 +229,16 @@ export class PagesController {
                 });
             }
 
-            const response: Record<string, unknown> = { synced: syncedPages.length, pages: syncedPages };
+            const response: Record<string, unknown> = { synced: syncedPages.length, pages: syncedPages.map(serializePage) };
 
             if (skippedCount > 0) {
                 response.warning = `${skippedCount} page(s) were synced but auto-reply was not enabled due to your plan limit. Upgrade to enable more pages.`;
                 response.skippedCount = skippedCount;
+            }
+
+            if (revokedCount > 0) {
+                response.revokedWarning = `${revokedCount} page(s) were disconnected because access was revoked in Facebook.`;
+                response.revokedCount = revokedCount;
             }
 
             // Include current limit status for frontend display

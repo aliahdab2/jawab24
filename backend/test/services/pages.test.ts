@@ -230,5 +230,60 @@ describe('PagesService', () => {
             expect(insertedValues).toBeDefined();
             expect(insertedValues.suggestedKnowledgeBase).toBeNull();
         });
+
+        it('should disable pages that user revoked access to in Facebook', async () => {
+            const workspaceId = 'workspace-123';
+            const userId = 'user-123';
+            const accessToken = 'token-123';
+
+            // Facebook only returns page 1 (user deselected page 2)
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [
+                    { id: 'fb-page-1', name: 'Page 1', access_token: 'pt-1' }
+                ]
+            });
+
+            // Both pages exist in DB
+            const existingPages = [
+                { id: 'p1', facebookPageId: 'fb-page-1', name: 'Page 1', accessToken: 'pt-1', autoReplyEnabled: true },
+                { id: 'p2', facebookPageId: 'fb-page-2', name: 'Page 2', accessToken: 'pt-2', autoReplyEnabled: true }
+            ];
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue(existingPages)
+                    })
+                })
+            } as any);
+
+            // Mock Instagram (no linked account)
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            // Track update calls
+            const updateSetMock = vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'p1', name: 'Page 1' }])
+                })
+            });
+            vi.mocked(db.update).mockReturnValue({
+                set: updateSetMock
+            } as any);
+
+            const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
+            // Should report 1 revoked page
+            expect(result.revokedCount).toBe(1);
+
+            // db.update should be called at least twice: once for syncing page 1, once for revoking page 2
+            expect(db.update).toHaveBeenCalledTimes(2);
+
+            // The second update call should set accessToken to '' and disable auto-reply
+            const secondSetCall = updateSetMock.mock.calls[1]?.[0];
+            expect(secondSetCall).toMatchObject({
+                autoReplyEnabled: false,
+                instagramAutoReplyEnabled: false,
+                accessToken: '',
+            });
+        });
     });
 });
