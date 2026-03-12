@@ -236,13 +236,18 @@ fi
 # Always clean .next before building to avoid stale vendor chunks after npm install.
 # Incremental builds sound nice but cause MODULE_NOT_FOUND errors in practice.
 rm -rf frontend/.next
-if npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
+# NEXT_PUBLIC_* vars are baked at build time in standalone mode.
+# Set the API URL to a dummy host with /api prefix so that E2E test mocks
+# using '**/api/**' patterns match the actual request URLs.
+# This only affects the local pre-deploy build — production builds on the server
+# use their own .env with the real API URL.
+if NEXT_PUBLIC_API_URL=http://localhost:4999/api npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
 else
     echo -e "${RED}   ❌ Frontend build failed!${NC}"
     # Clean cache and show full error output for debugging
     rm -rf frontend/.next
-    npm run build --workspace=jawab24-frontend
+    NEXT_PUBLIC_API_URL=http://localhost:4999/api npm run build --workspace=jawab24-frontend
     exit 1
 fi
 
@@ -455,9 +460,9 @@ rm -rf frontend/test-results frontend/playwright-report frontend/blob-report
 # Safety: if .next is missing (e.g. step 2 was skipped), build it now
 if [ ! -d "frontend/.next" ]; then
     echo "   ⚠️  No .next build found, building for E2E..."
-    if ! (cd frontend && npx next build) > /dev/null 2>&1; then
+    if ! (cd frontend && NEXT_PUBLIC_API_URL=http://localhost:4999/api npx next build) > /dev/null 2>&1; then
         echo -e "${RED}   ❌ E2E build failed!${NC}"
-        (cd frontend && npx next build)
+        (cd frontend && NEXT_PUBLIC_API_URL=http://localhost:4999/api npx next build)
         exit 1
     fi
 fi
