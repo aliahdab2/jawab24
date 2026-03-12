@@ -269,6 +269,7 @@ const CommentsPage: NextPageWithLayout = () => {
       needs_action: t('needsAction'),
       all: '',
       auto_replied: t('autoReplied'),
+      handled: t('handled'),
     };
     const filterLabel = filterLabels[filter] ? ` — ${filterLabels[filter]}` : '';
     const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
