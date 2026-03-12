@@ -63,7 +63,7 @@ mkdir -p "$BACKUP_DIR"
 # =============================================
 log "${BLUE}Starting database backup...${NC}"
 
-if ! docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" | gzip > "$BACKUP_FILE"; then
+if ! docker compose exec -T postgres pg_dump -U "$DB_USER" "$DB_NAME" 2>/dev/null | gzip > "$BACKUP_FILE"; then
     log "${RED}FAILED: pg_dump failed!${NC}"
     rm -f "$BACKUP_FILE"
     exit 1
