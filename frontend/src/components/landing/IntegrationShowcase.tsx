@@ -17,18 +17,18 @@ function CheckIcon() {
 }
 
 /* ── Animation config ── */
-const springIn = { type: 'spring' as const, stiffness: 120, damping: 20 };
+const springPop = { type: 'spring' as const, stiffness: 220, damping: 20 };
 const layoutSpring = { type: 'spring' as const, stiffness: 300, damping: 30 };
 
 const fadeSlide: Variants = {
-  enter: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: springIn },
-  exit: { opacity: 0, y: -8, transition: { duration: 0.2 } },
+  enter: { opacity: 0, y: 15, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: springPop },
+  exit: { opacity: 0, y: -8, scale: 0.98, transition: { duration: 0.2 } },
 };
 
 const cardSlide: Variants = {
-  enter: { opacity: 0, x: -20 },
-  visible: { opacity: 1, x: 0, transition: { type: 'spring', stiffness: 100, damping: 15 } },
+  enter: { opacity: 0, x: -20, scale: 0.95 },
+  visible: { opacity: 1, x: 0, scale: 1, transition: { type: 'spring', stiffness: 100, damping: 15 } },
 };
 
 /* Fade-out all messages before loop reset */
@@ -126,21 +126,26 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
 
   return (
     <div ref={wrapperRef}>
-      {/* Fixed-height container — section never shifts */}
-      <div
-        style={{
-          background: '#f9fafb',
-          borderRadius: 24,
-          width: 360,
-          maxWidth: '100%',
-          height: 620,
-          boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
-          border: '1px solid #f3f4f6',
-          display: 'flex',
-          flexDirection: 'column',
-          overflow: 'hidden',
-        }}
+      {/* Anti-gravity float — whole card breathes like zero-G */}
+      <motion.div
+        animate={{ y: [0, -6, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
       >
+        {/* Fixed-height container — section never shifts */}
+        <div
+          style={{
+            background: '#f9fafb',
+            borderRadius: 24,
+            width: 360,
+            maxWidth: '100%',
+            height: 620,
+            boxShadow: '0 8px 32px rgba(13,148,136,0.08), 0 4px 24px rgba(0,0,0,0.06)',
+            border: '1px solid #f3f4f6',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
         {/* Chat header with online status */}
         <div
           style={{
@@ -222,8 +227,10 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
                 <div dir="auto" style={{
-                  background: '#0d9488', padding: '12px 14px',
+                  background: 'linear-gradient(135deg, #0d9488 0%, #065f56 100%)',
+                  padding: '12px 14px',
                   borderRadius: '14px 14px 4px 14px', maxWidth: '88%',
+                  filter: 'drop-shadow(0 0 15px rgba(13,148,136,0.25))',
                 }}>
                   <div style={{ fontSize: 13, color: '#fff', marginBottom: 8, lineHeight: 1.6 }}>
                     {t('showcase.chatReply1Intro')}
@@ -300,8 +307,10 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
                 <div dir="auto" style={{
-                  background: '#0d9488', padding: '12px 14px', borderRadius: '14px 14px 4px 14px',
+                  background: 'linear-gradient(135deg, #0d9488 0%, #065f56 100%)',
+                  padding: '12px 14px', borderRadius: '14px 14px 4px 14px',
                   maxWidth: '88%', fontSize: 13, color: '#fff', lineHeight: 1.6,
+                  filter: 'drop-shadow(0 0 15px rgba(13,148,136,0.25))',
                 }}>
                   {t('showcase.chatReply2')}
                 </div>
@@ -340,6 +349,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           )}
         </AnimatePresence>
       </div>
+      </motion.div>
     </div>
   );
 }
