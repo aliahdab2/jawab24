@@ -34,17 +34,20 @@ vi.mock('@/lib/sentryHelpers', () => ({
 
 describe('AuthCallback - edge cases', () => {
   let mockPush: ReturnType<typeof vi.fn>;
+  let mockReplace: ReturnType<typeof vi.fn>;
   let mockSetAuth: ReturnType<typeof vi.fn>;
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     mockPush = vi.fn();
+    mockReplace = vi.fn();
     mockSetAuth = vi.fn();
 
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
       query: {},
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
       pathname: '/auth/callback',
       asPath: '/auth/callback',
     });
@@ -82,6 +85,7 @@ describe('AuthCallback - edge cases', () => {
       query: { error: 'access_denied', state: '/dashboard|web|ar' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     render(<AuthCallback />);
@@ -100,6 +104,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'test-code-123' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue(successResponse());
@@ -120,6 +125,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'slow-code' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     // Fetch that never resolves
@@ -147,6 +153,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'bad-code' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue({
@@ -169,6 +176,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'offline-code' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockRejectedValue(new Error('Failed to fetch'));
@@ -191,6 +199,7 @@ describe('AuthCallback - edge cases', () => {
       },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue(successResponse());
@@ -217,6 +226,7 @@ describe('AuthCallback - edge cases', () => {
       },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue(successResponse());
@@ -226,7 +236,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/dashboard');
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard');
     });
   });
 
@@ -236,6 +246,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'valid-code' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue({
@@ -252,7 +263,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(
+      expect(mockReplace).toHaveBeenCalledWith(
         expect.stringContaining('/complete-profile')
       );
     });
@@ -264,6 +275,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'valid-code' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue(successResponse({ shopifyOnboarding: true }));
@@ -273,7 +285,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/shopify/onboarding');
+      expect(mockReplace).toHaveBeenCalledWith('/shopify/onboarding');
     });
   });
 
@@ -286,6 +298,7 @@ describe('AuthCallback - edge cases', () => {
       },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue(successResponse());
@@ -295,7 +308,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith('/rules');
+      expect(mockReplace).toHaveBeenCalledWith('/rules');
     });
   });
 
@@ -310,6 +323,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'valid-code', state: encodeURIComponent('/dashboard|web|ar') },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     fetchMock.mockResolvedValue(successResponse({ settings: { dashboardLanguage: 'en' } }));
@@ -329,6 +343,7 @@ describe('AuthCallback - edge cases', () => {
       query: { code: 'valid-code' },
       isReady: true,
       push: mockPush,
+      replace: mockReplace,
     });
 
     const abortError = new Error('The operation was aborted');

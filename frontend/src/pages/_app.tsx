@@ -324,13 +324,56 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       };
 
       // 1. Warm Start Listener
-      listenerHandle = await App.addListener('appUrlOpen', (data) => {
+      listenerHandle = await App.addListener('appUrlOpen', async (data) => {
         const slug = handleDeepLink(data.url);
-        if (slug) {
-            setTimeout(() => {
-                routerRef.current.push(slug).catch(console.error);
-            }, 50);
+        if (!slug) return;
+
+        // Close any open system browser (Chrome Custom Tab / SFSafariViewController)
+        // left over from OAuth flow before navigating
+        try {
+          const { Browser } = await import('@capacitor/browser');
+          await Browser.close();
+        } catch {
+          // Browser may not be open — that's fine
         }
+
+        // Fast-path: handle auth sync inline instead of navigating to /auth/sync page.
+        // The callback passes the full user object in the deep link URL, so we can
+        // hydrate the store synchronously — zero network calls, instant redirect.
+        if (slug.startsWith('/auth/sync')) {
+          const params = new URLSearchParams(slug.split('?')[1] || '');
+          const token = params.get('token');
+          const fbToken = params.get('fbToken') || '';
+          const redirect = params.get('redirect') || '/dashboard';
+          const userParam = params.get('user');
+          const safePath = redirect.startsWith('/') ? redirect : '/dashboard';
+
+          if (token && userParam) {
+            try {
+              const user = JSON.parse(userParam);
+              if (user?.id) {
+                useAuthStore.getState().setAuth(user, token, fbToken);
+                routerRef.current.replace(safePath).catch(console.error);
+                return;
+              }
+            } catch (err) {
+              captureError(err, 'Deep link auth parse failed', {
+                tags: { page: 'deep-link', action: 'auth-sync' },
+              });
+            }
+          }
+
+          // Fallback: navigate to /auth/sync page (handles legacy deep links without user param)
+          if (token) {
+            routerRef.current.push(`/auth/sync?token=${encodeURIComponent(token)}&fbToken=${encodeURIComponent(fbToken)}&redirect=${encodeURIComponent(safePath)}`).catch(console.error);
+            return;
+          }
+          // No token — fall through to normal navigation
+        }
+
+        setTimeout(() => {
+            routerRef.current.push(slug).catch(console.error);
+        }, 50);
       });
 
       // 2. Cold Start Check

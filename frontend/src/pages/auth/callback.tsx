@@ -5,7 +5,6 @@ import { useAuthStore, useUIStore, type Language } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { AppSkeleton } from '@/components/ui';
-import { isNativePlatform } from '@/lib/capacitor';
 import { captureError } from '@/lib/sentryHelpers';
 
 export default function AuthCallback() {
@@ -132,61 +131,49 @@ export default function AuthCallback() {
         }
 
         if (platform === 'mobile') {
-          const isNative = isNativePlatform();
-          if (isNative) {
-            routerRef.current.push('/pages');
-            return;
-          }
-          // iOS: deep link back to the app pointing at /pages
           const tokenStr = encodeURIComponent(data.token);
           const fbTokenStr = encodeURIComponent(data.fbAccessToken);
-          window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}`;
+          const userStr = encodeURIComponent(JSON.stringify(data.user));
+          window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
           return;
         }
 
-        routerRef.current.push('/pages');
+        routerRef.current.replace('/pages');
         return;
       }
 
       // Check if e-commerce onboarding is needed (install-first flow)
       if (data.shopifyOnboarding) {
-        routerRef.current.push('/shopify/onboarding');
+        routerRef.current.replace('/shopify/onboarding');
         return;
       }
       if (data.sallaOnboarding) {
-        routerRef.current.push('/salla/onboarding');
+        routerRef.current.replace('/salla/onboarding');
         return;
       }
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
-        routerRef.current.push(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);
+        routerRef.current.replace(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);
         return;
       }
       
       
-      // If request came from mobile app, redirect using custom URL scheme
-      // to open the app directly. We ONLY pass critical tokens here.
-      // The app will fetch the full user profile using the token.
+      // If request came from mobile app, deep link back to the app.
+      // Pass the full user object so the app can hydrate the store instantly
+      // without an extra /auth/me network round-trip.
       if (platform === 'mobile') {
-        const isNative = isNativePlatform();
-        
-        if (isNative) {
-          routerRef.current.push(safeUrl);
-          return;
-        }
-
         const tokenStr = encodeURIComponent(data.token);
         const fbTokenStr = encodeURIComponent(data.fbAccessToken || '');
         const redirectStr = encodeURIComponent(safeUrl);
-        
-        // Simplified Deep Link: No User Object!
-        window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}`;
+        const userStr = encodeURIComponent(JSON.stringify(data.user));
+
+        window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`;
         return;
       }
       
-      // Web: standard navigation
-      routerRef.current.push(safeUrl);
+      // Web: replace navigation (don't keep callback in history)
+      routerRef.current.replace(safeUrl);
     } catch (err) {
       // Don't show error if request was aborted (user navigated away)
       if (err instanceof Error && err.name === 'AbortError') {

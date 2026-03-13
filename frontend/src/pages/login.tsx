@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -15,13 +15,12 @@ import {
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { Button, BrandLogo, FacebookIcon, AppSkeleton } from '@/components/ui';
+import { Button, BrandLogo, FacebookIcon } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 
-import { authApi } from '@/lib/api';
-import { useAuthStore, useUIStore } from '@/lib/store';
+import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
 import { DemoLoginButton } from '@/features/demo';
 
@@ -33,66 +32,24 @@ export default function LoginPage() {
   const tSalla = useTranslations('salla');
   const locale = useLocale();
   const { setLanguage } = useLanguage();
-  const setAuth = useAuthStore((state) => state.setAuth);
-
-  const [mounted, setMounted] = useState(false);
-  // isProcessing: true after Facebook returns, while we authenticate with backend
-  // This shows a blank screen instead of the login page to avoid flashing
-  const [isProcessing, setIsProcessing] = useState(false);
+  const { isAuthenticated, _hasHydrated } = useAuthStore();
 
   // Read query params from URL directly — router.query is empty on first render
   // for statically exported pages (autoExport: true)
   const [urlParams, setUrlParams] = useState<URLSearchParams | null>(null);
-  
-  // Pre-loaded Facebook SDK reference to avoid delay on button tap
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Facebook SDK types are dynamic-imported
-  const fbSdkRef = useRef<any>(null);
 
   useEffect(() => {
-    setMounted(true);
     setUrlParams(new URLSearchParams(window.location.search));
-    
-    // Pre-initialize Facebook SDK on native platforms and clear any stuck sessions
-    // This eliminates the delay when user taps the login button AND prevents
-    // the "stuck on first attempt" issue
-    const preInitFacebookSDK = async () => {
-      if (!Capacitor.isNativePlatform()) return;
-      
-      const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
-      if (!fbAppId) return;
-      
-      try {
-        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
-        fbSdkRef.current = FacebookLogin;
-        await FacebookLogin.initialize({ appId: fbAppId });
-        
-        // Clear any stuck/stale sessions when login page loads
-        // This fixes the "first attempt fails" issue
-        try {
-          const currentToken = await FacebookLogin.getCurrentAccessToken();
-          if (currentToken?.accessToken) {
-            // There's a stale token - clear it
-            await FacebookLogin.logout();
-          }
-        } catch {
-          // No token or error checking - that's fine
-        }
-      } catch {
-        // Initialization failed or already initialized - that's OK
-      }
-    };
-    
-    preInitFacebookSDK();
   }, []);
 
-  // Show dashboard skeleton while processing auth (after Facebook returns)
-  // This gives a preview of the dashboard they're about to see
-  if (mounted && isProcessing) {
-    return <AppSkeleton variant="dashboard" />;
-  }
-
-  // Import dynamically to avoid SSR issues
-  // import { FacebookLogin, FacebookLoginResponse } from '@capacitor-community/facebook-login';
+  // Redirect authenticated users away from login page
+  useEffect(() => {
+    if (_hasHydrated && isAuthenticated) {
+      const redirect = router.query.redirect as string;
+      const target = redirect && redirect.startsWith('/') ? redirect : '/dashboard';
+      router.replace(target);
+    }
+  }, [_hasHydrated, isAuthenticated, router]);
 
   const handleFacebookLogin = async () => {
     // Check for Facebook App ID
@@ -105,113 +62,13 @@ export default function LoginPage() {
     const isMobile = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
 
-    if (isMobile && platform === 'android') {
-      // --- ANDROID NATIVE LOGIN FLOW (uses native FB SDK) ---
-      // Falls back to web OAuth if the native SDK fails (common after app idle —
-      // Android may kill the Activity, leaving the Facebook SDK in a broken state).
-      try {
-        let FacebookLogin = fbSdkRef.current;
-        if (!FacebookLogin) {
-          const fbModule = await import('@capacitor-community/facebook-login');
-          FacebookLogin = fbModule.FacebookLogin;
-          try {
-            await FacebookLogin.initialize({ appId: fbAppId });
-          } catch {
-            // May already be initialized
-          }
-        }
-
-        // Clear any stale native SDK session before login.
-        // After the app has been idle, the native Facebook LoginManager may hold
-        // stale state that causes "There is an error logging you into this application".
-        try {
-          await FacebookLogin.logout();
-        } catch {
-          // Ignore — logout may fail if SDK wasn't fully initialized
-        }
-
-        const TIMEOUT_MS = 30000;
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('TIMEOUT')), TIMEOUT_MS);
-        });
-
-        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
-
-        /* eslint-disable @typescript-eslint/no-explicit-any -- Capacitor Facebook plugin types lack tracking field */
-        const result: { accessToken?: { token: string } } = await Promise.race([
-          FacebookLogin.login({ permissions, tracking: 'enabled' } as any),
-          timeoutPromise
-        ]);
-        /* eslint-enable @typescript-eslint/no-explicit-any */
-
-        if (!result.accessToken) {
-          toast.info(t('loginCancelled'));
-          return;
-        }
-
-        setIsProcessing(true);
-
-        const response = await authApi.nativeFacebookLogin(result.accessToken.token);
-        const { user, token, settings } = response.data;
-
-        setAuth(user, token, result.accessToken.token);
-
-        const finalLocale = settings?.dashboardLanguage || locale || 'ar';
-        useUIStore.getState().setLanguage(finalLocale);
-
-        const returnUrl = router.query.redirect as string || '/dashboard';
-        await router.push(returnUrl, returnUrl, { locale: finalLocale });
-
-      } catch (error: unknown) {
-        setIsProcessing(false);
-
-        const msg = error instanceof Error ? error.message : '';
-        const code = (error as { code?: string }).code;
-        if (msg.includes('cancel') || msg.includes('Cancel')) {
-          toast.info(t('loginCancelled'));
-          return;
-        }
-
-        // Native SDK failed — fall back to web-based OAuth (Chrome Custom Tab).
-        // This bypasses the native Facebook app which can be flaky after app idle.
-        captureError(error, 'Android native login failed, falling back to web OAuth', {
-          tags: { page: 'login', platform: 'android', fallback: 'web-oauth' },
-        });
-
-        try {
-          const { Browser } = await import('@capacitor/browser');
-          const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-          const normalizedOrigin = siteUrl.replace(/\/$/, '');
-          const localePath = locale === 'ar' ? '' : `/${locale}`;
-          const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
-          const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
-          const returnUrl = router.query.redirect as string || '/dashboard';
-          const state = encodeURIComponent(`${returnUrl}|mobile|${locale}`);
-          const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
-          await Browser.open({ url: oauthUrl });
-        } catch (fallbackError: unknown) {
-          captureError(fallbackError, 'Android web OAuth fallback also failed', {
-            tags: { page: 'login', platform: 'android' },
-          });
-
-          if (msg === 'TIMEOUT') {
-            toast.error(t('loginTimeout'));
-          } else if (msg.includes('network') || code === 'NETWORK_ERROR') {
-            toast.error(t('networkError'));
-          } else if ((error as { response?: { data?: { message?: string } } }).response?.data?.message) {
-            toast.error((error as { response: { data: { message: string } } }).response.data.message);
-          } else {
-            toast.error(t('loginError'));
-          }
-        }
-      }
-
-    } else if (isMobile && platform === 'ios') {
-      // --- iOS LOGIN FLOW (in-app browser OAuth) ---
-      // Uses SFSafariViewController via @capacitor/browser since the native FB SDK
-      // requires additional Facebook Developer Console config on iOS.
-      // The callback redirects back via com.jawab24.app:// custom URL scheme,
-      // which is handled by the appUrlOpen listener in _app.tsx.
+    if (isMobile) {
+      // --- MOBILE LOGIN FLOW (Android + iOS) ---
+      // Uses system browser (Chrome Custom Tab / SFSafariViewController) via @capacitor/browser.
+      // This follows RFC 8252 (OAuth 2.0 for Native Apps) which recommends system browsers
+      // over native SDKs or embedded WebViews for reliability and security.
+      // The callback on jawab24.com exchanges the code, then deep-links back to the app
+      // via com.jawab24.app:// custom URL scheme (handled by appUrlOpen in _app.tsx).
       try {
         const { Browser } = await import('@capacitor/browser');
 
@@ -228,7 +85,7 @@ export default function LoginPage() {
 
         await Browser.open({ url: oauthUrl });
       } catch (error: unknown) {
-        captureError(error, 'iOS login error', { tags: { page: 'login', platform: 'ios' } });
+        captureError(error, 'Mobile login error', { tags: { page: 'login', platform } });
         toast.error(t('loginError'));
       }
 

@@ -2,9 +2,6 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { useRouter } from 'next/router';
 import LoginPage from '@/pages/login';
-import { authApi } from '@/lib/api';
-// We need to import the mocked module to verify calls (for Capacitor only)
-import { FacebookLogin } from '@capacitor-community/facebook-login';
 
 // Mock Next.js Link (prevents ForwardRef(LinkComponent) act warnings)
 vi.mock('next/link', () => ({
@@ -46,7 +43,7 @@ vi.mock('@capacitor/core', () => ({
     }
 }));
 
-// Mock Facebook Login Plugin (Global Mock for External Module)
+// Mock Facebook Login Plugin (no longer used for login, but still imported at module level)
 vi.mock('@capacitor-community/facebook-login', () => ({
     FacebookLogin: {
         initialize: vi.fn().mockResolvedValue(undefined),
@@ -64,13 +61,14 @@ vi.mock('@capacitor/browser', () => ({
     }
 }));
 
-// Mock Store
+// Mock Store — use mutable object so tests can override isAuthenticated
 const mockSetAuth = vi.fn();
 const mockSetLanguage = vi.fn();
+const mockAuthState = { isAuthenticated: false, _hasHydrated: true };
 vi.mock('@/lib/store', () => ({
-    useAuthStore: (selector: any) => {
-        const store = { setAuth: mockSetAuth };
-        return selector(store);
+    useAuthStore: (selector?: any) => {
+        const store = { setAuth: mockSetAuth, ...mockAuthState };
+        return selector ? selector(store) : store;
     },
     useUIStore: {
         getState: () => ({
@@ -118,6 +116,8 @@ describe('LoginPage', () => {
         vi.clearAllMocks();
         mockSetAuth.mockClear();
         mockSetLanguage.mockClear();
+        mockAuthState.isAuthenticated = false;
+        mockAuthState._hasHydrated = true;
 
         // Reset Capacitor mock to default (web)
         const { Capacitor } = await import('@capacitor/core');
@@ -171,36 +171,19 @@ describe('LoginPage', () => {
         });
     });
 
-    describe('Native Mobile Login', () => {
+    describe('Mobile Login (Web OAuth via System Browser)', () => {
         beforeEach(async () => {
-            // Mock Capacitor for Android Mobile
+            // Mock Capacitor for mobile platform
             const { Capacitor } = await import('@capacitor/core');
             (Capacitor.isNativePlatform as any).mockReturnValue(true);
             (Capacitor.getPlatform as any).mockReturnValue('android');
-
-            // Setup Facebook Login mock BEFORE rendering (component pre-initializes SDK on mount)
-            (FacebookLogin.login as any).mockResolvedValue({ accessToken: { token: 'native-fb-token' } });
         });
 
-        it('should use native SDK when on mobile platform', async () => {
+        it('should use Browser.open for OAuth on Android', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-
-            // Setup API Spy
-            const nativeLoginSpy = vi.spyOn(authApi, 'nativeFacebookLogin').mockResolvedValue({
-                data: {
-                    user: { id: 'user-1' },
-                    token: 'session-token',
-                    settings: {}
-                }
-            } as any);
 
             await act(async () => {
                 render(<LoginPage />);
-            });
-
-            // Wait for pre-initialization to complete
-            await vi.waitFor(() => {
-                expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
             const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
@@ -208,101 +191,30 @@ describe('LoginPage', () => {
                 loginButton.click();
             });
 
-            // Verify Native Login called
-            await vi.waitFor(() => {
-                expect(FacebookLogin.login).toHaveBeenCalled();
-                expect(nativeLoginSpy).toHaveBeenCalledWith('native-fb-token');
-                expect(mockSetAuth).toHaveBeenCalledWith({ id: 'user-1' }, 'session-token', 'native-fb-token');
-                // Expect explicit language preservation
-                expect(mockSetLanguage).toHaveBeenCalledWith('en');
-                expect(mockPush).toHaveBeenCalledWith('/dashboard', '/dashboard', { locale: 'en' });
-            });
-            
-            // Verify isProcessing logic (blank screen after success)
-            expect(screen.queryByRole('button')).toBeNull();
-        });
-
-        it('should show info message when user cancels login (no token returned)', async () => {
-            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-
-            // Mock SDK returning null (user cancelled)
-            (FacebookLogin.login as any).mockResolvedValue({ accessToken: null });
-
-            // Get toast.info mock
-            const { toast } = await import('sonner');
-            const toastInfoSpy = vi.mocked(toast.info);
-            toastInfoSpy.mockClear();
-
-            await act(async () => {
-                render(<LoginPage />);
-            });
-
-            await vi.waitFor(() => {
-                expect(FacebookLogin.initialize).toHaveBeenCalled();
-            });
-
-            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
-            await act(async () => {
-                loginButton.click();
-            });
-
-            await vi.waitFor(() => {
-                // User cancellation shows info, not error
-                expect(toastInfoSpy).toHaveBeenCalledWith('Login was cancelled');
-            });
-            
-            // Should NOT navigate
-            expect(mockPush).not.toHaveBeenCalled();
-            // Should NOT set auth
-            expect(mockSetAuth).not.toHaveBeenCalled();
-        });
-
-        it('should fall back to web OAuth when SDK login throws an error', async () => {
-            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-
-            // Mock SDK throwing error
-            (FacebookLogin.login as any).mockRejectedValue(new Error('SDK Error'));
-
-            await act(async () => {
-                render(<LoginPage />);
-            });
-
-            await vi.waitFor(() => {
-                expect(FacebookLogin.initialize).toHaveBeenCalled();
-            });
-
-            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
-            await act(async () => {
-                loginButton.click();
-            });
-
-            // Should fall back to web OAuth (Browser.open) instead of showing error
             await vi.waitFor(() => {
                 expect(mockBrowserOpen).toHaveBeenCalled();
             });
+
             const openUrl = mockBrowserOpen.mock.calls[0][0]?.url as string;
             expect(openUrl).toContain('facebook.com');
+            expect(openUrl).toContain('client_id=test-app-id-123');
+            expect(openUrl).toContain('state=');
 
-            // Should NOT navigate or set auth
-            expect(mockPush).not.toHaveBeenCalled();
-            expect(mockSetAuth).not.toHaveBeenCalled();
+            // State should include mobile marker
+            const stateMatch = openUrl.match(/state=([^&]+)/);
+            expect(stateMatch).toBeTruthy();
+            const decodedState = decodeURIComponent(stateMatch![1]);
+            expect(decodedState).toContain('|mobile|');
         });
 
-        it('should fall back to web OAuth when backend API fails after successful SDK login', async () => {
+        it('should use Browser.open for OAuth on iOS', async () => {
+            const { Capacitor } = await import('@capacitor/core');
+            (Capacitor.getPlatform as any).mockReturnValue('ios');
+
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-
-            // SDK succeeds
-            (FacebookLogin.login as any).mockResolvedValue({ accessToken: { token: 'native-fb-token' } });
-
-            // But backend fails
-            vi.spyOn(authApi, 'nativeFacebookLogin').mockRejectedValue(new Error('Backend Error'));
 
             await act(async () => {
                 render(<LoginPage />);
-            });
-
-            await vi.waitFor(() => {
-                expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
             const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
@@ -310,31 +222,20 @@ describe('LoginPage', () => {
                 loginButton.click();
             });
 
-            // Should fall back to web OAuth
             await vi.waitFor(() => {
                 expect(mockBrowserOpen).toHaveBeenCalled();
             });
 
-            // Should NOT navigate or set auth
-            expect(mockPush).not.toHaveBeenCalled();
-            expect(mockSetAuth).not.toHaveBeenCalled();
+            const openUrl = mockBrowserOpen.mock.calls[0][0]?.url as string;
+            expect(openUrl).toContain('facebook.com');
         });
 
-        it('should fall back to web OAuth on login timeout', async () => {
+        it('should show error toast when Browser.open fails', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-
-            // Mock SDK that never resolves (simulates hanging)
-            (FacebookLogin.login as any).mockImplementation(() => new Promise(() => {}));
-
-            // Use fake timers for timeout testing
-            vi.useFakeTimers();
+            mockBrowserOpen.mockRejectedValueOnce(new Error('Browser unavailable'));
 
             await act(async () => {
                 render(<LoginPage />);
-            });
-
-            await vi.waitFor(() => {
-                expect(FacebookLogin.initialize).toHaveBeenCalled();
             });
 
             const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
@@ -342,36 +243,138 @@ describe('LoginPage', () => {
                 loginButton.click();
             });
 
-            // Fast forward 31 seconds (past the 30 second timeout)
-            await act(async () => {
-                await vi.advanceTimersByTimeAsync(31000);
+            await vi.waitFor(() => {
+                expect(toastErrorSpy).toHaveBeenCalledWith('Login failed. Please try again.');
             });
 
-            // Should fall back to web OAuth instead of showing timeout toast
+            // Should NOT navigate
+            expect(mockPush).not.toHaveBeenCalled();
+        });
+
+        it('should include required OAuth scopes in mobile flow', async () => {
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
+            const loginButton = screen.getByRole('button', { name: /Login with Facebook/i });
+            await act(async () => {
+                loginButton.click();
+            });
+
             await vi.waitFor(() => {
                 expect(mockBrowserOpen).toHaveBeenCalled();
             });
 
-            vi.useRealTimers();
+            const openUrl = mockBrowserOpen.mock.calls[0][0]?.url as string;
+            const decodedScope = decodeURIComponent(openUrl.match(/scope=([^&]+)/)![1]);
+            expect(decodedScope).toContain('email');
+            expect(decodedScope).toContain('pages_show_list');
+            expect(decodedScope).toContain('pages_read_engagement');
+            expect(decodedScope).toContain('pages_messaging');
+            expect(decodedScope).toContain('instagram_basic');
+            expect(decodedScope).toContain('instagram_manage_messages');
+            expect(decodedScope).toContain('instagram_manage_comments');
         });
+    });
 
-        it('should clear stale tokens on page load', async () => {
-            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
-            
-            // Mock having a stale token
-            (FacebookLogin.getCurrentAccessToken as any).mockResolvedValue({ 
-                accessToken: { token: 'stale-token' } 
+    describe('Auth Guard', () => {
+        it('should redirect authenticated users to dashboard', async () => {
+            mockAuthState.isAuthenticated = true;
+            const mockReplace = vi.fn();
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+                query: {},
+                push: vi.fn(),
+                replace: mockReplace,
+                pathname: '/login',
+                asPath: '/login',
+                events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
             });
 
             await act(async () => {
                 render(<LoginPage />);
             });
 
-            // Wait for initialization and stale token cleanup
-            await vi.waitFor(() => {
-                expect(FacebookLogin.getCurrentAccessToken).toHaveBeenCalled();
-                expect(FacebookLogin.logout).toHaveBeenCalled();
+            expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+        });
+
+        it('should redirect authenticated users to custom redirect path', async () => {
+            mockAuthState.isAuthenticated = true;
+            const mockReplace = vi.fn();
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+                query: { redirect: '/settings' },
+                push: vi.fn(),
+                replace: mockReplace,
+                pathname: '/login',
+                asPath: '/login?redirect=/settings',
+                events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
             });
+
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
+            expect(mockReplace).toHaveBeenCalledWith('/settings');
+        });
+
+        it('should not redirect when store has not hydrated yet', async () => {
+            mockAuthState.isAuthenticated = true;
+            mockAuthState._hasHydrated = false;
+            const mockReplace = vi.fn();
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+                query: {},
+                push: vi.fn(),
+                replace: mockReplace,
+                pathname: '/login',
+                asPath: '/login',
+                events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+            });
+
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('should not redirect unauthenticated users', async () => {
+            mockAuthState.isAuthenticated = false;
+            const mockReplace = vi.fn();
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+                query: {},
+                push: vi.fn(),
+                replace: mockReplace,
+                pathname: '/login',
+                asPath: '/login',
+                events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+            });
+
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
+            expect(mockReplace).not.toHaveBeenCalled();
+        });
+
+        it('should ignore non-relative redirect paths (open redirect protection)', async () => {
+            mockAuthState.isAuthenticated = true;
+            const mockReplace = vi.fn();
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+                query: { redirect: 'https://evil.com' },
+                push: vi.fn(),
+                replace: mockReplace,
+                pathname: '/login',
+                asPath: '/login?redirect=https://evil.com',
+                events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+            });
+
+            await act(async () => {
+                render(<LoginPage />);
+            });
+
+            // Should fall back to /dashboard, not follow the external URL
+            expect(mockReplace).toHaveBeenCalledWith('/dashboard');
         });
     });
 });

@@ -233,9 +233,9 @@ else
     exit 1
 fi
 
-# Always clean .next before building to avoid stale vendor chunks after npm install.
-# Incremental builds sound nice but cause MODULE_NOT_FOUND errors in practice.
-rm -rf frontend/.next
+# Always clean .next and webpack cache before building to avoid stale vendor chunks
+# after npm install. Incremental builds sound nice but cause MODULE_NOT_FOUND errors.
+rm -rf frontend/.next frontend/node_modules/.cache
 # NEXT_PUBLIC_* vars are baked at build time in standalone mode.
 # Set the API URL to a dummy host with /api prefix so that E2E test mocks
 # using '**/api/**' patterns match the actual request URLs.
