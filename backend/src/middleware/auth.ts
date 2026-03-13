@@ -84,7 +84,8 @@ export async function csrfProtection(request: FastifyRequest, reply: FastifyRepl
 
     // Skip for unauthenticated requests (no auth cookie = not logged in via cookies)
     // CSRF only matters for cookie-authenticated sessions
-    if (!request.cookies.token) {
+    // Note: request.cookies may be undefined if cookie plugin hasn't parsed yet
+    if (!request.cookies?.token) {
         return;
     }
 
