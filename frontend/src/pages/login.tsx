@@ -34,12 +34,19 @@ export default function LoginPage() {
   const { setLanguage } = useLanguage();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
 
+  // Prevent double-tap while system browser opens
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
   // Read query params from URL directly — router.query is empty on first render
   // for statically exported pages (autoExport: true)
   const [urlParams, setUrlParams] = useState<URLSearchParams | null>(null);
 
   useEffect(() => {
     setUrlParams(new URLSearchParams(window.location.search));
+    // Reset redirecting state when user returns to the page (e.g. presses back from browser)
+    const resetRedirecting = () => setIsRedirecting(false);
+    window.addEventListener('focus', resetRedirecting);
+    return () => window.removeEventListener('focus', resetRedirecting);
   }, []);
 
   // Redirect authenticated users away from login page
@@ -52,12 +59,16 @@ export default function LoginPage() {
   }, [_hasHydrated, isAuthenticated, router]);
 
   const handleFacebookLogin = async () => {
+    if (isRedirecting) return;
+
     // Check for Facebook App ID
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
     if (!fbAppId) {
       toast.error(t('loginError'));
       return;
     }
+
+    setIsRedirecting(true);
 
     const isMobile = Capacitor.isNativePlatform();
     const platform = Capacitor.getPlatform();
@@ -85,6 +96,7 @@ export default function LoginPage() {
 
         await Browser.open({ url: oauthUrl });
       } catch (error: unknown) {
+        setIsRedirecting(false);
         captureError(error, 'Mobile login error', { tags: { page: 'login', platform } });
         toast.error(t('loginError'));
       }
@@ -381,8 +393,9 @@ export default function LoginPage() {
                 <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 dark:from-transparent to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
                   <Button
                     onClick={handleFacebookLogin}
+                    disabled={isRedirecting}
                     size="lg"
-                    className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95"
+                    className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                   >
                     <div className="flex items-center justify-center gap-3 text-white">
                       <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />

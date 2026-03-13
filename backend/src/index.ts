@@ -41,6 +41,7 @@ import { shutdownEventBus } from "./lib/eventBus";
 import { integrationRegistry } from "./integrations";
 import { errorHandler } from "./middleware/errorHandler";
 import { requestIdMiddleware } from "./middleware/requestId";
+import { csrfProtection } from "./middleware/auth";
 import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
@@ -114,6 +115,10 @@ const start = async () => {
     // Add geo middleware (must be early for sanctions checking)
     const { geoMiddleware } = await import("./middleware/geo");
     server.addHook("onRequest", geoMiddleware);
+
+    // CSRF protection for cookie-based web requests
+    // Skips: Bearer token auth (mobile), GET/HEAD/OPTIONS, unauthenticated requests
+    server.addHook("onRequest", csrfProtection);
 
     // Register plugins
     // CORS: Environment-based origin configuration
