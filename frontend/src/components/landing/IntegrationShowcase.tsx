@@ -65,7 +65,9 @@ function TypingDots() {
     >
       <div style={{
         display: 'flex', gap: 4, padding: '10px 14px',
-        background: 'rgba(16, 185, 129, 0.15)', borderRadius: '14px 14px 4px 14px',
+        background: 'rgba(16, 185, 129, 0.1)', borderRadius: '14px 14px 4px 14px',
+        border: '1px solid rgba(16, 185, 129, 0.2)',
+        boxShadow: '0 0 15px rgba(16, 185, 129, 0.1)',
       }}>
         {[0, 1, 2].map(i => (
           <motion.span
@@ -212,13 +214,25 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           <AnimatePresence mode="popLayout">
             {show(0) && (
               <motion.div key="cust1" layout="position" transition={layoutSpring} variants={fadeSlide} initial="enter" animate="visible" exit="exit">
-                <div dir="auto" style={{
-                  background: 'rgba(255, 255, 255, 0.08)', padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
-                  maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
-                  border: '1px solid rgba(255, 255, 255, 0.06)',
-                }}>
+                <motion.div
+                  dir="auto"
+                  animate={{
+                    boxShadow: [
+                      '0 0 15px rgba(59, 130, 246, 0.1)',
+                      '0 0 25px rgba(59, 130, 246, 0.25)',
+                      '0 0 15px rgba(59, 130, 246, 0.1)',
+                    ],
+                  }}
+                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(10px)',
+                    padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
+                    maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                  }}
+                >
                   {t('showcase.chatCustomer1')}
-                </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -236,13 +250,23 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 animate="visible"
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
-                <div dir="auto" style={{
-                  background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
-                  padding: '12px 14px',
-                  borderRadius: '14px 14px 4px 14px', maxWidth: '88%',
-                  filter: 'drop-shadow(0 0 20px rgba(16, 185, 129, 0.3))',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                }}>
+                <motion.div
+                  dir="auto"
+                  animate={{
+                    boxShadow: [
+                      '0 0 15px rgba(16, 185, 129, 0.15)',
+                      '0 0 30px rgba(16, 185, 129, 0.35)',
+                      '0 0 15px rgba(16, 185, 129, 0.15)',
+                    ],
+                  }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{
+                    background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
+                    padding: '12px 14px',
+                    borderRadius: '14px 14px 4px 14px', maxWidth: '88%',
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                  }}
+                >
                   <div style={{ fontSize: 13, color: '#fff', marginBottom: 8, lineHeight: 1.6 }}>
                     {t('showcase.chatReply1Intro')}
                   </div>
@@ -262,7 +286,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                         background: 'linear-gradient(110deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 100%)',
                         borderRadius: 8, padding: 8,
                         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-                        border: '1px solid rgba(255,255,255,0.12)',
+                        border: '1px solid rgba(255,255,255,0.15)',
                       }}
                     >
                       <div style={{
@@ -285,7 +309,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6 }}>
                     {t('showcase.chatReply1Outro')}
                   </div>
-                </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -294,13 +318,25 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           <AnimatePresence mode="popLayout">
             {show(3) && (
               <motion.div key="cust2" layout="position" transition={layoutSpring} variants={fadeSlide} initial="enter" animate="visible" exit="exit">
-                <div dir="auto" style={{
-                  background: 'rgba(255, 255, 255, 0.08)', padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
-                  maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
-                  border: '1px solid rgba(255, 255, 255, 0.06)',
-                }}>
+                <motion.div
+                  dir="auto"
+                  animate={{
+                    boxShadow: [
+                      '0 0 15px rgba(251, 191, 36, 0.1)',
+                      '0 0 25px rgba(251, 191, 36, 0.25)',
+                      '0 0 15px rgba(251, 191, 36, 0.1)',
+                    ],
+                  }}
+                  transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(10px)',
+                    padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
+                    maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
+                    border: '1px solid rgba(251, 191, 36, 0.2)',
+                  }}
+                >
                   {t('showcase.chatCustomer2')}
-                </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -318,15 +354,25 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 animate="visible"
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
-                <div dir="auto" style={{
-                  background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
-                  padding: '12px 14px', borderRadius: '14px 14px 4px 14px',
-                  maxWidth: '88%', fontSize: 13, color: '#fff', lineHeight: 1.6,
-                  filter: 'drop-shadow(0 0 20px rgba(16, 185, 129, 0.3))',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                }}>
+                <motion.div
+                  dir="auto"
+                  animate={{
+                    boxShadow: [
+                      '0 0 15px rgba(16, 185, 129, 0.15)',
+                      '0 0 30px rgba(16, 185, 129, 0.35)',
+                      '0 0 15px rgba(16, 185, 129, 0.15)',
+                    ],
+                  }}
+                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+                  style={{
+                    background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
+                    padding: '12px 14px', borderRadius: '14px 14px 4px 14px',
+                    maxWidth: '88%', fontSize: 13, color: '#fff', lineHeight: 1.6,
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                  }}
+                >
                   {t('showcase.chatReply2')}
-                </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
