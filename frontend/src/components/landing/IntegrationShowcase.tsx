@@ -286,7 +286,8 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                         background: 'linear-gradient(110deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 100%)',
                         borderRadius: 8, padding: 8,
                         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-                        border: '1px solid rgba(255,255,255,0.15)',
+                        border: '1px solid rgba(251, 191, 36, 0.25)',
+                        boxShadow: '0 0 12px rgba(251, 191, 36, 0.08)',
                       }}
                     >
                       <div style={{
