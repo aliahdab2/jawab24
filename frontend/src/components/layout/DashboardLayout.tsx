@@ -203,7 +203,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         {/* Main content - uses centralized spacing from CSS variables */}
         <main
           className={clsx(
-            'relative z-[1] transition-all duration-500 flex-1',
+            'relative z-[1] transition-[margin] duration-500 flex-1',
             // Both layouts use fixed headers — content needs top padding to clear them
             // Desktop (with sidebar) uses its own layout, no top padding needed
             'pt-header lg:pt-0',

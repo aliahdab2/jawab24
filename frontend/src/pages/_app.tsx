@@ -419,7 +419,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         timeZone="Asia/Riyadh"
       >
       {!hasHydrated ? (
-        <AppSkeleton />
+        <AppSkeleton variant="dashboard" />
       ) : (
         <>
           <SSEManager />
