@@ -596,7 +596,8 @@
 
   /* --- Landing page theme classes --- */
   .landing-section-dark {
-    @apply bg-zinc-900 dark:bg-zinc-900 text-white;
+    @apply text-white;
+    background: linear-gradient(to bottom, #0B0F1A, #05080F);
 
     /* Override surface/brand tokens so text is readable on dark bg in dark mode.
        Without this, .dark theme sets --surface-* to near-black blues → invisible. */
@@ -604,6 +605,20 @@
     --surface-400: 155 165 185; /* body text, links: ~7:1 contrast */
     --surface-500: 120 132 155; /* muted text, copyright: ~4.5:1 (WCAG AA) */
     --brand-300: 110 210 195;   /* stat labels (24/7, <1s): ~8:1 contrast */
+  }
+
+  /* Neon glow for stat numbers in dark sections */
+  .stat-neon {
+    text-shadow: 0 0 20px rgba(110, 210, 195, 0.4), 0 0 60px rgba(110, 210, 195, 0.15);
+  }
+
+  /* Slow breathing pulse for stat values */
+  @keyframes neon-breathe {
+    0%, 100% { text-shadow: 0 0 20px rgba(110, 210, 195, 0.3), 0 0 60px rgba(110, 210, 195, 0.1); }
+    50% { text-shadow: 0 0 30px rgba(110, 210, 195, 0.5), 0 0 80px rgba(110, 210, 195, 0.2); }
+  }
+  .stat-neon-breathe {
+    animation: neon-breathe 4s ease-in-out infinite;
   }
 
   .landing-icon-shell {
