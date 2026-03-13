@@ -71,6 +71,9 @@ export class AuthController {
                     if (syncResult && syncResult.skippedCount > 0) {
                         request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
                     }
+                    if (syncResult && (syncResult.revokedCount ?? 0) > 0) {
+                        request.log.info(`Auto-sync: ${syncResult.revokedCount} page(s) disconnected (access revoked in Facebook)`);
+                    }
                 } catch (err) {
                     request.log.error({ err }, 'Auto-sync pages failed (non-fatal)');
                 }
@@ -170,6 +173,9 @@ export class AuthController {
                     const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
                     if (syncResult && syncResult.skippedCount > 0) {
                         request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
+                    }
+                    if (syncResult && (syncResult.revokedCount ?? 0) > 0) {
+                        request.log.info(`Auto-sync: ${syncResult.revokedCount} page(s) disconnected (access revoked in Facebook)`);
                     }
                 } catch (err) {
                     request.log.error({ err }, 'Auto-sync pages failed (non-fatal, Native Flow)');

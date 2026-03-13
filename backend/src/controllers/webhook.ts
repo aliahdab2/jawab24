@@ -3,7 +3,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { config } from '../config';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { messagesService } from '../services/messages';
-import { pagesService } from '../services/pages';
+import { pagesService, isPageDisconnected } from '../services/pages';
 import { authService } from '../services/auth';
 import { auditLog } from '../services/auditLog';
 import { captureError } from '../utils/sentryHelpers';
@@ -172,6 +172,13 @@ export class WebhookController {
         for (const entry of entries) {
             const pageId = entry.id;
 
+            // Skip if page access was revoked (empty accessToken)
+            const page = await pagesService.getPageByFacebookId(pageId);
+            if (isPageDisconnected(page)) {
+                this.log().warn('Skipping webhook for disconnected page', { pageId, pageName: page.name });
+                continue;
+            }
+
             // Handle feed changes (comments, posts)
             if (entry.changes) {
                 for (const change of entry.changes) {
@@ -323,6 +330,13 @@ export class WebhookController {
     private async processInstagramWebhookAsync(entries: WebhookEntry[]) {
         for (const entry of entries) {
             const instagramAccountId = entry.id;
+
+            // Skip if page access was revoked (empty accessToken)
+            const page = await pagesService.getPageByInstagramId(instagramAccountId);
+            if (isPageDisconnected(page)) {
+                this.log().warn('Skipping Instagram webhook for disconnected page', { instagramAccountId, pageName: page.name });
+                continue;
+            }
 
             // Handle Instagram changes (comments, mentions)
             if (entry.changes) {

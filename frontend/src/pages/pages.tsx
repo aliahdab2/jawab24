@@ -17,6 +17,8 @@ import {
   Clock,
   ShoppingBag,
   ExternalLink,
+  AlertTriangle,
+  LinkIcon,
   Info
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -171,7 +173,9 @@ const PagesPage: NextPageWithLayout = () => {
         page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
       ));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+      if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
+        toast.error(t('reconnectRequired'));
+      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t('pageLimitReached'));
       } else {
         captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
@@ -194,7 +198,9 @@ const PagesPage: NextPageWithLayout = () => {
         page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
       ));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
-      if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
+      if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
+        toast.error(t('reconnectRequired'));
+      } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t('pageLimitReached'));
       } else {
         captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
@@ -295,7 +301,26 @@ const PagesPage: NextPageWithLayout = () => {
                 </a>
               </div>
 
-              <div className="p-4 sm:p-6 flex-1 flex flex-col gap-6">
+              {/* Disconnected Banner */}
+              {page.isConnected === false && (
+                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold">{t('reconnectRequired')}</p>
+                    <p className="text-xs mt-0.5">{t('reconnectDescription')}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={handleReconnectFacebook}
+                    disabled={syncing}
+                    icon={<LinkIcon className="w-3.5 h-3.5" />}
+                  >
+                    {t('reconnect')}
+                  </Button>
+                </div>
+              )}
+
+              <div className={clsx('p-4 sm:p-6 flex-1 flex flex-col gap-6', page.isConnected === false && 'opacity-60 pointer-events-none')}>
                 {/* Platform Toggles */}
                 <div className="flex flex-col gap-3">
                   {/* Facebook row */}
@@ -436,9 +461,16 @@ const PagesPage: NextPageWithLayout = () => {
               {/* Status Footer */}
               <div className="px-6 py-4 bg-background/50 border-t border-theme-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'}`}></div>
+                  <div className={clsx(
+                    'w-2 h-2 rounded-full',
+                    page.isConnected === false
+                      ? 'bg-amber-500'
+                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
+                  )}></div>
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
-                    {(page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? tc('active') : tc('inactive')}
+                    {page.isConnected === false
+                      ? t('disconnected')
+                      : (page.autoReplyEnabled || page.instagramAutoReplyEnabled) ? tc('active') : tc('inactive')}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 text-muted-foreground">

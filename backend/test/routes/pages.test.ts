@@ -63,8 +63,8 @@ describe('Pages Routes', () => {
     });
 
     describe('GET /pages', () => {
-        it('should get all pages for user', async () => {
-            const pagesList = [{ id: 'page_1', name: 'My Store' }];
+        it('should get all pages for user with isConnected flag', async () => {
+            const pagesList = [{ id: 'page_1', name: 'My Store', accessToken: 'tok' }];
             vi.mocked(pagesService.getPages).mockResolvedValue(pagesList as any);
 
             const response = await app.inject({
@@ -73,14 +73,16 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(JSON.parse(response.payload)).toEqual(pagesList);
+            const body = JSON.parse(response.payload);
+            expect(body[0]).toEqual(expect.objectContaining({ id: 'page_1', isConnected: true }));
+            expect(body[0].accessToken).toBeUndefined();
             expect(pagesService.getPages).toHaveBeenCalledWith('test_workspace_id');
         });
     });
 
     describe('GET /pages/:id', () => {
-        it('should get a single page', async () => {
-            const page = { id: 'page_1', name: 'My Store' };
+        it('should get a single page with isConnected flag', async () => {
+            const page = { id: 'page_1', name: 'My Store', accessToken: 'tok' };
             vi.mocked(pagesService.getPage).mockResolvedValue(page as any);
 
             const response = await app.inject({
@@ -89,7 +91,9 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(JSON.parse(response.payload)).toEqual(page);
+            const body = JSON.parse(response.payload);
+            expect(body).toEqual(expect.objectContaining({ id: 'page_1', isConnected: true }));
+            expect(body.accessToken).toBeUndefined();
         });
 
         it('should return 404 if page not found', async () => {
@@ -120,7 +124,7 @@ describe('Pages Routes', () => {
 
     describe('PATCH /pages/:id/auto-reply', () => {
         it('should toggle auto-reply', async () => {
-            const updatedPage = { id: 'page_1', autoReplyEnabled: false };
+            const updatedPage = { id: 'page_1', autoReplyEnabled: false, accessToken: 'tok' };
             vi.mocked(pagesService.toggleAutoReply).mockResolvedValue(updatedPage as any);
 
             const response = await app.inject({
