@@ -10,8 +10,8 @@ interface IntegrationShowcaseProps {
 function CheckIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <circle cx="10" cy="10" r="10" fill="#ecfdf5" />
-      <path d="M6 10l3 3 5-5" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="10" cy="10" r="10" fill="rgba(16, 185, 129, 0.15)" />
+      <path d="M6 10l3 3 5-5" stroke="#10B981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -65,14 +65,14 @@ function TypingDots() {
     >
       <div style={{
         display: 'flex', gap: 4, padding: '10px 14px',
-        background: '#0d948833', borderRadius: '14px 14px 4px 14px',
+        background: 'rgba(16, 185, 129, 0.15)', borderRadius: '14px 14px 4px 14px',
       }}>
         {[0, 1, 2].map(i => (
           <motion.span
             key={i}
             style={{
               width: 7, height: 7, borderRadius: '50%',
-              background: '#0d9488', display: 'block',
+              background: '#10B981', display: 'block',
             }}
             animate={{ y: [0, -6, 0] }}
             transition={{
@@ -126,21 +126,30 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
 
   return (
     <div ref={wrapperRef}>
-      {/* Anti-gravity float — whole card breathes like zero-G */}
+      {/* Anti-gravity float + breathing border glow */}
       <motion.div
-        animate={{ y: [0, -6, 0] }}
+        animate={{
+          y: [0, -6, 0],
+          boxShadow: [
+            '0 0 20px rgba(16, 185, 129, 0.1), 0 8px 32px rgba(0,0,0,0.4)',
+            '0 0 40px rgba(16, 185, 129, 0.25), 0 8px 32px rgba(0,0,0,0.4)',
+            '0 0 20px rgba(16, 185, 129, 0.1), 0 8px 32px rgba(0,0,0,0.4)',
+          ],
+        }}
         transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ borderRadius: 24 }}
       >
-        {/* Fixed-height container — section never shifts */}
+        {/* Glassmorphism card — fixed height, section never shifts */}
         <div
           style={{
-            background: '#f9fafb',
+            background: 'rgba(255, 255, 255, 0.03)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
             borderRadius: 24,
             width: 360,
             maxWidth: '100%',
             height: 620,
-            boxShadow: '0 8px 32px rgba(13,148,136,0.08), 0 4px 24px rgba(0,0,0,0.06)',
-            border: '1px solid #f3f4f6',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -153,7 +162,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             alignItems: 'center',
             gap: 10,
             padding: '20px 22px 14px',
-            borderBottom: '1px solid #e5e7eb',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
             flexShrink: 0,
           }}
         >
@@ -161,7 +170,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <div
               style={{
-                width: 34, height: 34, borderRadius: '50%', background: '#0d9488',
+                width: 34, height: 34, borderRadius: '50%', background: '#10B981',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}
             >
@@ -176,12 +185,12 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
               style={{
                 position: 'absolute', bottom: 0, right: 0,
                 width: 10, height: 10, borderRadius: '50%',
-                background: '#22c55e', border: '2px solid #f9fafb',
+                background: '#22c55e', border: '2px solid rgba(5, 8, 15, 0.8)',
               }}
             />
           </div>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>{t('showcase.chatHeader')}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, color: '#F9FAFB' }}>{t('showcase.chatHeader')}</div>
             <div style={{ fontSize: 10, color: '#22c55e', fontWeight: 500 }}>{t('showcase.chatChannel')}</div>
           </div>
         </div>
@@ -204,8 +213,9 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             {show(0) && (
               <motion.div key="cust1" layout="position" transition={layoutSpring} variants={fadeSlide} initial="enter" animate="visible" exit="exit">
                 <div dir="auto" style={{
-                  background: '#e5e7eb', padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
-                  maxWidth: '85%', fontSize: 13, color: '#374151', lineHeight: 1.6,
+                  background: 'rgba(255, 255, 255, 0.08)', padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
+                  maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
                 }}>
                   {t('showcase.chatCustomer1')}
                 </div>
@@ -227,10 +237,11 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
                 <div dir="auto" style={{
-                  background: 'linear-gradient(135deg, #0d9488 0%, #065f56 100%)',
+                  background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
                   padding: '12px 14px',
                   borderRadius: '14px 14px 4px 14px', maxWidth: '88%',
-                  filter: 'drop-shadow(0 0 15px rgba(13,148,136,0.25))',
+                  filter: 'drop-shadow(0 0 20px rgba(16, 185, 129, 0.3))',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
                 }}>
                   <div style={{ fontSize: 13, color: '#fff', marginBottom: 8, lineHeight: 1.6 }}>
                     {t('showcase.chatReply1Intro')}
@@ -284,8 +295,9 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             {show(3) && (
               <motion.div key="cust2" layout="position" transition={layoutSpring} variants={fadeSlide} initial="enter" animate="visible" exit="exit">
                 <div dir="auto" style={{
-                  background: '#e5e7eb', padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
-                  maxWidth: '85%', fontSize: 13, color: '#374151', lineHeight: 1.6,
+                  background: 'rgba(255, 255, 255, 0.08)', padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
+                  maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
+                  border: '1px solid rgba(255, 255, 255, 0.06)',
                 }}>
                   {t('showcase.chatCustomer2')}
                 </div>
@@ -307,10 +319,11 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
                 <div dir="auto" style={{
-                  background: 'linear-gradient(135deg, #0d9488 0%, #065f56 100%)',
+                  background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
                   padding: '12px 14px', borderRadius: '14px 14px 4px 14px',
                   maxWidth: '88%', fontSize: 13, color: '#fff', lineHeight: 1.6,
-                  filter: 'drop-shadow(0 0 15px rgba(13,148,136,0.25))',
+                  filter: 'drop-shadow(0 0 20px rgba(16, 185, 129, 0.3))',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
                 }}>
                   {t('showcase.chatReply2')}
                 </div>
@@ -335,13 +348,13 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             >
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: '#0d94880d', border: '1px solid #0d94881a',
+                background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.15)',
                 borderRadius: 100, padding: '4px 12px 4px 8px',
               }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0d9488" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                 </svg>
-                <span style={{ fontSize: 10, color: '#0d9488', fontWeight: 600, letterSpacing: '0.01em' }}>
+                <span style={{ fontSize: 10, color: '#10B981', fontWeight: 600, letterSpacing: '0.01em' }}>
                   {t('showcase.chatPoweredBy')}
                 </span>
               </div>
@@ -369,8 +382,28 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
     : '/login?redirect=%2Fintegrations';
 
   return (
-    <section style={{ background: '#ffffff' }} className="py-12 md:py-20">
-      <div className="mx-auto px-4 sm:px-8" style={{ maxWidth: 1200 }}>
+    <section
+      className="py-12 md:py-20 relative overflow-hidden"
+      style={{ background: 'radial-gradient(circle at 50% 50%, #101827 0%, #05080f 100%)' }}
+    >
+      {/* Background glow — subtle teal radial light */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 600,
+          height: 600,
+          background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, transparent 70%)',
+          filter: 'blur(80px)',
+          zIndex: 0,
+          pointerEvents: 'none',
+        }}
+      />
+
+      <div className="mx-auto px-4 sm:px-8 relative z-10" style={{ maxWidth: 1200 }}>
         <div className="flex flex-col md:flex-row items-center gap-10 md:gap-[60px]">
           {/* Left column */}
           <div className="w-full md:w-1/2 md:flex-shrink-0">
@@ -378,14 +411,15 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
             <div
               className="inline-block mb-5"
               style={{
-                background: '#ecfdf5',
-                color: '#059669',
+                background: 'rgba(16, 185, 129, 0.12)',
+                color: '#10B981',
                 fontSize: 12,
                 fontWeight: 600,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
                 padding: '4px 14px',
                 borderRadius: 100,
+                border: '1px solid rgba(16, 185, 129, 0.2)',
               }}
             >
               {t('showcase.badge')}
@@ -397,7 +431,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               style={{
                 fontSize: 'clamp(28px, 4vw, 36px)',
                 fontWeight: 800,
-                color: '#111',
+                color: '#F9FAFB',
                 lineHeight: 1.2,
               }}
             >
@@ -407,7 +441,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
             </h2>
 
             {/* Description */}
-            <p className="mb-7" style={{ fontSize: 17, color: '#6b7280', lineHeight: 1.7 }}>
+            <p className="mb-7" style={{ fontSize: 17, color: 'rgba(249, 250, 251, 0.6)', lineHeight: 1.7 }}>
               {t('showcase.description')}
             </p>
 
@@ -416,7 +450,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               {features.map((feature, i) => (
                 <li key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <CheckIcon />
-                  <span style={{ fontSize: 15, color: '#374151', fontWeight: 500 }}>{feature}</span>
+                  <span style={{ fontSize: 15, color: 'rgba(249, 250, 251, 0.85)', fontWeight: 500 }}>{feature}</span>
                 </li>
               ))}
             </ul>
@@ -426,7 +460,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               className="mb-3.5"
               style={{
                 fontSize: 12,
-                color: '#9ca3af',
+                color: 'rgba(249, 250, 251, 0.4)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}
@@ -434,26 +468,54 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
               {t('showcase.availableOn')}
             </div>
 
-            {/* Store badges */}
+            {/* Store badges — glassmorphism dark */}
             <div className="flex gap-3.5 flex-wrap">
               <a
                 href={integrationsLink}
-                className="flex items-center gap-2.5 no-underline rounded-xl border-[1.5px] border-[#e2e6ea] bg-[#f4f6f8] px-[18px] py-2.5 transition-all duration-200 hover:shadow-md hover:border-[#0d9488] hover:-translate-y-0.5"
+                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = '0 0 20px rgba(150, 191, 71, 0.2)';
+                  e.currentTarget.style.borderColor = 'rgba(150, 191, 71, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                }}
               >
                 <ShopifyIcon className="w-6 h-7" />
                 <div>
-                  <div style={{ fontSize: 10, color: '#6b7280' }}>{t('showcase.availableOn')}</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{t('showcase.shopifyStore')}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(249, 250, 251, 0.4)' }}>{t('showcase.availableOn')}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#F9FAFB' }}>{t('showcase.shopifyStore')}</div>
                 </div>
               </a>
               <a
                 href={integrationsLink}
-                className="flex items-center gap-2.5 no-underline rounded-xl border-[1.5px] border-[#e2e6ea] bg-[#f4f6f8] px-[18px] py-2.5 transition-all duration-200 hover:shadow-md hover:border-[#004956] hover:-translate-y-0.5"
+                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = '0 0 20px rgba(0, 73, 86, 0.3)';
+                  e.currentTarget.style.borderColor = 'rgba(0, 73, 86, 0.5)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                }}
               >
-                <SallaIcon className="w-6 h-6 text-[#004956]" />
+                <SallaIcon className="w-6 h-6 text-[#00b4b6]" />
                 <div>
-                  <div style={{ fontSize: 10, color: '#6b7280' }}>{t('showcase.availableOn')}</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a' }}>{t('showcase.sallaStore')}</div>
+                  <div style={{ fontSize: 10, color: 'rgba(249, 250, 251, 0.4)' }}>{t('showcase.availableOn')}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#F9FAFB' }}>{t('showcase.sallaStore')}</div>
                 </div>
               </a>
             </div>
