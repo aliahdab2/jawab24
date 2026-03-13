@@ -423,7 +423,7 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return { syncedPages: [], skippedCount: 0, revokedCount: 0 };
+            return { syncedPages: [], skippedCount: 0 };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -562,31 +562,8 @@ export class PagesService {
             }
         }
 
-        // 5. Disable pages that the user revoked access to in Facebook
-        // If a page exists in DB but was NOT returned by Facebook's /me/accounts,
-        // the user deselected it in Facebook's permission dialog — disable it.
-        const returnedFbPageIds = new Set(fbPages.data.map(p => p.id));
-        const revokedPages = existingPages.filter(p => p.facebookPageId && !returnedFbPageIds.has(p.facebookPageId));
-
-        for (const revokedPage of revokedPages) {
-            logger.info(`[Pages] Page "${revokedPage.name}" (${revokedPage.facebookPageId}) was not returned by Facebook — disabling auto-reply`);
-            await db
-                .update(pages)
-                .set({
-                    autoReplyEnabled: false,
-                    instagramAutoReplyEnabled: false,
-                    accessToken: '',
-                    updatedAt: new Date(),
-                })
-                .where(eq(pages.id, revokedPage.id));
-        }
-
-        if (revokedPages.length > 0) {
-            logger.info(`[Pages] Disabled ${revokedPages.length} page(s) that user revoked access to in Facebook`);
-        }
-
-        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit), ${revokedPages.length} disabled (access revoked).`);
-        return { syncedPages, skippedCount, revokedCount: revokedPages.length };
+        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit).`);
+        return { syncedPages, skippedCount };
     }
 
     /**
@@ -619,9 +596,4 @@ export class PagesService {
 }
 
 export const pagesService = new PagesService();
-
-/** Check if a page's Facebook access has been revoked (empty accessToken sentinel) */
-export function isPageDisconnected(page: { accessToken: string } | null | undefined): boolean {
-    return !!page && page.accessToken === '';
-}
 

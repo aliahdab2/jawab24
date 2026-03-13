@@ -7,7 +7,6 @@ vi.mock('../../src/services/pages', () => ({
         getPage: vi.fn(),
         toggleInstagramAutoReply: vi.fn(),
     },
-    isPageDisconnected: (page: { accessToken: string } | null | undefined) => !!page && page.accessToken === '',
 }));
 
 vi.mock('../../src/services/instagram', () => ({
@@ -277,7 +276,6 @@ describe('InstagramController', () => {
     describe('toggleAutoReply', () => {
         it('should toggle auto-reply and return updated page', async () => {
             const updatedPage = { id: 'page-1', instagramAutoReplyEnabled: true };
-            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1', accessToken: 'tok' } as any);
             vi.mocked(pagesService.toggleInstagramAutoReply).mockResolvedValue(updatedPage as any);
             (mockRequest as any).params = { id: 'page-1' };
             (mockRequest as any).body = { enabled: true };

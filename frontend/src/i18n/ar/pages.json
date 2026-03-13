@@ -51,7 +51,5 @@
   "connectedAgo": "تم الربط منذ {count} يوم",
   "connectedDayAgo": "تم الربط منذ يوم واحد",
   "shopifyConnectedBadge": "ردود ذكية مدعومة بمتجرك على Shopify",
-  "totalIncoming": "الوارد",
-  "reconnectRequired": "إعادة الربط مطلوبة",
-  "reconnectDescription": "تم إلغاء صلاحية الوصول لهذه الصفحة من فيسبوك. أعد الربط لاستئناف الردود التلقائية."
+  "totalIncoming": "الوارد"
 }

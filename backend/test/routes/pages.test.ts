@@ -64,7 +64,7 @@ describe('Pages Routes', () => {
 
     describe('GET /pages', () => {
         it('should get all pages for user', async () => {
-            const pagesList = [{ id: 'page_1', name: 'My Store', accessToken: 'tok' }];
+            const pagesList = [{ id: 'page_1', name: 'My Store' }];
             vi.mocked(pagesService.getPages).mockResolvedValue(pagesList as any);
 
             const response = await app.inject({
@@ -73,14 +73,14 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(JSON.parse(response.payload)).toEqual([expect.objectContaining({ id: 'page_1', name: 'My Store', isConnected: true })]);
+            expect(JSON.parse(response.payload)).toEqual(pagesList);
             expect(pagesService.getPages).toHaveBeenCalledWith('test_workspace_id');
         });
     });
 
     describe('GET /pages/:id', () => {
         it('should get a single page', async () => {
-            const page = { id: 'page_1', name: 'My Store', accessToken: 'tok' };
+            const page = { id: 'page_1', name: 'My Store' };
             vi.mocked(pagesService.getPage).mockResolvedValue(page as any);
 
             const response = await app.inject({
@@ -89,7 +89,7 @@ describe('Pages Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(JSON.parse(response.payload)).toEqual(expect.objectContaining({ id: 'page_1', name: 'My Store', isConnected: true }));
+            expect(JSON.parse(response.payload)).toEqual(page);
         });
 
         it('should return 404 if page not found', async () => {

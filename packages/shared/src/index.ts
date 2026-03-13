@@ -99,8 +99,6 @@ export interface Page {
   // Business profile
   businessProfile?: BusinessProfile;
   businessProfileUpdatedAt?: string | Date | null;
-  // Connection status (true if Facebook access token is valid)
-  isConnected?: boolean;
   // Computed/joined fields
   commentsCount?: number;
   repliesCount?: number;
