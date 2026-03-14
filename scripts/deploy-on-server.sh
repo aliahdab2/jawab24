@@ -329,6 +329,15 @@ cleanup() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "🧹 STEP 7: Cleanup"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    # Stop the old environment to prevent stale BullMQ workers from processing
+    # jobs with outdated code. Both blue and green run background workers, so
+    # leaving the old one running causes a race where old code handles new jobs.
+    echo "🛑 Stopping old $ACTIVE_ENV containers (prevents stale worker race)..."
+    docker-compose -f docker-compose.yml -f "docker-compose.$ACTIVE_ENV.yml" stop \
+        "backend-$ACTIVE_ENV" "frontend-$ACTIVE_ENV" "ai-worker-$ACTIVE_ENV" 2>/dev/null || true
+    echo "✅ Old $ACTIVE_ENV environment stopped"
+
     docker image prune -f --filter "until=24h" 2>/dev/null || true
     echo "✅ Cleanup complete"
 }

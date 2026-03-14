@@ -316,9 +316,9 @@ main() {
         exit 1
     fi
     
-    # Step 5: Stop old environment (optional - keep for quick rollback)
-    # Uncomment the next line to stop old containers after successful deploy
-    # stop_old_env "$ACTIVE_ENV"
+    # Step 5: Stop old environment to prevent stale BullMQ workers from
+    # processing jobs with outdated code (both envs run background workers)
+    stop_old_env "$ACTIVE_ENV"
     
     log "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     log "🎉 DEPLOYMENT SUCCESSFUL"
