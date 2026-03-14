@@ -102,4 +102,11 @@ export interface CommentPlatformAdapter {
 
     /** Flag a comment as needing attention without sending a reply */
     flagComment(commentId: string, flagReason?: string, aiIntent?: string): Promise<void>;
+
+    /**
+     * Fetch the commenter's name from the platform API (best-effort fallback).
+     * Called when the webhook didn't include the commenter name.
+     * Optional — platforms that don't support this can omit it.
+     */
+    fetchCommenterName?(platformCommentId: string, accessToken: string): Promise<string | undefined>;
 }

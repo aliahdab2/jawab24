@@ -97,7 +97,7 @@ export class MessageProcessor {
             // 3. Fetch sender name (best-effort)
             let senderName: string | undefined;
             try {
-                senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id);
+                senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId);
             } catch {
                 // Non-critical — continue without sender name
             }

@@ -217,4 +217,5 @@ export interface UpdateCommentDTO {
     needsAttention?: boolean;
     flagReason?: string | null;
     aiIntent?: string | null;
+    fromName?: string;
 }

@@ -32,7 +32,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         };
     }
 
-    async fetchSenderName(_senderId: string, _accessToken: string, _pageId?: string): Promise<string | undefined> {
+    async fetchSenderName(_senderId: string, _accessToken: string, _pageId?: string, _platformPageId?: string): Promise<string | undefined> {
         // Instagram doesn't support fetching sender profile via API
         return undefined;
     }

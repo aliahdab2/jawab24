@@ -1,5 +1,6 @@
 import { workspaceSettingsService } from '../workspaceSettings';
 import { messagesService } from '../messages';
+import { commentsService } from '../comments';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
@@ -97,6 +98,19 @@ export class CommentProcessor {
             const { comment, isNew } = await adapter.storeComment(
                 content.id, platformCommentId, commentMessage, fromId, fromName,
             );
+
+            // 4a. If fromName is missing, try fetching from the platform API (best-effort)
+            if (!fromName && adapter.fetchCommenterName && page.accessToken) {
+                try {
+                    const fetchedName = await adapter.fetchCommenterName(platformCommentId, page.accessToken);
+                    if (fetchedName) {
+                        fromName = fetchedName;
+                        await commentsService.updateComment(comment.id, { fromName: fetchedName });
+                    }
+                } catch {
+                    // Non-critical — continue without name
+                }
+            }
 
             // SSE: notify merchant that a new comment arrived
             publishSSEEvent(userId, 'comment:received', {

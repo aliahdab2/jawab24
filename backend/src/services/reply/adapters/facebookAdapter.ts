@@ -32,7 +32,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         };
     }
 
-    async fetchSenderName(senderId: string, accessToken: string, pageId?: string): Promise<string | undefined> {
+    async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined> {
         // 1. Check DB first: reuse name from a previous message with this sender
         if (pageId) {
             const cached = await messagesService.getSenderNameBySenderId(pageId, senderId);
@@ -47,9 +47,9 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
             // Redis unavailable — fall through
         }
 
-        // 3. Cache miss — call Facebook API (pageId enables Conversations API fallback)
+        // 3. Cache miss — call Facebook API (platformPageId enables Conversations API fallback)
         try {
-            const profile = await facebookService.getSenderProfile(senderId, accessToken, pageId);
+            const profile = await facebookService.getSenderProfile(senderId, accessToken, platformPageId);
             const name = profile?.name;
             if (name) {
                 redis.set(senderNameCacheKey(senderId), name, 'EX', SENDER_NAME_CACHE_TTL).catch(() => {});

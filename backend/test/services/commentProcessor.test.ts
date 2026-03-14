@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { commentProcessor } from '../../src/services/reply/commentProcessor';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
+import { commentsService } from '../../src/services/comments';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../../src/services/reply/generator';
 import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
@@ -33,6 +34,11 @@ vi.mock('../../src/services/notifications', () => ({
 }));
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
+}));
+vi.mock('../../src/services/comments', () => ({
+    commentsService: {
+        updateComment: vi.fn().mockResolvedValue(undefined),
+    },
 }));
 vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), quit: vi.fn(), incr: vi.fn(), expire: vi.fn() },
@@ -994,6 +1000,79 @@ describe('shouldSkipReply', () => {
     it('should trim whitespace around flags', () => {
         expect(shouldSkipReply(' offensive_or_abusive ')).toBe(true);
         expect(shouldSkipReply('low_confidence, offensive_or_abusive')).toBe(true);
+    });
+});
+
+describe('CommentProcessor — fromName fallback fetch', () => {
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        await pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentsAutoReply: true,
+            replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'Thank you!',
+            replyMethod: 'template',
+            templateId: 'tpl-1',
+            needsAttention: false,
+        });
+    });
+
+    it('should call fetchCommenterName when fromName is missing and update the comment in DB', async () => {
+        const fetchCommenterName = vi.fn().mockResolvedValue('Fetched Ali');
+        const adapter = createMockAdapter({ fetchCommenterName });
+
+        await commentProcessor.processComment(
+            adapter, 'platform-page-1', 'content-1', 'comment-1', 'Hello!', 'user-1',
+            // fromName intentionally omitted
+        );
+
+        expect(fetchCommenterName).toHaveBeenCalledWith('comment-1', 'token-123');
+        expect(commentsService.updateComment).toHaveBeenCalledWith('comment-uuid', { fromName: 'Fetched Ali' });
+    });
+
+    it('should NOT call fetchCommenterName when fromName is already provided', async () => {
+        const fetchCommenterName = vi.fn().mockResolvedValue('Fetched Ali');
+        const adapter = createMockAdapter({ fetchCommenterName });
+
+        await commentProcessor.processComment(
+            adapter, 'platform-page-1', 'content-1', 'comment-1', 'Hello!', 'user-1', 'Alice',
+        );
+
+        expect(fetchCommenterName).not.toHaveBeenCalled();
+    });
+
+    it('should NOT call fetchCommenterName when adapter does not implement it', async () => {
+        const adapter = createMockAdapter();
+        // Ensure no fetchCommenterName on the adapter
+        expect(adapter.fetchCommenterName).toBeUndefined();
+
+        // Should still process successfully without error
+        const result = await commentProcessor.processComment(
+            adapter, 'platform-page-1', 'content-1', 'comment-1', 'Hello!', 'user-1',
+        );
+
+        expect(result.success).toBe(true);
+    });
+
+    it('should continue processing even if fetchCommenterName throws', async () => {
+        const fetchCommenterName = vi.fn().mockRejectedValue(new Error('API down'));
+        const adapter = createMockAdapter({ fetchCommenterName });
+
+        const result = await commentProcessor.processComment(
+            adapter, 'platform-page-1', 'content-1', 'comment-1', 'Hello!', 'user-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(fetchCommenterName).toHaveBeenCalled();
     });
 });
 

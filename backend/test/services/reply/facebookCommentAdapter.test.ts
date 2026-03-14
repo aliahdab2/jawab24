@@ -26,6 +26,13 @@ vi.mock('../../../src/services/comments', () => ({
     },
 }));
 
+const mockGetCommentDetails = vi.fn();
+vi.mock('../../../src/services/facebook', () => ({
+    facebookService: {
+        getCommentDetails: (...args: unknown[]) => mockGetCommentDetails(...args),
+    },
+}));
+
 const mockSendCommentReply = vi.fn();
 vi.mock('../../../src/services/reply/sender', () => ({
     replySender: {
@@ -439,6 +446,44 @@ describe('FacebookCommentAdapter', () => {
     describe('getFallbackReply', () => {
         it('should return null (no fallback for Facebook)', () => {
             expect(adapter.getFallbackReply()).toBeNull();
+        });
+    });
+
+    describe('fetchCommenterName', () => {
+        it('should return name from getCommentDetails', async () => {
+            mockGetCommentDetails.mockResolvedValue({
+                message: 'Great product!',
+                from: { id: 'user_123', name: 'Ali Ahdab' },
+            });
+
+            const name = await adapter.fetchCommenterName('fb_comment_123', 'token_abc');
+
+            expect(name).toBe('Ali Ahdab');
+            expect(mockGetCommentDetails).toHaveBeenCalledWith('fb_comment_123', 'token_abc');
+        });
+
+        it('should return undefined when getCommentDetails returns null', async () => {
+            mockGetCommentDetails.mockResolvedValue(null);
+
+            const name = await adapter.fetchCommenterName('fb_comment_123', 'token_abc');
+
+            expect(name).toBeUndefined();
+        });
+
+        it('should return undefined when from field is missing', async () => {
+            mockGetCommentDetails.mockResolvedValue({ message: 'Hello' });
+
+            const name = await adapter.fetchCommenterName('fb_comment_123', 'token_abc');
+
+            expect(name).toBeUndefined();
+        });
+
+        it('should return undefined when API throws', async () => {
+            mockGetCommentDetails.mockRejectedValue(new Error('API error'));
+
+            const name = await adapter.fetchCommenterName('fb_comment_123', 'token_abc');
+
+            expect(name).toBeUndefined();
         });
     });
 });

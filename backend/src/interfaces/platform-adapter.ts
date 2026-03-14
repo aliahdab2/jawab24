@@ -40,8 +40,8 @@ export interface MessagePlatformAdapter {
     /** Look up the page/account by the platform-specific ID. Must set autoReplyEnabled for this platform. */
     getPage(platformPageId: string): Promise<PlatformPage | null>;
 
-    /** Fetch the sender's display name (best-effort, may return undefined). pageId enables DB cache lookup. */
-    fetchSenderName(senderId: string, accessToken: string, pageId?: string): Promise<string | undefined>;
+    /** Fetch the sender's display name (best-effort, may return undefined). pageId enables DB cache lookup; platformPageId enables platform API fallback. */
+    fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined>;
 
     /** Store the incoming message and return { message, isNew } */
     storeIncomingMessage(

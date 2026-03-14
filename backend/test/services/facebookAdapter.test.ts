@@ -36,6 +36,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     const SENDER_ID = 'psid_abc';
     const ACCESS_TOKEN = 'page-token';
     const PAGE_ID = 'page-uuid-123';
+    const FB_PAGE_ID = 'fb-page-123';
 
     beforeEach(() => {
         vi.clearAllMocks();
@@ -45,10 +46,10 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
         vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
         vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'Ali Ahdab' });
 
-        const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
+        const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID, FB_PAGE_ID);
 
         expect(name).toBe('Ali Ahdab');
-        expect(facebookService.getSenderProfile).toHaveBeenCalledWith(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
+        expect(facebookService.getSenderProfile).toHaveBeenCalledWith(SENDER_ID, ACCESS_TOKEN, FB_PAGE_ID);
     });
 
     it('returns undefined when Facebook API returns null (both APIs failed)', async () => {
@@ -123,6 +124,30 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
 
         expect(name).toBe('Fallback API');
         expect(facebookService.getSenderProfile).toHaveBeenCalled();
+    });
+
+    it('passes platformPageId (not internal pageId) to getSenderProfile for Conversations API', async () => {
+        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'Via Conversations API' });
+
+        const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID, FB_PAGE_ID);
+
+        expect(name).toBe('Via Conversations API');
+        // CRITICAL: getSenderProfile must receive FB_PAGE_ID (Facebook page ID),
+        // not PAGE_ID (internal DB UUID), so the Conversations API fallback works
+        expect(facebookService.getSenderProfile).toHaveBeenCalledWith(SENDER_ID, ACCESS_TOKEN, FB_PAGE_ID);
+    });
+
+    it('uses internal pageId for DB cache but platformPageId for API', async () => {
+        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'API Name' });
+
+        await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID, FB_PAGE_ID);
+
+        // DB lookup uses internal pageId
+        expect(messagesService.getSenderNameBySenderId).toHaveBeenCalledWith(PAGE_ID, SENDER_ID);
+        // Facebook API uses platformPageId
+        expect(facebookService.getSenderProfile).toHaveBeenCalledWith(SENDER_ID, ACCESS_TOKEN, FB_PAGE_ID);
     });
 });
 

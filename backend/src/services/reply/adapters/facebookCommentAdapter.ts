@@ -1,6 +1,7 @@
 import { pagesService } from '../../pages';
 import { postsService } from '../../posts';
 import { commentsService } from '../../comments';
+import { facebookService } from '../../facebook';
 import { replySender, ReplyMode } from '../sender';
 import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode } from '../../../utils/language';
@@ -139,6 +140,15 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
 
     getFallbackReply(): string | null {
         return null;
+    }
+
+    async fetchCommenterName(platformCommentId: string, accessToken: string): Promise<string | undefined> {
+        try {
+            const details = await facebookService.getCommentDetails(platformCommentId, accessToken);
+            return details?.from?.name;
+        } catch {
+            return undefined;
+        }
     }
 }
 
