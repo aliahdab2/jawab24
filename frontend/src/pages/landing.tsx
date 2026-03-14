@@ -128,18 +128,12 @@ export default function LandingPage() {
 
       {/* Stats Section — deep space with neon glow */}
       <section className="py-10 sm:py-20 landing-section-dark relative overflow-hidden">
-        {/* Top edge fade — smooth transition from light hero */}
-        <div className="absolute top-0 start-0 w-full h-16 bg-gradient-to-b from-sky-50 to-transparent pointer-events-none" />
-        {/* Subtle brand line at top */}
-        <div className="absolute top-0 start-0 w-full h-px" style={{ background: 'linear-gradient(90deg, transparent 10%, rgba(110,210,195,0.25) 50%, transparent 90%)' }} />
         {/* Background cosmic glow */}
         <div
           aria-hidden="true"
           className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] rounded-full pointer-events-none"
           style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)', filter: 'blur(60px)' }}
         />
-        {/* Bottom edge fade — smooth transition to IntegrationShowcase */}
-        <div className="absolute bottom-0 start-0 w-full h-8 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, #05080F)' }} />
 
         <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
           {statsList.map((stat, i) => (
