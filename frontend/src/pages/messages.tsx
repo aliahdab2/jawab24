@@ -611,6 +611,7 @@ const MessagesPage: NextPageWithLayout = () => {
           dateLocale={dateLocale}
           pageName={selectedPageName}
           pageUrl={selectedPageUrl}
+          isInstagram={false}
         />
       )}
     </>

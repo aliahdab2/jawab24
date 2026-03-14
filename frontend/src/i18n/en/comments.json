@@ -72,5 +72,7 @@
   "close": "Close",
   "tryDifferentSearch": "Try a different search term",
   "connectPage": "Connect a Page",
-  "replyNotFound": "This comment was removed or already handled. Refreshing the list."
+  "replyNotFound": "This comment was removed or already handled. Refreshing the list.",
+  "platformFacebook": "Facebook",
+  "platformInstagram": "Instagram"
 }
