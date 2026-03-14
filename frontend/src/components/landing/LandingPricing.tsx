@@ -1,20 +1,55 @@
+import { useRef } from 'react';
 import Link from 'next/link';
 import { Zap, Sparkles, Crown, Check, ArrowRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
+import { motion, useInView } from 'framer-motion';
+
+const containerVariants = {
+  hidden: {},
+  visible: {
+    transition: { staggerChildren: 0.15 },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] },
+  },
+};
+
+const headingVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
+  },
+};
 
 export function LandingPricing() {
   const tPricing = useTranslations('pricing');
   const t = useTranslations('landing');
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: '-80px' });
 
   return (
-    <section id="pricing" className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden">
+    <section id="pricing" className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden" ref={ref}>
       {/* Dark mode glow — bottom-left */}
       <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
         <div className="absolute -bottom-1/4 -start-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,116,178,0.10),transparent_70%)]" />
       </div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="text-center mb-8 sm:mb-16">
+        <motion.div
+          className="text-center mb-8 sm:mb-16"
+          variants={headingVariants}
+          initial="hidden"
+          animate={isInView ? 'visible' : 'hidden'}
+        >
           <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full status-brand border mb-4 sm:mb-6 font-bold text-[10px] sm:text-xs uppercase tracking-widest">
             {tPricing('description')}
           </div>
@@ -24,12 +59,17 @@ export function LandingPricing() {
           <p className="text-sm sm:text-lg lg:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-4 sm:mb-10">
             {tPricing('noCreditCard')}
           </p>
-        </div>
+        </motion.div>
 
         {/* Plan Features Preview */}
-        <div className="grid grid-cols-3 gap-2 sm:gap-8 mb-8 sm:mb-16 max-w-4xl mx-auto">
+        <motion.div
+          className="grid grid-cols-3 gap-2 sm:gap-8 mb-8 sm:mb-16 max-w-4xl mx-auto"
+          variants={containerVariants}
+          initial="hidden"
+          animate={isInView ? 'visible' : 'hidden'}
+        >
           {/* Starter */}
-          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 dark:hover:bg-surface-100 transition-colors">
+          <motion.div variants={cardVariants} className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 dark:hover:bg-surface-100 transition-colors">
             <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl icon-bg-blue flex items-center justify-center">
               <Zap className="w-5 h-5 sm:w-7 sm:h-7" />
             </div>
@@ -42,10 +82,10 @@ export function LandingPricing() {
               <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {tPricing('starterFeature2')}</li>
               <li><Check className="w-3 h-3 inline-block" /> {tPricing('starterFeature3')}</li>
             </ul>
-          </div>
+          </motion.div>
 
           {/* Business */}
-          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl status-brand border sm:border-2 relative">
+          <motion.div variants={cardVariants} className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl status-brand border sm:border-2 relative">
             <div className="absolute -top-2 sm:-top-3 left-1/2 -translate-x-1/2 px-2 sm:px-3 py-0.5 sm:py-1 bg-brand-700 text-white text-[10px] sm:text-xs font-bold rounded-full whitespace-nowrap">
               {tPricing('popular')}
             </div>
@@ -61,10 +101,10 @@ export function LandingPricing() {
               <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {tPricing('businessFeature2')}</li>
               <li><Check className="w-3 h-3 inline-block" /> {tPricing('businessFeature3')}</li>
             </ul>
-          </div>
+          </motion.div>
 
           {/* Pro */}
-          <div className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 dark:hover:bg-surface-100 transition-colors">
+          <motion.div variants={cardVariants} className="text-center p-2 sm:p-6 rounded-xl sm:rounded-2xl hover:bg-surface-50 dark:hover:bg-surface-100 transition-colors">
             <div className="w-10 h-10 sm:w-14 sm:h-14 mx-auto mb-2 sm:mb-4 rounded-xl sm:rounded-2xl icon-bg-violet flex items-center justify-center">
               <Crown className="w-5 h-5 sm:w-7 sm:h-7" />
             </div>
@@ -77,11 +117,16 @@ export function LandingPricing() {
               <li className="hidden sm:block"><Check className="w-3 h-3 inline-block" /> {tPricing('proFeature2')}</li>
               <li><Check className="w-3 h-3 inline-block" /> {tPricing('proFeature3')}</li>
             </ul>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         {/* CTA */}
-        <div className="text-center">
+        <motion.div
+          className="text-center"
+          initial={{ opacity: 0, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+        >
           <Link href="/pricing">
             <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200 dark:shadow-brand-900/40">
               <span className="flex items-center gap-2">
@@ -93,7 +138,7 @@ export function LandingPricing() {
           <p className="text-xs sm:text-sm text-muted-foreground mt-3 sm:mt-4">
             {t('cta.note')}
           </p>
-        </div>
+        </motion.div>
       </div>
     </section>
   );

@@ -3,14 +3,50 @@ import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
+import { motion, useInView } from 'framer-motion';
+import { useRef } from 'react';
 
 interface LandingHowItWorksProps {
   isAuthenticated: boolean;
 }
 
+const stepVariants = {
+  hidden: { opacity: 0, x: -30 },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: {
+      delay: i * 0.2,
+      duration: 0.5,
+      ease: [0.25, 0.46, 0.45, 0.94],
+    },
+  }),
+};
+
+const imageVariants = {
+  hidden: { opacity: 0, scale: 0.9, rotate: 4 },
+  visible: {
+    opacity: 1,
+    scale: 1,
+    rotate: 2,
+    transition: { duration: 0.7, ease: [0.25, 0.46, 0.45, 0.94], delay: 0.3 },
+  },
+};
+
+const headingVariants = {
+  hidden: { opacity: 0, y: 30 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] },
+  },
+};
+
 export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
   const t = useTranslations('landing');
   const tNav = useTranslations('nav');
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: '-80px' });
 
   const howItWorks = [
     { step: '1', title: t('howItWorks.step1Title'), description: t('howItWorks.step1Desc') },
@@ -19,33 +55,69 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
   ];
 
   return (
-    <section className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden">
+    <section className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden" ref={ref}>
+      {/* Subtle background depth */}
+      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
+        <div
+          className="absolute top-1/3 end-0 w-[400px] h-[400px] rounded-full opacity-30"
+          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)' }}
+        />
+      </div>
+
       {/* Dark mode glow — center-right */}
       <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
         <div className="absolute top-1/4 -end-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,116,178,0.10),transparent_70%)]" />
       </div>
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center">
           {/* Steps */}
           <div className="space-y-4 sm:space-y-8 col-span-1">
-            <h2 className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-4 sm:mb-8 leading-relaxed text-start">
+            <motion.h2
+              className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-4 sm:mb-8 leading-relaxed text-start"
+              variants={headingVariants}
+              initial="hidden"
+              animate={isInView ? 'visible' : 'hidden'}
+            >
               {t('howItWorks.title1')}
               <span className="block text-brand-600 mt-2">{t('howItWorks.title2')}</span>
-            </h2>
-            <div className="space-y-3 sm:space-y-6 lg:space-y-10">
+            </motion.h2>
+
+            <div className="space-y-3 sm:space-y-6 lg:space-y-10 relative">
+              {/* Connecting line */}
+              <div
+                className="absolute start-4 sm:start-6 top-10 sm:top-14 bottom-4 w-px hidden sm:block"
+                style={{ background: 'linear-gradient(to bottom, rgba(16,185,129,0.3), rgba(16,185,129,0.05))' }}
+                aria-hidden="true"
+              />
+
               {howItWorks.map((item, i) => (
-                <div key={i} className="flex flex-row gap-3 sm:gap-6 items-start">
-                  <div className="flex-shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-brand-600 text-white flex items-center justify-center text-sm sm:text-2xl font-bold shadow-lg shadow-brand-200">
+                <motion.div
+                  key={i}
+                  className="flex flex-row gap-3 sm:gap-6 items-start relative"
+                  variants={stepVariants}
+                  custom={i}
+                  initial="hidden"
+                  animate={isInView ? 'visible' : 'hidden'}
+                >
+                  <div className="flex-shrink-0 w-8 h-8 sm:w-12 sm:h-12 rounded-lg sm:rounded-2xl bg-brand-600 text-white flex items-center justify-center text-sm sm:text-2xl font-bold shadow-lg shadow-brand-200 relative z-10">
                     {item.step}
                   </div>
                   <div className="text-start">
                     <h3 className="text-sm sm:text-xl font-bold text-foreground mb-1 sm:mb-2">{item.title}</h3>
                     <p className="text-[10px] sm:text-base text-muted-foreground font-medium leading-relaxed">{item.description}</p>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
-            <div className="text-start">
+
+            <motion.div
+              className="text-start"
+              variants={stepVariants}
+              custom={3}
+              initial="hidden"
+              animate={isInView ? 'visible' : 'hidden'}
+            >
               <Link href={isAuthenticated ? "/dashboard" : "/login?redirect=%2Fdashboard"} className="inline-block mt-4 sm:mt-12">
                 <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                   <span className="flex items-center gap-2">
@@ -54,11 +126,16 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
                   </span>
                 </Button>
               </Link>
-            </div>
+            </motion.div>
           </div>
 
           {/* Dashboard Preview */}
-          <div className="relative col-span-1 pt-8 sm:pt-0">
+          <motion.div
+            className="relative col-span-1 pt-8 sm:pt-0"
+            variants={imageVariants}
+            initial="hidden"
+            animate={isInView ? 'visible' : 'hidden'}
+          >
             <div className="relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl border-2 sm:border-8 border-surface-900/5 rotate-2 group hover:rotate-0 transition-transform duration-700 bg-surface-50">
               <Image
                 src="/images/social-icons-3d.png"
@@ -71,7 +148,7 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
             </div>
             <div className="absolute -top-5 sm:-top-10 -end-5 sm:-end-10 w-16 sm:w-32 h-16 sm:h-32 bg-accent-100 rounded-full -z-10 blur-xl sm:blur-2xl"></div>
             <div className="absolute -bottom-5 sm:-bottom-10 -start-5 sm:-start-10 w-20 sm:w-40 h-20 sm:h-40 bg-brand-100 rounded-full -z-10 blur-xl sm:blur-3xl"></div>
-          </div>
+          </motion.div>
         </div>
       </div>
     </section>

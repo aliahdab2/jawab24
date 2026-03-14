@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
@@ -6,6 +6,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { motion, useInView } from 'framer-motion';
 import {
   LandingHero,
   LandingFeatures,
@@ -16,6 +17,37 @@ import {
   LandingFooter,
   IntegrationShowcase,
 } from '@/components/landing';
+
+function StatsSection({ statsList }: { statsList: { value: string; label: string }[] }) {
+  const ref = useRef(null);
+  const isInView = useInView(ref, { once: true, margin: '-40px' });
+
+  return (
+    <section className="py-10 sm:py-20 landing-section-dark relative overflow-hidden" ref={ref}>
+      {/* Background cosmic glow */}
+      <div
+        aria-hidden="true"
+        className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] rounded-full pointer-events-none"
+        style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)', filter: 'blur(60px)' }}
+      />
+
+      <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
+        {statsList.map((stat, i) => (
+          <motion.div
+            key={i}
+            className="text-center group"
+            initial={{ opacity: 0, y: 30, scale: 0.9 }}
+            animate={isInView ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 30, scale: 0.9 }}
+            transition={{ duration: 0.6, delay: i * 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
+          >
+            <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hover:scale-110 transition-transform duration-500 stat-neon-breathe">{stat.value}</div>
+            <div className="text-brand-300 font-bold uppercase tracking-widest text-xs sm:text-sm lg:text-base">{stat.label}</div>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function LandingPage() {
   const t = useTranslations('landing');
@@ -127,23 +159,7 @@ export default function LandingPage() {
       <LandingHero isAuthenticated={isAuthenticated} />
 
       {/* Stats Section — deep space with neon glow */}
-      <section className="py-10 sm:py-20 landing-section-dark relative overflow-hidden">
-        {/* Background cosmic glow */}
-        <div
-          aria-hidden="true"
-          className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] rounded-full pointer-events-none"
-          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%)', filter: 'blur(60px)' }}
-        />
-
-        <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
-          {statsList.map((stat, i) => (
-            <div key={i} className="text-center group">
-              <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hover:scale-110 transition-transform duration-500 stat-neon-breathe">{stat.value}</div>
-              <div className="text-brand-300 font-bold uppercase tracking-widest text-xs sm:text-sm lg:text-base">{stat.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
+      <StatsSection statsList={statsList} />
 
       <IntegrationShowcase isAuthenticated={isAuthenticated} />
 
