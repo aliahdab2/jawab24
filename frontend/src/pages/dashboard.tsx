@@ -538,7 +538,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Command Center — consolidated metrics */}
       <CommandCenter
-        smartReplies={statsData.aiReplies + statsData.messagesAiReplies}
+        smartReplies={statsData.aiReplies}
         repliedToday={statsData.repliedToday}
         replyRate={analytics?.totals?.replyRate ?? '0'}
         avgSpeedSeconds={analytics?.responseTime?.avgSeconds ?? null}

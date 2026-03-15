@@ -24,6 +24,7 @@ const MOCK_MESSAGE_STATS = {
   replied: 10,
   pending: 5,
   needsAttention: 1,
+  repliedToday: 3,
   byMethod: { ai: 5, template: 3, manual: 2 },
 };
 
@@ -232,8 +233,8 @@ test.describe('Dashboard Page', () => {
     // Command Center should show Smart Replies count: 20 (comments AI) + 5 (messages AI) = 25
     await expect(page.getByText('25', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
-    // Replied Today should show 5
-    await expect(page.getByText('5', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    // Replied Today should show 8 (5 comments + 3 messages)
+    await expect(page.getByText('8', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
     // Reply Rate from analytics should show 70.2%
     await expect(page.getByText('70.2%')).toBeVisible({ timeout: 15000 });
