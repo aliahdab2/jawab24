@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { messagesApi } from '@/lib/api';
+import { type Message, messagesApi } from '@/lib/api';
 import { useTranslations } from 'next-intl';
 import type { Conversation } from '@/components/messages';
 
@@ -37,6 +37,15 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       return res.data;
     },
     onSuccess: (outgoingMessage) => {
+      // Update the modal's conversation query cache so fullMessages shows the reply instantly.
+      // We read selectedConversation outside setState to keep the updater pure.
+      const conv = selectedConversation;
+      if (conv) {
+        queryClient.setQueryData<Message[]>(
+          ['conversation', conv.senderId, conv.lastMessage.pageId],
+          (old) => old ? [...old, outgoingMessage] : [outgoingMessage],
+        );
+      }
       setSelectedConversation(prev => prev ? {
         ...prev,
         messages: [...prev.messages, outgoingMessage],

@@ -195,10 +195,6 @@ export const MessageCard = React.memo(function MessageCard({
                 <span className="text-[10px] text-muted-foreground">
                   {formatTime(conv.lastMessage.createdAt)}
                 </span>
-                <span className="flex items-center gap-1 text-[10px] text-muted-foreground px-1.5 py-0.5 bg-muted rounded">
-                  <MessageCircle className="w-2.5 h-2.5" />
-                  {conv.messages.filter(m => m.direction === 'incoming').length}
-                </span>
               </div>
               <FlagTag flagReason={conv.lastMessage.flagReason} />
             </div>

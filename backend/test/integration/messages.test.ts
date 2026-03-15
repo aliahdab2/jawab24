@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { messagesService } from '../../src/services/messages';
 import { createTestUser, createTestPage, insertMessage, insertPause, testDb } from './setup';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { messages } from '../../src/db/schema';
 
 describe('Messages Service — Integration (real Postgres)', () => {
@@ -261,6 +261,96 @@ describe('Messages Service — Integration (real Postgres)', () => {
 
             await messagesService.resumeConversation(pageId, senderId);
             expect(await messagesService.isPaused(pageId, senderId)).toBe(false);
+        });
+    });
+
+    // =========================================================
+    // Test 6: resolveConversation / unresolveConversation
+    // =========================================================
+    describe('resolveConversation', () => {
+        it('resolves both replied and unreplied incoming messages', async () => {
+            // Unreplied message
+            const msg1 = await insertMessage(pageId, senderId, {
+                facebookMessageId: 'dm-unreplied',
+                message: 'Need help',
+                replied: false,
+            });
+            // Replied message with needsAttention (e.g., "Information not in knowledge base")
+            const msg2 = await insertMessage(pageId, senderId, {
+                facebookMessageId: 'dm-flagged',
+                message: 'How much does it cost?',
+                replied: true,
+                needsAttention: true,
+            });
+            // Outgoing reply (should NOT be resolved)
+            const msg3 = await insertMessage(pageId, senderId, {
+                facebookMessageId: 'dm-outgoing',
+                message: 'Auto reply',
+                direction: 'outgoing',
+                replied: true,
+            });
+
+            const count = await messagesService.resolveConversation(pageId, senderId);
+
+            // Both incoming messages resolved (unreplied + flagged-replied)
+            expect(count).toBe(2);
+
+            const [updated1] = await testDb.select().from(messages).where(eq(messages.id, msg1.id));
+            expect(updated1.resolved).toBe(true);
+
+            const [updated2] = await testDb.select().from(messages).where(eq(messages.id, msg2.id));
+            expect(updated2.resolved).toBe(true);
+
+            // Outgoing message should NOT be touched
+            const [updated3] = await testDb.select().from(messages).where(eq(messages.id, msg3.id));
+            expect(updated3.resolved).toBeFalsy();
+        });
+
+        it('returns 0 when all messages are already resolved', async () => {
+            await insertMessage(pageId, senderId, {
+                facebookMessageId: 'dm-already-resolved',
+                message: 'Old message',
+                resolved: true,
+            });
+
+            const count = await messagesService.resolveConversation(pageId, senderId);
+            expect(count).toBe(0);
+        });
+
+        it('does not resolve messages from a different sender', async () => {
+            await insertMessage(pageId, senderId, {
+                facebookMessageId: 'dm-target',
+                message: 'Target sender',
+            });
+            await insertMessage(pageId, 'other-sender', {
+                facebookMessageId: 'dm-other',
+                message: 'Other sender',
+            });
+
+            const count = await messagesService.resolveConversation(pageId, senderId);
+            expect(count).toBe(1);
+
+            // Other sender's message should remain unresolved
+            const [otherMsg] = await testDb.select().from(messages)
+                .where(and(eq(messages.senderId, 'other-sender'), eq(messages.pageId, pageId)));
+            expect(otherMsg.resolved).toBeFalsy();
+        });
+    });
+
+    describe('unresolveConversation', () => {
+        it('unresolves all resolved incoming messages', async () => {
+            const msg = await insertMessage(pageId, senderId, {
+                facebookMessageId: 'dm-resolved',
+                message: 'Was resolved',
+                resolved: true,
+                replied: true,
+            });
+
+            const count = await messagesService.unresolveConversation(pageId, senderId);
+            expect(count).toBe(1);
+
+            const [updated] = await testDb.select().from(messages).where(eq(messages.id, msg.id));
+            expect(updated.resolved).toBe(false);
         });
     });
 });

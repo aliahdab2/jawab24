@@ -471,7 +471,7 @@ export class MessagesService {
     }
 
     /**
-     * Resolve all unreplied incoming messages in a conversation.
+     * Resolve all unresolved incoming messages in a conversation.
      * Returns the number of messages resolved.
      */
     async resolveConversation(pageId: string, senderId: string): Promise<number> {
@@ -481,7 +481,6 @@ export class MessagesService {
                 eq(messages.pageId, pageId),
                 eq(messages.senderId, senderId),
                 eq(messages.direction, 'incoming'),
-                eq(messages.replied, false),
                 eq(messages.resolved, false)
             ))
             .returning({ id: messages.id });

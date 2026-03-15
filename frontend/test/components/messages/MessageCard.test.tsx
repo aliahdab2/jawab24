@@ -44,30 +44,20 @@ describe('MessageCard', () => {
     expect(screen.getByText('Ali')).toBeInTheDocument();
   });
 
-  it('counts only incoming messages, not outgoing replies', () => {
+  it('does not show an inline message count badge', () => {
     const incoming1 = makeMessage({ message: 'Hello', direction: 'incoming', createdAt: '2026-01-01T00:00:00Z' });
     const outgoing1 = makeMessage({ message: 'Hi! How can I help?', direction: 'outgoing', replied: true, replyMethod: 'ai', createdAt: '2026-01-01T00:00:01Z' });
     const incoming2 = makeMessage({ message: 'I need help', direction: 'incoming', createdAt: '2026-01-01T00:00:02Z' });
     const outgoing2 = makeMessage({ message: 'Sure thing!', direction: 'outgoing', replied: true, replyMethod: 'ai', createdAt: '2026-01-01T00:00:03Z' });
 
     const conv = makeConversation([incoming1, outgoing1, incoming2, outgoing2]);
-    render(<MessageCard conversation={conv} onClick={vi.fn()} />);
+    const { container } = render(<MessageCard conversation={conv} onClick={vi.fn()} />);
 
-    // 4 total messages but only 2 are incoming — the badge should show 2
-    const badge = screen.getByText('2');
-    expect(badge).toBeInTheDocument();
-  });
-
-  it('shows 1 when a single incoming message has an outgoing reply', () => {
-    const incoming = makeMessage({ message: 'Hello', direction: 'incoming', createdAt: '2026-01-01T00:00:00Z' });
-    const outgoing = makeMessage({ message: 'Hello! How can I assist you?', direction: 'outgoing', replied: true, replyMethod: 'ai', createdAt: '2026-01-01T00:00:01Z' });
-
-    const conv = makeConversation([incoming, outgoing]);
-    render(<MessageCard conversation={conv} onClick={vi.fn()} />);
-
-    // Only 1 incoming message — badge should show 1, not 2
-    const badge = screen.getByText('1');
-    expect(badge).toBeInTheDocument();
+    // The inline count badge was removed (it showed unreliable paginated counts).
+    // The accurate count is shown in the modal header instead.
+    const countBadges = container.querySelectorAll('.bg-muted.rounded');
+    const hasMsgCount = Array.from(countBadges).some(el => /^\d+$/.test(el.textContent?.trim() || ''));
+    expect(hasMsgCount).toBe(false);
   });
 
   it('calls onClick when card is clicked', () => {
