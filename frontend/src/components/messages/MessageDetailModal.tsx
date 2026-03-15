@@ -93,8 +93,15 @@ export function MessageDetailModal({
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewMessage, setHasNewMessage] = useState(false);
   const prevMessageCountRef = useRef(messages.length);
-  // Track IDs present on initial render so newly arrived messages get an entrance animation
-  const initialMessageIdsRef = useRef(new Set(messages.map(m => m.id)));
+  // Track the count of messages when the modal first loaded full data,
+  // so newly arrived messages get an entrance animation.
+  // Inline ref write (not useEffect) — must be synchronous so the very first
+  // render already knows which messages are "old". Ref writes don't trigger
+  // re-renders, so this is safe per React docs.
+  const initialCountRef = useRef<number | null>(null);
+  if (initialCountRef.current === null && fullMessages) {
+    initialCountRef.current = fullMessages.length;
+  }
 
   useEscapeKey(() => onClose(), true);
   useBodyScrollLock(true);
@@ -325,13 +332,15 @@ export function MessageDetailModal({
           className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50"
         >
           <div className="min-h-full flex flex-col justify-end gap-4 sm:gap-6">
-            {sortedMessages.map((msg) => (
+            {sortedMessages.map((msg, idx) => {
+              const isNew = initialCountRef.current !== null && idx >= initialCountRef.current;
+              return (
               <div
                 key={msg.id}
                 className={clsx(
                   "flex flex-col",
                   msg.direction === 'outgoing' ? 'items-end' : 'items-start',
-                  !initialMessageIdsRef.current.has(msg.id) && 'animate-in fade-in slide-in-from-bottom-2 duration-300',
+                  isNew && 'animate-in fade-in slide-in-from-bottom-2 duration-300',
                 )}
               >
                 <div className={clsx(
@@ -369,7 +378,8 @@ export function MessageDetailModal({
                   )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
