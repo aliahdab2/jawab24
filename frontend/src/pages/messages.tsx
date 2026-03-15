@@ -181,11 +181,13 @@ const MessagesPage: NextPageWithLayout = () => {
   const stats = useMemo(() => {
     if (statsData) {
       return {
-        total: statsData.total,
+        // Conversation counts for tab labels (matches what the user sees in the list)
+        total: statsData.convTotal ?? statsData.total,
+        autoReplied: statsData.convAutoReplied ?? statsData.autoReplied ?? 0,
+        needsAction: statsData.convActionRequired ?? statsData.actionRequired ?? statsData.pending,
+        handled: statsData.convHandled ?? statsData.resolved ?? 0,
+        // Keep message-level pending for internal use
         pending: statsData.pending,
-        autoReplied: statsData.autoReplied ?? 0,
-        needsAction: statsData.actionRequired ?? statsData.pending,
-        handled: statsData.resolved ?? 0,
       };
     }
     return { total: 0, pending: 0, autoReplied: 0, needsAction: 0, handled: 0 };

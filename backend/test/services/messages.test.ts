@@ -544,6 +544,10 @@ describe('MessagesService', () => {
                             ai: 15,
                             template: 10,
                             manual: 5,
+                            convTotal: 12,
+                            convActionRequired: 5,
+                            convAutoReplied: 8,
+                            convHandled: 0,
                         }])
                     })
                 })
@@ -562,7 +566,11 @@ describe('MessagesService', () => {
                 resolved: 0,
                 autoReplied: 25,
                 repliedToday: 8,
-                byMethod: { template: 10, ai: 15, manual: 5 }
+                byMethod: { template: 10, ai: 15, manual: 5 },
+                convTotal: 12,
+                convActionRequired: 5,
+                convAutoReplied: 8,
+                convHandled: 0,
             });
         });
 
@@ -580,6 +588,10 @@ describe('MessagesService', () => {
                             ai: 0,
                             template: 0,
                             manual: 0,
+                            convTotal: 0,
+                            convActionRequired: 0,
+                            convAutoReplied: 0,
+                            convHandled: 0,
                         }])
                     })
                 })
@@ -598,7 +610,11 @@ describe('MessagesService', () => {
                 resolved: 0,
                 autoReplied: 0,
                 repliedToday: 0,
-                byMethod: { template: 0, ai: 0, manual: 0 }
+                byMethod: { template: 0, ai: 0, manual: 0 },
+                convTotal: 0,
+                convActionRequired: 0,
+                convAutoReplied: 0,
+                convHandled: 0,
             });
         });
     });

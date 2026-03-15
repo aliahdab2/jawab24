@@ -518,12 +518,18 @@ export class MessagesService {
         autoReplied: number;
         repliedToday: number;
         byMethod: { template: number; ai: number; manual: number };
+        // Conversation-level counts (COUNT DISTINCT sender_id) for tab labels
+        convTotal: number;
+        convActionRequired: number;
+        convAutoReplied: number;
+        convHandled: number;
     }> {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
 
         const result = await db
             .select({
+                // Message-level counts (for analytics, dashboard, billing)
                 total:          sql<number>`count(*)`,
                 replied:        sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
                 resolved:       sql<number>`count(*) FILTER (WHERE ${messages.resolved} = true)`,
@@ -533,6 +539,11 @@ export class MessagesService {
                 ai:             sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'manual')`,
+                // Conversation-level counts (for tab labels — matches what the user sees in the list)
+                convTotal:          sql<number>`count(DISTINCT ${messages.senderId})`,
+                convActionRequired: sql<number>`count(DISTINCT ${messages.senderId}) FILTER (WHERE ${messages.resolved} = false AND (${messages.replied} = false OR ${messages.needsAttention} = true))`,
+                convAutoReplied:    sql<number>`count(DISTINCT ${messages.senderId}) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} IN ('ai', 'template'))`,
+                convHandled:        sql<number>`count(DISTINCT ${messages.senderId}) FILTER (WHERE ${messages.resolved} = true)`,
             })
             .from(messages)
             .innerJoin(pages, eq(messages.pageId, pages.id))
@@ -543,9 +554,10 @@ export class MessagesService {
 
         const row = result[0];
         const total = Number(row?.total || 0);
+        const emptyByMethod = { template: 0, ai: 0, manual: 0 };
 
         if (total === 0) {
-            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, actionRequired: 0, autoReplied: 0, repliedToday: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
+            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, actionRequired: 0, autoReplied: 0, repliedToday: 0, byMethod: emptyByMethod, convTotal: 0, convActionRequired: 0, convAutoReplied: 0, convHandled: 0 };
         }
 
         const replied = Number(row?.replied || 0);
@@ -567,6 +579,10 @@ export class MessagesService {
                 ai,
                 manual: Number(row?.manual || 0),
             },
+            convTotal: Number(row?.convTotal || 0),
+            convActionRequired: Number(row?.convActionRequired || 0),
+            convAutoReplied: Number(row?.convAutoReplied || 0),
+            convHandled: Number(row?.convHandled || 0),
         };
     }
 
