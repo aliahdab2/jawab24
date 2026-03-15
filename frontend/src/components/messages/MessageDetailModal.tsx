@@ -93,6 +93,8 @@ export function MessageDetailModal({
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewMessage, setHasNewMessage] = useState(false);
   const prevMessageCountRef = useRef(messages.length);
+  // Track IDs present on initial render so newly arrived messages get an entrance animation
+  const initialMessageIdsRef = useRef(new Set(messages.map(m => m.id)));
 
   useEscapeKey(() => onClose(), true);
   useBodyScrollLock(true);
@@ -326,7 +328,11 @@ export function MessageDetailModal({
             {sortedMessages.map((msg) => (
               <div
                 key={msg.id}
-                className={clsx("flex flex-col", msg.direction === 'outgoing' ? 'items-end' : 'items-start')}
+                className={clsx(
+                  "flex flex-col",
+                  msg.direction === 'outgoing' ? 'items-end' : 'items-start',
+                  !initialMessageIdsRef.current.has(msg.id) && 'animate-in fade-in slide-in-from-bottom-2 duration-300',
+                )}
               >
                 <div className={clsx(
                   "max-w-[90%] sm:max-w-[85%] rounded-2xl p-3 sm:p-4 shadow-sm",
