@@ -37,6 +37,9 @@ export type Platform = 'facebook' | 'instagram' | 'shopify' | 'whatsapp';
 export interface MessagePlatformAdapter {
     readonly platform: Platform;
 
+    /** Max characters for a single reply on this platform (default: 2000) */
+    readonly maxReplyLength?: number;
+
     /** Look up the page/account by the platform-specific ID. Must set autoReplyEnabled for this platform. */
     getPage(platformPageId: string): Promise<PlatformPage | null>;
 

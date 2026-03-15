@@ -14,6 +14,7 @@ const senderNameCacheKey = (senderId: string) => `sender_name:${senderId}`;
  */
 export class FacebookMessageAdapter implements MessagePlatformAdapter {
     readonly platform = 'facebook' as const;
+    readonly maxReplyLength = 2000;
 
     async getPage(facebookPageId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByFacebookId(facebookPageId);

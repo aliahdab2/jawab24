@@ -14,6 +14,7 @@ import { formatBusinessProfile } from '../../utils/businessProfile';
 import { getStoreContextForAI } from '../ecommerce';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
+import { truncateAtSentence } from '../../utils/text';
 
 /**
  * Unified Message Processor
@@ -359,6 +360,17 @@ export class MessageProcessor {
             if (!replyText) {
                 pipelineMetrics.record(pipeline, 'no_reply_generated');
                 return { success: false, messageId: platformMessageId, error: 'No reply generated' };
+            }
+
+            // 12e. Enforce platform max message length (Facebook=2000, Instagram=1000)
+            const maxReplyChars = adapter.maxReplyLength ?? 2000;
+            if (replyText.length > maxReplyChars) {
+                const originalLength = replyText.length;
+                replyText = truncateAtSentence(replyText, maxReplyChars);
+                this.logger.info(`[${platform}] Reply truncated to max message length`, {
+                    originalLength,
+                    truncatedLength: replyText.length,
+                });
             }
 
             // 13. Send reply

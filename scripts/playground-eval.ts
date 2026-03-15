@@ -18,7 +18,7 @@
  *   ADMIN_TOKEN  — Required. JWT token for an admin user.
  *   BASE_URL     — Backend base URL. Default: http://localhost:3000
  *   CONCURRENCY  — Max parallel requests. Default: 3
- *   CATEGORY     — Run only this category number (1-19). Default: all
+ *   CATEGORY     — Run only this category number (1-21). Default: all
  *   VERBOSE      — Set to "1" for detailed output per test. Default: summary only
  */
 
@@ -52,6 +52,7 @@ interface TestCase {
         nudgePresent?: boolean;         // true = nudgeText must be non-null/non-empty
         nudgeMaxLength?: number;        // nudgeText length must be <= this
         commentReplyMode?: string;      // expected commentReplyMode value
+        replyMaxLength?: number;        // reply length must be <= this
     };
     notes?: string;
 }
@@ -946,6 +947,44 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Angry cancellation — must at least have cancellation_request flag, may also have angry_customer',
     },
+
+    // ===== Category 21: Reply Length (DM replies must stay under 1500 chars) =====
+
+    // 21.1 — Broad question about all services (triggers long KB dump if not summarized)
+    {
+        id: 150, category: 21, categoryName: 'Reply Length', channel: 'dm',
+        message: 'Tell me everything about your services, pricing, and what you offer',
+        page: 'training',
+        expected: {
+            replyMaxLength: 1500,
+            confidence: ['high', 'medium'],
+        },
+        notes: 'Broad "tell me everything" question — AI must summarize KB, not dump it verbatim',
+    },
+
+    // 21.2 — Arabic broad question
+    {
+        id: 151, category: 21, categoryName: 'Reply Length', channel: 'dm',
+        message: 'ابي اعرف كل شي عن خدماتكم والاسعار والعروض وكل التفاصيل',
+        page: 'electronics',
+        expected: {
+            replyMaxLength: 1500,
+            confidence: ['high', 'medium'],
+        },
+        notes: 'Arabic "tell me everything" — must summarize, not quote entire product catalog',
+    },
+
+    // 21.3 — Detailed product inquiry (could produce long reply from KB)
+    {
+        id: 152, category: 21, categoryName: 'Reply Length', channel: 'dm',
+        message: 'I want full details about all your courses, schedules, prices, and certificates',
+        page: 'training',
+        expected: {
+            replyMaxLength: 1500,
+            confidence: ['high', 'medium'],
+        },
+        notes: 'Multi-topic question — AI should summarize key points across topics',
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1040,6 +1079,12 @@ function evaluate(test: TestCase, resp: PlaygroundResponse): { verdict: Verdict;
     if (e.nudgeMaxLength && d.nudgeText) {
         const pass = d.nudgeText.length <= e.nudgeMaxLength;
         checks.push({ field: 'nudgeMaxLength', pass, detail: `length ${d.nudgeText.length} vs max ${e.nudgeMaxLength}` });
+    }
+
+    // replyMaxLength
+    if (e.replyMaxLength && d.reply) {
+        const pass = d.reply.length <= e.replyMaxLength;
+        checks.push({ field: 'replyMaxLength', pass, detail: `length ${d.reply.length} vs max ${e.replyMaxLength}` });
     }
 
     // commentReplyMode

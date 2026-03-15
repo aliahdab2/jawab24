@@ -13,6 +13,7 @@ import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../
  */
 export class InstagramMessageAdapter implements MessagePlatformAdapter {
     readonly platform = 'instagram' as const;
+    readonly maxReplyLength = 1000;
 
     async getPage(instagramAccountId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByInstagramId(instagramAccountId);

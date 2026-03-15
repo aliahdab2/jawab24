@@ -522,14 +522,17 @@ const MessagesPage: NextPageWithLayout = () => {
       </div>
 
       {/* Conversations count hint - clarifies that tab counts refer to messages, not conversations */}
-      {conversations.length > 0 && conversations.length !== allMessages.length && (
-        <p className="text-xs text-muted-foreground mb-3 -mt-2">
-          {conversations.length === 1
-            ? t('oneConversation', { msgCount: allMessages.length })
-            : t('conversationCount', { count: conversations.length, msgCount: allMessages.length })
-          }
-        </p>
-      )}
+      {conversations.length > 0 && (() => {
+        const incomingCount = allMessages.filter(m => m.direction === 'incoming').length;
+        return conversations.length !== incomingCount ? (
+          <p className="text-xs text-muted-foreground mb-3 -mt-2">
+            {conversations.length === 1
+              ? t('oneConversation', { msgCount: incomingCount })
+              : t('conversationCount', { count: conversations.length, msgCount: incomingCount })
+            }
+          </p>
+        ) : null;
+      })()}
 
       {/* Conversations Grid */}
       {conversations.length > 0 ? (

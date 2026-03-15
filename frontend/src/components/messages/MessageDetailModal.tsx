@@ -245,7 +245,7 @@ export function MessageDetailModal({
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-start">
-                  {t('msgCount', { count: conversation.messages.length })}
+                  {t('msgCount', { count: conversation.messages.filter(m => m.direction === 'incoming').length })}
                 </span>
                 {conversation.needsHumanAttention && (
                   <Badge variant="warning" size="sm">
