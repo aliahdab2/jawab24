@@ -99,7 +99,12 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
             { id: 'msg-uuid', message: 'What are your hours?', createdTime: new Date() } as any,
         ]);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
-        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', facebookMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
         vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
@@ -305,7 +310,12 @@ describe('MessageProcessor — Handoff Re-enqueue', () => {
             { id: 'msg-uuid', message: 'Hello', createdTime: new Date() } as any,
         ]);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
-        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', facebookMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
         vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
             replyText: 'Hi!',
@@ -378,7 +388,12 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
-        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', facebookMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
     });

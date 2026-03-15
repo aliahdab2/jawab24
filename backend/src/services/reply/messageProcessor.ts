@@ -13,6 +13,7 @@ import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { getStoreContextForAI } from '../ecommerce';
 import { publishSSEEvent } from '../../lib/eventBus';
+import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
 
@@ -114,12 +115,27 @@ export class MessageProcessor {
             );
             lap('4-storeMessage');
 
-            // SSE: notify merchant that a new message arrived
+            // SSE: notify merchant that a new message arrived (includes full message for optimistic cache update)
             publishSSEEvent(userId, 'message:received', {
                 messageId: platformMessageId,
                 pageId: page.id,
                 senderId,
                 senderName: senderName ?? null,
+                message: {
+                    id: storedMessage.id,
+                    pageId: page.id,
+                    facebookMessageId: platformMessageId,
+                    senderId,
+                    senderName: senderName ?? null,
+                    message: messageText,
+                    direction: 'incoming' as const,
+                    replied: false,
+                    replyText: null,
+                    replyMethod: null,
+                    createdTime: null,
+                    repliedAt: null,
+                    createdAt: new Date().toISOString(),
+                },
             });
 
             // 4b. Acquire distributed lock — prevents two workers from replying to
@@ -392,12 +408,28 @@ export class MessageProcessor {
             // 14-16. Mark replied + store outgoing + mark older — wrapped in a transaction
             // so all DB state changes succeed or fail together.
             let markedOlder = 0;
+            let outgoingMessage: SSEMessageSnapshot | undefined;
             await db.transaction(async (tx) => {
                 // 14. Mark as replied
                 await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx, aiOriginalReply);
 
                 // 15. Store outgoing message
-                await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod, tx);
+                const stored = await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod, tx);
+                outgoingMessage = {
+                    id: stored.id,
+                    pageId: stored.pageId,
+                    facebookMessageId: stored.facebookMessageId,
+                    senderId: stored.senderId,
+                    senderName: stored.senderName,
+                    message: stored.message,
+                    direction: stored.direction,
+                    replied: stored.replied,
+                    replyText: stored.replyText,
+                    replyMethod: stored.replyMethod,
+                    createdTime: stored.createdTime ?? null,
+                    repliedAt: stored.repliedAt ?? null,
+                    createdAt: stored.createdAt ?? new Date().toISOString(),
+                };
 
                 // 16. Mark older debounced messages as replied
                 if (unrepliedMessages.length > 1) {
@@ -430,12 +462,13 @@ export class MessageProcessor {
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
-            // SSE: notify merchant that a reply was sent
+            // SSE: notify merchant that a reply was sent (includes full message for optimistic cache update)
             publishSSEEvent(userId, 'message:reply_sent', {
                 messageId: platformMessageId,
                 pageId: page.id,
                 replyMethod: replyMethod as 'template' | 'ai',
                 replyText,
+                message: outgoingMessage,
             });
             // SSE: update usage counter if AI reply
             if (replyMethod === 'ai') {

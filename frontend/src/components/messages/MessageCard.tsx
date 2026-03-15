@@ -239,4 +239,20 @@ export const MessageCard = React.memo(function MessageCard({
       </div>
     </div>
   );
+}, (prev, next) => {
+  const a = prev.conversation;
+  const b = next.conversation;
+  return (
+    a.senderId === b.senderId &&
+    a.senderName === b.senderName &&
+    a.messages.length === b.messages.length &&
+    a.lastMessage.id === b.lastMessage.id &&
+    a.lastMessage.replied === b.lastMessage.replied &&
+    a.lastMessage.flagReason === b.lastMessage.flagReason &&
+    a.lastMessage.resolved === b.lastMessage.resolved &&
+    a.needsHumanAttention === b.needsHumanAttention &&
+    a.pauseStatus?.paused === b.pauseStatus?.paused &&
+    !!prev.onResolve === !!next.onResolve &&
+    !!prev.onUnresolve === !!next.onUnresolve
+  );
 });

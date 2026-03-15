@@ -11,6 +11,23 @@ export type SSEEventType =
     | 'usage:updated'
     | 'heartbeat';
 
+/** Lightweight message snapshot included in SSE events for optimistic cache updates. */
+export interface SSEMessageSnapshot {
+    id: string;
+    pageId: string;
+    facebookMessageId: string;
+    senderId: string;
+    senderName: string | null;
+    message: string;
+    direction: 'incoming' | 'outgoing';
+    replied: boolean;
+    replyText: string | null;
+    replyMethod: string | null;
+    createdTime: string | Date | null;
+    repliedAt: string | Date | null;
+    createdAt: string | Date | null;
+}
+
 /** Maps each event type to its data payload */
 export interface SSEEventDataMap {
     'comment:received': {
@@ -35,12 +52,14 @@ export interface SSEEventDataMap {
         pageId: string;
         senderId: string;
         senderName: string | null;
+        message?: SSEMessageSnapshot;
     };
     'message:reply_sent': {
         messageId: string;
         pageId: string;
         replyMethod: 'template' | 'ai';
         replyText: string;
+        message?: SSEMessageSnapshot;
     };
     'message:reply_failed': {
         messageId: string;

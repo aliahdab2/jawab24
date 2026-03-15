@@ -1,13 +1,38 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
 import type { SSEEvent } from '@jawab24/shared';
+import type { Message } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
+
+/**
+ * Optimistically append a message to the conversation cache.
+ * Falls back to invalidation when the SSE event doesn't carry the full message
+ * (backward compat with older backend versions).
+ */
+function appendToConversationCache(
+    qc: QueryClient,
+    msg: Message | undefined,
+    senderId: string,
+): void {
+    if (msg) {
+        qc.setQueriesData<Message[]>(
+            { queryKey: ['conversation', senderId] },
+            (old) => {
+                if (!old) return [msg];
+                if (old.some(m => m.id === msg.id)) return old;
+                return [...old, msg];
+            },
+        );
+    } else {
+        qc.invalidateQueries({ queryKey: ['conversation'] });
+    }
+}
 
 /** Max reconnect delay in ms */
 const MAX_BACKOFF = 30_000;
@@ -114,7 +139,7 @@ export function useSSE(): void {
             const event: SSEEvent<'message:received'> = JSON.parse(e.data);
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-            queryClient.invalidateQueries({ queryKey: ['conversation'] });
+            appendToConversationCache(queryClient, event.data.message as Message | undefined, event.data.senderId);
             if (!isOnPage('/messages')) {
                 incrementUnreadMessages();
                 showToast(
@@ -128,7 +153,8 @@ export function useSSE(): void {
             const event: SSEEvent<'message:reply_sent'> = JSON.parse(e.data);
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-            queryClient.invalidateQueries({ queryKey: ['conversation'] });
+            const replyMsg = event.data.message as Message | undefined;
+            appendToConversationCache(queryClient, replyMsg, replyMsg?.senderId ?? '');
             if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
                 showToast(t('aiRepliedMessage'));
             }
