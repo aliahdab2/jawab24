@@ -510,7 +510,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
         p.id === pageId ? { ...p, autoReplyEnabled: !enabled } : p
       ));
     }
-  }, [pages, pageLimit, t]);
+  }, [pages, pageLimit, queryClient, t]);
 
   const handleChipToggle = useCallback((chipId: ChipId) => {
     setActiveChip(prev => prev === chipId ? null : chipId);
