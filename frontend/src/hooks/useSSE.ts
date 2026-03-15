@@ -114,6 +114,7 @@ export function useSSE(): void {
             const event: SSEEvent<'message:received'> = JSON.parse(e.data);
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['conversation'] });
             incrementUnreadMessages();
             if (!isOnPage('/messages')) {
                 showToast(
@@ -127,6 +128,7 @@ export function useSSE(): void {
             const event: SSEEvent<'message:reply_sent'> = JSON.parse(e.data);
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['conversation'] });
             if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
                 showToast(t('aiRepliedMessage'));
             }
@@ -135,6 +137,7 @@ export function useSSE(): void {
         es.addEventListener('message:reply_failed', () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['conversation'] });
         });
 
         // --- Usage ---
@@ -186,6 +189,7 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['conversation'] });
             queryClient.invalidateQueries({ queryKey: ['subscription-usage'] });
         }, NATIVE_POLL_INTERVAL);
     }, [queryClient, setSSEStatus]);
