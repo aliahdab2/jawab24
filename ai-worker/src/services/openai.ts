@@ -710,7 +710,9 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro
 
         // Check 4: Hedge-word inconsistency — reply uses "I'll check" / "contact us" language but confidence is high/medium
         // Uses PHRASE matching (not substring) to avoid false positives on words like "أرجعلك" in valid replies
-        if (reply && (parsed.confidence === 'high' || parsed.confidence === 'medium')) {
+        // Only applies to question-type intents — hedging on a GREETING/COMPLIMENT reply is normal (e.g., "How can I help?" to "ok")
+        const HEDGE_CHECK_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+        if (reply && HEDGE_CHECK_INTENTS.has(parsed.intent || '') && (parsed.confidence === 'high' || parsed.confidence === 'medium')) {
             const hedgePatterns = [
                 /خليني أتحقق|خلني أتحقق|سأتحقق|سأتأكد|راح أتحقق|راح أتأكد|نتأكد ونرجعلك|أتحقق.*وأرجعلك|أرجعلك.*بعد/,  // Arabic hedge phrases
                 /تواصل معنا|تواصلوا معنا|راسلنا|أرسلنا رسالة|اتصل بنا|اتصلوا بنا|خلنا نتواصل على الخاص/,  // Arabic deflection phrases

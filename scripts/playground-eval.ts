@@ -985,6 +985,60 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Multi-topic question — AI should summarize key points across topics',
     },
+
+    // ===== Category 22: Acknowledgment / Conversation Closers =====
+
+    // 22.1 — Simple "ok" should NOT trigger needsAttention
+    {
+        id: 153, category: 22, categoryName: 'Acknowledgment Closers', channel: 'dm',
+        message: 'ok',
+        page: 'training',
+        expected: {
+            intent: ['GREETING', 'COMPLIMENT', 'SPAM_OR_IRRELEVANT'],
+            needsAttention: false,
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Simple acknowledgment — AI may reply briefly but must NOT flag as needing attention',
+    },
+
+    // 22.2 — Arabic "شكرا" should NOT trigger needsAttention
+    {
+        id: 154, category: 22, categoryName: 'Acknowledgment Closers', channel: 'dm',
+        message: 'شكرا',
+        page: 'training',
+        expected: {
+            intent: ['COMPLIMENT', 'GREETING'],
+            needsAttention: false,
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Arabic thank you — polite closing, should not flag',
+    },
+
+    // 22.3 — "thanks" in English
+    {
+        id: 155, category: 22, categoryName: 'Acknowledgment Closers', channel: 'dm',
+        message: 'thanks',
+        page: 'training',
+        expected: {
+            intent: ['COMPLIMENT', 'GREETING'],
+            needsAttention: false,
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'English thank you — should not flag as needing attention',
+    },
+
+    // 22.4 — Arabic "تمام" (alright/ok)
+    {
+        id: 156, category: 22, categoryName: 'Acknowledgment Closers', channel: 'dm',
+        message: 'تمام',
+        page: 'training',
+        expected: {
+            intent: ['GREETING', 'COMPLIMENT', 'SPAM_OR_IRRELEVANT'],
+            needsAttention: false,
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Arabic acknowledgment — should not flag',
+    },
 ];
 
 // ---------------------------------------------------------------------------

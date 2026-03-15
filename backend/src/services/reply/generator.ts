@@ -34,6 +34,21 @@ export function shouldUseFallback(flagReason?: string): boolean {
     return flags.some(f => (SAFE_FALLBACK_FLAGS as readonly string[]).includes(f));
 }
 
+/** Determine if a message needs human attention based on flags and intent.
+ *  For non-question intents (GREETING, COMPLIMENT, SPAM_OR_IRRELEVANT), a low_confidence
+ *  flag alone is normal — no human review needed. Only meaningful flags (info_not_in_kb,
+ *  price_not_in_kb, etc.) or attention-worthy intents (COMPLAINT, OFFENSIVE) trigger review. */
+const QUESTION_LIKE_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+export function computeNeedsAttention(flags: string[], normalizedIntent: string | undefined): boolean {
+    const intent = normalizedIntent || '';
+    const meaningfulFlags = QUESTION_LIKE_INTENTS.has(intent)
+        ? flags.length > 0
+        : flags.some(f => f !== 'low_confidence');
+    return meaningfulFlags ||
+        intent === 'COMPLAINT' ||
+        intent === 'OFFENSIVE';
+}
+
 /** Safe fallback replies when AI hallucinates pricing */
 export const PRICE_FALLBACK: Record<string, string> = {
     ar: 'شكراً لاهتمامك! خليني أتأكد من تفاصيل الأسعار وبرجعلك بأقرب وقت.',
@@ -417,9 +432,7 @@ export class ReplyGenerator {
                 flags.push('low_confidence');
             }
         }
-        const needsAttention = flags.length > 0 ||
-            normalizedIntent === 'COMPLAINT' ||
-            normalizedIntent === 'OFFENSIVE';
+        const needsAttention = computeNeedsAttention(flags, normalizedIntent);
         const flagReason = flags.join(',') ||
             (normalizedIntent === 'COMPLAINT' ? 'complaint' : null) ||
             (normalizedIntent === 'OFFENSIVE' ? 'offensive' : null) ||

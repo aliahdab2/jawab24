@@ -185,9 +185,9 @@ describe('OpenAI Service - Structured JSON Response', () => {
         const result = await service.generateReply({ comment: 'This is terrible!' });
 
         expect(result.intent).toBe('COMPLAINT');
-        // validateReply detects "contact us" deflection → adds info_not_in_kb + downgrades confidence
+        // COMPLAINT replies with "contact us" are appropriate (not a hedge) — confidence preserved
         expect(result.flags).toEqual(expect.arrayContaining(['angry_customer']));
-        expect(result.confidence).toBe('low');
+        expect(result.confidence).toBe('high');
     });
 
     it('should parse JSON with multiple flags', async () => {
@@ -1714,6 +1714,38 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
 
         expect(result.confidence).toBe('low');
         expect(result.flags).toContain('info_not_in_kb');
+    });
+
+    it('should NOT flag hedge words in GREETING replies (e.g., reply to "ok")', async () => {
+        setupMock(JSON.stringify({
+            reply: 'How can I assist you today? Feel free to reach out!',
+            intent: 'GREETING',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'ok' });
+
+        expect(result.confidence).toBe('high');
+        expect(result.flags).not.toContain('info_not_in_kb');
+    });
+
+    it('should NOT flag hedge words in COMPLIMENT replies (e.g., reply to "thanks")', async () => {
+        setupMock(JSON.stringify({
+            reply: "You're welcome! Don't hesitate to reach out if you need anything.",
+            intent: 'COMPLIMENT',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({ comment: 'شكرا' });
+
+        expect(result.confidence).toBe('high');
+        expect(result.flags).not.toContain('info_not_in_kb');
     });
 });
 

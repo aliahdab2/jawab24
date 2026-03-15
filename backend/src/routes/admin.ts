@@ -14,7 +14,7 @@ import { OpenAIEmbeddingProvider } from '../services/kb/embedding';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { settingsService } from '../services/settings';
 import { getIngestionService } from '../services/pages';
-import { shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../services/reply/generator';
+import { shouldSkipReply, shouldUseFallback, computeNeedsAttention, PRICE_FALLBACK } from '../services/reply/generator';
 import { pickNudgeVariation } from '../services/reply/nudge';
 import { isOffensiveContent } from '../services/offensive-filter';
 import { normalizeAiIntent } from '@jawab24/shared';
@@ -1051,9 +1051,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         flags.push('low_confidence');
                     }
                 }
-                const needsAttention = flags.length > 0 ||
-                    normalizedIntent === 'COMPLAINT' ||
-                    normalizedIntent === 'OFFENSIVE';
+                const needsAttention = computeNeedsAttention(flags, normalizedIntent);
                 const skipped = shouldSkipReply(flags.join(','), normalizedIntent);
                 const useFallback = shouldUseFallback(flags.join(','));
 
