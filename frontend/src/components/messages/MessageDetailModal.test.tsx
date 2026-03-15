@@ -9,6 +9,18 @@ vi.mock('@/lib/openExternalUrl', () => ({
   openExternalUrl: vi.fn()
 }));
 
+// Mock react-query — useQuery returns conversation.messages as fallback
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({ data: undefined, isLoading: false }),
+}));
+
+// Mock messagesApi (imported by the modal for conversation fetch)
+vi.mock('@/lib/api', () => ({
+  messagesApi: {
+    getConversation: vi.fn(),
+  },
+}));
+
 // Translation mocked globally via test/setup.ts (next-intl mock returns the key as-is)
 
 // Mock useEscapeKey hook

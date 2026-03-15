@@ -114,7 +114,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const tc = useTranslations('common');
   const tTime = useTranslations('time');
   const tSub = useTranslations('subscription');
-  const tMsg = useTranslations('messages');
+
   const tPages = useTranslations('pages');
   const tPlans = useTranslations('plans');
   const { language, intlLocale } = useLanguage();
@@ -143,7 +143,7 @@ const DashboardPage: NextPageWithLayout = () => {
     isReplying,
     isPausing,
     isResuming,
-  } = useConversationActions({ extraInvalidateKeys: [['dashboard-needs-action-messages']] });
+  } = useConversationActions({ extraInvalidateKeys: [['dashboard-recent-messages']] });
 
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
   const [expandedPageId, setExpandedPageId] = useState<string | null>(null);
@@ -234,10 +234,10 @@ const DashboardPage: NextPageWithLayout = () => {
     enabled: isAuthenticated,
   });
 
-  const { data: needsActionMessages } = useQuery({
-    queryKey: ['dashboard-needs-action-messages'],
+  const { data: recentMessages } = useQuery({
+    queryKey: ['dashboard-recent-messages'],
     queryFn: async () => {
-      const res = await messagesApi.getAll({ replied: false, resolved: false, limit: 20 });
+      const res = await messagesApi.getAll({ limit: 5 });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
@@ -259,7 +259,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-analytics'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-comments'] });
-    queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-messages'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-recent-messages'] });
   }, [queryClient]);
 
   // --- Derived state (computed from query data) ---
@@ -271,14 +271,14 @@ const DashboardPage: NextPageWithLayout = () => {
 
     return {
       totalComments: stats.total,
-      repliedToday: stats.repliedToday,
+      repliedToday: (stats.repliedToday ?? 0) + (msgStats.repliedToday ?? 0),
       pendingReplies: stats.unreplied,
       needsAttention: stats.needsAttention,
       commentsNeedsAction: Math.max(0, stats.unreplied ?? 0),
       activePages,
-      aiReplies: stats.byMethod.ai,
-      templateReplies: stats.byMethod.template,
-      manualReplies: stats.byMethod.manual,
+      aiReplies: stats.byMethod.ai + (msgStats.byMethod?.ai ?? 0),
+      templateReplies: stats.byMethod.template + (msgStats.byMethod?.template ?? 0),
+      manualReplies: stats.byMethod.manual + (msgStats.byMethod?.manual ?? 0),
       totalMessages: msgStats.total,
       messagesPending: msgStats.pending,
       messagesNeedsAttention: msgStats.needsAttention ?? 0,
@@ -316,14 +316,14 @@ const DashboardPage: NextPageWithLayout = () => {
       }
     }
 
-    if (needsActionMessages) {
+    if (recentMessages) {
       // Group messages by senderId so each conversation appears once
       const grouped: Record<string, {
-        latest: typeof needsActionMessages[0];
+        latest: typeof recentMessages[0];
         earliestAt: string | Date | null;
         count: number;
       }> = {};
-      for (const m of needsActionMessages) {
+      for (const m of recentMessages) {
         const key = m.senderId || m.id; // fallback to id if no senderId
         const mDate = m.createdTime || m.createdAt || null;
         if (!grouped[key]) {
@@ -365,7 +365,7 @@ const DashboardPage: NextPageWithLayout = () => {
       return dateB - da;
     });
     return bannerItems.slice(0, 5);
-  }, [needsActionComments, needsActionMessages]);
+  }, [needsActionComments, recentMessages]);
 
   // Auto-sync if no pages found — only for existing users (onboarding already completed)
   const syncAttemptedRef = useRef(false);
@@ -474,7 +474,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const handleConversationModalClose = useCallback(() => {
     setSelectedConversation(null);
     // Refresh attention data to reflect any changes made in the modal
-    queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-messages'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-recent-messages'] });
     queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
   }, [queryClient, setSelectedConversation]);
 
@@ -564,7 +564,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
         // Determine max items to show — cap at 5, match shorter column
         const commentItems = recentComments.slice(0, 5);
-        const messageItems = (needsActionMessages ?? []).slice(0, 5);
+        const messageItems = (recentMessages ?? []).slice(0, 5);
         const maxRows = Math.min(5, Math.max(commentItems.length, messageItems.length));
 
         return (
@@ -663,7 +663,7 @@ const DashboardPage: NextPageWithLayout = () => {
               <div className="p-4 sm:p-5 border-b border-theme-border flex items-center justify-between gap-4 bg-background/50">
                 <div className="flex items-center gap-2.5">
                   <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{tMsg('title')}</h2>
+                  <h2 className="text-base font-display font-bold text-foreground tracking-tight">{t('recentMessages')}</h2>
                   {statsData.messagesNeedsAction > 0 && (
                     <span className="flex-shrink-0 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full bg-red-500 text-white">
                       {statsData.messagesNeedsAction > 99 ? '99+' : statsData.messagesNeedsAction}

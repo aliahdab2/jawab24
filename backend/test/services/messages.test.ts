@@ -540,6 +540,7 @@ describe('MessagesService', () => {
                             needsAttention: 3,
                             resolved: 0,
                             actionRequired: 23,  // 20 unreplied + 3 flagged
+                            repliedToday: 8,
                             ai: 15,
                             template: 10,
                             manual: 5,
@@ -560,6 +561,7 @@ describe('MessagesService', () => {
                 actionRequired: 23,
                 resolved: 0,
                 autoReplied: 25,
+                repliedToday: 8,
                 byMethod: { template: 10, ai: 15, manual: 5 }
             });
         });
@@ -574,6 +576,7 @@ describe('MessagesService', () => {
                             needsAttention: 0,
                             resolved: 0,
                             actionRequired: 0,
+                            repliedToday: 0,
                             ai: 0,
                             template: 0,
                             manual: 0,
@@ -594,6 +597,7 @@ describe('MessagesService', () => {
                 actionRequired: 0,
                 resolved: 0,
                 autoReplied: 0,
+                repliedToday: 0,
                 byMethod: { template: 0, ai: 0, manual: 0 }
             });
         });

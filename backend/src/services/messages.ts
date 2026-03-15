@@ -517,8 +517,12 @@ export class MessagesService {
         needsAttention: number;
         actionRequired: number;
         autoReplied: number;
+        repliedToday: number;
         byMethod: { template: number; ai: number; manual: number };
     }> {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+
         const result = await db
             .select({
                 total:          sql<number>`count(*)`,
@@ -526,6 +530,7 @@ export class MessagesService {
                 resolved:       sql<number>`count(*) FILTER (WHERE ${messages.resolved} = true)`,
                 needsAttention: sql<number>`count(*) FILTER (WHERE ${messages.needsAttention} = true AND ${messages.resolved} = false)`,
                 actionRequired: sql<number>`count(*) FILTER (WHERE ${messages.resolved} = false AND (${messages.replied} = false OR ${messages.needsAttention} = true))`,
+                repliedToday:   sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.repliedAt} >= ${todayStart})`,
                 ai:             sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} = 'manual')`,
@@ -541,7 +546,7 @@ export class MessagesService {
         const total = Number(row?.total || 0);
 
         if (total === 0) {
-            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, actionRequired: 0, autoReplied: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
+            return { total: 0, replied: 0, pending: 0, resolved: 0, needsAttention: 0, actionRequired: 0, autoReplied: 0, repliedToday: 0, byMethod: { template: 0, ai: 0, manual: 0 } };
         }
 
         const replied = Number(row?.replied || 0);
@@ -557,6 +562,7 @@ export class MessagesService {
             needsAttention: Number(row?.needsAttention || 0),
             actionRequired: Number(row?.actionRequired || 0),
             autoReplied: ai + template,
+            repliedToday: Number(row?.repliedToday || 0),
             byMethod: {
                 template,
                 ai,

@@ -1,12 +1,14 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
+import { useQuery } from '@tanstack/react-query';
 import { Badge, Button } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { messagesApi } from '@/lib/api';
 import type { Conversation } from './MessageCard';
 import {
   User,
@@ -66,8 +68,21 @@ export function MessageDetailModal({
   const tDashboard = useTranslations('dashboard');
   const tPricing = useTranslations('pricing');
 
+  // Fetch full conversation (including outgoing replies) regardless of which tab filter
+  // was used to find this conversation. Tabs control which conversations appear in the list,
+  // but the detail view always shows the complete thread.
+  const pageId = conversation.lastMessage.pageId;
+  const { data: fullMessages } = useQuery({
+    queryKey: ['conversation', conversation.senderId, pageId],
+    queryFn: async () => {
+      const res = await messagesApi.getConversation(conversation.senderId, { pageId, limit: 100 });
+      return res.data;
+    },
+  });
+  const messages = fullMessages ?? conversation.messages;
+
   // Check for held low-confidence reply and pre-fill textarea
-  const heldMessage = conversation.messages.find(
+  const heldMessage = messages.find(
     m => m.direction === 'incoming' && !m.replied && !!m.aiOriginalReply && m.flagReason?.includes('held_low_confidence')
   );
   const [replyText, setReplyText] = useState(heldMessage?.aiOriginalReply || '');
@@ -76,7 +91,7 @@ export function MessageDetailModal({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewMessage, setHasNewMessage] = useState(false);
-  const prevMessageCountRef = useRef(conversation.messages.length);
+  const prevMessageCountRef = useRef(messages.length);
 
   useEscapeKey(() => onClose(), true);
   useBodyScrollLock(true);
@@ -107,7 +122,7 @@ export function MessageDetailModal({
 
   // When new messages arrive: auto-scroll if near bottom, otherwise show indicator
   useEffect(() => {
-    const currentCount = conversation.messages.length;
+    const currentCount = messages.length;
     if (currentCount > prevMessageCountRef.current) {
       if (isNearBottom) {
         requestAnimationFrame(() => scrollToBottom('smooth'));
@@ -116,7 +131,7 @@ export function MessageDetailModal({
       }
     }
     prevMessageCountRef.current = currentCount;
-  }, [conversation.messages.length, isNearBottom, scrollToBottom]);
+  }, [messages.length, isNearBottom, scrollToBottom]);
 
   // Track scroll position
   const handleScroll = useCallback(() => {
@@ -133,15 +148,15 @@ export function MessageDetailModal({
   }, [generatedReply]);
 
   const sortedMessages = useMemo(() => {
-    return [...conversation.messages].sort((a, b) => {
+    return [...messages].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return dateA - dateB;
     });
-  }, [conversation.messages]);
+  }, [messages]);
 
   const getReplyTargetMessageId = (): string | null => {
-    const incoming = conversation.messages
+    const incoming = messages
       .filter(m => m.direction === 'incoming')
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const unreplied = incoming.find(m => !m.replied);
@@ -177,7 +192,7 @@ export function MessageDetailModal({
     });
   };
 
-  const hasUnrepliedIncoming = conversation.messages.some(
+  const hasUnrepliedIncoming = messages.some(
     m => m.direction === 'incoming' && !m.replied
   );
 
@@ -203,12 +218,11 @@ export function MessageDetailModal({
     }
   };
 
-  const pageId = conversation.lastMessage.pageId;
   const isPaused = conversation.pauseStatus?.paused;
-  const hasUnresolvedUnreplied = conversation.messages.some(
+  const hasUnresolvedUnreplied = messages.some(
     m => m.direction === 'incoming' && !m.replied && !m.resolved
   );
-  const hasResolvedIncoming = conversation.messages.some(
+  const hasResolvedIncoming = messages.some(
     m => m.direction === 'incoming' && !!m.resolved
   );
 
@@ -245,7 +259,7 @@ export function MessageDetailModal({
               </h2>
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-start">
-                  {t('msgCount', { count: conversation.messages.filter(m => m.direction === 'incoming').length })}
+                  {t('msgCount', { count: messages.filter(m => m.direction === 'incoming').length })}
                 </span>
                 {conversation.needsHumanAttention && (
                   <Badge variant="warning" size="sm">
