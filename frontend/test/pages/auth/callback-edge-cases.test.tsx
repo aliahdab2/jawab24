@@ -338,6 +338,38 @@ describe('AuthCallback - edge cases', () => {
     });
   });
 
+  // ─── Locale redirect must not interfere ─────────────────
+  it('should exchange code exactly once even if store locale differs from URL', async () => {
+    // Simulates: user was on English, switches to Arabic landing, logs in.
+    // The auth callback loads at /auth/callback (default locale = 'ar')
+    // but the store might still have 'en'. The _app.tsx sync effect must NOT
+    // redirect /auth/callback to /en/auth/callback — that would reload the
+    // page and cause a second code exchange (Facebook codes are single-use).
+    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+      query: { code: 'single-use-code', state: encodeURIComponent('/dashboard|web|ar') },
+      isReady: true,
+      push: mockPush,
+      replace: mockReplace,
+      pathname: '/auth/callback',
+      asPath: '/auth/callback?code=single-use-code',
+      locale: 'ar',
+    });
+
+    fetchMock.mockResolvedValue(successResponse());
+
+    await act(async () => {
+      render(<AuthCallback />);
+    });
+
+    await waitFor(() => {
+      // Auth exchange endpoint should be called exactly once
+      const authCalls = fetchMock.mock.calls.filter((c: string[]) =>
+        c[0]?.includes('/auth/facebook')
+      );
+      expect(authCalls).toHaveLength(1);
+    });
+  });
+
   // ─── AbortError suppressed ───────────────────────────────
   it('should not show error when request is aborted (navigation)', async () => {
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({

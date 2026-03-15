@@ -122,17 +122,20 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   // We intentionally do NOT overwrite the store from the URL — all language
   // changes go through useLanguage().setLanguage() which syncs both store
   // and router atomically. Overwriting the store here would fight the toggle.
+  // IMPORTANT: Never redirect auth callback — it has single-use OAuth codes
+  // that would break if the page reloads mid-exchange.
+  const pathname = routerRef.current.pathname;
   useEffect(() => {
     if (!locale || !hasHydrated) return;
 
-    if (storeLanguage !== locale && isDefaultLocale(locale)) {
+    if (storeLanguage !== locale && isDefaultLocale(locale) && !pathname.startsWith('/auth/')) {
       routerRef.current.replace(routerRef.current.pathname, routerRef.current.asPath, { locale: storeLanguage });
       return;
     }
 
     document.documentElement.dir = getLocaleDirection(locale);
     document.documentElement.lang = locale;
-  }, [locale, storeLanguage, hasHydrated]);
+  }, [locale, storeLanguage, hasHydrated, pathname]);
 
   // Native platform initialization (only runs on mobile)
   useEffect(() => {
