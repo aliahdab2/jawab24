@@ -9,15 +9,25 @@
 
 ## Recording Rules (from Meta Screen Recording Guide)
 
-- No audio
+- No audio — use text captions only
 - English UI (`/en/` URLs)
-- 1080p resolution, max 1440px width
+- 1920×1080 resolution
 - Large cursor, mouse clicks only (no keyboard shortcuts)
 - Start logged out
 - Show complete login flow
-- Add text captions/tooltips explaining each step
+- Add text captions explaining each step (no API endpoints in captions)
+- Pause 2–3 seconds on permission dialog
+- Pause 3–4 seconds on dashboard screens
+- One video per permission (do NOT combine permissions)
 - Record with QuickTime Player (Show Mouse Clicks enabled)
 - Add captions in iMovie or CapCut after recording
+
+### What NOT to do in videos
+
+- Do NOT show API endpoints (e.g., `POST /{page-id}/subscribed_apps`) in captions
+- Do NOT mention permission dependencies in submission text
+- Do NOT show Facebook settings pages (Business Integrations, etc.)
+- Do NOT combine multiple permissions in one video
 
 ---
 
@@ -38,26 +48,18 @@ This allows the user to:
 - Connect or reconnect a Page through Meta authorization
 - Manage automation settings for connected Pages, such as enabling or disabling automatic replies
 
-The screencast demonstrates:
-
-1. The user logging in with Facebook from Jawab24
-2. Meta requesting permission including "Show a list of the Pages you manage" (pages_show_list)
-3. The user granting the permission
-4. The user being redirected back to Jawab24
-5. Jawab24 displaying the user's Pages in the My Pages dashboard where they can be connected or managed
-
 ### Screencast Scenes
 
-| Scene | Action                                   | Caption                                                                            |
-| ----- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
-| 1     | Show `jawab24.com/en/login` (logged out) | _"User visits Jawab24 login page"_                                                 |
-| 2     | Click "Login with Facebook"              | _"User clicks Login with Facebook"_                                                |
-| 3     | Enter credentials on Facebook            | _"User authenticates with their Facebook account"_                                 |
-| 4     | Permission dialog — zoom in              | _"Facebook requests permission to access the user's Pages list (pages_show_list)"_ |
-| 5     | Click Continue/Allow                     | _"User grants permission"_                                                         |
-| 6     | Pages list loads in onboarding           | _"Jawab24 retrieves and displays all Pages the user manages"_                      |
-| 7     | User selects Pages to connect            | _"User selects which Pages to connect for automatic replies"_                      |
-| 8     | Navigate to `/en/pages`                  | _"Connected Pages displayed in the Pages management dashboard"_                    |
+| Scene | Action                                   | Caption                                                             |
+| ----- | ---------------------------------------- | ------------------------------------------------------------------- |
+| 1     | Show `jawab24.com/en/login` (logged out) | _"User visits Jawab24 login page"_                                  |
+| 2     | Click "Login with Facebook"              | _"User clicks Login with Facebook"_                                 |
+| 3     | Enter credentials on Facebook            | _"User authenticates with their Facebook account"_                  |
+| 4     | Permission dialog — zoom in (pause 3s)   | _"Facebook requests permission to access the user's Pages list"_    |
+| 5     | Click Continue/Allow                     | _"User grants permission"_                                          |
+| 6     | Pages list loads in onboarding           | _"Jawab24 retrieves and displays all Pages the user manages"_       |
+| 7     | User selects Pages to connect            | _"User selects which Pages to connect for automatic replies"_       |
+| 8     | Navigate to `/en/pages` (pause 4s)       | _"Connected Pages displayed in the Pages management dashboard"_     |
 
 ---
 
@@ -67,37 +69,27 @@ The screencast demonstrates:
 
 ### Submission Text
 
-Jawab24 uses the pages_manage_metadata permission to subscribe connected Facebook Pages to webhook events via the /PAGE_ID/subscribed_apps endpoint.
+Jawab24 uses the pages_manage_metadata permission to allow users to connect and manage their Facebook Pages inside the Jawab24 dashboard.
 
-When a user connects a Facebook Page through Jawab24, the app subscribes the Page to receive real-time webhook notifications for new comments and messages. This is required so that Facebook delivers instant notifications to Jawab24, enabling automatic replies.
+When a user connects a Facebook Page through Jawab24, the app subscribes the Page to receive real-time events such as comments and messages. The connected Page then appears in the Pages dashboard where the user can manage automation settings.
 
-This allows the user to:
+This enables:
 
-- Connect a Page and have it automatically subscribed to webhook events
-- Receive real-time notifications when customers comment on posts or send messages
-- Ensure automatic replies are triggered instantly without manual polling
-
-The screencast demonstrates:
-
-1. The user logging in with Facebook from Jawab24
-2. Meta requesting the pages_manage_metadata permission
-3. The user granting the permission
-4. The user selecting a Page to connect
-5. Jawab24 subscribing the Page to webhook events (Page shows as "Connected")
-6. A real-time notification arriving in the dashboard (message or comment)
+- Connecting a Facebook Page to Jawab24
+- Receiving real-time notifications when customers comment on posts or send messages
+- Managing the Page connection and automation settings from the dashboard
 
 ### Screencast Scenes
 
-| Scene | Action                                          | Caption                                                                                                                                      |
-| ----- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | Show `jawab24.com/en/login` (logged out)        | _"User visits Jawab24 login page"_                                                                                                           |
-| 2     | Click "Login with Facebook"                     | _"User clicks Login with Facebook"_                                                                                                          |
-| 3     | Enter credentials on Facebook                   | _"User authenticates with their Facebook account"_                                                                                           |
-| 4     | Permission dialog — zoom in                     | _"Facebook requests permission to manage Page metadata (pages_manage_metadata)"_                                                             |
-| 5     | Click Continue/Allow                            | _"User grants permission"_                                                                                                                   |
-| 6     | Select a Page and connect it                    | _"User selects a Page to connect"_                                                                                                           |
-| 7     | Show Page as "Connected" in `/en/pages`         | _"Jawab24 subscribes the Page to webhook events via /PAGE_ID/subscribed_apps — Page is now connected and receiving real-time notifications"_ |
-| 8     | (Optional) Show a message arriving in real-time | _"Real-time webhook notification received"_                                                                                                  |
+| Scene | Action                                        | Caption                                                                                         |
+| ----- | --------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| 1     | Show `jawab24.com/en/login` (logged out)      | _"User visits Jawab24 login page"_                                                              |
+| 2     | Click "Login with Facebook"                   | _"User clicks Login with Facebook"_                                                             |
+| 3     | Enter credentials on Facebook                 | _"User authenticates with their Facebook account"_                                              |
+| 4     | Permission dialog — zoom in (pause 3s)        | _"Facebook requests permission to manage Page metadata"_                                        |
+| 5     | Click Continue/Allow                          | _"User grants permission"_                                                                      |
+| 6     | Select a Page and connect it                  | _"User selects a Page to connect"_                                                              |
+| 7     | Show Page as "Connected" in `/en/pages` (4s)  | _"The selected Facebook Page is now connected and managed in the Jawab24 dashboard"_            |
 
 ---
 
@@ -130,28 +122,19 @@ This allows Page owners to:
 - View all comments and replies in a centralized dashboard
 - Automatically respond to comments using AI-generated or template-based replies
 
-The screencast demonstrates:
-
-1. The user logging in with Facebook
-2. Meta requesting the pages_read_engagement permission
-3. The user granting permission
-4. A customer posting a comment on a Facebook Page post
-5. Jawab24 receiving and displaying the comment in the dashboard
-6. Jawab24 generating an automatic reply
-
 ### Screencast Scenes
 
-| Scene | Action                                                           | Caption                                                                      |
-| ----- | ---------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| 1     | Show `jawab24.com/en/login` (logged out)                         | _"User visits Jawab24 login page"_                                           |
-| 2     | Click "Login with Facebook"                                      | _"User clicks Login with Facebook"_                                          |
-| 3     | Enter credentials on Facebook                                    | _"User authenticates with their Facebook account"_                           |
-| 4     | Permission dialog — zoom in on "Read content posted on the Page" | _"Facebook requests the pages_read_engagement permission"_ (pause 2 seconds) |
-| 5     | Click Continue/Save                                              | _"User grants permission"_                                                   |
-| 6     | Show Page connected in Jawab24                                   | _"The Facebook Page is connected to Jawab24"_                                |
-| 7     | Switch to Facebook — post a comment from the tester account      | _"A customer comments on a post on the Facebook Page"_                       |
-| 8     | Switch to Jawab24 → `/en/comments` — comment appears             | _"Jawab24 receives the new comment and displays it in the dashboard"_        |
-| 9     | Show reply generation                                            | _"Jawab24 reads the comment and generates an automatic reply"_               |
+| Scene | Action                                                           | Caption                                                               |
+| ----- | ---------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 1     | Show `jawab24.com/en/login` (logged out)                         | _"User visits Jawab24 login page"_                                    |
+| 2     | Click "Login with Facebook"                                      | _"User clicks Login with Facebook"_                                   |
+| 3     | Enter credentials on Facebook                                    | _"User authenticates with their Facebook account"_                    |
+| 4     | Permission dialog — zoom in (pause 3s)                           | _"Facebook requests permission to read Page engagement"_              |
+| 5     | Click Continue/Save                                              | _"User grants permission"_                                            |
+| 6     | Show Page connected in Jawab24 (pause 4s)                        | _"The Facebook Page is connected to Jawab24"_                         |
+| 7     | Switch to Facebook — post a comment from the tester account      | _"A customer comments on a post on the Facebook Page"_                |
+| 8     | Switch to Jawab24 → `/en/comments` — comment appears             | _"Jawab24 receives the new comment and displays it in the dashboard"_ |
+| 9     | Show reply generation (pause 4s)                                 | _"Jawab24 reads the comment and generates an automatic reply"_        |
 
 ### Key: You MUST show the comment being created on Facebook, then appearing in Jawab24. Without this, reviewers reject.
 
@@ -173,39 +156,30 @@ You MUST show the reply appearing in **Messenger** (the native client).
 
 Jawab24 uses the pages_messaging permission to send automatic replies to customers who message a connected Facebook Page via Messenger.
 
-When a customer sends a message to a connected Page, Jawab24 receives a webhook notification, generates an AI-powered or template-based reply, and sends it back through the Page's Messenger using the Send API. Page owners can also configure greeting messages for new conversations and away messages for when auto-reply is inactive.
+When a customer sends a message to a connected Page, the message appears in the Jawab24 dashboard and the system generates an automatic reply based on configured AI or template rules. The reply is sent back to the customer through Messenger.
 
-This allows the user to:
+This permission enables:
 
-- Automatically reply to customer messages on Messenger
-- Configure greeting messages for first-time customers
-- Set away messages for off-hours
-- View all conversations in the Jawab24 Messages dashboard
+- Automatic AI-powered replies to customer messages 24/7
+- Greeting messages for first-time customers
+- Away messages when auto-reply is inactive (outside business hours)
 
-The screencast demonstrates:
-
-1. The user logging in with Facebook from Jawab24
-2. Meta requesting the pages_messaging permission
-3. The user granting permission
-4. The connected Page visible in the dashboard
-5. A customer sending a message via Messenger
-6. Jawab24 receiving the message and generating an automatic reply
-7. The reply appearing in Messenger (native client)
+The app only responds to customer-initiated conversations. Jawab24 does not send unsolicited messages or promotional content.
 
 ### Screencast Scenes
 
-| Scene | Action                                                              | Caption                                                                    |
-| ----- | ------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| 1     | Show `jawab24.com/en/login` (logged out)                            | _"User visits Jawab24 login page"_                                         |
-| 2     | Click "Login with Facebook"                                         | _"User clicks Login with Facebook"_                                        |
-| 3     | Enter credentials on Facebook                                       | _"User authenticates with their Facebook account"_                         |
-| 4     | Permission dialog — zoom in                                         | _"Facebook requests permission to manage Page messages (pages_messaging)"_ |
-| 5     | Click Continue/Allow                                                | _"User grants permission"_                                                 |
-| 6     | Show connected Page in `/en/pages`                                  | _"The Jawab24 Facebook Page is connected"_                                 |
-| 7     | Open Messenger (other browser/incognito) — send message to the Page | _"A customer sends a message to the Page via Messenger"_                   |
-| 8     | Switch to Jawab24 → `/en/messages` — message appears                | _"Jawab24 receives the message via webhook"_                               |
-| 9     | Show auto-reply generated                                           | _"Jawab24 generates an automatic reply and sends it via the Send API"_     |
-| 10    | Switch to Messenger — show reply received                           | _"The automatic reply appears in Messenger (native client)"_               |
+| Scene | Action                                                              | Caption                                                                 |
+| ----- | ------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| 1     | Show `jawab24.com/en/login` (logged out)                            | _"User visits Jawab24 login page"_                                      |
+| 2     | Click "Login with Facebook"                                         | _"User clicks Login with Facebook"_                                     |
+| 3     | Enter credentials on Facebook                                       | _"User authenticates with their Facebook account"_                      |
+| 4     | Permission dialog — zoom in (pause 3s)                              | _"Facebook requests permission to manage Page messages"_                |
+| 5     | Click Continue/Allow                                                | _"User grants permission"_                                              |
+| 6     | Show connected Page in `/en/pages` (pause 4s)                       | _"The Jawab24 Facebook Page is connected"_                              |
+| 7     | Open Messenger (other browser/incognito) — send message to the Page | _"A customer sends a message to the Page via Messenger"_                |
+| 8     | Switch to Jawab24 → `/en/messages` — message appears                | _"Jawab24 receives the message and displays it in the dashboard"_       |
+| 9     | Show auto-reply generated (pause 4s)                                | _"Jawab24 generates an automatic reply and sends it to the customer"_   |
+| 10    | Switch to Messenger — show reply received (pause 4s)                | _"The automatic reply appears in Messenger"_                            |
 
 ### Key: You MUST show the reply in the native Messenger client. This is what the reviewer specifically asked for.
 

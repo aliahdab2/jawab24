@@ -92,7 +92,12 @@ export function MessageDetailModal({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewMessage, setHasNewMessage] = useState(false);
-  const prevMessageCountRef = useRef(messages.length);
+  // Track message count from the canonical source (fullMessages when available,
+  // conversation.messages as fallback). This prevents the parent's live-sync
+  // from bumping the ref before fullMessages refetches, which would suppress
+  // the new-message indicator.
+  const canonicalCount = fullMessages?.length ?? conversation.messages.length;
+  const prevMessageCountRef = useRef(canonicalCount);
   // Track the count of messages when the modal first loaded full data,
   // so newly arrived messages get an entrance animation.
   // Inline ref write (not useEffect) — must be synchronous so the very first
@@ -135,8 +140,7 @@ export function MessageDetailModal({
   const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
   useEffect(() => {
-    const currentCount = messages.length;
-    if (currentCount > prevMessageCountRef.current) {
+    if (canonicalCount > prevMessageCountRef.current) {
       if (isNearBottom) {
         requestAnimationFrame(() => scrollToBottom('smooth'));
         // Brief flash of the indicator so the user notices
@@ -147,8 +151,8 @@ export function MessageDetailModal({
         setHasNewMessage(true);
       }
     }
-    prevMessageCountRef.current = currentCount;
-  }, [messages.length, isNearBottom, scrollToBottom]);
+    prevMessageCountRef.current = canonicalCount;
+  }, [canonicalCount, isNearBottom, scrollToBottom]);
 
   // Track scroll position
   const handleScroll = useCallback(() => {
