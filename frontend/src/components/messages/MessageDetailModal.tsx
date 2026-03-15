@@ -130,12 +130,19 @@ export function MessageDetailModal({
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When new messages arrive: auto-scroll if near bottom, otherwise show indicator
+  // When new messages arrive: auto-scroll if near bottom, otherwise show indicator.
+  // Flash the "New message" button briefly (2s) even when auto-scrolling as a visual cue.
+  const flashTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (flashTimerRef.current) clearTimeout(flashTimerRef.current); }, []);
   useEffect(() => {
     const currentCount = messages.length;
     if (currentCount > prevMessageCountRef.current) {
       if (isNearBottom) {
         requestAnimationFrame(() => scrollToBottom('smooth'));
+        // Brief flash of the indicator so the user notices
+        setHasNewMessage(true);
+        if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = setTimeout(() => setHasNewMessage(false), 2000);
       } else {
         setHasNewMessage(true);
       }
