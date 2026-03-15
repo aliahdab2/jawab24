@@ -163,7 +163,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryKey: ['messages-stats'],
     queryFn: async () => {
       const res = await messagesApi.getStats();
-      return res.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
+      return res.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
     },
     enabled: isAuthenticated,
   });
@@ -266,7 +266,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
   const statsData = useMemo(() => {
     const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0 } };
-    const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
+    const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
     const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled).length;
 
     return {
