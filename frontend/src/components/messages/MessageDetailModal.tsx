@@ -79,6 +79,9 @@ export function MessageDetailModal({
       const res = await messagesApi.getConversation(conversation.senderId, { pageId, limit: 100 });
       return res.data;
     },
+    // Override the global 5-minute staleTime so SSE invalidation
+    // triggers an immediate refetch instead of serving cached data.
+    staleTime: 0,
   });
   // Use whichever source has more messages — fullMessages (from dedicated query)
   // or conversation.messages (from parent live-sync). This ensures new messages
