@@ -21,7 +21,6 @@ import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useSSE, useTheme } from '@/hooks';
 import { getLocaleDirection, getOGLocale, getOGAlternateLocales, isDefaultLocale } from '@/utils/locale';
-import type { Language } from '@/i18n';
 
 /**
  * Type for pages with persistent layouts
@@ -117,22 +116,18 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     }
   }, []); // Empty deps = runs once on mount
 
-  // Sync Next.js locale with language store (bidirectional)
-  // - Default locale URL + store disagrees → redirect to store's locale (store wins)
-  //   This handles: returning user, post-login redirect, store rehydration
-  // - Explicit locale URL (/en/...) + store disagrees → update store (URL wins)
-  //   This handles: direct URL navigation, language toggle, shared links
+  // Sync Next.js locale with language store
+  // Only redirects when on the default locale URL but store says otherwise.
+  // This handles: returning user, post-login redirect, store rehydration.
+  // We intentionally do NOT overwrite the store from the URL — all language
+  // changes go through useLanguage().setLanguage() which syncs both store
+  // and router atomically. Overwriting the store here would fight the toggle.
   useEffect(() => {
     if (!locale || !hasHydrated) return;
 
-    if (storeLanguage !== locale) {
-      if (isDefaultLocale(locale)) {
-        // User is on default locale URL but store says different — redirect
-        routerRef.current.replace(routerRef.current.pathname, routerRef.current.asPath, { locale: storeLanguage });
-        return;
-      }
-      // User explicitly navigated to a non-default locale URL — sync store
-      useUIStore.getState().setLanguage(locale as Language);
+    if (storeLanguage !== locale && isDefaultLocale(locale)) {
+      routerRef.current.replace(routerRef.current.pathname, routerRef.current.asPath, { locale: storeLanguage });
+      return;
     }
 
     document.documentElement.dir = getLocaleDirection(locale);
