@@ -7,6 +7,7 @@ import { Loader2, Mail, CheckCircle2, AlertCircle, Shield, Lock } from 'lucide-r
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
+import { isRTLLocale } from '@/utils/locale';
 
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -16,7 +17,7 @@ export default function CompleteProfilePage() {
   const t = useTranslations('profile');
   const tc = useTranslations('common');
   const locale = useLocale();
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
   const { user, setAuth, _hasHydrated } = useAuthStore();
   
   const [email, setEmail] = useState('');

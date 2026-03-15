@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { isRTLLocale } from '@/utils/locale';
 
 interface BrandLogoProps extends React.ImgHTMLAttributes<HTMLImageElement> {
     variant?: 'main' | 'small' | 'large' | 'vector';
@@ -20,13 +21,12 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     ...props
 }) => {
     const locale = useLocale();
-    // Reversed: English uses RTL version, Arabic uses standard
-    const shouldUseRtlVersion = locale === 'en';
+    const shouldUseRtlVersion = isRTLLocale(locale);
 
     // Determine the correct source
     let src = BRAND_ASSETS.logo[variant];
 
-    // Specific logic for 'main' variant - English gets RTL version
+    // RTL locales get the mirrored logo for correct visual alignment
     if (variant === 'main' && shouldUseRtlVersion && BRAND_ASSETS.logo.mainRtl) {
         src = BRAND_ASSETS.logo.mainRtl;
     }

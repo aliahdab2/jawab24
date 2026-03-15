@@ -6,6 +6,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { BrandLogo, Button, VersionBadge } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { getNextLocale } from '@/utils/locale';
 
 /**
  * PublicLayout - Unified layout for all public-facing pages
@@ -49,7 +50,7 @@ export function PublicLayout({
   const { isAuthenticated } = useAuthStore();
 
   const toggleLanguage = () => {
-    setLanguage(locale === 'ar' ? 'en' : 'ar');
+    setLanguage(getNextLocale(locale));
   };
 
   const pageTitle = title ? `${title} | ${BRAND_ASSETS.meta.appName}` : BRAND_ASSETS.meta.appTitle;

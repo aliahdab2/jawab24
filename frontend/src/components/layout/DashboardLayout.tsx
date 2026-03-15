@@ -18,6 +18,7 @@ import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { isRTLLocale, getNextLocale } from '@/utils/locale';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -35,7 +36,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const tLogout = useTranslations('logout');
   const locale = useLocale();
   const { setLanguage } = useLanguage();
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
   const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
   const { sidebarOpen, isOnboardingVisible } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
@@ -49,7 +50,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   useEscapeKey(() => setMobileMenuOpen(false), mobileMenuOpen && !showLogoutCheck);
 
   const toggleLanguage = () => {
-    const newLang = locale === 'ar' ? 'en' : 'ar';
+    const newLang = getNextLocale(locale);
     setLanguage(newLang);
   };
 

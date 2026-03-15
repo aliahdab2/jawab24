@@ -958,6 +958,9 @@ return (
 | Hardcoded strings | Use `t('key')` |
 | **Language conditionals for text** | **Use `t('key')` NOT `locale === 'ar' ? ... : ...`** |
 | `locale === 'ar'` for RTL detection | Use `isRTLLocale(locale)` from `@/utils/locale` — extensible, works for all RTL locales |
+| `locale === 'ar' ? 'en' : 'ar'` for language toggle | Use `getNextLocale(locale)` from `@/utils/locale` — single place to update when adding languages |
+| `locale === 'ar' ? '' : '/${locale}'` for URL path | Use `getLocalePath(locale)` from `@/utils/locale` — handles default locale prefix |
+| `locale === 'ar' ? 'rtl' : 'ltr'` for direction | Use `getLocaleDirection(locale)` from `@/utils/locale` — works for all RTL locales |
 | Adding `dir` to normal page containers | Don't — they inherit from `<html dir>` in `_document.tsx`. Only add `dir` to portal/overlay components |
 | Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
 | Ignoring landscape mode | Test both orientations, use `landscape:` |

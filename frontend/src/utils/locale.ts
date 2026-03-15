@@ -5,3 +5,48 @@ const RTL_LOCALES = new Set(['ar', 'he', 'fa', 'ur']);
 export function isRTLLocale(locale: string): boolean {
   return RTL_LOCALES.has(locale);
 }
+
+/** The default locale (no URL prefix in Next.js routing). */
+export const DEFAULT_LOCALE = 'ar';
+
+/** All supported locales. Must match next.config.js i18n.locales. */
+export const SUPPORTED_LOCALES: readonly string[] = ['ar', 'en'] as const;
+
+/** Returns true if this is the default locale (no URL prefix). */
+export function isDefaultLocale(locale: string): boolean {
+  return locale === DEFAULT_LOCALE;
+}
+
+/** Returns the URL path prefix for a locale. Default locale gets '', others get '/en', '/fr', etc. */
+export function getLocalePath(locale: string): string {
+  return isDefaultLocale(locale) ? '' : `/${locale}`;
+}
+
+/** Get the text direction for a locale. */
+export function getLocaleDirection(locale: string): 'rtl' | 'ltr' {
+  return isRTLLocale(locale) ? 'rtl' : 'ltr';
+}
+
+/** Cycle to the next supported locale. Single place to update when adding languages. */
+export function getNextLocale(current: string): string {
+  const idx = SUPPORTED_LOCALES.indexOf(current);
+  return SUPPORTED_LOCALES[(idx + 1) % SUPPORTED_LOCALES.length];
+}
+
+/** Open Graph locale mapping. */
+const OG_LOCALE_MAP: Record<string, string> = {
+  ar: 'ar_SA',
+  en: 'en_US',
+};
+
+/** Get the OG locale string for a locale. */
+export function getOGLocale(locale: string): string {
+  return OG_LOCALE_MAP[locale] ?? 'en_US';
+}
+
+/** Get all OG alternate locales (all supported except the current). */
+export function getOGAlternateLocales(locale: string): string[] {
+  return SUPPORTED_LOCALES
+    .filter(l => l !== locale)
+    .map(l => OG_LOCALE_MAP[l] ?? 'en_US');
+}

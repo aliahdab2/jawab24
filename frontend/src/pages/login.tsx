@@ -22,6 +22,7 @@ import { FB_CALLBACK_PATH } from '@/constants/auth';
 
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
+import { getNextLocale, getLocalePath } from '@/utils/locale';
 import { DemoLoginButton } from '@/features/demo';
 
 export default function LoginPage() {
@@ -85,7 +86,7 @@ export default function LoginPage() {
 
         const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
         const normalizedOrigin = siteUrl.replace(/\/$/, '');
-        const localePath = locale === 'ar' ? '' : `/${locale}`;
+        const localePath = getLocalePath(locale);
         const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
         const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
@@ -105,7 +106,7 @@ export default function LoginPage() {
       // --- WEB BROWSER LOGIN FLOW ---
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
-      const localePath = locale === 'ar' ? '' : `/${locale}`;
+      const localePath = getLocalePath(locale);
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
@@ -122,7 +123,7 @@ export default function LoginPage() {
   }
 
   const toggleLanguage = () => {
-    setLanguage(locale === 'ar' ? 'en' : 'ar');
+    setLanguage(getNextLocale(locale));
   };
 
   const features = [

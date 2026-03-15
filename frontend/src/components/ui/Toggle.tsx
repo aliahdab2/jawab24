@@ -1,5 +1,6 @@
 import clsx from 'clsx';
 import { useLocale } from 'next-intl';
+import { isRTLLocale } from '@/utils/locale';
 
 interface ToggleProps {
   enabled: boolean;
@@ -11,7 +12,7 @@ interface ToggleProps {
 
 export function Toggle({ enabled, onChange, disabled = false, size = 'md', 'aria-label': ariaLabel }: ToggleProps) {
   const locale = useLocale();
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
   
   const sizeClasses = {
     sm: {

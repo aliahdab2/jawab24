@@ -1,16 +1,13 @@
 import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/router';
 import { useAuthStore } from '@/lib/store';
-import { useLocale } from 'next-intl';
 import { AppSkeleton } from '@/components/ui';
 
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
-  const locale = useLocale();
-  const isRTL = locale === 'ar';
   const [mounted, setMounted] = useState(false);
-  
+
   // Use ref for router to avoid dependency issues
   const routerRef = useRef(router);
   routerRef.current = router;
@@ -19,14 +16,6 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  // Update document direction
-  useEffect(() => {
-    if (mounted) {
-      document.documentElement.dir = isRTL ? 'rtl' : 'ltr';
-      document.documentElement.lang = isRTL ? 'ar' : 'en';
-    }
-  }, [isRTL, mounted]);
 
   useEffect(() => {
     // Wait for both mounting and hydration before redirecting

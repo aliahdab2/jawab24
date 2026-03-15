@@ -6,6 +6,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { Button, BrandLogo } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { isRTLLocale, getNextLocale } from '@/utils/locale';
 import { motion, MotionConfig, useInView } from 'framer-motion';
 import {
   LandingHero,
@@ -61,11 +62,11 @@ export default function LandingPage() {
   useEffect(() => { setMounted(true); }, []);
   const isAuthenticated = mounted ? useAuthStore.getState().isAuthenticated : false;
 
-  const isRTL = locale === 'ar';
+  const isRTL = isRTLLocale(locale);
   const dir = isRTL ? 'rtl' : 'ltr';
 
   const toggleLanguage = () => {
-    setLanguage(locale === 'ar' ? 'en' : 'ar');
+    setLanguage(getNextLocale(locale));
   };
 
   const faqs = [

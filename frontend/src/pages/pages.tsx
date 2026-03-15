@@ -26,6 +26,7 @@ import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
 import { captureError } from '@/lib/sentryHelpers';
+import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/formatConnectedDate';
 import type { NextPageWithLayout } from './_app';
 
@@ -134,7 +135,7 @@ const PagesPage: NextPageWithLayout = () => {
       // Web/iOS: open Facebook OAuth with auth_type=rerequest to force page selection dialog
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
-      const localePath = language === 'ar' ? '' : `/${language}`;
+      const localePath = getLocalePath(language);
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages');

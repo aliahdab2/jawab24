@@ -6,6 +6,7 @@ import { Shield, Users, ArrowLeft, FlaskConical, Bell } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import clsx from 'clsx';
+import { isRTLLocale } from '@/utils/locale';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -27,7 +28,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
     const tAdmin = useTranslations('admin');
     const tc = useTranslations('common');
     const locale = useLocale();
-    const isRTL = locale === 'ar';
+    const isRTL = isRTLLocale(locale);
     const { user, isAuthenticated, _hasHydrated } = useAuthStore();
     const [mounted, setMounted] = useState(false);
 

@@ -10,7 +10,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { AppShell } from '@/components/layout/AppShell';
 import { useUIStore, useAuthStore } from '@/lib/store';
-import type { Language } from '@/i18n';
 import { useTranslations } from 'next-intl';
 import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { Toaster } from 'sonner';
@@ -21,6 +20,8 @@ import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useSSE, useTheme } from '@/hooks';
+import { getLocaleDirection, getOGLocale, getOGAlternateLocales, isDefaultLocale } from '@/utils/locale';
+import type { Language } from '@/i18n';
 
 /**
  * Type for pages with persistent layouts
@@ -48,12 +49,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   // Use ref for listeners to handle cleanup
   const listenersRef = useRef<(() => void)[]>([]);
 
-  // Memoize setLanguage to ensure stable reference
-  const setLanguageStore = useUIStore((state) => state.setLanguage);
-  const setLanguage = useCallback((lang: Language) => {
-    setLanguageStore(lang);
-  }, [setLanguageStore]);
-
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
@@ -71,6 +66,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   const uiHasHydrated = useUIStore((state) => state._hasHydrated);
   const authHasHydrated = useAuthStore((state) => state._hasHydrated);
   const hasHydrated = uiHasHydrated && authHasHydrated;
+
+  // Store language — used by locale sync effect and effectiveLocale
+  const storeLanguage = useUIStore((s) => s.language);
 
   // Add is-native class IMMEDIATELY on first render (before hydration completes)
   // This ensures CSS safe area rules apply from the start
@@ -119,25 +117,27 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     }
   }, []); // Empty deps = runs once on mount
 
-  // Sync Next.js locale with language store
+  // Sync Next.js locale with language store (bidirectional)
+  // - Default locale URL + store disagrees → redirect to store's locale (store wins)
+  //   This handles: returning user, post-login redirect, store rehydration
+  // - Explicit locale URL (/en/...) + store disagrees → update store (URL wins)
+  //   This handles: direct URL navigation, language toggle, shared links
   useEffect(() => {
     if (!locale || !hasHydrated) return;
 
-    const storedLang = useUIStore.getState().language;
-    const isDefaultLocale = locale === 'ar';
-
-    if (isDefaultLocale && storedLang === 'en') {
-      routerRef.current.replace(routerRef.current.pathname, routerRef.current.asPath, { locale: 'en' });
-      return;
+    if (storeLanguage !== locale) {
+      if (isDefaultLocale(locale)) {
+        // User is on default locale URL but store says different — redirect
+        routerRef.current.replace(routerRef.current.pathname, routerRef.current.asPath, { locale: storeLanguage });
+        return;
+      }
+      // User explicitly navigated to a non-default locale URL — sync store
+      useUIStore.getState().setLanguage(locale as Language);
     }
 
-    if (!isDefaultLocale && storedLang !== locale) {
-      setLanguage(locale as Language);
-    }
-
-    document.documentElement.dir = locale === 'ar' ? 'rtl' : 'ltr';
+    document.documentElement.dir = getLocaleDirection(locale);
     document.documentElement.lang = locale;
-  }, [locale, hasHydrated, setLanguage]);
+  }, [locale, storeLanguage, hasHydrated]);
 
   // Native platform initialization (only runs on mobile)
   useEffect(() => {
@@ -401,7 +401,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
   // Effective locale: router > Zustand store > default 'ar'
   // Mobile builds have no router locale, so fall back to store (reactive subscription)
-  const storeLanguage = useUIStore((s) => s.language);
   const effectiveLocale = locale || storeLanguage || 'ar';
 
   // On mobile (static export), translations are baked at build time for one locale.
@@ -486,8 +485,10 @@ function MetaHead({ locale }: { locale: string }) {
       <meta property="og:image:width" content="1200" />
       <meta property="og:image:height" content="630" />
       <meta property="og:type" content="website" />
-      <meta property="og:locale" content={locale === 'ar' ? 'ar_SA' : 'en_US'} />
-      <meta property="og:locale:alternate" content={locale === 'ar' ? 'en_US' : 'ar_SA'} />
+      <meta property="og:locale" content={getOGLocale(locale)} />
+      {getOGAlternateLocales(locale).map(alt => (
+        <meta key={alt} property="og:locale:alternate" content={alt} />
+      ))}
 
       {/* Twitter Card */}
       <meta name="twitter:card" content="summary_large_image" />

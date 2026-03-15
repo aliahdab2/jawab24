@@ -236,7 +236,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard', '/dashboard', { locale: 'ar' });
     });
   });
 
@@ -263,9 +263,10 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith(
-        expect.stringContaining('/complete-profile')
+      const call = mockReplace.mock.calls.find((c: unknown[]) =>
+        typeof c[0] === 'string' && c[0].includes('/complete-profile')
       );
+      expect(call).toBeDefined();
     });
   });
 
@@ -285,7 +286,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/shopify/onboarding');
+      expect(mockReplace).toHaveBeenCalledWith('/shopify/onboarding', '/shopify/onboarding', { locale: 'ar' });
     });
   });
 
@@ -308,7 +309,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/rules');
+      expect(mockReplace).toHaveBeenCalledWith('/rules', '/rules', { locale: 'ar' });
     });
   });
 

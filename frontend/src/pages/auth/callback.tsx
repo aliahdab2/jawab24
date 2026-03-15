@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { AppSkeleton } from '@/components/ui';
 import { captureError } from '@/lib/sentryHelpers';
+import { getLocalePath } from '@/utils/locale';
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -76,7 +77,7 @@ export default function AuthCallback() {
 
       // Ensure redirectUri matches initial request exactly using shared constant
       // INDUSTRY STANDARD: Use locale-specific callback URL (matches what Facebook received)
-      const localePath = preferredLocale === 'ar' ? '' : `/${preferredLocale}`;
+      const localePath = getLocalePath(preferredLocale);
       const redirectUriClean = `${origin}${localePath}${FB_CALLBACK_PATH}`;
       const redirectUri = redirectUriClean;
 
@@ -138,27 +139,27 @@ export default function AuthCallback() {
           return;
         }
 
-        routerRef.current.replace('/pages');
+        routerRef.current.replace('/pages', '/pages', { locale: finalLocale });
         return;
       }
 
       // Check if e-commerce onboarding is needed (install-first flow)
       if (data.shopifyOnboarding) {
-        routerRef.current.replace('/shopify/onboarding');
+        routerRef.current.replace('/shopify/onboarding', '/shopify/onboarding', { locale: finalLocale });
         return;
       }
       if (data.sallaOnboarding) {
-        routerRef.current.replace('/salla/onboarding');
+        routerRef.current.replace('/salla/onboarding', '/salla/onboarding', { locale: finalLocale });
         return;
       }
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
-        routerRef.current.replace(`/complete-profile?redirect=${encodeURIComponent(safeUrl)}`);
+        const profileUrl = `/complete-profile?redirect=${encodeURIComponent(safeUrl)}`;
+        routerRef.current.replace(profileUrl, profileUrl, { locale: finalLocale });
         return;
       }
-      
-      
+
       // If request came from mobile app, deep link back to the app.
       // Pass the full user object so the app can hydrate the store instantly
       // without an extra /auth/me network round-trip.
@@ -171,9 +172,9 @@ export default function AuthCallback() {
         window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`;
         return;
       }
-      
-      // Web: replace navigation (don't keep callback in history)
-      routerRef.current.replace(safeUrl);
+
+      // Web: replace navigation with correct locale (don't keep callback in history)
+      routerRef.current.replace(safeUrl, safeUrl, { locale: finalLocale });
     } catch (err) {
       // Don't show error if request was aborted (user navigated away)
       if (err instanceof Error && err.name === 'AbortError') {
