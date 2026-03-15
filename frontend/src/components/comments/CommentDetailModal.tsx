@@ -21,6 +21,7 @@ import {
   X,
   ExternalLink,
   CheckCircle,
+  Undo2,
   PauseCircle,
   PlayCircle,
   FileText,
@@ -402,7 +403,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     disabled={isSending}
                     className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                   >
-                    <CheckCircle className="w-3.5 h-3.5" />
+                    <Undo2 className="w-3.5 h-3.5" />
                     {t('unresolve')}
                   </button>
                 </div>

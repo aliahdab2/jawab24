@@ -18,6 +18,7 @@ import {
   AlertTriangle,
   Sparkles,
   CheckCircle,
+  Undo2,
   UserCheck,
   PauseCircle,
   PlayCircle,
@@ -509,7 +510,7 @@ export function MessageDetailModal({
                 onClick={() => onUnresolve(conversation.senderId, pageId)}
                 className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
               >
-                <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <Undo2 className="w-3.5 h-3.5 flex-shrink-0" />
                 {tComments('unresolve')}
               </button>
             ) : hasResolvedIncoming ? (
