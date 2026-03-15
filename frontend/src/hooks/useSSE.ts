@@ -86,8 +86,8 @@ export function useSSE(): void {
             const event: SSEEvent<'comment:received'> = JSON.parse(e.data);
             queryClient.invalidateQueries({ queryKey: ['comments'] });
             queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-            incrementUnreadComments();
             if (!isOnPage('/comments')) {
+                incrementUnreadComments();
                 showToast(
                     t('newComment', { name: event.data.fromName || '' }),
                     { label: t('view'), onClick: () => router.push('/comments') },
@@ -115,8 +115,8 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
             queryClient.invalidateQueries({ queryKey: ['conversation'] });
-            incrementUnreadMessages();
             if (!isOnPage('/messages')) {
+                incrementUnreadMessages();
                 showToast(
                     t('newMessage', { name: event.data.senderName || '' }),
                     { label: t('view'), onClick: () => router.push('/messages') },
