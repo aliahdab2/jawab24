@@ -10,7 +10,10 @@ export function isRTLLocale(locale: string): boolean {
 export const DEFAULT_LOCALE = 'ar';
 
 /** All supported locales. Must match next.config.js i18n.locales. */
-export const SUPPORTED_LOCALES: readonly string[] = ['ar', 'en'] as const;
+export const SUPPORTED_LOCALES = ['ar', 'en'] as const;
+
+/** A supported locale string. */
+export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /** Returns true if this is the default locale (no URL prefix). */
 export function isDefaultLocale(locale: string): boolean {
@@ -28,8 +31,8 @@ export function getLocaleDirection(locale: string): 'rtl' | 'ltr' {
 }
 
 /** Cycle to the next supported locale. Single place to update when adding languages. */
-export function getNextLocale(current: string): string {
-  const idx = SUPPORTED_LOCALES.indexOf(current);
+export function getNextLocale(current: string): SupportedLocale {
+  const idx = SUPPORTED_LOCALES.indexOf(current as SupportedLocale);
   return SUPPORTED_LOCALES[(idx + 1) % SUPPORTED_LOCALES.length];
 }
 
