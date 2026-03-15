@@ -547,6 +547,9 @@ const MessagesPage: NextPageWithLayout = () => {
               const needsResolve = conv.messages.some(
                 m => m.direction === 'incoming' && !m.resolved && (!m.replied || m.needsAttention)
               );
+              const isResolved = conv.messages.some(
+                m => m.direction === 'incoming' && m.resolved
+              );
               return (
                 <MessageCard
                   key={conv.senderId}
@@ -554,6 +557,7 @@ const MessagesPage: NextPageWithLayout = () => {
                   animationDelay={i < 10 ? i * 0.05 : 0}
                   onClick={() => setSelectedConversation(conv)}
                   onResolve={needsResolve ? () => handleResolve(conv.senderId, conv.lastMessage.pageId) : undefined}
+                  onUnresolve={isResolved ? () => handleUnresolve(conv.senderId, conv.lastMessage.pageId) : undefined}
                 />
               );
             })}

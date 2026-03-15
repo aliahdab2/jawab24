@@ -38,5 +38,6 @@
   "resolveSuccess": "تم وضع علامة تمت المعالجة",
   "unresolveSuccess": "تم إلغاء علامة المعالجة",
   "resolved": "تمت المعالجة",
+  "unresolve": "تحديد كغير معالج",
   "newMessage": "رسالة جديدة"
 }

@@ -38,5 +38,6 @@
   "resolveSuccess": "Marked as handled",
   "unresolveSuccess": "Marked as unhandled",
   "resolved": "Handled",
+  "unresolve": "Mark as unhandled",
   "newMessage": "New message"
 }

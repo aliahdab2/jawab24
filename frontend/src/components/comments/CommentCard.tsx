@@ -10,6 +10,7 @@ import {
   Zap,
   CheckCircle,
   CheckCheck,
+  Undo2,
   User,
   FileText,
 } from 'lucide-react';
@@ -241,7 +242,7 @@ export const CommentCard = React.memo(function CommentCard({
                        e.stopPropagation();
                        onResolve(e);
                      }}
-                     icon={<CheckCheck className="w-3.5 h-3.5" />}
+                     icon={<CheckCircle className="w-3.5 h-3.5" />}
                    >
                      {t('resolve')}
                    </Button>
@@ -275,7 +276,7 @@ export const CommentCard = React.memo(function CommentCard({
                 e.stopPropagation();
                 onUnresolve(e);
               }}
-              icon={<CheckCheck className="w-3.5 h-3.5" />}
+              icon={<Undo2 className="w-3.5 h-3.5" />}
             >
               {t('unresolve')}
             </Button>
