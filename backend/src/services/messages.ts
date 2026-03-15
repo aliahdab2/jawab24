@@ -542,7 +542,7 @@ export class MessagesService {
                 // Conversation-level counts (for tab labels — matches what the user sees in the list)
                 convTotal:          sql<number>`count(DISTINCT ${messages.senderId})`,
                 convActionRequired: sql<number>`count(DISTINCT ${messages.senderId}) FILTER (WHERE ${messages.resolved} = false AND (${messages.replied} = false OR ${messages.needsAttention} = true))`,
-                convAutoReplied:    sql<number>`count(DISTINCT ${messages.senderId}) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} IN ('ai', 'template'))`,
+                convAutoReplied:    sql<number>`count(DISTINCT ${messages.senderId}) FILTER (WHERE ${messages.replied} = true)`,
                 convHandled:        sql<number>`count(DISTINCT ${messages.senderId}) FILTER (WHERE ${messages.resolved} = true)`,
             })
             .from(messages)
