@@ -37,6 +37,7 @@ export interface UserSettings {
     brandVoiceNotes: string;
     holdLowConfidence: boolean;
     notificationsEnabled: boolean;
+    onboardingCompletedAt: string | null;
 }
 
 export interface UpdateSettingsDTO {
@@ -70,4 +71,5 @@ export interface UpdateSettingsDTO {
     brandVoiceNotes?: string;
     holdLowConfidence?: boolean;
     notificationsEnabled?: boolean;
+    onboardingCompletedAt?: string | null;
 }

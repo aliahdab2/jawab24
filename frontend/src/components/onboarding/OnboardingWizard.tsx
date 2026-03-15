@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Button, Toggle } from '@/components/ui';
 import { useTranslations, useLocale } from 'next-intl';
+import { useQueryClient } from '@tanstack/react-query';
 import { pagesApi, api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
@@ -374,6 +375,7 @@ function ReviewInfoStep({
 }
 
 export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) {
+  const queryClient = useQueryClient();
   const tOnboarding = useTranslations('onboarding');
   const tc = useTranslations('common');
   const tPages = useTranslations('pages');
@@ -494,6 +496,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
 
     try {
       await pagesApi.toggle(pageId, enabled);
+      queryClient.invalidateQueries({ queryKey: ['pages'] });
     } catch (error: unknown) {
       captureError(error, 'Onboarding: failed to toggle page', { tags: { component: 'onboarding' } });
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };

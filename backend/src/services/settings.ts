@@ -90,11 +90,14 @@ export class SettingsService {
         // Ensure settings exist
         await this.getSettings(userId);
 
+        // Convert ISO string timestamps to Date objects for Drizzle
+        const dbUpdates: Record<string, unknown> = { ...updates, updatedAt: new Date() };
+        if (typeof dbUpdates.onboardingCompletedAt === 'string') {
+            dbUpdates.onboardingCompletedAt = new Date(dbUpdates.onboardingCompletedAt as string);
+        }
+
         const [updated] = await db.update(settings)
-            .set({
-                ...updates,
-                updatedAt: new Date(),
-            })
+            .set(dbUpdates as typeof settings.$inferInsert)
             .where(eq(settings.userId, userId))
             .returning();
 
@@ -316,6 +319,7 @@ export class SettingsService {
             brandVoiceNotesMulti: record.brandVoiceNotesMulti || {},
             holdLowConfidence: record.holdLowConfidence ?? false,
             notificationsEnabled: record.notificationsEnabled ?? true,
+            onboardingCompletedAt: record.onboardingCompletedAt?.toISOString() ?? null,
         };
     }
 }

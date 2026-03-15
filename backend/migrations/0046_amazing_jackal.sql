@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "onboarding_completed_at" timestamp;

@@ -320,6 +320,8 @@ export const settings = pgTable('settings', {
     holdLowConfidence: boolean('hold_low_confidence').default(false),
     // Push notification preferences
     notificationsEnabled: boolean('notifications_enabled').default(true).notNull(),
+    // Onboarding
+    onboardingCompletedAt: timestamp('onboarding_completed_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {

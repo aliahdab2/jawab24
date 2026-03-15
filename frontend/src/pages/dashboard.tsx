@@ -210,6 +210,7 @@ const DashboardPage: NextPageWithLayout = () => {
       return {
         commentsAutoReply: res.data?.commentsAutoReply ?? true,
         messagesAutoReply: res.data?.messagesAutoReply ?? true,
+        onboardingCompletedAt: res.data?.onboardingCompletedAt ?? null,
       };
     },
     enabled: isAuthenticated,
@@ -370,7 +371,7 @@ const DashboardPage: NextPageWithLayout = () => {
   // Auto-sync if no pages found — only for existing users (onboarding already completed)
   const syncAttemptedRef = useRef(false);
   useEffect(() => {
-    const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+    const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY) || userSettings?.onboardingCompletedAt;
     if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncAttemptedRef.current && onboardingComplete) {
       syncAttemptedRef.current = true;
       api.post('/pages/sync', { accessToken: fbToken })
@@ -382,18 +383,25 @@ const DashboardPage: NextPageWithLayout = () => {
           captureError(err, 'Dashboard auto-sync failed', { tags: { page: 'dashboard', action: 'auto-sync' } });
         });
     }
-  }, [loading, pages.length, fbToken, isAuthenticated, queryClient, t]);
+  }, [loading, pages.length, fbToken, isAuthenticated, queryClient, t, userSettings]);
 
-  // Show onboarding for new users
+  // Show onboarding for new users — server-side state is the source of truth,
+  // localStorage is a fast cache to prevent flash on subsequent page loads.
   useEffect(() => {
-    if (!loading && pages.length === 0) {
-      const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
-      if (!onboardingComplete) {
+    if (!loading && pages.length === 0 && userSettings !== undefined) {
+      const localComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
+      const serverComplete = !!userSettings?.onboardingCompletedAt;
+
+      if (!serverComplete && !localComplete) {
         setShowOnboarding(true);
         setOnboardingVisible(true);
+      } else if (localComplete && !serverComplete) {
+        // Backward compat: user completed onboarding before server-side tracking.
+        // Silently backfill the server so it knows on future logins / other devices.
+        settingsApi.update({ onboardingCompletedAt: new Date().toISOString() }).catch(() => {});
       }
     }
-  }, [loading, pages.length, setOnboardingVisible]);
+  }, [loading, pages.length, userSettings, setOnboardingVisible]);
 
   // Pre-build a Map for O(1) page name lookups (avoids O(n×m) find() in render loops)
   const pageNameMap = useMemo(() => {
@@ -412,19 +420,18 @@ const DashboardPage: NextPageWithLayout = () => {
     return pageNameMap.get(pageId) ?? null;
   };
 
-  // Calculate trend for today vs yesterday
-  // Handle onboarding completion
-  const handleOnboardingComplete = () => {
+  // Handle onboarding completion — persist to server + localStorage
+  const markOnboardingDone = useCallback(() => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setShowOnboarding(false);
     setOnboardingVisible(false);
-  };
+    settingsApi.update({ onboardingCompletedAt: new Date().toISOString() }).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: ['pages'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
+  }, [setOnboardingVisible, queryClient]);
 
-  const handleOnboardingSkip = () => {
-    localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
-    setShowOnboarding(false);
-    setOnboardingVisible(false);
-  };
+  const handleOnboardingComplete = markOnboardingDone;
+  const handleOnboardingSkip = markOnboardingDone;
 
   // Auto-expand accordion when only 1 page is connected
   useEffect(() => {
