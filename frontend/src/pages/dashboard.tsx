@@ -237,7 +237,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const { data: recentMessages } = useQuery({
     queryKey: ['dashboard-recent-messages'],
     queryFn: async () => {
-      const res = await messagesApi.getAll({ limit: 5, direction: 'incoming' });
+      const res = await messagesApi.getAll({ limit: 20, direction: 'incoming' });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
@@ -564,7 +564,14 @@ const DashboardPage: NextPageWithLayout = () => {
 
         // Determine max items to show — cap at 5, match shorter column
         const commentItems = recentComments.slice(0, 5);
-        const messageItems = (recentMessages ?? []).slice(0, 5);
+        // Deduplicate messages by sender — show only the latest message per conversation
+        const allMessages = recentMessages ?? [];
+        const seenSenders = new Set<string>();
+        const messageItems = allMessages.filter(msg => {
+          if (seenSenders.has(msg.senderId)) return false;
+          seenSenders.add(msg.senderId);
+          return true;
+        }).slice(0, 5);
         const maxRows = Math.min(5, Math.max(commentItems.length, messageItems.length));
 
         return (
