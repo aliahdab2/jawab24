@@ -86,6 +86,7 @@ export function useSSE(): void {
             const event: SSEEvent<'comment:received'> = JSON.parse(e.data);
             queryClient.invalidateQueries({ queryKey: ['comments'] });
             queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['pages'] });
             if (!isOnPage('/comments')) {
                 incrementUnreadComments();
                 showToast(
@@ -99,6 +100,7 @@ export function useSSE(): void {
             const event: SSEEvent<'comment:reply_sent'> = JSON.parse(e.data);
             queryClient.invalidateQueries({ queryKey: ['comments'] });
             queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['pages'] });
             if (!isOnPage('/comments') && event.data.replyMethod === 'ai') {
                 showToast(t('aiRepliedComment'));
             }
@@ -107,6 +109,7 @@ export function useSSE(): void {
         es.addEventListener('comment:reply_failed', () => {
             queryClient.invalidateQueries({ queryKey: ['comments'] });
             queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['pages'] });
         });
 
         // --- Message events ---
@@ -115,6 +118,7 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
             queryClient.invalidateQueries({ queryKey: ['conversation'] });
+            queryClient.invalidateQueries({ queryKey: ['pages'] });
             if (!isOnPage('/messages')) {
                 incrementUnreadMessages();
                 showToast(
@@ -129,6 +133,7 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
             queryClient.invalidateQueries({ queryKey: ['conversation'] });
+            queryClient.invalidateQueries({ queryKey: ['pages'] });
             if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
                 showToast(t('aiRepliedMessage'));
             }
@@ -137,6 +142,7 @@ export function useSSE(): void {
         es.addEventListener('message:reply_failed', () => {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['pages'] });
             queryClient.invalidateQueries({ queryKey: ['conversation'] });
         });
 
