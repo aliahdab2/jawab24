@@ -57,5 +57,5 @@
   "reconnectFailed": "Reconnect failed. Please try again.",
   "reconnectSuccess": "Page reconnected successfully!",
   "reconnectDialogTitle": "Reconnect Page",
-  "reconnectDialogBody": "You'll be redirected to Facebook to re-authorize access to this page. After granting permissions, auto-replies will resume automatically."
+  "reconnectDialogBody": "You'll be redirected to Facebook to re-authorize access to this page. To change pages, click \"Edit previous settings\" on the Facebook screen. After granting permissions, auto-replies will resume automatically."
 }
