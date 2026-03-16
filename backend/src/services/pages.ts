@@ -506,48 +506,89 @@ export class PagesService {
                 // Subscribe page to webhook events (idempotent — safe to re-subscribe)
                 await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
             } else {
-                // Create new page - auto-enable only if within plan limit
-                const shouldAutoEnable = remainingSlots === null || remainingSlots > 0;
-                logger.debug(`[Pages] Creating new page: ${fbPage.name} (autoReply: ${shouldAutoEnable})`);
-                const suggestedKnowledgeBase = generateKnowledgeBase(fbPage);
-                if (suggestedKnowledgeBase) {
-                    logger.info(`[Pages] Generated suggested knowledge base for ${fbPage.name}`, {
-                        hasAbout: !!fbPage.about,
-                        hasPhone: !!fbPage.phone,
-                        hasAddress: !!fbPage.single_line_address,
-                        hasHours: !!fbPage.hours,
-                        hasWebsite: !!fbPage.website,
-                    });
-                }
-                const businessProfile = buildBusinessProfile(fbPage);
-                const [created] = await db
-                    .insert(pages)
-                    .values({
-                        workspaceId,
-                        userId,
-                        facebookPageId: fbPage.id,
-                        name: fbPage.name,
-                        accessToken: fbPage.access_token,
-                        autoReplyEnabled: shouldAutoEnable,
-                        instagramAccountId,
-                        instagramUsername,
-                        instagramProfilePicUrl,
-                        instagramAutoReplyEnabled: false,
-                        knowledgeBase: suggestedKnowledgeBase || null,
-                        suggestedKnowledgeBase: suggestedKnowledgeBase || null,
-                        businessProfile,
-                        businessProfileUpdatedAt: new Date(),
-                    })
-                    .returning();
-                syncedPages.push(created);
+                // Check if this page exists in another workspace (transferred admin access)
+                const globalResults = await db
+                    .select()
+                    .from(pages)
+                    .where(eq(pages.facebookPageId, fbPage.id));
+                const globalExisting = globalResults[0];
 
-                // Fire-and-forget: ingest KB for new page so RAG retrieval works immediately
-                if (suggestedKnowledgeBase && created?.kbVersion) {
-                    const ingestion = getIngestionService();
-                    if (ingestion) {
-                        ingestion.ingestKnowledgeBase(created.id, suggestedKnowledgeBase, created.kbVersion)
-                            .catch(err => captureError(err, 'KB ingestion failed during syncPages', { tags: { service: 'kb-ingestion', action: 'syncPages' }, extra: { pageId: created.id } }));
+                const shouldAutoEnable = remainingSlots === null || remainingSlots > 0;
+                const businessProfile = buildBusinessProfile(fbPage);
+
+                if (globalExisting && isPageDisconnected(globalExisting)) {
+                    // Page exists but previous owner disconnected — safe to claim
+                    logger.info(`[Pages] Claiming disconnected page "${fbPage.name}" (${fbPage.id}) from workspace ${globalExisting.workspaceId} to ${workspaceId}`);
+                    const [claimed] = await db
+                        .update(pages)
+                        .set({
+                            workspaceId,
+                            userId,
+                            name: fbPage.name,
+                            accessToken: fbPage.access_token,
+                            autoReplyEnabled: shouldAutoEnable,
+                            instagramAccountId,
+                            instagramUsername,
+                            instagramProfilePicUrl,
+                            businessProfile,
+                            businessProfileUpdatedAt: new Date(),
+                            updatedAt: new Date(),
+                        })
+                        .where(eq(pages.id, globalExisting.id))
+                        .returning();
+                    syncedPages.push(claimed);
+
+                    await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
+                } else if (globalExisting) {
+                    // Page is active under another user — skip to avoid stealing it
+                    logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
+                    skippedCount++;
+                    continue;
+                } else {
+                    // Brand new page — insert
+                    logger.debug(`[Pages] Creating new page: ${fbPage.name} (autoReply: ${shouldAutoEnable})`);
+                    const suggestedKnowledgeBase = generateKnowledgeBase(fbPage);
+                    if (suggestedKnowledgeBase) {
+                        logger.info(`[Pages] Generated suggested knowledge base for ${fbPage.name}`, {
+                            hasAbout: !!fbPage.about,
+                            hasPhone: !!fbPage.phone,
+                            hasAddress: !!fbPage.single_line_address,
+                            hasHours: !!fbPage.hours,
+                            hasWebsite: !!fbPage.website,
+                        });
                     }
+                    const [created] = await db
+                        .insert(pages)
+                        .values({
+                            workspaceId,
+                            userId,
+                            facebookPageId: fbPage.id,
+                            name: fbPage.name,
+                            accessToken: fbPage.access_token,
+                            autoReplyEnabled: shouldAutoEnable,
+                            instagramAccountId,
+                            instagramUsername,
+                            instagramProfilePicUrl,
+                            instagramAutoReplyEnabled: false,
+                            knowledgeBase: suggestedKnowledgeBase || null,
+                            suggestedKnowledgeBase: suggestedKnowledgeBase || null,
+                            businessProfile,
+                            businessProfileUpdatedAt: new Date(),
+                        })
+                        .returning();
+                    syncedPages.push(created);
+
+                    // Fire-and-forget: ingest KB for new page so RAG retrieval works immediately
+                    if (suggestedKnowledgeBase && created?.kbVersion) {
+                        const ingestion = getIngestionService();
+                        if (ingestion) {
+                            ingestion.ingestKnowledgeBase(created.id, suggestedKnowledgeBase, created.kbVersion)
+                                .catch(err => captureError(err, 'KB ingestion failed during syncPages', { tags: { service: 'kb-ingestion', action: 'syncPages' }, extra: { pageId: created.id } }));
+                        }
+                    }
+
+                    // Subscribe new page to webhook events (even if disabled, so webhooks work when enabled later)
+                    await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
                 }
 
                 if (shouldAutoEnable && remainingSlots !== null) {
@@ -556,9 +597,6 @@ export class PagesService {
                 if (!shouldAutoEnable) {
                     skippedCount++;
                 }
-
-                // Subscribe new page to webhook events (even if disabled, so webhooks work when enabled later)
-                await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
             }
         }
 
