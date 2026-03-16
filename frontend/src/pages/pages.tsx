@@ -43,6 +43,7 @@ const PagesPage: NextPageWithLayout = () => {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showConnectDialog, setShowConnectDialog] = useState(false);
+  const [showReconnectDialog, setShowReconnectDialog] = useState(false);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
 
   // ESC key handled inside KnowledgeBaseModal
@@ -299,7 +300,7 @@ const PagesPage: NextPageWithLayout = () => {
                   </div>
                   <Button
                     size="sm"
-                    onClick={handleReconnectFacebook}
+                    onClick={() => setShowReconnectDialog(true)}
                     disabled={syncing}
                     className="w-full"
                     icon={<LinkIcon className="w-3.5 h-3.5" />}
@@ -526,6 +527,20 @@ const PagesPage: NextPageWithLayout = () => {
         }}
         title={t('connectDialogTitle')}
         message={t('connectDialogBody')}
+        confirmText={t('continueToFacebook')}
+        variant="info"
+      />
+
+      {/* Reconnect Page confirmation dialog */}
+      <ConfirmationModal
+        isOpen={showReconnectDialog}
+        onClose={() => setShowReconnectDialog(false)}
+        onConfirm={() => {
+          setShowReconnectDialog(false);
+          handleReconnectFacebook();
+        }}
+        title={t('reconnectDialogTitle')}
+        message={t('reconnectDialogBody')}
         confirmText={t('continueToFacebook')}
         variant="info"
       />
