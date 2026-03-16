@@ -103,54 +103,37 @@ const PagesPage: NextPageWithLayout = () => {
 
   const handleReconnectFacebook = useCallback(async () => {
     const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID;
-    if (!fbAppId) return;
+    if (!fbAppId) {
+      toast.error(t('reconnectFailed'));
+      return;
+    }
 
     const isMobile = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
 
-    if (isMobile && platform === 'android') {
-      // Android: re-trigger native login to force page re-selection
-      try {
-        setSyncing(true);
-        const { FacebookLogin } = await import('@capacitor-community/facebook-login');
-        await FacebookLogin.initialize({ appId: fbAppId }).catch(() => {});
-
-        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Facebook plugin types lack tracking field
-        const result = await FacebookLogin.login({ permissions, tracking: 'enabled' } as any);
-
-        if (!result.accessToken) {
-          setSyncing(false);
-          return;
-        }
-
-        await api.post('/pages/sync', { accessToken: result.accessToken.token });
-        fetchPages();
-      } catch (error) {
-        captureError(error, 'Reconnect failed', { tags: { page: 'pages', action: 'reconnect-android' } });
-      } finally {
-        setSyncing(false);
-      }
-    } else {
-      // Web/iOS: open Facebook OAuth with auth_type=rerequest to force page selection dialog
+    // Use system browser OAuth on all platforms (same as login flow, RFC 8252).
+    // The native Facebook SDK (@capacitor-community/facebook-login) is unreliable
+    // for reconnect — system browser works consistently on Android + iOS + web.
+    try {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
       const localePath = getLocalePath(language);
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages');
-      const state = encodeURIComponent(`/pages|web|${language}|reconnect`);
+      const state = encodeURIComponent(`/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`);
       const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page&auth_type=rerequest`;
 
       if (isMobile) {
-        // iOS: open in in-app browser
         const { Browser } = await import('@capacitor/browser');
         await Browser.open({ url: oauthUrl });
       } else {
         window.location.href = oauthUrl;
       }
+    } catch (error) {
+      captureError(error, 'Reconnect failed', { tags: { page: 'pages', action: 'reconnect' } });
+      toast.error(t('reconnectFailed'));
     }
-  }, [language, fetchPages]);
+  }, [language, t]);
 
   useEffect(() => {
     if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncing && !syncAttemptedRef.current) {
@@ -304,16 +287,19 @@ const PagesPage: NextPageWithLayout = () => {
 
               {/* Disconnected Banner */}
               {page.isConnected === false && (
-                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex items-start gap-3">
-                  <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold">{t('reconnectRequired')}</p>
-                    <p className="text-xs mt-0.5">{t('reconnectDescription')}</p>
+                <div className="mx-4 sm:mx-6 mt-4 sm:mt-6 p-3 rounded-xl alert-warning border flex flex-col gap-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold">{t('reconnectRequired')}</p>
+                      <p className="text-xs mt-0.5">{t('reconnectDescription')}</p>
+                    </div>
                   </div>
                   <Button
                     size="sm"
                     onClick={handleReconnectFacebook}
                     disabled={syncing}
+                    className="w-full"
                     icon={<LinkIcon className="w-3.5 h-3.5" />}
                   >
                     {t('reconnect')}

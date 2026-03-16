@@ -53,5 +53,7 @@
   "shopifyConnectedBadge": "Smart replies powered by your Shopify store",
   "totalIncoming": "Incoming",
   "reconnectRequired": "Reconnect Required",
-  "reconnectDescription": "Access to this page was revoked in Facebook. Reconnect to resume auto-replies."
+  "reconnectDescription": "Access to this page was revoked in Facebook. Reconnect to resume auto-replies.",
+  "reconnectFailed": "Reconnect failed. Please try again.",
+  "reconnectSuccess": "Page reconnected successfully!"
 }
