@@ -9,7 +9,7 @@ import { subscriptionApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
-import { Check, X, Zap, Crown, Sparkles, Store, ChevronDown, Star } from 'lucide-react';
+import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
@@ -218,19 +218,15 @@ function PlanCard({
           text={t('pricing.brandingHidden')}
         />
 
-      </div>
+        <FeatureRow
+          included={plan.ecommerceEnabled}
+          text={plan.maxProducts === null
+            ? t('pricing.ecommerceProductsUnlimited')
+            : t('pricing.ecommerceProducts', { count: plan.maxProducts })}
+          subtext={t('pricing.ecommerceBadgePlatforms')}
+        />
 
-      {/* Integration badge — shown only for plans with e-commerce enabled */}
-      {plan.ecommerceEnabled && (
-        <div className="mx-3 mt-2">
-          <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 rounded-lg border border-purple-100">
-            <Store className="w-4 h-4 text-purple-600 flex-shrink-0" />
-            <span className="text-xs font-medium text-purple-700">
-              {t('pricing.shopifyBadge')}
-            </span>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* CTA */}
       <div className="mt-auto pt-1.5 md:pt-3 px-3 pb-1">

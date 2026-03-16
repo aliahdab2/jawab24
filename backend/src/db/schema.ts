@@ -441,14 +441,15 @@ export const plans = pgTable('plans', {
     // Limits
     maxPages: integer('max_pages').default(1),
     maxAiRepliesPerMonth: integer('max_ai_replies_per_month').default(200),
-    maxTemplates: integer('max_templates').default(3), // null = unlimited
-    maxRules: integer('max_rules').default(2), // null = unlimited
+    maxTemplates: integer('max_templates').default(5), // null = unlimited
+    maxRules: integer('max_rules').default(7), // null = unlimited
+    maxProducts: integer('max_products').default(50), // null = unlimited
 
     // Features
     facebookEnabled: boolean('facebook_enabled').default(true),
     instagramEnabled: boolean('instagram_enabled').default(true),
     whatsappEnabled: boolean('whatsapp_enabled').default(false),
-    ecommerceEnabled: boolean('ecommerce_enabled').default(false),
+    ecommerceEnabled: boolean('ecommerce_enabled').default(true),
     showBranding: boolean('show_branding').default(true), // Show "Powered by Jawab24"
     prioritySupport: boolean('priority_support').default(false),
 

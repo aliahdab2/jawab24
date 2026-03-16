@@ -645,6 +645,15 @@ export const subscriptionsService = {
     },
 
     /**
+     * Get the max products allowed by the user's plan (null = unlimited).
+     */
+    async getMaxProducts(userId: string): Promise<number | null> {
+        const subscription = await this.getUserSubscription(userId);
+        if (!subscription) return 50; // default limit if no subscription
+        return subscription.plan.maxProducts ?? null;
+    },
+
+    /**
      * Log AI token usage for cost tracking per store/page
      */
     async logAiUsage(

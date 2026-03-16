@@ -188,6 +188,7 @@ export interface Plan {
   maxAiRepliesPerMonth: number | null;
   maxTemplates: number | null;
   maxRules: number | null;
+  maxProducts: number | null;
   // Features
   facebookEnabled: boolean;
   instagramEnabled: boolean;

@@ -641,6 +641,7 @@ export const mapToShopifyStore = mapToEcommerceStore;
 /**
  * Atomically replace all products for a store and rebuild summary.
  * Platform services call this after fetching products from their API.
+ * Products are truncated to the user's plan limit (maxProducts).
  */
 export async function replaceProductsAndRebuildSummary(
     storeId: string,
@@ -661,6 +662,16 @@ export async function replaceProductsAndRebuildSummary(
         imageUrl?: string | null;
     }>,
 ): Promise<{ synced: number }> {
+    // Enforce plan product limit
+    const store = await getStoreById(storeId);
+    if (store?.userId) {
+        const { subscriptionsService } = await import('./subscriptions');
+        const maxProducts = await subscriptionsService.getMaxProducts(store.userId);
+        if (maxProducts !== null && products.length > maxProducts) {
+            products = products.slice(0, maxProducts);
+        }
+    }
+
     // Atomic replacement: delete old + insert new
     await db.delete(ecommerceProducts).where(eq(ecommerceProducts.ecommerceStoreId, storeId));
 
