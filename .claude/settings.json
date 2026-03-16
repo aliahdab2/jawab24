@@ -29,7 +29,8 @@
       "Read(//var/folders/k4/sxg819sn007bfjyq9g1wf4vr0000gn/T/chrome-devtools-mcp-F5URXf/**)",
       "Read(//private/var/folders/k4/sxg819sn007bfjyq9g1wf4vr0000gn/T/chrome-devtools-mcp-F5URXf/**)",
       "Bash(psql -h localhost -p 5432 -U aliahdab -d postgres -c \"ALTER TABLE settings ADD COLUMN IF NOT EXISTS brand_voice_notes_multi jsonb DEFAULT ''{}''::jsonb;\")",
-      "Bash(./scripts/deploy-production.sh -y)"
+      "Bash(./scripts/deploy-production.sh -y)",
+      "Bash(/Users/aliahdab/Documents/AutoReply/backend/migrations/0048_fix_plan_data.sql:*)"
     ],
     "deny": [
       "Bash(git push --force:*)"

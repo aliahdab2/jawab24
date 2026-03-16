@@ -87,7 +87,7 @@ export default function LandingPage() {
       <Head>
         <title>{BRAND_ASSETS.meta.appTitle}</title>
         <meta name="description" content={t('seoDescription')} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical('/landing')} />
+        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/landing' : '/landing')} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
