@@ -421,6 +421,80 @@ test.describe('Dashboard Page', () => {
     await expect(secondButton).toHaveAttribute('aria-expanded', 'false');
   });
 
+  test('should hide disconnected pages from Your Pages section', async ({ page }) => {
+    const pagesWithDisconnected = [
+      { ...MOCK_PAGES[0], isConnected: true },
+      {
+        id: 'page_disconnected',
+        facebookPageId: 'fb_999',
+        name: 'Disconnected Page',
+        autoReplyEnabled: false,
+        isConnected: false,
+        commentsCount: 0,
+        repliesCount: 0,
+        replyRate: 0,
+        createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+      },
+    ];
+
+    await page.route('**/api/pages**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: pagesWithDisconnected }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Connected page should be visible in the accordion
+    const connectedButton = page.locator('button[id^="page-header-"]', { hasText: /Test Business Page/i });
+    await expect(connectedButton).toBeVisible({ timeout: 15000 });
+
+    // Disconnected page should NOT appear in the dashboard
+    await expect(page.getByText('Disconnected Page')).not.toBeVisible();
+  });
+
+  test('should show empty state when all pages are disconnected', async ({ page }) => {
+    const allDisconnected = [
+      {
+        id: 'page_dc1',
+        facebookPageId: 'fb_dc1',
+        name: 'Old Page',
+        autoReplyEnabled: false,
+        isConnected: false,
+        commentsCount: 0,
+        repliesCount: 0,
+        replyRate: 0,
+        createdAt: new Date(Date.now() - 10 * 86400000).toISOString(),
+      },
+    ];
+
+    await page.route('**/api/pages**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: allDisconnected }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Disconnected page should not be shown
+    await expect(page.getByText('Old Page')).not.toBeVisible();
+
+    // Empty state CTA should be visible
+    await expect(page.getByRole('button', { name: t('pages.connectPage') })).toBeVisible();
+  });
+
   test('should show empty state gracefully when APIs fail', async ({ page }) => {
     // Override API mocks to return errors
     await page.route('**/api/**', async (route) => {

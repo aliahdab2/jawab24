@@ -265,6 +265,9 @@ const DashboardPage: NextPageWithLayout = () => {
 
   // --- Derived state (computed from query data) ---
 
+  // Only show connected pages in the dashboard — disconnected ones are managed on /pages
+  const connectedPages = pages.filter(p => p.isConnected !== false);
+
   const statsData = useMemo(() => {
     const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0 } };
     const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
@@ -928,7 +931,7 @@ const DashboardPage: NextPageWithLayout = () => {
             )}>
               {sectionErrors.pages ? (
                 <SectionError onRetry={refetchAll} />
-              ) : pages.length > 0 ? pages.map((page, i) => {
+              ) : connectedPages.length > 0 ? connectedPages.map((page, i) => {
                 const pageComments = recentComments.filter(c => c.pageId === page.id || c.pageId === page.facebookPageId);
                 const pendingCount = pageComments.filter(c => !c.replied).length;
 
