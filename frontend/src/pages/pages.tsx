@@ -115,7 +115,7 @@ const PagesPage: NextPageWithLayout = () => {
         const { FacebookLogin } = await import('@capacitor-community/facebook-login');
         await FacebookLogin.initialize({ appId: fbAppId }).catch(() => {});
 
-        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
+        const permissions = ['email', 'public_profile', 'pages_show_list', 'pages_read_engagement', 'pages_manage_metadata', 'pages_messaging', 'instagram_basic', 'instagram_manage_messages'];
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Facebook plugin types lack tracking field
         const result = await FacebookLogin.login({ permissions, tracking: 'enabled' } as any);
 
@@ -138,7 +138,7 @@ const PagesPage: NextPageWithLayout = () => {
       const localePath = getLocalePath(language);
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_messaging,instagram_basic,instagram_manage_messages');
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages');
       const state = encodeURIComponent(`/pages|web|${language}|reconnect`);
       const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page&auth_type=rerequest`;
 

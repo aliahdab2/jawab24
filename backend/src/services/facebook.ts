@@ -319,9 +319,32 @@ export class FacebookService {
                     access_token: pageAccessToken,
                 },
             });
-            this.logger.info('[Facebook] Page subscribed to webhooks', { pageId });
+            this.logger.info('[Facebook] Page subscribed to webhooks (feed+messages)', { pageId });
             return true;
         } catch (error) {
+            // feed requires pages_manage_metadata — fall back to messages-only if missing
+            const fbError = axios.isAxiosError(error) ? error.response?.data?.error : null;
+            if (fbError && fbError.code === 200 && /pages_manage_metadata/i.test(fbError.message)) {
+                this.logger.warn('[Facebook] pages_manage_metadata missing, subscribing to messages only', { pageId });
+                try {
+                    await axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                        params: {
+                            subscribed_fields: 'messages',
+                            access_token: pageAccessToken,
+                        },
+                    });
+                    this.logger.info('[Facebook] Page subscribed to webhooks (messages only)', { pageId });
+                    return true;
+                } catch (retryError) {
+                    if (axios.isAxiosError(retryError)) {
+                        this.logger.error('[Facebook] Failed to subscribe page to messages webhooks', {
+                            pageId,
+                            error: retryError.response?.data?.error?.message || retryError.message,
+                        });
+                    }
+                    return false;
+                }
+            }
             if (axios.isAxiosError(error)) {
                 this.logger.error('[Facebook] Failed to subscribe page to webhooks', {
                     pageId,

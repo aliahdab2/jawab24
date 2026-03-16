@@ -375,6 +375,52 @@ describe('Facebook Service', () => {
 
             expect(result).toBe(false);
         });
+
+        it('should fall back to messages-only when pages_manage_metadata is missing', async () => {
+            const metadataError = Object.assign(new Error('Missing permission'), {
+                isAxiosError: true,
+                response: { data: { error: { message: 'To subscribe to the feed field, one of these permissions is needed: pages_manage_metadata', code: 200 } } },
+            });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+            vi.mocked(axios.post)
+                .mockRejectedValueOnce(metadataError)   // first call: feed+messages fails
+                .mockResolvedValueOnce({ data: { success: true } }); // retry: messages-only succeeds
+
+            const result = await service.subscribePageToWebhooks('page_123', 'page_token');
+
+            expect(result).toBe(true);
+            expect(axios.post).toHaveBeenCalledTimes(2);
+            expect(axios.post).toHaveBeenNthCalledWith(1,
+                'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
+                null,
+                { params: { subscribed_fields: 'feed,messages', access_token: 'page_token' } },
+            );
+            expect(axios.post).toHaveBeenNthCalledWith(2,
+                'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
+                null,
+                { params: { subscribed_fields: 'messages', access_token: 'page_token' } },
+            );
+        });
+
+        it('should return false when messages-only fallback also fails', async () => {
+            const metadataError = Object.assign(new Error('Missing permission'), {
+                isAxiosError: true,
+                response: { data: { error: { message: 'To subscribe to the feed field, one of these permissions is needed: pages_manage_metadata', code: 200 } } },
+            });
+            const messagingError = Object.assign(new Error('No messaging permission'), {
+                isAxiosError: true,
+                response: { data: { error: { message: 'pages_messaging permission required' } } },
+            });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+            vi.mocked(axios.post)
+                .mockRejectedValueOnce(metadataError)
+                .mockRejectedValueOnce(messagingError);
+
+            const result = await service.subscribePageToWebhooks('page_123', 'bad_token');
+
+            expect(result).toBe(false);
+            expect(axios.post).toHaveBeenCalledTimes(2);
+        });
     });
 
     describe('getLongLivedToken', () => {
