@@ -117,7 +117,9 @@ const PagesPage: NextPageWithLayout = () => {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const normalizedOrigin = siteUrl.replace(/\/$/, '');
       const localePath = getLocalePath(language);
-      const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
+      // Mobile: always use canonical origin (Capacitor serves from http://localhost)
+      // Web dev: use window.location.origin for localhost
+      const origin = isMobile ? normalizedOrigin : (window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin);
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages');
       const state = encodeURIComponent(`/pages|${isMobile ? 'mobile' : 'web'}|${language}|reconnect`);
