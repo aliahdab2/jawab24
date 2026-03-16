@@ -62,6 +62,12 @@ If iOS sync fails with pod errors:
 cd frontend/ios/App && pod install --repo-update
 ```
 
+If iOS sync fails with SPM cache errors (e.g. "already exists in file system"):
+```bash
+rm -rf ~/Library/Caches/org.swift.swiftpm/artifacts/https___github_com_ionic_team_capacitor_swift_pm_*
+```
+Then retry `npx cap sync ios`.
+
 ## Step 5: Build native app
 
 ### Android Debug (default)
@@ -85,20 +91,46 @@ Tell the user: "Xcode is open. Press Cmd+R to build and run."
 
 ### iOS Debug (CLI)
 ```bash
-cd frontend/ios/App && xcodebuild -project App.xcodeproj -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' -derivedDataPath build clean build 2>&1 | tail -30
+cd frontend/ios/App && xcodebuild -scheme App -sdk iphonesimulator -configuration Debug -derivedDataPath build -quiet
 ```
+Output: `frontend/ios/App/build/Build/Products/Debug-iphonesimulator/App.app`
 
 ### iOS Release (CLI)
 ```bash
-cd frontend/ios/App && xcodebuild -project App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' -derivedDataPath build clean build 2>&1 | tail -30
+cd frontend/ios/App && xcodebuild -scheme App -sdk iphoneos -configuration Release -derivedDataPath build -quiet
 ```
 Note: requires signing certificates and provisioning profiles. If signing fails, suggest opening Xcode with `npx cap open ios` to configure Signing & Capabilities.
 
-## Step 6: Report results
+### iOS Troubleshooting
+
+**Firebase crash on launch** (`FirebaseApp.configure() could not find GoogleService-Info.plist`):
+- `GoogleService-Info.plist` must be added to the Xcode project's build resources (PBXBuildFile + PBXResourcesBuildPhase in project.pbxproj)
+- File exists at `frontend/ios/App/App/GoogleService-Info.plist`
+
+**Firebase SPM dependencies missing** (`Unable to find module dependency: FirebaseCore`):
+- `firebase-ios-sdk` must be in `frontend/ios/App/CapApp-SPM/Package.swift` dependencies
+- Required products: `FirebaseCore`, `FirebaseMessaging`
+
+## Step 6: Package for distribution
+
+### iOS — zip for Facebook review or TestFlight
+```bash
+cd frontend/ios/App/build/Build/Products/Debug-iphonesimulator && zip -r -q ~/Downloads/Jawab24-simulator-$(date +%Y%m%d-%H%M).zip App.app
+```
+
+### iOS — run on simulator
+```bash
+xcrun simctl boot "iPhone 17 Pro"
+xcrun simctl install "iPhone 17 Pro" frontend/ios/App/build/Build/Products/Debug-iphonesimulator/App.app
+xcrun simctl launch "iPhone 17 Pro" com.jawab24.app
+open -a Simulator
+```
+
+## Step 7: Report results
 
 Show:
 - Platform(s) built and variant (debug/release)
-- Output file path (APK for Android)
+- Output file path (APK for Android, .app for iOS)
 - Any warnings from build output
 
 If the build fails, show the relevant error and suggest a fix.
