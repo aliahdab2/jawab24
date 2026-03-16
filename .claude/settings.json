@@ -1,19 +1,5 @@
 {
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          { "type": "command", "command": ".claude/hooks/guard-secrets.sh", "timeout": 5 },
-          { "type": "command", "command": ".claude/hooks/guard-destructive.sh", "timeout": 5 }
-        ]
-      }
-    ]
-  },
   "permissions": {
-    "deny": [
-      "Bash(git push --force:*)"
-    ],
     "allow": [
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -c \"DROP DATABASE IF EXISTS autoreply_test\")",
       "Bash(PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -c \"CREATE DATABASE autoreply_test\")",
@@ -42,11 +28,34 @@
       "mcp__chrome-devtools__take_screenshot",
       "Read(//var/folders/k4/sxg819sn007bfjyq9g1wf4vr0000gn/T/chrome-devtools-mcp-F5URXf/**)",
       "Read(//private/var/folders/k4/sxg819sn007bfjyq9g1wf4vr0000gn/T/chrome-devtools-mcp-F5URXf/**)",
-      "Bash(psql -h localhost -p 5432 -U aliahdab -d postgres -c \"ALTER TABLE settings ADD COLUMN IF NOT EXISTS brand_voice_notes_multi jsonb DEFAULT ''{}''::jsonb;\")"
+      "Bash(psql -h localhost -p 5432 -U aliahdab -d postgres -c \"ALTER TABLE settings ADD COLUMN IF NOT EXISTS brand_voice_notes_multi jsonb DEFAULT ''{}''::jsonb;\")",
+      "Bash(./scripts/deploy-production.sh -y)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)"
     ],
     "additionalDirectories": [
       "/tmp",
       "/Users/aliahdab/Documents/AutoReply/.claude"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/guard-secrets.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/guard-destructive.sh",
+            "timeout": 5
+          }
+        ]
+      }
     ]
   }
 }

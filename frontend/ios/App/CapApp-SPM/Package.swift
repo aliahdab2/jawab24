@@ -11,7 +11,7 @@ let package = Package(
             targets: ["CapApp-SPM"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.0.0"),
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.2.0"),
         .package(name: "CapacitorCommunityFacebookLogin", path: "../../../../node_modules/@capacitor-community/facebook-login"),
         .package(name: "CapacitorApp", path: "../../../../node_modules/@capacitor/app"),
         .package(name: "CapacitorBrowser", path: "../../../../node_modules/@capacitor/browser"),
@@ -22,7 +22,7 @@ let package = Package(
         .package(name: "CapacitorPushNotifications", path: "../../../../node_modules/@capacitor/push-notifications"),
         .package(name: "CapacitorSplashScreen", path: "../../../../node_modules/@capacitor/splash-screen"),
         .package(name: "CapacitorStatusBar", path: "../../../../node_modules/@capacitor/status-bar"),
-        .package(name: "CapacitorSecureStoragePlugin", path: "../../../node_modules/capacitor-secure-storage-plugin")
+        .package(name: "CapacitorSecureStoragePlugin", path: "../../../../node_modules/capacitor-secure-storage-plugin")
     ],
     targets: [
         .target(
