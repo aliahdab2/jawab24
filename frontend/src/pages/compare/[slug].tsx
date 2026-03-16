@@ -65,11 +65,11 @@ export default function ComparePage({ competitor }: ComparePageProps) {
       <Head>
         <title>{t(k(`${slug}.seoTitle`))}</title>
         <meta name="description" content={t(k(`${slug}.seoDescription`))} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(`/compare/${slug}`)} />
+        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? `/en/compare/${slug}` : `/compare/${slug}`)} />
 
         <meta property="og:title" content={t(k(`${slug}.seoTitle`))} />
         <meta property="og:description" content={t(k(`${slug}.seoDescription`))} />
-        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(`/compare/${slug}`)} />
+        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? `/en/compare/${slug}` : `/compare/${slug}`)} />
         <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
         <meta property="og:type" content="website" />
 
