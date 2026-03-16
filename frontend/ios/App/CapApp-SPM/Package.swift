@@ -12,6 +12,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.2.0"),
+        .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "11.0.0"),
         .package(name: "CapacitorCommunityFacebookLogin", path: "../../../../node_modules/@capacitor-community/facebook-login"),
         .package(name: "CapacitorApp", path: "../../../../node_modules/@capacitor/app"),
         .package(name: "CapacitorBrowser", path: "../../../../node_modules/@capacitor/browser"),
@@ -40,7 +41,9 @@ let package = Package(
                 .product(name: "CapacitorPushNotifications", package: "CapacitorPushNotifications"),
                 .product(name: "CapacitorSplashScreen", package: "CapacitorSplashScreen"),
                 .product(name: "CapacitorStatusBar", package: "CapacitorStatusBar"),
-                .product(name: "CapacitorSecureStoragePlugin", package: "CapacitorSecureStoragePlugin")
+                .product(name: "CapacitorSecureStoragePlugin", package: "CapacitorSecureStoragePlugin"),
+                .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
+                .product(name: "FirebaseMessaging", package: "firebase-ios-sdk")
             ]
         )
     ]

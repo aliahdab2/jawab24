@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type ReactElement } from 'react';
+import { useState, useEffect, useMemo, useRef, type ReactElement, type ReactNode } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
@@ -18,6 +18,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { ShopifyIcon, SallaIcon } from '@/components/landing/LandingHero';
 
 interface PricingPageProps {
   plans: Plan[];
@@ -220,10 +221,16 @@ function PlanCard({
 
         <FeatureRow
           included={plan.ecommerceEnabled}
-          text={plan.maxProducts === null
+          text={plan.maxProducts == null
             ? t('pricing.ecommerceProductsUnlimited')
             : t('pricing.ecommerceProducts', { count: plan.maxProducts })}
           subtext={t('pricing.ecommerceBadgePlatforms')}
+          subtextIcons={
+            <>
+              <ShopifyIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0" />
+              <SallaIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0 text-[#00b4b6]" />
+            </>
+          }
         />
 
       </div>
@@ -287,11 +294,13 @@ function FeatureRow({
   included,
   text,
   subtext,
+  subtextIcons,
   highlight
 }: {
   included: boolean;
   text: string;
   subtext?: string;
+  subtextIcons?: ReactNode;
   highlight?: boolean;
 }) {
   return (
@@ -309,8 +318,9 @@ function FeatureRow({
           }`}>
           {text}
         </span>
-        {subtext && (
-          <span className="text-[10px] md:text-xs text-muted-foreground font-medium mt-0.5 text-start">
+        {(subtext || subtextIcons) && (
+          <span className="flex items-center gap-1.5 text-[10px] md:text-xs text-muted-foreground font-medium mt-0.5 text-start">
+            {subtextIcons}
             {subtext}
           </span>
         )}
