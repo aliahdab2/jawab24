@@ -337,6 +337,13 @@
       "when": 1773699935640,
       "tag": "0047_hot_king_cobra",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "5",
+      "when": 1773699936640,
+      "tag": "0048_fix_plan_data",
+      "breakpoints": true
     }
   ]
 }
