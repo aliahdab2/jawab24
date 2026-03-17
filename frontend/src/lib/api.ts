@@ -269,9 +269,27 @@ export interface AnalyticsOverview {
   };
 }
 
+export interface AiUsageModelStats {
+  calls: number;
+  llmCalls: number;
+  cacheHits: number;
+  tokensIn: number;
+  tokensOut: number;
+  costUsd: number;
+}
+
+export interface AiUsageReport {
+  period: { from: string; to: string; days: number };
+  totals: AiUsageModelStats;
+  byModel: Record<string, AiUsageModelStats>;
+  byDay: Array<{ date: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+}
+
 export const analyticsApi = {
   getOverview: (days?: number) =>
     api.get<AnalyticsOverview>('/analytics/overview', { params: days ? { days } : undefined }),
+  getAiUsage: (days?: number) =>
+    api.get<AiUsageReport>('/analytics/ai-usage', { params: days ? { days } : undefined }),
 };
 
 // Plans API (Public - uses publicApi to avoid auth redirect issues)

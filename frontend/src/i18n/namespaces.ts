@@ -57,6 +57,7 @@ export const PAGE_NAMESPACES = {
   adminCustomers:     [...ADMIN_LAYOUT],
   adminCustomerDetail:[...ADMIN_LAYOUT],
   adminPlayground:    [...ADMIN_LAYOUT, 'kb'],
+  adminObservability: [...ADMIN_LAYOUT],
 
   // ── Integration onboarding ────────────────────────────────────
   shopifyOnboard:     ['shopify', 'integrations', 'onboarding'],
