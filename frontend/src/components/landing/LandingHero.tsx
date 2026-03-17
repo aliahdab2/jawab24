@@ -28,6 +28,14 @@ export function SallaIcon({ className }: { className?: string }) {
   );
 }
 
+export function MetaIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 36 24" fill="currentColor" className={className} aria-hidden="true">
+      <path d="M7.5 2.4C5.7 2.4 4 4 2.8 6.6 1.2 10 .2 14.6.2 17.5c0 2.5.9 4.1 2.8 4.1 2 0 3.5-1.8 5.3-5.3l2-3.8c2.3-4.4 4.5-7.2 7.7-7.2s5.3 1.6 6.2 4.5c.7-2.8 2.8-7.4 6.3-7.4 1.7 0 2.9.8 3.7 2.1C33 2.4 30.7.9 27.6.9c-5.2 0-8 4.8-10.6 10l-1.8 3.5c-2 3.9-3.3 5.6-4.8 5.6-1 0-1.5-.8-1.5-2.5 0-2.7.9-6.7 2.3-9.9C12.6 4.6 14 3.1 15.3 2.8c-1-.3-2-.4-3-.4H7.5zm17.3 0c-1.8 0-3.2 2.4-4.5 5.5l-1.7 3.4c-1.6 3.2-2.8 5.4-2.8 7.2 0 2.5.9 4.1 2.8 4.1 2 0 3.5-1.8 5.3-5.3l2-3.8c1.2-2.2 2.2-3.6 3.2-4.3-.3-2.5-1.1-4.2-2.3-5.3-.6-.9-1.3-1.5-2-1.5z" />
+    </svg>
+  );
+}
+
 interface LandingHeroProps {
   isAuthenticated: boolean;
 }
@@ -73,6 +81,13 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                   {t('cta.note')}
                 </p>
               )}
+              {/* Meta Trust Anchor */}
+              <div className="flex items-center gap-2 group cursor-default" title={t('metaBadge.description')}>
+                <MetaIcon className="h-[14px] w-auto text-[#0668E1] dark:text-blue-400 flex-shrink-0" />
+                <span className="text-[13px] font-semibold text-[#475569] dark:text-slate-300 tracking-wide group-hover:text-[#0668E1] dark:group-hover:text-blue-400 transition-colors">
+                  {t('metaBadge.label')}
+                </span>
+              </div>
               {!isAuthenticated && (
                 <Link href="/pricing" className="w-full sm:w-auto">
                   <Button variant="secondary" size="lg" className="w-full sm:w-auto sm:min-w-[240px] justify-center px-6 sm:px-8 py-3 sm:py-5 text-sm sm:text-lg font-bold rounded-lg sm:rounded-2xl border-2 border-theme-border hover:border-brand-500 bg-card hover:bg-card transition-all shadow-lg dark:shadow-black/20">
@@ -101,6 +116,7 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                 <span>{t('platforms.salla')}</span>
               </div>
             </div>
+
           </div>
 
           {/* Hero Illustration - Phone Mockup with Floating Icons */}

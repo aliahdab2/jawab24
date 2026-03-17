@@ -70,9 +70,9 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="grid grid-cols-2 gap-4 sm:gap-8 lg:gap-16 items-center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 lg:gap-16 items-center">
           {/* Steps */}
-          <div className="space-y-4 sm:space-y-8 col-span-1">
+          <div className="space-y-4 sm:space-y-8">
             <motion.h2
               className="text-xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-4 sm:mb-8 leading-relaxed text-start"
               variants={headingVariants}
@@ -131,7 +131,7 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
 
           {/* Dashboard Preview */}
           <motion.div
-            className="relative col-span-1 pt-8 sm:pt-0"
+            className="relative hidden sm:block"
             variants={imageVariants}
             initial="hidden"
             animate={isInView ? 'visible' : 'hidden'}

@@ -24,6 +24,10 @@
     "salla": "Salla",
     "comingSoon": "Coming Soon"
   },
+  "metaBadge": {
+    "label": "Official Meta Business Partner",
+    "description": "Verified by Meta to safely connect with your Facebook & Instagram accounts"
+  },
   "comingSoon": {
     "banner": "Coming Soon — We're preparing something amazing!",
     "subtitle": "Our service is not live yet. Stay tuned for the launch!",

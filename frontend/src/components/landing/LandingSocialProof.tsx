@@ -50,6 +50,7 @@ export function LandingSocialProof() {
           </div>
           <div className="text-white font-bold text-base sm:text-xl">{t('testimonials.author1')}</div>
         </motion.div>
+
       </div>
     </section>
   );
