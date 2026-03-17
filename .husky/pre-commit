@@ -1,14 +1,9 @@
+#!/usr/bin/env bash
 # Guard against accidental deletion of critical config files
-CRITICAL_FILES=(
-  "frontend/postcss.config.js"
-  "frontend/tailwind.config.js"
-  "frontend/next.config.js"
-  "frontend/tsconfig.json"
-  "backend/tsconfig.json"
-)
+CRITICAL_FILES="frontend/postcss.config.js frontend/tailwind.config.js frontend/next.config.js frontend/tsconfig.json backend/tsconfig.json"
 
 DELETED_CRITICAL=""
-for file in "${CRITICAL_FILES[@]}"; do
+for file in $CRITICAL_FILES; do
   if git diff --cached --name-only --diff-filter=D | grep -qx "$file"; then
     DELETED_CRITICAL="$DELETED_CRITICAL\n  - $file"
   fi

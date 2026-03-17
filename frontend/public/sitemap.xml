@@ -265,4 +265,26 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+
+  <!-- Compare: Jawab24 vs Botpress - Arabic -->
+  <url>
+    <loc>https://jawab24.com/compare/botpress</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/compare/botpress"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/botpress"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/botpress"/>
+    <lastmod>2026-03-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Compare: Jawab24 vs Botpress - English -->
+  <url>
+    <loc>https://jawab24.com/en/compare/botpress</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/compare/botpress"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/botpress"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/botpress"/>
+    <lastmod>2026-03-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>

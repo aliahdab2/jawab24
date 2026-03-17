@@ -97,6 +97,25 @@ export const COMPETITORS: Record<string, Competitor> = {
       startingPrice: { jawab24: '$9/mo', competitor: '$29/mo' },
     },
   },
+  botpress: {
+    slug: 'botpress',
+    name: 'Botpress',
+    website: 'https://botpress.com',
+    features: {
+      arabicDialects: { jawab24: true, competitor: false },
+      aiSmartReplies: { jawab24: true, competitor: true },
+      shopifyIntegration: { jawab24: true, competitor: false },
+      sallaIntegration: { jawab24: true, competitor: false },
+      priceVerification: { jawab24: true, competitor: false },
+      knowledgeBaseRag: { jawab24: true, competitor: true },
+      confidenceScoring: { jawab24: true, competitor: false },
+      templateReplies: { jawab24: true, competitor: true },
+      businessHours: { jawab24: true, competitor: true },
+      rtlInterface: { jawab24: true, competitor: false },
+      freeTrialDays: { jawab24: true, competitor: true },
+      startingPrice: { jawab24: '$9/mo', competitor: '$89/mo' },
+    },
+  },
 };
 
 /** Get all competitor slugs for static path generation */
