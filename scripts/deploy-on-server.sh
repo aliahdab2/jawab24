@@ -292,33 +292,6 @@ run_migrations() {
     fi
 }
 
-# Run one-time data migrations (idempotent scripts in backend/scripts/)
-run_data_migrations() {
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "🔐 STEP 5b: Data Migrations"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-    container_id=$(docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml ps -q "backend-$DEPLOY_ENV")
-
-    if [ -z "$container_id" ]; then
-        echo "   ⚠️  No backend container — skipping data migrations"
-        return 0
-    fi
-
-    # Encrypt plaintext Facebook page tokens (idempotent — skips already-encrypted)
-    if docker exec "$container_id" test -f backend/scripts/migrate-encrypt-page-tokens.ts 2>/dev/null ||
-       docker exec "$container_id" test -f scripts/migrate-encrypt-page-tokens.ts 2>/dev/null; then
-        echo "   🔄 Encrypting Facebook page tokens..."
-        if docker exec "$container_id" npx tsx backend/scripts/migrate-encrypt-page-tokens.ts 2>&1; then
-            echo "   ✅ Page token encryption complete"
-        else
-            echo "   ⚠️  Page token encryption failed (non-fatal — tokens remain readable)"
-        fi
-    else
-        echo "   ℹ️  No data migration scripts found — skipping"
-    fi
-}
-
 # Switch traffic by updating Nginx
 switch_traffic() {
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -564,7 +537,6 @@ fi
 start_new_env
 # Run migrations BEFORE switching traffic, but AFTER starting new env
 run_migrations
-run_data_migrations
 verify_and_wait
 smoke_test_content  # Verify pages return real content before switching traffic
 echo "⏳ Warm-up (10s)..." && sleep 10
