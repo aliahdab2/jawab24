@@ -9,6 +9,7 @@ import enComments      from './en/comments.json';
 import enCommon        from './en/common.json';
 import enCompare       from './en/compare.json';
 import enContact       from './en/contact.json';
+import enEcommerce    from './en/ecommerce.json';
 import enDashboard     from './en/dashboard.json';
 import enDataDeletion  from './en/dataDeletion.json';
 import enErrorBoundary from './en/errorBoundary.json';
@@ -51,6 +52,7 @@ import arComments      from './ar/comments.json';
 import arCommon        from './ar/common.json';
 import arCompare       from './ar/compare.json';
 import arContact       from './ar/contact.json';
+import arEcommerce    from './ar/ecommerce.json';
 import arDashboard     from './ar/dashboard.json';
 import arDataDeletion  from './ar/dataDeletion.json';
 import arErrorBoundary from './ar/errorBoundary.json';
@@ -97,6 +99,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/common': enCommon,         'ar/common': arCommon,
   'en/compare': enCompare,       'ar/compare': arCompare,
   'en/contact': enContact,       'ar/contact': arContact,
+  'en/ecommerce': enEcommerce,   'ar/ecommerce': arEcommerce,
   'en/dashboard': enDashboard,   'ar/dashboard': arDashboard,
   'en/dataDeletion': enDataDeletion, 'ar/dataDeletion': arDataDeletion,
   'en/errorBoundary': enErrorBoundary, 'ar/errorBoundary': arErrorBoundary,

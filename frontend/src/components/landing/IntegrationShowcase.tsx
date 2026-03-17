@@ -424,9 +424,8 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
     t('showcase.feature4'),
   ];
 
-  const integrationsLink = isAuthenticated
-    ? '/integrations'
-    : '/login?redirect=%2Fintegrations';
+  const shopifyLink = isAuthenticated ? '/integrations' : '/integrations/shopify';
+  const sallaLink = isAuthenticated ? '/integrations' : '/integrations/salla';
 
   return (
     <section
@@ -518,7 +517,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
             {/* Store badges — glassmorphism dark */}
             <div className="flex gap-3.5 flex-wrap">
               <a
-                href={integrationsLink}
+                href={shopifyLink}
                 className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',
@@ -542,7 +541,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 </div>
               </a>
               <a
-                href={integrationsLink}
+                href={sallaLink}
                 className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',

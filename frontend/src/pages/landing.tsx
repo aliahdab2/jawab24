@@ -74,6 +74,7 @@ export default function LandingPage() {
     { question: t('faq.q2'), answer: t('faq.a2') },
     { question: t('faq.q3'), answer: t('faq.a3') },
     { question: t('faq.q4'), answer: t('faq.a4') },
+    { question: t('faq.q5'), answer: t('faq.a5') },
   ];
 
   const statsList = [
@@ -85,9 +86,27 @@ export default function LandingPage() {
     <MotionConfig reducedMotion="user">
     <div dir={dir} className="flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200 relative">
       <Head>
-        <title>{BRAND_ASSETS.meta.appTitle}</title>
+        <title>{t('seoTitle')}</title>
         <meta name="description" content={t('seoDescription')} />
+        <meta name="keywords" content={t('seoKeywords')} />
         <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/landing' : '/landing')} />
+
+        {/* Open Graph */}
+        <meta property="og:title" content={t('seoTitle')} />
+        <meta property="og:description" content={t('seoDescription')} />
+        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/landing' : '/landing')} />
+        <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
+        <meta property="og:type" content="website" />
+        <meta property="og:locale" content={locale === 'en' ? 'en_US' : 'ar_SA'} />
+        <meta property="og:site_name" content="Jawab24" />
+
+        {/* Twitter Card */}
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t('seoTitle')} />
+        <meta name="twitter:description" content={t('seoDescription')} />
+        <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
+
+        {/* FAQ Structured Data */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
