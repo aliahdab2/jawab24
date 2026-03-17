@@ -5,7 +5,8 @@
     "customers": "Customers",
     "auditLogs": "Audit Logs",
     "playground": "AI Playground",
-    "waitlist": "Waitlist"
+    "waitlist": "Waitlist",
+    "observability": "Observability"
   },
   "customers": {
     "title": "Customers",
@@ -174,5 +175,39 @@
     "paginationShowing": "Showing {from}-{to} of {total}",
     "featureEarly_access": "Early Access",
     "featureEcommerce_integrations": "E-commerce Integrations"
+  },
+  "observability": {
+    "title": "Observability",
+    "subtitle": "System health, AI costs, and reply pipeline metrics",
+    "periodLabel": "Period",
+    "days7": "7 days",
+    "days30": "30 days",
+    "days90": "90 days",
+    "aiCost": "AI Cost",
+    "totalCost": "Total Cost",
+    "totalCalls": "Total Calls",
+    "llmCalls": "LLM Calls",
+    "cacheHits": "Cache Hits",
+    "cacheHitRate": "Cache Hit Rate",
+    "tokensIn": "Tokens In",
+    "tokensOut": "Tokens Out",
+    "costByDay": "Daily Cost",
+    "costByModel": "Cost by Model",
+    "model": "Model",
+    "calls": "Calls",
+    "cost": "Cost",
+    "replyPipeline": "Reply Pipeline",
+    "totalReplies": "Total Replies",
+    "replyRate": "Reply Rate",
+    "avgResponseTime": "Avg Response Time",
+    "p50ResponseTime": "P50 Response Time",
+    "p95ResponseTime": "P95 Response Time",
+    "seconds": "s",
+    "byMethod": "By Method",
+    "byIntent": "By Intent",
+    "byPlatform": "By Platform",
+    "flagged": "Flagged",
+    "noData": "No data for this period",
+    "loading": "Loading metrics..."
   }
 }

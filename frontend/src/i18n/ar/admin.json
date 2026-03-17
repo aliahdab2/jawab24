@@ -5,7 +5,8 @@
     "customers": "العملاء",
     "auditLogs": "سجل العمليات",
     "playground": "ساحة التجريب",
-    "waitlist": "قائمة الانتظار"
+    "waitlist": "قائمة الانتظار",
+    "observability": "المراقبة"
   },
   "customers": {
     "title": "العملاء",
@@ -174,5 +175,39 @@
     "paginationShowing": "عرض {from}-{to} من {total}",
     "featureEarly_access": "الوصول المبكر",
     "featureEcommerce_integrations": "تكامل المتاجر الإلكترونية"
+  },
+  "observability": {
+    "title": "المراقبة",
+    "subtitle": "صحة النظام، تكاليف الذكاء الاصطناعي، ومقاييس خط الردود",
+    "periodLabel": "الفترة",
+    "days7": "٧ أيام",
+    "days30": "٣٠ يوم",
+    "days90": "٩٠ يوم",
+    "aiCost": "تكلفة الذكاء الاصطناعي",
+    "totalCost": "التكلفة الإجمالية",
+    "totalCalls": "إجمالي الطلبات",
+    "llmCalls": "طلبات LLM",
+    "cacheHits": "ردود من الكاش",
+    "cacheHitRate": "نسبة الكاش",
+    "tokensIn": "التوكنات الواردة",
+    "tokensOut": "التوكنات الصادرة",
+    "costByDay": "التكلفة اليومية",
+    "costByModel": "التكلفة حسب الموديل",
+    "model": "الموديل",
+    "calls": "الطلبات",
+    "cost": "التكلفة",
+    "replyPipeline": "خط الردود",
+    "totalReplies": "إجمالي الردود",
+    "replyRate": "نسبة الرد",
+    "avgResponseTime": "متوسط وقت الاستجابة",
+    "p50ResponseTime": "وقت الاستجابة P50",
+    "p95ResponseTime": "وقت الاستجابة P95",
+    "seconds": "ث",
+    "byMethod": "حسب الطريقة",
+    "byIntent": "حسب النية",
+    "byPlatform": "حسب المنصة",
+    "flagged": "مُعلّم",
+    "noData": "لا توجد بيانات لهذه الفترة",
+    "loading": "جاري تحميل المقاييس..."
   }
 }

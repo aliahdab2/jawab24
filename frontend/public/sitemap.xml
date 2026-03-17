@@ -243,4 +243,26 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+
+  <!-- Compare: Jawab24 vs Tidio - Arabic -->
+  <url>
+    <loc>https://jawab24.com/compare/tidio</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/compare/tidio"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/tidio"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/tidio"/>
+    <lastmod>2026-03-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Compare: Jawab24 vs Tidio - English -->
+  <url>
+    <loc>https://jawab24.com/en/compare/tidio</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/compare/tidio"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/tidio"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/tidio"/>
+    <lastmod>2026-03-17</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>

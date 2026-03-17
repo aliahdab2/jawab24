@@ -1,6 +1,6 @@
 {
   "backToHome": "Back to Home",
-  "vsTitle": "Jawab24 vs {{name}}",
+  "vsTitle": "Jawab24 vs {name}",
   "featureComparison": "Feature Comparison",
   "feature": "Feature",
   "yes": "Supported",
@@ -53,5 +53,20 @@
     "faqA2": "No. Chatfuel supports Shopify but not Salla. Jawab24 natively integrates with both Shopify and Salla.",
     "faqQ3": "Which has better AI quality, Jawab24 or Chatfuel?",
     "faqA3": "Jawab24 uses confidence scoring to hold uncertain replies for human review, plus RAG-powered Knowledge Base search. Chatfuel sends all AI replies without confidence checks."
+  },
+  "tidio": {
+    "seoTitle": "Jawab24 vs Tidio: Best Auto-Reply for Arabic E-Commerce (2026)",
+    "seoDescription": "Compare Jawab24 and Tidio for Facebook and Instagram auto-replies. See why Jawab24 is better for Arabic businesses — 70% cheaper with Salla integration, dialect support, and price verification.",
+    "subtitle": "Tidio is a general-purpose live chat and chatbot platform designed for websites. Jawab24 is purpose-built for Facebook and Instagram auto-replies — with Arabic dialect detection, Salla integration, and AI that verifies prices before sending. At $9/month vs $29/month, Jawab24 delivers more value for Arabic-speaking e-commerce businesses.",
+    "advantage1": "70% cheaper: Jawab24 starts at $9/month with AI replies, templates, and e-commerce integration included. Tidio starts at $29/month — and its AI add-on (Lyro) costs an extra $39/month on top.",
+    "advantage2": "Arabic-first: Jawab24 understands 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, MSA) and Franco-Arabic. Tidio has no Arabic dialect support.",
+    "advantage3": "Native Salla integration: Jawab24 syncs your Salla product catalog for accurate AI replies. Tidio does not support Salla at all.",
+    "advantage4": "Price verification: Jawab24's 2-tier system verifies every AI-generated price against your real catalog. Tidio has no price hallucination detection — its AI can invent prices.",
+    "faqQ1": "Is Jawab24 better than Tidio for Facebook and Instagram auto-replies?",
+    "faqA1": "Yes. Jawab24 is purpose-built for Facebook and Instagram with Arabic dialect support, Salla integration, and price verification. Tidio is primarily a website live chat tool that added social media as a secondary feature.",
+    "faqQ2": "Why is Jawab24 so much cheaper than Tidio?",
+    "faqA2": "Jawab24 is focused on one thing — intelligent auto-replies for social media. Tidio bundles website chat, email, and other features you may not need. With Jawab24 at $9/month, you get AI replies, templates, and e-commerce integration without paying for extras.",
+    "faqQ3": "Does Tidio support Arabic dialects and Salla stores?",
+    "faqA3": "No. Tidio has no Arabic dialect detection and does not integrate with Salla. Jawab24 is the only tool that supports 6 Arabic dialect families and both Shopify and Salla natively."
   }
 }

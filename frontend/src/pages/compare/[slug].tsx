@@ -48,9 +48,9 @@ export default function ComparePage({ competitor }: ComparePageProps) {
   const slug = competitor.slug;
 
   const faqs = [
-    { question: t(k(`${slug}.faq.q1`)), answer: t(k(`${slug}.faq.a1`)) },
-    { question: t(k(`${slug}.faq.q2`)), answer: t(k(`${slug}.faq.a2`)) },
-    { question: t(k(`${slug}.faq.q3`)), answer: t(k(`${slug}.faq.a3`)) },
+    { question: t(k(`${slug}.faqQ1`)), answer: t(k(`${slug}.faqA1`)) },
+    { question: t(k(`${slug}.faqQ2`)), answer: t(k(`${slug}.faqA2`)) },
+    { question: t(k(`${slug}.faqQ3`)), answer: t(k(`${slug}.faqA3`)) },
   ];
 
   const advantages = [
