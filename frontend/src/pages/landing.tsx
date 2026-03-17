@@ -24,7 +24,7 @@ function StatsSection({ statsList }: { statsList: { value: string; label: string
   const isInView = useInView(ref, { once: true, margin: '-40px' });
 
   return (
-    <section className="py-10 sm:py-20 -mb-px landing-section-dark relative overflow-hidden" ref={ref}>
+    <section className="py-10 sm:py-20 landing-section-dark relative overflow-hidden" ref={ref}>
       {/* Background cosmic glow */}
       <div
         aria-hidden="true"
