@@ -21,7 +21,7 @@ test.describe('SSR — public pages render without JavaScript', () => {
   test.use({ javaScriptEnabled: false });
 
   test('landing page renders hero heading and meta', async ({ page }) => {
-    await page.goto('/en/landing');
+    await page.goto('/en');
 
     // The h1 must be in the server HTML
     const h1 = page.locator('h1');
@@ -119,8 +119,8 @@ test.describe('SSR — public pages render without JavaScript', () => {
   });
 
   test('Arabic pages render with dir="rtl"', async ({ page }) => {
-    // Use /landing (not /) because / is a client-side redirect page
-    await page.goto('/landing');
+    // / is now the canonical landing page (renders full content)
+    await page.goto('/');
 
     // Arabic h1 must be visible
     const h1 = page.locator('h1');

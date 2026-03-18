@@ -84,7 +84,7 @@ export function PublicLayout({
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16 sm:h-20">
                 {/* Logo */}
-                <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
+                <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
                   <BrandLogo
                     variant="main"
                     className="w-10 h-10 sm:w-12 sm:h-12 transition-transform group-hover:rotate-6 flex-shrink-0"
@@ -135,7 +135,7 @@ export function PublicLayout({
 
         {variant === 'minimal' && (
           <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20">
-            <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
                 className="w-9 h-9 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform"

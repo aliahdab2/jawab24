@@ -19,7 +19,7 @@ const SITE_URL = 'https://jawab24.com';
 
 // --- Public pages to test ---
 const PUBLIC_PAGES = [
-  { path: '/en/landing', arPath: '/landing' },
+  { path: '/en', arPath: '/' },
   { path: '/en/pricing', arPath: '/pricing' },
   { path: '/en/login', arPath: '/login' },
   { path: '/en/what-is-jawab24', arPath: '/what-is-jawab24' },
@@ -39,7 +39,7 @@ const PROTECTED_PAGES = [
 
 // --- Pages with JSON-LD structured data ---
 const PAGES_WITH_JSON_LD = [
-  '/en/landing',
+  '/en',
   '/en/pricing',
   '/en/what-is-jawab24',
   '/en/blog',
@@ -100,8 +100,8 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
   // 1b. Canonical URL correctness (exact assertions)
   // ----------------------------------------------------------
   const CANONICAL_TEST_PAGES = [
-    { path: '/en/landing', expected: `${SITE_URL}/en/landing` },
-    { path: '/landing', expected: `${SITE_URL}/landing` },
+    { path: '/en', expected: `${SITE_URL}/en` },
+    { path: '/', expected: SITE_URL },
     { path: '/en/pricing', expected: `${SITE_URL}/en/pricing` },
     { path: '/pricing', expected: `${SITE_URL}/pricing` },
     { path: '/en/blog', expected: `${SITE_URL}/en/blog` },
@@ -121,16 +121,16 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
   // ----------------------------------------------------------
   const HREFLANG_TEST_PAGES = [
     {
-      path: '/en/landing',
-      ar: `${SITE_URL}/landing`,
-      en: `${SITE_URL}/en/landing`,
-      xDefault: `${SITE_URL}/landing`,
+      path: '/en',
+      ar: SITE_URL,
+      en: `${SITE_URL}/en`,
+      xDefault: SITE_URL,
     },
     {
-      path: '/landing',
-      ar: `${SITE_URL}/landing`,
-      en: `${SITE_URL}/en/landing`,
-      xDefault: `${SITE_URL}/landing`,
+      path: '/',
+      ar: SITE_URL,
+      en: `${SITE_URL}/en`,
+      xDefault: SITE_URL,
     },
     {
       path: '/en/pricing',
@@ -159,7 +159,7 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
   // 1d. No duplicate meta tags (tag ownership)
   // ----------------------------------------------------------
   const DEDUP_TEST_PAGES = [
-    '/en/landing',  // public page with many Head overrides
+    '/en',  // root page with many Head overrides
     '/en/pricing',  // public page with fewer overrides
   ];
 
@@ -319,7 +319,32 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
   });
 
   // ----------------------------------------------------------
-  // 1k. Sitemap validation
+  // 1k. Root URL renders real content (not skeleton)
+  // ----------------------------------------------------------
+  test('root URL (/) renders landing content (not skeleton)', async ({ page }) => {
+    await page.goto('/en');
+
+    // Must have real content, not skeleton
+    const h1 = page.locator('h1');
+    expect(await h1.count()).toBeGreaterThan(0);
+    const h1Text = await h1.first().textContent();
+    expect(h1Text!.length).toBeGreaterThan(5);
+
+    // No skeleton divs with animate-pulse as main content
+    const skeletons = page.locator('.animate-pulse');
+    const skeletonCount = await skeletons.count();
+    expect(skeletonCount).toBeLessThan(5);
+  });
+
+  test('/landing redirects to / (backward compatibility)', async ({ page }) => {
+    await page.goto('/en/landing');
+    // Should redirect to root (the canonical landing page)
+    // Next.js i18n may or may not preserve /en prefix depending on config
+    expect(page.url()).not.toContain('/landing');
+  });
+
+  // ----------------------------------------------------------
+  // 1m. Sitemap validation
   // ----------------------------------------------------------
   test('sitemap.xml is valid and contains expected routes', async ({ page }) => {
     const response = await page.goto('/sitemap.xml');
@@ -330,11 +355,15 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
     // Must be valid XML (if it loaded and has urlset, it parsed)
     expect(body).toContain('<urlset');
 
-    // Representative public routes must appear
-    expect(body).toContain(`${SITE_URL}/landing`);
-    expect(body).toContain(`${SITE_URL}/en/landing`);
+    // Representative public routes must appear (/ is the canonical landing page)
+    expect(body).toContain(`${SITE_URL}/</loc>`);
+    expect(body).toContain(`${SITE_URL}/en</loc>`);
     expect(body).toContain(`${SITE_URL}/pricing`);
     expect(body).toContain(`${SITE_URL}/blog`);
+
+    // /landing should NOT be in sitemap (it redirects to /)
+    expect(body).not.toContain(`${SITE_URL}/landing</loc>`);
+    expect(body).not.toContain(`${SITE_URL}/en/landing</loc>`);
 
     // Protected routes must NOT appear
     expect(body).not.toContain(`${SITE_URL}/dashboard`);
@@ -350,7 +379,7 @@ test.describe('SEO — meta tags, structured data, and crawl directives', () => 
   });
 
   // ----------------------------------------------------------
-  // 1l. robots.txt validation
+  // 1n. robots.txt validation
   // ----------------------------------------------------------
   test('robots.txt has correct crawl policy', async ({ page }) => {
     const response = await page.goto('/robots.txt');

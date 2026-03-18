@@ -178,7 +178,7 @@ Unlike generic chatbot builders (ManyChat, Chatfuel, Respond.io), Jawab24 is not
 ## Links
 
 - Homepage: https://jawab24.com
-- Landing page: https://jawab24.com/landing
+- Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
 - Pricing: https://jawab24.com/pricing
 - Contact: https://jawab24.com/contact

@@ -24,28 +24,6 @@
     <priority>1.0</priority>
   </url>
   
-  <!-- Landing - Arabic -->
-  <url>
-    <loc>https://jawab24.com/landing</loc>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/landing"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/landing"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/landing"/>
-    <lastmod>2026-03-07</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  
-  <!-- Landing - English -->
-  <url>
-    <loc>https://jawab24.com/en/landing</loc>
-    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/landing"/>
-    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/landing"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/landing"/>
-    <lastmod>2026-03-07</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-  
   <!-- Pricing - Arabic -->
   <url>
     <loc>https://jawab24.com/pricing</loc>

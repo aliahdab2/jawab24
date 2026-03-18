@@ -50,7 +50,7 @@ function StatsSection({ statsList }: { statsList: { value: string; label: string
   );
 }
 
-export default function LandingPage() {
+export default function LandingPageContent() {
   const t = useTranslations('landing');
   const tc = useTranslations('common');
   const tNav = useTranslations('nav');
@@ -133,7 +133,7 @@ export default function LandingPage() {
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 sm:h-20">
-            <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
                 className="w-10 h-10 sm:w-12 sm:h-12 transition-transform group-hover:rotate-6 flex-shrink-0"
@@ -192,7 +192,3 @@ export default function LandingPage() {
     </MotionConfig>
   );
 }
-
-import { makeGetStaticProps } from '@/i18n/getMessages';
-import { PAGE_NAMESPACES } from '@/i18n/namespaces';
-export const getStaticProps = makeGetStaticProps([...PAGE_NAMESPACES.landing]);

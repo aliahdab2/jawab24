@@ -22,7 +22,7 @@ export default function Custom500() {
 
       <div className="min-h-dvh bg-background flex flex-col items-center justify-center px-4">
         {/* Brand header */}
-        <Link href="/landing" className="flex items-center gap-3 mb-10 group">
+        <Link href="/" className="flex items-center gap-3 mb-10 group">
           <BrandLogo
             variant="main"
             className="w-12 h-12 group-hover:rotate-6 transition-transform"

@@ -27,7 +27,7 @@ export default function Custom404() {
 
       <div className="min-h-dvh bg-background flex flex-col items-center justify-center px-4">
         {/* Brand header */}
-        <Link href="/landing" className="flex items-center gap-3 mb-12 group">
+        <Link href="/" className="flex items-center gap-3 mb-12 group">
           <BrandLogo
             variant="main"
             className="w-10 h-10 group-hover:rotate-6 transition-transform"

@@ -234,13 +234,13 @@ describe('AuthManager', () => {
       expect(window.location.href).toBe(originalHref);
     });
 
-    it('should not redirect if on landing page', async () => {
-      window.location.pathname = '/landing';
-      window.location.href = '/landing';
-      
+    it('should not redirect if on root page', async () => {
+      window.location.pathname = '/';
+      window.location.href = '/';
+
       await authManager.logout({ redirect: true });
-      
-      expect(window.location.href).toBe('/landing');
+
+      expect(window.location.href).toBe('/');
     });
 
     it('should log reason when provided', async () => {

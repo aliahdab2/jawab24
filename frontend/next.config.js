@@ -50,6 +50,18 @@ const nextConfig = {
     ignoreDuringBuilds: false,
   },
 
+  async redirects() {
+    return [
+      // /landing → / (canonical landing page is now at root)
+      // Next.js i18n automatically handles locale: /en/landing → /en/
+      {
+        source: '/landing',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       // Static brand assets — immutable, cached for 1 year

@@ -233,7 +233,7 @@ export default function LoginPage() {
 
           {/* Header - Sticky so it stays visible when content scrolls (safe area handled by app-shell) */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm dark:bg-transparent dark:backdrop-blur-none flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 border-b border-theme-border/50 dark:border-transparent">
-            <Link href="/landing" className="flex items-center gap-2 sm:gap-3 group">
+            <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
                 className="w-9 h-9 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform"

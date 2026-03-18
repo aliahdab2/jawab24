@@ -1,7 +1,7 @@
 import { useRouter } from 'next/router';
 import { useVersion } from '@/lib/useVersion';
 
-const PUBLIC_PATHS = ['/', '/pricing', '/login', '/register', '/landing', '/terms', '/privacy'];
+const PUBLIC_PATHS = ['/', '/pricing', '/login', '/register', '/terms', '/privacy'];
 
 export function VersionBadge() {
   const { versionInfo, displayVersion, environment } = useVersion();

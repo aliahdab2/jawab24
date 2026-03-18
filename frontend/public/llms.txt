@@ -34,7 +34,7 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 
 ## Links
 
-- Landing page: https://jawab24.com/landing
+- Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
 - Pricing: https://jawab24.com/pricing
 - Full details for LLMs: https://jawab24.com/llms-full.txt

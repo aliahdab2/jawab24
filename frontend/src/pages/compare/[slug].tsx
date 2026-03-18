@@ -117,7 +117,7 @@ export default function ComparePage({ competitor }: ComparePageProps) {
         <div className="max-w-4xl mx-auto px-6 sm:px-8 px-safe-landscape py-12">
           {/* Back link */}
           <Link
-            href="/landing"
+            href="/"
             className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
           >
             <BackArrow className="w-5 h-5" />

@@ -165,7 +165,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
       // Handle hardware back button (Android) - Industry Standard
       // Exit app when on root screens, otherwise go back in history
-      const ROOT_SCREENS = ['/dashboard', '/login', '/landing', '/'];
+      const ROOT_SCREENS = ['/dashboard', '/login', '/'];
       
       const backListener = await App.addListener('backButton', () => {
         const router = routerRef.current;

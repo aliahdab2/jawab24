@@ -3,7 +3,6 @@ User-agent: *
 
 # Allow public pages (all locales)
 Allow: /
-Allow: /landing
 Allow: /pricing
 Allow: /login
 Allow: /privacy
@@ -20,7 +19,6 @@ Allow: /llms-full.txt
 
 # Allow English locale pages
 Allow: /en
-Allow: /en/landing
 Allow: /en/pricing
 Allow: /en/login
 Allow: /en/privacy

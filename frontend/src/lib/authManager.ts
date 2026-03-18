@@ -168,7 +168,7 @@ class AuthManager {
       // 5. Redirect to login (if requested and not already there)
       if (redirect && typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
-        if (!currentPath.includes('/login') && !currentPath.includes('/landing')) {
+        if (!currentPath.includes('/login') && currentPath !== '/' && !currentPath.match(/^\/[a-z]{2}\/?$/)) {
           window.location.href = '/login';
         }
       }
