@@ -37,3 +37,6 @@ GoogleService-Info.plist
 
 # CocoaPods (generated from Podfile)
 frontend/ios/App/Pods/
+
+# Marketing assets (not code)
+marketing/
