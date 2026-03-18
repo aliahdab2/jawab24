@@ -4,6 +4,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Clock, Calendar } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
 import {
@@ -143,7 +144,7 @@ export default function BlogPostPage({ post, frontmatter, content }: BlogPostPag
             prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-theme-border
             prose-th:border prose-th:border-theme-border prose-th:text-start
           ">
-            <ReactMarkdown>{content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           </div>
 
           {/* CTA */}
