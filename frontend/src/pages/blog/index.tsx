@@ -1,0 +1,190 @@
+import Head from 'next/head';
+import Link from 'next/link';
+import type { GetStaticProps } from 'next';
+import { ArrowLeft, ArrowRight, Clock, ArrowUpRight } from 'lucide-react';
+import { useTranslations, useLocale } from 'next-intl';
+import { BRAND_ASSETS } from '@/constants/brand';
+import { isRTLLocale } from '@/utils/locale';
+import { BLOG_POSTS, type BlogPost } from '@/data/blog-posts';
+import type { BlogFrontmatter } from '@/lib/blog';
+
+interface PostWithMeta extends BlogPost {
+  frontmatter: BlogFrontmatter;
+}
+
+interface BlogIndexProps {
+  posts: PostWithMeta[];
+}
+
+function PostCard({ post, featured = false }: { post: PostWithMeta; featured?: boolean }) {
+  const t = useTranslations('blog');
+  const locale = useLocale();
+  const href = locale === 'en' ? `/en/blog/${post.slug}` : `/blog/${post.slug}`;
+
+  return (
+    <Link
+      href={href}
+      className={`group block rounded-2xl border border-theme-border bg-card transition-all duration-200 hover:border-brand-300 hover:shadow-lg ${
+        featured ? 'md:col-span-2' : ''
+      }`}
+    >
+      <div className={`p-6 ${featured ? 'md:p-8' : ''}`}>
+        {/* Category + Date */}
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-xs font-medium uppercase tracking-wider text-brand-400">
+            {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {new Date(post.date).toLocaleDateString(locale === 'en' ? 'en-US' : 'ar-SA', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+            })}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h2 className={`font-bold text-foreground group-hover:text-brand-400 transition-colors mb-3 ${
+          featured ? 'text-2xl md:text-3xl' : 'text-xl'
+        }`}>
+          {post.frontmatter.title}
+        </h2>
+
+        {/* Excerpt */}
+        <p className={`text-muted-foreground leading-relaxed mb-4 ${
+          featured ? 'text-base md:text-lg' : 'text-sm line-clamp-3'
+        }`}>
+          {post.frontmatter.excerpt}
+        </p>
+
+        {/* Footer: read time + arrow */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>{t('readTime', { minutes: post.readingTime })}</span>
+          </div>
+          <ArrowUpRight className="w-4 h-4 text-muted-foreground group-hover:text-brand-400 transition-colors" aria-hidden="true" />
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+export default function BlogIndex({ posts }: BlogIndexProps) {
+  const t = useTranslations('blog');
+  const locale = useLocale();
+  const isRTL = isRTLLocale(locale);
+  const BackArrow = isRTL ? ArrowRight : ArrowLeft;
+
+  const [featured, ...rest] = posts;
+
+  return (
+    <>
+      <Head>
+        <title>{t('indexSeoTitle')}</title>
+        <meta name="description" content={t('indexSeoDescription')} />
+        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/blog' : '/blog')} />
+
+        <meta property="og:title" content={t('indexSeoTitle')} />
+        <meta property="og:description" content={t('indexSeoDescription')} />
+        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/blog' : '/blog')} />
+        <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
+        <meta property="og:type" content="website" />
+
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content={t('indexSeoTitle')} />
+        <meta name="twitter:description" content={t('indexSeoDescription')} />
+        <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
+
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              '@context': 'https://schema.org',
+              '@type': 'Blog',
+              'name': t('indexTitle'),
+              'description': t('indexDescription'),
+              'url': 'https://jawab24.com/blog',
+              'publisher': {
+                '@type': 'Organization',
+                'name': 'Jawab24',
+                'url': 'https://jawab24.com',
+              },
+            }),
+          }}
+        />
+      </Head>
+
+      <div className="flex-1 overflow-y-auto bg-background text-foreground">
+        <div className="fixed-safe-bg top-safe-bg bg-background" aria-hidden="true" />
+
+        <div className="max-w-5xl mx-auto px-6 sm:px-8 px-safe-landscape py-12">
+          {/* Back link */}
+          <Link
+            href="/landing"
+            className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
+          >
+            <BackArrow className="w-5 h-5" />
+            {t('backToHome')}
+          </Link>
+
+          {/* Hero */}
+          <div className="mb-12">
+            <h1 className="text-4xl md:text-5xl font-bold mb-3">
+              {t('indexTitle')}
+            </h1>
+            <p className="text-lg text-muted-foreground max-w-2xl">
+              {t('indexDescription')}
+            </p>
+          </div>
+
+          {/* Featured post */}
+          {featured && (
+            <div className="mb-8">
+              <PostCard post={featured} featured />
+            </div>
+          )}
+
+          {/* Post grid */}
+          {rest.length > 0 && (
+            <div className="grid gap-6 md:grid-cols-2">
+              {rest.map((post) => (
+                <PostCard key={post.slug} post={post} />
+              ))}
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="pt-12 border-t border-theme-border text-center mt-12">
+            <p className="text-xs text-muted-foreground">
+              &copy; {new Date().getFullYear()} Jawab24
+            </p>
+          </div>
+        </div>
+
+        <div className="fixed-safe-bg bottom-safe-bg bg-background" aria-hidden="true" />
+      </div>
+    </>
+  );
+}
+
+export const getStaticProps: GetStaticProps<BlogIndexProps> = async (ctx) => {
+  const { getI18nProps } = await import('@/i18n/getMessages');
+  const { PAGE_NAMESPACES } = await import('@/i18n/namespaces');
+  const { loadBlogPost } = await import('@/lib/blog');
+
+  const locale = ctx.locale || 'ar';
+  const i18nProps = await getI18nProps(ctx, [...PAGE_NAMESPACES.blog]);
+
+  const posts: PostWithMeta[] = BLOG_POSTS.map((post) => {
+    const { frontmatter } = loadBlogPost(post.slug, locale);
+    return { ...post, frontmatter };
+  });
+
+  return {
+    props: {
+      posts,
+      ...i18nProps,
+    },
+  };
+};

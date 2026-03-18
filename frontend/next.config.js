@@ -72,6 +72,11 @@ const nextConfig = {
         source: '/:locale(en|ar)?/:page(landing|pricing|login|what-is-jawab24|compare/:slug*)',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=3600, stale-while-revalidate=86400' }],
       },
+      // Blog pages — cache 1 day, serve stale for 1 week (content changes rarely)
+      {
+        source: '/:locale(en|ar)?/blog/:slug*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' }],
+      },
     ];
   },
 }

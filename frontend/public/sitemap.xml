@@ -287,4 +287,151 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
+
+  <!-- Blog Index - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Blog Index - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Blog: Facebook Auto Reply Setup Guide - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/auto-reply-facebook-setup-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/auto-reply-facebook-setup-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/auto-reply-facebook-setup-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/auto-reply-facebook-setup-guide"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Facebook Auto Reply Setup Guide - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/auto-reply-facebook-setup-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/auto-reply-facebook-setup-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/auto-reply-facebook-setup-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/auto-reply-facebook-setup-guide"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: Instagram Auto Reply Guide - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/instagram-auto-reply-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/instagram-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/instagram-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/instagram-auto-reply-guide"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Instagram Auto Reply Guide - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/instagram-auto-reply-guide</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/instagram-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/instagram-auto-reply-guide"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/instagram-auto-reply-guide"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: Best Auto Reply Tools 2026 - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/best-auto-reply-tools-2026</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/best-auto-reply-tools-2026"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/best-auto-reply-tools-2026"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/best-auto-reply-tools-2026"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Best Auto Reply Tools 2026 - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/best-auto-reply-tools-2026</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/best-auto-reply-tools-2026"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/best-auto-reply-tools-2026"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/best-auto-reply-tools-2026"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: Salla Store Facebook Auto Reply - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/salla-store-facebook-auto-reply</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/salla-store-facebook-auto-reply"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-store-facebook-auto-reply"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-store-facebook-auto-reply"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Salla Store Facebook Auto Reply - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/salla-store-facebook-auto-reply</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/salla-store-facebook-auto-reply"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-store-facebook-auto-reply"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-store-facebook-auto-reply"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: Shopify Facebook Auto Reply Arabic - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/shopify-facebook-auto-reply-arabic</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/shopify-facebook-auto-reply-arabic"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/shopify-facebook-auto-reply-arabic"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/shopify-facebook-auto-reply-arabic"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Shopify Facebook Auto Reply Arabic - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/shopify-facebook-auto-reply-arabic</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/shopify-facebook-auto-reply-arabic"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/shopify-facebook-auto-reply-arabic"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/shopify-facebook-auto-reply-arabic"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: Jawab24 Setup Tutorial - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/jawab24-setup-tutorial</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/jawab24-setup-tutorial"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-setup-tutorial"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-setup-tutorial"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Jawab24 Setup Tutorial - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/jawab24-setup-tutorial</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/jawab24-setup-tutorial"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/jawab24-setup-tutorial"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/jawab24-setup-tutorial"/>
+    <lastmod>2026-03-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
 </urlset>

@@ -20,6 +20,7 @@ export const PAGE_NAMESPACES = {
   index:              ['landing'],
   whatIsJawab24:      ['about'],
   compare:            ['compare'],
+  blog:               ['blog'],
   ecommerce:          ['ecommerce'],
 
   // ── Legal pages ───────────────────────────────────────────────

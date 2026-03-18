@@ -58,6 +58,7 @@ export function LandingFooter() {
             <h3 className="font-bold text-white text-sm sm:text-lg mb-4 sm:mb-8 uppercase tracking-widest">{t('footer.quickLinks')}</h3>
             <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
               <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.whatIsJawab24')}</Link></li>
+              <li><Link href="/blog" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.blog')}</Link></li>
               <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.contactUs')}</Link></li>
               <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.termsOfService')}</Link></li>
               <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.privacyPolicy')}</Link></li>

@@ -2,6 +2,7 @@ import type { GetStaticPropsContext, GetServerSidePropsContext } from 'next';
 
 // ── English namespace imports ─────────────────────────────────────────────────
 import enAbout         from './en/about.json';
+import enBlog          from './en/blog.json';
 import enAdmin         from './en/admin.json';
 import enAuth          from './en/auth.json';
 import enCheckout      from './en/checkout.json';
@@ -45,6 +46,7 @@ import enTime          from './en/time.json';
 
 // ── Arabic namespace imports ──────────────────────────────────────────────────
 import arAbout         from './ar/about.json';
+import arBlog          from './ar/blog.json';
 import arAdmin         from './ar/admin.json';
 import arAuth          from './ar/auth.json';
 import arCheckout      from './ar/checkout.json';
@@ -92,6 +94,7 @@ const GLOBAL_NAMESPACES = ['common', 'nav', 'notifications', 'errors', 'errorBou
 // Lookup table keyed by "locale/namespace"
 const NS: Record<string, Record<string, unknown>> = {
   'en/about': enAbout,           'ar/about': arAbout,
+  'en/blog': enBlog,             'ar/blog': arBlog,
   'en/admin': enAdmin,           'ar/admin': arAdmin,
   'en/auth': enAuth,             'ar/auth': arAuth,
   'en/checkout': enCheckout,     'ar/checkout': arCheckout,
