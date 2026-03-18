@@ -85,15 +85,11 @@ export default function WhatIsJawab24() {
         <meta name="description" content={t('seoDescription')} />
         <meta name="keywords" content={t('seoKeywords')} />
 
-        <meta property="og:title" content={t('seoTitle')} />
-        <meta property="og:description" content={t('seoDescription')} />
-        <meta property="og:image" content="https://jawab24.com/brand/og-social.png" />
-        <meta property="og:type" content="website" />
+        <meta key="og:title" property="og:title" content={t('seoTitle')} />
+        <meta key="og:description" property="og:description" content={t('seoDescription')} />
 
-        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('seoTitle')} />
         <meta name="twitter:description" content={t('seoDescription')} />
-        <meta name="twitter:image" content="https://jawab24.com/brand/og-social.png" />
 
         {/* WebPage structured data for AI extraction */}
         <script

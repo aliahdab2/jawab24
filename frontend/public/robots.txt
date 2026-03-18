@@ -12,6 +12,9 @@ Allow: /data-deletion
 Allow: /contact
 Allow: /what-is-jawab24
 Allow: /compare/
+Allow: /blog
+Allow: /blog/
+Allow: /integrations/
 Allow: /llms.txt
 Allow: /llms-full.txt
 
@@ -26,6 +29,9 @@ Allow: /en/data-deletion
 Allow: /en/contact
 Allow: /en/what-is-jawab24
 Allow: /en/compare/
+Allow: /en/blog
+Allow: /en/blog/
+Allow: /en/integrations/
 
 # Disallow dashboard pages (require auth)
 Disallow: /dashboard

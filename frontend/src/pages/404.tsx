@@ -21,7 +21,8 @@ export default function Custom404() {
   return (
     <>
       <Head>
-        <title>404 - {BRAND_ASSETS.meta.appName}</title>
+        <title>{`404 - ${BRAND_ASSETS.meta.appName}`}</title>
+        <meta name="robots" content="noindex, nofollow" />
       </Head>
 
       <div className="min-h-dvh bg-background flex flex-col items-center justify-center px-4">

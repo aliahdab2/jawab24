@@ -3,7 +3,6 @@ import Link from 'next/link';
 import type { GetStaticProps } from 'next';
 import { Clock, ArrowUpRight } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
-import { BRAND_ASSETS } from '@/constants/brand';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import { BLOG_POSTS, type BlogPost } from '@/data/blog-posts';
 import type { BlogFrontmatter } from '@/lib/blog';
@@ -81,12 +80,9 @@ export default function BlogIndex({ posts }: BlogIndexProps) {
         <title>{t('indexSeoTitle')}</title>
         <meta name="description" content={t('indexSeoDescription')} />
 
-        <meta property="og:title" content={t('indexSeoTitle')} />
-        <meta property="og:description" content={t('indexSeoDescription')} />
-        <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
-        <meta property="og:type" content="website" />
+        <meta key="og:title" property="og:title" content={t('indexSeoTitle')} />
+        <meta key="og:description" property="og:description" content={t('indexSeoDescription')} />
 
-        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('indexSeoTitle')} />
         <meta name="twitter:description" content={t('indexSeoDescription')} />
 

@@ -476,8 +476,8 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         <title>{t('pricing.seoTitle')}</title>
         <meta name="description" content={t('pricing.seoDescription')} />
         <meta name="keywords" content={t('pricing.seoKeywords')} />
-        <meta property="og:title" content={t('pricing.ogTitle')} />
-        <meta property="og:description" content={t('pricing.ogDescription')} />
+        <meta key="og:title" property="og:title" content={t('pricing.ogTitle')} />
+        <meta key="og:description" property="og:description" content={t('pricing.ogDescription')} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify({

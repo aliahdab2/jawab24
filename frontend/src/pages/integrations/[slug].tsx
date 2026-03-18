@@ -55,15 +55,11 @@ export default function IntegrationPage({ integration }: IntegrationPageProps) {
         <meta name="description" content={t(k(`${slug}.seoDescription`))} />
         <meta name="keywords" content={t(k(`${slug}.seoKeywords`))} />
 
-        <meta property="og:title" content={t(k(`${slug}.seoTitle`))} />
-        <meta property="og:description" content={t(k(`${slug}.seoDescription`))} />
-        <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
-        <meta property="og:type" content="website" />
+        <meta key="og:title" property="og:title" content={t(k(`${slug}.seoTitle`))} />
+        <meta key="og:description" property="og:description" content={t(k(`${slug}.seoDescription`))} />
 
-        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t(k(`${slug}.seoTitle`))} />
         <meta name="twitter:description" content={t(k(`${slug}.seoDescription`))} />
-        <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
 
         {/* WebPage structured data for AI extraction */}
         <script

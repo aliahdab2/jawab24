@@ -142,3 +142,6 @@ test.describe('SSR — public pages render without JavaScript', () => {
     expect(await h3s.count()).toBeGreaterThanOrEqual(3);
   });
 });
+
+// SEO meta tag tests (canonical, hreflang, noindex, dedup) have been consolidated
+// into e2e/seo.spec.ts — see that file for comprehensive SEO regression coverage.

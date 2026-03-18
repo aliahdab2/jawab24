@@ -317,59 +317,7 @@ Use these terms consistently in UI text, code comments, and translations:
 
 ### 7. Multi-Language Translation Service
 
-Jawab24 automatically translates user-generated content (greeting messages, away messages) to support bilingual businesses.
-
-**How It Works:**
-1. User writes message in any language (Arabic or English) in settings
-2. Backend automatically detects language when saving
-3. Backend translates to the other language using OpenAI
-4. Both versions stored in database (`*_ar` and `*_en` fields)
-5. When replying to customers, system sends the appropriate language version
-
-**Implementation Details:**
-- **Translation happens**: When user clicks Save in settings (not on every message sent)
-- **Service**: `/backend/src/services/translation.ts` using OpenAI GPT-4o-mini
-- **API endpoint**: `POST /api/translation/translate` (authenticated, for manual use if needed)
-- **Language detection**: `/backend/src/utils/language.ts` `detectLanguage()` function
-- **Auto-translation**: `/backend/src/controllers/settings.ts` lines 52-110
-
-**Database Schema:**
-```typescript
-// settings table (backend/src/db/schema.ts)
-awayMessage: text('away_message'),        // DEPRECATED - legacy field
-greetingMessage: text('greeting_message'), // DEPRECATED - legacy field
-awayMessageAr: text('away_message_ar'),
-awayMessageEn: text('away_message_en'),
-greetingMessageAr: text('greeting_message_ar'),
-greetingMessageEn: text('greeting_message_en'),
-awayMessageSourceLang: varchar('away_message_source_lang'),
-greetingMessageSourceLang: varchar('greeting_message_source_lang'),
-```
-
-**Reply Logic:**
-- Message processors detect customer's language from their comment/message
-- Call `settingsService.getAwayMessage(userId, language)` or `getGreetingMessage(userId, language)`
-- Service returns appropriate language version
-- Falls back to any available version if specific language not found
-
-**Cost Optimization:**
-- Translation only happens when user saves settings (one-time cost)
-- No translation on every message sent to customers (would be expensive!)
-- Uses cost-effective `gpt-4.1-mini` model
-- System prompt enforces consistent, emoji-preserving translations
-
-**User Experience:**
-- User sees simple textarea (no language tabs - too confusing!)
-- Types in any language they prefer
-- Backend handles translation transparently
-- Users don't need to know translation is happening
-
-**Supported Languages:** Arabic (ar) and English (en)
-
-**Future Extensions:**
-- Templates (high value - used frequently)
-- Knowledge Base (highest value - enables multilingual AI replies)
-- Additional languages (French, Spanish, German, Swedish)
+Away messages and greeting messages are auto-translated on save (not per-message). Service at `backend/src/services/translation.ts`. Both `*_ar` and `*_en` versions are stored; the system picks the right one based on the customer's language.
 
 ### 8. Linting
 
@@ -586,7 +534,7 @@ npx lighthouse http://localhost:3001/en/settings --only-categories=accessibility
 
 14. **Keep services focused — one file, one responsibility** — When adding new behavior to an existing service file, check if it belongs there or deserves its own file. If a function is used by multiple callers (adapter, controller, route), it should live in its own utility file, not buried inside one caller's service.
 
-### 13. Dark Mode — Use Semantic CSS Classes - CRITICAL
+### 12. Dark Mode — Use Semantic CSS Classes - CRITICAL
 
 **Use the semantic CSS classes defined in `globals.css` instead of writing `dark:` overrides inline.**
 
@@ -623,7 +571,7 @@ className="status-warning border"
 
 **For dark mode / theming fixes, use `/style`** — it has the full workflow, color mapping tables, and class creation conventions.
 
-### 14. SSR Content — Never Gate Server HTML Behind Client-Only State - CRITICAL
+### 13. SSR Content — Never Gate Server HTML Behind Client-Only State - CRITICAL
 
 **Public pages must render full HTML on the server. Never wrap page content in a client-only hydration guard in `_app.tsx`.**
 
@@ -749,7 +697,7 @@ ADMIN_TOKEN="$ADMIN_TOKEN" npm run test:ecommerce:shopify
 # Dev app credentials: in backend/.env (Jawab24-Dev app in Shopify Partners — never commit keys here)
 # Prod: restore SHOPIFY_HOST_NAME=jawab24.com in backend/.env before deploying!
 
-# AI Reply Quality Eval (98 test cases)
+# AI Reply Quality Eval (125 test cases)
 # Prerequisites: backend (port 3000) + ai-worker (port 3002) running, demo mode enabled
 # 1. Start services:
 DATABASE_URL="postgres://postgres:postgres@localhost:5433/autoreply" npx tsx backend/src/index.ts
@@ -765,43 +713,7 @@ ADMIN_TOKEN="$ADMIN_TOKEN" npm run eval
 
 ## 🚀 CI/CD Pipeline
 
-The project uses **GitHub Actions** for continuous integration and deployment.
-
-### Workflows (`.github/workflows/`)
-
-| Workflow | Trigger | Purpose |
-|----------|---------|---------|
-| **ci.yml** | Push to `main`/`develop`, PRs to `main` | 4-stage pipeline: secrets check → pre-deploy checks (lint, test, build with Postgres) → Docker image build + container smoke tests → deploy gate |
-| **deploy.yml** | After CI passes on `main`, or manual trigger | Blue-green zero-downtime deployment with pre-validation, migration check, 6-point health verification, automatic rollback on failure |
-| **rollback.yml** | Manual trigger | Emergency rollback to previous environment |
-| **smoke-tests.yml** | Post-deploy | Smoke tests against live deployment |
-| **validate-deployment.yml** | Post-deploy | Comprehensive deployment validation |
-
-### CI Pipeline Stages
-
-1. **Preflight** — Verify GitHub secrets and deployment scripts exist
-2. **Checks** — `npm ci` → OpenAI SDK version parity → `pre-deploy-check.sh` (lint, test, build) with Postgres service
-3. **Docker** — Build all 3 Docker images (backend, frontend, ai-worker) + smoke test each container starts without crashing
-4. **Summary** — Gate: blocks deployment if any stage fails
-
-### Deploy Pipeline
-
-- Runs only after CI passes on `main`
-- Pre-deployment: validates env vars on server, checks DB connectivity, manages disk space
-- Validates migrations locally before deploying
-- Creates backup point, then runs blue-green deploy via `deploy-on-server.sh`
-- Post-deploy: 6-point verification (backend health, frontend, DB, API endpoints, HTTPS/SSL, container health)
-- **Automatic rollback** if any verification fails
-
-### Key Commands
-
-```bash
-# CI runs this automatically — you can run it locally too:
-./scripts/pre-deploy-check.sh
-
-# Manual deployment (emergency/hotfix):
-# Go to Actions tab → Deploy → Run workflow
-```
+GitHub Actions workflows live in `.github/workflows/` (ci, deploy, rollback, smoke-tests, validate-deployment). Run `./scripts/pre-deploy-check.sh` locally to check before pushing.
 
 ---
 
@@ -820,18 +732,8 @@ These run on every push, PR, and deploy. All must pass to merge or deploy.
 | **AI worker unit tests** | `npm run test -w jawab24-ai-worker` | AI pipeline, prompt building, caching logic. |
 | **Backend integration tests** | `npm run test:integration -w jawab24-backend` | Real Postgres (CI service container). Messages, payments, pages, adapters, workspace. |
 | **E2E tests (Playwright)** | `cd frontend && npx playwright test` | All pages: comments, dashboard, landing, login, messages, pages, payment, pricing, rules, settings, templates, integrations. APIs mocked. |
-| **Lighthouse CI** | `.lighthouserc.json` | Accessibility (>90), CLS (<0.1) on `/landing`, `/pricing`, `/login`. |
-
-**Shopify-specific unit tests (16+ files):**
-- `backend/test/services/shopify.test.ts` — Core Shopify service (sync, webhooks, GraphQL)
-- `backend/test/services/shopifyCrypto.test.ts` — AES-256-GCM token encryption
-- `backend/test/services/shopifyPendingInstall.test.ts` — OAuth pending install flow
-- `backend/test/services/shopify.ecommerce-refactor.test.ts` — ecommerceStoreId migration
-- `backend/test/controllers/shopify.test.ts` — Controller endpoints
-- `backend/test/controllers/auth.shopify-claim.test.ts` — OAuth claim after login
-- `backend/test/routes/shopify.test.ts` — Route registration and auth guards
-- `backend/test/services/ecommerce*.test.ts` — Shared e-commerce logic (crypto, actions, RAG, tool loop)
-- `frontend/e2e/integrations.spec.ts` — Integrations page UI (connect, sync, disconnect, page linking)
+| **SEO regression tests** | `cd frontend && npx playwright test e2e/seo.spec.ts` | 39 tests: canonical URLs, hreflang, OG/Twitter tags, noindex on protected routes, JSON-LD, sitemap, robots.txt. JS disabled. |
+| **Lighthouse CI** | `.lighthouserc.json` | Accessibility (>90), SEO (>90), CLS (<0.1) on `/landing`, `/pricing`, `/login`, `/blog`, `/what-is-jawab24`. |
 
 ### Tier 2 — Automatic (deploy only)
 
@@ -852,85 +754,16 @@ These require real running services and can't run in CI (need API keys, connecte
 | **AI eval (full — 125 cases)** | `npm run eval` | Before releasing AI/prompt changes | Backend + AI worker running |
 | **AI eval (e-commerce only)** | `CATEGORY=13 npm run eval` | Before releasing e-commerce KB/RAG changes | Backend + AI worker running |
 
-**How to run Tier 3 Shopify tests:**
-```bash
-# Option A: Use the /shopify-dev skill (recommended)
-/shopify-dev test
-
-# Option B: Manual (if backend is already running)
-ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
-ADMIN_TOKEN="$ADMIN_TOKEN" npm run test:ecommerce:shopify
-
-# Option C: Run e-commerce eval tests too
-ADMIN_TOKEN="$ADMIN_TOKEN" CATEGORY=13 VERBOSE=1 npm run eval
-```
-
-**Important notes:**
-- `POST /auth/demo` reseeds demo data — call it once, reuse the token
-- Integration tests use demo-seeded data (no real Shopify API calls needed)
-- Eval tests need AI worker on port 3002 (uses OpenAI API)
-- Salla tests (138-149) require a "fashion" demo page — only available when Salla is configured
+See **Common Commands** above for exact commands. Use `/shopify-dev` skill for the easiest workflow.
 
 ---
 
 ## ⚠️ Known Issues & Technical Debt
 
-This section documents known issues, technical debt, and production readiness gaps in the codebase. AI assistants should be aware of these when making changes.
-
-### Testing Gaps
-
-1. **~~Thin E2E test coverage~~ — RESOLVED**
-   - Full E2E coverage: comments, dashboard, landing, login, messages, pages, payment, pricing, rules, settings, templates, visual
-   - All tests import from `en/<namespace>.json`/`ar/<namespace>.json` instead of hardcoding translated strings
-
-2. **No visual regression testing**
+1. **No visual regression testing**
    - Status: No visual regression tests configured
    - Impact: UI-heavy mobile app with RTL can easily have visual regressions
    - Impact: Safe area, landscape mode, RTL layout issues may slip through
-
-### Production Readiness
-
-3. **~~No centralized error reporting~~ — RESOLVED**
-   - Sentry (`@sentry/nextjs` + `@sentry/node` v10.35.0) is integrated across all workspaces
-   - All critical `console.error()` calls replaced with `captureError()` from `sentryHelpers.ts`
-   - Helper utilities: `frontend/src/lib/sentryHelpers.ts` and `backend/src/utils/sentryHelpers.ts`
-   - Errors are tagged by context (e.g. `{ tags: { page: 'settings', action: 'save' } }`)
-   - Infrastructure errors (Redis, shutdown) use DUAL logging (console + Sentry)
-   - Non-critical errors use `Sentry.addBreadcrumb()` for context without noise
-
-### Performance & Cost
-
-4. **~~No rate limiting on auto-translation~~ — ALREADY PROTECTED**
-   - Backend `handleSmartTranslation()` compares update vs current DB values — only translates when text actually changed
-   - Frontend save button is disabled during save (`disabled={!hasChanges || saving}`) — prevents double-clicks
-
-### Code Quality
-
-5. **~~Remaining hardcoded strings~~ — RESOLVED**
-   - All language conditionals fixed — using `t()` keys
-   - Checkmark symbols replaced with `<Check>` lucide icon
-   - No `&middot;` separator found in codebase
-
-### Security
-
-6. **~~No input sanitization on user textareas~~ — NOT AN ISSUE**
-   - Audit confirmed: all user content rendered as **plain text in JSX** (not HTML)
-   - No `dangerouslySetInnerHTML` with user input anywhere
-   - Backend is JSON-only API, no server-side HTML rendering
-   - Existing sanitization in `packages/shared/src/utils/sanitize.ts` handles AI prompt injection
-
-### Minor Cleanup
-
-7. **~~Dead export: `translateText`~~ — NOT DEAD**
-    - Actively used in `controllers/settings.ts` and `routes/translation.ts`
-    - No action needed
-
----
-
-**Note to AI Assistants:**
-- When working on related features, consider fixing these issues if appropriate
-- Don't introduce new instances of these anti-patterns
-- Ask the user if they want you to address any of these issues when you're in the area
 
 ---
 
@@ -985,48 +818,26 @@ return (
 
 ---
 
-## ⚠️ Common Mistakes
+## ⚠️ Common Mistakes (Quick Reference)
+
+Detailed rules are in the sections above. This table covers the most frequent gotchas:
 
 | Mistake | Fix |
 |---------|-----|
-| Hardcoded safe area values | Use `var(--sai-*)` CSS variables |
-| Using `env()` in components | Use CSS classes like `pt-safe`, `bottom-nav-position` |
-| Using `min-h-screen` in pages | Use `flex-1 overflow-y-auto` instead |
-| Inline styles for safe areas | Use CSS classes |
-| Using `left`/`right` in CSS | Use `start`/`end` for RTL |
-| Using `pl-*`/`pr-*` | Use `ps-*`/`pe-*` for RTL |
-| Using `ml-*`/`mr-*` | Use `ms-*`/`me-*` for RTL |
 | `import { useTranslation } from '@/i18n'` (old shim) | Use `import { useTranslations } from 'next-intl'` with a namespace |
-| `useTranslation()` without namespace | Use `useTranslations('namespace')` — every component needs a namespace |
-| `t('namespace.key')` (prefixed key) | Drop the namespace prefix: `t('key')` — the namespace is passed to `useTranslations()` |
-| Hardcoded strings | Use `t('key')` |
-| **Language conditionals for text** | **Use `t('key')` NOT `locale === 'ar' ? ... : ...`** |
-| `locale === 'ar'` for RTL detection | Use `isRTLLocale(locale)` from `@/utils/locale` — extensible, works for all RTL locales |
-| `locale === 'ar' ? 'en' : 'ar'` for language toggle | Use `getNextLocale(locale)` from `@/utils/locale` — single place to update when adding languages |
-| `locale === 'ar' ? '' : '/${locale}'` for URL path | Use `getLocalePath(locale)` from `@/utils/locale` — handles default locale prefix |
-| `locale === 'ar' ? 'rtl' : 'ltr'` for direction | Use `getLocaleDirection(locale)` from `@/utils/locale` — works for all RTL locales |
-| Adding `dir` to normal page containers | Don't — they inherit from `<html dir>` in `_document.tsx`. Only add `dir` to portal/overlay components |
-| Fixed heights in modals | Use `max-h-[vh]` + `overflow-auto` |
-| Ignoring landscape mode | Test both orientations, use `landscape:` |
-| Buttons hidden in landscape | Keep footer `flex-shrink-0`, body scrollable |
-| Stripe call without country check | ALWAYS check sanctioned countries first |
-| `dir="ltr"` on inputs with translated placeholders | Use `dir="auto"` so RTL placeholders display correctly |
-| `dir={lang === 'ar' ? 'rtl' : 'ltr'}` on user inputs | Use `dir="auto"` — browser detects direction from typed content |
-| Inline `useX()` hook in a page | Check `frontend/src/hooks/` first, create shared hook if missing |
-| `<input>` or `<textarea>` without `aria-label` or linked `<label>` | Use UI components (`Input`, `Textarea`) which auto-link labels, or add `aria-label={t('...')}` |
-| Hardcoded English in `aria-label` | Use `aria-label={t('key')}` — screen readers need translated labels too |
-| Hardcoded translated strings in E2E tests | Import `en.json`/`ar.json` and use `en['key']`/`ar['key']` — tests break when translations change |
-| `console.error(...)` for error reporting | Use `captureError()` from `sentryHelpers.ts` — errors must be tracked in Sentry, not just the browser console |
-| `bg-amber-50 text-amber-700` without `dark:` overrides | Use semantic class `status-warning` (or `alert-warning`, `icon-bg-amber`) — check `globals.css` for available classes before adding inline `dark:` overrides |
-| `<textarea>` or `<input>` with `text-foreground` but no `bg-*` | Add `bg-background` — browser default bg is white, causing white-on-white in dark mode |
-| `bg-green-100` circles/badges in dark mode | Use `icon-bg-emerald` or `icon-bg-green` — or add `dark:bg-green-900/30` if no semantic class fits |
-| `text-surface-300` or `text-surface-400` for text/icons | **NEVER** — these are invisible in dark mode (near-black). Use: `text-muted-foreground` (text), `text-icon-muted` (icons), `text-subtle` (separators), `bg-dot-muted` (dots). For action buttons with hover states: `text-surface-400 dark:text-surface-600` |
-| `placeholder:text-surface-300` or `placeholder:text-surface-400` | Use `placeholder:text-muted-foreground` — matches the standard `input` component pattern in `globals.css` |
-| Duplicating logic (fallback chains, selection, formatting) across files | Extract a shared utility function and import it everywhere — single source of truth |
-| Adding new behavior to an unrelated service file | Create a dedicated file when the function is used by multiple callers (adapter, controller, route) |
-| `"{count} item(s)"` or `"{limit} page(s)"` in translation files | **NEVER use `(s)` workarounds** — use ICU plural format: `"{count, plural, one {# item} other {# items}}"` for EN; include all 6 CLDR forms for AR |
-| `!hasHydrated ? <Skeleton /> : <Content />` in `_app.tsx` | **NEVER** gate page rendering behind client-only state in `_app.tsx` — server HTML will be empty, killing SEO and AI discoverability. Auth/hydration guards belong in `DashboardLayout`, not `_app.tsx` |
-| `typeof window === 'undefined' ? <Fallback /> : <Page />` in `_app.tsx` | Same problem — server renders the fallback, not the page content. Always render `<Component {...pageProps} />` unconditionally |
+| `t('namespace.key')` (prefixed key) | Drop the prefix: `t('key')` — namespace is passed to `useTranslations()` |
+| `locale === 'ar'` for RTL detection | Use `isRTLLocale(locale)` from `@/utils/locale` |
+| `locale === 'ar' ? 'en' : 'ar'` for language toggle | Use `getNextLocale(locale)` from `@/utils/locale` |
+| `locale === 'ar' ? '' : '/${locale}'` for URL path | Use `getLocalePath(locale)` from `@/utils/locale` |
+| `locale === 'ar' ? 'rtl' : 'ltr'` for direction | Use `getLocaleDirection(locale)` from `@/utils/locale` |
+| Adding `dir` to normal page containers | Don't — they inherit from `<html dir>` in `_document.tsx`. Only portals/overlays need `dir` |
+| `dir="ltr"` or `dir={lang === 'ar' ? ...}` on user inputs | Use `dir="auto"` — browser detects direction from typed content |
+| `console.error(...)` for error reporting | Use `captureError()` from `sentryHelpers.ts` |
+| `text-surface-300` or `text-surface-400` for text/icons | **NEVER** — invisible in dark mode. Use `text-muted-foreground`, `text-icon-muted`, `text-subtle` |
+| `<input>` with `text-foreground` but no `bg-*` | Add `bg-background` — prevents white-on-white in dark mode |
+| Hardcoded color classes without `dark:` overrides | Use semantic classes from `globals.css` (`status-*`, `icon-bg-*`, `alert-*`) |
+| `"{count} item(s)"` in translation files | Use ICU plural format: `"{count, plural, one {# item} other {# items}}"` |
+| Hydration guard in `_app.tsx` | **NEVER** — server HTML will be empty. Guards belong in `DashboardLayout` |
 
 ---
 
@@ -1060,12 +871,6 @@ refactor(css): consolidate safe areas
 - `brand-*`: Primary teal/green
 - `surface-*`: Grays for backgrounds
 - `accent-*`: Orange highlights
-
-### Breakpoints
-- `sm`: 640px
-- `md`: 768px
-- `lg`: 1024px (desktop)
-- `xl`: 1280px
 
 ### Fonts
 - `font-display`: Outfit (headings)

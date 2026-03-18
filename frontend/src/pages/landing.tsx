@@ -90,19 +90,13 @@ export default function LandingPage() {
         <meta name="description" content={t('seoDescription')} />
         <meta name="keywords" content={t('seoKeywords')} />
 
-        {/* Open Graph */}
-        <meta property="og:title" content={t('seoTitle')} />
-        <meta property="og:description" content={t('seoDescription')} />
-        <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
-        <meta property="og:type" content="website" />
-        <meta property="og:locale" content={locale === 'en' ? 'en_US' : 'ar_SA'} />
-        <meta property="og:site_name" content="Jawab24" />
+        {/* Open Graph — title/desc override MetaHead defaults; image/type/locale/site_name inherited */}
+        <meta key="og:title" property="og:title" content={t('seoTitle')} />
+        <meta key="og:description" property="og:description" content={t('seoDescription')} />
 
-        {/* Twitter Card */}
-        <meta name="twitter:card" content="summary_large_image" />
+        {/* Twitter — title/desc override MetaHead defaults; card/image inherited */}
         <meta name="twitter:title" content={t('seoTitle')} />
         <meta name="twitter:description" content={t('seoDescription')} />
-        <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
 
         {/* FAQ Structured Data */}
         <script

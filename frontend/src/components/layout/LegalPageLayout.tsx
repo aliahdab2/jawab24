@@ -25,7 +25,6 @@ interface LegalPageLayoutProps {
   lastUpdatedDate?: string;
   backToHomeLabel: string;
   sections: Section[];
-  ogImage?: string;
 }
 
 export function LegalPageLayout({
@@ -36,21 +35,16 @@ export function LegalPageLayout({
   lastUpdatedDate,
   backToHomeLabel,
   sections,
-  ogImage = 'https://jawab24.com/brand/og-social.png',
 }: LegalPageLayoutProps) {
   return (
     <>
       <Head>
         <title>{seoTitle}</title>
         <meta name="description" content={metaDescription} />
-        <meta property="og:title" content={seoTitle} />
-        <meta property="og:description" content={metaDescription} />
-        <meta property="og:image" content={ogImage} />
-        <meta property="og:type" content="article" />
-        <meta name="twitter:card" content="summary_large_image" />
+        <meta key="og:title" property="og:title" content={seoTitle} />
+        <meta key="og:description" property="og:description" content={metaDescription} />
         <meta name="twitter:title" content={seoTitle} />
         <meta name="twitter:description" content={metaDescription} />
-        <meta name="twitter:image" content={ogImage} />
       </Head>
 
       <div className="flex-1 overflow-y-auto bg-background text-foreground">

@@ -153,11 +153,11 @@ export default function LoginPage() {
   return (
     <>
       <Head>
-        <title>{BRAND_ASSETS.meta.appTitle} - {t('login')}</title>
+        <title>{`${BRAND_ASSETS.meta.appTitle} - ${t('login')}`}</title>
         <meta name="description" content={t('seoDescription')} />
         <meta name="keywords" content={t('seoKeywords')} />
-        <meta property="og:title" content={t('ogTitle')} />
-        <meta property="og:description" content={t('ogDescription')} />
+        <meta key="og:title" property="og:title" content={t('ogTitle')} />
+        <meta key="og:description" property="og:description" content={t('ogDescription')} />
       </Head>
 
       <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] relative">

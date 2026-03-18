@@ -40,15 +40,12 @@ export default function BlogPostPage({ post, frontmatter, content }: BlogPostPag
         <meta name="description" content={frontmatter.seoDescription} />
         <meta name="keywords" content={frontmatter.seoKeywords} />
 
-        <meta property="og:title" content={frontmatter.seoTitle} />
-        <meta property="og:description" content={frontmatter.seoDescription} />
-        <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
-        <meta property="og:type" content="article" />
+        <meta key="og:title" property="og:title" content={frontmatter.seoTitle} />
+        <meta key="og:description" property="og:description" content={frontmatter.seoDescription} />
+        <meta key="og:type" property="og:type" content="article" />
 
-        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={frontmatter.seoTitle} />
         <meta name="twitter:description" content={frontmatter.seoDescription} />
-        <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
 
         <script
           type="application/ld+json"

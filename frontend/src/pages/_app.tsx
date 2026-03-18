@@ -469,26 +469,26 @@ function MetaHead({ locale }: { locale: string }) {
       <link rel="alternate" hrefLang="en" href={BRAND_ASSETS.urls.canonical(enPagePath)} />
       <link rel="alternate" hrefLang="x-default" href={BRAND_ASSETS.urls.canonical(arPagePath)} />
 
-      {/* Open Graph Defaults */}
-      <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
-      <meta property="og:site_name" content={BRAND_ASSETS.meta.appName} />
-      <meta property="og:title" content={BRAND_ASSETS.meta.appTitle} />
-      <meta property="og:description" content={tMeta('ogDescription')} />
-      <meta property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
-      <meta property="og:image:width" content="1200" />
-      <meta property="og:image:height" content="630" />
-      <meta property="og:type" content="website" />
-      <meta property="og:locale" content={getOGLocale(locale)} />
+      {/* Open Graph Defaults — key props enable page-level overrides via next/head dedup */}
+      <meta key="og:url" property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
+      <meta key="og:site_name" property="og:site_name" content={BRAND_ASSETS.meta.appName} />
+      <meta key="og:title" property="og:title" content={BRAND_ASSETS.meta.appTitle} />
+      <meta key="og:description" property="og:description" content={tMeta('ogDescription')} />
+      <meta key="og:image" property="og:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
+      <meta key="og:image:width" property="og:image:width" content="1200" />
+      <meta key="og:image:height" property="og:image:height" content="630" />
+      <meta key="og:type" property="og:type" content="website" />
+      <meta key="og:locale" property="og:locale" content={getOGLocale(locale)} />
       {getOGAlternateLocales(locale).map(alt => (
         <meta key={alt} property="og:locale:alternate" content={alt} />
       ))}
 
-      {/* Twitter Card */}
-      <meta name="twitter:card" content="summary_large_image" />
-      <meta name="twitter:site" content="@jawab24" />
-      <meta name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
-      <meta name="twitter:description" content={tMeta('twitterDescription')} />
-      <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
+      {/* Twitter Card — key props enable page-level overrides */}
+      <meta key="twitter:card" name="twitter:card" content="summary_large_image" />
+      <meta key="twitter:site" name="twitter:site" content="@jawab24" />
+      <meta key="twitter:title" name="twitter:title" content={BRAND_ASSETS.meta.appTitle} />
+      <meta key="twitter:description" name="twitter:description" content={tMeta('twitterDescription')} />
+      <meta key="twitter:image" name="twitter:image" content={BRAND_ASSETS.urls.ogImage(BRAND_ASSETS.seo.ogSocial)} />
 
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
