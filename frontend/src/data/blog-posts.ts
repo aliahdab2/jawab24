@@ -45,6 +45,30 @@ export const BLOG_POSTS: BlogPost[] = [
     category: 'guides',
     readingTime: 10,
   },
+  {
+    slug: 'reduce-facebook-response-time',
+    date: '2026-04-01',
+    category: 'guides',
+    readingTime: 8,
+  },
+  {
+    slug: 'salla-vs-shopify-arabic-sellers',
+    date: '2026-04-15',
+    category: 'comparisons',
+    readingTime: 10,
+  },
+  {
+    slug: 'ai-auto-reply-angry-customers',
+    date: '2026-04-29',
+    category: 'guides',
+    readingTime: 9,
+  },
+  {
+    slug: 'common-facebook-auto-reply-mistakes',
+    date: '2026-05-13',
+    category: 'guides',
+    readingTime: 8,
+  },
 ];
 
 export function getAllBlogSlugs(): string[] {

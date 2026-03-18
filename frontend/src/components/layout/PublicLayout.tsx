@@ -97,6 +97,12 @@ export function PublicLayout({
                 {/* Actions */}
                 <div className="flex items-center gap-1 sm:gap-4">
                   <Link
+                    href="/blog"
+                    className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
+                  >
+                    {tLanding('nav.blog')}
+                  </Link>
+                  <Link
                     href="/pricing"
                     className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
                   >

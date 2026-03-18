@@ -1,5 +1,6 @@
 {
   "nav": {
+    "blog": "المدونة",
     "pricing": "الأسعار",
     "login": "تسجيل الدخول",
     "start": "ابدأ"
@@ -141,7 +142,7 @@
     "businessInfo": "Bergavägen 15 A, LGH 1002, 241 39 Eslöv, Sweden",
     "phoneNumber": "+46 700 22 47 20",
     "operatedBy": "يتم تشغيل Jawab24 بواسطة:",
-    "operatorName": "Mohammad Ali Ahdab",
+    "operatorName": "فريق جواب٢٤",
     "orgNumber": "رقم التسجيل: 810312-5335"
   },
   "images": {

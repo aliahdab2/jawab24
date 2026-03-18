@@ -1,22 +1,26 @@
 ---
 seoTitle: "Jawab24 Setup Guide: How to Get Started with AI Auto-Reply in Minutes"
-seoDescription: "Complete Jawab24 tutorial — connect your Facebook/Instagram page, set up your Knowledge Base, configure auto-reply settings, and sync your Shopify or Salla store."
+seoDescription: "Complete Jawab24 tutorial — connect your Facebook/Instagram page, set up your Knowledge Base, configure auto-reply settings, and explore features like angry customer alerts and price verification."
 seoKeywords: "Jawab24 tutorial, how to use Jawab24, Jawab24 setup guide, Jawab24 getting started"
 title: "Jawab24 Setup Guide: How to Get Started with AI Auto-Reply in Minutes"
-excerpt: "A complete walkthrough of setting up Jawab24 — from connecting your Facebook page to going live with AI-powered auto-replies that understand Arabic dialects."
+excerpt: "A complete walkthrough of setting up Jawab24 — from connecting your Facebook page to going live with AI-powered auto-replies that understand your customers' language."
 ---
 
 ## What Jawab24 Does
 
 Jawab24 is an AI-powered auto-reply platform for Facebook and Instagram business pages. When a customer comments on your post or sends you a direct message, Jawab24 reads their question, checks your product catalog and business information, and sends an accurate reply — automatically, 24/7.
 
+Unlike traditional chatbot tools that require you to build decision trees and flowcharts, Jawab24 uses AI that works out of the box. **No flow building, no keyword mapping, no technical setup.** You add your business information to a Knowledge Base, and the AI figures out how to respond to customers naturally.
+
 What makes it different from generic chatbot tools:
 
-- **Arabic dialect detection** — Jawab24 recognizes 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA) and replies naturally in the customer's dialect
+- **Multilingual with dialect awareness** — Jawab24 currently supports English and Arabic, with Arabic covering 6 dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA). Turkish, Swedish, and German are coming soon. If it can handle 6 Arabic dialects, it can handle any language
+- **Conversation context** — The AI loads the last 12 messages in each conversation, so it understands follow-ups. When a customer says "and how much is this one?", the AI knows what "this one" refers to from conversation history
+- **99.6% accuracy** — Tested across 125 real-world scenarios covering product questions, complaints, follow-ups, and edge cases. This is a published benchmark, not a vague "powered by AI" claim
 - **E-commerce integration** — Native Shopify and Salla support with automatic product sync, so the AI always has your latest prices and availability
-- **Price hallucination prevention** — A two-tier verification system checks every price the AI mentions against your actual catalog before sending
+- **Price hallucination prevention** — A two-tier verification system checks every price the AI mentions against your actual catalog before sending. If the price doesn't match, the reply is held with a safe fallback
+- **Angry customer detection** — The AI identifies frustrated customers and sends instant push notifications to your phone so you can intervene personally
 - **Confidence scoring** — When the AI is unsure about an answer, it flags the reply for your review instead of sending a potentially wrong response
-- **Bilingual support** — Handles Arabic and English seamlessly, including mixed-language queries where customers blend both
 
 Whether you're a solo merchant handling 20 comments a day or a growing brand with hundreds of daily interactions, Jawab24 keeps your customers engaged while you focus on your business.
 
@@ -51,20 +55,22 @@ All permissions follow Facebook's official API guidelines. Jawab24 never posts o
 
 The Knowledge Base is the foundation of accurate auto-replies. Think of it as the AI's brain — it will *only* use information you provide here. It never invents answers.
 
+This is the key difference from flow-based chatbot tools: instead of building conversation trees and mapping every possible customer question to a response, you simply describe your business. The AI handles the conversation logic on its own.
+
 **What to include:**
 
 - **Products and pricing** — If you connect Shopify or Salla (covered in the next section), this happens automatically. Otherwise, add your key products manually with names, prices, and descriptions.
-- **Shipping policy** — Delivery zones, timeframes, costs. Example: "We deliver to all Saudi cities within 2-3 business days. Shipping is free for orders over 200 SAR."
+- **Shipping policy** — Delivery zones, timeframes, costs. Example: "We deliver to all cities within 2-3 business days. Shipping is free for orders over $50."
 - **Return and exchange policy** — Return window, conditions, process. This is one of the most commonly asked questions after pricing.
-- **Payment methods** — What you accept: cash on delivery, credit cards, Apple Pay, Tamara, Tabby, etc.
+- **Payment methods** — What you accept: cash on delivery, credit cards, Apple Pay, online payment gateways, etc.
 - **Frequently asked questions** — Anything customers regularly ask that isn't covered above. Sizing guides, materials, warranty, care instructions.
 - **Business information** — Store location (if physical), working hours, contact methods.
 
 **Tips for a strong Knowledge Base:**
 
-- **Be specific.** "Shipping takes 2-3 days to Riyadh and 4-5 days to other cities" is better than "Shipping takes a few days."
+- **Be specific.** "Shipping takes 2-3 days to major cities and 4-5 days to other areas" is better than "Shipping takes a few days."
 - **Write naturally.** The AI uses your text as a reference, not a script. Write as you'd explain things to a customer.
-- **Include both Arabic and English** if your customers use both languages. The backend automatically translates your content, but providing both versions ensures accuracy.
+- **Include both languages** if your customers use both Arabic and English. The backend automatically translates your content, but providing both versions ensures accuracy.
 - **Update regularly.** When you change a policy or add a new product category, update the Knowledge Base. Outdated information leads to wrong answers.
 
 ## Configuring Auto-Reply Settings
@@ -86,6 +92,16 @@ Choose the tone that matches your brand:
 - **Enthusiastic** — Energetic and warm. Best for brands that want to convey excitement and positivity.
 
 The reply style affects *tone only* — the AI's accuracy and information stay the same regardless of style.
+
+### Comment Reply Mode
+
+For comments on your posts, Jawab24 offers a **dual reply mode**:
+
+- **Public comment only** — The AI replies directly on the comment for everyone to see
+- **Private DM only** — The AI sends a direct message to the commenter with detailed information
+- **Dual mode** — A short, friendly public comment (like "Thanks for asking! Check your DMs for details") plus a detailed private message with full product information, pricing, and ordering instructions
+
+Dual mode is particularly effective for sales-oriented pages. The public reply shows other followers that you're responsive, while the private DM gives the customer all the details they need to purchase. The public nudge messages rotate automatically with different wording variations to avoid looking repetitive or triggering spam detection by Facebook.
 
 ### Away Message
 
@@ -116,6 +132,8 @@ For common questions that always have the same answer, you can create **template
 
 Template replies are checked *before* the AI generates a response. If a keyword matches, the template reply is sent instantly — faster and cheaper than an AI-generated reply.
 
+**Template deduplication**: If a template was already sent earlier in the same conversation, Jawab24 won't send it again. Instead, the AI generates a fresh contextual reply for the follow-up. This prevents the robotic experience of receiving the same canned response twice.
+
 ## Connecting Your Store and Going Live
 
 ### Syncing Your Shopify or Salla Store
@@ -139,6 +157,17 @@ If you sell on Shopify or Salla, connecting your store is the single most impact
 
 After the initial sync, updates happen in real-time through webhooks. When you change a price or mark something out of stock, the AI knows immediately.
 
+### How Price Verification Works
+
+Once your store is connected, Jawab24's **2-tier price hallucination prevention** protects you from pricing errors:
+
+1. **First check**: The AI's generated reply is scanned for any mention of a price (numbers near currency symbols like $, SAR, SR, EUR, or other currency markers)
+2. **Second check**: Every detected price is compared against the actual price in your synced product catalog
+
+If a price matches, the reply sends normally. If a price doesn't match — maybe the AI recalled an old price or made a mistake — the reply is held and replaced with a safe fallback that directs the customer to check the product page without mentioning a specific number.
+
+This matters because a wrong price sent to a customer can mean either a lost sale (price too high) or a loss (customer expects the lower price you accidentally quoted). The verification happens automatically on every reply — no configuration needed.
+
 ### Testing Before Going Live
 
 Before letting Jawab24 reply to real customers, test thoroughly:
@@ -146,8 +175,21 @@ Before letting Jawab24 reply to real customers, test thoroughly:
 1. **Send a test comment** from a personal Facebook account on one of your business page's posts. Ask about a specific product — "How much is [product name]?"
 2. **Check the reply** — it should appear within seconds with accurate pricing from your store
 3. **Test an FAQ** — ask about shipping or returns and verify the answer matches your Knowledge Base
-4. **Test in Arabic** — if your customers use Arabic, comment in dialect and check that the reply is natural
+4. **Test in different languages** — if your customers use Arabic, comment in Arabic and check that the reply is natural. Try English too
 5. **Test edge cases** — ask about a product that doesn't exist, or ask something your Knowledge Base doesn't cover. The AI should admit it doesn't know rather than making something up
+6. **Test follow-up questions** — ask about a product, then send a follow-up like "and in black?" or "how long for delivery?" to verify the AI maintains conversation context
+
+### Features to Explore After Setup
+
+Once you're live, here are Jawab24 features worth exploring:
+
+**Smart message consolidation** — When a customer sends multiple rapid messages ("How much is this?", "Is it available?", "Do you deliver?"), Jawab24 waits briefly and generates one comprehensive reply instead of three separate responses. This feels more natural and avoids overwhelming the customer.
+
+**Angry customer push notifications** — If a customer sends a frustrated message, you'll get an instant push notification on your phone. You can open the app, read the full conversation, and step in personally. The AI's empathetic auto-reply buys you time while you get there.
+
+**Auto-pause on manual reply** — When you reply to a customer manually, Jawab24 automatically pauses auto-reply for that conversation. You can have a human conversation without the AI jumping in. No toggle to flip — it detects your manual reply and stays out of the way.
+
+**KB gap detection** — The dashboard shows what customers asked about that wasn't covered in your Knowledge Base. Instead of guessing what to add, you see real gaps based on actual customer questions. This makes Knowledge Base maintenance data-driven instead of guesswork.
 
 ### Monitoring the Confidence Dashboard
 

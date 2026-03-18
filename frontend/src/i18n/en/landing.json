@@ -1,5 +1,6 @@
 {
   "nav": {
+    "blog": "Blog",
     "pricing": "Pricing",
     "login": "Login",
     "start": "Start"
@@ -141,7 +142,7 @@
     "businessInfo": "Bergavägen 15 A, LGH 1002, 241 39 Eslöv, Sweden",
     "phoneNumber": "+46 700 22 47 20",
     "operatedBy": "Jawab24 is operated by:",
-    "operatorName": "Mohammad Ali Ahdab",
+    "operatorName": "Jawab24 Team",
     "orgNumber": "Org.nr: 810312-5335"
   },
   "images": {

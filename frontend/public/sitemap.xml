@@ -434,4 +434,88 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+
+  <!-- Blog: Reduce Facebook Response Time - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/reduce-facebook-response-time</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/reduce-facebook-response-time"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/reduce-facebook-response-time"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/reduce-facebook-response-time"/>
+    <lastmod>2026-04-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Reduce Facebook Response Time - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/reduce-facebook-response-time</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/reduce-facebook-response-time"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/reduce-facebook-response-time"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/reduce-facebook-response-time"/>
+    <lastmod>2026-04-01</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: Salla vs Shopify Arabic Sellers - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/salla-vs-shopify-arabic-sellers</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/salla-vs-shopify-arabic-sellers"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-vs-shopify-arabic-sellers"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-vs-shopify-arabic-sellers"/>
+    <lastmod>2026-04-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Salla vs Shopify Arabic Sellers - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/salla-vs-shopify-arabic-sellers</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/salla-vs-shopify-arabic-sellers"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/salla-vs-shopify-arabic-sellers"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/salla-vs-shopify-arabic-sellers"/>
+    <lastmod>2026-04-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: AI Auto Reply Angry Customers - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/ai-auto-reply-angry-customers</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/ai-auto-reply-angry-customers"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/ai-auto-reply-angry-customers"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/ai-auto-reply-angry-customers"/>
+    <lastmod>2026-04-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: AI Auto Reply Angry Customers - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/ai-auto-reply-angry-customers</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/ai-auto-reply-angry-customers"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/ai-auto-reply-angry-customers"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/ai-auto-reply-angry-customers"/>
+    <lastmod>2026-04-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Blog: Common Facebook Auto Reply Mistakes - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/common-facebook-auto-reply-mistakes</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/common-facebook-auto-reply-mistakes"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/common-facebook-auto-reply-mistakes"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/common-facebook-auto-reply-mistakes"/>
+    <lastmod>2026-05-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <!-- Blog: Common Facebook Auto Reply Mistakes - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/common-facebook-auto-reply-mistakes</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/common-facebook-auto-reply-mistakes"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/common-facebook-auto-reply-mistakes"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/common-facebook-auto-reply-mistakes"/>
+    <lastmod>2026-05-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
 </urlset>

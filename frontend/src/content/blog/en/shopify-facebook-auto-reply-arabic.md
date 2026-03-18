@@ -1,20 +1,20 @@
 ---
-seoTitle: "How to Use Shopify with Facebook Auto Reply in Arabic"
-seoDescription: "Connect your Shopify store to a Facebook auto-reply bot that understands Arabic dialects. Sync products, verify prices, and reply to customers in Gulf, Egyptian, and Levantine Arabic."
-seoKeywords: "Shopify auto reply Arabic, Shopify Facebook bot Arabic, Shopify chatbot Arabic, Shopify auto reply comments"
-title: "How to Use Shopify with Facebook Auto Reply in Arabic"
-excerpt: "Shopify is growing fast in the Arab world — but most auto-reply tools don't speak Arabic. Here's how to connect your Shopify store to a bot that actually understands your customers."
+seoTitle: "How to Use Shopify with Facebook Auto Reply — Including Arabic Support"
+seoDescription: "Connect your Shopify store to a Facebook auto-reply bot that understands your customers' language. Sync products, verify prices, and reply automatically in English, Arabic, and more."
+seoKeywords: "Shopify auto reply, Shopify Facebook bot, Shopify chatbot, Shopify auto reply comments, Shopify Arabic support"
+title: "How to Use Shopify with Facebook Auto Reply — Including Arabic Support"
+excerpt: "Shopify is growing fast globally — but most auto-reply tools can't handle multilingual customers. Here's how to connect your Shopify store to a bot that actually understands your buyers."
 ---
 
-## The Arabic Shopify Seller's Challenge
+## The Shopify Seller's Challenge
 
-Shopify has seen significant growth in Saudi Arabia, UAE, and across the Middle East. Many Arabic-speaking merchants have built thriving online stores on the platform. But they face a unique challenge when it comes to customer communication.
+Shopify has seen significant growth worldwide, including in the Middle East. Whether you're selling to customers in the US, Europe, or Saudi Arabia, one challenge is universal: keeping up with customer questions on social media.
 
-Most Shopify sellers market through Facebook and Instagram — running ads in Arabic, posting product photos with Arabic descriptions, and engaging with an Arabic-speaking audience. When customers comment or send messages, they write in their local dialect: Gulf Arabic, Egyptian, Levantine, or others.
+Most Shopify sellers market through Facebook and Instagram — running ads, posting product photos, and engaging with their audience. When customers comment or send messages, they expect fast, accurate answers. If you sell internationally, those questions come in multiple languages.
 
-The problem: Shopify's own tools don't auto-reply to Facebook comments. And most chatbot tools (ManyChat, Chatfuel, Tidio) either don't support Arabic at all, or treat it as a single language — sending the same Modern Standard Arabic reply to everyone, which feels unnatural and robotic.
+The problem: Shopify's own tools don't auto-reply to Facebook comments. And most chatbot tools (ManyChat, Chatfuel, Tidio) are built for English-only workflows. If you have Arabic-speaking customers, they either don't support Arabic at all, or treat it as a single language — sending the same Modern Standard Arabic reply to everyone, which feels unnatural and robotic.
 
-For Arabic Shopify sellers who want to automate their Facebook and Instagram customer support, the gap between available tools and actual needs is significant.
+For Shopify sellers who want to automate their Facebook and Instagram customer support across languages, there's a gap between available tools and actual needs.
 
 ## Connecting Shopify Product Data to Facebook Auto Replies
 
@@ -26,27 +26,28 @@ When you connect your Shopify store to an auto-reply tool, your product catalog 
 
 **Webhook-based updates:** When you change a price, add a product, or update inventory in Shopify, the auto-reply system is updated automatically. No manual re-sync needed.
 
-**Price hallucination detection:** This is crucial for Arabic e-commerce. The AI checks every price it mentions against your actual Shopify catalog. If it generates a reply saying "The bag costs 150 SAR" but the real price is 189 SAR, the reply is flagged and held for review. This prevents costly pricing errors.
+**Price hallucination detection:** This is crucial for e-commerce. The AI checks every price it mentions against your actual Shopify catalog. If it generates a reply saying "The bag costs $39.99" but the real price is $49.99, the reply is flagged and held for review. This prevents costly pricing errors.
 
 **Knowledge Base enrichment:** Your Shopify products are combined with any other business information you add (shipping policy, return policy, FAQs) into a unified Knowledge Base. The AI searches this using RAG (Retrieval-Augmented Generation) to find relevant information for each customer question.
 
-## Arabic Dialect Awareness in Product Replies
+## Multilingual Replies — Including Arabic Dialect Awareness
 
-Here's what makes Arabic auto-reply genuinely challenging — and why generic tools fail:
+Here's what makes multilingual auto-reply genuinely challenging — and why generic tools fail:
 
-A customer from Saudi Arabia asking about a product writes: "بكم هذا؟ وهل يوصل للدمام؟"
-A customer from Egypt asking the same thing writes: "ده بكام؟ بتوصلوا للمنصورة؟"
-A customer from Lebanon might write: "أديش سعرو؟ بتوصلو على بيروت؟"
+A customer from the US asks: "How much is this? Do you ship to California?"
+A customer from Saudi Arabia asks the same thing — but in Gulf Arabic.
+A customer from Egypt asks the same thing — but in Egyptian Arabic.
+A customer from Lebanon asks the same thing — but in Levantine Arabic.
 
-These are all asking "How much?" and "Do you deliver to [city]?" — but in three different dialects. A generic Arabic chatbot would either:
+They're all asking "How much?" and "Do you deliver to [location]?" — but in different languages and dialects. A generic chatbot would either:
 
-- Reply in MSA (formal Arabic), which feels corporate and cold
-- Pick one dialect and reply in it regardless, which feels wrong to speakers of other dialects
+- Reply in English to everyone, ignoring non-English speakers
+- Reply in formal Arabic (MSA), which feels corporate and cold to dialect speakers
 - Simply not understand the dialectal variations
 
-A good auto-reply tool detects the customer's dialect from their message and responds naturally in the same dialect family. The reply should feel like it's coming from a human who speaks their language — not a translation machine.
+A good auto-reply tool detects the customer's language and dialect from their message and responds naturally. The reply should feel like it's coming from a human who speaks their language — not a translation machine.
 
-Jawab24 recognizes **6 Arabic dialect families**: Gulf (Saudi, UAE, Kuwait, Qatar, Bahrain, Oman), Egyptian, Levantine (Lebanon, Syria, Jordan, Palestine), Maghrebi (Morocco, Algeria, Tunisia), Iraqi, and Modern Standard Arabic.
+Jawab24 handles conversations in English and Arabic — including **6 Arabic dialect families**: Gulf (Saudi, UAE, Kuwait, Qatar, Bahrain, Oman), Egyptian, Levantine (Lebanon, Syria, Jordan, Palestine), Maghrebi (Morocco, Algeria, Tunisia), Iraqi, and Modern Standard Arabic. Turkish, Swedish, and German support is coming soon. If it can handle 6 Arabic dialects, it can handle any language.
 
 ## Setup Walkthrough and Tips
 

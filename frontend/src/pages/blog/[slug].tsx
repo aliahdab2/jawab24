@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
+import { PublicLayout } from '@/components/layout/PublicLayout';
 import {
   getAllBlogSlugs,
   getBlogPost,
@@ -33,7 +34,7 @@ export default function BlogPostPage({ post, frontmatter, content }: BlogPostPag
   );
 
   return (
-    <>
+    <PublicLayout variant="landing">
       <Head>
         <title>{frontmatter.seoTitle}</title>
         <meta name="description" content={frontmatter.seoDescription} />
@@ -51,7 +52,6 @@ export default function BlogPostPage({ post, frontmatter, content }: BlogPostPag
         <meta name="twitter:description" content={frontmatter.seoDescription} />
         <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
 
-        {/* BlogPosting structured data */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{
@@ -88,88 +88,78 @@ export default function BlogPostPage({ post, frontmatter, content }: BlogPostPag
         />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-background text-foreground">
-        <div className="fixed-safe-bg top-safe-bg bg-background" aria-hidden="true" />
+      <article className="max-w-3xl mx-auto px-6 sm:px-8 px-safe-landscape pt-24 sm:pt-28 pb-12">
+        {/* Back to blog */}
+        <Link
+          href={locale === 'en' ? '/en/blog' : '/blog'}
+          className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors text-sm"
+        >
+          <BackArrow className="w-4 h-4" />
+          {t('backToBlog')}
+        </Link>
 
-        <article className="max-w-3xl mx-auto px-6 sm:px-8 px-safe-landscape py-12">
-          {/* Back link */}
-          <Link
-            href={locale === 'en' ? '/en/blog' : '/blog'}
-            className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
-          >
-            <BackArrow className="w-5 h-5" />
-            {t('backToBlog')}
-          </Link>
+        {/* Article header */}
+        <header className="mb-10">
+          <span className="text-sm font-medium uppercase tracking-wider text-brand-400 mb-3 block">
+            {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
+          </span>
 
-          {/* Article header */}
-          <header className="mb-10">
-            {/* Category */}
-            <span className="text-sm font-medium uppercase tracking-wider text-brand-400 mb-3 block">
-              {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
-            </span>
+          <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-4">
+            {frontmatter.title}
+          </h1>
 
-            {/* Title */}
-            <h1 className="text-3xl md:text-4xl font-bold leading-tight mb-4">
-              {frontmatter.title}
-            </h1>
+          <p className="text-lg text-muted-foreground leading-relaxed mb-6">
+            {frontmatter.excerpt}
+          </p>
 
-            {/* Excerpt */}
-            <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-              {frontmatter.excerpt}
-            </p>
-
-            {/* Meta: date + read time */}
-            <div className="flex items-center gap-4 text-sm text-muted-foreground border-b border-theme-border pb-6">
-              <div className="flex items-center gap-1.5">
-                <Calendar className="w-4 h-4" aria-hidden="true" />
-                <time dateTime={post.date}>{formattedDate}</time>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Clock className="w-4 h-4" aria-hidden="true" />
-                <span>{t('readTime', { minutes: post.readingTime })}</span>
-              </div>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground border-b border-theme-border pb-6">
+            <div className="flex items-center gap-1.5">
+              <Calendar className="w-4 h-4" aria-hidden="true" />
+              <time dateTime={post.date}>{formattedDate}</time>
             </div>
-          </header>
-
-          {/* Article body — rendered from Markdown */}
-          <div className="prose prose-lg max-w-none text-foreground/80
-            prose-headings:text-foreground prose-headings:font-semibold
-            prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4
-            prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-3
-            prose-p:leading-relaxed prose-p:mb-4
-            prose-strong:text-foreground prose-strong:font-semibold
-            prose-ul:my-4 prose-li:my-1
-            prose-a:text-brand-400 prose-a:no-underline hover:prose-a:text-brand-300
-            prose-table:border-collapse prose-th:bg-muted/50 prose-th:px-4 prose-th:py-2
-            prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-theme-border
-            prose-th:border prose-th:border-theme-border prose-th:text-start
-          ">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+            <div className="flex items-center gap-1.5">
+              <Clock className="w-4 h-4" aria-hidden="true" />
+              <span>{t('readTime', { minutes: post.readingTime })}</span>
+            </div>
           </div>
+        </header>
 
-          {/* CTA */}
-          <section className="mt-16 text-center py-10 rounded-2xl bg-muted/30 border border-theme-border">
-            <h2 className="text-2xl font-bold mb-3">{t('ctaTitle')}</h2>
-            <p className="text-muted-foreground mb-6">{t('ctaDescription')}</p>
-            <Link
-              href="/login"
-              className="inline-flex items-center px-8 py-3 bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors font-medium text-lg"
-            >
-              {t('cta')}
-            </Link>
-          </section>
+        {/* Article body */}
+        <div className="prose prose-lg max-w-none text-foreground/80
+          prose-headings:text-foreground prose-headings:font-semibold
+          prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4
+          prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-3
+          prose-p:leading-relaxed prose-p:mb-4
+          prose-strong:text-foreground prose-strong:font-semibold
+          prose-ul:my-4 prose-li:my-1
+          prose-a:text-brand-400 prose-a:no-underline hover:prose-a:text-brand-300
+          prose-table:border-collapse prose-th:bg-muted/50 prose-th:px-4 prose-th:py-2
+          prose-td:px-4 prose-td:py-2 prose-td:border prose-td:border-theme-border
+          prose-th:border prose-th:border-theme-border prose-th:text-start
+        ">
+          <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+        </div>
 
-          {/* Footer */}
-          <div className="pt-8 border-t border-theme-border text-center mt-12">
-            <p className="text-xs text-muted-foreground">
-              &copy; {new Date().getFullYear()} Jawab24
-            </p>
-          </div>
-        </article>
+        {/* CTA */}
+        <section className="mt-16 text-center py-10 rounded-2xl bg-muted/30 border border-theme-border">
+          <h2 className="text-2xl font-bold mb-3">{t('ctaTitle')}</h2>
+          <p className="text-muted-foreground mb-6">{t('ctaDescription')}</p>
+          <Link
+            href="/login"
+            className="inline-flex items-center px-8 py-3 bg-brand-400 text-white rounded-lg hover:bg-brand-500 transition-colors font-medium text-lg"
+          >
+            {t('cta')}
+          </Link>
+        </section>
 
-        <div className="fixed-safe-bg bottom-safe-bg bg-background" aria-hidden="true" />
-      </div>
-    </>
+        {/* Footer */}
+        <div className="pt-8 border-t border-theme-border text-center mt-12">
+          <p className="text-xs text-muted-foreground">
+            &copy; {new Date().getFullYear()} Jawab24
+          </p>
+        </div>
+      </article>
+    </PublicLayout>
   );
 }
 

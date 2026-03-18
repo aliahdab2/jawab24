@@ -1,10 +1,10 @@
 import Head from 'next/head';
 import Link from 'next/link';
 import type { GetStaticProps } from 'next';
-import { ArrowLeft, ArrowRight, Clock, ArrowUpRight } from 'lucide-react';
+import { Clock, ArrowUpRight } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { isRTLLocale } from '@/utils/locale';
+import { PublicLayout } from '@/components/layout/PublicLayout';
 import { BLOG_POSTS, type BlogPost } from '@/data/blog-posts';
 import type { BlogFrontmatter } from '@/lib/blog';
 
@@ -72,29 +72,24 @@ function PostCard({ post, featured = false }: { post: PostWithMeta; featured?: b
 
 export default function BlogIndex({ posts }: BlogIndexProps) {
   const t = useTranslations('blog');
-  const locale = useLocale();
-  const isRTL = isRTLLocale(locale);
-  const BackArrow = isRTL ? ArrowRight : ArrowLeft;
 
   const [featured, ...rest] = posts;
 
   return (
-    <>
+    <PublicLayout variant="landing">
       <Head>
         <title>{t('indexSeoTitle')}</title>
         <meta name="description" content={t('indexSeoDescription')} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/blog' : '/blog')} />
+        <link rel="canonical" href={BRAND_ASSETS.urls.canonical('/blog')} />
 
         <meta property="og:title" content={t('indexSeoTitle')} />
         <meta property="og:description" content={t('indexSeoDescription')} />
-        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/blog' : '/blog')} />
         <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
         <meta property="og:type" content="website" />
 
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={t('indexSeoTitle')} />
         <meta name="twitter:description" content={t('indexSeoDescription')} />
-        <meta name="twitter:image" content={BRAND_ASSETS.urls.ogImage()} />
 
         <script
           type="application/ld+json"
@@ -115,56 +110,41 @@ export default function BlogIndex({ posts }: BlogIndexProps) {
         />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-background text-foreground">
-        <div className="fixed-safe-bg top-safe-bg bg-background" aria-hidden="true" />
-
-        <div className="max-w-5xl mx-auto px-6 sm:px-8 px-safe-landscape py-12">
-          {/* Back link */}
-          <Link
-            href="/landing"
-            className="inline-flex items-center gap-2 mb-8 text-brand-400 hover:text-brand-300 transition-colors"
-          >
-            <BackArrow className="w-5 h-5" />
-            {t('backToHome')}
-          </Link>
-
-          {/* Hero */}
-          <div className="mb-12">
-            <h1 className="text-4xl md:text-5xl font-bold mb-3">
-              {t('indexTitle')}
-            </h1>
-            <p className="text-lg text-muted-foreground max-w-2xl">
-              {t('indexDescription')}
-            </p>
-          </div>
-
-          {/* Featured post */}
-          {featured && (
-            <div className="mb-8">
-              <PostCard post={featured} featured />
-            </div>
-          )}
-
-          {/* Post grid */}
-          {rest.length > 0 && (
-            <div className="grid gap-6 md:grid-cols-2">
-              {rest.map((post) => (
-                <PostCard key={post.slug} post={post} />
-              ))}
-            </div>
-          )}
-
-          {/* Footer */}
-          <div className="pt-12 border-t border-theme-border text-center mt-12">
-            <p className="text-xs text-muted-foreground">
-              &copy; {new Date().getFullYear()} Jawab24
-            </p>
-          </div>
+      <div className="max-w-5xl mx-auto px-6 sm:px-8 px-safe-landscape pt-24 sm:pt-28 pb-12">
+        {/* Hero */}
+        <div className="mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold mb-3">
+            {t('indexTitle')}
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-2xl">
+            {t('indexDescription')}
+          </p>
         </div>
 
-        <div className="fixed-safe-bg bottom-safe-bg bg-background" aria-hidden="true" />
+        {/* Featured post */}
+        {featured && (
+          <div className="mb-8">
+            <PostCard post={featured} featured />
+          </div>
+        )}
+
+        {/* Post grid */}
+        {rest.length > 0 && (
+          <div className="grid gap-6 md:grid-cols-2">
+            {rest.map((post) => (
+              <PostCard key={post.slug} post={post} />
+            ))}
+          </div>
+        )}
+
+        {/* Footer */}
+        <div className="pt-12 border-t border-theme-border text-center mt-12">
+          <p className="text-xs text-muted-foreground">
+            &copy; {new Date().getFullYear()} Jawab24
+          </p>
+        </div>
       </div>
-    </>
+    </PublicLayout>
   );
 }
 

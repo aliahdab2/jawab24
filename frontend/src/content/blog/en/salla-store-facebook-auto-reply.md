@@ -47,15 +47,15 @@ After the initial sync, updates happen automatically. When you add a new product
 
 Here are real examples of how this works in practice:
 
-**Scenario 1 — Price inquiry (Gulf Arabic):**
-Customer: "بكم الشنطة الجلد؟" (How much is the leather bag?)
+**Scenario 1 — Price inquiry:**
+Customer: "How much is the leather bag?"
 AI checks Salla, finds "Leather Crossbody Bag" at 189 SAR
-Reply: "الشنطة الجلد عندنا بـ ١٨٩ ريال. تقدر تطلبها من المتجر مباشرة"
+Reply: "The leather crossbody bag is 189 SAR. You can order it directly from our store."
 
-**Scenario 2 — Availability check (Egyptian Arabic):**
-Customer: "ده متوفر باللون الأسود؟" (Is this available in black?)
+**Scenario 2 — Availability check:**
+Customer: "Is this available in black?"
 AI checks Salla, black variant is in stock
-Reply: "أيوه متوفر باللون الأسود. تقدر تطلبه من اللينك في البايو"
+Reply: "Yes, it's available in black! You can order through the link in our bio."
 
 **Scenario 3 — Out of stock:**
 Customer: "I want to order this"
@@ -63,6 +63,8 @@ AI checks Salla, product is out of stock
 Reply: "This item is currently out of stock, but we're expecting a restock soon. Would you like me to let you know when it's available?"
 
 **Scenario 4 — Shipping question:**
-Customer: "هل توصلون للرياض؟" (Do you deliver to Riyadh?)
+Customer: "Do you deliver to Riyadh?"
 AI checks Knowledge Base, shipping policy covers all Saudi cities
-Reply: "نوصل لكل مدن المملكة. التوصيل للرياض خلال ٢-٣ أيام عمل"
+Reply: "We deliver to all cities in the Kingdom. Delivery to Riyadh takes 2-3 business days."
+
+Jawab24 handles conversations in both English and Arabic — including 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA). So whether your customers write in English or in their local dialect, the AI replies naturally in the same language. Turkish, Swedish, and German support is coming soon.
