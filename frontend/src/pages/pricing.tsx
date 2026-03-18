@@ -7,7 +7,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button } from '@/components/ui';
 import { subscriptionApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
@@ -18,6 +18,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { isRTLLocale } from '@/utils/locale';
 import { ShopifyIcon, SallaIcon } from '@/components/landing/LandingHero';
 
 interface PricingPageProps {
@@ -331,7 +332,7 @@ function FeatureRow({
 
 const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans }) => {
   const router = useRouter();
-  const locale = router.locale;
+  const locale = useLocale();
   const tPricing = useTranslations('pricing');
   const tSub = useTranslations('subscription');
   const t = (key: string, params?: Record<string, string | number>): string => {
@@ -455,7 +456,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
   // Keyboard navigation for tab bar (RTL-aware)
   const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const isRTL = document.documentElement.dir === 'rtl';
+    const isRTL = isRTLLocale(locale);
     const forward = isRTL ? 'ArrowLeft' : 'ArrowRight';
     const backward = isRTL ? 'ArrowRight' : 'ArrowLeft';
     let next = activeTab;

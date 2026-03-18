@@ -13,7 +13,6 @@ import { useUIStore, useAuthStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { dmSans, cairo, tajawal, outfit, jetbrainsMono } from '@/lib/fonts';
 import { Toaster } from 'sonner';
-import { AppSkeleton } from '@/components/ui';
 import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
@@ -415,9 +414,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         messages={mobileMessages || pageProps.messages || {}}
         timeZone="Asia/Riyadh"
       >
-      {!hasHydrated ? (
-        <AppSkeleton variant="dashboard" />
-      ) : (
         <>
           <SSEManager />
           <ThemeManager />
@@ -432,7 +428,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
             </ErrorBoundary>
           </AppShell>
         </>
-      )}
       </NextIntlClientProvider>
     </QueryClientProvider>
   );

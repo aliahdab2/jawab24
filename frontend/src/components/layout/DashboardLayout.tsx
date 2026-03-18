@@ -92,9 +92,9 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
     document.documentElement.lang = isRTL ? 'ar' : 'en';
   }, [isRTL]);
 
-  // Don't render anything until hydration is complete
-  // (_app.tsx already guards with AppSkeleton, so this is a safety net)
-  if (!_hasHydrated) {
+  // Public pages (e.g. pricing) must render on the server for SEO/AI crawlers.
+  // Only block rendering for authenticated pages that need hydration to check auth.
+  if (!_hasHydrated && !isPublic) {
     return null;
   }
 

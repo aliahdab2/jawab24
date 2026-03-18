@@ -623,6 +623,50 @@ className="status-warning border"
 
 **For dark mode / theming fixes, use `/style`** — it has the full workflow, color mapping tables, and class creation conventions.
 
+### 14. SSR Content — Never Gate Server HTML Behind Client-Only State - CRITICAL
+
+**Public pages must render full HTML on the server. Never wrap page content in a client-only hydration guard in `_app.tsx`.**
+
+Google, AI tools (ChatGPT, Perplexity, Gemini), and `curl` all read the server-rendered HTML. If the HTML is empty, the site is invisible to search engines and AI crawlers — regardless of how good the client-side experience is.
+
+**The rule:**
+- `_app.tsx` must ALWAYS render `<Component {...pageProps} />` on the server — no conditional skeleton
+- Auth/hydration guards belong in **layout components** (`DashboardLayout`), NOT in `_app.tsx`
+- `DashboardLayout` already returns `null` until Zustand stores hydrate — this protects dashboard pages
+- Public pages (landing, pricing, login, blog, what-is, contact, terms, privacy) render immediately
+
+```tsx
+// ❌ WRONG — blocks ALL pages from rendering on the server (localStorage doesn't exist on server)
+{!hasHydrated ? (
+  <AppSkeleton />
+) : (
+  <Component {...pageProps} />
+)}
+
+// ❌ WRONG — same problem with typeof window check
+{typeof window === 'undefined' ? (
+  <Loading />
+) : (
+  <Component {...pageProps} />
+)}
+
+// ✅ CORRECT — always render the page, let layouts handle their own guards
+<Component {...pageProps} />
+// DashboardLayout internally: if (!_hasHydrated) return null;
+// Public pages: render immediately, no guard needed
+```
+
+**Why this matters:**
+- Server HTML is what Google indexes and AI tools read
+- `localStorage`, Zustand hydration, and `window` don't exist during SSR/SSG
+- A hydration guard in `_app.tsx` turns every page into a blank skeleton in the HTML
+- This kills SEO, AI discoverability, and social link previews (Open Graph)
+
+**When adding new pages:**
+- Public pages: no hydration guard needed — content renders immediately
+- Dashboard pages: use `DashboardLayout` which has built-in auth + hydration protection
+- Never add `if (!hasHydrated) return <Skeleton />` at the `_app.tsx` level
+
 ---
 
 ## 📁 Project Structure
@@ -981,6 +1025,8 @@ return (
 | Duplicating logic (fallback chains, selection, formatting) across files | Extract a shared utility function and import it everywhere — single source of truth |
 | Adding new behavior to an unrelated service file | Create a dedicated file when the function is used by multiple callers (adapter, controller, route) |
 | `"{count} item(s)"` or `"{limit} page(s)"` in translation files | **NEVER use `(s)` workarounds** — use ICU plural format: `"{count, plural, one {# item} other {# items}}"` for EN; include all 6 CLDR forms for AR |
+| `!hasHydrated ? <Skeleton /> : <Content />` in `_app.tsx` | **NEVER** gate page rendering behind client-only state in `_app.tsx` — server HTML will be empty, killing SEO and AI discoverability. Auth/hydration guards belong in `DashboardLayout`, not `_app.tsx` |
+| `typeof window === 'undefined' ? <Fallback /> : <Page />` in `_app.tsx` | Same problem — server renders the fallback, not the page content. Always render `<Component {...pageProps} />` unconditionally |
 
 ---
 
@@ -1046,3 +1092,4 @@ refactor(css): consolidate safe areas
 - [ ] Modals don't overflow screen in landscape
 - [ ] **Accessibility**: form inputs have labels, interactive elements are keyboard accessible, heading hierarchy is logical
 - [ ] **Dark mode**: use semantic classes (`status-*`, `icon-bg-*`, `alert-*`) from `globals.css` — only add inline `dark:` overrides when no class fits. Landing page is exempt.
+- [ ] **SSR content**: no hydration guards in `_app.tsx` — public pages must render full HTML on the server for SEO and AI crawlers
