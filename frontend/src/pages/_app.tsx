@@ -77,6 +77,15 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     document.documentElement.classList.add('is-native');
     document.body.classList.add('is-native');
 
+    // Safety timeout: hide splash screen after 3s even if hydration hasn't completed.
+    // Prevents the app from being permanently stuck on the splash screen if storage
+    // or rehydration fails. The normal path hides it earlier via initNativePlatform().
+    const splashTimeout = setTimeout(() => {
+      import("@capacitor/splash-screen").then(({ SplashScreen }) => {
+        SplashScreen.hide().catch(() => {});
+      }).catch(() => {});
+    }, 3000);
+
     // Configure StatusBar overlay EARLY (before full init) for consistent safe areas
     import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
       StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar overlay init failed', { error: String(e) }));
@@ -106,13 +115,16 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     // KeyboardResize.Body resizes <body> but fixed-position modals use viewport units,
     // so they need --keyboard-height to cap their max-height correctly.
     // visualViewport is more accurate than Capacitor Keyboard events and works on web too.
-    if (window.visualViewport) {
+    const vv = window.visualViewport;
+    if (vv) {
       const updateKeyboardHeight = () => {
-        const kbHeight = Math.max(0, window.innerHeight - window.visualViewport!.height);
+        const kbHeight = Math.max(0, window.innerHeight - vv.height);
         document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
       };
-      window.visualViewport.addEventListener('resize', updateKeyboardHeight);
+      vv.addEventListener('resize', updateKeyboardHeight);
     }
+
+    return () => clearTimeout(splashTimeout);
   }, []); // Empty deps = runs once on mount
 
   // Sync Next.js locale with language store

@@ -74,7 +74,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
   const [pauseLoading, setPauseLoading] = useState(false);
 
-  // Auto-focus textarea on open
+  // Auto-focus textarea on open and scroll into view when keyboard appears
   useEffect(() => {
     // Small timeout to allow modal animation to complete
     const timer = setTimeout(() => {
@@ -83,6 +83,20 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       }
     }, 100);
     return () => clearTimeout(timer);
+  }, []);
+
+  // Scroll textarea into view when focused (keyboard opens on mobile)
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const handleFocus = () => {
+      // Delay to let the keyboard fully open and viewport resize
+      setTimeout(() => {
+        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    };
+    textarea.addEventListener('focus', handleFocus);
+    return () => textarea.removeEventListener('focus', handleFocus);
   }, []);
 
   // Sync AI-generated reply into textarea
@@ -196,7 +210,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       onWheel={(e) => e.preventDefault()}
     >
       <div
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[68dvh] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-var(--keyboard-height,0px)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[min(68dvh,calc(100dvh-var(--keyboard-height,0px)))] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-var(--keyboard-height,0px)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
