@@ -1,6 +1,5 @@
 import { useTranslations } from 'next-intl';
 import { LegalPageLayout } from '@/components/layout/LegalPageLayout';
-import { BRAND_ASSETS } from '@/constants/brand';
 
 export default function PrivacyPolicy() {
   const t = useTranslations('privacy');
@@ -58,7 +57,6 @@ export default function PrivacyPolicy() {
       title={t('title')}
       seoTitle={t('seoTitle')}
       metaDescription={t('metaDescription')}
-      canonicalUrl={BRAND_ASSETS.urls.canonical('/privacy')}
       lastUpdatedLabel={t('lastUpdated')}
       lastUpdatedDate={t('updateDate')}
       backToHomeLabel={t('backToHome')}

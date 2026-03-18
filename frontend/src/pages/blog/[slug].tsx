@@ -39,11 +39,9 @@ export default function BlogPostPage({ post, frontmatter, content }: BlogPostPag
         <title>{frontmatter.seoTitle}</title>
         <meta name="description" content={frontmatter.seoDescription} />
         <meta name="keywords" content={frontmatter.seoKeywords} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? `/en/blog/${slug}` : `/blog/${slug}`)} />
 
         <meta property="og:title" content={frontmatter.seoTitle} />
         <meta property="og:description" content={frontmatter.seoDescription} />
-        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? `/en/blog/${slug}` : `/blog/${slug}`)} />
         <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
         <meta property="og:type" content="article" />
 

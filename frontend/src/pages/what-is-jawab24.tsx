@@ -2,7 +2,6 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
-import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
 
 interface FeatureSection {
@@ -85,11 +84,9 @@ export default function WhatIsJawab24() {
         <title>{t('seoTitle')}</title>
         <meta name="description" content={t('seoDescription')} />
         <meta name="keywords" content={t('seoKeywords')} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/what-is-jawab24' : '/what-is-jawab24')} />
 
         <meta property="og:title" content={t('seoTitle')} />
         <meta property="og:description" content={t('seoDescription')} />
-        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/what-is-jawab24' : '/what-is-jawab24')} />
         <meta property="og:image" content="https://jawab24.com/brand/og-social.png" />
         <meta property="og:type" content="website" />
 

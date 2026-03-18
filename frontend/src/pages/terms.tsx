@@ -1,6 +1,5 @@
 import { useTranslations } from 'next-intl';
 import { LegalPageLayout } from '@/components/layout/LegalPageLayout';
-import { BRAND_ASSETS } from '@/constants/brand';
 
 export default function TermsOfService() {
   const t = useTranslations('terms');
@@ -54,7 +53,6 @@ export default function TermsOfService() {
       title={t('title')}
       seoTitle={t('seoTitle')}
       metaDescription={t('metaDescription')}
-      canonicalUrl={BRAND_ASSETS.urls.canonical('/terms')}
       lastUpdatedLabel={t('lastUpdated')}
       lastUpdatedDate={t('updateDate')}
       backToHomeLabel={t('backToHome')}

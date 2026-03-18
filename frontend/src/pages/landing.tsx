@@ -89,12 +89,10 @@ export default function LandingPage() {
         <title>{t('seoTitle')}</title>
         <meta name="description" content={t('seoDescription')} />
         <meta name="keywords" content={t('seoKeywords')} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/landing' : '/landing')} />
 
         {/* Open Graph */}
         <meta property="og:title" content={t('seoTitle')} />
         <meta property="og:description" content={t('seoDescription')} />
-        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? '/en/landing' : '/landing')} />
         <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
         <meta property="og:type" content="website" />
         <meta property="og:locale" content={locale === 'en' ? 'en_US' : 'ar_SA'} />

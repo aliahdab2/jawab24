@@ -95,12 +95,21 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // Public pages (e.g. pricing) must render on the server for SEO/AI crawlers.
   // Only block rendering for authenticated pages that need hydration to check auth.
   if (!_hasHydrated && !isPublic) {
-    return null;
+    // Still emit noindex so crawlers never index auth-protected pages
+    return (
+      <Head>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
+    );
   }
 
   // If not public and not authenticated, we're redirecting, so show nothing
   if (!isPublic && !isAuthenticated) {
-    return null;
+    return (
+      <Head>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
+    );
   }
 
   const isCleanLayout = isPublic && !isAuthenticated;

@@ -17,7 +17,6 @@ import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
-import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
 import { ShopifyIcon, SallaIcon } from '@/components/landing/LandingHero';
 
@@ -477,10 +476,8 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         <title>{t('pricing.seoTitle')}</title>
         <meta name="description" content={t('pricing.seoDescription')} />
         <meta name="keywords" content={t('pricing.seoKeywords')} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/pricing' : '/pricing')} />
         <meta property="og:title" content={t('pricing.ogTitle')} />
         <meta property="og:description" content={t('pricing.ogDescription')} />
-        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(router.locale === 'en' ? '/en/pricing' : '/pricing')} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify({

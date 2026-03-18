@@ -21,7 +21,6 @@ interface LegalPageLayoutProps {
   title: string;
   seoTitle: string;
   metaDescription: string;
-  canonicalUrl: string;
   lastUpdatedLabel?: string;
   lastUpdatedDate?: string;
   backToHomeLabel: string;
@@ -33,7 +32,6 @@ export function LegalPageLayout({
   title,
   seoTitle,
   metaDescription,
-  canonicalUrl,
   lastUpdatedLabel,
   lastUpdatedDate,
   backToHomeLabel,
@@ -45,10 +43,8 @@ export function LegalPageLayout({
       <Head>
         <title>{seoTitle}</title>
         <meta name="description" content={metaDescription} />
-        <link rel="canonical" href={canonicalUrl} />
         <meta property="og:title" content={seoTitle} />
         <meta property="og:description" content={metaDescription} />
-        <meta property="og:url" content={canonicalUrl} />
         <meta property="og:image" content={ogImage} />
         <meta property="og:type" content="article" />
         <meta name="twitter:card" content="summary_large_image" />

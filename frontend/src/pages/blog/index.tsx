@@ -80,7 +80,6 @@ export default function BlogIndex({ posts }: BlogIndexProps) {
       <Head>
         <title>{t('indexSeoTitle')}</title>
         <meta name="description" content={t('indexSeoDescription')} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical('/blog')} />
 
         <meta property="og:title" content={t('indexSeoTitle')} />
         <meta property="og:description" content={t('indexSeoDescription')} />

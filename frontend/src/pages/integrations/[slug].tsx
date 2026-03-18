@@ -48,19 +48,15 @@ export default function IntegrationPage({ integration }: IntegrationPageProps) {
     desc: t(k(`${slug}.step${i + 1}Desc`)),
   }));
 
-  const pagePath = locale === 'en' ? `/en/integrations/${slug}` : `/integrations/${slug}`;
-
   return (
     <>
       <Head>
         <title>{t(k(`${slug}.seoTitle`))}</title>
         <meta name="description" content={t(k(`${slug}.seoDescription`))} />
         <meta name="keywords" content={t(k(`${slug}.seoKeywords`))} />
-        <link rel="canonical" href={BRAND_ASSETS.urls.canonical(pagePath)} />
 
         <meta property="og:title" content={t(k(`${slug}.seoTitle`))} />
         <meta property="og:description" content={t(k(`${slug}.seoDescription`))} />
-        <meta property="og:url" content={BRAND_ASSETS.urls.canonical(pagePath)} />
         <meta property="og:image" content={BRAND_ASSETS.urls.ogImage()} />
         <meta property="og:type" content="website" />
 

@@ -219,7 +219,6 @@ export default function CheckoutPage() {
       <Head>
         <title>{t('title')} - Jawab24</title>
         <meta name="description" content={t('subtitle')} />
-        <link rel="canonical" href="https://jawab24.com/checkout" />
         <meta name="robots" content="noindex, follow" />
       </Head>
 
