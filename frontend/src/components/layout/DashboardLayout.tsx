@@ -110,7 +110,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
     <>
       <Head>
         {!skipTitle && <title>{pageTitle} | Jawab24</title>}
-        <meta name="robots" content="noindex, nofollow" />
+        {!isPublic && <meta name="robots" content="noindex, nofollow" />}
       </Head>
 
       <div className="dashboard-scroll-root flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh">
