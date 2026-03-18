@@ -30,7 +30,11 @@
       "Read(//private/var/folders/k4/sxg819sn007bfjyq9g1wf4vr0000gn/T/chrome-devtools-mcp-F5URXf/**)",
       "Bash(psql -h localhost -p 5432 -U aliahdab -d postgres -c \"ALTER TABLE settings ADD COLUMN IF NOT EXISTS brand_voice_notes_multi jsonb DEFAULT ''{}''::jsonb;\")",
       "Bash(./scripts/deploy-production.sh -y)",
-      "Bash(/Users/aliahdab/Documents/AutoReply/backend/migrations/0048_fix_plan_data.sql:*)"
+      "Bash(/Users/aliahdab/Documents/AutoReply/backend/migrations/0048_fix_plan_data.sql:*)",
+      "Bash(sed -i '' 's/\"\"corporateName\"\": \"\"Mohammad Ali Ahdab\"\"/\"\"corporateName\"\": \"\"Jawab24 Team\"\"/g' en/contact.json en/privacy.json en/terms.json)",
+      "Bash(sed -i '' 's/\"\"corporateName\"\": \"\"محمد علي أحدب\"\"/\"\"corporateName\"\": \"\"فريق جواب24\"\"/g' ar/contact.json ar/privacy.json ar/terms.json)",
+      "Bash(sed -i '' 's/\"\"corporateName\"\": \"\"Jawab24 Team\"\"/\"\"corporateName\"\": \"\"Mohammad Ali Ahdab\"\"/g' en/privacy.json en/terms.json)",
+      "Bash(sed -i '' 's/\"\"corporateName\"\": \"\"فريق جواب24\"\"/\"\"corporateName\"\": \"\"محمد علي أحدب\"\"/g' ar/privacy.json ar/terms.json)"
     ],
     "deny": [
       "Bash(git push --force:*)"
