@@ -22,7 +22,7 @@
   "copyLink": "Copy link",
   "linkCopied": "Link copied!",
   "shareLinkDesc": "Share this link with {email}",
-  "linkExpires": "Link expires in 7 days",
+  "linkExpires": "Link expires in 48 hours",
   "removeError": "Failed to remove member",
   "emptyTitle": "You're the only one here",
   "emptyDesc": "Invite someone to help manage your replies",

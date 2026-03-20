@@ -22,7 +22,7 @@
   "copyLink": "نسخ الرابط",
   "linkCopied": "تم نسخ الرابط!",
   "shareLinkDesc": "شارك هذا الرابط مع {email}",
-  "linkExpires": "ينتهي الرابط خلال 7 أيام",
+  "linkExpires": "ينتهي الرابط خلال 48 ساعة",
   "removeError": "فشلت إزالة العضو",
   "emptyTitle": "أنت الوحيد هنا",
   "emptyDesc": "ادعُ شخصاً للمساعدة في إدارة ردودك",
