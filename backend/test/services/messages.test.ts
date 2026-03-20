@@ -13,6 +13,7 @@ vi.mock('../../src/db', () => ({
         insert: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
+        execute: vi.fn(),
     }
 }));
 
@@ -922,6 +923,86 @@ describe('MessagesService', () => {
             mockSelectChain([]);
             const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
             expect(result).toBe(true);
+        });
+    });
+
+    // ───────────────────────────────────────────
+    // isRepeatQuestion
+    // ───────────────────────────────────────────
+    describe('isRepeatQuestion', () => {
+        const now = Date.now();
+
+        it('should return true when customer repeats same question within 5 min of AI reply', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([
+                // Most recent first (orderBy desc)
+                { id: 'msg-3', message: 'What is the price?', direction: 'incoming', replyMethod: null, createdAt: new Date(now) },
+                { id: 'msg-2', message: 'The price is 100 SAR.', direction: 'outgoing', replyMethod: 'ai', createdAt: new Date(now - 60_000) },
+                { id: 'msg-1', message: 'What is the price?', direction: 'incoming', replyMethod: null, createdAt: new Date(now - 120_000) },
+            ] as any);
+            vi.mocked(db.execute).mockResolvedValue([{ sim: 0.9 }] as any);
+
+            const result = await messagesService.isRepeatQuestion('page-1', 'sender-1', 'What is the price?');
+            expect(result).toBe(true);
+        });
+
+        it('should return false when fewer than 2 messages exist', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([
+                { id: 'msg-1', message: 'Hello', direction: 'incoming', replyMethod: null, createdAt: new Date(now) },
+            ] as any);
+
+            const result = await messagesService.isRepeatQuestion('page-1', 'sender-1', 'Hello');
+            expect(result).toBe(false);
+        });
+
+        it('should return false when no outgoing AI reply exists', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([
+                { id: 'msg-2', message: 'Hi again', direction: 'incoming', replyMethod: null, createdAt: new Date(now) },
+                { id: 'msg-1', message: 'Hi', direction: 'incoming', replyMethod: null, createdAt: new Date(now - 60_000) },
+            ] as any);
+
+            const result = await messagesService.isRepeatQuestion('page-1', 'sender-1', 'Hi again');
+            expect(result).toBe(false);
+        });
+
+        it('should return false when AI reply is older than 5 minutes', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([
+                { id: 'msg-3', message: 'What is the price?', direction: 'incoming', replyMethod: null, createdAt: new Date(now) },
+                { id: 'msg-2', message: 'The price is 100 SAR.', direction: 'outgoing', replyMethod: 'ai', createdAt: new Date(now - 6 * 60_000) },
+                { id: 'msg-1', message: 'What is the price?', direction: 'incoming', replyMethod: null, createdAt: new Date(now - 7 * 60_000) },
+            ] as any);
+
+            const result = await messagesService.isRepeatQuestion('page-1', 'sender-1', 'What is the price?');
+            expect(result).toBe(false);
+        });
+
+        it('should return false when similarity is below threshold', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([
+                { id: 'msg-3', message: 'Something completely different', direction: 'incoming', replyMethod: null, createdAt: new Date(now) },
+                { id: 'msg-2', message: 'The price is 100 SAR.', direction: 'outgoing', replyMethod: 'ai', createdAt: new Date(now - 60_000) },
+                { id: 'msg-1', message: 'What is the price?', direction: 'incoming', replyMethod: null, createdAt: new Date(now - 120_000) },
+            ] as any);
+            vi.mocked(db.execute).mockResolvedValue([{ sim: 0.1 }] as any);
+
+            const result = await messagesService.isRepeatQuestion('page-1', 'sender-1', 'Something completely different');
+            expect(result).toBe(false);
+        });
+
+        it('should return false when preceding incoming message has no text', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([
+                { id: 'msg-3', message: 'Hello?', direction: 'incoming', replyMethod: null, createdAt: new Date(now) },
+                { id: 'msg-2', message: 'Reply', direction: 'outgoing', replyMethod: 'ai', createdAt: new Date(now - 60_000) },
+                { id: 'msg-1', message: null, direction: 'incoming', replyMethod: null, createdAt: new Date(now - 120_000) },
+            ] as any);
+
+            const result = await messagesService.isRepeatQuestion('page-1', 'sender-1', 'Hello?');
+            expect(result).toBe(false);
+        });
+
+        it('should return false gracefully on DB error', async () => {
+            vi.mocked(db.query.messages.findMany).mockRejectedValue(new Error('DB down'));
+
+            const result = await messagesService.isRepeatQuestion('page-1', 'sender-1', 'Hello');
+            expect(result).toBe(false);
         });
     });
 });
