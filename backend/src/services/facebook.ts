@@ -1,7 +1,11 @@
 import axios from 'axios';
 import { config } from '../config';
+import { tracedExternalCall } from '../utils/tracing';
 import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, Logger } from '../types';
 import { noopLogger } from '../types';
+
+const traced = <T>(method: string, fn: () => Promise<T>) =>
+    tracedExternalCall('facebook', method, fn);
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
@@ -18,14 +22,16 @@ export class FacebookService {
      */
     async getAccessToken(code: string, redirectUri?: string): Promise<string> {
         try {
-            const response = await axios.get<FacebookTokenResponse>(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
-                params: {
-                    client_id: config.facebook.appId,
-                    client_secret: config.facebook.appSecret,
-                    redirect_uri: redirectUri || config.facebook.redirectUri,
-                    code,
-                },
-            });
+            const response = await traced('getAccessToken', () =>
+                axios.get<FacebookTokenResponse>(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
+                    params: {
+                        client_id: config.facebook.appId,
+                        client_secret: config.facebook.appSecret,
+                        redirect_uri: redirectUri || config.facebook.redirectUri,
+                        code,
+                    },
+                }),
+            );
 
             return response.data.access_token;
         } catch (error) {
@@ -35,19 +41,21 @@ export class FacebookService {
             throw error;
         }
     }
-    
+
     /**
      * Verify access token validity and metadata
      */
     async verifyAccessToken(accessToken: string): Promise<{ isValid: boolean; userId: string; expiresAt: number; scopes: string[] }> {
         try {
             const appAccessToken = `${config.facebook.appId}|${config.facebook.appSecret}`;
-            const response = await axios.get(`${FACEBOOK_GRAPH_API}/debug_token`, {
-                params: {
-                    input_token: accessToken,
-                    access_token: appAccessToken,
-                },
-            });
+            const response = await traced('verifyAccessToken', () =>
+                axios.get(`${FACEBOOK_GRAPH_API}/debug_token`, {
+                    params: {
+                        input_token: accessToken,
+                        access_token: appAccessToken,
+                    },
+                }),
+            );
 
             const data = response.data.data;
 
@@ -75,12 +83,14 @@ export class FacebookService {
     }
     async getUserProfile(accessToken: string): Promise<FacebookUserProfile> {
         try {
-            const response = await axios.get(`${FACEBOOK_GRAPH_API}/me`, {
-                params: {
-                    fields: 'id,name,email,picture.type(large)',
-                    access_token: accessToken,
-                },
-            });
+            const response = await traced('getUserProfile', () =>
+                axios.get(`${FACEBOOK_GRAPH_API}/me`, {
+                    params: {
+                        fields: 'id,name,email,picture.type(large)',
+                        access_token: accessToken,
+                    },
+                }),
+            );
 
             // Extract picture URL from nested structure
             const data = response.data;
@@ -106,12 +116,14 @@ export class FacebookService {
     async getUserPages(accessToken: string): Promise<FacebookPagesResponse> {
         try {
             this.logger.debug('[Facebook] Fetching user pages');
-            const response = await axios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
-                params: {
-                    access_token: accessToken,
-                    fields: 'id,name,access_token,category,tasks,about,phone,single_line_address,hours,website',
-                },
-            });
+            const response = await traced('getUserPages', () =>
+                axios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
+                    params: {
+                        access_token: accessToken,
+                        fields: 'id,name,access_token,category,tasks,about,phone,single_line_address,hours,website',
+                    },
+                }),
+            );
 
             const pageCount = response.data.data?.length || 0;
             this.logger.info('[Facebook] Found pages', { count: pageCount });
@@ -136,14 +148,16 @@ export class FacebookService {
      */
     async getLongLivedToken(shortLivedToken: string): Promise<{ token: string; expiresAt: Date }> {
         try {
-            const response = await axios.get(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
-                params: {
-                    grant_type: 'fb_exchange_token',
-                    client_id: config.facebook.appId,
-                    client_secret: config.facebook.appSecret,
-                    fb_exchange_token: shortLivedToken,
-                },
-            });
+            const response = await traced('getLongLivedToken', () =>
+                axios.get(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
+                    params: {
+                        grant_type: 'fb_exchange_token',
+                        client_id: config.facebook.appId,
+                        client_secret: config.facebook.appSecret,
+                        fb_exchange_token: shortLivedToken,
+                    },
+                }),
+            );
 
             const data = response.data;
             const expiresIn = data.expires_in ? data.expires_in * 1000 : 60 * 24 * 60 * 60 * 1000; // Default 60 days if missing
@@ -180,14 +194,16 @@ export class FacebookService {
      */
     async sendPrivateMessage(pageAccessToken: string, recipientId: string, text: string): Promise<void> {
         try {
-            await axios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
-                recipient: { id: recipientId },
-                message: { text },
-            }, {
-                params: {
-                    access_token: pageAccessToken,
-                },
-            });
+            await traced('sendPrivateMessage', () =>
+                axios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
+                    recipient: { id: recipientId },
+                    message: { text },
+                }, {
+                    params: {
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
@@ -203,12 +219,14 @@ export class FacebookService {
     async getPostContent(postId: string, pageAccessToken: string): Promise<string | null> {
         try {
             this.logger.debug('[Facebook] Fetching post content', { postId });
-            const response = await axios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
-                params: {
-                    fields: 'message,story,created_time',
-                    access_token: pageAccessToken,
-                },
-            });
+            const response = await traced('getPostContent', () =>
+                axios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
+                    params: {
+                        fields: 'message,story,created_time',
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
 
             const message = response.data.message || response.data.story || null;
             this.logger.debug('[Facebook] Post content fetched', {
@@ -238,12 +256,14 @@ export class FacebookService {
         from?: { id: string; name: string };
     } | null> {
         try {
-            const response = await axios.get(`${FACEBOOK_GRAPH_API}/${commentId}`, {
-                params: {
-                    fields: 'message,from',
-                    access_token: pageAccessToken,
-                },
-            });
+            const response = await traced('getCommentDetails', () =>
+                axios.get(`${FACEBOOK_GRAPH_API}/${commentId}`, {
+                    params: {
+                        fields: 'message,from',
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
 
             return response.data;
         } catch (error) {
@@ -265,12 +285,14 @@ export class FacebookService {
     async getSenderProfile(senderId: string, pageAccessToken: string, pageId?: string): Promise<{ name: string } | null> {
         // Try User Profile API first
         try {
-            const response = await axios.get(`${FACEBOOK_GRAPH_API}/${senderId}`, {
-                params: {
-                    fields: 'name',
-                    access_token: pageAccessToken,
-                },
-            });
+            const response = await traced('getSenderProfile', () =>
+                axios.get(`${FACEBOOK_GRAPH_API}/${senderId}`, {
+                    params: {
+                        fields: 'name',
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
             const { name } = response.data;
             if (name) return { name };
         } catch (error) {
@@ -285,13 +307,15 @@ export class FacebookService {
         // Fallback: Conversations API — returns participant names even when User API is restricted
         if (pageId) {
             try {
-                const convResponse = await axios.get(`${FACEBOOK_GRAPH_API}/${pageId}/conversations`, {
-                    params: {
-                        user_id: senderId,
-                        fields: 'participants',
-                        access_token: pageAccessToken,
-                    },
-                });
+                const convResponse = await traced('getSenderProfile.conversations', () =>
+                    axios.get(`${FACEBOOK_GRAPH_API}/${pageId}/conversations`, {
+                        params: {
+                            user_id: senderId,
+                            fields: 'participants',
+                            access_token: pageAccessToken,
+                        },
+                    }),
+                );
                 const conversations = convResponse.data?.data as Array<{ participants?: { data?: Array<{ id: string; name?: string }> } }> | undefined;
                 if (conversations && conversations.length > 0) {
                     const participants = conversations[0].participants?.data ?? [];
@@ -313,12 +337,14 @@ export class FacebookService {
     async subscribePageToWebhooks(pageId: string, pageAccessToken: string): Promise<boolean> {
         try {
             this.logger.info('[Facebook] Subscribing page to webhooks', { pageId });
-            await axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
-                params: {
-                    subscribed_fields: 'feed,messages',
-                    access_token: pageAccessToken,
-                },
-            });
+            await traced('subscribePageToWebhooks', () =>
+                axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                    params: {
+                        subscribed_fields: 'feed,messages',
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
             this.logger.info('[Facebook] Page subscribed to webhooks (feed+messages)', { pageId });
             return true;
         } catch (error) {
@@ -327,12 +353,14 @@ export class FacebookService {
             if (fbError && fbError.code === 200 && /pages_manage_metadata/i.test(fbError.message)) {
                 this.logger.warn('[Facebook] pages_manage_metadata missing, subscribing to messages only', { pageId });
                 try {
-                    await axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
-                        params: {
-                            subscribed_fields: 'messages',
-                            access_token: pageAccessToken,
-                        },
-                    });
+                    await traced('subscribePageToWebhooks.messagesOnly', () =>
+                        axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                            params: {
+                                subscribed_fields: 'messages',
+                                access_token: pageAccessToken,
+                            },
+                        }),
+                    );
                     this.logger.info('[Facebook] Page subscribed to webhooks (messages only)', { pageId });
                     return true;
                 } catch (retryError) {
@@ -361,11 +389,13 @@ export class FacebookService {
     async unsubscribePageFromWebhooks(pageId: string, pageAccessToken: string): Promise<boolean> {
         try {
             this.logger.info('[Facebook] Unsubscribing page from webhooks', { pageId });
-            await axios.delete(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, {
-                params: {
-                    access_token: pageAccessToken,
-                },
-            });
+            await traced('unsubscribePageFromWebhooks', () =>
+                axios.delete(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, {
+                    params: {
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
             this.logger.info('[Facebook] Page unsubscribed from webhooks', { pageId });
             return true;
         } catch (error) {

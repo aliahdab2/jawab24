@@ -285,11 +285,36 @@ export interface AiUsageReport {
   byDay: Array<{ date: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
 }
 
+export interface SystemHealthReport {
+  services: {
+    database: { status: 'up' | 'down'; latencyMs: number };
+    redis: { status: 'up' | 'down'; latencyMs: number };
+    aiWorker: { circuit: 'closed' | 'open' | 'half-open' | 'unknown' };
+  };
+  process: {
+    memoryRssMb: number;
+    heapUsedMb: number;
+    heapTotalMb: number;
+    uptimeSeconds: number;
+  };
+  externalApis: Array<{
+    service: string;
+    method: string;
+    status: string;
+    count: number;
+    p50Ms: number;
+    p95Ms: number;
+    p99Ms: number;
+  }>;
+}
+
 export const analyticsApi = {
   getOverview: (days?: number) =>
     api.get<AnalyticsOverview>('/analytics/overview', { params: days ? { days } : undefined }),
   getAiUsage: (days?: number) =>
     api.get<AiUsageReport>('/analytics/ai-usage', { params: days ? { days } : undefined }),
+  getSystemHealth: () =>
+    api.get<SystemHealthReport>('/analytics/system-health'),
 };
 
 // Plans API (Public - uses publicApi to avoid auth redirect issues)

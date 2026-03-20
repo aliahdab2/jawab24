@@ -2,8 +2,9 @@ import Redis from 'ioredis';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
 
-// Create a shared Redis instance
-// We use lazy connection or just global connection from config
+// Create a shared Redis instance.
+// Redis command tracing is handled automatically by @sentry/node v10+
+// which instruments ioredis out of the box (spans for every command).
 export const redis = new Redis({
     host: config.redis.host,
     port: config.redis.port,
@@ -16,12 +17,10 @@ export const redis = new Redis({
 });
 
 redis.on('error', (err) => {
-     
     console.error('Redis Client Error:', err);
     Sentry.captureException(err, { tags: { service: 'redis' } });
 });
 
- 
 redis.on('connect', () => {
     // eslint-disable-next-line no-console
     console.log('✅ Redis Client Connected');

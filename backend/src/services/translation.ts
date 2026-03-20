@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { config } from '../config';
+import { tracedExternalCall } from '../utils/tracing';
 
 export interface TranslateRequest {
   text: string;
@@ -39,10 +40,12 @@ export async function generateNudgeVariations(
   count = 10,
 ): Promise<string[]> {
   try {
-    const response = await axios.post<{ variations: string[]; tokensUsed: number }>(
-      `${config.ai.serviceUrl}/generate-variations`,
-      { text, language, count },
-      { timeout: 30000 },
+    const response = await tracedExternalCall('translation', 'generateVariations', () =>
+      axios.post<{ variations: string[]; tokensUsed: number }>(
+        `${config.ai.serviceUrl}/generate-variations`,
+        { text, language, count },
+        { timeout: 30000 },
+      ),
     );
     return response.data.variations;
   } catch (error) {
@@ -57,14 +60,16 @@ export async function translateText(request: TranslateRequest): Promise<Translat
   const { text, sourceLanguage, targetLanguage } = request;
 
   try {
-    const response = await axios.post<TranslateResponse>(
-      `${config.ai.serviceUrl}/translate`,
-      {
-        text,
-        sourceLanguage: sourceLanguage || 'auto',
-        targetLanguage
-      },
-      { timeout: 30000 } // 30 second timeout
+    const response = await tracedExternalCall('translation', 'translate', () =>
+      axios.post<TranslateResponse>(
+        `${config.ai.serviceUrl}/translate`,
+        {
+          text,
+          sourceLanguage: sourceLanguage || 'auto',
+          targetLanguage
+        },
+        { timeout: 30000 },
+      ),
     );
 
     return response.data;

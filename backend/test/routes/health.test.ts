@@ -24,6 +24,12 @@ vi.mock('../../src/utils/cleanup', () => ({
     getAiCacheStats: vi.fn(),
 }));
 
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        ping: vi.fn().mockResolvedValue('PONG'),
+    },
+}));
+
 vi.mock('../../src/lib/pipelineMetrics', () => ({
     pipelineMetrics: {
         getMetrics: vi.fn(),
@@ -83,6 +89,7 @@ describe('Health Routes', () => {
             const body = response.json();
             expect(body.status).toBe('healthy');
             expect(body.services.database.status).toBe('up');
+            expect(body.services.redis.status).toBe('up');
             expect(body.services.stripe.status).toBe('up');
             expect(body.services.ai.status).toBe('up');
             expect(body.timestamp).toBeDefined();

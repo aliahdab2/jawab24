@@ -9,6 +9,7 @@
  * cache, and BullMQ queues in production.
  */
 import { redis } from './redis';
+import { pipelineOutcomeCounter } from './metrics';
 
 export type Pipeline =
     | 'facebook_message'
@@ -48,6 +49,10 @@ export class PipelineMetrics {
      * never block or crash the processing pipeline.
      */
     async record(pipeline: Pipeline, outcome: Outcome): Promise<void> {
+        // Prometheus counter (in-process, zero-cost)
+        pipelineOutcomeCounter.inc({ pipeline, outcome });
+
+        // Redis counter (survives restarts, serves /health/pipeline-metrics JSON endpoint)
         const key = `${PREFIX}${pipeline}.${outcome}`;
         try {
             await redis.incr(key);

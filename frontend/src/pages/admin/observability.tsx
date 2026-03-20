@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
-import type { AiUsageReport, AnalyticsOverview } from '@/lib/api';
+import type { AiUsageReport, AnalyticsOverview, SystemHealthReport } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
@@ -16,6 +16,10 @@ import {
   Clock,
   BarChart3,
   Activity,
+  Server,
+  Cpu,
+  RefreshCw,
+  Globe,
 } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, sub }: {
@@ -69,9 +73,35 @@ function BreakdownTable({ title, data }: { title: string; data: Record<string, n
   );
 }
 
+function ServiceBadge({ status }: { status: string }) {
+  const isUp = status === 'up' || status === 'closed';
+  return (
+    <span className={clsx(
+      'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium',
+      isUp ? 'status-success' : 'status-warning',
+    )}>
+      <span className={clsx('w-1.5 h-1.5 rounded-full', isUp ? 'bg-green-500' : 'bg-amber-500')} />
+      {status}
+    </span>
+  );
+}
+
 export default function AdminObservabilityPage() {
   const t = useTranslations('admin');
+  const queryClient = useQueryClient();
   const [days, setDays] = useState(30);
+
+  const { data: health, isLoading: healthLoading, isFetching: healthFetching } = useQuery<SystemHealthReport>({
+    queryKey: ['admin', 'system-health'],
+    queryFn: async () => {
+      const res = await analyticsApi.getSystemHealth();
+      return res.data;
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: false,
+    meta: { onError: (err: unknown) => captureError(err, 'Failed to load system health', { tags: { page: 'observability' } }) },
+  });
 
   const { data: aiUsage, isLoading: aiLoading } = useQuery<AiUsageReport>({
     queryKey: ['admin', 'ai-usage', days],
@@ -99,6 +129,14 @@ export default function AdminObservabilityPage() {
 
   const formatCost = (usd: number) => `$${usd.toFixed(4)}`;
   const formatPct = (n: number) => `${Math.round(n)}%`;
+  const formatUptime = (s: number) => {
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h`;
+    if (h > 0) return `${h}h ${m}m`;
+    return `${m}m`;
+  };
 
   const cacheHitRate = aiUsage?.totals
     ? aiUsage.totals.calls > 0
@@ -269,7 +307,115 @@ export default function AdminObservabilityPage() {
               </section>
             )}
 
-            {!aiUsage && !overview && (
+            {/* System Health Section */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  {t('observability.systemHealth')}
+                </h2>
+                <button
+                  onClick={() => queryClient.invalidateQueries({ queryKey: ['admin', 'system-health'] })}
+                  disabled={healthFetching}
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  aria-label={t('observability.refreshHealth')}
+                >
+                  <RefreshCw className={clsx('w-3 h-3', healthFetching && 'animate-spin')} aria-hidden="true" />
+                  {t('observability.refreshHealth')}
+                </button>
+              </div>
+
+              {healthLoading ? (
+                <div className="text-sm text-muted-foreground py-4">{t('observability.loading')}</div>
+              ) : health ? (
+                <div className="space-y-3">
+                  {/* Service Status */}
+                  <Card className="p-4">
+                    <h3 className="text-sm font-semibold text-foreground mb-3">{t('observability.serviceStatus')}</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="flex items-center gap-3">
+                        <Database className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t('observability.database')}</p>
+                          <ServiceBadge status={health.services.database.status} />
+                          {health.services.database.latencyMs >= 0 && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{health.services.database.latencyMs}ms</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Server className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t('observability.redis')}</p>
+                          <ServiceBadge status={health.services.redis.status} />
+                          {health.services.redis.latencyMs >= 0 && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{health.services.redis.latencyMs}ms</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <Zap className="w-4 h-4 text-icon-muted" aria-hidden="true" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">{t('observability.aiWorkerCircuit')}</p>
+                          <ServiceBadge status={health.services.aiWorker.circuit} />
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Process Metrics */}
+                  <Card className="p-4">
+                    <h3 className="text-sm font-semibold text-foreground mb-3">{t('observability.processMetrics')}</h3>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <StatCard icon={Cpu} label={t('observability.memoryRss')} value={`${health.process.memoryRssMb} MB`} />
+                      <StatCard icon={Cpu} label={t('observability.heapUsed')} value={`${health.process.heapUsedMb} MB`} sub={`/ ${health.process.heapTotalMb} MB`} />
+                      <StatCard icon={Clock} label="Uptime" value={formatUptime(health.process.uptimeSeconds)} />
+                    </div>
+                  </Card>
+
+                  {/* External API Latency */}
+                  {health.externalApis.length > 0 && (
+                    <Card className="p-4">
+                      <h3 className="text-sm font-semibold text-foreground mb-3">
+                        <Globe className="w-4 h-4 inline me-1 text-icon-muted" aria-hidden="true" />
+                        {t('observability.externalApis')}
+                      </h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-theme-border">
+                              <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.service')}</th>
+                              <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.method')}</th>
+                              <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.status')}</th>
+                              <th className="text-end pb-2 text-muted-foreground font-medium">P50</th>
+                              <th className="text-end pb-2 text-muted-foreground font-medium">P95</th>
+                              <th className="text-end pb-2 text-muted-foreground font-medium">P99</th>
+                              <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.count')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {health.externalApis.map((api, i) => (
+                              <tr key={i} className="border-b border-theme-border last:border-0">
+                                <td className="py-1.5 font-mono text-xs text-foreground">{api.service}</td>
+                                <td className="py-1.5 text-xs text-foreground">{api.method}</td>
+                                <td className="py-1.5">
+                                  <ServiceBadge status={api.status === 'success' ? 'up' : 'down'} />
+                                </td>
+                                <td className="py-1.5 text-end font-mono text-xs text-foreground">{api.p50Ms}ms</td>
+                                <td className="py-1.5 text-end font-mono text-xs text-foreground">{api.p95Ms}ms</td>
+                                <td className="py-1.5 text-end font-mono text-xs text-foreground">{api.p99Ms}ms</td>
+                                <td className="py-1.5 text-end text-foreground">{api.count}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </Card>
+                  )}
+                </div>
+              ) : null}
+            </section>
+
+            {!aiUsage && !overview && !health && (
               <div className="text-center py-12 text-muted-foreground">
                 {t('observability.noData')}
               </div>

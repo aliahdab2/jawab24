@@ -9,6 +9,7 @@
  * existing imports from 'services/shopify' continue to work.
  */
 import crypto from 'crypto';
+import { tracedExternalCall } from '../utils/tracing';
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores } from '../db/schema';
@@ -61,15 +62,17 @@ export function buildAuthUrl(shop: string, state: string): string {
 }
 
 export async function exchangeCodeForToken(shop: string, code: string): Promise<string> {
-    const response = await fetch(`https://${shop}/admin/oauth/access_token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            client_id: config.shopify.apiKey,
-            client_secret: config.shopify.apiSecret,
-            code,
+    const response = await tracedExternalCall('shopify', 'exchangeCodeForToken', () =>
+        fetch(`https://${shop}/admin/oauth/access_token`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                client_id: config.shopify.apiKey,
+                client_secret: config.shopify.apiSecret,
+                code,
+            }),
         }),
-    });
+    );
 
     if (!response.ok) {
         throw new Error(`Shopify token exchange failed: ${response.status}`);
@@ -107,16 +110,18 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
 
     for (const { topic, address } of topics) {
         try {
-            const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Shopify-Access-Token': accessToken,
-                },
-                body: JSON.stringify({
-                    webhook: { topic, address, format: 'json' },
+            const response = await tracedExternalCall('shopify', 'registerWebhook', () =>
+                fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Shopify-Access-Token': accessToken,
+                    },
+                    body: JSON.stringify({
+                        webhook: { topic, address, format: 'json' },
+                    }),
                 }),
-            });
+            );
             if (!response.ok) {
                 const text = await response.text();
                 if (response.status === 422) {
@@ -226,14 +231,16 @@ async function shopifyGraphQL<T = unknown>(shop: string, accessToken: string, qu
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        const response = await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Shopify-Access-Token': accessToken,
-            },
-            body: JSON.stringify({ query }),
-        });
+        const response = await tracedExternalCall('shopify', 'graphql', () =>
+            fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Shopify-Access-Token': accessToken,
+                },
+                body: JSON.stringify({ query }),
+            }),
+        );
 
         if (response.status === 429 || response.status >= 500) {
             const retryAfter = response.headers.get('retry-after');

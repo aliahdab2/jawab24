@@ -11,6 +11,7 @@
  * - No GDPR endpoints required
  */
 import crypto from 'crypto';
+import { tracedExternalCall } from '../utils/tracing';
 import { eq, and, lt } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores } from '../db/schema';
@@ -47,17 +48,19 @@ export async function exchangeCodeForToken(code: string): Promise<SallaTokenResp
     const { clientId, clientSecret, hostName } = config.salla;
     const redirectUri = `https://${hostName}/salla/auth/callback`;
 
-    const response = await fetch('https://accounts.salla.sa/oauth2/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            grant_type: 'authorization_code',
-            client_id: clientId,
-            client_secret: clientSecret,
-            code,
-            redirect_uri: redirectUri,
+    const response = await tracedExternalCall('salla', 'exchangeCodeForToken', () =>
+        fetch('https://accounts.salla.sa/oauth2/token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                grant_type: 'authorization_code',
+                client_id: clientId,
+                client_secret: clientSecret,
+                code,
+                redirect_uri: redirectUri,
+            }),
         }),
-    });
+    );
 
     if (!response.ok) {
         const text = await response.text();
@@ -109,16 +112,18 @@ export async function refreshAccessToken(storeId: string): Promise<void> {
 
         const refreshToken = decrypt(store.refreshToken, store.refreshTokenIv);
 
-        const response = await fetch('https://accounts.salla.sa/oauth2/token', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                grant_type: 'refresh_token',
-                refresh_token: refreshToken,
-                client_id: config.salla.clientId,
-                client_secret: config.salla.clientSecret,
+        const response = await tracedExternalCall('salla', 'refreshAccessToken', () =>
+            fetch('https://accounts.salla.sa/oauth2/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    grant_type: 'refresh_token',
+                    refresh_token: refreshToken,
+                    client_id: config.salla.clientId,
+                    client_secret: config.salla.clientSecret,
+                }),
             }),
-        });
+        );
 
         if (!response.ok) {
             const text = await response.text();
@@ -208,18 +213,20 @@ export async function registerWebhooks(accessToken: string): Promise<void> {
 
     for (const event of SALLA_WEBHOOK_EVENTS) {
         try {
-            const response = await fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify({
-                    name: event,
-                    event,
-                    url: webhookUrl,
+            const response = await tracedExternalCall('salla', 'registerWebhook', () =>
+                fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${accessToken}`,
+                    },
+                    body: JSON.stringify({
+                        name: event,
+                        event,
+                        url: webhookUrl,
+                    }),
                 }),
-            });
+            );
             if (!response.ok) {
                 const text = await response.text();
                 // 422 = webhook already exists
@@ -243,13 +250,15 @@ async function sallaApiGet<T = unknown>(url: string, accessToken: string): Promi
     let lastError: Error | undefined;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Accept': 'application/json',
-            },
-        });
+        const response = await tracedExternalCall('salla', 'apiGet', () =>
+            fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Accept': 'application/json',
+                },
+            }),
+        );
 
         // Retry on 429 (rate limit) or 5xx (server error)
         if (response.status === 429 || response.status >= 500) {

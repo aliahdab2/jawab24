@@ -1,10 +1,9 @@
 import { FastifyPluginAsync } from 'fastify';
-import { db } from '../db';
-import { sql } from 'drizzle-orm';
 import { config } from '../config';
 import { runAllCleanupTasks, getAiCacheStats } from '../utils/cleanup';
 import { pipelineMetrics } from '../lib/pipelineMetrics';
-import { aiWorkerCircuit } from '../lib/circuitBreaker';
+import { metricsRegistry } from '../lib/metrics';
+import { probeDatabase, probeRedis, probeAiWorkerCircuit } from '../utils/healthChecks';
 import { createRequestLogger } from '../types';
 
 const startTime = Date.now();
@@ -16,50 +15,11 @@ interface HealthStatus {
     version: string;
     environment: string;
     services: {
-        database: ServiceStatus;
-        stripe: ServiceStatus;
-        ai: ServiceStatus;
+        database: { status: string; responseTime?: number; message?: string };
+        redis: { status: string; responseTime?: number; message?: string };
+        stripe: { status: string; message?: string };
+        ai: { status: string; message?: string; circuit?: string };
     };
-}
-
-interface ServiceStatus {
-    status: 'up' | 'down' | 'not_configured';
-    message?: string;
-    responseTime?: number;
-    circuit?: 'closed' | 'open' | 'half-open';
-}
-
-async function checkDatabase(): Promise<ServiceStatus> {
-    try {
-        const start = Date.now();
-        await db.execute(sql`SELECT 1`);
-        const responseTime = Date.now() - start;
-        return { status: 'up', responseTime };
-    } catch (error) {
-        return {
-            status: 'down',
-            message: error instanceof Error ? error.message : 'Unknown error',
-        };
-    }
-}
-
-function checkStripe(): ServiceStatus {
-    if (config.stripe?.secretKey) {
-        return { status: 'up', message: 'Configured' };
-    }
-    return { status: 'not_configured', message: 'Stripe keys not set' };
-}
-
-async function checkAI(): Promise<ServiceStatus> {
-    if (!config.ai.enabled) {
-        return { status: 'not_configured', message: 'AI service disabled' };
-    }
-    try {
-        const circuit = await aiWorkerCircuit.getState();
-        return { status: 'up', message: 'Enabled', circuit };
-    } catch {
-        return { status: 'up', message: 'Enabled' };
-    }
 }
 
 const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
@@ -70,12 +30,23 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     fastify.get('/health', {
         schema: { tags: ['Health'], summary: 'Comprehensive health check with service statuses' },
     }, async (request, reply) => {
-        const database = await checkDatabase();
-        const stripe = checkStripe();
-        const ai = await checkAI();
+        const [dbProbe, redisProbe, circuit] = await Promise.all([
+            probeDatabase(),
+            probeRedis(),
+            probeAiWorkerCircuit(),
+        ]);
 
-        const allServicesUp = database.status === 'up';
-        const anyServiceDown = database.status === 'down';
+        const database = { status: dbProbe.status, responseTime: dbProbe.latencyMs, message: dbProbe.message };
+        const redisStatus = { status: redisProbe.status, responseTime: redisProbe.latencyMs, message: redisProbe.message };
+        const stripe = config.stripe?.secretKey
+            ? { status: 'up' as const, message: 'Configured' }
+            : { status: 'not_configured' as const, message: 'Stripe keys not set' };
+        const ai = config.ai.enabled
+            ? { status: 'up' as const, message: 'Enabled', circuit }
+            : { status: 'not_configured' as const, message: 'AI service disabled' };
+
+        const allServicesUp = dbProbe.status === 'up' && redisProbe.status === 'up';
+        const anyServiceDown = dbProbe.status === 'down';
 
         const health: HealthStatus = {
             status: anyServiceDown ? 'unhealthy' : allServicesUp ? 'healthy' : 'degraded',
@@ -85,6 +56,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
             environment: config.nodeEnv,
             services: {
                 database,
+                redis: redisStatus,
                 stripe,
                 ai,
             },
@@ -111,9 +83,9 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
     fastify.get('/health/ready', {
         schema: { tags: ['Health'], summary: 'Readiness probe checking database connectivity' },
     }, async (request, reply) => {
-        const database = await checkDatabase();
+        const dbProbe = await probeDatabase();
 
-        if (database.status === 'up') {
+        if (dbProbe.status === 'up') {
             return reply.send({ status: 'ready' });
         }
 
@@ -202,6 +174,30 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
         }
 
         return reply.send(await pipelineMetrics.getMetrics());
+    });
+
+    /**
+     * Prometheus-compatible metrics endpoint
+     * GET /health/metrics
+     * Exports all metrics via prom-client registry:
+     *   - Default Node.js metrics (CPU, memory, event loop, GC)
+     *   - Pipeline outcome counters (jawab24_pipeline_total)
+     *   - Redis operation latency histogram (jawab24_redis_operation_duration_seconds)
+     *   - External API latency histogram (jawab24_external_api_duration_seconds)
+     *   - Uptime gauge (jawab24_uptime_seconds)
+     */
+    fastify.get<{ Headers: { 'x-cleanup-token'?: string } }>('/health/metrics', {
+        schema: { tags: ['Health'], summary: 'Prometheus-compatible metrics export (token-protected)' },
+    }, async (request, reply) => {
+        const cleanupToken = config.cleanupSecretToken;
+        const providedToken = request.headers['x-cleanup-token'];
+
+        if (!cleanupToken || providedToken !== cleanupToken) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        reply.header('Content-Type', metricsRegistry.contentType);
+        return reply.send(await metricsRegistry.metrics());
     });
 
     /**
