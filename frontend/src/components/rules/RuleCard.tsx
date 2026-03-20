@@ -84,7 +84,7 @@ export function RuleCard({
       <div className="p-4 sm:p-5 flex items-center gap-3 border-b border-theme-border">
         <Toggle
           enabled={isActive}
-          onChange={onToggle ? (active) => onToggle(rule.id, active) : undefined}
+          onChange={onToggle ? (active) => onToggle(rule.id, active) : () => {}}
           disabled={!onToggle}
           size="sm"
         />

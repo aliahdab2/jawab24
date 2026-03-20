@@ -58,7 +58,7 @@ export function TemplateCard({
       <div className="p-4 sm:p-5 border-b border-theme-border flex items-center gap-3">
         <Toggle
           enabled={isActive}
-          onChange={onToggle ? (active) => onToggle(template.id, active) : undefined}
+          onChange={onToggle ? (active) => onToggle(template.id, active) : () => {}}
           disabled={!onToggle}
           size="sm"
         />
