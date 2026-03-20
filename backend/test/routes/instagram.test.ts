@@ -7,6 +7,7 @@ vi.mock('../../src/middleware/auth', () => ({
 }));
 vi.mock('../../src/middleware/workspace', () => ({
     resolveWorkspace: vi.fn(),
+    requireRole: () => async () => {},
 }));
 
 vi.mock('../../src/controllers/instagram', () => ({

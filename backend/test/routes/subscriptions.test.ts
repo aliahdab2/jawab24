@@ -110,6 +110,7 @@ vi.mock('../../src/middleware/workspace', () => ({
         req.workspaceRole = 'owner';
     },
     WorkspaceRequest: {},
+    requireRole: () => async () => {},
 }));
 
 describe('Subscriptions Routes', () => {

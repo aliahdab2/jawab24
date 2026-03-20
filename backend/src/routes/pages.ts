@@ -1,24 +1,16 @@
 import { FastifyInstance } from 'fastify';
 import { pagesController } from '../controllers/pages';
 import { authenticate } from '../middleware/auth';
-import { resolveWorkspace } from '../middleware/workspace';
+import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function pagesRoutes(fastify: FastifyInstance) {
-    fastify.register(async (protectedRoutes) => {
-        protectedRoutes.addHook('preHandler', authenticate);
-        protectedRoutes.addHook('preHandler', resolveWorkspace);
+    // --- Read: all workspace members ---
+    fastify.register(async (readRoutes) => {
+        readRoutes.addHook('preHandler', authenticate);
+        readRoutes.addHook('preHandler', resolveWorkspace);
 
-        // Pages CRUD
-        protectedRoutes.post('/pages', {
-            schema: {
-                tags: ['Pages'],
-                summary: 'Create a new page',
-                security: auth,
-            },
-        }, pagesController.create);
-
-        protectedRoutes.get('/pages', {
+        readRoutes.get('/pages', {
             schema: {
                 tags: ['Pages'],
                 summary: 'List all pages',
@@ -26,7 +18,7 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.getAll);
 
-        protectedRoutes.get('/pages/:id', {
+        readRoutes.get('/pages/:id', {
             schema: {
                 tags: ['Pages'],
                 summary: 'Get a single page by ID',
@@ -34,7 +26,30 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.getOne);
 
-        protectedRoutes.put('/pages/:id', {
+        readRoutes.get('/pages/:id/kb-gaps', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Get unresolved KB gaps for a page',
+                security: auth,
+            },
+        }, pagesController.getKbGaps);
+    });
+
+    // --- Write: admin+ only ---
+    fastify.register(async (adminRoutes) => {
+        adminRoutes.addHook('preHandler', authenticate);
+        adminRoutes.addHook('preHandler', resolveWorkspace);
+        adminRoutes.addHook('preHandler', requireRole('admin'));
+
+        adminRoutes.post('/pages', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Create a new page',
+                security: auth,
+            },
+        }, pagesController.create);
+
+        adminRoutes.put('/pages/:id', {
             schema: {
                 tags: ['Pages'],
                 summary: 'Update a page',
@@ -42,7 +57,7 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.update);
 
-        protectedRoutes.delete('/pages/:id', {
+        adminRoutes.delete('/pages/:id', {
             schema: {
                 tags: ['Pages'],
                 summary: 'Delete a page',
@@ -50,8 +65,7 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.delete);
 
-        // Special actions
-        protectedRoutes.patch('/pages/:id/auto-reply', {
+        adminRoutes.patch('/pages/:id/auto-reply', {
             schema: {
                 tags: ['Pages'],
                 summary: 'Toggle auto-reply for a page',
@@ -59,7 +73,7 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.toggleAutoReply);
 
-        protectedRoutes.post('/pages/sync', {
+        adminRoutes.post('/pages/sync', {
             schema: {
                 tags: ['Pages'],
                 summary: 'Sync pages from Facebook',
@@ -67,15 +81,7 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.sync);
 
-        protectedRoutes.get('/pages/:id/kb-gaps', {
-            schema: {
-                tags: ['Pages'],
-                summary: 'Get unresolved KB gaps for a page',
-                security: auth,
-            },
-        }, pagesController.getKbGaps);
-
-        protectedRoutes.post('/pages/:id/kb-gaps/:gapId/dismiss', {
+        adminRoutes.post('/pages/:id/kb-gaps/:gapId/dismiss', {
             schema: {
                 tags: ['Pages'],
                 summary: 'Dismiss a KB gap (mark as resolved)',

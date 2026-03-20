@@ -49,6 +49,7 @@ vi.mock('../../src/middleware/workspace', () => ({
         req.workspaceId = 'test_workspace_id';
         req.workspaceRole = 'owner';
     },
+    requireRole: () => async () => {},
 }));
 
 vi.mock('../../src/services/workspaceSettings', () => ({

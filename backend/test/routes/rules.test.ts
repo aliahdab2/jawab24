@@ -21,7 +21,8 @@ vi.mock('../../src/middleware/workspace', () => ({
     resolveWorkspace: async (req: any) => {
         req.workspaceId = 'test_workspace_id';
         req.workspaceRole = 'owner';
-    }
+    },
+    requireRole: () => async () => {},
 }));
 
 describe('Rules Routes', () => {

@@ -1,23 +1,31 @@
 import { FastifyInstance } from 'fastify';
 import { settingsController } from '../controllers/settings';
 import { authenticate } from '../middleware/auth';
-import { resolveWorkspace } from '../middleware/workspace';
+import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 
 export default async function settingsRoutes(fastify: FastifyInstance) {
-    fastify.register(async (protectedRoutes) => {
-        protectedRoutes.addHook('preHandler', authenticate);
-        protectedRoutes.addHook('preHandler', resolveWorkspace);
+    // --- Read: all workspace members ---
+    fastify.register(async (readRoutes) => {
+        readRoutes.addHook('preHandler', authenticate);
+        readRoutes.addHook('preHandler', resolveWorkspace);
 
-        protectedRoutes.get('/settings', {
+        readRoutes.get('/settings', {
             schema: {
                 tags: ['Settings'],
                 summary: 'Get user settings',
                 security: auth,
             },
         }, settingsController.get);
+    });
 
-        protectedRoutes.put('/settings', {
+    // --- Write: admin+ only ---
+    fastify.register(async (adminRoutes) => {
+        adminRoutes.addHook('preHandler', authenticate);
+        adminRoutes.addHook('preHandler', resolveWorkspace);
+        adminRoutes.addHook('preHandler', requireRole('admin'));
+
+        adminRoutes.put('/settings', {
             schema: {
                 tags: ['Settings'],
                 summary: 'Update user settings',
