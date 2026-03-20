@@ -1,27 +1,30 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { Button } from '@/components/ui';
 import { motion, useInView } from 'framer-motion';
 import { useRef } from 'react';
+import { isRTLLocale } from '@/utils/locale';
 
 interface LandingHowItWorksProps {
   isAuthenticated: boolean;
 }
 
-const stepVariants = {
-  hidden: { opacity: 0, x: -30 },
-  visible: (i: number) => ({
-    opacity: 1,
-    x: 0,
-    transition: {
-      delay: i * 0.2,
-      duration: 0.5,
-      ease: [0.25, 0.46, 0.45, 0.94] as const,
-    },
-  }),
-};
+function makeStepVariants(rtl: boolean) {
+  return {
+    hidden: { opacity: 0, x: rtl ? 30 : -30 },
+    visible: (i: number) => ({
+      opacity: 1,
+      x: 0,
+      transition: {
+        delay: i * 0.2,
+        duration: 0.5,
+        ease: [0.25, 0.46, 0.45, 0.94] as const,
+      },
+    }),
+  };
+}
 
 const imageVariants = {
   hidden: { opacity: 0, scale: 0.9, rotate: 4 },
@@ -45,8 +48,11 @@ const headingVariants = {
 export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
   const t = useTranslations('landing');
   const tNav = useTranslations('nav');
+  const locale = useLocale();
+  const isRTL = isRTLLocale(locale);
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-80px' });
+  const stepVariants = makeStepVariants(isRTL);
 
   const howItWorks = [
     { step: '1', title: t('howItWorks.step1Title'), description: t('howItWorks.step1Desc') },
@@ -122,7 +128,7 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
                 <Button size="lg" className="rounded-xl sm:rounded-2xl px-4 sm:px-10 py-3 sm:py-7 text-sm sm:text-lg font-bold shadow-xl shadow-brand-500/20 transition-all hover:px-12">
                   <span className="flex items-center gap-2">
                     {isAuthenticated ? (tNav('dashboard') || 'Dashboard') : t('howItWorks.cta')}
-                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
                   </span>
                 </Button>
               </Link>

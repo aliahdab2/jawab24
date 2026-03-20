@@ -131,7 +131,7 @@ export function LandingPricing() {
             <Button size="lg" className="px-6 sm:px-12 py-4 sm:py-6 text-sm sm:text-lg font-bold rounded-xl sm:rounded-2xl shadow-xl shadow-brand-200 dark:shadow-brand-900/40">
               <span className="flex items-center gap-2">
                 {tPricing('viewPricingDetails')}
-                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 rtl:rotate-180" />
               </span>
             </Button>
           </Link>
