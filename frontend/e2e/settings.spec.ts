@@ -68,6 +68,12 @@ test.describe('Settings Page', () => {
       if (url.includes('/subscription/usage')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
       }
+      if (url.includes('/workspaces/current/members')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'mem-1', userId: 'u1', role: 'owner', joinedAt: '2026-01-01', user: { id: 'u1', name: 'Test', email: 'test@test.com', picture: null } }]) });
+      }
+      if (url.includes('/workspaces/current/invites')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      }
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
   });
@@ -141,6 +147,12 @@ test.describe('Settings Page', () => {
       }
       if (url.includes('/subscription/usage')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      if (url.includes('/workspaces/current/members')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'mem-1', userId: 'u1', role: 'owner', joinedAt: '2026-01-01', user: { id: 'u1', name: 'Test', email: 'test@test.com', picture: null } }]) });
+      }
+      if (url.includes('/workspaces/current/invites')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       }
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
@@ -269,6 +281,12 @@ test.describe('Settings Page', () => {
       }
       if (url.includes('/subscription/usage')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      if (url.includes('/workspaces/current/members')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'mem-1', userId: 'u1', role: 'owner', joinedAt: '2026-01-01', user: { id: 'u1', name: 'Test', email: 'test@test.com', picture: null } }]) });
+      }
+      if (url.includes('/workspaces/current/invites')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
       }
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });

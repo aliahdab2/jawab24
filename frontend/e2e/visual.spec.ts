@@ -153,6 +153,10 @@ function setupApiMocks(page: import('@playwright/test').Page) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_USAGE) });
     if (url.includes('/settings'))
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+    if (url.includes('/workspaces/current/members'))
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'mem-1', userId: 'u1', role: 'owner', joinedAt: '2026-01-01', user: { id: 'u1', name: 'Test', email: 'test@test.com', picture: null } }]) });
+    if (url.includes('/workspaces/current/invites'))
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
     await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
 }
