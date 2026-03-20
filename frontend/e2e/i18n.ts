@@ -45,6 +45,7 @@ import enShopify from '../src/i18n/en/shopify.json';
 import enSidebar from '../src/i18n/en/sidebar.json';
 import enSse from '../src/i18n/en/sse.json';
 import enSubscription from '../src/i18n/en/subscription.json';
+import enTeam from '../src/i18n/en/team.json';
 import enTemplates from '../src/i18n/en/templates.json';
 import enTerms from '../src/i18n/en/terms.json';
 import enTime from '../src/i18n/en/time.json';
@@ -87,6 +88,7 @@ import arShopify from '../src/i18n/ar/shopify.json';
 import arSidebar from '../src/i18n/ar/sidebar.json';
 import arSse from '../src/i18n/ar/sse.json';
 import arSubscription from '../src/i18n/ar/subscription.json';
+import arTeam from '../src/i18n/ar/team.json';
 import arTemplates from '../src/i18n/ar/templates.json';
 import arTerms from '../src/i18n/ar/terms.json';
 import arTime from '../src/i18n/ar/time.json';
@@ -102,8 +104,8 @@ export const en = {
   onboarding: enOnboarding, pages: enPages, payment: enPayment, plans: enPlans,
   pricing: enPricing, privacy: enPrivacy, profile: enProfile, rules: enRules,
   salla: enSalla, settings: enSettings, shopify: enShopify, sidebar: enSidebar,
-  sse: enSse, subscription: enSubscription, templates: enTemplates, terms: enTerms,
-  time: enTime,
+  sse: enSse, subscription: enSubscription, team: enTeam, templates: enTemplates,
+  terms: enTerms, time: enTime,
 };
 
 export const ar = {
@@ -116,8 +118,8 @@ export const ar = {
   onboarding: arOnboarding, pages: arPages, payment: arPayment, plans: arPlans,
   pricing: arPricing, privacy: arPrivacy, profile: arProfile, rules: arRules,
   salla: arSalla, settings: arSettings, shopify: arShopify, sidebar: arSidebar,
-  sse: arSse, subscription: arSubscription, templates: arTemplates, terms: arTerms,
-  time: arTime,
+  sse: arSse, subscription: arSubscription, team: arTeam, templates: arTemplates,
+  terms: arTerms, time: arTime,
 };
 
 /** Resolve a dot-notation key from a nested object */

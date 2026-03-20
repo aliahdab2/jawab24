@@ -40,6 +40,7 @@ import enShopify       from './en/shopify.json';
 import enSidebar       from './en/sidebar.json';
 import enSse           from './en/sse.json';
 import enSubscription  from './en/subscription.json';
+import enTeam          from './en/team.json';
 import enTemplates     from './en/templates.json';
 import enTerms         from './en/terms.json';
 import enTime          from './en/time.json';
@@ -84,6 +85,7 @@ import arShopify       from './ar/shopify.json';
 import arSidebar       from './ar/sidebar.json';
 import arSse           from './ar/sse.json';
 import arSubscription  from './ar/subscription.json';
+import arTeam          from './ar/team.json';
 import arTemplates     from './ar/templates.json';
 import arTerms         from './ar/terms.json';
 import arTime          from './ar/time.json';
@@ -132,6 +134,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/sidebar': enSidebar,       'ar/sidebar': arSidebar,
   'en/sse': enSse,               'ar/sse': arSse,
   'en/subscription': enSubscription, 'ar/subscription': arSubscription,
+  'en/team': enTeam,             'ar/team': arTeam,
   'en/templates': enTemplates,   'ar/templates': arTemplates,
   'en/terms': enTerms,           'ar/terms': arTerms,
   'en/time': enTime,             'ar/time': arTime,

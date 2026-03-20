@@ -14,7 +14,9 @@ import {
   Shield,
   BookTemplate,
   Zap,
-  Plug
+  Plug,
+  ChevronDown as ChevronDownIcon,
+  Check
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
@@ -150,7 +152,8 @@ export function getNavigationGroups(hasEcommerceStore: boolean) {
  */
 export const Sidebar = memo(function Sidebar() {
   const router = useRouter();
-  const { logout, user, fbToken } = useAuthStore();
+  const { logout, user, fbToken, workspaces, activeWorkspaceId } = useAuthStore();
+  const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
   const unreadMessages = useUIStore((s) => s.unreadMessages);
@@ -175,6 +178,10 @@ export const Sidebar = memo(function Sidebar() {
     logout();
     router.push('/login');
   }, [logout, router]);
+
+  const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
+  const hasMultipleWorkspaces = workspaces.length > 1;
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
 
   // Local override for picture — set when the stored CDN URL expires and we refresh it
   const [pictureOverride, setPictureOverride] = useState<string | undefined>(undefined);
@@ -268,6 +275,56 @@ export const Sidebar = memo(function Sidebar() {
           </div>
         )}
       </div>
+
+      {/* Workspace Switcher — only when user has 2+ workspaces */}
+      {hasMultipleWorkspaces && (
+        <div className="px-3 pt-3 pb-1 relative">
+          <button
+            onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
+            className={clsx(
+              'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-start',
+              !sidebarOpen && 'justify-center px-0'
+            )}
+          >
+            <span className="w-7 h-7 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
+              {activeWorkspace?.name?.charAt(0) || 'W'}
+            </span>
+            {sidebarOpen && (
+              <>
+                <span className="text-sm font-bold text-white truncate flex-1">{activeWorkspace?.name}</span>
+                <ChevronDownIcon className={clsx('w-4 h-4 text-zinc-400 flex-shrink-0 transition-transform', wsDropdownOpen && 'rotate-180')} />
+              </>
+            )}
+          </button>
+
+          {wsDropdownOpen && (
+            <div className={clsx(
+              'absolute z-50 mt-1 bg-surface-900 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[200px]',
+              sidebarOpen ? 'start-3 end-3' : 'start-full ms-2 top-3'
+            )}>
+              {workspaces.map((ws) => (
+                <button
+                  key={ws.id}
+                  onClick={() => {
+                    setActiveWorkspace(ws.id);
+                    setWsDropdownOpen(false);
+                    router.push('/dashboard');
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 text-start hover:bg-white/10 transition-colors"
+                >
+                  <span className="w-6 h-6 rounded-md bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0">
+                    {ws.name?.charAt(0) || 'W'}
+                  </span>
+                  <span className="text-sm text-white truncate flex-1">{ws.name}</span>
+                  {ws.id === activeWorkspaceId && (
+                    <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-6 overflow-y-auto custom-scrollbar">

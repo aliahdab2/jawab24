@@ -51,7 +51,7 @@ export const PAGE_NAMESPACES = {
   templates:          [...DASHBOARD_LAYOUT, 'templates'],
   rules:              [...DASHBOARD_LAYOUT, 'rules', 'templates'],
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
-  settings:           [...DASHBOARD_LAYOUT, 'settings', 'time', 'logout'],
+  settings:           [...DASHBOARD_LAYOUT, 'settings', 'team', 'time', 'logout'],
   integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'salla', 'shopify'],
 
   // ── Admin pages (include ADMIN_LAYOUT) ────────────────────────

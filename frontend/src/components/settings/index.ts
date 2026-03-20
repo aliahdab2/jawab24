@@ -11,4 +11,5 @@ export { HandoffPauseCard } from './HandoffPauseCard';
 export { GreetingMessageCard } from './GreetingMessageCard';
 export { ReplyStyleCard } from './ReplyStyleCard';
 export { DangerZone } from './DangerZone';
+export { TeamSection } from './TeamSection';
 export type { SettingsState, SettingsCardProps } from './types';

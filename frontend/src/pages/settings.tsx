@@ -32,6 +32,7 @@ import {
   GreetingMessageCard,
   ReplyStyleCard,
   DangerZone,
+  TeamSection,
 } from '@/components/settings';
 import type { SettingsState } from '@/components/settings';
 
@@ -331,6 +332,11 @@ const SettingsPage: NextPageWithLayout = () => {
             }
           </Button>
         </div>
+      </div>
+
+      {/* Section: Team */}
+      <div className="mt-8 sm:mt-10 landscape:mt-6">
+        <TeamSection />
       </div>
 
       {/* Visual separator before danger zone */}
