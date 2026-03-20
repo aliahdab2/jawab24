@@ -334,6 +334,7 @@ const PagesPage: NextPageWithLayout = () => {
                       onChange={(enabled) => handleToggle(page.id, enabled)}
                       disabled={!canEdit}
                       aria-label={`${t('autoReply')} Facebook - ${page.name}`}
+                      title={!canEdit ? tc('viewOnlyHint') : undefined}
                     />
                   </div>
 
@@ -390,6 +391,7 @@ const PagesPage: NextPageWithLayout = () => {
                         onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
                         disabled={!canEdit}
                         aria-label={`${t('autoReply')} Instagram - ${page.name}`}
+                        title={!canEdit ? tc('viewOnlyHint') : undefined}
                       />
                     )}
                   </div>

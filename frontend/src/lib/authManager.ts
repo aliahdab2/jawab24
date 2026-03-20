@@ -234,6 +234,13 @@ class AuthManager {
           }
         }
 
+        // 403 INSUFFICIENT_ROLE: user tried an action above their permission level
+        if (status === 403 && errorCode === 'INSUFFICIENT_ROLE') {
+          const { toast } = await import('sonner');
+          toast.error('You don\'t have permission to do this. Only admins can make changes.');
+          return Promise.reject(error);
+        }
+
         // Only handle 401 (expired token) from here on
         if (status !== 401) {
           return Promise.reject(error);

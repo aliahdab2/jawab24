@@ -60,6 +60,7 @@ export function TemplateCard({
           enabled={isActive}
           onChange={onToggle ? (active) => onToggle(template.id, active) : () => {}}
           disabled={!onToggle}
+          title={!onToggle ? tc('viewOnlyHint') : undefined}
           size="sm"
         />
         <div className="flex-1 min-w-0 flex items-center gap-2">

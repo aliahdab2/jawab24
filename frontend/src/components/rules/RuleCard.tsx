@@ -86,6 +86,7 @@ export function RuleCard({
           enabled={isActive}
           onChange={onToggle ? (active) => onToggle(rule.id, active) : () => {}}
           disabled={!onToggle}
+          title={!onToggle ? tc('viewOnlyHint') : undefined}
           size="sm"
         />
 
