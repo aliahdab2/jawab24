@@ -329,13 +329,14 @@ const PagesPage: NextPageWithLayout = () => {
                         </p>
                       </div>
                     </div>
-                    <Toggle
-                      enabled={page.autoReplyEnabled ?? false}
-                      onChange={(enabled) => handleToggle(page.id, enabled)}
-                      disabled={!canEdit}
-                      aria-label={`${t('autoReply')} Facebook - ${page.name}`}
-                      title={!canEdit ? tc('viewOnlyHint') : undefined}
-                    />
+                    <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
+                      <Toggle
+                        enabled={page.autoReplyEnabled ?? false}
+                        onChange={(enabled) => handleToggle(page.id, enabled)}
+                        disabled={!canEdit}
+                        aria-label={`${t('autoReply')} Facebook - ${page.name}`}
+                      />
+                    </span>
                   </div>
 
                   {/* Instagram row */}
@@ -386,13 +387,14 @@ const PagesPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     {page.instagramUsername && (
-                      <Toggle
-                        enabled={page.instagramAutoReplyEnabled ?? false}
-                        onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
-                        disabled={!canEdit}
-                        aria-label={`${t('autoReply')} Instagram - ${page.name}`}
-                        title={!canEdit ? tc('viewOnlyHint') : undefined}
-                      />
+                      <span title={!canEdit ? tc('viewOnlyHint') : undefined}>
+                        <Toggle
+                          enabled={page.instagramAutoReplyEnabled ?? false}
+                          onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
+                          disabled={!canEdit}
+                          aria-label={`${t('autoReply')} Instagram - ${page.name}`}
+                        />
+                      </span>
                     )}
                   </div>
                 </div>

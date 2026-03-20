@@ -82,13 +82,14 @@ export function RuleCard({
     >
       {/* Header: Toggle + Name + Priority */}
       <div className="p-4 sm:p-5 flex items-center gap-3 border-b border-theme-border">
-        <Toggle
-          enabled={isActive}
-          onChange={onToggle ? (active) => onToggle(rule.id, active) : () => {}}
-          disabled={!onToggle}
-          title={!onToggle ? tc('viewOnlyHint') : undefined}
-          size="sm"
-        />
+        <span title={!onToggle ? tc('viewOnlyHint') : undefined}>
+          <Toggle
+            enabled={isActive}
+            onChange={onToggle ? (active) => onToggle(rule.id, active) : () => {}}
+            disabled={!onToggle}
+            size="sm"
+          />
+        </span>
 
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <h3 className="text-base sm:text-lg font-bold text-foreground truncate">{rule.name}</h3>

@@ -56,13 +56,14 @@ export function TemplateCard({
     >
       {/* Header */}
       <div className="p-4 sm:p-5 border-b border-theme-border flex items-center gap-3">
-        <Toggle
-          enabled={isActive}
-          onChange={onToggle ? (active) => onToggle(template.id, active) : () => {}}
-          disabled={!onToggle}
-          title={!onToggle ? tc('viewOnlyHint') : undefined}
-          size="sm"
-        />
+        <span title={!onToggle ? tc('viewOnlyHint') : undefined}>
+          <Toggle
+            enabled={isActive}
+            onChange={onToggle ? (active) => onToggle(template.id, active) : () => {}}
+            disabled={!onToggle}
+            size="sm"
+          />
+        </span>
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <div className={clsx(
             'w-9 h-9 rounded-xl flex items-center justify-center shadow-inner transition-colors flex-shrink-0',
