@@ -179,7 +179,7 @@ export class ReplyGenerator {
                 context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
             });
 
-            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
+            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text);
         }
 
         // 3. Fallback
@@ -249,7 +249,7 @@ export class ReplyGenerator {
                     aiResponse = await aiService.generateReply(aiRequest);
                 }
 
-                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB);
+                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text);
             }
         }
 
@@ -400,6 +400,7 @@ export class ReplyGenerator {
         retrievedChunkCount?: number,
         ragAttempted?: boolean,
         hasStaticKB?: boolean,
+        queryText?: string,
     ): Promise<GenerateReplyResult> {
         // Normalize intent: GPT sometimes invents intents (PRICE, OTHER, LOCATION)
         // instead of using the 8 valid ones. Map them back to the standard taxonomy.
@@ -443,6 +444,23 @@ export class ReplyGenerator {
         // Log token usage for cost tracking (skip for cached responses)
         if (!aiResponse.cached) {
             await subscriptionsService.logAiUsage(userId, pageId, aiResponse.tokensUsed, aiResponse.model || DEFAULT_AI_MODEL);
+        }
+
+        // Record KB gap for low-confidence replies with info_not_in_kb flag.
+        // This extends gap detection beyond zero-chunk RAG misses: even partial
+        // matches that weren't useful enough get surfaced to merchants.
+        if (
+            pageId &&
+            queryText &&
+            aiResponse.confidence === 'low' &&
+            flags.includes('info_not_in_kb')
+        ) {
+            gapDetectorService.setLogger(this.logger);
+            gapDetectorService.recordGap(pageId, queryText).catch(err => {
+                this.logger.error('[Generator] Gap detection error (low-confidence)', {
+                    error: err instanceof Error ? err.message : String(err),
+                });
+            });
         }
 
         return {

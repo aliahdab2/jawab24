@@ -393,6 +393,61 @@ export class MessagesService {
     }
 
     /**
+     * Detect if the current message is a repeat question — customer asking
+     * the same thing again shortly after receiving an AI reply.
+     *
+     * Returns true if:
+     * 1. Last outgoing message was an AI reply, sent < 5 min ago
+     * 2. Current message text is similar to the incoming message that
+     *    preceded that AI reply (pg_trgm similarity ≥ 0.4)
+     *
+     * This is a strong signal that the AI reply failed.
+     */
+    async isRepeatQuestion(
+        pageId: string,
+        senderId: string,
+        currentText: string,
+    ): Promise<boolean> {
+        try {
+            // Get last 4 messages (should include: customer Q → AI reply → current Q)
+            const recent = await db.query.messages.findMany({
+                where: and(
+                    eq(messages.pageId, pageId),
+                    eq(messages.senderId, senderId),
+                ),
+                orderBy: [desc(messages.createdAt)],
+                limit: 4,
+                columns: { id: true, message: true, direction: true, replyMethod: true, createdAt: true },
+            });
+
+            if (recent.length < 2) return false;
+
+            // Find the most recent outgoing AI reply
+            const lastOutgoing = recent.find(m => m.direction === 'outgoing' && m.replyMethod === 'ai');
+            if (!lastOutgoing?.createdAt) return false;
+
+            // Must be within 5 minutes
+            const ageMs = Date.now() - new Date(lastOutgoing.createdAt).getTime();
+            if (ageMs > 5 * 60 * 1000) return false;
+
+            // Find the incoming message that preceded the AI reply
+            const outgoingIdx = recent.indexOf(lastOutgoing);
+            const precedingIncoming = recent.slice(outgoingIdx + 1).find(m => m.direction === 'incoming');
+            if (!precedingIncoming?.message) return false;
+
+            // Compare current message with the preceding question using pg_trgm
+            const result = await db.execute(
+                sql`SELECT similarity(${currentText}, ${precedingIncoming.message}) as sim`
+            );
+            const sim = (result as unknown as Array<{ sim: number }>)?.[0]?.sim ?? 0;
+
+            return sim >= 0.4;
+        } catch {
+            return false; // Never block the pipeline for detection failures
+        }
+    }
+
+    /**
      * Check if there is a newer unreplied incoming message from the same sender.
      * Used to debounce rapid-fire messages: skip older ones and let the newest job reply.
      */
