@@ -236,7 +236,7 @@ export function TeamSection() {
               />
               <Button
                 size="sm"
-                variant={linkCopied ? 'outline' : 'primary'}
+                variant={linkCopied ? 'secondary' : 'primary'}
                 className="px-3 flex-shrink-0"
                 onClick={async () => {
                   await navigator.clipboard.writeText(inviteLink.url);
