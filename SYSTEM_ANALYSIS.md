@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
-> **Pre-Launch Reference Document / وثيقة مرجعية قبل الإطلاق**
-> Generated: 2026-02-28 | Updated: 2026-03-07 (v20 — consistency pass: fixed greeting flow, rate limits, auto-reply behavior, comment length rules)
+> **System Reference Document / وثيقة مرجعية للنظام**
+> Generated: 2026-02-28 | Updated: 2026-03-20 (v21 — added RBAC/workspaces, page token encryption, blog, comparison pages, admin observability, prompt v21)
 
 ---
 
@@ -17,9 +17,12 @@
 8. [Caching Strategy / استراتيجية التخزين المؤقت](#8-caching-strategy)
 9. [Safety & Validation / الأمان والتحقق](#9-safety-and-validation)
 10. [Edge Cases & Scenarios / حالات خاصة وسيناريوهات](#10-edge-cases-and-scenarios)
-11. [Known Gaps & Pre-Launch Concerns / فجوات معروفة ومخاوف ما قبل الإطلاق](#11-known-gaps)
+11. [Known Gaps & Concerns / فجوات معروفة ومخاوف](#11-known-gaps)
 12. [Monitoring & Alerting / المراقبة والتنبيهات](#12-monitoring--alerting)
 13. [Launch Defaults / القيم الافتراضية عند الإطلاق](#launch-defaults-single-source-of-truth)
+14. [RBAC & Workspace System / نظام الأدوار ومساحات العمل](#14-rbac--workspace-system)
+15. [Security: Token Encryption / الأمان: تشفير التوكنات](#15-security-token-encryption)
+16. [Content & SEO / المحتوى وتحسين محركات البحث](#16-content--seo)
 
 ---
 
@@ -758,6 +761,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 | **v18** | 2026-03-02 | Customer awareness: pass customer name + returning status as context to GPT. Sharpened style descriptions. Natural behavior rules (vary structure, mirror dialect, emoji mirroring). | 98.3% |
 | **v19** | 2026-03-05 | Structured `angry_customer` flag with explicit 5-point trigger list (strong words, refund demands, ignored complaints, exclamation marks, escalation threats). Added confidence rule: reply style changes TONE only, must NOT affect confidence. Added Arabic vague follow-up examples ("وش المدة؟"). | 99.6% |
 | **v20** | 2026-03-06 | Made `angry_customer` trigger list non-exhaustive — added catch-all point (6): "any expression of strong dissatisfaction — use your judgment". Added Arabic colloquial examples (زفت/فشل). Clarified: polite complaint alone ≠ angry_customer. | 99.6% |
+| **v21** | 2026-03-15 | Prompt tuning for eval accuracy and edge case handling. Workspace-scoped context. | 99.6% |
 
 ### Fallback Classifier (when AI Worker is down)
 
@@ -1524,11 +1528,11 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 ---
 
 # 11. Known Gaps
-# فجوات معروفة ومخاوف ما قبل الإطلاق
+# فجوات معروفة ومخاوف
 
 ## English
 
-### Pre-Launch Concerns
+### Current Gaps
 
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
@@ -1538,7 +1542,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | 4 | Templates not auto-translated | Low | Manual both-language maintenance |
 | 5 | No visual regression tests | Medium | RTL/landscape may break silently (macOS baselines only) |
 | 6 | One store per workspace | Low | Multi-store needs workaround |
-| 7 | No pluralization in i18n | Low | "1 Pages" instead of "1 Page" (deferred to next-intl migration) |
+| ~~7~~ | ~~No pluralization in i18n~~ | ~~RESOLVED~~ | Migrated to next-intl v4 with ICU Message Format support. Arabic uses all 6 CLDR plural forms (zero/one/two/few/many/other) |
 | 8 | Inventory is point-in-time | Info | AI adds "verify before ordering" caveat |
 
 ### System Resilience
@@ -1552,6 +1556,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Facebook API down | Webhook retries | Delayed replies |
 | Salla token expires | Auto-refresh | Transparent |
 | Reply lock stuck | TTL auto-expires after 60s | At most 60s delay for that sender |
+| Page token compromised | AES-256-GCM encrypted at rest | Cannot read token from DB dump |
 
 ### Key Numbers
 
@@ -1569,21 +1574,24 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Comment Reply Length | AI prompt: 40 words, flag: >50 words, hard truncate: >280 chars (public only) |
 | Worker Concurrency | 5 jobs |
 | Cache TTL | 30 days |
-| Prompt Version | v20 |
+| Prompt Version | v21 |
 | Pipeline Outcomes | 20 types x 4 pipelines |
-| Eval Accuracy | 99.6% (v20) |
+| Eval Accuracy | 99.6% (v21) |
 | Scheduled Product Sync | Every 6 hours |
 | Queue Retries | 3 (exponential backoff) |
 | Handoff Pause | 15 minutes default |
 | Reply Lock TTL | 60 seconds (Redis SET NX EX) |
 | Reply Lock Key (DMs) | `reply_lock:{pageId}:{senderId}` |
 | Reply Lock Key (comments) | `reply_lock:comment:{pageId}:{commentId}` |
+| DB Migrations | 50 SQL files |
 | DB Index | Composite: `(page_id, sender_id, direction, replied, created_at)` |
 | Price Detection | Two-tier: Tier A (currency-adjacent) + Tier B (price-cue phrases) |
+| Workspace Roles | owner (level 3), admin (level 2), member (level 1) |
+| Page Token Encryption | AES-256-GCM at rest |
 
 ## عربي
 
-### مخاوف ما قبل الإطلاق
+### الفجوات الحالية
 
 | # | الفجوة | الشدة | التأثير |
 |---|--------|-------|---------|
@@ -1592,7 +1600,8 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | 3 | قاعدة معرفة بلغة واحدة | متوسط | خلط اللغتين في نص واحد |
 | 4 | القوالب لا تُترجم تلقائياً | منخفض | صيانة يدوية |
 | 5 | لا اختبارات بصرية | متوسط | أعطال RTL قد لا تُكتشف |
-| 6 | المخزون نقطة زمنية | معلوماتي | AI يضيف "تأكد قبل الطلب" |
+| ~~7~~ | ~~لا صيغ جمع في الترجمة~~ | ~~تم الحل~~ | تم الترحيل إلى next-intl v4 مع دعم ICU Message Format. العربية تستخدم جميع صيغ CLDR الستة |
+| 8 | المخزون نقطة زمنية | معلوماتي | AI يضيف "تأكد قبل الطلب" |
 
 ### مرونة النظام
 
@@ -1603,6 +1612,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | PostgreSQL معطل | الخدمة تتوقف | لا ردود |
 | OpenAI معطل | مهلة → رد احتياطي | ردود عامة |
 | القفل معلق | ينتهي تلقائياً بعد 60 ثانية | تأخير 60 ثانية كحد أقصى لذلك المرسل |
+| توكن الصفحة مُخترق | مشفر بـ AES-256-GCM في حالة السكون | لا يمكن قراءة التوكن من نسخة قاعدة البيانات |
 
 ---
 
@@ -1865,16 +1875,18 @@ The `analytics` service computes these from live tables (30-day window):
 }
 ```
 
-### Monitoring Gaps (Not Yet Instrumented)
+### Monitoring Gaps — ALL RESOLVED
 
-| Gap | Impact | Recommendation |
-|-----|--------|----------------|
-| No database query tracing | Can't detect slow queries | Add Drizzle query logging |
-| No Redis latency metrics | Can't detect cache slowdowns | Add Redis operation timing |
-| No external API latency tracking | Can't detect FB/IG/Shopify slowdowns | Add Sentry spans for external calls |
-| No Prometheus /metrics endpoint | Can't use Grafana dashboards | Export pipeline metrics as Prometheus |
-| No frontend RUM | Can't track user experience | Add Sentry browser performance |
-| No distributed tracing | Can't correlate backend ↔ AI Worker | Add OpenTelemetry |
+| Gap | Resolution |
+|-----|------------|
+| ~~No database query tracing~~ | Sentry auto-instruments postgres via `@sentry/node` v10+ (tracesSampleRate: 0.1) |
+| ~~No Redis latency metrics~~ | Sentry auto-instruments ioredis + Redis PING latency in `/health` endpoint |
+| ~~No external API latency tracking~~ | `tracedExternalCall()` in `utils/tracing.ts` — Sentry spans + prom-client histograms with p50/p95/p99 + success/error labels on all Facebook, Shopify, Salla, Translation calls |
+| ~~No Prometheus /metrics endpoint~~ | `GET /health/metrics` via `prom-client` — default Node.js metrics (CPU, memory, event loop, GC) + pipeline counters + external API histograms + uptime |
+| ~~No frontend RUM~~ | `@sentry/nextjs` with `tracesSampleRate: 0.1` in `sentry.client.config.ts` (LCP, FCP, CLS, route changes) |
+| ~~No distributed tracing~~ | Both backend + AI worker use `@sentry/node` v10+ with tracing; trace headers auto-propagated on HTTP calls |
+
+**Admin dashboard**: `/admin/observability` shows service status (DB/Redis/AI circuit latency), process metrics (RSS, heap, uptime), and external API latency table with p50/p95/p99.
 
 ## عربي
 
@@ -1937,12 +1949,18 @@ The `analytics` service computes these from live tables (30-day window):
 
 ### فجوات المراقبة
 
-| الفجوة | التأثير | التوصية |
-|--------|---------|---------|
-| لا تتبع لاستعلامات قاعدة البيانات | لا يمكن كشف الاستعلامات البطيئة | إضافة سجلات Drizzle |
-| لا مقاييس Redis | لا يمكن كشف بطء الكاش | إضافة توقيت عمليات Redis |
-| لا تتبع APIs خارجية | لا يمكن كشف بطء FB/IG | إضافة Sentry spans |
-| لا نقطة Prometheus | لا يمكن استخدام Grafana | تصدير المقاييس كـ Prometheus |
+### فجوات المراقبة — تم حل الجميع
+
+| الفجوة | الحل |
+|--------|------|
+| ~~لا تتبع لاستعلامات قاعدة البيانات~~ | Sentry يتتبع استعلامات postgres تلقائياً عبر `@sentry/node` v10+ |
+| ~~لا مقاييس Redis~~ | Sentry يتتبع ioredis تلقائياً + زمن PING في `/health` |
+| ~~لا تتبع APIs خارجية~~ | `tracedExternalCall()` في `utils/tracing.ts` — Sentry spans + prom-client histograms مع p50/p95/p99 + تصنيف نجاح/خطأ على جميع استدعاءات Facebook وShopify وSalla وTranslation |
+| ~~لا نقطة Prometheus~~ | `GET /health/metrics` عبر `prom-client` — مقاييس Node.js الافتراضية + عدادات خط الإنتاج + histograms APIs الخارجية + وقت التشغيل |
+| ~~لا تتبع تجربة المستخدم (RUM)~~ | `@sentry/nextjs` مع `tracesSampleRate: 0.1` (LCP، FCP، CLS، تنقل الصفحات) |
+| ~~لا تتبع موزع~~ | كلتا الخدمتين تستخدمان `@sentry/node` v10+ مع تتبع؛ رؤوس التتبع تُنشر تلقائياً |
+
+**لوحة الإدارة**: `/admin/observability` تعرض حالة الخدمات (زمن استجابة DB/Redis/AI circuit)، مقاييس العملية (الذاكرة، heap، وقت التشغيل)، وجدول زمن استجابة APIs الخارجية مع p50/p95/p99.
 
 ---
 
@@ -1956,7 +1974,7 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | Parameter | Default | Source |
 |-----------|---------|--------|
 | **AI Model** | `gpt-4.1-mini` | `packages/shared` `DEFAULT_AI_MODEL` |
-| **Prompt Version** | `v20` | `packages/shared` `PROMPT_VERSION` |
+| **Prompt Version** | `v21` | `packages/shared` `PROMPT_VERSION` |
 | **Temperature** | `0.3` | `ai-worker/config.ts` |
 | **Max Output Tokens** | `300` | `ai-worker/config.ts` |
 | **Comments Auto-Reply** | `true` | `workspaceSettings.ts` |
@@ -1983,6 +2001,243 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | **KB Max** | `16,000 chars` | prompt builder |
 | **Product Catalog** | `15 products, ~800 chars` | `ecommerce.ts` |
 | **Product Sync** | every `6 hours` via `setInterval` | `index.ts` |
+
+---
+
+# 14. RBAC & Workspace System
+# نظام الأدوار ومساحات العمل
+
+## English
+
+### Multi-Tenant Workspace Architecture
+
+Jawab24 supports **multi-tenant workspaces** with role-based access control (RBAC). Each workspace is an isolated unit containing pages, rules, templates, stores, and team members.
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    WORKSPACE ARCHITECTURE                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  WORKSPACE (isolated tenant)                                    │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ owner_id, name, slug, logo_url, settings (JSONB)        │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  WORKSPACE MEMBERS                                              │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ workspace_id, user_id, role, joined_at, invited_by      │   │
+│  │                                                          │   │
+│  │ Roles (3-level hierarchy):                               │   │
+│  │  • owner  (level 3): Full control, billing, delete       │   │
+│  │  • admin  (level 2): Manage pages, rules, templates,     │   │
+│  │                       settings, team members              │   │
+│  │  • member (level 1): Read-only dashboard, view messages  │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  WORKSPACE INVITES                                              │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ email, token_hash, role, expires_at, status              │   │
+│  │ Token: 48-hour expiry, shareable invite link             │   │
+│  │ Status: pending → accepted | expired | revoked           │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  SCOPED RESOURCES (all have workspace_id column):               │
+│  • pages                    • rules                             │
+│  • templates                • ecommerce_stores                  │
+│  • logs                     • ai_usage_log                      │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Backend Route Guards
+
+```
+Protected routes use requireRole('admin') middleware:
+  POST/PUT/DELETE on /pages, /rules, /templates, /settings → admin+
+  GET on /pages, /rules, /templates, /messages → member+
+  POST /workspace/invite, DELETE /workspace/members → admin+
+  DELETE /workspace → owner only
+```
+
+### Frontend RBAC UX
+
+- **Route guards**: Protected pages check user role before rendering
+- **Read-only mode**: Members see the dashboard but interactive elements are disabled
+- **Permission tooltips**: Disabled buttons show "You need admin access" on hover
+- **403 toast**: Unauthorized API calls show a toast notification
+- **Team management UI**: Admins can invite members, assign roles, revoke access
+- **Workspace context**: Set via `X-Workspace-Id` header; auto-selected if user has only 1 workspace
+
+### Database Tables (Migration 0034+)
+
+| Table | Key Columns |
+|-------|-------------|
+| `workspaces` | id, owner_id, name, slug, logo_url, settings (JSONB) |
+| `workspace_members` | workspace_id, user_id, role, joined_at, invited_by |
+| `workspace_invites` | email, token_hash, role, expires_at, status, workspace_id |
+
+## عربي
+
+### بنية مساحات العمل متعددة المستأجرين
+
+Jawab24 يدعم **مساحات عمل متعددة المستأجرين** مع التحكم بالوصول حسب الأدوار (RBAC). كل مساحة عمل وحدة معزولة تحتوي على الصفحات والقواعد والقوالب والمتاجر وأعضاء الفريق.
+
+**الأدوار (3 مستويات):**
+- **مالك** (المستوى 3): تحكم كامل، الفواتير، الحذف
+- **مدير** (المستوى 2): إدارة الصفحات، القواعد، القوالب، الإعدادات، أعضاء الفريق
+- **عضو** (المستوى 1): قراءة فقط، عرض لوحة التحكم والرسائل
+
+**نظام الدعوات:**
+- رابط دعوة قابل للمشاركة مع صلاحية 48 ساعة
+- الحالات: معلقة → مقبولة | منتهية | ملغاة
+
+**حماية الواجهة الأمامية:**
+- الأعضاء يرون لوحة التحكم لكن العناصر التفاعلية معطلة
+- تلميحات الصلاحيات: الأزرار المعطلة تظهر "تحتاج صلاحية مدير"
+- إشعار 403 عند محاولة إجراء غير مصرح
+
+---
+
+# 15. Security: Token Encryption
+# الأمان: تشفير التوكنات
+
+## English
+
+### Page Token Encryption at Rest
+
+Facebook page access tokens are now **encrypted at rest** using AES-256-GCM encryption.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                 TOKEN ENCRYPTION FLOW                         │
+├─────────────────────────────────────────────────────────────┤
+│                                                               │
+│  Facebook OAuth returns access_token                          │
+│         │                                                     │
+│         ▼                                                     │
+│  ┌───────────────────────────────────────┐                    │
+│  │  maybeEncryptPageToken(token)          │                    │
+│  │  • If FACEBOOK_TOKEN_ENCRYPTION_KEY    │                    │
+│  │    is configured → AES-256-GCM encrypt │                    │
+│  │  • Store: "enc:iv:ciphertext:tag"     │                    │
+│  │  • If no key → store plaintext         │                    │
+│  └───────────────┬───────────────────────┘                    │
+│                   │                                            │
+│                   ▼                                            │
+│  Stored in pages.access_token column                          │
+│                                                               │
+│  ─────────── ON READ ───────────                              │
+│                                                               │
+│  ┌───────────────────────────────────────┐                    │
+│  │  maybeDecryptPageToken(stored)         │                    │
+│  │  • If starts with "enc:" → decrypt    │                    │
+│  │  • Otherwise → return as-is (legacy)  │                    │
+│  │  • Transparent to all consumers       │                    │
+│  └───────────────────────────────────────┘                    │
+│                                                               │
+│  E-commerce store tokens also encrypted:                      │
+│  • Shopify: access_token + IV columns                         │
+│  • Salla: access_token + refresh_token + IV columns           │
+│                                                               │
+│  Migration script: migrate-encrypt-page-tokens.ts             │
+│  (one-time migration for existing plaintext tokens)           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## عربي
+
+### تشفير توكنات الصفحات في حالة السكون
+
+توكنات الوصول لصفحات فيسبوك الآن **مشفرة في حالة السكون** باستخدام تشفير AES-256-GCM.
+
+- **عند الحفظ**: إذا كان مفتاح التشفير مُعداً → تشفير AES-256-GCM، التخزين بصيغة `enc:iv:ciphertext:tag`
+- **عند القراءة**: إذا كان يبدأ بـ `enc:` → فك التشفير، وإلا → إرجاع كنص عادي (للتوافق مع القديم)
+- **شفاف تماماً** لجميع المستهلكين
+- توكنات المتاجر الإلكترونية (Shopify/Salla) مشفرة أيضاً مع أعمدة IV
+- سكريبت ترحيل لمرة واحدة للتوكنات الحالية: `migrate-encrypt-page-tokens.ts`
+
+---
+
+# 16. Content & SEO
+# المحتوى وتحسين محركات البحث
+
+## English
+
+### Blog System
+
+A full bilingual blog system was added for SEO and content marketing:
+
+- **Data**: TSX data files at `frontend/src/data/blog-posts.ts`
+- **Pages**: `frontend/src/pages/blog/index.tsx` (listing) + `frontend/src/pages/blog/[slug].tsx` (SSG per post)
+- **Rendering**: Markdown with `remark-gfm` for tables, bilingual (EN + AR)
+- **Articles**: 6+ bilingual articles targeting keywords like "auto reply Facebook", "Salla chatbot", "Shopify auto reply Arabic"
+
+### Comparison Pages
+
+Dynamic competitor comparison pages for SEO:
+
+- **Route**: `frontend/src/pages/compare/[slug].tsx`
+- **Competitors**: Tidio, Botpress (expandable via data file)
+- **Content**: Feature comparison tables, FAQ sections, advantages — all translated EN + AR
+- **Translations**: `compare` namespace in i18n files
+
+### Admin Observability Dashboard
+
+Internal dashboard for monitoring system health and AI costs:
+
+- **Route**: `/admin/observability` (protected, admin+ access)
+- **Metrics displayed**:
+  - AI cost breakdown (by model, by day, cache hit rate)
+  - Reply pipeline stats (reply rate, response times, flagged count)
+  - Breakdowns by method, intent, platform
+- **Data source**: Existing backend analytics endpoints
+
+### SEO Infrastructure
+
+| Feature | Status |
+|---------|--------|
+| Dynamic hreflang (page-aware) | Done |
+| Dynamic `<html lang>` per locale | Done |
+| Translated meta descriptions | Done |
+| Structured data (JSON-LD) with 17 features | Done |
+| Sitemap + robots.txt | Done |
+| Canonical URLs | Done |
+| "What is Jawab24" page (AI-discoverable) | Done |
+| Blog system (6+ articles) | Done |
+| Comparison pages (vs competitors) | Done |
+| 39 E2E SEO regression tests | Done |
+| Google Search Console verification | Done |
+| Backlink campaign | Pending |
+
+## عربي
+
+### نظام المدونة
+
+نظام مدونة ثنائي اللغة كامل لتحسين محركات البحث والتسويق بالمحتوى:
+- ملفات بيانات TSX + صفحات SSG ثابتة
+- 6+ مقالات ثنائية اللغة تستهدف كلمات بحث مثل "رد تلقائي فيسبوك"، "شات بوت سلة"
+
+### صفحات المقارنة
+
+صفحات مقارنة ديناميكية مع المنافسين:
+- المسار: `/compare/[slug]`
+- المنافسون: Tidio، Botpress (قابل للتوسيع)
+- المحتوى: جداول مقارنة الميزات، أسئلة شائعة، مزايا — الكل مترجم
+
+### لوحة المراقبة الإدارية
+
+لوحة تحكم داخلية لمراقبة صحة النظام وتكاليف الذكاء الاصطناعي:
+- المسار: `/admin/observability` (محمي، مدير+ فقط)
+- تفصيل تكلفة AI حسب النموذج واليوم ومعدل إصابة الكاش
+- إحصائيات خط الإنتاج: معدل الرد، أوقات الاستجابة، العدد المُعلَّم
+
+### بنية SEO التحتية
+
+- hreflang ديناميكي حسب الصفحة
+- وصف ميتا مترجم + بيانات منظمة (JSON-LD) بـ 17 ميزة
+- خريطة موقع + robots.txt + عناوين URL أساسية
+- 39 اختبار E2E لضمان جودة SEO
+- صفحة "ما هو Jawab24" محسّنة لاكتشاف الذكاء الاصطناعي
 
 ---
 
@@ -2025,6 +2280,10 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 ║  • Cache: 30-day TTL, version-scoped                             ║
 ║                                                                  ║
 ║  PORTS: Frontend=3001 | Backend=3000 | AI Worker=3002            ║
-║  MODEL: gpt-4.1-mini | PROMPT: v20 | TEMP: 0.3                  ║
+║  MODEL: gpt-4.1-mini | PROMPT: v21 | TEMP: 0.3                  ║
+║                                                                  ║
+║  RBAC ROLES: owner (full) | admin (manage) | member (read-only) ║
+║  ENCRYPTION: Page tokens AES-256-GCM at rest                     ║
+║  MIGRATIONS: 50 SQL files                                        ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```
