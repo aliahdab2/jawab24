@@ -9,51 +9,14 @@ import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { WorkspaceRole } from '@jawab24/shared';
 
-/** Backend may return flat (userName/userEmail) or nested (user: {...}) format */
-interface MemberRaw {
-  id: string;
-  userId: string;
-  role: WorkspaceRole;
-  joinedAt: string | null;
-  // Flat format (from production API)
-  userName?: string | null;
-  userEmail?: string | null;
-  userPicture?: string | null;
-  // Nested format
-  user?: {
-    id: string;
-    name: string | null;
-    email: string | null;
-    picture: string | null;
-  };
-}
-
 interface MemberRow {
   id: string;
   userId: string;
   role: WorkspaceRole;
   joinedAt: string | null;
-  user: {
-    id: string;
-    name: string | null;
-    email: string | null;
-    picture: string | null;
-  };
-}
-
-function normalizeMember(raw: MemberRaw): MemberRow {
-  return {
-    id: raw.id,
-    userId: raw.userId,
-    role: raw.role,
-    joinedAt: raw.joinedAt,
-    user: raw.user ?? {
-      id: raw.userId,
-      name: raw.userName ?? null,
-      email: raw.userEmail ?? null,
-      picture: raw.userPicture ?? null,
-    },
-  };
+  userName: string | null;
+  userEmail: string | null;
+  userPicture: string | null;
 }
 
 interface InviteRow {
@@ -117,7 +80,7 @@ export function TeamSection() {
         workspaceApi.getMembers(),
         workspaceApi.listInvites().catch(() => ({ data: [] })),
       ]);
-      setMembers((membersRes.data ?? []).map(normalizeMember));
+      setMembers(membersRes.data ?? []);
       setInvites(invitesRes.data ?? []);
     } catch (error) {
       captureError(error, 'Failed to fetch team data', { tags: { page: 'settings', section: 'team' } });
@@ -136,7 +99,7 @@ export function TeamSection() {
       toast.error(t('invalidEmail'));
       return;
     }
-    if (members.some((m) => m.user.email?.toLowerCase() === trimmed)) {
+    if (members.some((m) => m.userEmail?.toLowerCase() === trimmed)) {
       toast.error(t('alreadyMember'));
       return;
     }
@@ -174,7 +137,7 @@ export function TeamSection() {
     if (!removeTarget) return;
     try {
       await workspaceApi.removeMember(removeTarget.userId);
-      toast.success(t('memberRemoved', { name: removeTarget.user.name || removeTarget.user.email || '' }));
+      toast.success(t('memberRemoved', { name: removeTarget.userName || removeTarget.userEmail || '' }));
       setRemoveTarget(null);
       await fetchData();
     } catch (error) {
@@ -314,15 +277,15 @@ export function TeamSection() {
             const canChangeRole = isOwner && !isMe;
             const canRemove = isAdmin && !isMe && !isMemberOwner;
             const RoleIcon = ROLE_ICONS[member.role];
-            const initial = member.user.name?.charAt(0) || member.user.email?.charAt(0) || '?';
+            const initial = member.userName?.charAt(0) || member.userEmail?.charAt(0) || '?';
 
             return (
               <div key={member.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                 {/* Avatar */}
-                {member.user.picture ? (
+                {member.userPicture ? (
                   <img
-                    src={member.user.picture}
-                    alt={member.user.name || ''}
+                    src={member.userPicture}
+                    alt={member.userName || ''}
                     className="w-9 h-9 rounded-full object-cover flex-shrink-0"
                   />
                 ) : (
@@ -334,11 +297,11 @@ export function TeamSection() {
                 {/* Name + email */}
                 <div className="flex-1 min-w-0 text-start">
                   <p className="font-bold text-sm text-foreground truncate">
-                    {member.user.name || member.user.email}
+                    {member.userName || member.userEmail}
                     {isMe && <span className="text-muted-foreground font-normal ms-1.5">({t('you')})</span>}
                   </p>
-                  {member.user.name && member.user.email && (
-                    <p className="text-xs text-muted-foreground truncate">{member.user.email}</p>
+                  {member.userName && member.userEmail && (
+                    <p className="text-xs text-muted-foreground truncate">{member.userEmail}</p>
                   )}
                 </div>
 
@@ -441,7 +404,7 @@ export function TeamSection() {
           onClose={() => setRemoveTarget(null)}
           onConfirm={handleRemove}
           title={t('removeMember')}
-          message={t('removeConfirm', { name: removeTarget.user.name || removeTarget.user.email || '' })}
+          message={t('removeConfirm', { name: removeTarget.userName || removeTarget.userEmail || '' })}
           confirmText={t('removeMember')}
           cancelText={tc('cancel')}
           variant="danger"

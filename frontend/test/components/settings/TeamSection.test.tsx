@@ -53,19 +53,20 @@ function renderTeamSection() {
   );
 }
 
+// Mock data matches the flat format returned by production API
 const ownerMember = {
   id: 'mem-1', userId: 'user-1', role: 'owner' as const, joinedAt: '2026-01-01',
-  user: { id: 'user-1', name: 'Ahmad', email: 'ahmad@test.com', picture: null },
+  userName: 'Ahmad', userEmail: 'ahmad@test.com', userPicture: null,
 };
 
 const adminMember = {
   id: 'mem-2', userId: 'user-2', role: 'admin' as const, joinedAt: '2026-02-01',
-  user: { id: 'user-2', name: 'Sara', email: 'sara@test.com', picture: null },
+  userName: 'Sara', userEmail: 'sara@test.com', userPicture: null,
 };
 
 const regularMember = {
   id: 'mem-3', userId: 'user-3', role: 'member' as const, joinedAt: '2026-03-01',
-  user: { id: 'user-3', name: 'Omar', email: 'omar@test.com', picture: null },
+  userName: 'Omar', userEmail: 'omar@test.com', userPicture: null,
 };
 
 describe('TeamSection', () => {
@@ -168,7 +169,7 @@ describe('TeamSection', () => {
   it('shows limit hint when near capacity', async () => {
     const members = [ownerMember, adminMember, regularMember, {
       ...regularMember, id: 'mem-4', userId: 'user-4',
-      user: { ...regularMember.user, id: 'user-4', name: 'Fatima', email: 'fatima@test.com' },
+      userName: 'Fatima', userEmail: 'fatima@test.com',
     }];
     mockMembers.mockResolvedValue({ data: members });
     renderTeamSection();
@@ -182,7 +183,7 @@ describe('TeamSection', () => {
       ownerMember,
       ...Array.from({ length: 4 }, (_, i) => ({
         ...regularMember, id: `mem-${i + 2}`, userId: `user-${i + 10}`,
-        user: { id: `user-${i + 10}`, name: `User ${i + 2}`, email: `user${i + 10}@test.com`, picture: null },
+        userName: `User ${i + 2}`, userEmail: `user${i + 10}@test.com`, userPicture: null,
       })),
     ];
     mockMembers.mockResolvedValue({ data: members });
@@ -191,17 +192,10 @@ describe('TeamSection', () => {
     expect(await screen.findByText('Member limit reached (5)')).toBeInTheDocument();
   });
 
-  it('handles flat API format (production response)', async () => {
-    // Production API returns flat fields, not nested user object
-    const flatMember = {
-      id: 'mem-1', userId: 'user-1', role: 'owner' as const, joinedAt: '2026-01-01',
-      userName: 'Ahmad', userEmail: 'ahmad@test.com', userPicture: null,
-    };
-    mockMembers.mockResolvedValue({ data: [flatMember] });
+  it('shows email below name when both exist', async () => {
     renderTeamSection();
 
     expect(await screen.findByText('Ahmad')).toBeInTheDocument();
     expect(await screen.findByText('ahmad@test.com')).toBeInTheDocument();
-    expect(await screen.findByText('Owner')).toBeInTheDocument();
   });
 });

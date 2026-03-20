@@ -38,7 +38,9 @@ const MOCK_OWNER = {
   userId: 'u1',
   role: 'owner',
   joinedAt: '2026-01-01',
-  user: { id: 'u1', name: 'Test Owner', email: 'test@test.com', picture: null },
+  userName: 'Test Owner',
+  userEmail: 'test@test.com',
+  userPicture: null,
 };
 
 const MOCK_MEMBER = {
@@ -46,7 +48,9 @@ const MOCK_MEMBER = {
   userId: 'u2',
   role: 'member',
   joinedAt: '2026-02-01',
-  user: { id: 'u2', name: 'Sara', email: 'sara@test.com', picture: null },
+  userName: 'Sara',
+  userEmail: 'sara@test.com',
+  userPicture: null,
 };
 
 const MOCK_INVITE = {
