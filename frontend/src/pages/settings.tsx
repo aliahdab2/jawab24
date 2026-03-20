@@ -19,6 +19,7 @@ import {
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
+import { useWorkspaceRole } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 import {
   SimpleToggle,
@@ -72,6 +73,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const tc = useTranslations('common');
   const { language, setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
+  const { canEdit } = useWorkspaceRole();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const router = useRouter();
 
@@ -304,8 +306,15 @@ const SettingsPage: NextPageWithLayout = () => {
         </div>
       )}
 
+      {/* View-only banner for members */}
+      {!canEdit && (
+        <div className="mb-4 p-3 rounded-xl alert-info border text-sm text-center">
+          {tc('viewOnlyHint')}
+        </div>
+      )}
+
       {/* Fixed Save Button — above bottom nav on mobile, bottom of viewport on desktop */}
-      <div className={clsx(
+      {canEdit && <div className={clsx(
         'fixed end-0 start-0 z-30 px-4 md:px-8 lg:px-16 xl:px-20 py-3 bg-background/80 backdrop-blur-md border-t border-theme-border transition-all duration-300',
         sidebarOpen ? 'lg:start-64' : 'lg:start-20',
         'bottom-[calc(4rem+var(--sai-bottom))] lg:bottom-0 lg:pb-safe',
@@ -332,7 +341,7 @@ const SettingsPage: NextPageWithLayout = () => {
             }
           </Button>
         </div>
-      </div>
+      </div>}
 
       {/* Section: Team */}
       <div className="mt-8 sm:mt-10 landscape:mt-6">

@@ -13,11 +13,13 @@ import { RuleCard } from '@/components/rules';
 import type { Rule, Template } from '@jawab24/shared';
 import { testKeywordsMatch } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
+import { useWorkspaceRole } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 
 const RulesPage: NextPageWithLayout = () => {
   const t = useTranslations('rules');
   const tc = useTranslations('common');
+  const { canEdit } = useWorkspaceRole();
   const tTemplates = useTranslations('templates');
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
@@ -355,10 +357,11 @@ const RulesPage: NextPageWithLayout = () => {
             <span className="block text-xs text-muted-foreground mt-1">{t('firstMatchHint')}</span>
           </>
         }
-        action={
-          <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-            {t('addRule')}
-          </Button>
+        action={canEdit
+          ? <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+              {t('addRule')}
+            </Button>
+          : undefined
         }
       />
 
@@ -403,11 +406,11 @@ const RulesPage: NextPageWithLayout = () => {
               totalRules={rules.length}
               templates={templates}
               keywordRulesMap={keywordRulesMap}
-              onEdit={handleOpenModal}
-              onDuplicate={handleDuplicate}
-              onDelete={(id) => setDeleteConfirmationId(id)}
-              onToggle={handleToggle}
-              onPriorityChange={handlePriorityChange}
+              onEdit={canEdit ? handleOpenModal : undefined}
+              onDuplicate={canEdit ? handleDuplicate : undefined}
+              onDelete={canEdit ? (id) => setDeleteConfirmationId(id) : undefined}
+              onToggle={canEdit ? handleToggle : undefined}
+              onPriorityChange={canEdit ? handlePriorityChange : undefined}
             />
           ))}
         </div>
@@ -425,10 +428,11 @@ const RulesPage: NextPageWithLayout = () => {
             icon={Zap}
             title={t('noRules')}
             description={t('noRulesDesc')}
-            action={
-              <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-                {t('addRule')}
-              </Button>
+            action={canEdit
+              ? <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+                  {t('addRule')}
+                </Button>
+              : undefined
             }
           />
         </Card>

@@ -52,5 +52,7 @@
   "export": "Export",
   "optional": "Optional",
   "offline": "You're offline",
-  "backOnline": "Back online"
+  "backOnline": "Back online",
+  "viewOnly": "View only",
+  "viewOnlyHint": "Only admins can make changes"
 }

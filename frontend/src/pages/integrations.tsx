@@ -18,6 +18,7 @@ import {
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import type { Page, EcommerceStore } from '@jawab24/shared';
+import { useWorkspaceRole } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 
 /** Routes namespace-prefixed keys (e.g. 'shopify.title') to the correct scoped translator. */
@@ -171,6 +172,7 @@ function ConnectedStoreCard({
   onLinkPage: (pageId: string) => void;
 }) {
   const t = usePlatformT();
+  const { canEdit } = useWorkspaceRole();
   const [syncing, setSyncing] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
@@ -241,14 +243,16 @@ function ConnectedStoreCard({
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
-              <RefreshCw className={clsx('w-4 h-4 me-1', syncing && 'animate-spin')} />
-              {syncing ? t(platform.syncingKey) : t(platform.syncNowKey)}
-            </Button>
-            <Button variant="danger" size="sm" onClick={() => setShowDisconnectModal(true)}>
-              <Unlink className="w-4 h-4 me-1" />
-              {t(platform.disconnectKey)}
-            </Button>
+            {canEdit && <>
+              <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
+                <RefreshCw className={clsx('w-4 h-4 me-1', syncing && 'animate-spin')} />
+                {syncing ? t(platform.syncingKey) : t(platform.syncNowKey)}
+              </Button>
+              <Button variant="danger" size="sm" onClick={() => setShowDisconnectModal(true)}>
+                <Unlink className="w-4 h-4 me-1" />
+                {t(platform.disconnectKey)}
+              </Button>
+            </>}
           </div>
         </div>
 
@@ -260,7 +264,8 @@ function ConnectedStoreCard({
               {pages.map((page) => (
                 <button
                   key={page.id}
-                  onClick={() => handleLinkPage(page.id)}
+                  onClick={canEdit ? () => handleLinkPage(page.id) : undefined}
+                  disabled={!canEdit}
                   className={clsx(
                     'px-3 py-1.5 rounded-lg text-sm border transition-colors',
                     page.ecommerceStoreId === store.id
@@ -332,6 +337,7 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
 
 function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
   const t = usePlatformT();
+  const { canEdit } = useWorkspaceRole();
   const [shopDomain, setShopDomain] = useState('');
   const [connecting, setConnecting] = useState(false);
 
@@ -450,7 +456,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             variant="primary"
             size="md"
             onClick={handleConnect}
-            disabled={connecting || (platform.requiresDomain && !shopDomain.trim())}
+            disabled={!canEdit || connecting || (platform.requiresDomain && !shopDomain.trim())}
             className="w-full sm:w-auto"
           >
             {connecting ? (

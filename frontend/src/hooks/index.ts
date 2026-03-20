@@ -18,3 +18,4 @@ export { useTheme } from './useTheme';
 export { useAiGeneration } from './useAiGeneration';
 export { useConversationActions } from './useConversationActions';
 export { useMobileMessages } from './useMobileMessages';
+export { useWorkspaceRole } from './useWorkspaceRole';

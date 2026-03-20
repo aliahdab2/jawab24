@@ -10,12 +10,14 @@ import { FileText, Plus, Search } from 'lucide-react';
 import { TemplateCard } from '@/components/templates';
 import type { Template, Rule } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
+import { useWorkspaceRole } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 
 const TemplatesPage: NextPageWithLayout = () => {
   const t = useTranslations('templates');
   const tc = useTranslations('common');
   const { isAuthenticated } = useAuthStore();
+  const { canEdit } = useWorkspaceRole();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [rules, setRules] = useState<Rule[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,10 +158,11 @@ const TemplatesPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={
-          <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-            {t('addTemplate')}
-          </Button>
+        action={canEdit
+          ? <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+              {t('addTemplate')}
+            </Button>
+          : undefined
         }
       />
 
@@ -190,10 +193,10 @@ const TemplatesPage: NextPageWithLayout = () => {
               template={template}
               index={i}
               rulesCount={rulesCountMap[template.id] || 0}
-              onEdit={handleOpenModal}
-              onDuplicate={handleDuplicate}
-              onDelete={(id) => setDeleteConfirmationId(id)}
-              onToggle={handleToggle}
+              onEdit={canEdit ? handleOpenModal : undefined}
+              onDuplicate={canEdit ? handleDuplicate : undefined}
+              onDelete={canEdit ? (id) => setDeleteConfirmationId(id) : undefined}
+              onToggle={canEdit ? handleToggle : undefined}
             />
           ))}
         </div>
@@ -211,10 +214,11 @@ const TemplatesPage: NextPageWithLayout = () => {
             icon={FileText}
             title={t('noTemplates')}
             description={t('noTemplatesDesc')}
-            action={
-              <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
-                {t('addTemplate')}
-              </Button>
+            action={canEdit
+              ? <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
+                  {t('addTemplate')}
+                </Button>
+              : undefined
             }
           />
         </Card>

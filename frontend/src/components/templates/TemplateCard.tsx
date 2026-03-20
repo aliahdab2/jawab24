@@ -20,10 +20,10 @@ interface TemplateCardProps {
   template: Template;
   index: number;
   rulesCount: number;
-  onEdit: (template: Template) => void;
-  onDuplicate: (template: Template) => void;
-  onDelete: (id: string) => void;
-  onToggle: (id: string, active: boolean) => void;
+  onEdit?: (template: Template) => void;
+  onDuplicate?: (template: Template) => void;
+  onDelete?: (id: string) => void;
+  onToggle?: (id: string, active: boolean) => void;
 }
 
 export function TemplateCard({
@@ -58,7 +58,8 @@ export function TemplateCard({
       <div className="p-4 sm:p-5 border-b border-theme-border flex items-center gap-3">
         <Toggle
           enabled={isActive}
-          onChange={(active) => onToggle(template.id, active)}
+          onChange={onToggle ? (active) => onToggle(template.id, active) : undefined}
+          disabled={!onToggle}
           size="sm"
         />
         <div className="flex-1 min-w-0 flex items-center gap-2">
@@ -155,8 +156,9 @@ export function TemplateCard({
       </div>
 
       {/* Footer: Actions */}
+      {(onEdit || onDuplicate || onDelete) && (
       <div className="px-4 sm:px-5 py-3 mt-2 border-t border-theme-border flex items-center justify-end gap-1">
-        <Button
+        {onEdit && <Button
           variant="ghost"
           size="sm"
           onClick={() => onEdit(template)}
@@ -166,8 +168,8 @@ export function TemplateCard({
         >
           <Edit className="w-4 h-4" />
           <span className="text-xs font-medium hidden sm:inline">{tc('edit')}</span>
-        </Button>
-        <Button
+        </Button>}
+        {onDuplicate && <Button
           variant="ghost"
           size="sm"
           onClick={() => onDuplicate(template)}
@@ -177,8 +179,8 @@ export function TemplateCard({
         >
           <Copy className="w-4 h-4" />
           <span className="text-xs font-medium hidden sm:inline">{tc('duplicate')}</span>
-        </Button>
-        <Button
+        </Button>}
+        {onDelete && <Button
           variant="ghost"
           size="sm"
           onClick={() => onDelete(template.id)}
@@ -188,8 +190,9 @@ export function TemplateCard({
         >
           <Trash2 className="w-4 h-4" />
           <span className="text-xs font-medium hidden sm:inline">{tc('delete')}</span>
-        </Button>
+        </Button>}
       </div>
+      )}
     </Card>
   );
 }

@@ -19,11 +19,11 @@ interface RuleCardProps {
   totalRules: number;
   templates: Template[];
   keywordRulesMap: Record<string, string[]>;
-  onEdit: (rule: Rule) => void;
-  onDuplicate: (rule: Rule) => void;
-  onDelete: (id: string) => void;
-  onToggle: (id: string, active: boolean) => void;
-  onPriorityChange: (id: string, direction: 'up' | 'down') => void;
+  onEdit?: (rule: Rule) => void;
+  onDuplicate?: (rule: Rule) => void;
+  onDelete?: (id: string) => void;
+  onToggle?: (id: string, active: boolean) => void;
+  onPriorityChange?: (id: string, direction: 'up' | 'down') => void;
 }
 
 export function RuleCard({
@@ -84,7 +84,8 @@ export function RuleCard({
       <div className="p-4 sm:p-5 flex items-center gap-3 border-b border-theme-border">
         <Toggle
           enabled={isActive}
-          onChange={(active) => onToggle(rule.id, active)}
+          onChange={onToggle ? (active) => onToggle(rule.id, active) : undefined}
+          disabled={!onToggle}
           size="sm"
         />
 
@@ -98,6 +99,7 @@ export function RuleCard({
         </div>
 
         {/* Priority controls */}
+        {onPriorityChange ? (
         <div className="flex items-center gap-1 flex-shrink-0" title={t('priorityTooltip')}>
           <Button
             variant="ghost"
@@ -123,6 +125,11 @@ export function RuleCard({
             <ArrowDown className="w-3.5 h-3.5" />
           </Button>
         </div>
+        ) : (
+        <span className="w-7 h-7 rounded-lg bg-surface-100 dark:bg-surface-800 flex items-center justify-center text-sm font-bold text-foreground">
+          {rankNumber}
+        </span>
+        )}
       </div>
 
       {/* Body: IF/THEN sections */}
@@ -192,7 +199,7 @@ export function RuleCard({
           <span />
         )}
         <div className="flex items-center gap-1">
-          <Button
+          {onEdit && <Button
             variant="ghost"
             size="sm"
             onClick={() => onEdit(rule)}
@@ -202,8 +209,8 @@ export function RuleCard({
           >
             <Edit className="w-4 h-4" />
             <span className="text-xs font-medium hidden sm:inline">{tc('edit')}</span>
-          </Button>
-          <Button
+          </Button>}
+          {onDuplicate && <Button
             variant="ghost"
             size="sm"
             onClick={() => onDuplicate(rule)}
@@ -213,8 +220,8 @@ export function RuleCard({
           >
             <Copy className="w-4 h-4" />
             <span className="text-xs font-medium hidden sm:inline">{tc('duplicate')}</span>
-          </Button>
-          <Button
+          </Button>}
+          {onDelete && <Button
             variant="ghost"
             size="sm"
             onClick={() => onDelete(rule.id)}
@@ -224,7 +231,7 @@ export function RuleCard({
           >
             <Trash2 className="w-4 h-4" />
             <span className="text-xs font-medium hidden sm:inline">{tc('delete')}</span>
-          </Button>
+          </Button>}
         </div>
       </div>
     </Card>

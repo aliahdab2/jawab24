@@ -26,6 +26,7 @@ import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
 import { captureError } from '@/lib/sentryHelpers';
+import { useWorkspaceRole } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/formatConnectedDate';
 import type { NextPageWithLayout } from './_app';
@@ -37,6 +38,7 @@ const PagesPage: NextPageWithLayout = () => {
   const tTime = useTranslations('time');
   const { language } = useLanguage();
   const { isAuthenticated, fbToken } = useAuthStore();
+  const { canEdit } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [editingPage, setEditingPage] = useState<Page | null>(null);
@@ -233,14 +235,15 @@ const PagesPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={
-          <Button
-            onClick={() => setShowConnectDialog(true)}
-            disabled={syncing}
-            icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
-          >
-            {syncing ? t('syncing') : t('connectPage')}
-          </Button>
+        action={canEdit
+          ? <Button
+              onClick={() => setShowConnectDialog(true)}
+              disabled={syncing}
+              icon={<RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />}
+            >
+              {syncing ? t('syncing') : t('connectPage')}
+            </Button>
+          : undefined
         }
       />
 
@@ -329,6 +332,7 @@ const PagesPage: NextPageWithLayout = () => {
                     <Toggle
                       enabled={page.autoReplyEnabled ?? false}
                       onChange={(enabled) => handleToggle(page.id, enabled)}
+                      disabled={!canEdit}
                       aria-label={`${t('autoReply')} Facebook - ${page.name}`}
                     />
                   </div>
@@ -384,6 +388,7 @@ const PagesPage: NextPageWithLayout = () => {
                       <Toggle
                         enabled={page.instagramAutoReplyEnabled ?? false}
                         onChange={(enabled) => handleInstagramToggle(page.id, enabled)}
+                        disabled={!canEdit}
                         aria-label={`${t('autoReply')} Instagram - ${page.name}`}
                       />
                     )}
@@ -482,10 +487,11 @@ const PagesPage: NextPageWithLayout = () => {
             icon={FileText}
             title={t('noPages')}
             description={t('noPagesDesc')}
-            action={
-              <Button onClick={() => setShowConnectDialog(true)}>
-                {t('connectPage')}
-              </Button>
+            action={canEdit
+              ? <Button onClick={() => setShowConnectDialog(true)}>
+                  {t('connectPage')}
+                </Button>
+              : undefined
             }
           />
         </Card>
