@@ -9,6 +9,25 @@ import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import type { WorkspaceRole } from '@jawab24/shared';
 
+/** Backend may return flat (userName/userEmail) or nested (user: {...}) format */
+interface MemberRaw {
+  id: string;
+  userId: string;
+  role: WorkspaceRole;
+  joinedAt: string | null;
+  // Flat format (from production API)
+  userName?: string | null;
+  userEmail?: string | null;
+  userPicture?: string | null;
+  // Nested format
+  user?: {
+    id: string;
+    name: string | null;
+    email: string | null;
+    picture: string | null;
+  };
+}
+
 interface MemberRow {
   id: string;
   userId: string;
@@ -19,6 +38,21 @@ interface MemberRow {
     name: string | null;
     email: string | null;
     picture: string | null;
+  };
+}
+
+function normalizeMember(raw: MemberRaw): MemberRow {
+  return {
+    id: raw.id,
+    userId: raw.userId,
+    role: raw.role,
+    joinedAt: raw.joinedAt,
+    user: raw.user ?? {
+      id: raw.userId,
+      name: raw.userName ?? null,
+      email: raw.userEmail ?? null,
+      picture: raw.userPicture ?? null,
+    },
   };
 }
 
@@ -83,7 +117,7 @@ export function TeamSection() {
         workspaceApi.getMembers(),
         workspaceApi.listInvites().catch(() => ({ data: [] })),
       ]);
-      setMembers(membersRes.data ?? []);
+      setMembers((membersRes.data ?? []).map(normalizeMember));
       setInvites(invitesRes.data ?? []);
     } catch (error) {
       captureError(error, 'Failed to fetch team data', { tags: { page: 'settings', section: 'team' } });

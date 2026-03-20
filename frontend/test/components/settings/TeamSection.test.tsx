@@ -190,4 +190,18 @@ describe('TeamSection', () => {
 
     expect(await screen.findByText('Member limit reached (5)')).toBeInTheDocument();
   });
+
+  it('handles flat API format (production response)', async () => {
+    // Production API returns flat fields, not nested user object
+    const flatMember = {
+      id: 'mem-1', userId: 'user-1', role: 'owner' as const, joinedAt: '2026-01-01',
+      userName: 'Ahmad', userEmail: 'ahmad@test.com', userPicture: null,
+    };
+    mockMembers.mockResolvedValue({ data: [flatMember] });
+    renderTeamSection();
+
+    expect(await screen.findByText('Ahmad')).toBeInTheDocument();
+    expect(await screen.findByText('ahmad@test.com')).toBeInTheDocument();
+    expect(await screen.findByText('Owner')).toBeInTheDocument();
+  });
 });
