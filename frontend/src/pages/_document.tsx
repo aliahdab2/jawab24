@@ -9,8 +9,8 @@ export default function MyDocument({ locale }: DocProps) {
     // Dynamic lang/dir based on Next.js i18n locale (SSR-correct for Google)
     <Html lang={locale || 'ar'} dir={locale === 'en' ? 'ltr' : 'rtl'} suppressHydrationWarning>
       <Head>
-        {/* Facebook App ID — MUST be before any <script> tags so OG parsers see it */}
-        <meta property="fb:app_id" content="774211662298446" />
+        {/* fb:app_id is in _app.tsx MetaHead (via next/head) — do NOT duplicate here,
+           Facebook rejects pages with duplicate fb:app_id property tags */}
 
         {/* Early detection of Capacitor native platform - runs BEFORE React hydrates
             Industry standard: Check Capacitor.isNativePlatform() first (most reliable) */}
