@@ -896,7 +896,7 @@ const DashboardPage: NextPageWithLayout = () => {
                     <p className="text-sm font-semibold">{t('kbNudgeTitle')}</p>
                     <p className="text-xs mt-0.5 opacity-80">{t('kbNudgeDesc')}</p>
                     <div className="flex items-center gap-3 mt-2">
-                      <Link href="/pages">
+                      <Link href="/pages?openKb=true">
                         <Button size="sm" variant="primary" className="text-xs">
                           {t('kbNudgeCta')}
                         </Button>

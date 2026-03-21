@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo, type ReactElement } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -37,6 +38,7 @@ const PagesPage: NextPageWithLayout = () => {
   const tDash = useTranslations('dashboard');
   const tTime = useTranslations('time');
   const { language } = useLanguage();
+  const router = useRouter();
   const { isAuthenticated, fbToken } = useAuthStore();
   const { canEdit } = useWorkspaceRole();
   const queryClient = useQueryClient();
@@ -147,6 +149,23 @@ const PagesPage: NextPageWithLayout = () => {
       handleSyncRef.current?.();
     }
   }, [loading, pages.length, fbToken, isAuthenticated, syncing]);
+
+  // Auto-open KB modal when navigated with ?openKb=true (e.g. from dashboard nudge)
+  const openKbHandledRef = useRef(false);
+  useEffect(() => {
+    if (openKbHandledRef.current || !router.isReady || loading || pages.length === 0) return;
+    if (router.query.openKb !== 'true') return;
+
+    openKbHandledRef.current = true;
+    // Find the first page with thin KB (matches the dashboard nudge logic)
+    const thinKbPage = pages.find(p => (p.knowledgeBase || '').length < 200);
+    const target = thinKbPage ?? pages[0];
+    setEditingPage(target);
+    setSaved(false);
+
+    // Clean up the URL without triggering a re-render
+    router.replace('/pages', undefined, { shallow: true });
+  }, [router.isReady, router.query.openKb, loading, pages, router]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     // Optimistic update
