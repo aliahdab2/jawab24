@@ -7,6 +7,7 @@ import { pagesService, isPageDisconnected } from '../services/pages';
 import { authService } from '../services/auth';
 import { auditLog } from '../services/auditLog';
 import { captureError } from '../utils/sentryHelpers';
+import { handleNonTextMessage } from '../services/reply/nonTextHandler';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
 import { users } from '../db/schema';
@@ -44,6 +45,10 @@ interface MessagingEvent {
         mid: string;
         text?: string;
         is_echo?: boolean;
+        attachments?: Array<{
+            type: 'audio' | 'image' | 'video' | 'file' | 'fallback';
+            payload?: { url?: string };
+        }>;
     };
 }
 
@@ -191,9 +196,18 @@ export class WebhookController {
                 for (const messageEvent of entry.messaging) {
                     // Skip echo events (bot's own messages reflected back)
                     if (messageEvent.message?.is_echo) continue;
-                    // Only handle text messages
+                    // Handle text messages through the normal pipeline
                     if (messageEvent.message && messageEvent.message.text) {
                         await this.processMessage(pageId, messageEvent);
+                    } else if (messageEvent.message?.attachments?.length) {
+                        const att = messageEvent.message.attachments[0];
+                        if (messageEvent.sender?.id && messageEvent.message.mid) {
+                            await handleNonTextMessage(pageId, {
+                                senderId: messageEvent.sender.id,
+                                messageId: messageEvent.message.mid,
+                                attachmentType: att.type,
+                            }, 'facebook', this.log());
+                        }
                     }
                 }
             }
@@ -352,6 +366,15 @@ export class WebhookController {
                     if (messageEvent.message?.is_echo) continue;
                     if (messageEvent.message && messageEvent.message.text) {
                         await this.processInstagramMessage(instagramAccountId, messageEvent);
+                    } else if (messageEvent.message?.attachments?.length) {
+                        const att = messageEvent.message.attachments[0];
+                        if (messageEvent.sender?.id && messageEvent.message.mid) {
+                            await handleNonTextMessage(instagramAccountId, {
+                                senderId: messageEvent.sender.id,
+                                messageId: messageEvent.message.mid,
+                                attachmentType: att.type,
+                            }, 'instagram', this.log());
+                        }
                     }
                 }
             }

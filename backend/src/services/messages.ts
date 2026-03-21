@@ -229,6 +229,27 @@ export class MessagesService {
     }
 
     /**
+     * Get the most recent incoming text message from a sender (for language detection).
+     * Skips placeholder messages (e.g. "[Voice Message]") that start with "[".
+     */
+    async getLastIncomingTextFromSender(pageId: string, senderId: string): Promise<string | null> {
+        const rows = await db
+            .select({ message: messages.message })
+            .from(messages)
+            .where(and(
+                eq(messages.pageId, pageId),
+                eq(messages.senderId, senderId),
+                eq(messages.direction, 'incoming'),
+            ))
+            .orderBy(desc(messages.createdAt))
+            .limit(5);
+
+        // Return the first message that isn't a placeholder
+        const textRow = rows.find(r => r.message && !r.message.startsWith('['));
+        return textRow?.message ?? null;
+    }
+
+    /**
      * Mark message as replied
      */
     async markAsReplied(

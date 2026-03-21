@@ -41,6 +41,14 @@ vi.mock('../../src/lib/replyQueue', () => ({
     enqueueMessage: vi.fn().mockResolvedValue('job-2'),
 }));
 
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn(),
+        set: vi.fn(),
+        quit: vi.fn(),
+    },
+}));
+
 vi.mock('../../src/services/auth', () => ({
     authService: { deleteUser: mockDeleteUser },
 }));

@@ -15,9 +15,28 @@ function generateSignature(payload: object): string {
 }
 
 // Mock the reply queue - use vi.hoisted to create mock functions before hoisting
-const { mockEnqueueComment, mockEnqueueMessage } = vi.hoisted(() => ({
+const {
+    mockEnqueueComment,
+    mockEnqueueMessage,
+    mockGetPageByFacebookId,
+    mockGetPageByInstagramId,
+    mockFindOrCreateFromWebhook,
+    mockStoreOutgoingMessage,
+    mockGetLastIncomingTextFromSender,
+    mockSendPrivateMessage,
+    mockSendDirectMessage,
+    mockRedisSet,
+} = vi.hoisted(() => ({
     mockEnqueueComment: vi.fn().mockResolvedValue('mock-job-id'),
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
+    mockGetPageByFacebookId: vi.fn().mockResolvedValue(null),
+    mockGetPageByInstagramId: vi.fn().mockResolvedValue(null),
+    mockFindOrCreateFromWebhook: vi.fn().mockResolvedValue({ message: { id: 'msg-1' }, isNew: true }),
+    mockStoreOutgoingMessage: vi.fn().mockResolvedValue({}),
+    mockGetLastIncomingTextFromSender: vi.fn().mockResolvedValue(null),
+    mockSendPrivateMessage: vi.fn().mockResolvedValue(undefined),
+    mockSendDirectMessage: vi.fn().mockResolvedValue('msg-id'),
+    mockRedisSet: vi.fn().mockResolvedValue('OK'),
 }));
 
 vi.mock('../../src/lib/replyQueue', () => ({
@@ -30,7 +49,7 @@ vi.mock('../../src/lib/replyQueue', () => ({
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         get: vi.fn(),
-        set: vi.fn(),
+        set: mockRedisSet,
         quit: vi.fn(),
     },
 }));
@@ -42,6 +61,36 @@ vi.mock('../../src/config', () => ({
             appSecret: 'test_app_secret',
             graphApiVersion: 'v18.0',
         },
+    },
+}));
+
+// Mock all services used by webhook controller
+vi.mock('../../src/services/pages', () => ({
+    pagesService: {
+        getPageByFacebookId: mockGetPageByFacebookId,
+        getPageByInstagramId: mockGetPageByInstagramId,
+    },
+    isPageDisconnected: vi.fn().mockReturnValue(false),
+}));
+
+vi.mock('../../src/services/messages', () => ({
+    messagesService: {
+        findOrCreateFromWebhook: mockFindOrCreateFromWebhook,
+        storeOutgoingMessage: mockStoreOutgoingMessage,
+        getLastIncomingTextFromSender: mockGetLastIncomingTextFromSender,
+        getSenderNameBySenderId: vi.fn().mockResolvedValue(null),
+    },
+}));
+
+vi.mock('../../src/services/facebook', () => ({
+    facebookService: {
+        sendPrivateMessage: mockSendPrivateMessage,
+    },
+}));
+
+vi.mock('../../src/services/instagram', () => ({
+    instagramService: {
+        sendDirectMessage: mockSendDirectMessage,
     },
 }));
 
@@ -759,10 +808,10 @@ describe('Webhook Controller', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            
+
             // Give async processing time to complete
             await new Promise(resolve => setTimeout(resolve, 50));
-            
+
             expect(mockEnqueueMessage).toHaveBeenCalledWith(
                 expect.objectContaining({
                     jobType: 'instagram_message',
@@ -772,6 +821,255 @@ describe('Webhook Controller', () => {
                     text: 'Hello via DM!',
                 })
             );
+        });
+    });
+
+    describe('POST /webhook (Non-Text Message Handling)', () => {
+        const mockPage = {
+            id: 'internal-page-id',
+            accessToken: 'test-token',
+            instagramAccountId: 'ig_account_123',
+        };
+
+        beforeEach(() => {
+            // Reset page mocks to default (null) since some tests use mockResolvedValue
+            mockGetPageByFacebookId.mockReset().mockResolvedValue(null);
+            mockGetPageByInstagramId.mockReset().mockResolvedValue(null);
+            mockFindOrCreateFromWebhook.mockReset().mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
+            mockStoreOutgoingMessage.mockReset().mockResolvedValue({});
+            mockGetLastIncomingTextFromSender.mockReset().mockResolvedValue(null);
+            mockSendPrivateMessage.mockReset().mockResolvedValue(undefined);
+            mockSendDirectMessage.mockReset().mockResolvedValue('msg-id');
+            mockRedisSet.mockReset().mockResolvedValue('OK');
+        });
+
+        it('should store placeholder and send nudge for Facebook voice message', async () => {
+            // Called twice: once for disconnection check, once in processNonTextMessage
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+            mockRedisSet.mockResolvedValueOnce('OK'); // NX succeeded — no cooldown
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_voice_1',
+                            attachments: [{ type: 'audio', payload: { url: 'https://example.com/voice.mp4' } }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Placeholder stored in DB
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+                mockPage.id, 'msg_voice_1', 'user_123', '[رسالة صوتية]',
+            );
+
+            // Nudge reply sent
+            expect(mockSendPrivateMessage).toHaveBeenCalledWith(
+                mockPage.accessToken, 'user_123', expect.stringContaining('الرسائل النصية'),
+            );
+
+            // Outgoing message stored
+            expect(mockStoreOutgoingMessage).toHaveBeenCalledWith(
+                mockPage.id, 'user_123', expect.stringContaining('الرسائل النصية'), 'template',
+            );
+        });
+
+        it('should NOT send nudge when cooldown is active', async () => {
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+            mockRedisSet.mockResolvedValueOnce(null); // NX failed — cooldown active
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_voice_2',
+                            attachments: [{ type: 'audio' }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Placeholder still stored
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalled();
+
+            // But no nudge sent
+            expect(mockSendPrivateMessage).not.toHaveBeenCalled();
+        });
+
+        it('should use English nudge when sender previously wrote in English', async () => {
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+            mockGetLastIncomingTextFromSender.mockResolvedValueOnce('Hi, I need help with my order');
+            mockRedisSet.mockResolvedValueOnce('OK');
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_en' },
+                        message: {
+                            mid: 'msg_img_1',
+                            attachments: [{ type: 'image' }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // English placeholder
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+                mockPage.id, 'msg_img_1', 'user_en', '[Image]',
+            );
+
+            // English nudge
+            expect(mockSendPrivateMessage).toHaveBeenCalledWith(
+                mockPage.accessToken, 'user_en', expect.stringContaining('text messages'),
+            );
+        });
+
+        it('should do nothing if page is not found', async () => {
+            // getPageByFacebookId returns null (default) — both for disconnect check and processNonTextMessage
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'unknown_page',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_voice_3',
+                            attachments: [{ type: 'audio' }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Page lookup happens (for disconnection check + processNonTextMessage) but returns null
+            expect(mockFindOrCreateFromWebhook).not.toHaveBeenCalled();
+            expect(mockSendPrivateMessage).not.toHaveBeenCalled();
+        });
+
+        it('should handle Instagram non-text DMs', async () => {
+            mockGetPageByInstagramId.mockResolvedValue(mockPage);
+            mockRedisSet.mockResolvedValueOnce('OK');
+
+            const webhookPayload = {
+                object: 'instagram',
+                entry: [{
+                    id: 'ig_account_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'ig_user_789' },
+                        message: {
+                            mid: 'ig_msg_voice_1',
+                            attachments: [{ type: 'video' }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Placeholder stored
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+                mockPage.id, 'ig_msg_voice_1', 'ig_user_789', '[فيديو]',
+            );
+
+            // Nudge sent via Instagram API
+            expect(mockSendDirectMessage).toHaveBeenCalledWith(
+                'ig_account_123', 'ig_user_789',
+                expect.stringContaining('الرسائل النصية'),
+                mockPage.accessToken,
+            );
+        });
+
+        it('should not store or reply for non-text messages without sender', async () => {
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        // No sender field
+                        message: {
+                            mid: 'msg_nosender',
+                            attachments: [{ type: 'file' }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // processNonTextMessage exits early — no storage or reply
+            expect(mockFindOrCreateFromWebhook).not.toHaveBeenCalled();
+            expect(mockSendPrivateMessage).not.toHaveBeenCalled();
         });
     });
 });
