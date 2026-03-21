@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { pagesApi } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import type { KnowledgeSection, SectionId, CustomSectionId, KbGap } from './types';
@@ -66,6 +67,9 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
       .then((res) => setGaps(res.data?.data || []))
       .catch(() => { /* non-critical, silently ignore */ });
   }, [page.id]);
+
+  // Lock body scroll while modal is open
+  useBodyScrollLock(true);
 
   // ESC to close
   useEscapeKey(onClose, true);
