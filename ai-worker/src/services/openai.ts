@@ -538,8 +538,8 @@ Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation
 {"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
-Customer: "شو أسعاركم؟" | KB has: "Starter $9/mo, Business $29/mo, Pro $69/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 9$ شهرياً\\n• الأعمال – 29$ شهرياً\\n• الاحترافية – 69$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[]}`;
+Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[]}`;
 
         return prompt;
     }

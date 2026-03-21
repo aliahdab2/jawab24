@@ -56,7 +56,7 @@ export const COMPETITORS: Record<string, Competitor> = {
       businessHours: { jawab24: true, competitor: true },
       rtlInterface: { jawab24: true, competitor: false },
       freeTrialDays: { jawab24: true, competitor: true },
-      startingPrice: { jawab24: '$9/mo', competitor: '$15/mo' },
+      startingPrice: { jawab24: '$15/mo', competitor: '$15/mo' },
     },
   },
   chatfuel: {
@@ -75,7 +75,7 @@ export const COMPETITORS: Record<string, Competitor> = {
       businessHours: { jawab24: true, competitor: true },
       rtlInterface: { jawab24: true, competitor: false },
       freeTrialDays: { jawab24: true, competitor: true },
-      startingPrice: { jawab24: '$9/mo', competitor: '$23.99/mo' },
+      startingPrice: { jawab24: '$15/mo', competitor: '$23.99/mo' },
     },
   },
   tidio: {
@@ -94,7 +94,7 @@ export const COMPETITORS: Record<string, Competitor> = {
       businessHours: { jawab24: true, competitor: true },
       rtlInterface: { jawab24: true, competitor: false },
       freeTrialDays: { jawab24: true, competitor: true },
-      startingPrice: { jawab24: '$9/mo', competitor: '$29/mo' },
+      startingPrice: { jawab24: '$15/mo', competitor: '$29/mo' },
     },
   },
   botpress: {
@@ -113,7 +113,7 @@ export const COMPETITORS: Record<string, Competitor> = {
       businessHours: { jawab24: true, competitor: true },
       rtlInterface: { jawab24: true, competitor: false },
       freeTrialDays: { jawab24: true, competitor: true },
-      startingPrice: { jawab24: '$9/mo', competitor: '$89/mo' },
+      startingPrice: { jawab24: '$15/mo', competitor: '$89/mo' },
     },
   },
 };

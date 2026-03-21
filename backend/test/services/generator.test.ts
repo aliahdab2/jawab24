@@ -1124,7 +1124,7 @@ describe('ReplyGenerator - Template Priority Guard', () => {
         vi.mocked(templatesService.getTemplate).mockResolvedValue({
             id: 'template-1',
             name: 'Price Inquiry',
-            message: 'الباقة التجريبية $9، باقة الأعمال $29، الباقة الاحترافية $69',
+            message: 'الباقة التجريبية $15، باقة الأعمال $39، الباقة الاحترافية $79',
             active: true,
         } as any);
 
@@ -1132,7 +1132,7 @@ describe('ReplyGenerator - Template Priority Guard', () => {
         const result = await generator.generateForComment(contextWithWorkspace, true, 'dual');
 
         expect(result.replyMethod).toBe('template');
-        expect(result.replyText).toContain('$9');
+        expect(result.replyText).toContain('$15');
         expect(aiService.generateReply).not.toHaveBeenCalled();
     });
 
@@ -1149,7 +1149,7 @@ describe('ReplyGenerator - Template Priority Guard', () => {
         vi.mocked(templatesService.getTemplate).mockResolvedValue({
             id: 'template-1',
             name: 'Pricing',
-            message: 'Our plans start at $9/month.',
+            message: 'Our plans start at $15/month.',
             active: true,
         } as any);
 
