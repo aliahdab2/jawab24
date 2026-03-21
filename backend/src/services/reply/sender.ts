@@ -73,10 +73,10 @@ export class ReplySender {
 
             try {
                 await facebookService.sendPrivateMessage(accessToken, fromId, replyText);
-                
-                if (replyMode === 'private') {
-                    success = true;
-                }
+
+                // DM sent — mark success for both private and dual modes.
+                // In dual mode the public nudge is nice-to-have; the customer already got their answer.
+                success = true;
                 this.logger.debug('[Sender] Sent private message', { fromId });
             } catch (error) {
                 this.logger.error('Failed to send private message', {
