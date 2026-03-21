@@ -123,14 +123,22 @@ export class PaymentController {
                 );
             }
 
+            // Validate redirect URLs to prevent open redirect attacks
+            const validatedSuccessUrl = successUrl && successUrl.startsWith(config.frontendUrl)
+                ? successUrl
+                : `${config.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
+            const validatedCancelUrl = cancelUrl && cancelUrl.startsWith(config.frontendUrl)
+                ? cancelUrl
+                : `${config.frontendUrl}/payment/cancel`;
+
             // Create checkout session with appropriate trial
             const session = await stripeService.createCheckoutSession(
                 userId,
                 user.email,
                 planId,
                 plan.stripePriceId,
-                successUrl || `${config.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
-                cancelUrl || `${config.frontendUrl}/payment/cancel`,
+                validatedSuccessUrl,
+                validatedCancelUrl,
                 trialDays
             );
 

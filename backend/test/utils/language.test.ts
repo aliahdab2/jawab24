@@ -98,6 +98,57 @@ describe('Language Detection Utility', () => {
             expect(result.language).toBe('es');
         });
 
+        it('should detect Hebrew script as unknown RTL', () => {
+            const result = detectLanguage('שלום עולם');
+            expect(result.language).toBe('unknown');
+            expect(result.script).toBe('Hebrew');
+            expect(result.isRTL).toBe(true);
+            expect(result.confidence).toBe(0.8);
+        });
+
+        it('should detect CJK characters as unknown', () => {
+            const result = detectLanguage('你好世界');
+            expect(result.language).toBe('unknown');
+            expect(result.script).toBe('CJK');
+            expect(result.isRTL).toBe(false);
+        });
+
+        it('should detect Japanese text as unknown', () => {
+            // Pure hiragana/katakana without kanji (CJK) to hit the Japanese branch
+            const result = detectLanguage('こんにちは');
+            expect(result.language).toBe('unknown');
+            expect(result.script).toBe('Japanese');
+            expect(result.isRTL).toBe(false);
+        });
+
+        it('should detect Korean text as unknown', () => {
+            const result = detectLanguage('안녕하세요');
+            expect(result.language).toBe('unknown');
+            expect(result.script).toBe('Korean');
+            expect(result.isRTL).toBe(false);
+        });
+
+        it('should detect Cyrillic text as unknown', () => {
+            const result = detectLanguage('Привет мир');
+            expect(result.language).toBe('unknown');
+            expect(result.script).toBe('Cyrillic');
+            expect(result.isRTL).toBe(false);
+        });
+
+        it('should detect Thai text as unknown', () => {
+            const result = detectLanguage('สวัสดีครับ');
+            expect(result.language).toBe('unknown');
+            expect(result.script).toBe('Thai');
+            expect(result.isRTL).toBe(false);
+        });
+
+        it('should detect Turkish by unique chars without common words (fallback)', () => {
+            // İ is a unique Turkish char; no Turkish common words present
+            const result = detectLanguage('İstanbul');
+            expect(result.language).toBe('tr');
+            expect(result.confidence).toBe(0.75);
+        });
+
         it('should handle numbers and symbols', () => {
             const result = detectLanguage('123 456 789 !@#$%');
             // Should default to English for pure numbers/symbols

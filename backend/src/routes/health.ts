@@ -1,10 +1,20 @@
 import { FastifyPluginAsync } from 'fastify';
+import crypto from 'crypto';
 import { config } from '../config';
 import { runAllCleanupTasks, getAiCacheStats } from '../utils/cleanup';
 import { pipelineMetrics } from '../lib/pipelineMetrics';
 import { metricsRegistry } from '../lib/metrics';
 import { probeDatabase, probeRedis, probeAiWorkerCircuit } from '../utils/healthChecks';
 import { createRequestLogger } from '../types';
+
+/** Constant-time token comparison to prevent timing attacks */
+function tokensMatch(provided: string | undefined, expected: string): boolean {
+    if (!provided) return false;
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length) return false;
+    return crypto.timingSafeEqual(a, b);
+}
 
 const startTime = Date.now();
 
@@ -108,7 +118,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
             return reply.status(503).send({ error: 'Cleanup not configured. Set CLEANUP_SECRET_TOKEN environment variable.' });
         }
 
-        if (providedToken !== cleanupToken) {
+        if (!tokensMatch(providedToken, cleanupToken)) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
@@ -145,7 +155,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
         const cleanupToken = config.cleanupSecretToken;
         const providedToken = request.headers['x-cleanup-token'];
 
-        if (!cleanupToken || providedToken !== cleanupToken) {
+        if (!cleanupToken || !tokensMatch(providedToken, cleanupToken)) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
@@ -169,7 +179,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
         const cleanupToken = config.cleanupSecretToken;
         const providedToken = request.headers['x-cleanup-token'];
 
-        if (!cleanupToken || providedToken !== cleanupToken) {
+        if (!cleanupToken || !tokensMatch(providedToken, cleanupToken)) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
@@ -192,7 +202,7 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
         const cleanupToken = config.cleanupSecretToken;
         const providedToken = request.headers['x-cleanup-token'];
 
-        if (!cleanupToken || providedToken !== cleanupToken) {
+        if (!cleanupToken || !tokensMatch(providedToken, cleanupToken)) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 

@@ -22,11 +22,13 @@ vi.mock('bullmq', () => ({
 const mockReplyService = {
     processComment: vi.fn(),
     processMessage: vi.fn(),
+    setLogger: vi.fn(),
 };
 
 const mockInstagramReplyService = {
     processComment: vi.fn(),
     processMessage: vi.fn(),
+    setLogger: vi.fn(),
 };
 
 const mockPagesService = {
@@ -126,15 +128,59 @@ describe('Reply Worker', () => {
         
         it('should set up event handlers on start', () => {
             startWorker();
-            
+
             // Check that event handlers are registered
             const onCalls = mockWorkerInstance.on.mock.calls;
             const eventNames = onCalls.map((call: any) => call[0]);
-            
+
             expect(eventNames).toContain('completed');
             expect(eventNames).toContain('failed');
             expect(eventNames).toContain('error');
             expect(eventNames).toContain('stalled');
+        });
+
+        it('should invoke completed handler without error', () => {
+            startWorker();
+            const completedHandler = mockWorkerInstance.on.mock.calls.find(
+                (c: any) => c[0] === 'completed',
+            )?.[1];
+            expect(() =>
+                completedHandler({ id: 'j1' }, { success: true }),
+            ).not.toThrow();
+        });
+
+        it('should invoke failed handler without error', () => {
+            startWorker();
+            const failedHandler = mockWorkerInstance.on.mock.calls.find(
+                (c: any) => c[0] === 'failed',
+            )?.[1];
+            expect(() =>
+                failedHandler({ id: 'j1', attemptsMade: 1 }, new Error('boom')),
+            ).not.toThrow();
+        });
+
+        it('should invoke error handler without error', () => {
+            startWorker();
+            const errorHandler = mockWorkerInstance.on.mock.calls.find(
+                (c: any) => c[0] === 'error',
+            )?.[1];
+            expect(() => errorHandler(new Error('worker err'))).not.toThrow();
+        });
+
+        it('should invoke stalled handler without error', () => {
+            startWorker();
+            const stalledHandler = mockWorkerInstance.on.mock.calls.find(
+                (c: any) => c[0] === 'stalled',
+            )?.[1];
+            expect(() => stalledHandler('stalled-job-id')).not.toThrow();
+        });
+
+        it('should accept a custom logger', () => {
+            const customLogger = {
+                info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(),
+            };
+            startWorker(customLogger);
+            expect(mockWorkerInstance.on).toHaveBeenCalled();
         });
     });
 });
@@ -396,6 +442,73 @@ describe('Reply Worker — Handoff Re-enqueue', () => {
         expect(mockEnqueueMessage).toHaveBeenCalledWith(expect.objectContaining({
             handoffRetries: 3,
             replyDelay: 90,
+        }));
+    });
+
+    it('should throw UnrecoverableError for unknown job type', async () => {
+        const job = createMockJob({ jobType: 'unknown_type' as any });
+        await expect(processJobFn(job)).rejects.toThrow('Unknown job type: unknown_type');
+    });
+
+    it('should throw UnrecoverableError when Facebook comment is missing postId', async () => {
+        const job = createMockJob({
+            jobType: 'facebook_comment',
+            postId: undefined,
+            commentId: 'c1',
+        });
+        await expect(processJobFn(job)).rejects.toThrow('Missing postId or commentId');
+    });
+
+    it('should throw UnrecoverableError when Facebook message is missing senderId', async () => {
+        const job = createMockJob({
+            jobType: 'facebook_message',
+            messageId: 'msg-1',
+            senderId: undefined as any,
+        });
+        await expect(processJobFn(job)).rejects.toThrow('Missing messageId or senderId');
+    });
+
+    it('should throw UnrecoverableError when Instagram comment is missing commentId', async () => {
+        const job = createMockJob({
+            jobType: 'instagram_comment',
+            postId: 'p1',
+            commentId: undefined,
+        });
+        await expect(processJobFn(job)).rejects.toThrow('Missing postId');
+    });
+
+    it('should throw UnrecoverableError when Instagram message is missing messageId', async () => {
+        const job = createMockJob({
+            jobType: 'instagram_message',
+            messageId: undefined,
+            senderId: 's1',
+        });
+        await expect(processJobFn(job)).rejects.toThrow('Missing messageId or senderId');
+    });
+
+    it('should re-enqueue Instagram comment with handoff', async () => {
+        mockInstagramReplyService.processComment.mockResolvedValue({
+            success: false,
+            commentId: 'ig-c-1',
+            error: 'Handoff active',
+            handoffDelayMs: 30000,
+        });
+
+        const job = createMockJob({
+            jobType: 'instagram_comment',
+            postId: 'media-1',
+            commentId: 'ig-c-1',
+            senderId: 'ig-sender-1',
+            senderName: 'User',
+        });
+        await processJobFn(job);
+
+        expect(mockEnqueueComment).toHaveBeenCalledWith(expect.objectContaining({
+            jobType: 'instagram_comment',
+            postId: 'media-1',
+            commentId: 'ig-c-1',
+            replyDelay: 30,
+            handoffRetries: 1,
         }));
     });
 

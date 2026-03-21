@@ -32,6 +32,7 @@ async function computeExternalApiSummary(): Promise<Array<{
         if (!groups.has(key)) {
             groups.set(key, { buckets: [], count: 0, service, method, status });
         }
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- key was just set above
         const group = groups.get(key)!;
 
         const metricName = v.metricName ?? '';

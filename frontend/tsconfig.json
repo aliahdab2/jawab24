@@ -42,6 +42,8 @@
     "node_modules",
     "vitest.config.ts",
     "test/**/*",
-    "e2e/**/*"
+    "e2e/**/*",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
   ]
 }

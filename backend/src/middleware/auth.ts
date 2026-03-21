@@ -1,4 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import crypto from 'crypto';
 import { authService } from '../services/auth';
 
 export interface AuthenticatedRequest extends FastifyRequest {
@@ -92,7 +93,10 @@ export async function csrfProtection(request: FastifyRequest, reply: FastifyRepl
     const cookieToken = request.cookies.csrfToken;
     const headerToken = request.headers['x-csrf-token'];
 
-    if (!cookieToken || !headerToken || cookieToken !== headerToken) {
+    if (!cookieToken || !headerToken
+        || typeof headerToken !== 'string'
+        || cookieToken.length !== headerToken.length
+        || !crypto.timingSafeEqual(Buffer.from(cookieToken), Buffer.from(headerToken))) {
         return reply.status(403).send({
             error: true,
             message: 'Invalid CSRF token',
