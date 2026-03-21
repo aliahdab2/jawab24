@@ -481,7 +481,8 @@ function MetaHead({ locale }: { locale: string }) {
       <link rel="alternate" hrefLang="en" href={BRAND_ASSETS.urls.canonical(enPagePath)} />
       <link rel="alternate" hrefLang="x-default" href={BRAND_ASSETS.urls.canonical(arPagePath)} />
 
-      {/* fb:app_id is in _document.tsx so it appears in SSG HTML */}
+      {/* Facebook App ID — also in _document.tsx as backup for SSG */}
+      <meta property="fb:app_id" content="774211662298446" />
 
       {/* Open Graph Defaults — key props enable page-level overrides via next/head dedup */}
       <meta key="og:url" property="og:url" content={BRAND_ASSETS.urls.canonical(locale === 'en' ? enPagePath : arPagePath)} />
