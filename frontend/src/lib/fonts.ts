@@ -21,6 +21,7 @@ export const dmSans = localFont({
     weight: '400 700',
     display: 'swap',
     variable: '--font-dm-sans',
+    adjustFontFallback: 'Arial',
 });
 
 // Arabic body font (variable font — single file covers weights 300–700)
@@ -55,6 +56,7 @@ export const outfit = localFont({
     weight: '400 900',
     display: 'swap',
     variable: '--font-outfit',
+    adjustFontFallback: 'Arial',
 });
 
 // Monospace font (variable font — single file covers weights 400–600)

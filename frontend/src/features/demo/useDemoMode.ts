@@ -20,6 +20,7 @@ export function useDemoMode() {
   const setAuth = useAuthStore((state) => state.setAuth);
   
   const [isEnabled, setIsEnabled] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
   // Check if demo mode is enabled on mount
@@ -30,6 +31,8 @@ export function useDemoMode() {
         setIsEnabled(response.data?.enabled === true);
       } catch {
         setIsEnabled(false);
+      } finally {
+        setIsChecking(false);
       }
     };
     checkDemoStatus();
@@ -60,6 +63,7 @@ export function useDemoMode() {
 
   return {
     isEnabled,
+    isChecking,
     isLoading,
     login,
   };

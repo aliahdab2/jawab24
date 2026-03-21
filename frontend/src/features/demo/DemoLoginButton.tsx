@@ -13,10 +13,15 @@ import { useDemoMode } from './useDemoMode';
 
 export function DemoLoginButton() {
   const t = useTranslations('auth');
-  const { isEnabled, isLoading, login } = useDemoMode();
+  const { isEnabled, isChecking, isLoading, login } = useDemoMode();
 
-  // Don't render if demo mode is not enabled
-  if (!isEnabled) return null;
+  // Don't render if demo mode is not enabled (and we're done checking)
+  if (!isChecking && !isEnabled) return null;
+
+  // While checking, render an invisible placeholder to reserve space and prevent layout shift
+  if (isChecking) {
+    return <div className="w-full mt-3 py-5 sm:py-6" aria-hidden="true" />;
+  }
 
   return (
     <>
