@@ -9,6 +9,9 @@ export default function MyDocument({ locale }: DocProps) {
     // Dynamic lang/dir based on Next.js i18n locale (SSR-correct for Google)
     <Html lang={locale || 'ar'} dir={locale === 'en' ? 'ltr' : 'rtl'} suppressHydrationWarning>
       <Head>
+        {/* Facebook App ID — MUST be before any <script> tags so OG parsers see it */}
+        <meta property="fb:app_id" content="774211662298446" />
+
         {/* Early detection of Capacitor native platform - runs BEFORE React hydrates
             Industry standard: Check Capacitor.isNativePlatform() first (most reliable) */}
         <script
@@ -60,9 +63,6 @@ export default function MyDocument({ locale }: DocProps) {
         <link rel="icon" type="image/png" sizes="16x16" href="/brand/favicon-16x16.png" />
         <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
-
-        {/* Facebook App ID — must be in _document so it's in SSG/SSR HTML for OG scrapers */}
-        <meta property="fb:app_id" content="774211662298446" />
 
         {/* Fonts are now loaded via next/font in _app.tsx for better performance */}
 
