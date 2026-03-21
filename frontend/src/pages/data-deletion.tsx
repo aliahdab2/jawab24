@@ -16,6 +16,8 @@ export default function DataDeletion() {
       <Head>
         <title>{t('title')}</title>
         <meta name="description" content={t('metaDescription')} />
+        <meta key="og:title" property="og:title" content={t('title')} />
+        <meta key="og:description" property="og:description" content={t('metaDescription')} />
       </Head>
 
       <div className="flex-1 overflow-y-auto bg-background py-12 px-4 sm:px-6 lg:px-8 text-start ">

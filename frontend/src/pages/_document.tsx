@@ -61,6 +61,9 @@ export default function MyDocument({ locale }: DocProps) {
         <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
         <link rel="manifest" href="/manifest.json" />
 
+        {/* Facebook App ID — must be in _document so it's in SSG/SSR HTML for OG scrapers */}
+        <meta property="fb:app_id" content="774211662298446" />
+
         {/* Fonts are now loaded via next/font in _app.tsx for better performance */}
 
         {/* Global Verification Tags */}
