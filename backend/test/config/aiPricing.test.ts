@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { AI_PRICING, estimateCostUsd } from '../../src/config/aiPricing';
+import { AI_PRICING, estimateCostUsd, estimateWhisperCostUsd } from '../../src/config/aiPricing';
 
 describe('AI Pricing', () => {
     it('exports pricing for gpt-4o-mini', () => {
@@ -34,6 +34,22 @@ describe('AI Pricing', () => {
 
         it('returns 0 for zero tokens', () => {
             expect(estimateCostUsd('gpt-4o-mini', 0, 0)).toBe(0);
+        });
+    });
+
+    describe('estimateWhisperCostUsd', () => {
+        it('calculates cost for 60 seconds of audio', () => {
+            // 1 minute × $0.006/min = $0.006
+            expect(estimateWhisperCostUsd(60)).toBeCloseTo(0.006, 6);
+        });
+
+        it('calculates cost for 30 seconds of audio', () => {
+            // 0.5 minutes × $0.006/min = $0.003
+            expect(estimateWhisperCostUsd(30)).toBeCloseTo(0.003, 6);
+        });
+
+        it('returns 0 for zero duration', () => {
+            expect(estimateWhisperCostUsd(0)).toBe(0);
         });
     });
 });

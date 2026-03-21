@@ -2,7 +2,9 @@ import { pagesService } from '../pages';
 import { messagesService } from '../messages';
 import { facebookService } from '../facebook';
 import { instagramService } from '../instagram';
+import { transcriptionService } from '../transcription';
 import { redis } from '../../lib/redis';
+import { enqueueMessage } from '../../lib/replyQueue';
 import { detectLanguageCode } from '../../utils/language';
 import { getAttachmentPlaceholder, getTextOnlyNudge } from '../../utils/attachmentLabels';
 import type { Logger } from '../../types';
@@ -14,12 +16,14 @@ export interface NonTextMessageEvent {
     senderId: string;
     messageId: string;
     attachmentType: string;
+    attachmentUrl?: string;
 }
 
 /**
  * Handle a non-text message (voice, image, video, file, sticker).
- * Stores a placeholder in DB so the merchant sees the message,
- * and sends a one-time nudge asking the customer to resend as text.
+ *
+ * For audio messages with a URL: transcribe via Whisper → feed into AI reply pipeline.
+ * For everything else (or if transcription fails): store placeholder + send nudge.
  */
 export async function handleNonTextMessage(
     platformPageId: string,
@@ -27,7 +31,7 @@ export async function handleNonTextMessage(
     platform: 'facebook' | 'instagram',
     logger: Logger,
 ): Promise<void> {
-    const { senderId, messageId, attachmentType } = event;
+    const { senderId, messageId, attachmentType, attachmentUrl } = event;
 
     try {
         // 1. Look up the page
@@ -47,20 +51,54 @@ export async function handleNonTextMessage(
             }
         } catch { /* default to Arabic */ }
 
-        // 3. Store a placeholder in DB so the merchant sees the message
+        // 3. Attempt Whisper transcription for audio messages
+        if (attachmentType === 'audio' && attachmentUrl) {
+            const result = await transcriptionService.transcribe(attachmentUrl, lang);
+
+            if (result) {
+                logger.info(`[${platform}] Voice message transcribed`, {
+                    senderId, textLength: result.text.length,
+                });
+
+                // Store transcribed text in DB (not placeholder)
+                await messagesService.findOrCreateFromWebhook(
+                    page.id, messageId, senderId, result.text,
+                );
+
+                // Enqueue for the normal AI reply pipeline
+                // pageId must be the platform ID (not internal UUID) — same as webhook.ts processMessage
+                const jobType = platform === 'facebook' ? 'facebook_message' : 'instagram_message';
+                await enqueueMessage({
+                    jobType,
+                    pageId: platformPageId,
+                    messageId,
+                    senderId,
+                    text: result.text,
+                });
+
+                return; // AI pipeline handles the reply from here
+            }
+
+            // Transcription failed — fall through to nudge
+            logger.warn(`[${platform}] Voice transcription failed, falling back to nudge`, {
+                senderId, messageId,
+            });
+        }
+
+        // 4. Non-audio or failed transcription: store placeholder + send nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
         await messagesService.findOrCreateFromWebhook(
             page.id, messageId, senderId, placeholder,
         );
 
-        // 4. Check cooldown — one nudge per sender per page per hour
+        // 5. Check cooldown — one nudge per sender per page per hour
         const cooldownKey = `nontext_nudge:${page.id}:${senderId}`;
         let alreadySent = false;
         try {
             const result = await redis.set(
                 cooldownKey, '1', 'EX', NUDGE_COOLDOWN_SECONDS, 'NX',
             );
-            alreadySent = result === null; // NX returns null if key already exists
+            alreadySent = result === null;
         } catch {
             // Redis unavailable — send nudge anyway (better than silence)
         }
@@ -70,7 +108,7 @@ export async function handleNonTextMessage(
             return;
         }
 
-        // 5. Send the nudge reply
+        // 6. Send the nudge reply
         const nudgeText = getTextOnlyNudge(lang);
 
         if (platform === 'facebook') {
@@ -84,7 +122,7 @@ export async function handleNonTextMessage(
             }
         }
 
-        // 6. Store the outgoing nudge
+        // 7. Store the outgoing nudge
         await messagesService.storeOutgoingMessage(page.id, senderId, nudgeText, 'template');
 
         logger.info(`[${platform}] Non-text nudge sent`, { senderId, attachmentType });

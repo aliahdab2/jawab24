@@ -19,3 +19,10 @@ export function estimateCostUsd(model: string, tokensIn: number, tokensOut: numb
     if (!pricing) return 0;
     return (tokensIn / 1000) * pricing.inputPer1K + (tokensOut / 1000) * pricing.outputPer1K;
 }
+
+/** Whisper speech-to-text pricing: $0.006 per minute of audio */
+const WHISPER_COST_PER_MINUTE = 0.006;
+
+export function estimateWhisperCostUsd(durationSeconds: number): number {
+    return (durationSeconds / 60) * WHISPER_COST_PER_MINUTE;
+}

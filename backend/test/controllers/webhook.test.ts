@@ -94,6 +94,16 @@ vi.mock('../../src/services/instagram', () => ({
     },
 }));
 
+const { mockTranscribeFn } = vi.hoisted(() => ({
+    mockTranscribeFn: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('../../src/services/transcription', () => ({
+    transcriptionService: {
+        transcribe: mockTranscribeFn,
+    },
+}));
+
 describe('Webhook Controller', () => {
     let app: any;
 
@@ -835,6 +845,7 @@ describe('Webhook Controller', () => {
             // Reset page mocks to default (null) since some tests use mockResolvedValue
             mockGetPageByFacebookId.mockReset().mockResolvedValue(null);
             mockGetPageByInstagramId.mockReset().mockResolvedValue(null);
+            mockTranscribeFn.mockReset().mockResolvedValue(null);
             mockFindOrCreateFromWebhook.mockReset().mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
             mockStoreOutgoingMessage.mockReset().mockResolvedValue({});
             mockGetLastIncomingTextFromSender.mockReset().mockResolvedValue(null);
@@ -887,6 +898,97 @@ describe('Webhook Controller', () => {
             expect(mockStoreOutgoingMessage).toHaveBeenCalledWith(
                 mockPage.id, 'user_123', expect.stringContaining('الرسائل النصية'), 'template',
             );
+        });
+
+        it('should transcribe voice message and enqueue for AI reply when Whisper succeeds', async () => {
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+            mockTranscribeFn.mockResolvedValueOnce({ text: 'كم سعر الجاكيت الأسود؟' });
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_voice_transcribed',
+                            attachments: [{ type: 'audio', payload: { url: 'https://example.com/voice.mp4' } }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Transcribed text stored in DB (not placeholder)
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+                mockPage.id, 'msg_voice_transcribed', 'user_123', 'كم سعر الجاكيت الأسود؟',
+            );
+
+            // Enqueued for AI reply pipeline (pageId = platform ID, not internal UUID)
+            expect(mockEnqueueMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'facebook_message',
+                    pageId: 'page_123',
+                    senderId: 'user_123',
+                    text: 'كم سعر الجاكيت الأسود؟',
+                }),
+            );
+
+            // No nudge sent — AI pipeline handles the reply
+            expect(mockSendPrivateMessage).not.toHaveBeenCalled();
+            expect(mockStoreOutgoingMessage).not.toHaveBeenCalled();
+        });
+
+        it('should fall back to nudge when transcription fails', async () => {
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+            mockTranscribeFn.mockResolvedValueOnce(null); // Transcription failed
+            mockRedisSet.mockResolvedValueOnce('OK');
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_voice_fail',
+                            attachments: [{ type: 'audio', payload: { url: 'https://example.com/voice.mp4' } }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // Placeholder stored (not transcription)
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+                mockPage.id, 'msg_voice_fail', 'user_123', '[رسالة صوتية]',
+            );
+
+            // Nudge sent as fallback
+            expect(mockSendPrivateMessage).toHaveBeenCalled();
+
+            // Not enqueued for AI reply
+            expect(mockEnqueueMessage).not.toHaveBeenCalled();
         });
 
         it('should NOT send nudge when cooldown is active', async () => {

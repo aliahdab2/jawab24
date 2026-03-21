@@ -206,6 +206,7 @@ export class WebhookController {
                                 senderId: messageEvent.sender.id,
                                 messageId: messageEvent.message.mid,
                                 attachmentType: att.type,
+                                attachmentUrl: att.payload?.url,
                             }, 'facebook', this.log());
                         }
                     }
@@ -373,6 +374,7 @@ export class WebhookController {
                                 senderId: messageEvent.sender.id,
                                 messageId: messageEvent.message.mid,
                                 attachmentType: att.type,
+                                attachmentUrl: att.payload?.url,
                             }, 'instagram', this.log());
                         }
                     }
