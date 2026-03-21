@@ -1456,6 +1456,7 @@ describe('ReplyGenerator - Template Dedup for DMs', () => {
         // getConversationHistory should NOT be called when senderId is missing
         expect(messagesService.getConversationHistory).not.toHaveBeenCalled();
     });
+
 });
 
 // --- shouldSkipReply tests ---

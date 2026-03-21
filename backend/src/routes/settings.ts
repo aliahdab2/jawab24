@@ -59,6 +59,7 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
                         notificationsEnabled: { type: 'boolean' },
                         replyStyle: { type: 'string', enum: ['professional', 'casual', 'enthusiastic'] },
                         brandVoiceNotes: { type: 'string', maxLength: 500 },
+                        brandVoiceNotesMulti: { type: 'object' },
                         holdLowConfidence: { type: 'boolean' },
                     },
                     additionalProperties: false,

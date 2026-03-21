@@ -1039,6 +1039,45 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Arabic acknowledgment — should not flag',
     },
+
+    // ===== Category 23: Brand Voice Notes =====
+    {
+        id: 157, category: 23, categoryName: 'Brand Voice Notes', channel: 'dm',
+        message: 'ابي اعرف عن دوراتكم',
+        page: 'training',
+        brandVoiceNotes: 'Always end your reply by inviting the customer to visit us at our Riyadh branch.',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['الرياض', 'Riyadh', 'الملز', 'فرع', 'branch', 'زيارت', 'visit'],
+        },
+        notes: 'First message — AI should incorporate the brand voice note (Riyadh is in KB)',
+    },
+    {
+        id: 158, category: 23, categoryName: 'Brand Voice Notes', channel: 'dm',
+        message: 'طيب ابي تفاصيل اكثر عن دورة الانجليزي',
+        page: 'training',
+        brandVoiceNotes: 'Always mention that we offer a free trial class.',
+        conversationHistory: [
+            { role: 'user', content: 'ايش الدورات عندكم؟' },
+            { role: 'assistant', content: 'عندنا دورات إنجليزي وحاسب ومحاسبة وPMP. ونقدم حصة تجريبية مجانية لكل الطلاب الجدد!' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['تجريبية مجانية', 'free trial', 'حصة مجانية'],
+        },
+        notes: 'Follow-up asking about hours — AI should NOT repeat the free trial note (already in history)',
+    },
+    {
+        id: 159, category: 23, categoryName: 'Brand Voice Notes', channel: 'dm',
+        message: 'Tell me about your training programs',
+        page: 'training',
+        brandVoiceNotes: 'Always mention that our courses are accredited and certified.',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['accredit', 'certif', 'اعتماد', 'معتمد', 'شهاد', 'certified', 'accredited'],
+        },
+        notes: 'First message in English — AI should mention accreditation (exists in KB)',
+    },
 ];
 
 // ---------------------------------------------------------------------------
