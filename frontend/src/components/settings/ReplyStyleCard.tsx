@@ -56,7 +56,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
       <div
         className={clsx(
           "overflow-hidden transition-all duration-300 ease-in-out",
-          voiceNotesOpen ? 'max-h-[400px] opacity-100' : 'max-h-0 opacity-0'
+          voiceNotesOpen ? 'max-h-[400px] opacity-100 pb-1' : 'max-h-0 opacity-0'
         )}
       >
         {(() => {
