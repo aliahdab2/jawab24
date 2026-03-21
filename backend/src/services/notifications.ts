@@ -62,8 +62,8 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationP
     flagged_reply: {
         titleEn: 'Reply Needs Your Attention',
         titleAr: 'رد يحتاج انتباهك',
-        bodyEn: 'An AI reply to "{senderName}" was flagged: {reason}. Please review it.',
-        bodyAr: 'تم وضع علامة على رد لـ "{senderName}": {reason}. يرجى مراجعته.',
+        bodyEn: 'A Smart Reply to "{senderName}" was flagged: {reason}. Please review it.',
+        bodyAr: 'تم وضع علامة على رد ذكي لـ "{senderName}": {reason}. يرجى مراجعته.',
     },
     skipped_reply: {
         titleEn: 'Auto-Reply Skipped',
