@@ -20,15 +20,15 @@ const MOCK_PLANS = [
   {
     id: 'plan_starter', slug: 'starter', name: 'Starter', description: 'Starter plan',
     price: 1500, currency: 'USD', interval: 'month', trialDays: 15,
-    isActive: true, isDefault: true, maxAiRepliesPerMonth: 400, maxPages: 1,
+    isActive: true, isDefault: true, maxAiRepliesPerMonth: 500, maxPages: 1,
     maxTemplates: 5, maxRules: 7, maxProducts: 50, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, showBranding: true, prioritySupport: false,
     ecommerceEnabled: false, regionalPricing: {}, sortOrder: 1,
   },
   {
     id: 'plan_business', slug: 'business', name: 'Business', description: 'Business plan',
-    price: 3900, currency: 'USD', interval: 'month', trialDays: 0,
-    isActive: true, isDefault: false, maxAiRepliesPerMonth: 3000, maxPages: 2,
+    price: 2900, currency: 'USD', interval: 'month', trialDays: 0,
+    isActive: true, isDefault: false, maxAiRepliesPerMonth: 2500, maxPages: 2,
     maxTemplates: null, maxRules: null, maxProducts: 200, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, showBranding: false, prioritySupport: true,
     ecommerceEnabled: true, regionalPricing: {}, sortOrder: 2,

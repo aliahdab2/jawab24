@@ -21,7 +21,7 @@ export const FALLBACK_PLANS: Plan[] = [
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
-        maxAiRepliesPerMonth: 400,
+        maxAiRepliesPerMonth: 500,
         maxTemplates: 5,
         maxRules: 7,
         maxProducts: 50,
@@ -42,11 +42,11 @@ export const FALLBACK_PLANS: Plan[] = [
         name: 'Business',
         slug: 'business',
         description: 'Auto-reply to 2 Facebook/Instagram pages with unlimited templates',
-        price: 3900, // $39.00
+        price: 2900, // $29.00
         currency: 'USD',
         interval: 'month',
         maxPages: 2,
-        maxAiRepliesPerMonth: 3000,
+        maxAiRepliesPerMonth: 2500,
         maxTemplates: null,
         maxRules: null,
         maxProducts: 200,

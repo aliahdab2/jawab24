@@ -275,7 +275,7 @@ const TEST_CASES: TestCase[] = [
     // Guard against GPT training-data contamination: the model must NEVER answer using
     // what it "knows" about Jawab24 (subscription prices, smart-reply credits, plan names).
     // Verified production bug: page named "Jawab24" + customer asks "ممكن تفاصيل"
-    // caused the AI to reply with Jawab24's $15/$39/$79 plan pricing instead of product KB.
+    // caused the AI to reply with Jawab24's $15/$29/$79 plan pricing instead of product KB.
 
     // 11.1 — Follow-up "details" DM after a product answer must not mention Jawab24 plans
     {
@@ -287,7 +287,7 @@ const TEST_CASES: TestCase[] = [
             { role: 'assistant', content: 'عنا عدة منتجات! أي منتج تقصد بالتحديد؟' },
         ],
         expected: {
-            replyNotContains: ['$15', '$39', '$79', 'Jawab24', 'jawab24', 'ردود ذكية شهرياً', 'ردود ذكية/شهر', 'باقة', 'خطة اشتراك'],
+            replyNotContains: ['$15', '$29', '$79', 'Jawab24', 'jawab24', 'ردود ذكية شهرياً', 'ردود ذكية/شهر', 'باقة', 'خطة اشتراك'],
         },
         notes: 'Follow-up "details" must use KB only — must NOT pull Jawab24 subscription pricing from training data',
     },
@@ -299,7 +299,7 @@ const TEST_CASES: TestCase[] = [
         page: 'electronics',
         expected: {
             // Primary guard: reply must NOT contain Jawab24 pricing or plan language
-            replyNotContains: ['$15', '$39', '$79', 'Jawab24', 'jawab24', '400 ردود', '3,000 ردود', '10,000 ردود'],
+            replyNotContains: ['$15', '$29', '$79', 'Jawab24', 'jawab24', '500 ردود', '2,500 ردود', '10,000 ردود'],
         },
         notes: 'Must answer with store product info from KB, never with Jawab24 subscription tiers',
     },
@@ -323,7 +323,7 @@ const TEST_CASES: TestCase[] = [
         expected: {
             // Training KB has course prices — AI may correctly list those.
             // It must NOT reference Jawab24 subscription plans.
-            replyNotContains: ['$15', '$39', '$79', 'Jawab24', 'smart replies', '400 replies', '3,000 replies', '10,000 replies'],
+            replyNotContains: ['$15', '$29', '$79', 'Jawab24', 'smart replies', '500 replies', '2,500 replies', '10,000 replies'],
         },
         notes: 'Must answer with training course prices from KB, not Jawab24 subscription tiers',
     },

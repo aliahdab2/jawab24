@@ -30,7 +30,7 @@ const MOCK_PLANS = [
     slug: 'business',
     name: 'Business',
     description: 'Business plan description',
-    price: 3900,
+    price: 2900,
     currency: 'USD',
     interval: 'month',
     trialDays: 0,
