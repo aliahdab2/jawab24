@@ -232,6 +232,10 @@ test.describe('Team Section', () => {
       localStorage.setItem('jawab24_onboarding_complete', 'true');
     });
     await setupRoutes(page);
+    // Override settings mock to return Arabic dashboard language
+    await page.route('**/api/settings', async (route) => {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...MOCK_SETTINGS, dashboardLanguage: 'ar' }) });
+    });
     await page.goto('/ar/settings');
 
     await expect(page.getByText(tAr('team.sectionTitle')).first()).toBeVisible({ timeout: 15000 });
