@@ -50,6 +50,8 @@ export interface Comment {
   repliedAt?: string | Date | null;
   postId: string | null;
   facebookCommentId?: string;
+  /** Facebook: post ID (e.g. "123_456"); Instagram: full permalink URL or null */
+  postPermalink?: string | null;
   needsAttention?: boolean;
   flagReason?: string | null;
   aiIntent?: string | null;

@@ -259,25 +259,43 @@ describe('CommentDetailModal', () => {
   });
 
   describe('page name link', () => {
-    it('shows clickable page name button when facebookCommentId is present', async () => {
-      const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
+    it('shows clickable page name button when postPermalink is present', async () => {
+      const comment: Comment = { ...mockComment, postPermalink: '123_456', facebookCommentId: 'fb_comment_123' };
 
       await renderModal({ comment, pageName: 'My Page' });
 
       expect(screen.getByRole('button', { name: /my page/i })).toBeInTheDocument();
     });
 
-    it('opens facebook comment URL when page name is clicked', async () => {
-      const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
+    it('opens facebook post URL with comment_id when both postPermalink and facebookCommentId exist', async () => {
+      const comment: Comment = { ...mockComment, postPermalink: '123_456', facebookCommentId: 'fb_comment_123', source: 'facebook' };
 
       await renderModal({ comment, pageName: 'My Page' });
 
       fireEvent.click(screen.getByRole('button', { name: /my page/i }));
-      expect(openExternalUrl).toHaveBeenCalledWith('https://facebook.com/fb_comment_123');
+      expect(openExternalUrl).toHaveBeenCalledWith('https://facebook.com/123_456?comment_id=fb_comment_123');
     });
 
-    it('falls back to pageUrl for Instagram comments without facebookCommentId', async () => {
-      const comment: Comment = { ...mockComment, facebookCommentId: undefined, source: 'instagram' };
+    it('opens facebook post URL without comment_id when facebookCommentId is absent', async () => {
+      const comment: Comment = { ...mockComment, postPermalink: '123_456', facebookCommentId: undefined, source: 'facebook' };
+
+      await renderModal({ comment, pageName: 'My Page' });
+
+      fireEvent.click(screen.getByRole('button', { name: /my page/i }));
+      expect(openExternalUrl).toHaveBeenCalledWith('https://facebook.com/123_456');
+    });
+
+    it('opens instagram permalink directly for instagram comments', async () => {
+      const comment: Comment = { ...mockComment, postPermalink: 'https://instagram.com/p/ABC123/', facebookCommentId: undefined, source: 'instagram' };
+
+      await renderModal({ comment, pageName: 'My Page' });
+
+      fireEvent.click(screen.getByRole('button', { name: /my page/i }));
+      expect(openExternalUrl).toHaveBeenCalledWith('https://instagram.com/p/ABC123/');
+    });
+
+    it('falls back to pageUrl when postPermalink is absent', async () => {
+      const comment: Comment = { ...mockComment, postPermalink: undefined, facebookCommentId: undefined, source: 'instagram' };
 
       await renderModal({ comment, pageName: 'My Page', pageUrl: 'https://instagram.com/mypageusername' });
 
@@ -286,7 +304,7 @@ describe('CommentDetailModal', () => {
     });
 
     it('shows non-clickable page name when no URL available', async () => {
-      const comment: Comment = { ...mockComment, facebookCommentId: undefined };
+      const comment: Comment = { ...mockComment, facebookCommentId: undefined, postPermalink: undefined };
 
       await renderModal({ comment, pageName: 'My Page' });
 
@@ -295,7 +313,7 @@ describe('CommentDetailModal', () => {
     });
 
     it('does not render page name row when pageName is not provided', async () => {
-      const comment: Comment = { ...mockComment, facebookCommentId: 'fb_comment_123' };
+      const comment: Comment = { ...mockComment, postPermalink: '123_456', facebookCommentId: 'fb_comment_123' };
 
       await renderModal({ comment });
 

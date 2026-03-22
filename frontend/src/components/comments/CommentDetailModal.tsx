@@ -198,10 +198,22 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
   const needsAttention = checkNeedsAttention(comment);
   const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
-  // Prefer specific comment URL (Facebook); fall back to page URL (e.g. Instagram pages)
-  const externalUrl = comment.facebookCommentId
-    ? `https://facebook.com/${comment.facebookCommentId}`
-    : pageUrl;
+  // Build external link to the original post/comment
+  // Facebook: post URL with comment_id param to highlight the specific comment
+  // Instagram: stored permalink (already a full URL)
+  // Fallback: page URL passed from parent
+  const externalUrl = (() => {
+    if (isInstagram) {
+      return comment.postPermalink || pageUrl;
+    }
+    if (comment.postPermalink) {
+      const postUrl = `https://facebook.com/${comment.postPermalink}`;
+      return comment.facebookCommentId
+        ? `${postUrl}?comment_id=${comment.facebookCommentId}`
+        : postUrl;
+    }
+    return pageUrl;
+  })();
 
   return createPortal(
     <div
