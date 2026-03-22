@@ -32,6 +32,15 @@ vi.mock('../../src/services/subscriptions', () => ({
     }
 }));
 
+const mockRedisGet = vi.fn();
+const mockRedisSet = vi.fn().mockResolvedValue('OK');
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: (...args: unknown[]) => mockRedisGet(...args),
+        set: (...args: unknown[]) => mockRedisSet(...args),
+    },
+}));
+
 describe('PagesService', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -275,6 +284,84 @@ describe('PagesService', () => {
             // suggestedKnowledgeBase should be null when no business info available
             expect(insertedValues).toBeDefined();
             expect(insertedValues.suggestedKnowledgeBase).toBeNull();
+        });
+    });
+
+    // ───────────────────────────────────────────
+    // getPages — Redis stats cache
+    // ───────────────────────────────────────────
+    describe('getPages - stats caching', () => {
+        const workspaceId = 'ws-123';
+        const mockPages = [
+            { id: 'page-1', workspaceId, accessToken: '', createdAt: new Date(), name: 'P1' },
+        ];
+
+        beforeEach(() => {
+            // Mock the pages query (workspacePages)
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockResolvedValue(mockPages),
+                    }),
+                }),
+            } as any);
+        });
+
+        it('should return cached stats from Redis on cache hit', async () => {
+            const cachedStats = { 'page-1': { commentsCount: 5, repliesCount: 3, lastActivity: 1700000000000 } };
+            mockRedisGet.mockResolvedValue(JSON.stringify(cachedStats));
+
+            const result = await pagesService.getPages(workspaceId);
+
+            expect(mockRedisGet).toHaveBeenCalledWith(`stats:workspace:${workspaceId}`);
+            expect(result[0].commentsCount).toBe(5);
+            expect(result[0].repliesCount).toBe(3);
+            expect(result[0].replyRate).toBe(60);
+        });
+
+        it('should write stats to Redis on cache miss', async () => {
+            mockRedisGet.mockResolvedValue(null);
+
+            // Mock the three parallel stats queries (fb, ig, messages)
+            const originalSelect = vi.mocked(db.select);
+            let callCount = 0;
+            originalSelect.mockImplementation((() => {
+                callCount++;
+                // First call is the pages query, subsequent are stats queries
+                if (callCount === 1) {
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockReturnValue({
+                                orderBy: vi.fn().mockResolvedValue(mockPages),
+                            }),
+                        }),
+                    } as any;
+                }
+                // Stats queries return empty rows
+                return {
+                    from: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    groupBy: vi.fn().mockResolvedValue([]),
+                                }),
+                            }),
+                            where: vi.fn().mockReturnValue({
+                                groupBy: vi.fn().mockResolvedValue([]),
+                            }),
+                        }),
+                    }),
+                } as any;
+            }) as any);
+
+            await pagesService.getPages(workspaceId);
+
+            expect(mockRedisSet).toHaveBeenCalledWith(
+                `stats:workspace:${workspaceId}`,
+                expect.any(String),
+                'EX',
+                60,
+            );
         });
     });
 });

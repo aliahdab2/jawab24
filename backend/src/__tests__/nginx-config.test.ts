@@ -7,6 +7,16 @@ const nginxConf = readFileSync(
   'utf-8',
 );
 
+const deployOnServer = readFileSync(
+  resolve(__dirname, '../../../scripts/deploy-on-server.sh'),
+  'utf-8',
+);
+
+const deployScript = readFileSync(
+  resolve(__dirname, '../../../scripts/deploy.sh'),
+  'utf-8',
+);
+
 /**
  * Guard against the CSP + www mismatch bug.
  *
@@ -83,5 +93,29 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
     const connectSrc = csp.match(/connect-src\s+([^;]+)/);
     expect(connectSrc).not.toBeNull();
     expect((connectSrc as RegExpMatchArray)[1]).toContain("'self'");
+  });
+});
+
+describe('deploy scripts - nginx upstream keepalive', () => {
+  it('deploy.sh should include keepalive in all upstream blocks', () => {
+    expect(deployScript).toContain('keepalive 32;');
+    expect(deployScript).toContain('keepalive 16;');
+  });
+
+  it('deploy-on-server.sh should include keepalive in upstream blocks', () => {
+    expect(deployOnServer).toContain('keepalive 32;');
+    expect(deployOnServer).toContain('keepalive 16;');
+  });
+
+  it('keepalive must be on its own line (not same line as server directive)', () => {
+    // Nginx requires keepalive on a separate line from server
+    const lines = deployOnServer.split('\n');
+    for (const line of lines) {
+      if (line.includes('server ') && line.includes('keepalive')) {
+        expect.fail(
+          `keepalive must be on a separate line from server directive: "${line.trim()}"`,
+        );
+      }
+    }
   });
 });

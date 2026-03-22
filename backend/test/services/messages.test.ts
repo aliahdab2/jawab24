@@ -480,6 +480,16 @@ describe('MessagesService', () => {
 
             expect(result).toEqual([]);
         });
+
+        it('should pass limit:50 to prevent unbounded queries', async () => {
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([]);
+
+            await messagesService.getUnrepliedFromSender('page-1', 'sender-1');
+
+            expect(db.query.messages.findMany).toHaveBeenCalledWith(
+                expect.objectContaining({ limit: 50 }),
+            );
+        });
     });
 
     // ───────────────────────────────────────────
