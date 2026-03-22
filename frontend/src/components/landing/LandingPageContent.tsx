@@ -37,8 +37,8 @@ function StatsSection({ statsList }: { statsList: { value: string; label: string
           <motion.div
             key={i}
             className="text-center group"
-            initial={{ opacity: 0, y: 30, scale: 0.9 }}
-            animate={isInView ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 30, scale: 0.9 }}
+            initial={{ opacity: 1, y: 30, scale: 0.9 }}
+            animate={isInView ? { opacity: 1, y: 0, scale: 1 } : { opacity: 1, y: 30, scale: 0.9 }}
             transition={{ duration: 0.6, delay: i * 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
           >
             <div className="text-3xl sm:text-5xl lg:text-6xl font-extrabold text-white mb-2 sm:mb-3 group-hover:scale-110 transition-transform duration-500 stat-neon-breathe">{stat.value}</div>

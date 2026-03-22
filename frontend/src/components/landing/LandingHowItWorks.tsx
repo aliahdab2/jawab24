@@ -13,7 +13,7 @@ interface LandingHowItWorksProps {
 
 function makeStepVariants(rtl: boolean) {
   return {
-    hidden: { opacity: 0, x: rtl ? 30 : -30 },
+    hidden: { opacity: 1, x: rtl ? 30 : -30 },
     visible: (i: number) => ({
       opacity: 1,
       x: 0,
@@ -27,7 +27,7 @@ function makeStepVariants(rtl: boolean) {
 }
 
 const imageVariants = {
-  hidden: { opacity: 0, scale: 0.9, rotate: 4 },
+  hidden: { opacity: 1, scale: 0.9, rotate: 4 },
   visible: {
     opacity: 1,
     scale: 1,
@@ -37,7 +37,7 @@ const imageVariants = {
 };
 
 const headingVariants = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: { opacity: 1, y: 30 },
   visible: {
     opacity: 1,
     y: 0,

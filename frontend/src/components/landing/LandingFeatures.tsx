@@ -18,7 +18,7 @@ const containerVariants = {
 };
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 40, scale: 0.95 },
+  hidden: { opacity: 1, y: 40, scale: 0.95 },
   visible: {
     opacity: 1,
     y: 0,
@@ -28,7 +28,7 @@ const cardVariants = {
 };
 
 const headingVariants = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: { opacity: 1, y: 30 },
   visible: {
     opacity: 1,
     y: 0,

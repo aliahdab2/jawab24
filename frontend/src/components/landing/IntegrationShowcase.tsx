@@ -385,7 +385,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           {show(6) && (
             <motion.div
               key="footer"
-              initial={{ opacity: 0, x: 30 }}
+              initial={{ opacity: 1, x: 30 }}
               animate={{ opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 18 } }}
               style={{
                 display: 'flex', justifyContent: 'flex-end',

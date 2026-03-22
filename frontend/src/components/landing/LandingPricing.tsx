@@ -13,7 +13,7 @@ const containerVariants = {
 };
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 30, scale: 0.95 },
+  hidden: { opacity: 1, y: 30, scale: 0.95 },
   visible: {
     opacity: 1,
     y: 0,
@@ -23,7 +23,7 @@ const cardVariants = {
 };
 
 const headingVariants = {
-  hidden: { opacity: 0, y: 30 },
+  hidden: { opacity: 1, y: 30 },
   visible: {
     opacity: 1,
     y: 0,
@@ -123,8 +123,8 @@ export function LandingPricing() {
         {/* CTA */}
         <motion.div
           className="text-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+          initial={{ opacity: 1, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 20 }}
           transition={{ duration: 0.5, delay: 0.6 }}
         >
           <Link href="/pricing">
