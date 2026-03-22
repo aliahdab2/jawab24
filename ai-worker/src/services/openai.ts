@@ -92,6 +92,7 @@ export class OpenAIService {
         if (config.openai.apiKey) {
             this.client = new OpenAI({
                 apiKey: config.openai.apiKey,
+                maxRetries: 3,
             });
         }
     }

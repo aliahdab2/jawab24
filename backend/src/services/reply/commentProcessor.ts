@@ -178,8 +178,10 @@ export class CommentProcessor {
             const generatorContext = adapter.buildGeneratorContext(page, content, contentId);
             generatorContext.text = commentMessage;
             for (const integration of integrationRegistry.getEnabled()) {
-                const enriched = await integration.enrichKnowledgeBase(generatorContext.knowledgeBase, page as unknown as Record<string, unknown>);
-                if (enriched !== null) { generatorContext.knowledgeBase = enriched; break; }
+                try {
+                    const enriched = await integration.enrichKnowledgeBase(generatorContext.knowledgeBase, page as unknown as Record<string, unknown>);
+                    if (enriched !== null) { generatorContext.knowledgeBase = enriched; break; }
+                } catch { /* non-critical — continue with original KB */ }
             }
 
             // Fetch store policies + product catalog so they survive RAG mode (RAG drops static KB)

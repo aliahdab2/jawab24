@@ -67,7 +67,7 @@ export class MessageProcessor {
         const pipeline = `${platform}_message` as Pipeline;
         const t0 = Date.now();
         const lap = (label: string) => {
-            this.logger.info(`[${platform}] ⏱ ${label}`, { ms: Date.now() - t0, messageId: platformMessageId });
+            this.logger.debug(`[${platform}] ⏱ ${label}`, { ms: Date.now() - t0, messageId: platformMessageId });
         };
 
         try {
@@ -275,8 +275,10 @@ export class MessageProcessor {
             let storePolicies: string | undefined;
             let productCatalog: string | undefined;
             for (const integration of integrationRegistry.getEnabled()) {
-                const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);
-                if (enriched !== null) { knowledgeBase = enriched; break; }
+                try {
+                    const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);
+                    if (enriched !== null) { knowledgeBase = enriched; break; }
+                } catch { /* non-critical — continue with original KB */ }
             }
 
             // Fetch store policies + product catalog so they survive RAG mode (RAG drops static KB)

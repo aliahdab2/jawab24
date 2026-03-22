@@ -36,6 +36,7 @@ export class MessagesService {
 
         const workspacePages = await db.query.pages.findMany({
             where: eq(pages.workspaceId, workspaceId),
+            columns: { id: true },
         });
 
         if (workspacePages.length === 0) {
@@ -329,6 +330,7 @@ export class MessagesService {
     async getUnrepliedMessages(workspaceId: string, limit: number = 10): Promise<Message[]> {
         const workspacePages = await db.query.pages.findMany({
             where: eq(pages.workspaceId, workspaceId),
+            columns: { id: true },
         });
 
         if (workspacePages.length === 0) {
@@ -511,6 +513,7 @@ export class MessagesService {
                 eq(messages.replied, false)
             ),
             orderBy: [asc(messages.createdAt)],
+            limit: 50,
         });
         return result.map(r => ({ id: r.id, message: r.message }));
     }

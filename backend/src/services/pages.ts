@@ -8,6 +8,7 @@ import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
+import { redis } from '../lib/redis';
 import { encryptFbToken, decryptFbToken } from './facebookCrypto';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
@@ -229,63 +230,78 @@ export class PagesService {
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
         // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
+        // Cache stats in Redis for 60s to avoid repeated GROUP BY aggregations on every dashboard load
+        const cacheKey = `stats:workspace:${workspaceId}`;
         const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
         try {
-            const [fbRows, igRows, msgRows] = await Promise.all([
-                db.select({
-                    pageId: pages.id,
-                    commentsCount: count(),
-                    repliesCount: sql<number>`count(*) FILTER (WHERE ${comments.replied} = true)`,
-                    lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${comments.repliedAt}))`,
-                })
-                    .from(comments)
-                    .innerJoin(posts, eq(comments.postId, posts.id))
-                    .innerJoin(pages, eq(posts.pageId, pages.id))
-                    .where(eq(pages.workspaceId, workspaceId))
-                    .groupBy(pages.id),
-
-                db.select({
-                    pageId: pages.id,
-                    commentsCount: count(),
-                    repliesCount: sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true)`,
-                    lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${instagramComments.repliedAt}))`,
-                })
-                    .from(instagramComments)
-                    .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
-                    .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                    .where(eq(pages.workspaceId, workspaceId))
-                    .groupBy(pages.id),
-
-                // DM/Messenger conversations (messages table has direct pageId FK)
-                db.select({
-                    pageId: pages.id,
-                    commentsCount: count(),
-                    repliesCount: sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
-                    lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${messages.repliedAt}))`,
-                })
-                    .from(messages)
-                    .innerJoin(pages, eq(messages.pageId, pages.id))
-                    .where(and(eq(pages.workspaceId, workspaceId), eq(messages.direction, 'incoming')))
-                    .groupBy(pages.id),
-            ]);
-
-            const mergeRows = (rows: typeof fbRows) => {
-                for (const row of rows) {
-                    const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
-                    const rowActivity = row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : null;
-                    statsMap.set(row.pageId, {
-                        commentsCount: existing.commentsCount + Number(row.commentsCount),
-                        repliesCount: existing.repliesCount + Number(row.repliesCount),
-                        lastActivity: rowActivity
-                            ? (existing.lastActivity ? Math.max(existing.lastActivity, rowActivity) : rowActivity)
-                            : existing.lastActivity,
-                    });
+            const cached = await redis.get(cacheKey).catch(() => null);
+            if (cached) {
+                const parsed = JSON.parse(cached) as Record<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>;
+                for (const [pageId, stats] of Object.entries(parsed)) {
+                    statsMap.set(pageId, stats);
                 }
-            };
+            } else {
+                const [fbRows, igRows, msgRows] = await Promise.all([
+                    db.select({
+                        pageId: pages.id,
+                        commentsCount: count(),
+                        repliesCount: sql<number>`count(*) FILTER (WHERE ${comments.replied} = true)`,
+                        lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${comments.repliedAt}))`,
+                    })
+                        .from(comments)
+                        .innerJoin(posts, eq(comments.postId, posts.id))
+                        .innerJoin(pages, eq(posts.pageId, pages.id))
+                        .where(eq(pages.workspaceId, workspaceId))
+                        .groupBy(pages.id),
 
-            mergeRows(fbRows);
-            mergeRows(igRows);
-            mergeRows(msgRows);
+                    db.select({
+                        pageId: pages.id,
+                        commentsCount: count(),
+                        repliesCount: sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true)`,
+                        lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${instagramComments.repliedAt}))`,
+                    })
+                        .from(instagramComments)
+                        .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
+                        .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                        .where(eq(pages.workspaceId, workspaceId))
+                        .groupBy(pages.id),
+
+                    // DM/Messenger conversations (messages table has direct pageId FK)
+                    db.select({
+                        pageId: pages.id,
+                        commentsCount: count(),
+                        repliesCount: sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
+                        lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${messages.repliedAt}))`,
+                    })
+                        .from(messages)
+                        .innerJoin(pages, eq(messages.pageId, pages.id))
+                        .where(and(eq(pages.workspaceId, workspaceId), eq(messages.direction, 'incoming')))
+                        .groupBy(pages.id),
+                ]);
+
+                const mergeRows = (rows: typeof fbRows) => {
+                    for (const row of rows) {
+                        const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
+                        const rowActivity = row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : null;
+                        statsMap.set(row.pageId, {
+                            commentsCount: existing.commentsCount + Number(row.commentsCount),
+                            repliesCount: existing.repliesCount + Number(row.repliesCount),
+                            lastActivity: rowActivity
+                                ? (existing.lastActivity ? Math.max(existing.lastActivity, rowActivity) : rowActivity)
+                                : existing.lastActivity,
+                        });
+                    }
+                };
+
+                mergeRows(fbRows);
+                mergeRows(igRows);
+                mergeRows(msgRows);
+
+                // Write to Redis cache (fire-and-forget, 60s TTL)
+                const cacheObj: Record<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }> = {};
+                for (const [pageId, stats] of statsMap) cacheObj[pageId] = stats;
+                redis.set(cacheKey, JSON.stringify(cacheObj), 'EX', 60).catch(() => {});
+            }
         } catch (err) {
             captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
         }
