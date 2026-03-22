@@ -175,12 +175,39 @@ Unlike generic chatbot builders (ManyChat, Chatfuel, Respond.io), Jawab24 is not
 - Knowledge Base with RAG search (not just simple FAQ matching)
 - Template replies at zero AI cost (keyword rules don't consume tokens)
 
+## Blog & Resources
+
+Jawab24 publishes guides, comparisons, and data-driven articles about auto-reply, social commerce, and AI customer support. All articles are available in English and Arabic.
+
+Blog index: https://jawab24.com/blog
+
+### Guides
+- How to Set Up Facebook Auto Reply for Your Business Page in 2026: https://jawab24.com/blog/auto-reply-facebook-setup-guide
+- How to Set Up Instagram Auto Reply for Business in 2026: https://jawab24.com/blog/instagram-auto-reply-guide
+- Jawab24 Setup Tutorial — Complete Guide: https://jawab24.com/blog/jawab24-setup-tutorial
+- How to Reduce Facebook Page Response Time: https://jawab24.com/blog/reduce-facebook-response-time
+- How to Handle Angry Customers with AI Auto Reply: https://jawab24.com/blog/ai-auto-reply-angry-customers
+- Common Facebook Auto Reply Mistakes to Avoid: https://jawab24.com/blog/common-facebook-auto-reply-mistakes
+
+### Comparisons
+- Best Auto Reply Tools for Facebook & Instagram in 2026: https://jawab24.com/blog/best-auto-reply-tools-2026
+- Salla vs Shopify — Which Is Better for Arabic Sellers?: https://jawab24.com/blog/salla-vs-shopify-arabic-sellers
+
+### Integrations
+- Connect Your Salla Store to Facebook Auto Reply: https://jawab24.com/blog/salla-store-facebook-auto-reply
+- Shopify Facebook Auto Reply for Arabic Stores: https://jawab24.com/blog/shopify-facebook-auto-reply-arabic
+
+### Statistics & Data
+- 40+ Social Commerce & AI Customer Service Statistics for 2026: https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026
+- Instagram & Facebook DM Selling Statistics for 2026: https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026
+
 ## Links
 
 - Homepage: https://jawab24.com
 - Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
 - Pricing: https://jawab24.com/pricing
+- Blog: https://jawab24.com/blog
 - Contact: https://jawab24.com/contact
 - Privacy Policy: https://jawab24.com/privacy
 - Terms of Service: https://jawab24.com/terms

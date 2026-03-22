@@ -32,9 +32,28 @@ Jawab24 (Arabic: جواب24) is an AI-powered customer support automation tool b
 - Arabic-speaking businesses that need tools built for their language
 - Social media managers handling multiple pages
 
+## Blog
+
+Jawab24 publishes guides, comparisons, and data-driven articles about auto-reply, social commerce, and AI customer support. All articles are available in English and Arabic.
+
+- Blog index: https://jawab24.com/blog
+- How to Set Up Facebook Auto Reply: https://jawab24.com/blog/auto-reply-facebook-setup-guide
+- Instagram Auto Reply Guide: https://jawab24.com/blog/instagram-auto-reply-guide
+- Best Auto Reply Tools 2026: https://jawab24.com/blog/best-auto-reply-tools-2026
+- Jawab24 Setup Tutorial: https://jawab24.com/blog/jawab24-setup-tutorial
+- Connect Salla Store to Facebook Auto Reply: https://jawab24.com/blog/salla-store-facebook-auto-reply
+- Shopify Facebook Auto Reply for Arabic Stores: https://jawab24.com/blog/shopify-facebook-auto-reply-arabic
+- Reduce Facebook Response Time: https://jawab24.com/blog/reduce-facebook-response-time
+- Salla vs Shopify for Arabic Sellers: https://jawab24.com/blog/salla-vs-shopify-arabic-sellers
+- AI Auto Reply for Angry Customers: https://jawab24.com/blog/ai-auto-reply-angry-customers
+- Common Facebook Auto Reply Mistakes: https://jawab24.com/blog/common-facebook-auto-reply-mistakes
+- 40+ Social Commerce & AI Customer Service Statistics 2026: https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026
+- Instagram & Facebook DM Selling Statistics 2026: https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026
+
 ## Links
 
 - Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
 - Pricing: https://jawab24.com/pricing
+- Blog: https://jawab24.com/blog
 - Full details for LLMs: https://jawab24.com/llms-full.txt
