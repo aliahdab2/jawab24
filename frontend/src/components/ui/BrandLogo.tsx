@@ -11,8 +11,8 @@ interface BrandLogoProps extends React.ImgHTMLAttributes<HTMLImageElement> {
  * BrandLogo Component
  * 
  * Automatically handles RTL awareness for the logo.
- * If the current language is Arabic (RTL) AND the variant is 'main', it shows the mirrored logo.
- * Otherwise, it shows the standard logo.
+ * The chat bubble tail always points toward the adjacent text:
+ * LTR → mirrored logo (tail right), RTL → default logo (tail left).
  */
 export const BrandLogo: React.FC<BrandLogoProps> = ({
     variant = 'main',
@@ -26,10 +26,17 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
     // Determine the correct source
     let src = BRAND_ASSETS.logo[variant];
 
-    // RTL locales get the mirrored logo for correct visual alignment
-    if (variant === 'main' && shouldUseRtlVersion && BRAND_ASSETS.logo.mainRtl) {
+    // Bubble tail should point toward the adjacent text:
+    // LTR (English): text is right → mirror the bubble (tail points right)
+    // RTL (Arabic):  text is left  → default bubble (tail points left)
+    const shouldMirror = !shouldUseRtlVersion;
+
+    if (variant === 'main' && shouldMirror && BRAND_ASSETS.logo.mainRtl) {
         src = BRAND_ASSETS.logo.mainRtl;
     }
+
+    // For vector variant (no separate RTL file), use CSS flip
+    const mirrorClass = (variant === 'vector' && shouldMirror) ? '-scale-x-100' : '';
 
     // Default alt text if not provided
     const altText = alt || `${BRAND_ASSETS.meta.appName} Logo`;
@@ -38,7 +45,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
         <img
             src={src}
             alt={altText}
-            className={className}
+            className={`${className} ${mirrorClass}`.trim()}
             {...props}
         />
     );
