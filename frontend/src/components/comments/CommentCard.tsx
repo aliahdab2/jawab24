@@ -13,6 +13,8 @@ import {
   Undo2,
   User,
   FileText,
+  ChevronDown,
+  MessageSquare,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import type { Comment } from '@jawab24/shared';
@@ -28,6 +30,14 @@ export interface CommentCardProps {
   showPlatformIcon?: boolean;
   animationDelay?: number;
   className?: string;
+  /** Number of comments in this conversation group */
+  groupCount?: number;
+  /** Earlier comments in the group (excluding the latest) */
+  earlierComments?: Comment[];
+  /** Whether earlier comments are currently visible */
+  isExpanded?: boolean;
+  /** Toggle expand/collapse of earlier comments */
+  onToggleExpand?: () => void;
 }
 
 // Keywords that indicate a comment needs human attention
@@ -61,12 +71,17 @@ export const CommentCard = React.memo(function CommentCard({
   pageName,
   showPlatformIcon = false,
   animationDelay = 0,
-  className
+  className,
+  groupCount,
+  earlierComments,
+  isExpanded = false,
+  onToggleExpand,
 }: CommentCardProps) {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
   const { dateLocale } = useLanguage();
   const needsAttention = checkNeedsAttention(comment);
+  const isGrouped = (groupCount ?? 1) > 1;
 
   const formatTime = (date?: string | Date | null) => {
     if (!date) return '';
@@ -154,7 +169,7 @@ export const CommentCard = React.memo(function CommentCard({
       )}
 
       <div className="p-5 flex flex-col gap-6">
-        
+
         {/* Customer Message Bubble (Start/Left) */}
         <div className="flex items-start gap-3 me-4 sm:me-8 lg:me-12">
           {/* Avatar */}
@@ -163,13 +178,21 @@ export const CommentCard = React.memo(function CommentCard({
                 <User className="w-5 h-5" />
              </div>
           </div>
-          
+
           <div className="flex flex-col items-start gap-1 min-w-0">
-             {/* Name & Time */}
+             {/* Name, Count Badge & Time */}
              <div className="flex flex-col px-1 mb-1">
-                <span className="text-sm font-bold text-foreground truncate">
-                   {comment.fromName || tc('unknownUser')}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-foreground truncate">
+                     {comment.fromName || tc('unknownUser')}
+                  </span>
+                  {isGrouped && (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-[10px] font-bold">
+                      <MessageSquare className="w-2.5 h-2.5" />
+                      {t('commentCount', { count: groupCount ?? 0 })}
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-2 mt-0.5">
                    <span className="text-[10px] text-muted-foreground">
                       {formatTime(comment.createdAt)}
@@ -203,6 +226,41 @@ export const CommentCard = React.memo(function CommentCard({
                  </p>
                </div>
              </div>
+
+             {/* Expand/Collapse Earlier Comments */}
+             {isGrouped && earlierComments && earlierComments.length > 0 && (
+               <>
+                 <button
+                   type="button"
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     onToggleExpand?.();
+                   }}
+                   className="flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
+                   aria-expanded={isExpanded}
+                 >
+                   <ChevronDown className={clsx(
+                     "w-3.5 h-3.5 transition-transform duration-200",
+                     isExpanded && "rotate-180"
+                   )} />
+                   {isExpanded ? t('hideEarlier') : t('showEarlier')}
+                 </button>
+
+                 {isExpanded && (
+                   <div className="flex flex-col gap-2 w-full animate-fade-in">
+                     {earlierComments.map((ec) => (
+                       <div
+                         key={ec.id}
+                         className="px-3 py-2 bg-muted/50 rounded-xl border border-theme-border/50 text-xs text-muted-foreground"
+                       >
+                         <p className="line-clamp-2 text-foreground/80">{ec.message}</p>
+                         <span className="text-[10px] mt-1 block">{formatTime(ec.createdAt)}</span>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </>
+             )}
           </div>
         </div>
 
@@ -283,7 +341,7 @@ export const CommentCard = React.memo(function CommentCard({
           </div>
         )}
       </div>
-      
+
     </div>
   );
 });

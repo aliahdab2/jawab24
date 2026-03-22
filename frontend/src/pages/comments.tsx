@@ -36,6 +36,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { groupComments, filterGroupsBySearch } from '@/utils/commentGrouping';
 
 type FilterType = 'needs_action' | 'all' | 'auto_replied' | 'handled';
 
@@ -147,15 +148,24 @@ const CommentsPage: NextPageWithLayout = () => {
     return data.pages.flatMap(page => page.data as unknown as Comment[]);
   }, [data]);
 
-  // Client-side filtering for search
-  const filteredComments = useMemo(() => {
+  // Group comments by person+post, then filter by search
+  const commentGroups = useMemo(() => groupComments(allComments), [allComments]);
+  const filteredGroups = useMemo(() => {
     const query = debouncedSearch.trim().toLowerCase();
-    if (!query) return allComments;
-    return allComments.filter(c =>
-      c.message.toLowerCase().includes(query) ||
-      (c.fromName || '').toLowerCase().includes(query)
-    );
-  }, [allComments, debouncedSearch]);
+    if (!query) return commentGroups;
+    return filterGroupsBySearch(commentGroups, query);
+  }, [commentGroups, debouncedSearch]);
+
+  // Track which groups are expanded (show earlier comments)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleExpand = useCallback((groupKey: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  }, []);
 
   // Fetch global stats from server
   const { data: statsData } = useQuery({
@@ -276,9 +286,9 @@ const CommentsPage: NextPageWithLayout = () => {
       handled: t('handled'),
     };
     const filterLabel = filterLabels[filter] ? ` — ${filterLabels[filter]}` : '';
-    const countLabel = filteredComments.length > 0 ? ` (${filteredComments.length})` : '';
+    const countLabel = filteredGroups.length > 0 ? ` (${filteredGroups.length})` : '';
     document.title = `${t('title')}${filterLabel}${countLabel}`;
-  }, [filter, filteredComments.length, t]);
+  }, [filter, filteredGroups.length, t]);
 
   // ESC key to close modal
   useEscapeKey(() => setSelectedComment(null), !!selectedComment);
@@ -504,7 +514,7 @@ const CommentsPage: NextPageWithLayout = () => {
       </div>
 
       {/* Comments List */}
-      {filteredComments.length > 0 ? (
+      {filteredGroups.length > 0 ? (
         <>
           <div
             className={clsx(
@@ -512,11 +522,13 @@ const CommentsPage: NextPageWithLayout = () => {
               isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
             )}
           >
-            {filteredComments.map((comment, i) => {
+            {filteredGroups.map((group, i) => {
+              const comment = group.latestComment;
               const page = comment.pageId ? pageById.get(comment.pageId) : undefined;
+              const earlierComments = group.count > 1 ? group.comments.slice(1) : undefined;
               return (
                 <CommentCard
-                  key={comment.id}
+                  key={group.groupKey}
                   comment={comment}
                   variant="full"
                   pageName={page?.name}
@@ -526,6 +538,10 @@ const CommentsPage: NextPageWithLayout = () => {
                   onQuickReply={() => setSelectedComment(comment)}
                   onResolve={!comment.resolved ? () => handleResolve(comment.id) : undefined}
                   onUnresolve={comment.resolved ? () => handleUnresolve(comment.id) : undefined}
+                  groupCount={group.count}
+                  earlierComments={earlierComments}
+                  isExpanded={expandedGroups.has(group.groupKey)}
+                  onToggleExpand={() => toggleExpand(group.groupKey)}
                 />
               );
             })}

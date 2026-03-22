@@ -174,6 +174,85 @@ test.describe('Comments Page', () => {
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
 
+  test('should group comments from the same person on the same post', async ({ page }) => {
+    const groupedComments = {
+      data: [
+        {
+          id: 'g1',
+          postId: 'p1',
+          fromId: 'user1',
+          fromName: 'Jane Doe',
+          message: 'Follow-up: when do you open?',
+          replied: false,
+          replyText: null,
+          replyMethod: null,
+          pageId: 'page_1',
+          createdAt: new Date(Date.now() - 1000).toISOString(),
+          postMessage: 'Check out our new schedule!',
+        },
+        {
+          id: 'g2',
+          postId: 'p1',
+          fromId: 'user1',
+          fromName: 'Jane Doe',
+          message: 'What are your business hours?',
+          replied: false,
+          replyText: null,
+          replyMethod: null,
+          pageId: 'page_1',
+          createdAt: new Date(Date.now() - 60000).toISOString(),
+          postMessage: 'Check out our new schedule!',
+        },
+        {
+          id: 'g3',
+          postId: 'p2',
+          fromId: 'user2',
+          fromName: 'John Smith',
+          message: 'How much does it cost?',
+          replied: false,
+          replyText: null,
+          replyMethod: null,
+          pageId: 'page_1',
+          createdAt: new Date(Date.now() - 2000).toISOString(),
+        },
+      ],
+      pagination: { nextCursor: null },
+    };
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/comments/stats')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENT_STATS) });
+      }
+      if (url.includes('/comments')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(groupedComments) });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/comments?filter=all');
+    await expect(page.locator('h1').filter({ hasText: t('comments.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    // Wait for comments to render
+    await expect(page.locator('text=Follow-up: when do you open?').first()).toBeVisible({ timeout: 10000 });
+
+    // Jane's 2 comments on same post should be grouped — show count badge
+    await expect(page.locator('text=2 comments').first()).toBeVisible({ timeout: 10000 });
+
+    // Click expand to see earlier comment
+    await page.locator('text=Show earlier comments').first().click();
+    await expect(page.locator('text=What are your business hours?').first()).toBeVisible();
+  });
+
   test('should not crash when APIs fail', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();

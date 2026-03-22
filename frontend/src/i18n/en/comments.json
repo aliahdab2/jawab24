@@ -74,5 +74,8 @@
   "connectPage": "Connect a Page",
   "replyNotFound": "This comment was removed or already handled. Refreshing the list.",
   "platformFacebook": "Facebook",
-  "platformInstagram": "Instagram"
+  "platformInstagram": "Instagram",
+  "commentCount": "{count, plural, one {# comment} other {# comments}}",
+  "showEarlier": "Show earlier comments",
+  "hideEarlier": "Hide earlier comments"
 }

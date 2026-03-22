@@ -159,4 +159,57 @@ describe('CommentCard', () => {
     render(<CommentCard {...defaultProps} pageName="معهد النور" />);
     expect(screen.getByText('معهد النور')).toBeInTheDocument();
   });
+
+  it('shows count badge when groupCount > 1', () => {
+    render(<CommentCard {...defaultProps} groupCount={3} />);
+    expect(screen.getByText('3 comments')).toBeInTheDocument();
+  });
+
+  it('does not show count badge when groupCount is 1', () => {
+    render(<CommentCard {...defaultProps} groupCount={1} />);
+    expect(screen.queryByText(/\d+ comments?/)).not.toBeInTheDocument();
+  });
+
+  it('does not show count badge when groupCount is undefined', () => {
+    render(<CommentCard {...defaultProps} />);
+    expect(screen.queryByText(/\d+ comments?/)).not.toBeInTheDocument();
+  });
+
+  it('shows expand toggle when grouped with earlier comments', () => {
+    const earlier: Comment[] = [
+      { ...baseComment, id: 'c0', message: 'Earlier question' },
+    ];
+    render(<CommentCard {...defaultProps} groupCount={2} earlierComments={earlier} />);
+    expect(screen.getByText('Show earlier comments')).toBeInTheDocument();
+  });
+
+  it('shows earlier comments when expanded', () => {
+    const earlier: Comment[] = [
+      { ...baseComment, id: 'c0', message: 'Earlier question' },
+    ];
+    render(<CommentCard {...defaultProps} groupCount={2} earlierComments={earlier} isExpanded />);
+    expect(screen.getByText('Earlier question')).toBeInTheDocument();
+    expect(screen.getByText('Hide earlier comments')).toBeInTheDocument();
+  });
+
+  it('calls onToggleExpand with stopPropagation when toggle is clicked', () => {
+    const onClick = vi.fn();
+    const onToggleExpand = vi.fn();
+    const earlier: Comment[] = [
+      { ...baseComment, id: 'c0', message: 'Earlier question' },
+    ];
+    render(
+      <CommentCard
+        {...defaultProps}
+        onClick={onClick}
+        groupCount={2}
+        earlierComments={earlier}
+        onToggleExpand={onToggleExpand}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Show earlier comments'));
+    expect(onToggleExpand).toHaveBeenCalled();
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });
