@@ -160,8 +160,10 @@ describe('Android safe area probe (top only)', () => {
 });
 
 describe('capacitor config', () => {
-  it('uses KeyboardResize.Body (not Native)', async () => {
-    // KeyboardResize.Native causes auto-scroll behind status bar.
+  it('uses KeyboardResize.None for iOS (Android overrides to Body at runtime)', async () => {
+    // KeyboardResize.Body permanently distorts WKWebView layout on iOS.
+    // KeyboardResize.Native can't scroll fixed-position modals.
+    // Config uses None; Android overrides to Body at runtime in _app.tsx.
     // KeyboardResize.Body + visualViewport tracking is the correct approach.
     const fs = await import('node:fs');
     const path = await import('node:path');
@@ -170,9 +172,8 @@ describe('capacitor config', () => {
       'utf-8'
     );
 
-    expect(configTs).toContain('KeyboardResize.Body');
+    expect(configTs).toContain('KeyboardResize.None');
     expect(configTs).not.toContain('KeyboardResize.Native');
-    expect(configTs).not.toContain('KeyboardResize.None');
   });
 
   it('Android navigation bar is opaque (not transparent)', async () => {

@@ -537,7 +537,7 @@ describe('MessageDetailModal', () => {
   });
 
   describe('keyboard-aware modal sizing', () => {
-    it('modal panel has keyboard-height in max-height class', () => {
+    it('backdrop uses keyboard-height for bottom positioning', () => {
       render(
         <MessageDetailModal
           {...defaultProps}
@@ -545,14 +545,14 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      // The modal panel (inner container with bg-card) should include
-      // --keyboard-height in its className for keyboard-aware sizing
-      const modalPanel = document.querySelector('[class*="keyboard-height"]');
-      expect(modalPanel).toBeTruthy();
-      expect(modalPanel?.className).toContain('var(--keyboard-height,0px)');
+      // The backdrop (outer overlay) should use --keyboard-height in its
+      // inline style to position above the keyboard
+      const backdrop = document.querySelector('[class*="bg-black"]');
+      expect(backdrop).toBeTruthy();
+      expect(backdrop?.getAttribute('style')).toContain('--keyboard-height');
     });
 
-    it('modal panel has safe area top in max-height class', () => {
+    it('modal panel uses max-h-full on mobile', () => {
       render(
         <MessageDetailModal
           {...defaultProps}
@@ -560,8 +560,9 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      const modalPanel = document.querySelector('[class*="--sai-top"]');
+      const modalPanel = document.querySelector('[class*="bg-card"]');
       expect(modalPanel).toBeTruthy();
+      expect(modalPanel?.className).toContain('max-h-full');
     });
   });
 });

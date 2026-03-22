@@ -138,6 +138,15 @@ class IntersectionObserverMock {
 }
 Object.defineProperty(window, 'IntersectionObserver', { value: IntersectionObserverMock });
 
+// Mock ResizeObserver (not available in jsdom)
+class ResizeObserverMock {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  constructor(_cb: ResizeObserverCallback) {}
+}
+Object.defineProperty(window, 'ResizeObserver', { value: ResizeObserverMock });
+
 // Mock Element.scrollIntoView (not implemented in jsdom)
 Element.prototype.scrollIntoView = vi.fn();
 
