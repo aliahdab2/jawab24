@@ -70,14 +70,17 @@ cat > ./nginx/upstream.conf << 'EOF'
 
 upstream backend_active {
     server jawab24-backend:3000;
+    keepalive 32;
 }
 
 upstream frontend_active {
     server jawab24-frontend:3001;
+    keepalive 16;
 }
 
 upstream ai_worker_active {
     server jawab24-ai-worker:3002;
+    keepalive 16;
 }
 EOF
 echo -e "${GREEN}✅ Nginx upstream configured${NC}"

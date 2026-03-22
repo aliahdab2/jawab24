@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "idx_messages_page_unreplied" ON "messages" ("page_id","replied","created_at");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "idx_rules_workspace_active_priority" ON "rules" ("workspace_id","active","priority");

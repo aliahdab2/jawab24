@@ -91,7 +91,10 @@ export async function generateReplyWithTools(
                     ecommerceToolsEnabled: true,
                 },
             },
-            { timeout: TOOL_LOOP_TIMEOUT_MS },
+            {
+                timeout: TOOL_LOOP_TIMEOUT_MS,
+                headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
+            },
         );
 
         const data = toolResponse.data;
@@ -149,7 +152,10 @@ export async function generateReplyWithTools(
                     toolResults: lastToolResults,
                     originalToolCalls: validToolCalls,
                 },
-                { timeout: TOOL_LOOP_TIMEOUT_MS },
+                {
+                    timeout: TOOL_LOOP_TIMEOUT_MS,
+                    headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
+                },
             );
 
             const roundData = finalResponse.data;

@@ -18,6 +18,15 @@ export async function buildServer(opts?: { logger?: boolean }) {
     await server.register(rateLimit, {
         max: 100,
         timeWindow: '1 minute',
+        // Rate-limit per workspace (via X-Workspace-Id header from backend).
+        // Falls back to IP if header is missing (e.g. direct calls, playground).
+        keyGenerator: (request) => {
+            const workspaceId = request.headers['x-workspace-id'];
+            if (typeof workspaceId === 'string' && workspaceId.length > 0) {
+                return `ws:${workspaceId}`;
+            }
+            return request.ip;
+        },
         errorResponseBuilder: () => ({
             error: 'Rate limit exceeded',
             message: 'Too many requests. Please try again later.',

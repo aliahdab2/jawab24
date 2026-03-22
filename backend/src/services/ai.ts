@@ -338,6 +338,7 @@ export class AiService {
                         },
                         {
                             timeout: 30000,
+                            headers: pageId ? { 'X-Workspace-Id': pageId } : undefined,
                         }
                     ),
                 )
@@ -422,7 +423,10 @@ export class AiService {
                                 context: request.context,
                                 model: fallbackModel,
                             },
-                            { timeout: 30000 },
+                            {
+                                timeout: 30000,
+                                headers: pageId ? { 'X-Workspace-Id': pageId } : undefined,
+                            },
                         ),
                     );
 

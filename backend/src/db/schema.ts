@@ -275,6 +275,8 @@ export const rules = pgTable('rules', {
     return {
         userIdIdx: index('idx_rules_user_id').on(table.userId),
         workspaceIdIdx: index('idx_rules_workspace_id').on(table.workspaceId),
+        // Covering index for "get active rules by priority" queries
+        activeRulesIdx: index('idx_rules_workspace_active_priority').on(table.workspaceId, table.active, table.priority),
     };
 });
 
@@ -367,6 +369,8 @@ export const messages = pgTable('messages', {
         resolvedFilterIdx: index('idx_messages_resolved_filter').on(table.pageId, table.direction, table.resolved, table.replied),
         // Composite index for sender inbox queries: isFirstIncomingMessage, hasNewerUnrepliedMessage, isPaused lookups
         senderInboxIdx: index('idx_messages_sender_inbox').on(table.pageId, table.senderId, table.direction, table.replied, table.createdAt),
+        // Covering index for unreplied message queries (getUnrepliedFromSender, dashboard counts)
+        unrepliedIdx: index('idx_messages_page_unreplied').on(table.pageId, table.replied, table.createdAt),
     };
 });
 

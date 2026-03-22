@@ -351,6 +351,13 @@
       "when": 1774281600000,
       "tag": "0049_update_plan_pricing",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "5",
+      "when": 1774165511047,
+      "tag": "0050_tense_norman_osborn",
+      "breakpoints": true
     }
   ]
 }

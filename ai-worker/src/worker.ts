@@ -3,6 +3,14 @@ import { AI_QUEUE_NAME } from '@jawab24/shared';
 import { config } from './config';
 import { openaiService } from './services/openai';
 import { Sentry } from './lib/sentry';
+import { Semaphore } from './lib/semaphore';
+
+// Limit concurrent OpenAI API calls to avoid rate limits.
+// Queue concurrency may be higher (e.g. 10) to handle job scheduling,
+// but actual API calls are capped here.
+const openaiSemaphore = new Semaphore(
+    parseInt(process.env.OPENAI_MAX_CONCURRENT || '5', 10),
+);
 
 let worker: Worker | null = null;
 
@@ -27,7 +35,9 @@ export function startWorker(logger?: WorkerLogger) {
         log.info({ jobId: job.id }, 'Processing job');
         const { comment, language, context } = job.data;
         try {
-            const result = await openaiService.generateReply({ comment, language, context });
+            const result = await openaiSemaphore.run(() =>
+                openaiService.generateReply({ comment, language, context }),
+            );
             return result;
         } catch (error) {
             log.error({ jobId: job.id, error }, 'Job failed');
