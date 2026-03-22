@@ -13,6 +13,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { getCommentExternalUrl } from '@/utils/pageUrl';
 import {
   MessageSquare,
   Bot,
@@ -198,22 +199,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
   const needsAttention = checkNeedsAttention(comment);
   const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
-  // Build external link to the original post/comment
-  // Facebook: post URL with comment_id param to highlight the specific comment
-  // Instagram: stored permalink (already a full URL)
-  // Fallback: page URL passed from parent
-  const externalUrl = (() => {
-    if (isInstagram) {
-      return comment.postPermalink || pageUrl;
-    }
-    if (comment.postPermalink) {
-      const postUrl = `https://facebook.com/${comment.postPermalink}`;
-      return comment.facebookCommentId
-        ? `${postUrl}?comment_id=${comment.facebookCommentId}`
-        : postUrl;
-    }
-    return pageUrl;
-  })();
+  const externalUrl = getCommentExternalUrl(comment, pageUrl);
 
   return createPortal(
     <div
