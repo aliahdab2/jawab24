@@ -968,14 +968,24 @@ const DashboardPage: NextPageWithLayout = () => {
       </div>
 
       {/* Comment Detail Modal - Now handles both modes */}
-      {selectedCommentData && (
-        <CommentDetailModal
-          comment={selectedCommentData.comment}
-          onClose={() => setSelectedCommentData(null)}
-          onReplySuccess={() => refetchAll()}
-          mode={selectedCommentData.mode}
-        />
-      )}
+      {selectedCommentData && (() => {
+        const commentPage = pages.find(p => p.id === selectedCommentData.comment.pageId);
+        const commentPageUrl = commentPage
+          ? (selectedCommentData.comment.source === 'instagram' && commentPage.instagramUsername
+            ? `https://instagram.com/${commentPage.instagramUsername}`
+            : `https://facebook.com/${commentPage.facebookPageId}`)
+          : undefined;
+        return (
+          <CommentDetailModal
+            comment={selectedCommentData.comment}
+            onClose={() => setSelectedCommentData(null)}
+            onReplySuccess={() => refetchAll()}
+            mode={selectedCommentData.mode}
+            pageName={commentPage?.name}
+            pageUrl={commentPageUrl}
+          />
+        );
+      })()}
 
       {/* Message Conversation Modal — opens inline from attention items or recent messages */}
       {selectedConversation && (
