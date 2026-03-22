@@ -25,7 +25,7 @@ export async function buildServer(opts?: { logger?: boolean }) {
             if (typeof workspaceId === 'string' && workspaceId.length > 0) {
                 return `ws:${workspaceId}`;
             }
-            return request.ip;
+            return request.ip || 'unknown';
         },
         errorResponseBuilder: () => ({
             error: 'Rate limit exceeded',

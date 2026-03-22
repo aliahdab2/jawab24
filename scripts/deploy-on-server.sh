@@ -302,9 +302,21 @@ switch_traffic() {
     cat > ./nginx/upstream.conf << EOF
 # Active environment: $DEPLOY_ENV
 # Switched at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-upstream backend_active { server jawab24-backend-$DEPLOY_ENV:3000; keepalive 32; }
-upstream frontend_active { server jawab24-frontend-$DEPLOY_ENV:3001; keepalive 16; }
-upstream ai_worker_active { server jawab24-ai-worker-$DEPLOY_ENV:3002; keepalive 16; }
+
+upstream backend_active {
+    server jawab24-backend-$DEPLOY_ENV:3000;
+    keepalive 32;
+}
+
+upstream frontend_active {
+    server jawab24-frontend-$DEPLOY_ENV:3001;
+    keepalive 16;
+}
+
+upstream ai_worker_active {
+    server jawab24-ai-worker-$DEPLOY_ENV:3002;
+    keepalive 16;
+}
 EOF
 
     echo "🔄 Restarting Nginx to apply changes..."
@@ -489,9 +501,21 @@ rollback() {
     cat > ./nginx/upstream.conf << EOF
 # Active environment: $ACTIVE_ENV (rolled back)
 # Rolled back at: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
-upstream backend_active { server jawab24-backend-$ACTIVE_ENV:3000; keepalive 32; }
-upstream frontend_active { server jawab24-frontend-$ACTIVE_ENV:3001; keepalive 16; }
-upstream ai_worker_active { server jawab24-ai-worker-$ACTIVE_ENV:3002; keepalive 16; }
+
+upstream backend_active {
+    server jawab24-backend-$ACTIVE_ENV:3000;
+    keepalive 32;
+}
+
+upstream frontend_active {
+    server jawab24-frontend-$ACTIVE_ENV:3001;
+    keepalive 16;
+}
+
+upstream ai_worker_active {
+    server jawab24-ai-worker-$ACTIVE_ENV:3002;
+    keepalive 16;
+}
 EOF
 
     if docker restart jawab24-nginx; then
