@@ -35,16 +35,24 @@ export function PageAccordionItem({
   const tComments = useTranslations('comments');
   const tPages = useTranslations('pages');
   const itemRef = useRef<HTMLDivElement>(null);
+  // Track whether expansion was triggered by user click vs auto-expand on mount.
+  // scrollIntoView should only fire on user-initiated toggles — auto-expanding
+  // a single page on load would scroll past the "Welcome" header.
+  const userToggled = useRef(false);
 
-  // Scroll expanded item into view after animation
   useEffect(() => {
-    if (isExpanded && itemRef.current) {
+    if (isExpanded && itemRef.current && userToggled.current) {
       const timer = setTimeout(() => {
         itemRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 320);
+      }, 320); // matches the CSS expand animation duration
       return () => clearTimeout(timer);
     }
   }, [isExpanded]);
+
+  const handleToggle = () => {
+    userToggled.current = true;
+    onToggle();
+  };
 
   const headerId = `page-header-${page.id}`;
   const panelId = `page-panel-${page.id}`;
@@ -60,7 +68,7 @@ export function PageAccordionItem({
       <button
         type="button"
         id={headerId}
-        onClick={onToggle}
+        onClick={handleToggle}
         className={clsx(
           'w-full flex items-center gap-4 p-4 sm:p-5 text-start transition-all cursor-pointer',
           isExpanded ? 'bg-brand-50/30' : 'hover:bg-brand-50/20'
