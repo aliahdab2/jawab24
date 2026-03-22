@@ -224,6 +224,15 @@
   a:focus-visible {
     @apply outline-2 outline-offset-2 outline-brand-500 rounded-sm;
   }
+
+  /* iOS auto-zoom prevention: iOS Safari/WKWebView zooms in on inputs with
+     font-size < 16px, which permanently distorts the viewport layout in
+     Capacitor apps. Force 16px minimum on mobile to prevent this. */
+  @media screen and (max-width: 767px) {
+    input, textarea, select {
+      font-size: max(16px, 1em) !important;
+    }
+  }
 }
 
 @layer components {
@@ -1340,7 +1349,7 @@
 }
 
 .is-native .pb-safe-modal {
-  padding-bottom: calc(var(--sai-bottom) + 8px);
+  padding-bottom: max(16px, calc(var(--sai-bottom) + 8px));
 }
 
 @media (orientation: landscape) {

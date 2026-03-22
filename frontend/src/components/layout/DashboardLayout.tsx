@@ -122,7 +122,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         {!isPublic && <meta name="robots" content="noindex, nofollow" />}
       </Head>
 
-      <div className="dashboard-scroll-root flex-1 overflow-y-auto bg-surface-50 bg-gradient-mesh">
+      <div className="dashboard-scroll-root flex-1 overflow-y-auto overflow-x-hidden bg-surface-50 bg-gradient-mesh">
         {/* Offline indicator — shown on native when network is lost */}
         <OfflineBanner />
         {/* Dark mode decorative background — teal/blue glows + cubes pattern */}

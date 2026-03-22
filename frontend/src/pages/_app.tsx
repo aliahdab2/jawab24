@@ -86,6 +86,18 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       }).catch(() => {});
     }, 3000);
 
+    // iOS: lock viewport scale to prevent auto-zoom when focusing inputs.
+    // WKWebView zooms on input focus even with font-size >= 16px in some cases,
+    // permanently distorting the layout. This is standard for Capacitor apps.
+    // Only applied on native to preserve accessibility zoom on web.
+    import("@capacitor/core").then(({ Capacitor }) => {
+      if (!Capacitor.isNativePlatform()) return;
+      const viewport = document.querySelector('meta[name="viewport"]');
+      if (viewport) {
+        viewport.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+      }
+    }).catch(() => {});
+
     // Configure StatusBar overlay EARLY (before full init) for consistent safe areas
     import("@capacitor/status-bar").then(({ StatusBar, Style }) => {
       StatusBar.setOverlaysWebView({ overlay: true }).catch((e) => addErrorBreadcrumb('capacitor', 'StatusBar overlay init failed', { error: String(e) }));
@@ -111,10 +123,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       });
     }).catch(() => {});
 
-    // Track keyboard height via visualViewport API (web standard).
-    // KeyboardResize.Body resizes <body> but fixed-position modals use viewport units,
-    // so they need --keyboard-height to cap their max-height correctly.
-    // visualViewport is more accurate than Capacitor Keyboard events and works on web too.
+    // Track keyboard height via visualViewport API.
+    // With KeyboardResize.None on iOS, visualViewport accurately reflects keyboard height.
+    // Capacitor keyboard events serve as backup (added in initNativePlatform).
     const vv = window.visualViewport;
     if (vv) {
       const updateKeyboardHeight = () => {
@@ -165,15 +176,34 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       ]);
 
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Keyboard plugin type lacks 'body' mode
-        await Keyboard.setResizeMode({ mode: 'body' } as any);
+        // Config uses KeyboardResize.None (required for iOS — 'body' distorts WKWebView layout).
+        // Android works correctly with 'body' mode, so override at runtime.
+        const { getCapacitor } = await import('@/lib/capacitor');
+        if (getCapacitor()?.getPlatform() === 'android') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Keyboard plugin type lacks 'body' mode
+          await Keyboard.setResizeMode({ mode: 'body' } as any);
+        }
       } catch (err) {
         addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
       }
 
+      // iOS fix: visualViewport resize events are unreliable in WKWebView with KeyboardResize.Body.
+      // Use Capacitor Keyboard plugin events which fire reliably on native platforms.
+      // These listeners only fire on iOS/Android, so web behavior is unaffected.
+      const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
+        document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
+      });
+      const kbHideListener = await Keyboard.addListener('keyboardWillHide', () => {
+        document.documentElement.style.setProperty('--keyboard-height', '0px');
+      });
+
       // Clear existing listeners if any (prevent duplicates)
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
+
+      // Register keyboard listeners for cleanup
+      listenersRef.current.push(() => kbShowListener.remove());
+      listenersRef.current.push(() => kbHideListener.remove());
 
       // Handle hardware back button (Android) - Industry Standard
       // Exit app when on root screens, otherwise go back in history

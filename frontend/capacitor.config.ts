@@ -21,7 +21,10 @@ const config: CapacitorConfig = {
   },
   plugins: {
     Keyboard: {
-      resize: KeyboardResize.Body,
+      // Use 'none' — keyboard overlays content without resizing.
+      // Android overrides to 'body' at runtime in _app.tsx (works correctly on Android WebView).
+      // iOS must use 'none' because 'body' permanently distorts the WKWebView layout.
+      resize: KeyboardResize.None,
     },
     StatusBar: {
       overlaysWebView: true,

@@ -94,7 +94,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       // Delay to let the keyboard fully open and viewport resize
       setTimeout(() => {
         textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
+      }, 500);
     };
     textarea.addEventListener('focus', handleFocus);
     return () => textarea.removeEventListener('focus', handleFocus);
@@ -203,12 +203,13 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
-      onTouchMove={(e) => e.preventDefault()}
-      onWheel={(e) => e.preventDefault()}
+      className="fixed inset-x-0 top-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
+      style={{ bottom: 'var(--keyboard-height, 0px)' }}
+      onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
+      onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
       <div
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl min-h-[min(68dvh,calc(100dvh-var(--keyboard-height,0px)))] sm:min-h-0 max-h-[calc(100dvh-var(--sai-top)-var(--keyboard-height,0px)-8px)] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >

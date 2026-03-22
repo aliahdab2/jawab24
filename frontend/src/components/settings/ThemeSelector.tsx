@@ -16,19 +16,19 @@ export function ThemeSelector() {
 
   return (
     <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.3)] p-5 landscape:p-3">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center flex-shrink-0 landscape:w-10 landscape:h-10 landscape:rounded-xl">
             {theme === 'dark' ? (
-              <Moon className="w-6 h-6 landscape:w-5 landscape:h-5" />
+              <Moon className="w-5 h-5 landscape:w-5 landscape:h-5" />
             ) : theme === 'light' ? (
-              <Sun className="w-6 h-6 landscape:w-5 landscape:h-5" />
+              <Sun className="w-5 h-5 landscape:w-5 landscape:h-5" />
             ) : (
-              <Monitor className="w-6 h-6 landscape:w-5 landscape:h-5" />
+              <Monitor className="w-5 h-5 landscape:w-5 landscape:h-5" />
             )}
           </div>
-          <div className="text-start">
-            <h3 className="font-bold text-foreground text-base landscape:text-sm">
+          <div className="text-start min-w-0">
+            <h3 className="font-bold text-foreground text-sm landscape:text-sm">
               {t('theme')}
             </h3>
           </div>
