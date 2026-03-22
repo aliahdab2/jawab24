@@ -46,15 +46,12 @@ export function LandingFAQ() {
     <section className="py-12 sm:py-20 lg:py-32 bg-surface-50 relative overflow-hidden" ref={ref}>
       {/* Subtle background depth */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div
-          className="absolute top-1/4 start-0 w-[400px] h-[400px] rounded-full opacity-30"
-          style={{ background: 'radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)' }}
-        />
+        <div className="absolute top-1/4 start-0 w-[400px] h-[400px] rounded-full opacity-30 landing-glow-violet" />
       </div>
 
       {/* Dark mode glow — top-right */}
       <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div className="absolute -top-1/4 -end-1/4 w-[500px] h-[500px] bg-[radial-gradient(circle,rgba(79,116,178,0.08),transparent_70%)]" />
+        <div className="absolute -top-1/4 -end-1/4 w-[500px] h-[500px] landing-dark-glow-soft" />
       </div>
 
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">

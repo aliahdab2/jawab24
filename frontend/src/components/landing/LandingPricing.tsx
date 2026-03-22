@@ -41,7 +41,7 @@ export function LandingPricing() {
     <section id="pricing" className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden" ref={ref}>
       {/* Dark mode glow — bottom-left */}
       <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div className="absolute -bottom-1/4 -start-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,116,178,0.10),transparent_70%)]" />
+        <div className="absolute -bottom-1/4 -start-1/4 w-[600px] h-[600px] landing-dark-glow" />
       </div>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <motion.div

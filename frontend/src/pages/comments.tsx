@@ -6,7 +6,10 @@ import { useRouter } from 'next/router';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
-import { CommentDetailModal, CommentCard } from '@/components/comments';
+import dynamic from 'next/dynamic';
+import { CommentCard } from '@/components/comments';
+
+const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useDebounce } from '@/hooks';
 import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';

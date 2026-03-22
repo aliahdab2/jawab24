@@ -6,7 +6,9 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { MessageCard, type Conversation } from '@/components/messages';
-import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
+import dynamic from 'next/dynamic';
+
+const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useDebounce, useConversationActions } from '@/hooks';
 import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';

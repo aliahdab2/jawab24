@@ -657,6 +657,30 @@
     @apply bg-[#2DC0C8]/10 text-[#2DC0C8] hover:bg-[#2DC0C8] hover:text-white;
   }
 
+  /* Decorative radial glow orbs for landing sections */
+  .landing-glow-cyan {
+    background: radial-gradient(circle, rgba(14,165,233,0.08) 0%, transparent 70%);
+  }
+  .landing-glow-violet {
+    background: radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%);
+  }
+  .landing-glow-emerald {
+    background: radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%);
+  }
+  .landing-glow-emerald-soft {
+    background: radial-gradient(circle, rgba(16,185,129,0.06) 0%, transparent 70%);
+  }
+  /* Dark mode navy glow variants — used across landing sections */
+  .landing-dark-glow {
+    background: radial-gradient(circle, rgba(79,116,178,0.10), transparent 70%);
+  }
+  .landing-dark-glow-soft {
+    background: radial-gradient(circle, rgba(79,116,178,0.08), transparent 70%);
+  }
+  .landing-dark-glow-strong {
+    background: radial-gradient(circle, rgba(79,116,178,0.12), transparent 70%);
+  }
+
   .gradient-text {
     @apply bg-gradient-to-r from-brand-600 to-accent-500 bg-clip-text text-transparent;
     padding-bottom: 0.1em;

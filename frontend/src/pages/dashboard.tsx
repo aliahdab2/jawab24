@@ -4,7 +4,10 @@ import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, PageHeader, Button, PageSkeleton } from '@/components/ui';
-import { OnboardingWizard } from '@/components/onboarding';
+import dynamic from 'next/dynamic';
+
+const OnboardingWizard = dynamic(() => import('@/components/onboarding').then(m => ({ default: m.OnboardingWizard })), { ssr: false });
+
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 
@@ -29,8 +32,8 @@ import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
-import { CommentDetailModal } from '@/components/comments';
-import { MessageDetailModal } from '@/components/messages/MessageDetailModal';
+const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
+const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useConversationActions } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 

@@ -64,15 +64,12 @@ export function LandingHowItWorks({ isAuthenticated }: LandingHowItWorksProps) {
     <section className="py-12 sm:py-20 lg:py-32 bg-background relative overflow-hidden" ref={ref}>
       {/* Subtle background depth */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div
-          className="absolute top-1/3 end-0 w-[400px] h-[400px] rounded-full opacity-30"
-          style={{ background: 'radial-gradient(circle, rgba(16,185,129,0.1) 0%, transparent 70%)' }}
-        />
+        <div className="absolute top-1/3 end-0 w-[400px] h-[400px] rounded-full opacity-30 landing-glow-emerald" />
       </div>
 
       {/* Dark mode glow — center-right */}
       <div className="hidden dark:block absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div className="absolute top-1/4 -end-1/4 w-[600px] h-[600px] bg-[radial-gradient(circle,rgba(79,116,178,0.10),transparent_70%)]" />
+        <div className="absolute top-1/4 -end-1/4 w-[600px] h-[600px] landing-dark-glow" />
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">

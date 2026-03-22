@@ -25,7 +25,9 @@ import {
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
-import { KnowledgeBaseModal } from '@/components/knowledge-base/KnowledgeBaseModal';
+import dynamic from 'next/dynamic';
+
+const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
