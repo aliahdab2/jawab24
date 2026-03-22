@@ -33,6 +33,7 @@ import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import type { Comment, Page } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
+import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -380,10 +381,7 @@ const CommentsPage: NextPageWithLayout = () => {
     if (!selectedComment?.pageId) return undefined;
     const page = pageById.get(selectedComment.pageId);
     if (!page) return undefined;
-    if (selectedComment.source === 'instagram' && page.instagramUsername) {
-      return `https://instagram.com/${page.instagramUsername}`;
-    }
-    return `https://facebook.com/${page.facebookPageId}`;
+    return getPageExternalUrl(page, selectedComment.source);
   }, [selectedComment, pageById]);
 
   // Platform visibility — only recomputes when pages data changes

@@ -31,6 +31,7 @@ import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionIte
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
@@ -503,7 +504,7 @@ const DashboardPage: NextPageWithLayout = () => {
     if (!selectedConversation) return undefined;
     const page = pages.find(p => p.id === selectedConversation.lastMessage.pageId);
     if (!page) return undefined;
-    return `https://facebook.com/${page.facebookPageId}`;
+    return getPageExternalUrl(page);
   }, [selectedConversation, pages]);
 
   // Dashboard Skeleton Loading State
@@ -971,9 +972,7 @@ const DashboardPage: NextPageWithLayout = () => {
       {selectedCommentData && (() => {
         const commentPage = pages.find(p => p.id === selectedCommentData.comment.pageId);
         const commentPageUrl = commentPage
-          ? (selectedCommentData.comment.source === 'instagram' && commentPage.instagramUsername
-            ? `https://instagram.com/${commentPage.instagramUsername}`
-            : `https://facebook.com/${commentPage.facebookPageId}`)
+          ? getPageExternalUrl(commentPage, selectedCommentData.comment.source)
           : undefined;
         return (
           <CommentDetailModal

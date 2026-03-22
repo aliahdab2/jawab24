@@ -30,6 +30,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
+import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
@@ -343,7 +344,7 @@ const MessagesPage: NextPageWithLayout = () => {
     if (!selectedConversation) return undefined;
     const page = pages.find(p => p.id === selectedConversation.lastMessage.pageId);
     if (!page) return undefined;
-    return `https://facebook.com/${page.facebookPageId}`;
+    return getPageExternalUrl(page);
   }, [selectedConversation, pages]);
 
   // Intersection Observer
