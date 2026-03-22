@@ -5,8 +5,9 @@ import {
   Zap,
   AlertTriangle,
   ArrowRight,
-  MessageCircle,
   Mail,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
@@ -41,51 +42,36 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
   const hasError = settings.businessHoursEnd <= settings.businessHoursStart;
 
+  // Compute current status
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: settings.timezone,
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(currentTime);
+  const nowTime = `${parts.find(p => p.type === 'hour')?.value || '00'}:${parts.find(p => p.type === 'minute')?.value || '00'}`;
+  const isActive = settings.businessHoursOnly && nowTime >= settings.businessHoursStart && nowTime < settings.businessHoursEnd;
+
+  // Character limit for away messages (Messenger recommendation)
+  const currentLang = settings.dashboardLanguage;
+  const awayValue = settings.awayMessageMulti?.[currentLang] || '';
+  const sourceLang = settings.awayMessageMulti?.sourceLang;
+  const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+  const displayValue = isAutoTranslated ? '' : awayValue;
+  const placeholder = isAutoTranslated && awayValue ? awayValue : t('awayMessagePlaceholder');
+  const maxChars = 500;
+
   return (
     <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">
-      <div className="flex items-center justify-between mb-6 landscape:mb-3">
-        <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.businessHoursOnly ? 'icon-bg-brand' : 'bg-muted text-muted-foreground'}`}>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5 landscape:mb-3">
+        <div className="flex items-center gap-3">
+          <div className={clsx(
+            'w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8',
+            settings.businessHoursOnly ? 'icon-bg-brand' : 'bg-muted text-muted-foreground'
+          )}>
             <Clock className="w-4 h-4" />
           </div>
           <div className="text-start">
-            <div className="flex items-center gap-2">
-              <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('businessHoursLabel')}</h4>
-              {settings.businessHoursOnly && (() => {
-                const parts = new Intl.DateTimeFormat('en-US', {
-                  timeZone: settings.timezone,
-                  hour: '2-digit', minute: '2-digit', hour12: false,
-                }).formatToParts(currentTime);
-                const now = `${parts.find(p => p.type === 'hour')?.value || '00'}:${parts.find(p => p.type === 'minute')?.value || '00'}`;
-                const isActive = now >= settings.businessHoursStart && now < settings.businessHoursEnd;
-                return (
-                  <button
-                    onClick={() => {
-                      const updates: Record<string, unknown> = { businessHoursOnly: !settings.businessHoursOnly };
-                      if (!settings.businessHoursOnly) {
-                        const defaultMsg = t('awayMessageDefault');
-                        const currentLang = settings.dashboardLanguage;
-                        if (!settings.awayMessageMulti?.[currentLang]) {
-                          updates.awayMessageMulti = {
-                            ...settings.awayMessageMulti,
-                            [currentLang]: defaultMsg
-                          };
-                        }
-                      }
-                      setSettings({ ...settings, ...updates });
-                    }}
-                    className={clsx(
-                      'px-2 py-0.5 rounded-full text-[10px] font-bold transition-all animate-in fade-in',
-                      isActive
-                        ? 'status-success hover:bg-emerald-200 dark:hover:bg-emerald-900/50'
-                        : 'status-error hover:bg-red-200 dark:hover:bg-red-900/50'
-                    )}
-                  >
-                    {isActive ? '🟢' : '🔴'} {isActive ? t('businessHours.statusActive') : t('businessHours.statusInactive')}
-                  </button>
-                );
-              })()}
-            </div>
+            <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('businessHoursLabel')}</h4>
             <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('businessHoursDesc')}</p>
           </div>
         </div>
@@ -94,142 +80,153 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
 
       <div
         className={clsx(
-          "space-y-4 transition-opacity duration-300",
-          !settings.businessHoursOnly && "opacity-50 pointer-events-none"
+          'space-y-4 transition-all duration-300',
+          !settings.businessHoursOnly && 'opacity-50 pointer-events-none'
         )}
       >
-          {/* Visual Flow */}
-          <div className="mt-3 mb-4 space-y-3 p-4 rounded-xl bg-muted border border-theme-border">
-            {/* During Hours */}
-            <div className="flex items-center justify-center gap-3">
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl icon-bg-green flex items-center justify-center">
-                  <Clock className="w-7 h-7" />
-                </div>
-                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('businessHours.duringLabel')}
+        {/* Inline Status + Visual Flow — compact */}
+        <div className="rounded-xl bg-muted border border-theme-border p-4 landscape:p-3">
+          {/* Status indicator */}
+          {settings.businessHoursOnly && (
+            <div className={clsx(
+              'flex items-center gap-2 mb-3 px-3 py-2 rounded-lg text-xs font-semibold',
+              isActive
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300'
+                : 'bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+            )}>
+              <span className={clsx(
+                'w-2 h-2 rounded-full flex-shrink-0',
+                isActive ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+              )} />
+              {isActive ? t('businessHours.statusActive') : t('businessHours.statusInactive')}
+              {!isActive && (
+                <span className="text-muted-foreground font-normal ms-auto">
+                  {t('businessHours.resumesAt', { time: settings.businessHoursStart })}
                 </span>
+              )}
+            </div>
+          )}
+
+          {/* Compact flow: two rows side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            {/* During hours */}
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card">
+              <div className="w-9 h-9 rounded-xl icon-bg-green flex items-center justify-center flex-shrink-0">
+                <Sun className="w-4 h-4" />
               </div>
-              <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl icon-bg-brand flex items-center justify-center">
-                  <Zap className="w-7 h-7" />
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
+                <div className="w-7 h-7 rounded-lg icon-bg-brand flex items-center justify-center flex-shrink-0">
+                  <Zap className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('businessHours.autoReplyActive')}
-                </span>
+                <span className="text-[11px] font-semibold text-foreground truncate">{t('businessHours.autoReplyActive')}</span>
               </div>
             </div>
 
-            {/* Outside Hours */}
-            <div className="flex items-center justify-center gap-3">
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl icon-bg-purple flex items-center justify-center">
-                  <Clock className="w-7 h-7" />
-                </div>
-                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('businessHours.outsideLabel')}
-                </span>
+            {/* Outside hours */}
+            <div className="flex items-center gap-2.5 p-2.5 rounded-lg bg-card">
+              <div className="w-9 h-9 rounded-xl icon-bg-purple flex items-center justify-center flex-shrink-0">
+                <Moon className="w-4 h-4" />
               </div>
-              <ArrowRight className="w-5 h-5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
-              <div className="flex flex-col items-center gap-1.5">
-                <div className="w-14 h-14 rounded-2xl icon-bg-orange flex items-center justify-center">
-                  <Mail className="w-7 h-7" />
+              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                <ArrowRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 rtl:rotate-180" />
+                <div className="w-7 h-7 rounded-lg icon-bg-orange flex items-center justify-center flex-shrink-0">
+                  <Mail className="w-3.5 h-3.5" />
                 </div>
-                <span className="text-xs font-bold text-foreground text-center leading-tight max-w-[80px]">
-                  {t('businessHours.awayMessage')}
-                </span>
+                <span className="text-[11px] font-semibold text-foreground truncate">{t('businessHours.awayMessage')}</span>
               </div>
             </div>
-          </div>
-
-          {/* Time pickers */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-6 landscape:gap-4 p-5 landscape:p-3 rounded-2xl bg-muted border border-theme-border">
-              <div>
-                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('businessHoursStart')}</label>
-                <Select
-                  value={settings.businessHoursStart}
-                  onChange={(val) => setSettings({ ...settings, businessHoursStart: val })}
-                  options={timeSlots}
-                  disabled={!settings.businessHoursOnly}
-                  className={clsx(
-                    "!py-3 font-bold border-none bg-card shadow-sm",
-                    hasError && settings.businessHoursOnly && "!border-2 !border-red-300"
-                  )}
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{t('businessHoursEnd')}</label>
-                <Select
-                  value={settings.businessHoursEnd}
-                  onChange={(val) => setSettings({ ...settings, businessHoursEnd: val })}
-                  options={timeSlots}
-                  disabled={!settings.businessHoursOnly}
-                  className={clsx(
-                    "!py-3 font-bold border-none bg-card shadow-sm",
-                    hasError && settings.businessHoursOnly && "!border-2 !border-red-300"
-                  )}
-                />
-              </div>
-            </div>
-
-            {/* Error Message */}
-            {hasError && settings.businessHoursOnly && (
-              <div className="flex items-start gap-2 p-3 rounded-xl alert-error border animate-in fade-in slide-in-from-top-1">
-                <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-red-700">{t('businessHoursErrorMsg')}</p>
-                  <p className="text-xs text-red-600 mt-0.5">{t('businessHoursError.hint')}</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Away Message */}
-          <div className="p-5 landscape:p-3 rounded-2xl bg-muted border border-theme-border">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-muted text-muted-foreground flex items-center justify-center">
-                <MessageCircle className="w-4 h-4" />
-              </div>
-              <div className="text-start">
-                  <h5 className="font-bold text-foreground text-sm">{t('awayMessage.title')}</h5>
-                <p className="text-[11px] text-muted-foreground font-medium">{t('awayMessage.desc')}</p>
-              </div>
-            </div>
-
-            {(() => {
-              const currentLang = settings.dashboardLanguage;
-              const value = settings.awayMessageMulti?.[currentLang] || '';
-              const sourceLang = settings.awayMessageMulti?.sourceLang;
-              const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-              const displayValue = isAutoTranslated ? '' : value;
-              const placeholder = isAutoTranslated && value ? value : t('awayMessagePlaceholder');
-
-              return (
-                <textarea
-                  disabled={!settings.businessHoursOnly}
-                  aria-label={t('awayMessage.title')}
-                  className="input min-h-[56px] landscape:min-h-[44px] border-none bg-card focus:ring-2 focus:ring-brand-500 p-3 rounded-xl text-sm placeholder:text-muted-foreground placeholder:italic"
-                  placeholder={placeholder}
-                  dir={displayValue ? 'auto' : undefined}
-                  value={displayValue}
-                  onChange={(e) => {
-                    const newValue = e.target.value;
-                    setSettings({
-                      ...settings,
-                      awayMessageMulti: {
-                        ...settings.awayMessageMulti,
-                        [currentLang]: newValue,
-                        sourceLang: currentLang
-                      }
-                    });
-                  }}
-                />
-              );
-            })()}
           </div>
         </div>
-      </Card>
+
+        {/* Time pickers — inline style */}
+        <div className="rounded-2xl bg-muted border border-theme-border p-5 landscape:p-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('businessHoursStart')}</label>
+              <Select
+                value={settings.businessHoursStart}
+                onChange={(val) => setSettings({ ...settings, businessHoursStart: val })}
+                options={timeSlots}
+                disabled={!settings.businessHoursOnly}
+                className={clsx(
+                  '!py-3 font-bold border-none bg-card shadow-sm',
+                  hasError && settings.businessHoursOnly && '!border-2 !border-red-300'
+                )}
+              />
+            </div>
+            <div className="text-muted-foreground font-bold text-lg mt-5">–</div>
+            <div className="flex-1">
+              <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{t('businessHoursEnd')}</label>
+              <Select
+                value={settings.businessHoursEnd}
+                onChange={(val) => setSettings({ ...settings, businessHoursEnd: val })}
+                options={timeSlots}
+                disabled={!settings.businessHoursOnly}
+                className={clsx(
+                  '!py-3 font-bold border-none bg-card shadow-sm',
+                  hasError && settings.businessHoursOnly && '!border-2 !border-red-300'
+                )}
+              />
+            </div>
+          </div>
+
+          {/* Error Message */}
+          {hasError && settings.businessHoursOnly && (
+            <div className="flex items-start gap-2 p-3 mt-3 rounded-xl alert-error border animate-in fade-in slide-in-from-top-1">
+              <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="text-sm font-bold text-red-700">{t('businessHoursErrorMsg')}</p>
+                <p className="text-xs text-red-600 mt-0.5">{t('businessHoursError.hint')}</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Away Message */}
+        <div className="p-5 landscape:p-3 rounded-2xl bg-muted border border-theme-border">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 rounded-lg icon-bg-orange flex items-center justify-center">
+              <Mail className="w-4 h-4" />
+            </div>
+            <div className="text-start flex-1">
+              <h5 className="font-bold text-foreground text-sm">{t('awayMessage.title')}</h5>
+              <p className="text-[11px] text-muted-foreground font-medium">{t('awayMessage.desc')}</p>
+            </div>
+          </div>
+
+          <div className="relative">
+            <textarea
+              disabled={!settings.businessHoursOnly}
+              aria-label={t('awayMessage.title')}
+              className="input min-h-[72px] landscape:min-h-[44px] border-none bg-card focus:ring-2 focus:ring-brand-500 p-3 pb-7 rounded-xl text-sm placeholder:text-muted-foreground placeholder:italic w-full"
+              placeholder={placeholder}
+              dir={displayValue ? 'auto' : undefined}
+              maxLength={maxChars}
+              value={displayValue}
+              onChange={(e) => {
+                const newValue = e.target.value;
+                setSettings({
+                  ...settings,
+                  awayMessageMulti: {
+                    ...settings.awayMessageMulti,
+                    [currentLang]: newValue,
+                    sourceLang: currentLang
+                  }
+                });
+              }}
+            />
+            <span className={clsx(
+              'absolute bottom-2 end-3 text-[10px] font-medium',
+              displayValue.length > maxChars * 0.9
+                ? 'text-red-500'
+                : 'text-muted-foreground'
+            )}>
+              {displayValue.length}/{maxChars}
+            </span>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }

@@ -112,7 +112,8 @@
     "autoReplyActive": "Auto-Reply Active",
     "awayMessage": "Away Message",
     "flowDesc": "Auto-reply is active during business hours. Outside these hours, an away message is sent.",
-    "custom": "Custom"
+    "custom": "Custom",
+    "resumesAt": "Resumes at {time}"
   },
   "businessHoursStart": "From",
   "businessHoursEnd": "To",

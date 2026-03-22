@@ -112,7 +112,8 @@
     "autoReplyActive": "الرد التلقائي نشط",
     "awayMessage": "رسالة غياب",
     "flowDesc": "الرد التلقائي نشط خلال ساعات العمل. خارج هذه الساعات، تُرسل رسالة غياب.",
-    "custom": "مخصص"
+    "custom": "مخصص",
+    "resumesAt": "يستأنف عند {time}"
   },
   "businessHoursStart": "بداية الدوام",
   "businessHoursEnd": "نهاية الدوام",
