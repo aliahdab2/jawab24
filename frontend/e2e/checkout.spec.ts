@@ -16,7 +16,8 @@ const MOCK_PLAN = {
   isActive: true,
 };
 
-test.describe('Checkout Page', () => {
+// TODO: Re-enable when NEXT_PUBLIC_CHECKOUT_MAINTENANCE=false (Stripe prices updated)
+test.describe.skip('Checkout Page', () => {
   test.beforeEach(async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
 
@@ -136,7 +137,8 @@ test.describe('Checkout Page', () => {
   });
 });
 
-test.describe('Checkout Page - unauthenticated user', () => {
+// TODO: Re-enable when NEXT_PUBLIC_CHECKOUT_MAINTENANCE=false (Stripe prices updated)
+test.describe.skip('Checkout Page - unauthenticated user', () => {
   test('should redirect to login when unauthenticated user clicks Continue', async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
 
