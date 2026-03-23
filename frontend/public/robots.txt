@@ -49,5 +49,27 @@ Disallow: /en/rules
 Disallow: /en/settings
 Disallow: /en/auth/
 
+# AI Crawlers - Explicit Allow
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: cohere-ai
+Allow: /
+
 # Sitemap
 Sitemap: https://jawab24.com/sitemap.xml

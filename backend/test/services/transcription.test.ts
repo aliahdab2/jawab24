@@ -49,7 +49,7 @@ describe('TranscriptionService', () => {
 
         expect(result).toEqual({ text: 'كم سعر المنتج؟' });
         expect(mockCreate).toHaveBeenCalledWith(
-            expect.objectContaining({ model: 'whisper-1', language: 'ar' }),
+            expect.objectContaining({ model: 'gpt-4o-mini-transcribe', language: 'ar' }),
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         );
     });
