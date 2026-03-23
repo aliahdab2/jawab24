@@ -39,7 +39,7 @@ export const PAGE_NAMESPACES = {
   completeProfile:    ['profile'],
 
   // ── Payment flow ──────────────────────────────────────────────
-  checkout:           ['checkout', 'payment', 'plans', 'pricing'],
+  checkout:           ['checkout', 'payment', 'plans', 'pricing', 'landing'],
   paymentSuccess:     ['payment'],
   paymentCancel:      ['payment'],
 
