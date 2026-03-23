@@ -9,6 +9,13 @@ const WHISPER_TIMEOUT_MS = 15_000;
 /** Maximum audio file size (10 MB) — prevents OOM from malformed responses */
 const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
+/** Fast + cheap — for reply pipeline (customer voice messages) */
+const MODEL_PIPELINE = 'gpt-4o-mini-transcribe';
+/** Most accurate — for KB voice input (merchant dictation, dialect-heavy) */
+const MODEL_ACCURATE = 'gpt-4o-transcribe';
+
+export type TranscriptionQuality = 'fast' | 'accurate';
+
 export interface TranscriptionResult {
     text: string;
 }
@@ -24,15 +31,17 @@ class TranscriptionService {
     }
 
     /**
-     * Transcribe an audio file from a URL using OpenAI Whisper.
+     * Transcribe an audio file from a URL using OpenAI transcription.
      * Returns the transcription text or null on any failure.
      *
      * @param audioUrl - Direct URL to the audio file (Facebook includes access token)
      * @param languageHint - ISO 639-1 code ('ar', 'en') to improve accuracy
+     * @param quality - 'fast' for pipeline (gpt-4o-mini), 'accurate' for KB voice input (gpt-4o)
      */
     async transcribe(
         audioUrl: string,
         languageHint?: string,
+        quality: TranscriptionQuality = 'fast',
     ): Promise<TranscriptionResult | null> {
         const client = this.getClient();
         if (!client) return null;
@@ -79,7 +88,7 @@ class TranscriptionService {
                 const file = await toFile(audioBuffer, 'voice.mp4', { type: 'audio/mp4' });
                 const transcription = await client.audio.transcriptions.create({
                     file,
-                    model: 'whisper-1',
+                    model: quality === 'accurate' ? MODEL_ACCURATE : MODEL_PIPELINE,
                     ...(languageHint ? { language: languageHint } : {}),
                 }, { signal: whisperController.signal });
 
