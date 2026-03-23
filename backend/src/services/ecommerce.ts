@@ -662,14 +662,10 @@ export async function replaceProductsAndRebuildSummary(
         imageUrl?: string | null;
     }>,
 ): Promise<{ synced: number }> {
-    // Enforce plan product limit
-    const store = await getStoreById(storeId);
-    if (store?.userId) {
-        const { subscriptionsService } = await import('./subscriptions');
-        const maxProducts = await subscriptionsService.getMaxProducts(store.userId);
-        if (maxProducts !== null && products.length > maxProducts) {
-            products = products.slice(0, maxProducts);
-        }
+    // Safety cap: prevent abuse (no store realistically has 5000+ products)
+    const PRODUCT_SAFETY_CAP = 5000;
+    if (products.length > PRODUCT_SAFETY_CAP) {
+        products = products.slice(0, PRODUCT_SAFETY_CAP);
     }
 
     // Atomic replacement: delete old + insert new

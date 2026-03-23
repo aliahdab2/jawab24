@@ -79,6 +79,7 @@
   "shopifyBadge": "يشمل ربط شوبيفاي وسلة",
   "ecommerceBadgeTitle": "ربط المتاجر الإلكترونية",
   "ecommerceBadgePlatforms": "شوبيفاي · سلة",
+  "ecommerceIntegration": "ربط المتاجر الإلكترونية",
   "ecommerceProducts": "{count, plural, zero {لا منتجات} one {منتج واحد} two {منتجان} few {# منتجات} many {# منتج} other {# منتج}}",
   "ecommerceProductsUnlimited": "منتجات غير محدودة",
   "usageReplies": "الردود: {used}/{limit}",

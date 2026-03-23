@@ -219,19 +219,19 @@ function PlanCard({
           text={t('pricing.brandingHidden')}
         />
 
-        <FeatureRow
-          included={plan.ecommerceEnabled}
-          text={plan.maxProducts == null
-            ? t('pricing.ecommerceProductsUnlimited')
-            : t('pricing.ecommerceProducts', { count: plan.maxProducts })}
-          subtext={t('pricing.ecommerceBadgePlatforms')}
-          subtextIcons={
-            <>
-              <ShopifyIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0" />
-              <SallaIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0 text-[#00b4b6]" />
-            </>
-          }
-        />
+        {plan.ecommerceEnabled && (
+          <FeatureRow
+            included={true}
+            text={t('pricing.ecommerceIntegration')}
+            subtext={t('pricing.ecommerceBadgePlatforms')}
+            subtextIcons={
+              <>
+                <ShopifyIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0" />
+                <SallaIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0 text-[#00b4b6]" />
+              </>
+            }
+          />
+        )}
 
       </div>
 
