@@ -15,85 +15,105 @@ export type NotificationType =
     | 'skipped_reply'
     | 'new_comment'
     | 'stale_comment'
+    | 'stale_message'
     | 'kb_gap'
     | 'provider_failover';
 
 export interface NotificationPayload {
     type: NotificationType;
-    titleEn: string;
-    titleAr: string;
-    bodyEn: string;
-    bodyAr: string;
+    titles: Record<string, string>;  // { en: '...', ar: '...', fr: '...' }
+    bodies: Record<string, string>;  // { en: '...', ar: '...', fr: '...' }
     data?: Record<string, unknown>;
 }
 
-// Notification templates
-export const NOTIFICATION_TEMPLATES: Record<NotificationType, Omit<NotificationPayload, 'type' | 'data'>> = {
+/** Default fallback language when the requested locale has no translation */
+const FALLBACK_LANG = 'en';
+
+// Notification templates — keyed by locale for easy multi-language expansion
+export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationPayload, 'titles' | 'bodies'>> = {
     payment_failed: {
-        titleEn: 'Payment Failed',
-        titleAr: 'فشل الدفع',
-        bodyEn: 'We couldn\'t process your payment. Please update your payment method to continue using Jawab24.',
-        bodyAr: 'لم نتمكن من معالجة الدفع. يرجى تحديث طريقة الدفع لمواصلة استخدام Jawab24.',
+        titles: { en: 'Payment Failed', ar: 'فشل الدفع' },
+        bodies: {
+            en: 'We couldn\'t process your payment. Please update your payment method to continue using Jawab24.',
+            ar: 'لم نتمكن من معالجة الدفع. يرجى تحديث طريقة الدفع لمواصلة استخدام Jawab24.',
+        },
     },
     subscription_expiring: {
-        titleEn: 'Subscription Expiring Soon',
-        titleAr: 'اشتراكك ينتهي قريباً',
-        bodyEn: 'Your subscription expires in {days} days. Renew now to avoid service interruption.',
-        bodyAr: 'ينتهي اشتراكك خلال {days} أيام. جدد الآن لتجنب انقطاع الخدمة.',
+        titles: { en: 'Subscription Expiring Soon', ar: 'اشتراكك ينتهي قريباً' },
+        bodies: {
+            en: 'Your subscription expires in {days} days. Renew now to avoid service interruption.',
+            ar: 'ينتهي اشتراكك خلال {days} أيام. جدد الآن لتجنب انقطاع الخدمة.',
+        },
     },
     page_disconnected: {
-        titleEn: 'Page Disconnected',
-        titleAr: 'تم فصل الصفحة',
-        bodyEn: 'Your page \'{pageName}\' has been disconnected. Please reconnect to resume auto-replies.',
-        bodyAr: 'تم فصل صفحتك \'{pageName}\'. يرجى إعادة الاتصال لاستئناف الرد التلقائي.',
+        titles: { en: 'Page Disconnected', ar: 'تم فصل الصفحة' },
+        bodies: {
+            en: 'Your page \'{pageName}\' has been disconnected. Please reconnect to resume auto-replies.',
+            ar: 'تم فصل صفحتك \'{pageName}\'. يرجى إعادة الاتصال لاستئناف الرد التلقائي.',
+        },
     },
     subscription_renewed: {
-        titleEn: 'Subscription Renewed',
-        titleAr: 'تم تجديد الاشتراك',
-        bodyEn: 'Your subscription has been successfully renewed. Thank you for using Jawab24!',
-        bodyAr: 'تم تجديد اشتراكك بنجاح. شكراً لاستخدامك Jawab24!',
+        titles: { en: 'Subscription Renewed', ar: 'تم تجديد الاشتراك' },
+        bodies: {
+            en: 'Your subscription has been successfully renewed. Thank you for using Jawab24!',
+            ar: 'تم تجديد اشتراكك بنجاح. شكراً لاستخدامك Jawab24!',
+        },
     },
     trial_ending: {
-        titleEn: 'Trial Ending Soon',
-        titleAr: 'تنتهي الفترة التجريبية قريباً',
-        bodyEn: 'Your free trial ends in {days} days. Subscribe now to keep using Jawab24.',
-        bodyAr: 'تنتهي فترتك التجريبية المجانية خلال {days} أيام. اشترك الآن للاستمرار في استخدام Jawab24.',
+        titles: { en: 'Trial Ending Soon', ar: 'تنتهي الفترة التجريبية قريباً' },
+        bodies: {
+            en: 'Your free trial ends in {days} days. Subscribe now to keep using Jawab24.',
+            ar: 'تنتهي فترتك التجريبية المجانية خلال {days} أيام. اشترك الآن للاستمرار في استخدام Jawab24.',
+        },
     },
     flagged_reply: {
-        titleEn: 'Reply Needs Your Attention',
-        titleAr: 'رد يحتاج انتباهك',
-        bodyEn: 'A Smart Reply to "{senderName}" was flagged: {reason}. Please review it.',
-        bodyAr: 'تم وضع علامة على رد ذكي لـ "{senderName}": {reason}. يرجى مراجعته.',
+        titles: { en: 'Reply Needs Your Attention', ar: 'رد يحتاج انتباهك' },
+        bodies: {
+            en: 'A Smart Reply to "{senderName}" was flagged: {reason}. Please review it.',
+            ar: 'تم وضع علامة على رد ذكي لـ "{senderName}": {reason}. يرجى مراجعته.',
+        },
     },
     skipped_reply: {
-        titleEn: 'Auto-Reply Skipped',
-        titleAr: 'تم تخطي الرد التلقائي',
-        bodyEn: 'A reply to "{senderName}" was skipped: {reason}. Please review and reply manually.',
-        bodyAr: 'تم تخطي الرد التلقائي لـ "{senderName}": {reason}. يرجى مراجعته والرد يدوياً.',
+        titles: { en: 'Auto-Reply Skipped', ar: 'تم تخطي الرد التلقائي' },
+        bodies: {
+            en: 'A reply to "{senderName}" was skipped: {reason}. Please review and reply manually.',
+            ar: 'تم تخطي الرد التلقائي لـ "{senderName}": {reason}. يرجى مراجعته والرد يدوياً.',
+        },
     },
     new_comment: {
-        titleEn: 'New Comment',
-        titleAr: 'تعليق جديد',
-        bodyEn: 'New comment from {senderName} is waiting for your reply.',
-        bodyAr: 'تعليق جديد من {senderName} بانتظار ردك.',
+        titles: { en: 'New Comment', ar: 'تعليق جديد' },
+        bodies: {
+            en: 'New comment from {senderName} is waiting for your reply.',
+            ar: 'تعليق جديد من {senderName} بانتظار ردك.',
+        },
     },
     stale_comment: {
-        titleEn: 'Unreplied Comments Need Attention',
-        titleAr: 'تعليقات بدون رد تحتاج انتباهك',
-        bodyEn: '{count} comments waiting for your reply for over {minutes} minutes.',
-        bodyAr: '{count} تعليقات بانتظار ردك منذ أكثر من {minutes} دقيقة.',
+        titles: { en: 'Unreplied Comments Need Attention', ar: 'تعليقات بدون رد تحتاج انتباهك' },
+        bodies: {
+            en: '{count} comments waiting for your reply for over {minutes} minutes.',
+            ar: '{count} تعليقات بانتظار ردك منذ أكثر من {minutes} دقيقة.',
+        },
+    },
+    stale_message: {
+        titles: { en: 'Unreplied Messages Need Attention', ar: 'رسائل بدون رد تحتاج انتباهك' },
+        bodies: {
+            en: '{count} messages waiting for your reply for over {minutes} minutes.',
+            ar: '{count} رسائل بانتظار ردك منذ أكثر من {minutes} دقيقة.',
+        },
     },
     kb_gap: {
-        titleEn: 'Knowledge Base Gap Detected',
-        titleAr: 'فجوة في قاعدة المعرفة',
-        bodyEn: 'Customers on "{pageName}" keep asking about "{topic}" but your knowledge base doesn\'t cover it.',
-        bodyAr: 'عملاء "{pageName}" يسألون عن "{topic}" لكن قاعدة المعرفة لا تغطي هذا الموضوع.',
+        titles: { en: 'Knowledge Base Gap Detected', ar: 'فجوة في قاعدة المعرفة' },
+        bodies: {
+            en: 'Customers on "{pageName}" keep asking about "{topic}" but your knowledge base doesn\'t cover it.',
+            ar: 'عملاء "{pageName}" يسألون عن "{topic}" لكن قاعدة المعرفة لا تغطي هذا الموضوع.',
+        },
     },
     provider_failover: {
-        titleEn: 'AI Provider Failover Active',
-        titleAr: 'تم تفعيل مزود الذكاء الاصطناعي الاحتياطي',
-        bodyEn: 'OpenAI is unreachable. Replies are being generated by {fallbackModel}. Check your OpenAI account status.',
-        bodyAr: 'لا يمكن الوصول إلى OpenAI. يتم إنشاء الردود بواسطة {fallbackModel}. تحقق من حالة حساب OpenAI الخاص بك.',
+        titles: { en: 'AI Provider Failover Active', ar: 'تم تفعيل مزود الذكاء الاصطناعي الاحتياطي' },
+        bodies: {
+            en: 'OpenAI is unreachable. Replies are being generated by {fallbackModel}. Check your OpenAI account status.',
+            ar: 'لا يمكن الوصول إلى OpenAI. يتم إنشاء الردود بواسطة {fallbackModel}. تحقق من حالة حساب OpenAI الخاص بك.',
+        },
     },
 };
 
@@ -141,6 +161,32 @@ function translateFlagReason(reason: string): string {
     return reason.split(',')
         .map(f => FLAG_REASON_AR[f.trim()] || f.trim())
         .join('، ');
+}
+
+/**
+ * Replace template placeholders in a localized string map.
+ * Arabic gets special handling for `reason` (translated) and `senderName` ('Unknown' → مجهول).
+ */
+function replaceVariables(
+    templateMap: Record<string, string>,
+    variables: Record<string, string>,
+): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const [lang, text] of Object.entries(templateMap)) {
+        let resolved = text;
+        for (const [key, value] of Object.entries(variables)) {
+            const placeholder = `{${key}}`;
+            let replacement = value;
+            if (lang === 'ar' && key === 'reason') {
+                replacement = translateFlagReason(value);
+            } else if (lang === 'ar' && key === 'senderName' && value === 'Unknown') {
+                replacement = UNKNOWN_SENDER_AR;
+            }
+            resolved = resolved.replace(placeholder, replacement);
+        }
+        result[lang] = resolved;
+    }
+    return result;
 }
 
 class NotificationService {
@@ -204,13 +250,13 @@ class NotificationService {
             .select({ token: deviceTokens.token })
             .from(deviceTokens)
             .where(eq(deviceTokens.userId, userId));
-        
+
         return tokens.map(t => t.token);
     }
 
     /**
-     * Create and send a notification to a user
-     * Uses user's preferred language for push notifications
+     * Create and send a notification to a user.
+     * Stores all locale variants in JSONB; push uses user's preferred language.
      */
     async sendNotification(
         userId: string,
@@ -222,10 +268,8 @@ class NotificationService {
             .values({
                 userId,
                 type: payload.type,
-                titleEn: payload.titleEn,
-                titleAr: payload.titleAr,
-                bodyEn: payload.bodyEn,
-                bodyAr: payload.bodyAr,
+                titles: payload.titles,
+                bodies: payload.bodies,
                 data: payload.data || {},
             })
             .returning({ id: notifications.id });
@@ -245,7 +289,8 @@ class NotificationService {
     }
 
     /**
-     * Send notification using a template
+     * Send notification using a template.
+     * Replaces {variables} in all locale variants, then delegates to sendNotification.
      */
     async sendTemplateNotification(
         userId: string,
@@ -254,36 +299,11 @@ class NotificationService {
         data?: Record<string, unknown>
     ): Promise<string> {
         const template = NOTIFICATION_TEMPLATES[type];
-        
-        // Replace variables in templates
-        let titleEn = template.titleEn;
-        let titleAr = template.titleAr;
-        let bodyEn = template.bodyEn;
-        let bodyAr = template.bodyAr;
-
-        for (const [key, value] of Object.entries(variables)) {
-            const placeholder = `{${key}}`;
-            titleEn = titleEn.replace(placeholder, value);
-            bodyEn = bodyEn.replace(placeholder, value);
-            if (key === 'reason') {
-                const arValue = translateFlagReason(value);
-                titleAr = titleAr.replace(placeholder, arValue);
-                bodyAr = bodyAr.replace(placeholder, arValue);
-            } else if (key === 'senderName' && value === 'Unknown') {
-                titleAr = titleAr.replace(placeholder, UNKNOWN_SENDER_AR);
-                bodyAr = bodyAr.replace(placeholder, UNKNOWN_SENDER_AR);
-            } else {
-                titleAr = titleAr.replace(placeholder, value);
-                bodyAr = bodyAr.replace(placeholder, value);
-            }
-        }
 
         return this.sendNotification(userId, {
             type,
-            titleEn,
-            titleAr,
-            bodyEn,
-            bodyAr,
+            titles: replaceVariables(template.titles, variables),
+            bodies: replaceVariables(template.bodies, variables),
             data,
         });
     }
@@ -291,35 +311,34 @@ class NotificationService {
     /**
      * Get user's preferred language from settings
      */
-    private async getUserLanguage(userId: string): Promise<'ar' | 'en'> {
+    private async getUserLanguage(userId: string): Promise<string> {
         try {
             const [userSettings] = await db
                 .select({ dashboardLanguage: settings.dashboardLanguage })
                 .from(settings)
                 .where(eq(settings.userId, userId))
                 .limit(1);
-            
-            return (userSettings?.dashboardLanguage === 'en' ? 'en' : 'ar') as 'ar' | 'en';
+
+            return userSettings?.dashboardLanguage || 'ar';
         } catch {
             return 'ar'; // Default to Arabic
         }
     }
 
     /**
-     * Send push notification via FCM
-     * Uses user's preferred language for the notification display
+     * Send push notification via FCM.
+     * Uses user's preferred language for the notification display,
+     * with fallback to English if the locale isn't available.
      */
     private async sendPushNotification(
         tokens: string[],
         payload: NotificationPayload,
-        userLanguage: 'ar' | 'en' = 'ar'
+        userLanguage: string = 'ar'
     ): Promise<void> {
         // Check if Firebase Admin is configured
         const firebaseCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-        
+
         if (!firebaseCredentials) {
-            // FCM not configured - skip push notification
-            // This is expected during development or before Firebase setup
             console.warn('[Notifications] FCM not configured, skipping push notification');
             return;
         }
@@ -328,7 +347,7 @@ class NotificationService {
             // Dynamic import to avoid errors when firebase-admin isn't installed
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const admin = require('firebase-admin');
-            
+
             // Initialize Firebase Admin if not already initialized
             if (!admin.apps.length) {
                 const serviceAccount = JSON.parse(firebaseCredentials);
@@ -337,11 +356,11 @@ class NotificationService {
                 });
             }
 
-            // Use user's preferred language for notification display
-            const title = userLanguage === 'ar' ? payload.titleAr : payload.titleEn;
-            const body = userLanguage === 'ar' ? payload.bodyAr : payload.bodyEn;
+            // Resolve title/body for user's preferred language, with English fallback
+            const title = payload.titles[userLanguage] || payload.titles[FALLBACK_LANG] || '';
+            const body = payload.bodies[userLanguage] || payload.bodies[FALLBACK_LANG] || '';
 
-            // Send to all tokens
+            // Send all locale variants so the client can switch language without re-fetching
             const isUrgent = payload.data?.urgent === true;
             const message = {
                 notification: {
@@ -350,10 +369,8 @@ class NotificationService {
                 },
                 data: {
                     type: payload.type,
-                    titleEn: payload.titleEn,
-                    titleAr: payload.titleAr,
-                    bodyEn: payload.bodyEn,
-                    bodyAr: payload.bodyAr,
+                    titles: JSON.stringify(payload.titles),
+                    bodies: JSON.stringify(payload.bodies),
                     language: userLanguage,
                     ...(payload.data ? { customData: JSON.stringify(payload.data) } : {}),
                 },
@@ -366,7 +383,7 @@ class NotificationService {
             };
 
             const response = await admin.messaging().sendEachForMulticast(message);
-            
+
             // Handle failed tokens (remove invalid ones)
             if (response.failureCount > 0) {
                 const failedTokens: string[] = [];
@@ -375,7 +392,7 @@ class NotificationService {
                         failedTokens.push(tokens[idx]);
                     }
                 });
-                
+
                 // Remove invalid tokens from database
                 for (const token of failedTokens) {
                     await db
@@ -391,14 +408,14 @@ class NotificationService {
 
     /**
      * Get notifications for a user.
-     * Accepts a lang parameter to return only the relevant title/body,
-     * avoiding sending unused language data over the wire.
+     * Resolves the requested locale from the JSONB titles/bodies columns,
+     * with English fallback if the locale isn't available.
      */
     async getNotifications(
         userId: string,
         limit: number = 20,
         offset: number = 0,
-        lang: 'ar' | 'en' = 'ar'
+        lang: string = 'ar'
     ): Promise<{
         notifications: Array<{
             id: string;
@@ -411,15 +428,12 @@ class NotificationService {
         }>;
         unreadCount: number;
     }> {
-        // Select only needed columns
         const notificationsList = await db
             .select({
                 id: notifications.id,
                 type: notifications.type,
-                titleEn: notifications.titleEn,
-                titleAr: notifications.titleAr,
-                bodyEn: notifications.bodyEn,
-                bodyAr: notifications.bodyAr,
+                titles: notifications.titles,
+                bodies: notifications.bodies,
                 data: notifications.data,
                 read: notifications.read,
                 createdAt: notifications.createdAt,
@@ -440,15 +454,19 @@ class NotificationService {
             ));
 
         return {
-            notifications: notificationsList.map(n => ({
-                id: n.id,
-                type: n.type,
-                title: lang === 'ar' ? n.titleAr : n.titleEn,
-                body: lang === 'ar' ? n.bodyAr : n.bodyEn,
-                data: n.data,
-                read: n.read ?? false,
-                createdAt: n.createdAt,
-            })),
+            notifications: notificationsList.map(n => {
+                const titles = n.titles as Record<string, string>;
+                const bodies = n.bodies as Record<string, string>;
+                return {
+                    id: n.id,
+                    type: n.type,
+                    title: titles[lang] || titles[FALLBACK_LANG] || '',
+                    body: bodies[lang] || bodies[FALLBACK_LANG] || '',
+                    data: n.data,
+                    read: n.read ?? false,
+                    createdAt: n.createdAt,
+                };
+            }),
             unreadCount,
         };
     }

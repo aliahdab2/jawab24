@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import {
     Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock,
-    MessageCircle, AlertTriangle, CreditCard, CheckCircle, Unplug, BookOpen,
+    MessageCircle, AlertTriangle, CreditCard, CheckCircle, Unplug, BookOpen, Mail,
     type LucideIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -14,7 +14,7 @@ import { isRTLLocale } from '@/utils/locale';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
 import { SwipeableNotificationItem } from './SwipeableNotificationItem';
-import { NotificationFilterPills, FILTER_TYPE_MAP, type NotificationFilter } from '../notifications/NotificationFilterPills';
+import { NotificationFilterPills, FILTER_TYPE_MAP, ACTIONABLE_NOTIFICATION_TYPES, type NotificationFilter } from '../notifications/NotificationFilterPills';
 import { NotificationGroupHeader } from '../notifications/NotificationGroup';
 import { NotificationEmptyState } from '../notifications/NotificationEmptyState';
 
@@ -48,7 +48,8 @@ interface NotificationStyle {
 }
 
 const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
-    stale_comment:         { icon: Bell,          iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
+    stale_comment:         { icon: MessageCircle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
+    stale_message:         { icon: Mail,          iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
     new_comment:           { icon: MessageCircle, iconColor: 'text-blue-600 dark:text-blue-400',       bgColor: 'bg-blue-50 dark:bg-blue-900/30',       ringColor: 'notif-ring-blue' },
     flagged_reply:         { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     skipped_reply:         { icon: AlertTriangle, iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
@@ -58,13 +59,14 @@ const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
     page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'notif-ring-slate' },
     kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
+    provider_failover:     { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
 };
 
 const DEFAULT_STYLE: NotificationStyle = {
     icon: Bell, iconColor: 'text-brand-600', bgColor: 'bg-brand-50', ringColor: 'ring-brand-200/60',
 };
 
-const ACTIONABLE_TYPES = new Set(['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply']);
+const ACTIONABLE_TYPES = new Set<string>(ACTIONABLE_NOTIFICATION_TYPES);
 const GROUP_TIME_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -78,7 +80,7 @@ function getNotificationRoute(notification: Notification): string | null {
     const isMessage = data?.type === 'message';
 
     // Comment/message notifications: deep-link to the specific item when possible
-    const isCommentType = ['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply'].includes(notification.type);
+    const isCommentType = ACTIONABLE_TYPES.has(notification.type);
     if (isCommentType) {
         if (isMessage && data?.messageId) {
             return `/messages?messageId=${encodeURIComponent(data.messageId)}`;
@@ -87,7 +89,7 @@ function getNotificationRoute(notification: Notification): string | null {
             return `/comments?commentId=${encodeURIComponent(data.commentId)}`;
         }
         // Fallback to filter page when no specific ID available
-        return isMessage ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
+        return (isMessage || notification.type === 'stale_message') ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
     }
 
     // Non-comment notifications: use stored deepLink or type-based fallback

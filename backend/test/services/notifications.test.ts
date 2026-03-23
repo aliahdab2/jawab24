@@ -42,62 +42,62 @@ describe('NotificationService', () => {
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('skipped_reply');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('new_comment');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('stale_comment');
+            expect(NOTIFICATION_TEMPLATES).toHaveProperty('stale_message');
         });
 
         it('should have skipped_reply template with correct placeholders', () => {
             const template = NOTIFICATION_TEMPLATES.skipped_reply;
-            expect(template.titleEn).toBe('Auto-Reply Skipped');
-            expect(template.titleAr).toBe('تم تخطي الرد التلقائي');
-            expect(template.bodyEn).toContain('{senderName}');
-            expect(template.bodyEn).toContain('{reason}');
-            expect(template.bodyAr).toContain('{senderName}');
-            expect(template.bodyAr).toContain('{reason}');
+            expect(template.titles.en).toBe('Auto-Reply Skipped');
+            expect(template.titles.ar).toBe('تم تخطي الرد التلقائي');
+            expect(template.bodies.en).toContain('{senderName}');
+            expect(template.bodies.en).toContain('{reason}');
+            expect(template.bodies.ar).toContain('{senderName}');
+            expect(template.bodies.ar).toContain('{reason}');
         });
 
         it('should have flagged_reply template with correct placeholders', () => {
             const template = NOTIFICATION_TEMPLATES.flagged_reply;
-            expect(template.titleEn).toBe('Reply Needs Your Attention');
-            expect(template.bodyEn).toContain('{senderName}');
-            expect(template.bodyEn).toContain('{reason}');
-            expect(template.bodyAr).toContain('{senderName}');
-            expect(template.bodyAr).toContain('{reason}');
+            expect(template.titles.en).toBe('Reply Needs Your Attention');
+            expect(template.bodies.en).toContain('{senderName}');
+            expect(template.bodies.en).toContain('{reason}');
+            expect(template.bodies.ar).toContain('{senderName}');
+            expect(template.bodies.ar).toContain('{reason}');
         });
 
         it('should have stale_comment template with correct placeholders', () => {
             const template = NOTIFICATION_TEMPLATES.stale_comment;
-            expect(template.titleEn).toBe('Unreplied Comments Need Attention');
-            expect(template.bodyEn).toContain('{count}');
-            expect(template.bodyEn).toContain('{minutes}');
-            expect(template.bodyAr).toContain('{count}');
-            expect(template.bodyAr).toContain('{minutes}');
+            expect(template.titles.en).toBe('Unreplied Comments Need Attention');
+            expect(template.bodies.en).toContain('{count}');
+            expect(template.bodies.en).toContain('{minutes}');
+            expect(template.bodies.ar).toContain('{count}');
+            expect(template.bodies.ar).toContain('{minutes}');
         });
 
         it('should have kb_gap template with correct placeholders', () => {
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('kb_gap');
             const template = NOTIFICATION_TEMPLATES.kb_gap;
-            expect(template.titleEn).toBe('Knowledge Base Gap Detected');
-            expect(template.titleAr).toBe('فجوة في قاعدة المعرفة');
-            expect(template.bodyEn).toContain('{pageName}');
-            expect(template.bodyEn).toContain('{topic}');
-            expect(template.bodyAr).toContain('{pageName}');
-            expect(template.bodyAr).toContain('{topic}');
+            expect(template.titles.en).toBe('Knowledge Base Gap Detected');
+            expect(template.titles.ar).toBe('فجوة في قاعدة المعرفة');
+            expect(template.bodies.en).toContain('{pageName}');
+            expect(template.bodies.en).toContain('{topic}');
+            expect(template.bodies.ar).toContain('{pageName}');
+            expect(template.bodies.ar).toContain('{topic}');
         });
 
-        it('should have bilingual content for each template', () => {
-            for (const [key, template] of Object.entries(NOTIFICATION_TEMPLATES)) {
-                expect(template.titleEn).toBeDefined();
-                expect(template.titleAr).toBeDefined();
-                expect(template.bodyEn).toBeDefined();
-                expect(template.bodyAr).toBeDefined();
-                expect(template.titleEn.length).toBeGreaterThan(0);
-                expect(template.titleAr.length).toBeGreaterThan(0);
+        it('should have titles and bodies for each locale in every template', () => {
+            for (const [, template] of Object.entries(NOTIFICATION_TEMPLATES)) {
+                expect(template.titles.en).toBeDefined();
+                expect(template.titles.ar).toBeDefined();
+                expect(template.bodies.en).toBeDefined();
+                expect(template.bodies.ar).toBeDefined();
+                expect(template.titles.en.length).toBeGreaterThan(0);
+                expect(template.titles.ar.length).toBeGreaterThan(0);
             }
         });
     });
 
     describe('registerDeviceToken', () => {
         it('should insert a new token if it does not exist', async () => {
-            // Mock: no existing token
             (db.select as any).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
@@ -116,7 +116,6 @@ describe('NotificationService', () => {
         });
 
         it('should update lastUsedAt if token already exists', async () => {
-            // Mock: existing token found
             (db.select as any).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
@@ -150,8 +149,7 @@ describe('NotificationService', () => {
     });
 
     describe('sendNotification', () => {
-        it('should store notification in database', async () => {
-            // Mock: no device tokens (skip push)
+        it('should store notification in database with JSONB titles/bodies', async () => {
             (db.select as any).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([]),
@@ -166,10 +164,8 @@ describe('NotificationService', () => {
 
             const result = await notificationService.sendNotification('user-123', {
                 type: 'payment_failed',
-                titleEn: 'Payment Failed',
-                titleAr: 'فشل الدفع',
-                bodyEn: 'Your payment could not be processed.',
-                bodyAr: 'لم نتمكن من معالجة الدفع.',
+                titles: { en: 'Payment Failed', ar: 'فشل الدفع' },
+                bodies: { en: 'Your payment could not be processed.', ar: 'لم نتمكن من معالجة الدفع.' },
             });
 
             expect(result).toBe('notif-123');
@@ -179,7 +175,6 @@ describe('NotificationService', () => {
 
     describe('sendTemplateNotification', () => {
         it('should replace variables in template', async () => {
-            // Mock database calls
             (db.select as any).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([]),
@@ -192,7 +187,6 @@ describe('NotificationService', () => {
                 }),
             });
 
-            // Spy on sendNotification to capture the payload
             const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
 
             await notificationService.sendTemplateNotification(
@@ -203,8 +197,10 @@ describe('NotificationService', () => {
 
             expect(sendNotificationSpy).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 type: 'subscription_expiring',
-                bodyEn: expect.stringContaining('3 days'),
-                bodyAr: expect.stringContaining('3'),
+                bodies: expect.objectContaining({
+                    en: expect.stringContaining('3 days'),
+                    ar: expect.stringContaining('3'),
+                }),
             }));
         });
 
@@ -232,7 +228,9 @@ describe('NotificationService', () => {
 
             expect(sendNotificationSpy).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 type: 'flagged_reply',
-                bodyEn: expect.stringContaining('angry_customer'),
+                bodies: expect.objectContaining({
+                    en: expect.stringContaining('angry_customer'),
+                }),
                 data: expect.objectContaining({
                     commentId: 'c-123',
                     type: 'comment',
@@ -262,11 +260,9 @@ describe('NotificationService', () => {
             );
 
             const payload = sendNotificationSpy.mock.calls[0][1];
-            // Arabic body should have Arabic translation, not English
-            expect(payload.bodyAr).toContain('عميل غاضب');
-            expect(payload.bodyAr).not.toContain('angry_customer');
-            // English body should keep the raw reason
-            expect(payload.bodyEn).toContain('angry_customer');
+            expect(payload.bodies.ar).toContain('عميل غاضب');
+            expect(payload.bodies.ar).not.toContain('angry_customer');
+            expect(payload.bodies.en).toContain('angry_customer');
         });
 
         it('should translate comma-separated flag reasons to Arabic', async () => {
@@ -291,9 +287,9 @@ describe('NotificationService', () => {
             );
 
             const payload = sendNotificationSpy.mock.calls[0][1];
-            expect(payload.bodyAr).toContain('محتوى مسيء');
-            expect(payload.bodyAr).toContain('ثقة منخفضة في الرد');
-            expect(payload.bodyAr).toContain('، '); // Arabic comma separator
+            expect(payload.bodies.ar).toContain('محتوى مسيء');
+            expect(payload.bodies.ar).toContain('ثقة منخفضة في الرد');
+            expect(payload.bodies.ar).toContain('، '); // Arabic comma separator
         });
 
         it('should fall back to raw reason when no translation exists', async () => {
@@ -318,8 +314,7 @@ describe('NotificationService', () => {
             );
 
             const payload = sendNotificationSpy.mock.calls[0][1];
-            // Should fall back to the raw string
-            expect(payload.bodyAr).toContain('some_unknown_flag');
+            expect(payload.bodies.ar).toContain('some_unknown_flag');
         });
 
         it('should translate enriched reason like "Cancellation Request — order #5678" to Arabic', async () => {
@@ -344,11 +339,9 @@ describe('NotificationService', () => {
             );
 
             const payload = sendNotificationSpy.mock.calls[0][1];
-            // Arabic body should translate the label but keep the order suffix
-            expect(payload.bodyAr).toContain('طلب إلغاء');
-            expect(payload.bodyAr).toContain('5678');
-            // English body keeps the original enriched reason
-            expect(payload.bodyEn).toContain('Cancellation Request — order #5678');
+            expect(payload.bodies.ar).toContain('طلب إلغاء');
+            expect(payload.bodies.ar).toContain('5678');
+            expect(payload.bodies.en).toContain('Cancellation Request — order #5678');
         });
 
         it('should translate new high-stakes flags (cancellation, refund, exchange)', async () => {
@@ -366,7 +359,6 @@ describe('NotificationService', () => {
 
             const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
 
-            // Test each new flag
             for (const [flag, arTranslation] of [
                 ['Cancellation Request', 'طلب إلغاء'],
                 ['Refund Request', 'طلب استرجاع'],
@@ -381,7 +373,7 @@ describe('NotificationService', () => {
                 );
 
                 const payload = sendNotificationSpy.mock.calls[0][1];
-                expect(payload.bodyAr).toContain(arTranslation);
+                expect(payload.bodies.ar).toContain(arTranslation);
             }
         });
 
@@ -408,7 +400,6 @@ describe('NotificationService', () => {
             );
 
             const payload = sendNotificationSpy.mock.calls[0][1];
-            // The urgent flag should be passed through in the data field
             expect(payload.data).toEqual(expect.objectContaining({ urgent: true }));
         });
     });
@@ -417,17 +408,14 @@ describe('NotificationService', () => {
         const mockNotification = {
             id: 'notif-1',
             type: 'payment_failed',
-            titleEn: 'Payment Failed',
-            titleAr: 'فشل الدفع',
-            bodyEn: 'Body en',
-            bodyAr: 'Body ar',
+            titles: { en: 'Payment Failed', ar: 'فشل الدفع' },
+            bodies: { en: 'Body en', ar: 'Body ar' },
             data: {},
             read: false,
             createdAt: new Date(),
         };
 
         function setupGetNotificationsMocks(notifs = [mockNotification], unreadCount = 1) {
-            // Mock for notifications list (select specific columns)
             (db.select as any).mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
@@ -440,7 +428,6 @@ describe('NotificationService', () => {
                 }),
             });
 
-            // Mock for unread count (uses SQL count())
             (db.select as any).mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([{ value: unreadCount }]),
@@ -465,8 +452,8 @@ describe('NotificationService', () => {
 
             expect(result.notifications[0].title).toBe('فشل الدفع');
             expect(result.notifications[0].body).toBe('Body ar');
-            expect(result.notifications[0]).not.toHaveProperty('titleEn');
-            expect(result.notifications[0]).not.toHaveProperty('titleAr');
+            expect(result.notifications[0]).not.toHaveProperty('titles');
+            expect(result.notifications[0]).not.toHaveProperty('bodies');
         });
 
         it('should return English title/body when lang=en', async () => {
@@ -484,6 +471,15 @@ describe('NotificationService', () => {
             const result = await notificationService.getNotifications('user-123', 20, 0);
 
             expect(result.notifications[0].title).toBe('فشل الدفع');
+        });
+
+        it('should fallback to English when requested locale is missing', async () => {
+            setupGetNotificationsMocks();
+
+            const result = await notificationService.getNotifications('user-123', 20, 0, 'fr');
+
+            expect(result.notifications[0].title).toBe('Payment Failed');
+            expect(result.notifications[0].body).toBe('Body en');
         });
     });
 
@@ -543,13 +539,11 @@ describe('NotificationService', () => {
 
     describe('Arabic translations in templates', () => {
         function setupSendNotificationMocks() {
-            // Mock for device tokens (no tokens, skip push)
             (db.select as any).mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockResolvedValue([]),
                 }),
             });
-            // Mock for user language
             (db.select as any).mockReturnValueOnce({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
@@ -557,7 +551,6 @@ describe('NotificationService', () => {
                     }),
                 }),
             });
-            // Mock for insert notification
             (db.insert as any).mockReturnValue({
                 values: vi.fn().mockReturnValue({
                     returning: vi.fn().mockResolvedValue([{ id: 'notif-test' }]),
@@ -574,8 +567,8 @@ describe('NotificationService', () => {
             });
 
             const payload = spy.mock.calls[0][1];
-            expect(payload.bodyAr).toContain('تم تمييز هذا الرد بواسطة الذكاء الاصطناعي');
-            expect(payload.bodyAr).not.toContain('AI flagged');
+            expect(payload.bodies.ar).toContain('تم تمييز هذا الرد بواسطة الذكاء الاصطناعي');
+            expect(payload.bodies.ar).not.toContain('AI flagged');
         });
 
         it('should translate "Unknown" sender to Arabic', async () => {
@@ -587,8 +580,8 @@ describe('NotificationService', () => {
             });
 
             const payload = spy.mock.calls[0][1];
-            expect(payload.bodyAr).toContain('مجهول');
-            expect(payload.bodyAr).not.toContain('Unknown');
+            expect(payload.bodies.ar).toContain('مجهول');
+            expect(payload.bodies.ar).not.toContain('Unknown');
         });
 
         it('should not contain English words in Arabic body for known reasons', async () => {
@@ -608,8 +601,7 @@ describe('NotificationService', () => {
                 });
 
                 const payload = spy.mock.calls[0][1];
-                // Arabic body should not have 3+ consecutive English letters (except brand names)
-                const bodyWithoutBrand = payload.bodyAr.replace(/Jawab24/g, '');
+                const bodyWithoutBrand = payload.bodies.ar.replace(/Jawab24/g, '');
                 expect(bodyWithoutBrand).not.toMatch(/[a-zA-Z]{3,}/);
             }
         });

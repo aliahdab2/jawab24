@@ -47,6 +47,15 @@ function buildTranscribeParams(file: Awaited<ReturnType<typeof toFile>>, languag
     };
 }
 
+/** Map audio MIME type to file extension for OpenAI transcription API */
+function mimeToExtension(mimeType: string): string {
+    if (mimeType.includes('webm')) return 'webm';
+    if (mimeType.includes('ogg')) return 'ogg';
+    if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3';
+    if (mimeType.includes('wav')) return 'wav';
+    return 'mp4';
+}
+
 class TranscriptionService {
     private client: OpenAI | null = null;
 
@@ -154,11 +163,7 @@ class TranscriptionService {
 
         if (audioBuffer.length === 0 || audioBuffer.length > MAX_AUDIO_BYTES) return null;
 
-        const ext = mimeType.includes('webm') ? 'webm'
-            : mimeType.includes('ogg') ? 'ogg'
-            : mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3'
-            : mimeType.includes('wav') ? 'wav'
-            : 'mp4';
+        const ext = mimeToExtension(mimeType);
 
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), KB_TRANSCRIBE_TIMEOUT_MS);

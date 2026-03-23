@@ -5,6 +5,7 @@ import axios from 'axios';
 import { toast } from 'sonner';
 import { api } from './api';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
+import { ACTIONABLE_NOTIFICATION_TYPES } from '@/components/notifications/NotificationFilterPills';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -151,17 +152,34 @@ export async function removePushToken(authToken: string): Promise<void> {
 }
 
 /**
+ * Get the current app locale from the URL path or Zustand store fallback.
+ * Works outside React components (no hooks needed).
+ */
+function getAppLocale(): 'ar' | 'en' {
+    if (typeof window !== 'undefined') {
+        // Primary: read from URL path (/en/... or /ar/...)
+        const pathLocale = window.location.pathname.split('/')[1];
+        if (pathLocale === 'en' || pathLocale === 'ar') return pathLocale;
+    }
+    return 'ar';
+}
+
+/**
  * Handle notification received while app is in foreground
  * Show a toast or in-app banner
  */
 function handleForegroundNotification(notification: PushNotificationSchema): void {
-    // Get user's preferred language
-    const language = localStorage.getItem('dashboard_language') || 'ar';
-    
-    // Extract bilingual content from notification data
+    const language = getAppLocale();
+
+    // Parse JSONB locale maps from push data, with fallback to OS-level notification
     const data = notification.data as Record<string, string> | undefined;
-    const title = language === 'ar' ? (data?.titleAr || notification.title) : (data?.titleEn || notification.title);
-    const body = language === 'ar' ? (data?.bodyAr || notification.body) : (data?.bodyEn || notification.body);
+    let titles: Record<string, string> = {};
+    let bodies: Record<string, string> = {};
+    try { if (data?.titles) titles = JSON.parse(data.titles); } catch { /* malformed — use fallback */ }
+    try { if (data?.bodies) bodies = JSON.parse(data.bodies); } catch { /* malformed — use fallback */ }
+
+    const title = titles[language] || titles['en'] || notification.title;
+    const body = bodies[language] || bodies['en'] || notification.body;
 
     toast(title, { description: body, duration: 5000 });
 }
@@ -180,7 +198,7 @@ function handleNotificationTap(action: ActionPerformed): void {
     } catch { /* ignore parse errors */ }
 
     // 1a. Prefer item-specific deep links for comment/message notifications
-    const isCommentType = ['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply'].includes(type || '');
+    const isCommentType = ACTIONABLE_NOTIFICATION_TYPES.includes(type as typeof ACTIONABLE_NOTIFICATION_TYPES[number]);
     if (isCommentType && customData) {
         const isMessage = customData.type === 'message';
         if (isMessage && customData.messageId) {
@@ -204,10 +222,11 @@ function handleNotificationTap(action: ActionPerformed): void {
     let route = '/dashboard';
     switch (type) {
         case 'stale_comment':
+        case 'stale_message':
         case 'new_comment':
         case 'flagged_reply':
         case 'skipped_reply':
-            route = isMessage ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
+            route = (isMessage || type === 'stale_message') ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
             break;
         case 'payment_failed':
         case 'subscription_expiring':
@@ -261,7 +280,7 @@ export async function getNotifications(
     unreadCount: number;
 }> {
     try {
-        const lang = localStorage.getItem('dashboard_language') || 'ar';
+        const lang = getAppLocale();
         const response = await api.get('/notifications', { params: { limit, offset, lang } });
         return response.data;
     } catch {

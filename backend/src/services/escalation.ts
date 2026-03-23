@@ -51,6 +51,37 @@ export async function runEscalationSweep(): Promise<void> {
     }
 }
 
+interface StaleRow {
+    userId: string | null;
+    itemId: string;
+    pageName: string | null;
+    thresholdMinutes: number;
+}
+
+interface UserEscalationGroup {
+    ids: string[];
+    threshold: number;
+    pageNames: Set<string>;
+}
+
+/** Group stale rows by userId, collecting item IDs and page names. */
+function groupByUser(
+    rows: StaleRow[],
+): Map<string, UserEscalationGroup> {
+    const byUser = new Map<string, UserEscalationGroup>();
+    for (const row of rows) {
+        if (!row.userId) continue;
+        let entry = byUser.get(row.userId);
+        if (!entry) {
+            entry = { ids: [], threshold: Number(row.thresholdMinutes), pageNames: new Set() };
+            byUser.set(row.userId, entry);
+        }
+        entry.ids.push(row.itemId);
+        if (row.pageName) entry.pageNames.add(row.pageName);
+    }
+    return byUser;
+}
+
 /**
  * Escalate stale comments: unreplied + not already flagged + past SLA.
  * Uses a single batch query to find all stale comments across all users,
@@ -62,7 +93,8 @@ async function escalateComments(): Promise<void> {
     const staleRows = await db
         .select({
             userId: pages.userId,
-            commentId: comments.id,
+            itemId: comments.id,
+            pageName: pages.name,
             thresholdMinutes: sql<number>`COALESCE(${settings.commentEscalationMinutes}, ${DEFAULT_COMMENT_ESCALATION_MINUTES})`,
         })
         .from(comments)
@@ -78,20 +110,10 @@ async function escalateComments(): Promise<void> {
 
     if (staleRows.length === 0) return;
 
-    // Group by user
-    const byUser = new Map<string, { ids: string[]; threshold: number }>();
-    for (const row of staleRows) {
-        if (!row.userId) continue;
-        let entry = byUser.get(row.userId);
-        if (!entry) {
-            entry = { ids: [], threshold: Number(row.thresholdMinutes) };
-            byUser.set(row.userId, entry);
-        }
-        entry.ids.push(row.commentId);
-    }
+    const byUser = groupByUser(staleRows);
 
     // Batch update + notify per user
-    for (const [userId, { ids, threshold }] of byUser) {
+    for (const [userId, { ids, threshold, pageNames }] of byUser) {
         await db
             .update(comments)
             .set({
@@ -102,12 +124,17 @@ async function escalateComments(): Promise<void> {
             .where(sql`${comments.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
         const count = ids.length;
+        const pageList = [...pageNames].join(', ');
         notificationService.sendNotification(userId, {
             type: 'stale_comment',
-            titleEn: 'Unreplied Comments Need Attention',
-            titleAr: 'تعليقات بدون رد تحتاج انتباهك',
-            bodyEn: `${formatCommentCountEn(count)} waiting for your reply for over ${threshold} minutes.`,
-            bodyAr: `${formatCommentCountAr(count)} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
+            titles: {
+                en: `Unreplied Comments — ${pageList}`,
+                ar: `تعليقات بدون رد — ${pageList}`,
+            },
+            bodies: {
+                en: `${formatCommentCountEn(count)} on ${pageList} waiting for your reply for over ${threshold} minutes.`,
+                ar: `${formatCommentCountAr(count)} على ${pageList} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
+            },
             data: { deepLink: '/comments?filter=flagged' },
         }).catch(err => captureError(err, 'Escalation comment notification failed', { tags: { service: 'escalation', type: 'comment' } }));
     }
@@ -121,7 +148,8 @@ async function escalateMessages(): Promise<void> {
     const staleRows = await db
         .select({
             userId: pages.userId,
-            messageId: messages.id,
+            itemId: messages.id,
+            pageName: pages.name,
             thresholdMinutes: sql<number>`COALESCE(${settings.messageEscalationMinutes}, ${DEFAULT_MESSAGE_ESCALATION_MINUTES})`,
         })
         .from(messages)
@@ -137,19 +165,9 @@ async function escalateMessages(): Promise<void> {
 
     if (staleRows.length === 0) return;
 
-    // Group by user
-    const byUser = new Map<string, { ids: string[]; threshold: number }>();
-    for (const row of staleRows) {
-        if (!row.userId) continue;
-        let entry = byUser.get(row.userId);
-        if (!entry) {
-            entry = { ids: [], threshold: Number(row.thresholdMinutes) };
-            byUser.set(row.userId, entry);
-        }
-        entry.ids.push(row.messageId);
-    }
+    const byUser = groupByUser(staleRows);
 
-    for (const [userId, { ids, threshold }] of byUser) {
+    for (const [userId, { ids, threshold, pageNames }] of byUser) {
         await db
             .update(messages)
             .set({
@@ -159,14 +177,19 @@ async function escalateMessages(): Promise<void> {
             })
             .where(sql`${messages.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
-        const msgCount = ids.length;
+        const count = ids.length;
+        const pageList = [...pageNames].join(', ');
         notificationService.sendNotification(userId, {
-            type: 'stale_comment',
-            titleEn: 'Unreplied Messages Need Attention',
-            titleAr: 'رسائل بدون رد تحتاج انتباهك',
-            bodyEn: `${formatMessageCountEn(msgCount)} waiting for your reply for over ${threshold} minutes.`,
-            bodyAr: `${formatMessageCountAr(msgCount)} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
-            data: { deepLink: '/messages?filter=flagged' },
+            type: 'stale_message',
+            titles: {
+                en: `Unreplied Messages — ${pageList}`,
+                ar: `رسائل بدون رد — ${pageList}`,
+            },
+            bodies: {
+                en: `${formatMessageCountEn(count)} on ${pageList} waiting for your reply for over ${threshold} minutes.`,
+                ar: `${formatMessageCountAr(count)} على ${pageList} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
+            },
+            data: { deepLink: '/messages?filter=flagged', type: 'message' },
         }).catch(err => captureError(err, 'Escalation message notification failed', { tags: { service: 'escalation', type: 'message' } }));
     }
 }

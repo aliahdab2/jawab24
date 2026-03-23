@@ -36,8 +36,9 @@ async function seedFullUserData(userId: string, pageId: string) {
         userId, token: 'fcm-token-123', platform: 'android',
     });
     await testDb.insert(schema.notifications).values({
-        userId, type: 'test', titleEn: 'Test', titleAr: 'تجربة',
-        bodyEn: 'Body', bodyAr: 'محتوى',
+        userId, type: 'test',
+        titles: { en: 'Test', ar: 'تجربة' },
+        bodies: { en: 'Body', ar: 'محتوى' },
     });
 
     // Logs

@@ -4,11 +4,14 @@ import { useTranslations } from 'next-intl';
 
 export type NotificationFilter = 'all' | 'comments' | 'billing' | 'system';
 
+/** Notification types that represent actionable comment/message items (used for routing, CTAs, and filtering). */
+export const ACTIONABLE_NOTIFICATION_TYPES = ['stale_comment', 'stale_message', 'new_comment', 'flagged_reply', 'skipped_reply'] as const;
+
 export const FILTER_TYPE_MAP: Record<NotificationFilter, string[] | null> = {
     all: null,
-    comments: ['stale_comment', 'new_comment', 'flagged_reply', 'skipped_reply'],
+    comments: [...ACTIONABLE_NOTIFICATION_TYPES],
     billing: ['payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed'],
-    system: ['page_disconnected', 'kb_gap'],
+    system: ['page_disconnected', 'kb_gap', 'provider_failover'],
 };
 
 interface NotificationFilterPillsProps {

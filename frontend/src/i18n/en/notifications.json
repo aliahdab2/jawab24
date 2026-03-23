@@ -30,6 +30,7 @@
   "groupSummary": "{count, plural, one {# notification} other {# notifications}}",
   "typeLabel": {
     "stale_comment": "comments waiting for your reply",
+    "stale_message": "messages waiting for your reply",
     "new_comment": "new comments",
     "flagged_reply": "flagged replies",
     "payment_failed": "payment alerts",

@@ -591,10 +591,8 @@ export const notifications = pgTable('notifications', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
     type: varchar('type', { length: 50 }).notNull(), // 'payment_failed', 'subscription_expiring', 'page_disconnected'
-    titleEn: text('title_en').notNull(),
-    titleAr: text('title_ar').notNull(),
-    bodyEn: text('body_en').notNull(),
-    bodyAr: text('body_ar').notNull(),
+    titles: jsonb('titles').$type<Record<string, string>>().notNull(),
+    bodies: jsonb('bodies').$type<Record<string, string>>().notNull(),
     data: jsonb('data'), // Deep link info, metadata
     read: boolean('read').default(false),
     createdAt: timestamp('created_at').defaultNow(),
