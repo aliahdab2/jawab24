@@ -440,7 +440,8 @@ export const plans = pgTable('plans', {
     price: integer('price').notNull().default(0), // Price in cents (500 = $5.00)
     currency: varchar('currency', { length: 3 }).default('USD'),
     interval: varchar('interval', { length: 20 }).default('month'), // 'month', 'year'
-    stripePriceId: varchar('stripe_price_id', { length: 255 }), // Stripe Price ID (e.g., price_xxxxx)
+    stripePriceId: varchar('stripe_price_id', { length: 255 }), // Stripe Monthly Price ID (e.g., price_xxxxx)
+    stripeYearlyPriceId: varchar('stripe_yearly_price_id', { length: 255 }), // Stripe Yearly Price ID
 
     // Limits
     maxPages: integer('max_pages').default(1),

@@ -88,7 +88,13 @@ export class PaymentController {
                 return reply.status(404).send({ error: 'Plan not found' });
             }
 
-            if (!plan.stripePriceId) {
+            // Pick monthly or yearly Stripe price
+            const { billingInterval = 'month' } = request.body;
+            const stripePriceId = billingInterval === 'year' && plan.stripeYearlyPriceId
+                ? plan.stripeYearlyPriceId
+                : plan.stripePriceId;
+
+            if (!stripePriceId) {
                 return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
             }
 
@@ -136,7 +142,7 @@ export class PaymentController {
                 userId,
                 user.email,
                 planId,
-                plan.stripePriceId,
+                stripePriceId,
                 validatedSuccessUrl,
                 validatedCancelUrl,
                 trialDays

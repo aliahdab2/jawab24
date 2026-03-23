@@ -23,7 +23,8 @@ function isCheckoutMaintenance() {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { planId } = router.query;
+  const { planId, interval } = router.query;
+  const billingInterval = interval === 'year' ? 'year' : 'month';
   const t = useTranslations('checkout');
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
@@ -120,6 +121,7 @@ export default function CheckoutPage() {
       
       const response = await api.post('/payment/create-checkout-session', {
         planId,
+        billingInterval,
         successUrl: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${baseUrl}/payment/cancel`,
       });

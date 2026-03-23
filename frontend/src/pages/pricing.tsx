@@ -407,7 +407,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         } else {
           // If they have a plan and are "downgrading" or "switching" back to default,
           // go to checkout to handle Stripe subscription update
-          router.push(`/checkout?planId=${planId}`);
+          router.push(`/checkout?planId=${planId}&interval=${billingInterval}`);
         }
       }
       return;
@@ -423,7 +423,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     setChangingPlan(planId);
 
     // Navigate to checkout (backend will validate again)
-    router.push(`/checkout?planId=${planId}`);
+    router.push(`/checkout?planId=${planId}&interval=${billingInterval}`);
   };
 
   // Filter out inactive plans (keep only plans where isActive is true)
