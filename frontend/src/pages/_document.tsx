@@ -67,9 +67,7 @@ export default function MyDocument({ locale }: DocProps) {
         {/* Fonts are now loaded via next/font in _app.tsx for better performance */}
 
         {/* Global Verification Tags */}
-        {process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION && (
-          <meta name="google-site-verification" content={process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION} />
-        )}
+        <meta name="google-site-verification" content="tshkD5ag97rX0t8u87eKuEKTO3ezhPneMj3auK18Jjw" />
 
         {/* Google Analytics - Global Site Tag (gtag.js) */}
         {process.env.NEXT_PUBLIC_GA_ID && (
