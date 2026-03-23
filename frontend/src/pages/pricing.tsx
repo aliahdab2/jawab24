@@ -416,7 +416,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     // For all other PAID plans:
     // If not authenticated, redirect to login then to checkout
     if (!isAuthenticated) {
-      router.push(`/login?redirect=${encodeURIComponent(`/checkout?planId=${planId}`)}`);
+      router.push(`/login?redirect=${encodeURIComponent(`/checkout?planId=${planId}&interval=${billingInterval}`)}`);
       return;
     }
 

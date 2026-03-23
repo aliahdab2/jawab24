@@ -88,8 +88,9 @@ export class PaymentController {
                 return reply.status(404).send({ error: 'Plan not found' });
             }
 
-            // Pick monthly or yearly Stripe price
-            const { billingInterval = 'month' } = request.body;
+            // Pick monthly or yearly Stripe price (validate input)
+            const rawInterval = request.body.billingInterval;
+            const billingInterval = rawInterval === 'year' ? 'year' : 'month';
             const stripePriceId = billingInterval === 'year' && plan.stripeYearlyPriceId
                 ? plan.stripeYearlyPriceId
                 : plan.stripePriceId;
