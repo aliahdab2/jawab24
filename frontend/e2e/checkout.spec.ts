@@ -16,8 +16,7 @@ const MOCK_PLAN = {
   isActive: true,
 };
 
-// TODO: Re-enable when NEXT_PUBLIC_CHECKOUT_MAINTENANCE=false (Stripe prices updated)
-test.describe.skip('Checkout Page', () => {
+test.describe('Checkout Page', () => {
   test.beforeEach(async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
 

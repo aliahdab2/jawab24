@@ -16,10 +16,9 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Plan } from '@jawab24/shared';
 
-// Temporary flag — set to false once Stripe prices are configured for new plans
-// Evaluated at render time so tests can override via process.env
+// Set to true to disable checkout (e.g. during Stripe price changes)
 function isCheckoutMaintenance() {
-  return process.env.NEXT_PUBLIC_CHECKOUT_MAINTENANCE !== 'false';
+  return process.env.NEXT_PUBLIC_CHECKOUT_MAINTENANCE === 'true';
 }
 
 export default function CheckoutPage() {

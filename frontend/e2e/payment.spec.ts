@@ -114,8 +114,7 @@ test.describe('Payment Flow', () => {
     expect(redirectParam).toContain('planId=');
   });
 
-  // TODO: Re-enable when NEXT_PUBLIC_CHECKOUT_MAINTENANCE=false (Stripe prices updated)
-  test.skip('should block payment for sanctioned users (mocked)', async ({ page }) => {
+  test('should block payment for sanctioned users (mocked)', async ({ page }) => {
      // Mock Geo Check (Sanctioned) - Override the default allowed mock
      await page.route('**/api/geo/check*', async route => {
         await route.fulfill({
