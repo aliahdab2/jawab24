@@ -66,6 +66,8 @@ describe('CheckoutPage', () => {
   };
 
   beforeEach(() => {
+    // Disable maintenance mode for checkout tests
+    process.env.NEXT_PUBLIC_CHECKOUT_MAINTENANCE = 'false';
     mockPush = vi.fn();
 
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({

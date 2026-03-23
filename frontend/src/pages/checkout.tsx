@@ -17,7 +17,10 @@ import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Plan } from '@jawab24/shared';
 
 // Temporary flag — set to false once Stripe prices are configured for new plans
-const CHECKOUT_MAINTENANCE = true;
+// Evaluated at render time so tests can override via process.env
+function isCheckoutMaintenance() {
+  return process.env.NEXT_PUBLIC_CHECKOUT_MAINTENANCE !== 'false';
+}
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -154,7 +157,7 @@ export default function CheckoutPage() {
 
   // EARLY RETURN 0: Maintenance mode — Stripe prices not configured yet
   // Remove this block once Stripe prices are updated for new plans ($15/$39/$79)
-  if (CHECKOUT_MAINTENANCE) {
+  if (isCheckoutMaintenance()) {
     return (
       <>
         <Head>
