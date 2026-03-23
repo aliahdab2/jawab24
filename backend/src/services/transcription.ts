@@ -11,15 +11,40 @@ const KB_TRANSCRIBE_TIMEOUT_MS = 60_000;
 /** Maximum audio file size (10 MB) — prevents OOM from malformed responses */
 export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
-/** Fast + cheap — for reply pipeline (customer voice messages) */
-const MODEL_PIPELINE = 'gpt-4o-mini-transcribe';
-/** Most accurate — for KB voice input (merchant dictation, dialect-heavy) */
-const MODEL_ACCURATE = 'gpt-4o-transcribe';
+/**
+ * OpenAI recommends gpt-4o-mini-transcribe over gpt-4o-transcribe (Jan 2026 changelog).
+ * 89% fewer hallucinations vs whisper-1, 35% lower WER, half the cost.
+ *
+ * Language enforcement is weak on GPT-4o models — the `language` param is treated as a
+ * soft hint, not strict. We reinforce it with a language-specific `prompt` (OpenAI's
+ * recommended workaround) + `language` param as belt-and-suspenders.
+ */
+const MODEL_TRANSCRIBE = 'gpt-4o-mini-transcribe';
+
+/** Language-specific prompts to reinforce language detection (OpenAI recommended approach) */
+const LANGUAGE_PROMPTS: Record<string, string> = {
+    ar: 'هذه رسالة صوتية باللغة العربية. النص يتعلق بمنتجات وخدمات المتجر والرد على استفسارات العملاء.',
+    en: 'This is a voice message in English about business products, services, and customer inquiries.',
+};
 
 export type TranscriptionQuality = 'fast' | 'accurate';
 
 export interface TranscriptionResult {
     text: string;
+}
+
+/**
+ * Build the transcription params shared by both methods.
+ * Combines model + language param + language-specific prompt for reliable detection.
+ */
+function buildTranscribeParams(file: Awaited<ReturnType<typeof toFile>>, languageHint?: string) {
+    return {
+        file,
+        model: MODEL_TRANSCRIBE,
+        ...(languageHint ? { language: languageHint } : {}),
+        ...(languageHint && LANGUAGE_PROMPTS[languageHint] ? { prompt: LANGUAGE_PROMPTS[languageHint] } : {}),
+        temperature: 0,
+    };
 }
 
 class TranscriptionService {
@@ -38,12 +63,11 @@ class TranscriptionService {
      *
      * @param audioUrl - Direct URL to the audio file (Facebook includes access token)
      * @param languageHint - ISO 639-1 code ('ar', 'en') to improve accuracy
-     * @param quality - 'fast' for pipeline (gpt-4o-mini), 'accurate' for KB voice input (gpt-4o)
      */
     async transcribe(
         audioUrl: string,
         languageHint?: string,
-        quality: TranscriptionQuality = 'fast',
+        _quality?: TranscriptionQuality,
     ): Promise<TranscriptionResult | null> {
         const client = this.getClient();
         if (!client) return null;
@@ -59,7 +83,7 @@ class TranscriptionService {
                 if (!response.ok) {
                     captureError(
                         new Error(`Audio download failed: ${response.status}`),
-                        'Whisper audio download failed',
+                        'Transcription audio download failed',
                         { tags: { service: 'transcription' } },
                     );
                     return null;
@@ -69,7 +93,7 @@ class TranscriptionService {
                 if (contentLength > MAX_AUDIO_BYTES) {
                     captureError(
                         new Error(`Audio too large: ${contentLength} bytes`),
-                        'Whisper audio too large',
+                        'Transcription audio too large',
                         { tags: { service: 'transcription' } },
                     );
                     return null;
@@ -82,30 +106,29 @@ class TranscriptionService {
 
             if (audioBuffer.length === 0 || audioBuffer.length > MAX_AUDIO_BYTES) return null;
 
-            // 2. Send to Whisper API with its own timeout
-            const whisperController = new AbortController();
-            const whisperTimer = setTimeout(() => whisperController.abort(), WHISPER_TIMEOUT_MS);
+            // 2. Send to transcription API with its own timeout
+            const transcribeController = new AbortController();
+            const transcribeTimer = setTimeout(() => transcribeController.abort(), WHISPER_TIMEOUT_MS);
 
             try {
                 const file = await toFile(audioBuffer, 'voice.mp4', { type: 'audio/mp4' });
-                const transcription = await client.audio.transcriptions.create({
-                    file,
-                    model: quality === 'accurate' ? MODEL_ACCURATE : MODEL_PIPELINE,
-                    ...(languageHint ? { language: languageHint } : {}),
-                }, { signal: whisperController.signal });
+                const transcription = await client.audio.transcriptions.create(
+                    buildTranscribeParams(file, languageHint),
+                    { signal: transcribeController.signal },
+                );
 
                 const text = transcription.text?.trim();
                 if (!text) return null;
 
                 return { text };
             } finally {
-                clearTimeout(whisperTimer);
+                clearTimeout(transcribeTimer);
             }
         } catch (error) {
             const isTimeout = error instanceof Error && error.name === 'AbortError';
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
-                isTimeout ? 'Whisper transcription timeout' : 'Whisper transcription failed',
+                isTimeout ? 'Transcription timeout' : 'Transcription failed',
                 { tags: { service: 'transcription' } },
             );
             return null;
@@ -119,13 +142,12 @@ class TranscriptionService {
      * @param audioBuffer - Raw audio bytes (webm/ogg/mp4)
      * @param mimeType - MIME type from the browser (e.g. 'audio/webm')
      * @param languageHint - ISO 639-1 code ('ar', 'en') to improve accuracy
-     * @param quality - 'fast' or 'accurate'
      */
     async transcribeFromBuffer(
         audioBuffer: Buffer,
         mimeType: string = 'audio/webm',
         languageHint?: string,
-        quality: TranscriptionQuality = 'accurate',
+        _quality?: TranscriptionQuality,
     ): Promise<TranscriptionResult | null> {
         const client = this.getClient();
         if (!client) return null;
@@ -143,11 +165,10 @@ class TranscriptionService {
 
         try {
             const file = await toFile(audioBuffer, `voice.${ext}`, { type: mimeType });
-            const transcription = await client.audio.transcriptions.create({
-                file,
-                model: quality === 'accurate' ? MODEL_ACCURATE : MODEL_PIPELINE,
-                ...(languageHint ? { language: languageHint } : {}),
-            }, { signal: controller.signal });
+            const transcription = await client.audio.transcriptions.create(
+                buildTranscribeParams(file, languageHint),
+                { signal: controller.signal },
+            );
 
             const text = transcription.text?.trim();
             if (!text) return null;
@@ -157,7 +178,7 @@ class TranscriptionService {
             const isTimeout = error instanceof Error && error.name === 'AbortError';
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
-                isTimeout ? 'Whisper buffer transcription timeout' : 'Whisper buffer transcription failed',
+                isTimeout ? 'Transcription buffer timeout' : 'Transcription buffer failed',
                 { tags: { service: 'transcription' } },
             );
             return null;

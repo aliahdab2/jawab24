@@ -49,9 +49,58 @@ describe('TranscriptionService', () => {
 
         expect(result).toEqual({ text: 'كم سعر المنتج؟' });
         expect(mockCreate).toHaveBeenCalledWith(
-            expect.objectContaining({ model: 'gpt-4o-mini-transcribe', language: 'ar' }),
+            expect.objectContaining({
+                model: 'gpt-4o-mini-transcribe',
+                language: 'ar',
+                temperature: 0,
+            }),
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         );
+    });
+
+    it('should include language-specific prompt for Arabic', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response(Buffer.from('audio'), { status: 200 }),
+        );
+        mockCreate.mockResolvedValueOnce({ text: 'مرحبا' });
+
+        await transcriptionService.transcribe('https://example.com/voice.mp4', 'ar');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                prompt: expect.stringContaining('العربية'),
+            }),
+            expect.any(Object),
+        );
+    });
+
+    it('should include language-specific prompt for English', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response(Buffer.from('audio'), { status: 200 }),
+        );
+        mockCreate.mockResolvedValueOnce({ text: 'hello' });
+
+        await transcriptionService.transcribe('https://example.com/voice.mp4', 'en');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+            expect.objectContaining({
+                prompt: expect.stringContaining('English'),
+            }),
+            expect.any(Object),
+        );
+    });
+
+    it('should omit prompt and language when no languageHint provided', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response(Buffer.from('audio'), { status: 200 }),
+        );
+        mockCreate.mockResolvedValueOnce({ text: 'hello' });
+
+        await transcriptionService.transcribe('https://example.com/voice.mp4');
+
+        const callArgs = mockCreate.mock.calls[0][0];
+        expect(callArgs.language).toBeUndefined();
+        expect(callArgs.prompt).toBeUndefined();
     });
 
     it('should return null when audio download fails', async () => {
@@ -65,7 +114,7 @@ describe('TranscriptionService', () => {
         expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it('should return null when Whisper returns empty text', async () => {
+    it('should return null when transcription returns empty text', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
             new Response(Buffer.from('audio'), { status: 200 }),
         );
@@ -76,7 +125,7 @@ describe('TranscriptionService', () => {
         expect(result).toBeNull();
     });
 
-    it('should return null when Whisper API throws', async () => {
+    it('should return null when transcription API throws', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
             new Response(Buffer.from('audio'), { status: 200 }),
         );
@@ -106,7 +155,7 @@ describe('TranscriptionService', () => {
         expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it('should use accurate model when quality is accurate', async () => {
+    it('should always use gpt-4o-mini-transcribe regardless of quality param', async () => {
         vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
             new Response(Buffer.from('audio'), { status: 200 }),
         );
@@ -115,7 +164,7 @@ describe('TranscriptionService', () => {
         await transcriptionService.transcribe('https://example.com/voice.mp4', 'ar', 'accurate');
 
         expect(mockCreate).toHaveBeenCalledWith(
-            expect.objectContaining({ model: 'gpt-4o-transcribe' }),
+            expect.objectContaining({ model: 'gpt-4o-mini-transcribe' }),
             expect.any(Object),
         );
     });
@@ -130,7 +179,7 @@ describe('TranscriptionService.transcribeFromBuffer', () => {
         transcriptionService = mod.transcriptionService;
     });
 
-    it('should transcribe audio buffer with accurate model by default', async () => {
+    it('should transcribe audio buffer with language hint and prompt', async () => {
         mockCreate.mockResolvedValueOnce({ text: 'عندنا توصيل مجاني' });
 
         const buffer = Buffer.from('fake-webm-audio');
@@ -138,12 +187,17 @@ describe('TranscriptionService.transcribeFromBuffer', () => {
 
         expect(result).toEqual({ text: 'عندنا توصيل مجاني' });
         expect(mockCreate).toHaveBeenCalledWith(
-            expect.objectContaining({ model: 'gpt-4o-transcribe', language: 'ar' }),
+            expect.objectContaining({
+                model: 'gpt-4o-mini-transcribe',
+                language: 'ar',
+                prompt: expect.stringContaining('العربية'),
+                temperature: 0,
+            }),
             expect.objectContaining({ signal: expect.any(AbortSignal) }),
         );
     });
 
-    it('should use fast model when quality is fast', async () => {
+    it('should always use gpt-4o-mini-transcribe regardless of quality param', async () => {
         mockCreate.mockResolvedValueOnce({ text: 'test' });
 
         const buffer = Buffer.from('fake-audio');
@@ -162,7 +216,7 @@ describe('TranscriptionService.transcribeFromBuffer', () => {
         expect(mockCreate).not.toHaveBeenCalled();
     });
 
-    it('should return null when Whisper returns empty text', async () => {
+    it('should return null when transcription returns empty text', async () => {
         mockCreate.mockResolvedValueOnce({ text: '   ' });
 
         const buffer = Buffer.from('fake-audio');
