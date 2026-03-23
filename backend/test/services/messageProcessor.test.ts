@@ -51,6 +51,9 @@ vi.mock('../../src/db', () => ({
         transaction: vi.fn(async (cb: (tx: unknown) => Promise<void>) => cb({})),
     },
 }));
+vi.mock('../../src/lib/eventBus', () => ({
+    publishSSEEvent: vi.fn(),
+}));
 
 // --- Mock adapter factory ---
 function createMockAdapter(overrides: Partial<MessagePlatformAdapter> = {}): MessagePlatformAdapter {
@@ -500,6 +503,102 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
             expect.objectContaining({
                 urgent: true,
             }),
+        );
+    });
+});
+
+describe('MessageProcessor — Page OFF behavior', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+    });
+
+    it('should fetch sender name and store message even when page auto-reply is OFF', async () => {
+        const mockPage: PlatformPage = {
+            id: 'page-uuid',
+            userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
+            name: 'Test Page',
+            accessToken: 'token-123',
+            knowledgeBase: null,
+            kbActiveVersion: null,
+            autoReplyEnabled: false, // PAGE IS OFF
+        };
+
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue(mockPage),
+            fetchSenderName: vi.fn().mockResolvedValue('Ahmad'),
+            storeIncomingMessage: vi.fn().mockResolvedValue({ message: { id: 'msg-1', replied: false }, isNew: true }),
+        });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        // Should return early with auto-reply disabled
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Auto-reply disabled');
+
+        // But should have fetched name and stored the message first
+        expect(adapter.fetchSenderName).toHaveBeenCalled();
+        expect(adapter.storeIncomingMessage).toHaveBeenCalledWith(
+            'page-uuid', 'msg-1', 'sender-1', 'Hello', 'Ahmad',
+        );
+    });
+
+    it('should not send away message or reply when page is OFF', async () => {
+        const mockPage: PlatformPage = {
+            id: 'page-uuid',
+            userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
+            name: 'Test Page',
+            accessToken: 'token-123',
+            knowledgeBase: null,
+            kbActiveVersion: null,
+            autoReplyEnabled: false,
+        };
+
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue(mockPage),
+            storeIncomingMessage: vi.fn().mockResolvedValue({ message: { id: 'msg-1', replied: false }, isNew: true }),
+        });
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        // No outbound communication when page is OFF
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
+    });
+
+    it('should store message with name even if fetchSenderName fails when page is OFF', async () => {
+        const mockPage: PlatformPage = {
+            id: 'page-uuid',
+            userId: 'user-uuid',
+            workspaceId: 'test_workspace_id',
+            name: 'Test Page',
+            accessToken: 'token-123',
+            knowledgeBase: null,
+            kbActiveVersion: null,
+            autoReplyEnabled: false,
+        };
+
+        const adapter = createMockAdapter({
+            getPage: vi.fn().mockResolvedValue(mockPage),
+            fetchSenderName: vi.fn().mockRejectedValue(new Error('API error')),
+            storeIncomingMessage: vi.fn().mockResolvedValue({ message: { id: 'msg-1', replied: false }, isNew: true }),
+        });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('Auto-reply disabled');
+        // Name fetch failed but message still stored (with undefined name)
+        expect(adapter.storeIncomingMessage).toHaveBeenCalledWith(
+            'page-uuid', 'msg-1', 'sender-1', 'Hello', undefined,
         );
     });
 });

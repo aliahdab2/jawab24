@@ -87,25 +87,17 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Page has no associated workspace' };
             }
 
-            // 2. Check auto-reply enabled for this platform
-            if (!page.autoReplyEnabled) {
-                pipelineMetrics.record(pipeline, 'auto_reply_disabled');
-                return { success: false, messageId: platformMessageId, error: `Auto-reply disabled for ${platform}` };
-            }
-
-            const userId = page.userId;
-            const workspaceId = page.workspaceId;
-
-            // 3. Fetch sender name (best-effort)
+            // 2. Fetch sender name (best-effort) — do this BEFORE auto-reply check
+            // so dashboard always shows real names, even when page is OFF
             let senderName: string | undefined;
             try {
                 senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId);
             } catch {
                 // Non-critical — continue without sender name
             }
-            lap('3-fetchSenderName');
+            lap('2-fetchSenderName');
 
-            // 4. Store incoming message
+            // 3. Store incoming message (before auto-reply check so name is persisted)
             const { message: storedMessage, isNew } = await adapter.storeIncomingMessage(
                 page.id,
                 platformMessageId,
@@ -113,10 +105,10 @@ export class MessageProcessor {
                 messageText,
                 senderName,
             );
-            lap('4-storeMessage');
+            lap('3-storeMessage');
 
-            // SSE: notify merchant that a new message arrived (includes full message for optimistic cache update)
-            publishSSEEvent(userId, 'message:received', {
+            // SSE: notify merchant that a new message arrived
+            publishSSEEvent(page.userId, 'message:received', {
                 messageId: platformMessageId,
                 pageId: page.id,
                 senderId,
@@ -137,6 +129,16 @@ export class MessageProcessor {
                     createdAt: new Date().toISOString(),
                 },
             });
+
+            // 4. Check auto-reply enabled — after storing so dashboard has the message with name
+            // Page OFF = Jawab24 is invisible. No reply, no flag, no notification.
+            if (!page.autoReplyEnabled) {
+                pipelineMetrics.record(pipeline, 'auto_reply_disabled');
+                return { success: false, messageId: platformMessageId, error: `Auto-reply disabled for ${platform}` };
+            }
+
+            const userId = page.userId;
+            const workspaceId = page.workspaceId;
 
             // 4b. Acquire distributed lock — prevents two workers from replying to
             //     the same sender simultaneously (covers greeting race + reply race).
