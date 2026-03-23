@@ -1,13 +1,20 @@
 package com.jawab24.app;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.util.Log;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.webkit.WebView;
 import android.widget.Toast;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.IntentSenderRequest;
 import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
 import com.google.android.play.core.appupdate.AppUpdateManager;
@@ -31,9 +38,33 @@ public class MainActivity extends BridgeActivity {
         }
     };
 
+    private static final int MIC_PERMISSION_REQUEST = 1001;
+    private PermissionRequest pendingPermissionRequest;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Grant WebView audio permission when JavaScript calls getUserMedia
+        getBridge().getWebView().setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                for (String resource : request.getResources()) {
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(resource)) {
+                        if (ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.RECORD_AUDIO)
+                                == PackageManager.PERMISSION_GRANTED) {
+                            request.grant(request.getResources());
+                        } else {
+                            pendingPermissionRequest = request;
+                            ActivityCompat.requestPermissions(MainActivity.this,
+                                    new String[]{Manifest.permission.RECORD_AUDIO}, MIC_PERMISSION_REQUEST);
+                        }
+                        return;
+                    }
+                }
+                request.deny();
+            }
+        });
 
         // Back button: navigate WebView history or double-press to exit
         try {
@@ -88,6 +119,19 @@ public class MainActivity extends BridgeActivity {
             });
         } catch (Exception e) {
             Log.e(TAG, "AppUpdateManager init failed", e);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == MIC_PERMISSION_REQUEST && pendingPermissionRequest != null) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                pendingPermissionRequest.grant(pendingPermissionRequest.getResources());
+            } else {
+                pendingPermissionRequest.deny();
+            }
+            pendingPermissionRequest = null;
         }
     }
 

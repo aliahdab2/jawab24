@@ -1,8 +1,8 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { KnowledgeSection, SectionConfig } from './types';
-import { VoiceRecordButton } from './VoiceRecordButton';
+import { SectionEditor } from './SectionEditor';
 
 interface KnowledgeBaseSectionProps {
   section: KnowledgeSection;
@@ -20,34 +20,7 @@ export function KnowledgeBaseSection({
   onChange,
 }: KnowledgeBaseSectionProps) {
   const tKb = useTranslations('kb');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasContent = section.content.trim().length > 0;
-  const [justTranscribed, setJustTranscribed] = useState(false);
-
-  // Auto-resize textarea to fit content
-  const autoResize = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(80, el.scrollHeight)}px`;
-  }, []);
-
-  const handleVoiceTranscribed = useCallback((text: string) => {
-    const current = section.content.trim();
-    const newContent = current ? `${current}\n${text}` : text;
-    onChange(newContent);
-    setJustTranscribed(true);
-    setTimeout(() => setJustTranscribed(false), 2000);
-    setTimeout(() => autoResize(), 50);
-  }, [section.content, onChange, autoResize]);
-
-  // Auto-focus and auto-resize when expanded
-  useEffect(() => {
-    if (isExpanded && textareaRef.current) {
-      textareaRef.current.focus();
-      autoResize();
-    }
-  }, [isExpanded, autoResize]);
 
   // Preview: first line of content, truncated
   const preview = hasContent
@@ -102,37 +75,14 @@ export function KnowledgeBaseSection({
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">
-              {tKb(config.descKey)}
-            </p>
-            <VoiceRecordButton
-              variant="inline"
-              onTranscribed={handleVoiceTranscribed}
-            />
-          </div>
-          <textarea
-            ref={textareaRef}
-            className={`w-full min-h-[80px] p-3 sm:p-4 border-2 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground transition-colors duration-500 ${
-              justTranscribed ? 'border-amber-400' : 'border-theme-border'
-            }`}
-            placeholder={tKb(config.placeholderKey)}
-            aria-label={tKb(config.titleKey)}
-            value={section.content}
-            onChange={(e) => onChange(e.target.value)}
-            onInput={autoResize}
-            dir="auto"
-            rows={3}
-          />
-          {section.content.length > 0 && (
-            <p className={`text-end text-xs mt-1 ${
-              section.content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
-            }`}>
-              {tKb('charCount', { count: section.content.length, max: 5000 })}
-            </p>
-          )}
-        </div>
+        <SectionEditor
+          content={section.content}
+          onChange={onChange}
+          description={tKb(config.descKey)}
+          placeholder={tKb(config.placeholderKey)}
+          ariaLabel={tKb(config.titleKey)}
+          isExpanded={isExpanded}
+        />
       )}
     </div>
   );

@@ -1,10 +1,10 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ConfirmationModal } from '@/components/ui';
 import { CUSTOM_SECTION_MARKER } from './types';
 import type { KnowledgeSection } from './types';
-import { VoiceRecordButton } from './VoiceRecordButton';
+import { SectionEditor } from './SectionEditor';
 
 interface KnowledgeBaseCustomSectionProps {
   section: KnowledgeSection;
@@ -24,40 +24,16 @@ export function KnowledgeBaseCustomSection({
   onDelete,
 }: KnowledgeBaseCustomSectionProps) {
   const tKb = useTranslations('kb');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const hasContent = section.content.trim().length > 0;
-  const [justTranscribed, setJustTranscribed] = useState(false);
 
-  // Auto-resize textarea to fit content
-  const autoResize = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(80, el.scrollHeight)}px`;
-  }, []);
-
-  const handleVoiceTranscribed = useCallback((text: string) => {
-    const current = section.content.trim();
-    const newContent = current ? `${current}\n${text}` : text;
-    onChange(newContent);
-    setJustTranscribed(true);
-    setTimeout(() => setJustTranscribed(false), 2000);
-    setTimeout(() => autoResize(), 50);
-  }, [section.content, onChange, autoResize]);
-
-  // Auto-focus title input when expanded (if title is default)
+  // Auto-focus title input when expanded (if no content yet)
   useEffect(() => {
-    if (isExpanded) {
-      if (titleRef.current && !section.content.trim()) {
-        titleRef.current.focus();
-        titleRef.current.select();
-      } else if (textareaRef.current) {
-        textareaRef.current.focus();
-        autoResize();
-      }
+    if (isExpanded && titleRef.current && !section.content.trim()) {
+      titleRef.current.focus();
+      titleRef.current.select();
     }
-  }, [isExpanded, section.content, autoResize]);
+  }, [isExpanded, section.content]);
 
   // Preview: first line of content, truncated
   const preview = hasContent
@@ -151,37 +127,14 @@ export function KnowledgeBaseCustomSection({
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-muted-foreground">
-              {tKb('customSection.desc')}
-            </p>
-            <VoiceRecordButton
-              variant="inline"
-              onTranscribed={handleVoiceTranscribed}
-            />
-          </div>
-          <textarea
-            ref={textareaRef}
-            className={`w-full min-h-[80px] p-3 sm:p-4 border-2 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground transition-colors duration-500 ${
-              justTranscribed ? 'border-amber-400' : 'border-theme-border'
-            }`}
-            placeholder={tKb('customSection.placeholder')}
-            aria-label={tKb('customSection.placeholder')}
-            value={section.content}
-            onChange={(e) => onChange(e.target.value)}
-            onInput={autoResize}
-            dir="auto"
-            rows={3}
-          />
-          {section.content.length > 0 && (
-            <p className={`text-end text-xs mt-1 ${
-              section.content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
-            }`}>
-              {tKb('charCount', { count: section.content.length, max: 5000 })}
-            </p>
-          )}
-        </div>
+        <SectionEditor
+          content={section.content}
+          onChange={onChange}
+          description={tKb('customSection.desc')}
+          placeholder={tKb('customSection.placeholder')}
+          ariaLabel={tKb('customSection.placeholder')}
+          isExpanded={isExpanded}
+        />
       )}
 
       <ConfirmationModal

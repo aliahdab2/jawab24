@@ -72,6 +72,8 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Jawab24 uses the microphone to record voice notes for your knowledge base and auto-replies.</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>This identifier will be used to deliver personalized login and social media features.</string>
 </dict>
