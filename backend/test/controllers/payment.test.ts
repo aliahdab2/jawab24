@@ -42,7 +42,7 @@ vi.mock('../../src/db', () => ({
 
 vi.mock('../../src/db/schema', () => ({
     users: { id: 'id', email: 'email' },
-    plans: { id: 'id', stripePriceId: 'stripe_price_id' },
+    plans: { id: 'id', stripePriceId: 'stripe_price_id', stripeYearlyPriceId: 'stripe_yearly_price_id' },
     subscriptions: {},
 }));
 
@@ -148,6 +148,94 @@ describe('Payment Controller', () => {
                 sessionId: mockSession.id,
                 url: mockSession.url,
             });
+        });
+
+        it('should use yearly Stripe price when billingInterval is year', async () => {
+            mockRequest.body = { planId: 'plan_123', billingInterval: 'year' };
+            mockRequest.log = { error: vi.fn(), info: vi.fn(), warn: vi.fn() } as any;
+
+            const mockUser = { id: 'user_123', email: 'test@example.com' };
+            const mockPlan = {
+                id: 'plan_123',
+                name: 'Starter',
+                stripePriceId: 'price_monthly',
+                stripeYearlyPriceId: 'price_yearly',
+                trialDays: 30,
+            };
+            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/pay/cs_test' };
+
+            const mockDb = vi.mocked(db);
+            mockDb.select
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockUser]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockPlan]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) } as any);
+
+            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
+
+            await paymentController.createCheckoutSession(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+                'user_123', 'test@example.com', 'plan_123', 'price_yearly',
+                expect.any(String), expect.any(String), 30
+            );
+        });
+
+        it('should fall back to monthly price when yearly is not configured', async () => {
+            mockRequest.body = { planId: 'plan_123', billingInterval: 'year' };
+
+            const mockUser = { id: 'user_123', email: 'test@example.com' };
+            const mockPlan = {
+                id: 'plan_123',
+                name: 'Starter',
+                stripePriceId: 'price_monthly',
+                stripeYearlyPriceId: null,
+                trialDays: 0,
+            };
+            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/pay/cs_test' };
+
+            const mockDb = vi.mocked(db);
+            mockDb.select
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockUser]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockPlan]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) } as any);
+
+            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
+
+            await paymentController.createCheckoutSession(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+                'user_123', 'test@example.com', 'plan_123', 'price_monthly',
+                expect.any(String), expect.any(String), 0
+            );
+        });
+
+        it('should default to monthly when billingInterval is invalid', async () => {
+            mockRequest.body = { planId: 'plan_123', billingInterval: 'weekly' };
+
+            const mockUser = { id: 'user_123', email: 'test@example.com' };
+            const mockPlan = {
+                id: 'plan_123',
+                name: 'Business',
+                stripePriceId: 'price_monthly',
+                stripeYearlyPriceId: 'price_yearly',
+                trialDays: 0,
+            };
+            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/pay/cs_test' };
+
+            const mockDb = vi.mocked(db);
+            mockDb.select
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockUser]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockPlan]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) } as any);
+
+            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
+
+            await paymentController.createCheckoutSession(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+                'user_123', 'test@example.com', 'plan_123', 'price_monthly',
+                expect.any(String), expect.any(String), 0
+            );
         });
 
         it('should return 401 if user is not authenticated', async () => {
