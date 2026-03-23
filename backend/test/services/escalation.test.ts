@@ -20,7 +20,7 @@ vi.mock('../../src/services/notifications', () => ({
 vi.mock('../../src/db/schema', () => ({
     comments: { id: 'id', postId: 'post_id', replied: 'replied', needsAttention: 'needs_attention', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at' },
     messages: { id: 'id', pageId: 'page_id', replied: 'replied', needsAttention: 'needs_attention', direction: 'direction', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at' },
-    pages: { id: 'id', userId: 'user_id' },
+    pages: { id: 'id', userId: 'user_id', autoReplyEnabled: 'auto_reply_enabled' },
     posts: { id: 'id', pageId: 'page_id' },
     settings: { userId: 'user_id', commentEscalationMinutes: 'comment_escalation_minutes', messageEscalationMinutes: 'message_escalation_minutes' },
 }));

@@ -72,6 +72,7 @@ async function escalateComments(): Promise<void> {
         .where(and(
             eq(comments.replied, false),
             eq(comments.needsAttention, false),
+            eq(pages.autoReplyEnabled, true),
             sql`${comments.createdTime} < NOW() - MAKE_INTERVAL(mins => COALESCE(${settings.commentEscalationMinutes}, ${DEFAULT_COMMENT_ESCALATION_MINUTES}))`,
         ));
 
@@ -130,6 +131,7 @@ async function escalateMessages(): Promise<void> {
             eq(messages.replied, false),
             eq(messages.needsAttention, false),
             eq(messages.direction, 'incoming'),
+            eq(pages.autoReplyEnabled, true),
             sql`${messages.createdTime} < NOW() - MAKE_INTERVAL(mins => COALESCE(${settings.messageEscalationMinutes}, ${DEFAULT_MESSAGE_ESCALATION_MINUTES}))`,
         ));
 
