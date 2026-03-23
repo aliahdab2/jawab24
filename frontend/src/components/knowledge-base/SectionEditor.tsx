@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { VoiceRecordButton } from './VoiceRecordButton';
 
 interface SectionEditorProps {
@@ -24,6 +24,7 @@ export function SectionEditor({
   isExpanded,
 }: SectionEditorProps) {
   const tKb = useTranslations('kb');
+  const locale = useLocale();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [justTranscribed, setJustTranscribed] = useState(false);
 
@@ -59,6 +60,7 @@ export function SectionEditor({
         <VoiceRecordButton
           variant="inline"
           onTranscribed={handleVoiceTranscribed}
+          languageHint={locale}
           className="flex-shrink-0"
         />
       </div>

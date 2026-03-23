@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { Button } from '@/components/ui';
 import type { KbGap } from './types';
 import { VoiceRecordButton } from './VoiceRecordButton';
@@ -15,6 +15,7 @@ interface GapCardProps {
 
 export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCardProps) {
   const tKb = useTranslations('kb');
+  const locale = useLocale();
   const [answer, setAnswer] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -77,6 +78,7 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
             <VoiceRecordButton
               variant="bar"
               onTranscribed={(text) => setAnswer(prev => prev.trim() ? `${prev.trim()}\n${text}` : text)}
+              languageHint={locale}
               className="me-auto"
             />
             <button

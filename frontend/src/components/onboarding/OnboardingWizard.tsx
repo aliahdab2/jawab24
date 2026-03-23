@@ -249,6 +249,7 @@ function ReviewInfoStep({
           <div className="flex items-center justify-end mb-1.5">
             <VoiceRecordButton
               variant="inline"
+              languageHint={locale}
               onTranscribed={(text) => {
                 const current = knowledgeBase.trim();
                 onKnowledgeBaseChange(current ? `${current}\n${text}` : text);
@@ -367,6 +368,7 @@ function ReviewInfoStep({
               </p>
               <VoiceRecordButton
                 variant="inline"
+                languageHint={locale}
                 onTranscribed={(text) => {
                   const current = (chipData[activeChip] || '').trim();
                   onChipContentChange(activeChip, current ? `${current}\n${text}` : text);
