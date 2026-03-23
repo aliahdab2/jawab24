@@ -20,7 +20,7 @@ vi.mock('../../src/services/notifications', () => ({
 vi.mock('../../src/db/schema', () => ({
     comments: { id: 'id', postId: 'post_id', replied: 'replied', needsAttention: 'needs_attention', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at' },
     messages: { id: 'id', pageId: 'page_id', replied: 'replied', needsAttention: 'needs_attention', direction: 'direction', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at' },
-    pages: { id: 'id', userId: 'user_id', autoReplyEnabled: 'auto_reply_enabled' },
+    pages: { id: 'id', userId: 'user_id', name: 'name', autoReplyEnabled: 'auto_reply_enabled' },
     posts: { id: 'id', pageId: 'page_id' },
     settings: { userId: 'user_id', commentEscalationMinutes: 'comment_escalation_minutes', messageEscalationMinutes: 'message_escalation_minutes' },
 }));
@@ -99,9 +99,9 @@ describe('Escalation Service', () => {
             // Batch query returns 3 stale comments for user-1
             mockBatchSelect(
                 [
-                    { userId: 'user-1', commentId: 'c-1', thresholdMinutes: 60 },
-                    { userId: 'user-1', commentId: 'c-2', thresholdMinutes: 60 },
-                    { userId: 'user-1', commentId: 'c-3', thresholdMinutes: 60 },
+                    { userId: 'user-1', itemId: 'c-1', pageName: 'My Page', thresholdMinutes: 60 },
+                    { userId: 'user-1', itemId: 'c-2', pageName: 'My Page', thresholdMinutes: 60 },
+                    { userId: 'user-1', itemId: 'c-3', pageName: 'My Page', thresholdMinutes: 60 },
                 ],
                 [] // no stale messages
             );
@@ -129,8 +129,8 @@ describe('Escalation Service', () => {
             mockBatchSelect(
                 [], // no stale comments
                 [
-                    { userId: 'user-2', messageId: 'm-1', thresholdMinutes: 15 },
-                    { userId: 'user-2', messageId: 'm-2', thresholdMinutes: 15 },
+                    { userId: 'user-2', itemId: 'm-1', pageName: 'Shop', thresholdMinutes: 15 },
+                    { userId: 'user-2', itemId: 'm-2', pageName: 'Shop', thresholdMinutes: 15 },
                 ]
             );
 
@@ -146,8 +146,8 @@ describe('Escalation Service', () => {
             expect(notificationService.sendNotification).toHaveBeenCalledWith(
                 'user-2',
                 expect.objectContaining({
-                    type: 'stale_comment',
-                    data: { deepLink: '/messages?filter=flagged' },
+                    type: 'stale_message',
+                    data: { deepLink: '/messages?filter=flagged', type: 'message' },
                 })
             );
         });
@@ -156,9 +156,9 @@ describe('Escalation Service', () => {
             // Single batch returns stale items for two different users
             mockBatchSelect(
                 [
-                    { userId: 'user-a', commentId: 'c-a1', thresholdMinutes: 60 },
-                    { userId: 'user-b', commentId: 'c-b1', thresholdMinutes: 120 },
-                    { userId: 'user-b', commentId: 'c-b2', thresholdMinutes: 120 },
+                    { userId: 'user-a', itemId: 'c-a1', pageName: 'Page A', thresholdMinutes: 60 },
+                    { userId: 'user-b', itemId: 'c-b1', pageName: 'Page B', thresholdMinutes: 120 },
+                    { userId: 'user-b', itemId: 'c-b2', pageName: 'Page B', thresholdMinutes: 120 },
                 ],
                 []
             );
@@ -185,8 +185,8 @@ describe('Escalation Service', () => {
 
         it('should skip rows with null userId', async () => {
             mockBatchSelect(
-                [{ userId: null, commentId: 'c-1', thresholdMinutes: 60 }],
-                [{ userId: null, messageId: 'm-1', thresholdMinutes: 30 }]
+                [{ userId: null, itemId: 'c-1', pageName: null, thresholdMinutes: 60 }],
+                [{ userId: null, itemId: 'm-1', pageName: null, thresholdMinutes: 30 }]
             );
 
             await runEscalationSweep();
