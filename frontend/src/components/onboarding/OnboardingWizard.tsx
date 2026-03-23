@@ -202,6 +202,8 @@ function ReviewInfoStep({
   isLandscape: boolean;
   t: TFunction;
 }) {
+  const locale = useLocale();
+
   if (!selectedPage) {
     return (
       <div className="text-center py-8">
