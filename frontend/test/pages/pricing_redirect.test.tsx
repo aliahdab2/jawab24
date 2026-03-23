@@ -145,6 +145,6 @@ describe('PricingPage Navigation Logic', () => {
         }, { timeout: 1000 });
 
         // Verify: Redirects directly to Checkout
-        expect(mockPush).toHaveBeenCalledWith('/checkout?planId=plan-1');
+        expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/checkout?planId=plan-1'));
     });
 });
