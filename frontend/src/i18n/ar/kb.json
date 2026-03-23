@@ -31,7 +31,16 @@
     "titlePlaceholder": "اسم القسم (مثال: القائمة، الفريق، الفروع)",
     "desc": "أضف أي معلومات عن عملك",
     "placeholder": "اكتب معلوماتك هنا...",
+    "deleteTitle": "حذف القسم",
     "deleteConfirm": "حذف هذا القسم ومحتواه؟"
   },
-  "defaultSectionTitle": "قسم جديد"
+  "defaultSectionTitle": "قسم جديد",
+  "voice": {
+    "startRecording": "سجّل صوتك",
+    "stopRecording": "أوقف التسجيل",
+    "transcribing": "جاري التحويل...",
+    "reviewHint": "راجع النص وعدّل إذا لزم",
+    "micDenied": "تم رفض الوصول للمايكروفون. تحقق من إعدادات المتصفح.",
+    "failed": "فشل تحويل الصوت. حاول مرة أخرى."
+  }
 }

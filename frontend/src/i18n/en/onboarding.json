@@ -40,5 +40,6 @@
   "chipLocationPlaceholder": "e.g. Jeddah, Al-Safa district",
   "chipServicesPlaceholder": "e.g. Boys & girls education, grades K–12\nEnglish courses, private tutoring",
   "chipDeliveryPlaceholder": "e.g. Free delivery in Jeddah\n30 SAR for other cities",
-  "chipOtherPlaceholder": "Write anything else Jawab should know..."
+  "chipOtherPlaceholder": "Write anything else Jawab should know...",
+  "voiceHint": "Tap a topic below and type or use the mic to add details."
 }

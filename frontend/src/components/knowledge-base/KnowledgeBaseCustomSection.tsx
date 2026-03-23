@@ -1,8 +1,10 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { ChevronDown, Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { ConfirmationModal } from '@/components/ui';
 import { CUSTOM_SECTION_MARKER } from './types';
 import type { KnowledgeSection } from './types';
+import { VoiceRecordButton } from './VoiceRecordButton';
 
 interface KnowledgeBaseCustomSectionProps {
   section: KnowledgeSection;
@@ -25,6 +27,7 @@ export function KnowledgeBaseCustomSection({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
   const hasContent = section.content.trim().length > 0;
+  const [justTranscribed, setJustTranscribed] = useState(false);
 
   // Auto-resize textarea to fit content
   const autoResize = useCallback(() => {
@@ -33,6 +36,15 @@ export function KnowledgeBaseCustomSection({
     el.style.height = 'auto';
     el.style.height = `${Math.max(80, el.scrollHeight)}px`;
   }, []);
+
+  const handleVoiceTranscribed = useCallback((text: string) => {
+    const current = section.content.trim();
+    const newContent = current ? `${current}\n${text}` : text;
+    onChange(newContent);
+    setJustTranscribed(true);
+    setTimeout(() => setJustTranscribed(false), 2000);
+    setTimeout(() => autoResize(), 50);
+  }, [section.content, onChange, autoResize]);
 
   // Auto-focus title input when expanded (if title is default)
   useEffect(() => {
@@ -52,12 +64,15 @@ export function KnowledgeBaseCustomSection({
     ? section.content.split('\n')[0].slice(0, 60) + (section.content.length > 60 ? '...' : '')
     : tKb('section.tapToAdd');
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (hasContent) {
-      if (!window.confirm(tKb('customSection.deleteConfirm'))) return;
+      setShowDeleteConfirm(true);
+    } else {
+      onDelete();
     }
-    onDelete();
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -137,12 +152,20 @@ export function KnowledgeBaseCustomSection({
       {/* Expanded content */}
       {isExpanded && (
         <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
-          <p className="text-xs text-muted-foreground mb-2">
-            {tKb('customSection.desc')}
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-muted-foreground">
+              {tKb('customSection.desc')}
+            </p>
+            <VoiceRecordButton
+              variant="inline"
+              onTranscribed={handleVoiceTranscribed}
+            />
+          </div>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground"
+            className={`w-full min-h-[80px] p-3 sm:p-4 border-2 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground transition-colors duration-500 ${
+              justTranscribed ? 'border-amber-400' : 'border-theme-border'
+            }`}
             placeholder={tKb('customSection.placeholder')}
             aria-label={tKb('customSection.placeholder')}
             value={section.content}
@@ -160,6 +183,15 @@ export function KnowledgeBaseCustomSection({
           )}
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => { setShowDeleteConfirm(false); onDelete(); }}
+        title={tKb('customSection.deleteTitle')}
+        message={tKb('customSection.deleteConfirm')}
+        variant="danger"
+      />
     </div>
   );
 }

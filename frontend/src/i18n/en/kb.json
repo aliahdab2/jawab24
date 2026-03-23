@@ -31,7 +31,16 @@
     "titlePlaceholder": "Section name (e.g., Menu, Team, Branches)",
     "desc": "Add any info about your business",
     "placeholder": "Type your info here...",
+    "deleteTitle": "Delete Section",
     "deleteConfirm": "Delete this section and its content?"
   },
-  "defaultSectionTitle": "New Section"
+  "defaultSectionTitle": "New Section",
+  "voice": {
+    "startRecording": "Record voice",
+    "stopRecording": "Stop recording",
+    "transcribing": "Transcribing...",
+    "reviewHint": "Review and edit if needed",
+    "micDenied": "Microphone access denied. Check your browser settings.",
+    "failed": "Voice transcription failed. Try again."
+  }
 }

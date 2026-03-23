@@ -1,7 +1,8 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { KnowledgeSection, SectionConfig } from './types';
+import { VoiceRecordButton } from './VoiceRecordButton';
 
 interface KnowledgeBaseSectionProps {
   section: KnowledgeSection;
@@ -21,6 +22,7 @@ export function KnowledgeBaseSection({
   const tKb = useTranslations('kb');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const hasContent = section.content.trim().length > 0;
+  const [justTranscribed, setJustTranscribed] = useState(false);
 
   // Auto-resize textarea to fit content
   const autoResize = useCallback(() => {
@@ -29,6 +31,15 @@ export function KnowledgeBaseSection({
     el.style.height = 'auto';
     el.style.height = `${Math.max(80, el.scrollHeight)}px`;
   }, []);
+
+  const handleVoiceTranscribed = useCallback((text: string) => {
+    const current = section.content.trim();
+    const newContent = current ? `${current}\n${text}` : text;
+    onChange(newContent);
+    setJustTranscribed(true);
+    setTimeout(() => setJustTranscribed(false), 2000);
+    setTimeout(() => autoResize(), 50);
+  }, [section.content, onChange, autoResize]);
 
   // Auto-focus and auto-resize when expanded
   useEffect(() => {
@@ -92,12 +103,20 @@ export function KnowledgeBaseSection({
       {/* Expanded content */}
       {isExpanded && (
         <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
-          <p className="text-xs text-muted-foreground mb-2">
-            {tKb(config.descKey)}
-          </p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-muted-foreground">
+              {tKb(config.descKey)}
+            </p>
+            <VoiceRecordButton
+              variant="inline"
+              onTranscribed={handleVoiceTranscribed}
+            />
+          </div>
           <textarea
             ref={textareaRef}
-            className="w-full min-h-[80px] p-3 sm:p-4 border-2 border-theme-border rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground"
+            className={`w-full min-h-[80px] p-3 sm:p-4 border-2 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground transition-colors duration-500 ${
+              justTranscribed ? 'border-amber-400' : 'border-theme-border'
+            }`}
             placeholder={tKb(config.placeholderKey)}
             aria-label={tKb(config.titleKey)}
             value={section.content}

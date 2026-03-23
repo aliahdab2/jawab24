@@ -536,6 +536,14 @@ export const adminApi = {
   },
 };
 
+// Voice API — KB voice input transcription
+export const voiceApi = {
+  transcribe: async (audio: string, mimeType: string = 'audio/webm', languageHint?: string, quality: 'fast' | 'accurate' = 'accurate') => {
+    const response = await api.post('/voice/transcribe', { audio, mimeType, languageHint, quality });
+    return response.data;
+  },
+};
+
 // E-commerce API - Manage connected store (Shopify, Salla, Zid)
 export const ecommerceApi = {
   getStore: async () => {

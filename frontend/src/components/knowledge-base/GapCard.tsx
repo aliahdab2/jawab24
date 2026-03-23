@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import type { KbGap } from './types';
+import { VoiceRecordButton } from './VoiceRecordButton';
 
 interface GapCardProps {
   gap: KbGap;
@@ -73,6 +74,11 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
             rows={2}
           />
           <div className="flex items-center justify-end gap-2">
+            <VoiceRecordButton
+              variant="bar"
+              onTranscribed={(text) => setAnswer(prev => prev.trim() ? `${prev.trim()}\n${text}` : text)}
+              className="me-auto"
+            />
             <button
               type="button"
               onClick={onSkip}

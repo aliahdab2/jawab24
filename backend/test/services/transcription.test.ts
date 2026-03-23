@@ -29,7 +29,7 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 }));
 
 describe('TranscriptionService', () => {
-    let transcriptionService: { transcribe: (url: string, lang?: string) => Promise<{ text: string } | null> };
+    let transcriptionService: Awaited<typeof import('../../src/services/transcription')>['transcriptionService'];
 
     beforeEach(async () => {
         mockCreate.mockReset();
@@ -104,5 +104,89 @@ describe('TranscriptionService', () => {
 
         expect(result).toBeNull();
         expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it('should use accurate model when quality is accurate', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response(Buffer.from('audio'), { status: 200 }),
+        );
+        mockCreate.mockResolvedValueOnce({ text: 'transcribed text' });
+
+        await transcriptionService.transcribe('https://example.com/voice.mp4', 'ar', 'accurate');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+            expect.objectContaining({ model: 'gpt-4o-transcribe' }),
+            expect.any(Object),
+        );
+    });
+});
+
+describe('TranscriptionService.transcribeFromBuffer', () => {
+    let transcriptionService: Awaited<typeof import('../../src/services/transcription')>['transcriptionService'];
+
+    beforeEach(async () => {
+        mockCreate.mockReset();
+        const mod = await import('../../src/services/transcription');
+        transcriptionService = mod.transcriptionService;
+    });
+
+    it('should transcribe audio buffer with accurate model by default', async () => {
+        mockCreate.mockResolvedValueOnce({ text: 'عندنا توصيل مجاني' });
+
+        const buffer = Buffer.from('fake-webm-audio');
+        const result = await transcriptionService.transcribeFromBuffer(buffer, 'audio/webm', 'ar');
+
+        expect(result).toEqual({ text: 'عندنا توصيل مجاني' });
+        expect(mockCreate).toHaveBeenCalledWith(
+            expect.objectContaining({ model: 'gpt-4o-transcribe', language: 'ar' }),
+            expect.objectContaining({ signal: expect.any(AbortSignal) }),
+        );
+    });
+
+    it('should use fast model when quality is fast', async () => {
+        mockCreate.mockResolvedValueOnce({ text: 'test' });
+
+        const buffer = Buffer.from('fake-audio');
+        await transcriptionService.transcribeFromBuffer(buffer, 'audio/webm', undefined, 'fast');
+
+        expect(mockCreate).toHaveBeenCalledWith(
+            expect.objectContaining({ model: 'gpt-4o-mini-transcribe' }),
+            expect.any(Object),
+        );
+    });
+
+    it('should return null for empty buffer', async () => {
+        const result = await transcriptionService.transcribeFromBuffer(Buffer.from(''), 'audio/webm');
+
+        expect(result).toBeNull();
+        expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it('should return null when Whisper returns empty text', async () => {
+        mockCreate.mockResolvedValueOnce({ text: '   ' });
+
+        const buffer = Buffer.from('fake-audio');
+        const result = await transcriptionService.transcribeFromBuffer(buffer);
+
+        expect(result).toBeNull();
+    });
+
+    it('should return null when API throws', async () => {
+        mockCreate.mockRejectedValueOnce(new Error('API error'));
+
+        const buffer = Buffer.from('fake-audio');
+        const result = await transcriptionService.transcribeFromBuffer(buffer);
+
+        expect(result).toBeNull();
+    });
+
+    it('should detect file extension from mimeType', async () => {
+        mockCreate.mockResolvedValueOnce({ text: 'test' });
+
+        const buffer = Buffer.from('fake-audio');
+        await transcriptionService.transcribeFromBuffer(buffer, 'audio/ogg');
+
+        const { toFile } = await import('openai');
+        expect(toFile).toHaveBeenCalledWith(buffer, 'voice.ogg', { type: 'audio/ogg' });
     });
 });

@@ -29,6 +29,7 @@ import { useSwipe } from '@/hooks/useSwipe';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { VoiceRecordButton } from '@/components/knowledge-base/VoiceRecordButton';
 
 type TFunction = (key: string, params?: Record<string, string | number>) => string;
 
@@ -245,6 +246,15 @@ function ReviewInfoStep({
       {/* Imported info preview */}
       {isEditing ? (
         <div className="text-start mb-3">
+          <div className="flex items-center justify-end mb-1.5">
+            <VoiceRecordButton
+              variant="inline"
+              onTranscribed={(text) => {
+                const current = knowledgeBase.trim();
+                onKnowledgeBaseChange(current ? `${current}\n${text}` : text);
+              }}
+            />
+          </div>
           <textarea
             value={knowledgeBase}
             onChange={(e) => onKnowledgeBaseChange(e.target.value)}
@@ -299,9 +309,14 @@ function ReviewInfoStep({
               </p>
             </div>
           ) : (
-            <p className="text-muted-foreground text-sm italic">
-              {t('onboarding.noBusinessInfo')}
-            </p>
+            <div>
+              <p className="text-muted-foreground text-sm">
+                {t('onboarding.noBusinessInfo')}
+              </p>
+              <p className="text-muted-foreground text-xs mt-1">
+                {t('onboarding.voiceHint')}
+              </p>
+            </div>
           )}
           <button
             onClick={onEditToggle}
@@ -346,6 +361,18 @@ function ReviewInfoStep({
         {/* Active chip textarea */}
         {activeChip && (
           <div className="animate-fade-in">
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-xs text-muted-foreground">
+                {t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.labelKey)}
+              </p>
+              <VoiceRecordButton
+                variant="inline"
+                onTranscribed={(text) => {
+                  const current = (chipData[activeChip] || '').trim();
+                  onChipContentChange(activeChip, current ? `${current}\n${text}` : text);
+                }}
+              />
+            </div>
             <textarea
               value={chipData[activeChip] || ''}
               onChange={(e) => onChipContentChange(activeChip, e.target.value)}

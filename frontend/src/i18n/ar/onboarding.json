@@ -40,5 +40,6 @@
   "chipLocationPlaceholder": "مثال: جدة، حي الصفا",
   "chipServicesPlaceholder": "مثال: تعليم بنين وبنات، من الروضة حتى الثانوية\nدورات لغة إنجليزية، دروس خصوصية",
   "chipDeliveryPlaceholder": "مثال: توصيل مجاني في جدة\n30 ريال للمدن الأخرى",
-  "chipOtherPlaceholder": "اكتب أي شيء آخر يجب أن يعرفه جواب..."
+  "chipOtherPlaceholder": "اكتب أي شيء آخر يجب أن يعرفه جواب...",
+  "voiceHint": "اضغط على موضوع واكتب أو استخدم المايك لإضافة التفاصيل."
 }

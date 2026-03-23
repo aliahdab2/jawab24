@@ -4,10 +4,12 @@ import { captureError } from '../utils/sentryHelpers';
 
 /** Maximum time to download audio from Facebook/Instagram CDN */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
-/** Maximum time for Whisper API transcription */
+/** Maximum time for Whisper API transcription (pipeline: short voice messages) */
 const WHISPER_TIMEOUT_MS = 15_000;
+/** Maximum time for KB voice transcription (longer recordings, up to 60s audio) */
+const KB_TRANSCRIBE_TIMEOUT_MS = 60_000;
 /** Maximum audio file size (10 MB) — prevents OOM from malformed responses */
-const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
+export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
 
 /** Fast + cheap — for reply pipeline (customer voice messages) */
 const MODEL_PIPELINE = 'gpt-4o-mini-transcribe';
@@ -107,6 +109,60 @@ class TranscriptionService {
                 { tags: { service: 'transcription' } },
             );
             return null;
+        }
+    }
+
+    /**
+     * Transcribe audio from a raw buffer (e.g. browser MediaRecorder blob).
+     * Used for KB voice input where audio is uploaded directly.
+     *
+     * @param audioBuffer - Raw audio bytes (webm/ogg/mp4)
+     * @param mimeType - MIME type from the browser (e.g. 'audio/webm')
+     * @param languageHint - ISO 639-1 code ('ar', 'en') to improve accuracy
+     * @param quality - 'fast' or 'accurate'
+     */
+    async transcribeFromBuffer(
+        audioBuffer: Buffer,
+        mimeType: string = 'audio/webm',
+        languageHint?: string,
+        quality: TranscriptionQuality = 'accurate',
+    ): Promise<TranscriptionResult | null> {
+        const client = this.getClient();
+        if (!client) return null;
+
+        if (audioBuffer.length === 0 || audioBuffer.length > MAX_AUDIO_BYTES) return null;
+
+        const ext = mimeType.includes('webm') ? 'webm'
+            : mimeType.includes('ogg') ? 'ogg'
+            : mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3'
+            : mimeType.includes('wav') ? 'wav'
+            : 'mp4';
+
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), KB_TRANSCRIBE_TIMEOUT_MS);
+
+        try {
+            const file = await toFile(audioBuffer, `voice.${ext}`, { type: mimeType });
+            const transcription = await client.audio.transcriptions.create({
+                file,
+                model: quality === 'accurate' ? MODEL_ACCURATE : MODEL_PIPELINE,
+                ...(languageHint ? { language: languageHint } : {}),
+            }, { signal: controller.signal });
+
+            const text = transcription.text?.trim();
+            if (!text) return null;
+
+            return { text };
+        } catch (error) {
+            const isTimeout = error instanceof Error && error.name === 'AbortError';
+            captureError(
+                error instanceof Error ? error : new Error(String(error)),
+                isTimeout ? 'Whisper buffer transcription timeout' : 'Whisper buffer transcription failed',
+                { tags: { service: 'transcription' } },
+            );
+            return null;
+        } finally {
+            clearTimeout(timer);
         }
     }
 }

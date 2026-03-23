@@ -30,6 +30,7 @@ import paymentRoutes from "./routes/payment";
 import geoRoutes from "./routes/geo";
 import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
+import voiceRoutes from "./routes/voice";
 import analyticsRoutes from "./routes/analytics";
 import workspaceRoutes from "./routes/workspace";
 import { translationRoutes } from "./routes/translation";
@@ -209,6 +210,7 @@ const start = async () => {
     await server.register(geoRoutes, { prefix: "/geo" });
     await server.register(notificationRoutes, { prefix: "/notifications" });
     await server.register(adminRoutes, { prefix: "/admin" });
+    await server.register(voiceRoutes, { prefix: "/voice" });
     await server.register(workspaceRoutes);
     await server.register(analyticsRoutes, { prefix: "/analytics" });
     // Translation route — non-critical, guarded so it can't crash the server
