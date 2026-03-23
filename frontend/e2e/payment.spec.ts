@@ -10,7 +10,7 @@ const MOCK_PLANS = [
     price: 1500,
     currency: 'USD',
     interval: 'month',
-    trialDays: 15,
+    trialDays: 30,
     isActive: true,
     isDefault: true,
     maxAiRepliesPerMonth: 100,

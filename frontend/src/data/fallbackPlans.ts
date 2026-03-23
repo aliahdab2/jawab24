@@ -16,7 +16,7 @@ export const FALLBACK_PLANS: Plan[] = [
         id: 'fallback-starter',
         name: 'Starter',
         slug: 'starter',
-        description: 'Auto-reply to your Facebook & Instagram page - 15 days free trial',
+        description: 'Auto-reply to your Facebook & Instagram page - 30 days free trial',
         price: 1500, // $15.00
         currency: 'USD',
         interval: 'month',
@@ -31,7 +31,7 @@ export const FALLBACK_PLANS: Plan[] = [
         ecommerceEnabled: false,
         showBranding: true,
         prioritySupport: false,
-        trialDays: 15,
+        trialDays: 30,
         regionalPricing: {},
         isActive: true,
         isDefault: true,

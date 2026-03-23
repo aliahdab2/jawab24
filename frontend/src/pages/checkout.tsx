@@ -9,7 +9,7 @@ import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotic
 import { useAuthStore } from '@/lib/store';
 
 import { Button, BrandLogo } from '@/components/ui';
-import { CheckCircle2, Loader2, ArrowRight, ArrowLeft, Bell } from 'lucide-react';
+import { CheckCircle2, Loader2, ArrowRight, ArrowLeft, AlertTriangle } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -30,7 +30,6 @@ export default function CheckoutPage() {
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
   const { isAuthenticated } = useAuthStore();
-  const [notified, setNotified] = useState(false);
 
   // On native (Android/iOS), redirect to web checkout — Google Play prohibits Stripe in-app
   useEffect(() => {
@@ -155,51 +154,7 @@ export default function CheckoutPage() {
     }
   };
 
-  // EARLY RETURN 0: Maintenance mode — Stripe prices not configured yet
-  // Remove this block once Stripe prices are updated for new plans ($15/$39/$79)
-  if (isCheckoutMaintenance()) {
-    return (
-      <>
-        <Head>
-          <title>{t('title')} - Jawab24</title>
-          <meta name="robots" content="noindex, follow" />
-        </Head>
-        <div className="flex-1 flex flex-col items-center justify-center bg-background px-5 py-12">
-          <div className="max-w-md w-full text-center">
-            <div className="w-16 h-16 rounded-full bg-brand-50 dark:bg-brand-950/40 flex items-center justify-center mx-auto mb-6">
-              <Bell className="w-8 h-8 text-brand-600 dark:text-brand-400" />
-            </div>
-            <h1 className="text-2xl font-bold text-foreground mb-3">
-              {tLanding('comingSoon.banner')}
-            </h1>
-            <p className="text-muted-foreground mb-8">
-              {tLanding('comingSoon.subtitle')}
-            </p>
-            {!notified ? (
-              <Button
-                onClick={() => setNotified(true)}
-                className="w-full mb-4"
-              >
-                <Bell className="w-4 h-4 me-2" />
-                {tLanding('comingSoon.notify')}
-              </Button>
-            ) : (
-              <p className="text-brand-600 dark:text-brand-400 font-medium mb-4">
-                {tLanding('comingSoon.notified')}
-              </p>
-            )}
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-2 text-muted-foreground text-sm hover:text-brand-600 transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-              {t('backToPricing')}
-            </Link>
-          </div>
-        </div>
-      </>
-    );
-  }
+  const maintenanceMode = isCheckoutMaintenance();
 
   // EARLY RETURN 1: Show loading while checking geo
   if (isSanctioned === null) {
@@ -375,11 +330,20 @@ export default function CheckoutPage() {
                   )}
                 </div>
 
+                {maintenanceMode && (
+                  <div className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 mb-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
+                      {tLanding('comingSoon.subtitle')}
+                    </p>
+                  </div>
+                )}
+
                 <Button
                   size="lg"
                   className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
                   onClick={handleCheckout}
-                  disabled={loading}
+                  disabled={loading || maintenanceMode}
                 >
                   {loading ? (
                     <>

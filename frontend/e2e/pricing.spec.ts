@@ -19,7 +19,7 @@ const MOCK_PLANS = [
   },
   {
     id: 'plan_starter', slug: 'starter', name: 'Starter', description: 'Starter plan',
-    price: 1500, currency: 'USD', interval: 'month', trialDays: 15,
+    price: 1500, currency: 'USD', interval: 'month', trialDays: 30,
     isActive: true, isDefault: true, maxAiRepliesPerMonth: 500, maxPages: 1,
     maxTemplates: 5, maxRules: 7, maxProducts: 50, facebookEnabled: true, instagramEnabled: true,
     whatsappEnabled: false, showBranding: true, prioritySupport: false,
