@@ -108,5 +108,7 @@
   "manageOnWeb": "Manage your subscription on our website",
   "downgradeToFreeTitle": "Cancel Subscription?",
   "downgradeToFreeMessage": "You will lose access to AI-powered smart replies, additional pages, and premium features at the end of your current billing period. Your templates and settings will be preserved.",
-  "downgradeToFreeConfirm": "Manage Subscription"
+  "downgradeToFreeConfirm": "Manage Subscription",
+  "unavailableRegion": "Payments are not available in your region. Please contact support.",
+  "billingPortalError": "Could not open billing portal. Please try again."
 }

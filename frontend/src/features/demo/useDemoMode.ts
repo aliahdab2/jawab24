@@ -43,15 +43,15 @@ export function useDemoMode() {
     setIsLoading(true);
     try {
       const response = await publicApi.post('/auth/demo');
-      const { user, token, settings } = response.data;
+      const { user, token } = response.data;
       
       setAuth(user, token, 'demo_token');
       
-      const finalLocale = settings?.dashboardLanguage || locale || 'ar';
-      useUIStore.getState().setLanguage(finalLocale);
+      // Use the locale the user was browsing in, not the backend default
+      useUIStore.getState().setLanguage(locale);
 
       const returnUrl = router.query.redirect as string || '/dashboard';
-      await router.push(returnUrl, returnUrl, { locale: finalLocale });
+      await router.push(returnUrl, returnUrl, { locale });
       
     } catch (error: unknown) {
       captureError(error, 'Demo login error', { level: 'warning', tags: { context: 'demo' } });

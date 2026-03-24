@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
 import clsx from 'clsx';
+import { toast } from 'sonner';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, ConfirmationModal } from '@/components/ui';
 import { subscriptionApi, publicApi } from '@/lib/api';
@@ -314,7 +315,7 @@ function FeatureRow({
         )}
       </div>
       <div className="flex flex-col min-w-0 flex-1">
-        <span className={`text-xs md:text-sm font-semibold leading-snug text-start ${included ? 'text-foreground/70' : 'text-muted-foreground line-through decoration-surface-300'
+        <span className={`text-xs md:text-sm font-semibold leading-snug text-start ${included ? 'text-muted-foreground' : 'text-muted-foreground line-through decoration-surface-300'
           }`}>
           {text}
         </span>
@@ -409,15 +410,21 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
     // STRICT PAYMENT VALIDATION: Re-check sanctions before payment
     // (Display is permissive, but payments are strict)
+    setChangingPlan(planId);
     const sanctioned = await isUserSanctioned();
     if (sanctioned) {
+      setChangingPlan(null);
+      toast.error(tPricing('unavailableRegion'));
       captureError(new Error('Payment blocked: sanctioned jurisdiction'), 'Sanctions block on pricing', { tags: { page: 'pricing', action: 'sanctions_block' }, level: 'warning' });
       return;
     }
 
     // Find the selected plan
     const selectedPlan = plans.find(p => p.id === planId);
-    if (!selectedPlan) return;
+    if (!selectedPlan) {
+      setChangingPlan(null);
+      return;
+    }
 
     // If it's a FREE plan, we don't need Stripe checkout for NEW users
     // New users get this plan automatically on registration/login
@@ -445,13 +452,10 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     // If user already has a subscription, use Stripe Billing Portal for plan changes
     // (upgrades, downgrades, interval changes). Checkout is only for NEW subscriptions.
     if (hasActiveSubscription) {
-      setChangingPlan(planId);
       await openBillingPortal();
       setChangingPlan(null);
       return;
     }
-
-    setChangingPlan(planId);
 
     // New subscription — navigate to checkout
     router.push(`/checkout?planId=${planId}&interval=${billingInterval}`);
@@ -464,6 +468,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       window.location.href = response.data.url;
     } catch (err) {
       captureError(err, 'Failed to open billing portal', { tags: { page: 'pricing', action: 'billing_portal' } });
+      toast.error(tPricing('billingPortalError'));
     }
   };
 

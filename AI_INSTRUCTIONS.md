@@ -203,3 +203,47 @@ test: add tests
 - `brand-*`: teal/green, `surface-*`: grays, `accent-*`: orange
 - `font-display`: Outfit (headings), `font-sans`: DM Sans (body)
 - Arabic: Cairo/Tajawal (auto-loaded)
+
+---
+
+## Best Practices & Industry Standards
+
+Follow these across every change. When in doubt, prefer the safer, simpler option.
+
+### Security (OWASP Top 10)
+- Sanitize and validate ALL external input (user input, query params, API responses) at system boundaries
+- Never interpolate user input into SQL, HTML, shell commands, or URLs — use parameterized queries, DOMPurify, and URL constructors
+- Never expose secrets, tokens, or internal errors to the client — return generic error messages
+- Set secure HTTP headers (CSP, X-Content-Type-Options, X-Frame-Options) — never weaken them without justification
+- Apply least-privilege: API endpoints check auth + ownership before acting, never trust client-side-only guards
+
+### Performance
+- Minimize bundle size — lazy-load heavy components (`next/dynamic`), tree-shake imports, avoid barrel re-exports in hot paths
+- Images: always use `next/image` with explicit `width`/`height` or `fill` + `sizes` — never bare `<img>` for content images
+- Avoid layout shifts — reserve space for async content (skeletons, fixed dimensions), never inject DOM above the fold after paint
+- Database queries: use indexes, avoid N+1 patterns, paginate unbounded lists
+- Memoize expensive computations (`useMemo`/`useCallback`) only when profiling shows a need — don't pre-optimize
+
+### Error Handling
+- Use `captureError()` from `sentryHelpers.ts` — never swallow errors silently or use bare `console.error`
+- Display user-friendly translated messages (`t('errorKey')`) — never show raw error strings, stack traces, or technical details
+- Fail fast on startup for missing critical config (DB, API keys) — fail gracefully at runtime for transient issues (network, third-party APIs)
+- Always handle loading, error, and empty states in UI — no unhandled promise rejections, no blank screens
+
+### API & Data
+- REST endpoints follow consistent naming: plural nouns, kebab-case (`/api/reply-templates`), proper HTTP methods and status codes
+- Validate request bodies with schemas (Zod/Drizzle) at the handler level — never trust shape from the client
+- Return consistent response shapes: `{ data }` on success, `{ error: { message, code } }` on failure
+- Never return unbounded data — always paginate, limit, or stream large result sets
+
+### Testing
+- Unit tests cover business logic and edge cases, not implementation details — test behavior, not internals
+- Integration tests hit real services (DB, APIs) — mocks only for third-party externals you don't control
+- E2E tests use translation keys (imported JSON), never hardcoded strings
+- Every bug fix includes a regression test that would have caught it
+
+### Dependencies
+- Pin exact versions in `package.json` for production dependencies
+- Audit before adding a new dependency — prefer built-in APIs or existing packages in the repo
+- Keep `npm audit` clean — no known high/critical vulnerabilities in production deps
+- When upgrading, verify compatibility at runtime (not just `npm ls` / `tsc`) — some breakage is runtime-only

@@ -168,12 +168,14 @@ export async function isUserSanctionedNonBlocking(timeoutMs: number = 2000): Pro
 }
 
 /**
- * LEGACY: Check if user is sanctioned (safe-by-default for payments)
- * 
- * ⚠️ PAYMENT MODE: Blocks if check fails
- * Use this for payment/checkout flows only
- * 
- * @returns Promise<boolean> - true if sanctioned OR if check fails
+ * Check if user is sanctioned for payment flows.
+ *
+ * Strategy:
+ * 1. Try fresh API call — if it succeeds, trust the result and update cache
+ * 2. If API fails, fall back to cached result from the page-load check
+ * 3. Only block if both API and cache are unavailable (truly unknown user)
+ *
+ * @returns Promise<boolean> - true if sanctioned or completely unknown
  */
 export async function isUserSanctioned(): Promise<boolean> {
     try {
@@ -185,25 +187,31 @@ export async function isUserSanctioned(): Promise<boolean> {
 
         // Get API URL from environment (required for mobile where origin is localhost)
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-        
+
         const response = await fetch(`${apiUrl}/geo/check`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
+            signal: AbortSignal.timeout(5000),
         });
 
         if (!response.ok) {
-            // Payment mode: strict (block if check fails)
             captureError(new Error(`Geo check HTTP ${response.status}`), 'Geo check failed (payment mode)', { tags: { context: 'geo-payment' }, level: 'warning' });
-            return true;
+            // API error — fall back to cache from page-load check
+            const cached = getCachedGeoCheck();
+            if (cached) return cached.sanctioned;
+            return true; // No cache, no API — block for safety
         }
 
         const data: GeoCheckResponse = await response.json();
+        cacheGeoCheck(data.sanctioned, data.country);
         return data.sanctioned;
     } catch (error) {
-        // Payment mode: strict (block if error)
-        captureError(error, 'Geo check error - defaulting to blocked for payment', { tags: { context: 'payment' } });
-        return true;
+        captureError(error, 'Geo check error (payment mode)', { tags: { context: 'payment' } });
+        // Network error — fall back to cache from page-load check
+        const cached = getCachedGeoCheck();
+        if (cached) return cached.sanctioned;
+        return true; // No cache, no API — block for safety
     }
 }
 

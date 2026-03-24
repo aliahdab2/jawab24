@@ -141,8 +141,9 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
         transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
         style={{ borderRadius: 24 }}
       >
-        {/* Glassmorphism card — fixed height, section never shifts */}
+        {/* Glassmorphism card — fixed height in portrait, capped in landscape */}
         <div
+          className="h-[620px] landscape:h-[min(620px,70vh)]"
           style={{
             background: 'rgba(255, 255, 255, 0.03)',
             backdropFilter: 'blur(12px)',
@@ -150,7 +151,6 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             borderRadius: 24,
             width: 360,
             maxWidth: '100%',
-            height: 620,
             border: '1px solid rgba(255, 255, 255, 0.1)',
             display: 'flex',
             flexDirection: 'column',
@@ -225,10 +225,10 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                   }}
                   transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(10px)',
+                    background: 'rgba(255, 255, 255, 0.08)', backdropFilter: 'blur(10px)',
                     padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
-                    maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
-                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                    maxWidth: '85%', fontSize: 13, color: '#F9FAFB', lineHeight: 1.6,
+                    border: '1px solid rgba(59, 130, 246, 0.3)',
                   }}
                 >
                   {t('showcase.chatCustomer1')}
@@ -283,10 +283,10 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                       animate="visible"
                       transition={{ delay: 0.3 + i * 0.25 }}
                       style={{
-                        background: 'linear-gradient(110deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.06) 100%)',
+                        background: 'linear-gradient(110deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.10) 100%)',
                         borderRadius: 8, padding: 8,
                         display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-                        border: '1px solid rgba(251, 191, 36, 0.25)',
+                        border: '1px solid rgba(251, 191, 36, 0.35)',
                         boxShadow: '0 0 12px rgba(251, 191, 36, 0.08)',
                       }}
                     >
@@ -302,7 +302,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                       </div>
                       <div>
                         <div style={{ fontSize: 11, fontWeight: 700, color: '#fff' }}>{product.name}</div>
-                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)' }}>{product.details}</div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)' }}>{product.details}</div>
                       </div>
                     </motion.div>
                   ))}
@@ -330,10 +330,10 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                   }}
                   transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.05)', backdropFilter: 'blur(10px)',
+                    background: 'rgba(255, 255, 255, 0.08)', backdropFilter: 'blur(10px)',
                     padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
-                    maxWidth: '85%', fontSize: 13, color: 'rgba(249, 250, 251, 0.9)', lineHeight: 1.6,
-                    border: '1px solid rgba(251, 191, 36, 0.2)',
+                    maxWidth: '85%', fontSize: 13, color: '#F9FAFB', lineHeight: 1.6,
+                    border: '1px solid rgba(251, 191, 36, 0.3)',
                   }}
                 >
                   {t('showcase.chatCustomer2')}
@@ -395,7 +395,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             >
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.15)',
+                background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)',
                 borderRadius: 100, padding: '4px 12px 4px 8px',
               }}>
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
