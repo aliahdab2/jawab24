@@ -93,7 +93,7 @@ export default function CheckoutPage() {
   }, [planId, plan, fetchError, errorLoadPlanMessage, isSanctioned, router, isAuthenticated]);
 
   const handleCheckout = async () => {
-    if (!planId) return;
+    if (!plan) return;
 
     // SANCTIONS CHECK: Do not proceed if sanctioned
     if (isSanctioned) {
@@ -107,8 +107,8 @@ export default function CheckoutPage() {
     try {
       // Check if user is authenticated (web uses cookies, mobile uses token)
       if (!isAuthenticated) {
-        // ENCODE THE REDIRECT URL PROPERLY
-        const returnUrl = `/checkout?planId=${planId}`;
+        // Use real plan ID for redirect (not the URL param which may be a slug)
+        const returnUrl = `/checkout?planId=${plan.id}&interval=${billingInterval}`;
         router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
         return;
       }
@@ -119,9 +119,10 @@ export default function CheckoutPage() {
       // On mobile (Capacitor), window.location.origin is "localhost" which breaks Stripe redirects
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
       const baseUrl = siteUrl.replace(/\/$/, ''); // Remove trailing slash
-      
+
+      // Use the real plan ID from the fetched plan (not the URL param, which may be a slug)
       const response = await api.post('/payment/create-checkout-session', {
-        planId,
+        planId: plan.id,
         billingInterval,
         successUrl: `${baseUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
         cancelUrl: `${baseUrl}/payment/cancel`,
@@ -146,7 +147,7 @@ export default function CheckoutPage() {
 
       if (errorData?.code === 'EMAIL_REQUIRED') {
         // Email is missing - redirect to complete profile then back to checkout
-        const returnUrl = `/checkout?planId=${planId}`;
+        const returnUrl = `/checkout?planId=${plan.id}&interval=${billingInterval}`;
         router.push(`/complete-profile?redirect=${encodeURIComponent(returnUrl)}`);
         return;
       }

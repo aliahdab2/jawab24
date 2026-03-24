@@ -39,22 +39,27 @@ export default async function plansRoutes(fastify: FastifyInstance) {
     });
 
     /**
-     * GET /plans/:planId - Get plan details
+     * GET /plans/:planId - Get plan details by ID or slug (public)
      */
     fastify.get<{ Params: PlanParams }>(
         '/:planId',
-        { schema: { tags: ['Plans'], summary: 'Get plan details by ID (public)', params: { type: 'object', properties: { planId: { type: 'string', format: 'uuid' } }, required: ['planId'] } } },
+        { schema: { tags: ['Plans'], summary: 'Get plan details by ID or slug (public)', params: { type: 'object', properties: { planId: { type: 'string', minLength: 1, maxLength: 100 } }, required: ['planId'] } } },
         async (request, reply) => {
             try {
-                const plan = await plansService.getPlanById(request.params.planId);
-                
+                const { planId } = request.params;
+
+                // Try UUID lookup first, fall back to slug lookup
+                const plan = UUIDSchema.safeParse(planId).success
+                    ? await plansService.getPlanById(planId)
+                    : await plansService.getPlanBySlug(planId);
+
                 if (!plan) {
                     return reply.status(404).send({
                         success: false,
                         error: 'Plan not found',
                     });
                 }
-                
+
                 return reply
                     .header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
                     .send({

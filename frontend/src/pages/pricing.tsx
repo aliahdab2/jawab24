@@ -5,7 +5,7 @@ import type { GetStaticProps } from 'next';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button } from '@/components/ui';
-import { subscriptionApi } from '@/lib/api';
+import { subscriptionApi, publicApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
@@ -343,12 +343,32 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     return params ? tSub(k, params) : tSub(k);
   };
   const { isAuthenticated } = useAuthStore();
-  const [plans] = useState<Plan[]>(serverPlans);
+  const [plans, setPlans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
   const [isSanctioned, setIsSanctioned] = useState<boolean>(false);
   const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  // Client-side: fetch real plans if ISR served fallback data
+  useEffect(() => {
+    const isFallback = serverPlans.some(p => p.id.startsWith('fallback-'));
+    if (!isFallback) return;
+
+    const fetchPlans = async () => {
+      try {
+        const response = await publicApi.get('/plans');
+        const realPlans: Plan[] = response.data.data ?? [];
+        if (realPlans.length > 0) {
+          setPlans(realPlans);
+        }
+      } catch {
+        // Keep fallback plans — better than nothing
+      }
+    };
+
+    fetchPlans();
+  }, [serverPlans]);
 
   // Client-side: fetch user-specific data (subscription, usage, geo)
   useEffect(() => {
