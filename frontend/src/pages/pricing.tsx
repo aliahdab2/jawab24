@@ -395,11 +395,15 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   }, [isAuthenticated]);
 
   const handleSelectPlan = async (planId: string) => {
-    // On native (Android/iOS), open the web pricing page instead of in-app checkout.
+    // On native (Android/iOS), open the web login → checkout flow.
     // Google Play policy prohibits in-app purchases via Stripe.
+    // The in-app browser doesn't share the app's auth session, so we
+    // route through login with a redirect to checkout after auth.
     if (isNativePlatform()) {
       const locale = router.locale === 'en' ? '/en' : '';
-      await openExternalUrl(`https://jawab24.com${locale}/pricing`);
+      const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
+      const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}&theme=${theme}`;
+      await openExternalUrl(`https://jawab24.com${locale}/login?redirect=${encodeURIComponent(checkoutPath)}`);
       return;
     }
 

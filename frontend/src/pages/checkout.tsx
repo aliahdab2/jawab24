@@ -24,13 +24,20 @@ function isCheckoutMaintenance() {
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { planId, interval } = router.query;
+  const { planId, interval, theme: themeParam } = router.query;
   const billingInterval = interval === 'year' ? 'year' : 'month';
   const t = useTranslations('checkout');
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
   const { isAuthenticated } = useAuthStore();
+
+  // Apply theme from URL param (used when opened from native app's in-app browser)
+  useEffect(() => {
+    if (themeParam === 'dark' || themeParam === 'light') {
+      document.documentElement.classList.toggle('dark', themeParam === 'dark');
+    }
+  }, [themeParam]);
 
   // On native (Android/iOS), redirect to web checkout — Google Play prohibits Stripe in-app
   useEffect(() => {
