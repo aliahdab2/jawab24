@@ -437,7 +437,8 @@ export const plans = pgTable('plans', {
     description: text('description'),
 
     // Pricing
-    price: integer('price').notNull().default(0), // Price in cents (500 = $5.00)
+    price: integer('price').notNull().default(0), // Monthly price in cents (3900 = $39.00)
+    yearlyPrice: integer('yearly_price'), // Yearly price in cents (39000 = $390.00); null = no yearly option
     currency: varchar('currency', { length: 3 }).default('USD'),
     interval: varchar('interval', { length: 20 }).default('month'), // 'month', 'year'
     stripePriceId: varchar('stripe_price_id', { length: 255 }), // Stripe Monthly Price ID (e.g., price_xxxxx)

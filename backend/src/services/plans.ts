@@ -209,6 +209,7 @@ export const plansService = {
             slug: row.slug,
             description: row.description,
             price: row.price,
+            yearlyPrice: row.yearlyPrice ?? null,
             currency: row.currency || 'USD',
             interval: (row.interval || 'month') as 'month' | 'year',
             maxPages: row.maxPages,

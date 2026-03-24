@@ -182,7 +182,8 @@ export interface Plan {
   name: string;
   slug: string;
   description?: string | null;
-  price: number; // in cents
+  price: number; // monthly price in cents
+  yearlyPrice: number | null; // yearly price in cents; null = no yearly option
   currency: string;
   interval: 'month' | 'year';
   // Limits

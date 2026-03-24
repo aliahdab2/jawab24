@@ -88,18 +88,12 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         },
     },
     stale_comment: {
-        titles: { en: 'Unreplied Comments Need Attention', ar: 'تعليقات بدون رد تحتاج انتباهك' },
-        bodies: {
-            en: '{count} comments waiting for your reply for over {minutes} minutes.',
-            ar: '{count} تعليقات بانتظار ردك منذ أكثر من {minutes} دقيقة.',
-        },
+        titles: { en: '{senderName} — {pageName}', ar: '{senderName} — {pageName}' },
+        bodies: { en: '{preview}', ar: '{preview}' },
     },
     stale_message: {
-        titles: { en: 'Unreplied Messages Need Attention', ar: 'رسائل بدون رد تحتاج انتباهك' },
-        bodies: {
-            en: '{count} messages waiting for your reply for over {minutes} minutes.',
-            ar: '{count} رسائل بانتظار ردك منذ أكثر من {minutes} دقيقة.',
-        },
+        titles: { en: '{senderName} — {pageName}', ar: '{senderName} — {pageName}' },
+        bodies: { en: '{preview}', ar: '{preview}' },
     },
     kb_gap: {
         titles: { en: 'Knowledge Base Gap Detected', ar: 'فجوة في قاعدة المعرفة' },

@@ -1,46 +1,92 @@
 import { db } from '../db';
 import { comments, messages, pages, posts, settings } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
-import { notificationService } from './notifications';
+import { notificationService, NotificationType } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 
 const DEFAULT_COMMENT_ESCALATION_MINUTES = 60;
 const DEFAULT_MESSAGE_ESCALATION_MINUTES = 30;
 const SWEEP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
+/** Max individual notifications per user per sweep to prevent flood. */
+const MAX_INDIVIDUAL_NOTIFICATIONS = 10;
+const PREVIEW_MAX_LENGTH = 80;
+
 let intervalHandle: ReturnType<typeof setInterval> | null = null;
 
+function truncatePreview(text: string | null): string {
+    if (!text) return '';
+    const trimmed = text.trim();
+    if (trimmed.length <= PREVIEW_MAX_LENGTH) return trimmed;
+    return `${trimmed.slice(0, PREVIEW_MAX_LENGTH)}...`;
+}
+
+/** Group rows by userId, filtering out null userIds. */
+function groupByUser<T extends { userId: string | null }>(rows: T[]): Map<string, T[]> {
+    const byUser = new Map<string, T[]>();
+    for (const row of rows) {
+        if (!row.userId) continue;
+        const arr = byUser.get(row.userId) ?? [];
+        arr.push(row);
+        byUser.set(row.userId, arr);
+    }
+    return byUser;
+}
+
+interface NotificationItem {
+    name: string;
+    title: string;
+    preview: string;
+    data: Record<string, string | undefined>;
+}
+
 /**
- * Arabic pluralization for counted nouns.
- * Arabic has: singular (1), dual (2), plural (3-10), singular-accusative (11+).
+ * Send per-item notifications with a flood cap.
+ * Sends up to MAX_INDIVIDUAL_NOTIFICATIONS, then one overflow summary if needed.
  */
-function arabicPlural(count: number, singular: string, dual: string, plural: string, accusative: string): string {
-    if (count === 1) return `${singular}`;
-    if (count === 2) return `${dual}`;
-    if (count >= 3 && count <= 10) return `${count} ${plural}`;
-    return `${count} ${accusative}`;
+function sendItemNotifications(
+    userId: string,
+    type: NotificationType,
+    items: NotificationItem[],
+    overflow: { deepLink: string; labelEn: string; labelAr: string },
+): void {
+    const toNotify = items.slice(0, MAX_INDIVIDUAL_NOTIFICATIONS);
+
+    for (const item of toNotify) {
+        notificationService.sendNotification(userId, {
+            type,
+            titles: { en: item.title, ar: item.title },
+            bodies: { en: item.preview, ar: item.preview },
+            data: item.data,
+        }).catch(err => captureError(err, `Escalation ${type} notification failed`, { tags: { service: 'escalation', type } }));
+    }
+
+    const overflowCount = items.length - toNotify.length;
+    if (overflowCount > 0) {
+        notificationService.sendNotification(userId, {
+            type,
+            titles: {
+                en: `${overflowCount} more ${overflow.labelEn} need attention`,
+                ar: `${overflowCount} ${overflow.labelAr} تحتاج انتباهك`,
+            },
+            bodies: {
+                en: `Plus ${overflowCount} more ${overflow.labelEn} waiting for your reply.`,
+                ar: `بالإضافة إلى ${overflowCount} ${overflow.labelAr} بانتظار ردك.`,
+            },
+            data: { deepLink: overflow.deepLink },
+        }).catch(err => captureError(err, `Escalation ${type} overflow notification failed`, { tags: { service: 'escalation', type } }));
+    }
 }
 
-function formatCommentCountAr(count: number): string {
-    return arabicPlural(count, 'تعليق واحد', 'تعليقان', 'تعليقات', 'تعليقًا');
-}
-
-function formatMessageCountAr(count: number): string {
-    return arabicPlural(count, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة');
-}
-
-function formatCommentCountEn(count: number): string {
-    return count === 1 ? '1 comment' : `${count} comments`;
-}
-
-function formatMessageCountEn(count: number): string {
-    return count === 1 ? '1 message' : `${count} messages`;
+function buildTitle(name: string | null, pageName: string | null): string {
+    const displayName = name || 'Unknown';
+    return pageName ? `${displayName} — ${pageName}` : displayName;
 }
 
 /**
  * Run a single escalation sweep.
  * Finds unreplied comments/messages past their SLA threshold,
- * flags them as needsAttention, and sends one notification per user.
+ * flags them as needsAttention, and sends per-conversation notifications.
  */
 export async function runEscalationSweep(): Promise<void> {
     try {
@@ -51,50 +97,29 @@ export async function runEscalationSweep(): Promise<void> {
     }
 }
 
-interface StaleRow {
+// ---------------------------------------------------------------------------
+// Stale comments — one notification per comment
+// ---------------------------------------------------------------------------
+
+interface StaleCommentRow {
     userId: string | null;
     itemId: string;
     pageName: string | null;
+    pageId: string | null;
+    fromName: string | null;
+    messageText: string | null;
     thresholdMinutes: number;
 }
 
-interface UserEscalationGroup {
-    ids: string[];
-    threshold: number;
-    pageNames: Set<string>;
-}
-
-/** Group stale rows by userId, collecting item IDs and page names. */
-function groupByUser(
-    rows: StaleRow[],
-): Map<string, UserEscalationGroup> {
-    const byUser = new Map<string, UserEscalationGroup>();
-    for (const row of rows) {
-        if (!row.userId) continue;
-        let entry = byUser.get(row.userId);
-        if (!entry) {
-            entry = { ids: [], threshold: Number(row.thresholdMinutes), pageNames: new Set() };
-            byUser.set(row.userId, entry);
-        }
-        entry.ids.push(row.itemId);
-        if (row.pageName) entry.pageNames.add(row.pageName);
-    }
-    return byUser;
-}
-
-/**
- * Escalate stale comments: unreplied + not already flagged + past SLA.
- * Uses a single batch query to find all stale comments across all users,
- * then groups by user for bulk updates and one notification per user.
- */
 async function escalateComments(): Promise<void> {
-    // Single query: find all stale comments grouped by user, respecting per-user SLA thresholds.
-    // Uses COALESCE to fall back to the default escalation threshold.
-    const staleRows = await db
+    const staleRows: StaleCommentRow[] = await db
         .select({
             userId: pages.userId,
             itemId: comments.id,
             pageName: pages.name,
+            pageId: posts.pageId,
+            fromName: comments.fromName,
+            messageText: comments.message,
             thresholdMinutes: sql<number>`COALESCE(${settings.commentEscalationMinutes}, ${DEFAULT_COMMENT_ESCALATION_MINUTES})`,
         })
         .from(comments)
@@ -110,46 +135,54 @@ async function escalateComments(): Promise<void> {
 
     if (staleRows.length === 0) return;
 
-    const byUser = groupByUser(staleRows);
+    for (const [userId, rows] of groupByUser(staleRows)) {
+        const ids = rows.map(r => r.itemId);
+        const threshold = Number(rows[0].thresholdMinutes);
 
-    // Batch update + notify per user
-    for (const [userId, { ids, threshold, pageNames }] of byUser) {
-        await db
-            .update(comments)
-            .set({
-                needsAttention: true,
-                flagReason: `sla_no_reply:${threshold}`,
-                updatedAt: new Date(),
-            })
+        await db.update(comments)
+            .set({ needsAttention: true, flagReason: `sla_no_reply:${threshold}`, updatedAt: new Date() })
             .where(sql`${comments.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
-        const count = ids.length;
-        const pageList = [...pageNames].join(', ');
-        notificationService.sendNotification(userId, {
-            type: 'stale_comment',
-            titles: {
-                en: `Unreplied Comments — ${pageList}`,
-                ar: `تعليقات بدون رد — ${pageList}`,
-            },
-            bodies: {
-                en: `${formatCommentCountEn(count)} on ${pageList} waiting for your reply for over ${threshold} minutes.`,
-                ar: `${formatCommentCountAr(count)} على ${pageList} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
-            },
-            data: { deepLink: '/comments?filter=flagged' },
-        }).catch(err => captureError(err, 'Escalation comment notification failed', { tags: { service: 'escalation', type: 'comment' } }));
+        const items: NotificationItem[] = rows.map(row => ({
+            name: row.fromName || 'Unknown',
+            title: buildTitle(row.fromName, row.pageName),
+            preview: truncatePreview(row.messageText),
+            data: { commentId: row.itemId },
+        }));
+
+        sendItemNotifications(userId, 'stale_comment', items, {
+            deepLink: '/comments?filter=needs_action',
+            labelEn: 'comments',
+            labelAr: 'تعليقات إضافية',
+        });
     }
 }
 
-/**
- * Escalate stale messages: unreplied incoming + not already flagged + past SLA.
- * Uses a single batch query instead of per-user loops.
- */
+// ---------------------------------------------------------------------------
+// Stale messages — one notification per conversation (senderId + pageId)
+// ---------------------------------------------------------------------------
+
+interface StaleMessageRow {
+    userId: string | null;
+    itemId: string;
+    pageName: string | null;
+    pageId: string | null;
+    senderName: string | null;
+    senderId: string | null;
+    messageText: string | null;
+    thresholdMinutes: number;
+}
+
 async function escalateMessages(): Promise<void> {
-    const staleRows = await db
+    const staleRows: StaleMessageRow[] = await db
         .select({
             userId: pages.userId,
             itemId: messages.id,
             pageName: pages.name,
+            pageId: messages.pageId,
+            senderName: messages.senderName,
+            senderId: messages.senderId,
+            messageText: messages.message,
             thresholdMinutes: sql<number>`COALESCE(${settings.messageEscalationMinutes}, ${DEFAULT_MESSAGE_ESCALATION_MINUTES})`,
         })
         .from(messages)
@@ -165,32 +198,38 @@ async function escalateMessages(): Promise<void> {
 
     if (staleRows.length === 0) return;
 
-    const byUser = groupByUser(staleRows);
+    for (const [userId, rows] of groupByUser(staleRows)) {
+        const ids = rows.map(r => r.itemId);
+        const threshold = Number(rows[0].thresholdMinutes);
 
-    for (const [userId, { ids, threshold, pageNames }] of byUser) {
-        await db
-            .update(messages)
-            .set({
-                needsAttention: true,
-                flagReason: `sla_no_reply:${threshold}`,
-                updatedAt: new Date(),
-            })
+        await db.update(messages)
+            .set({ needsAttention: true, flagReason: `sla_no_reply:${threshold}`, updatedAt: new Date() })
             .where(sql`${messages.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
-        const count = ids.length;
-        const pageList = [...pageNames].join(', ');
-        notificationService.sendNotification(userId, {
-            type: 'stale_message',
-            titles: {
-                en: `Unreplied Messages — ${pageList}`,
-                ar: `رسائل بدون رد — ${pageList}`,
+        // Group by conversation — multiple messages from same sender on same page → one notification
+        const conversations = new Map<string, StaleMessageRow>();
+        for (const row of rows) {
+            const key = `${row.senderId ?? 'unknown'}:${row.pageId ?? 'unknown'}`;
+            conversations.set(key, row); // last one wins (latest message preview)
+        }
+
+        const items: NotificationItem[] = [...conversations.values()].map(conv => ({
+            name: conv.senderName || 'Unknown',
+            title: buildTitle(conv.senderName, conv.pageName),
+            preview: truncatePreview(conv.messageText),
+            data: {
+                type: 'message',
+                messageId: conv.itemId,
+                ...(conv.senderId ? { senderId: conv.senderId } : {}),
+                ...(conv.pageId ? { pageId: conv.pageId } : {}),
             },
-            bodies: {
-                en: `${formatMessageCountEn(count)} on ${pageList} waiting for your reply for over ${threshold} minutes.`,
-                ar: `${formatMessageCountAr(count)} على ${pageList} بانتظار ردك منذ أكثر من ${threshold} دقيقة.`,
-            },
-            data: { deepLink: '/messages?filter=flagged', type: 'message' },
-        }).catch(err => captureError(err, 'Escalation message notification failed', { tags: { service: 'escalation', type: 'message' } }));
+        }));
+
+        sendItemNotifications(userId, 'stale_message', items, {
+            deepLink: '/messages?filter=needs_action',
+            labelEn: 'conversations',
+            labelAr: 'محادثات إضافية',
+        });
     }
 }
 
@@ -198,10 +237,9 @@ async function escalateMessages(): Promise<void> {
  * Start the escalation cron (runs every 5 minutes).
  */
 export function startEscalationCron(): void {
-    if (intervalHandle) return; // Already running
+    if (intervalHandle) return;
     console.warn('[Escalation] Cron started (every 5 min)');
     intervalHandle = setInterval(runEscalationSweep, SWEEP_INTERVAL_MS);
-    // Run once immediately on startup
     runEscalationSweep().catch(err => console.warn('[Escalation] Initial sweep failed:', err));
 }
 

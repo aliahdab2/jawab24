@@ -709,6 +709,8 @@ const DashboardPage: NextPageWithLayout = () => {
                       : (msg.message || '');
                     const timeLabel = getTimeLabel(msg.createdTime || msg.createdAt);
 
+                    const msgPageName = getPageName(msg.pageId);
+
                     return (
                       <button
                         key={msg.id}
@@ -723,9 +725,16 @@ const DashboardPage: NextPageWithLayout = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-0.5">
-                            <span className="text-sm font-semibold text-foreground truncate">
-                              {msg.senderName || tc('unknownUser')}
-                            </span>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-sm font-semibold text-foreground truncate">
+                                {msg.senderName || tc('unknownUser')}
+                              </span>
+                              {msgPageName && (
+                                <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 bg-muted rounded truncate max-w-[100px] flex-shrink-0">
+                                  {msgPageName}
+                                </span>
+                              )}
+                            </div>
                             {timeLabel && (
                               <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
                                 <Clock className="w-3 h-3" aria-hidden="true" />
