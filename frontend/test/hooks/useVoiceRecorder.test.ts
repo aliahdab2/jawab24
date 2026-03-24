@@ -45,7 +45,8 @@ class MockMediaRecorder {
   stop() {
     this.ondataavailable?.({ data: new Blob(['fake-audio'], { type: this.mimeType }) });
     this.state = 'inactive';
-    this.onstop?.();
+    // Defer onstop to match real browser behavior (async event)
+    Promise.resolve().then(() => this.onstop?.());
   }
 }
 
@@ -71,16 +72,28 @@ beforeEach(() => {
 
 /** Helper: start recording, stop, and wait for transcription to complete */
 async function recordAndTranscribe(result: { current: ReturnType<typeof useVoiceRecorder> }) {
+  // Mock Date.now to simulate recording duration > MIN_DURATION_MS (500ms)
+  let fakeNow = 10000;
+  const origDateNow = Date.now;
+  Date.now = () => fakeNow;
+
   await act(async () => {
     await result.current.startRecording();
   });
-  act(() => {
-    result.current.stopRecording();
+
+  // Advance past MIN_DURATION_MS
+  fakeNow += 1000;
+
+  await act(async () => {
+    await result.current.stopRecording();
   });
-  // Wait for the full async chain: blob.arrayBuffer → btoa → API call → state back to idle
+
+  // Wait for the full async chain: onstop → blob → base64 → API → state idle
   await waitFor(() => {
     expect(result.current.state).toBe('idle');
   });
+
+  Date.now = origDateNow;
 }
 
 describe('useVoiceRecorder', () => {
