@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { publicApi } from '@/lib/api';
-import { useAuthStore, useUIStore } from '@/lib/store';
+import { useAuthStore, useUIStore, type Language } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { captureError } from '@/lib/sentryHelpers';
 
@@ -48,7 +48,7 @@ export function useDemoMode() {
       setAuth(user, token, 'demo_token');
       
       // Use the locale the user was browsing in, not the backend default
-      useUIStore.getState().setLanguage(locale);
+      useUIStore.getState().setLanguage(locale as Language);
 
       const returnUrl = router.query.redirect as string || '/dashboard';
       await router.push(returnUrl, returnUrl, { locale });
