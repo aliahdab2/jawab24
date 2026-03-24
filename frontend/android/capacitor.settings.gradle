@@ -11,6 +11,9 @@ project(':capacitor-app').projectDir = new File('../../node_modules/@capacitor/a
 include ':capacitor-browser'
 project(':capacitor-browser').projectDir = new File('../../node_modules/@capacitor/browser/android')
 
+include ':capacitor-filesystem'
+project(':capacitor-filesystem').projectDir = new File('../../node_modules/@capacitor/filesystem/android')
+
 include ':capacitor-haptics'
 project(':capacitor-haptics').projectDir = new File('../../node_modules/@capacitor/haptics/android')
 
@@ -31,6 +34,9 @@ project(':capacitor-splash-screen').projectDir = new File('../../node_modules/@c
 
 include ':capacitor-status-bar'
 project(':capacitor-status-bar').projectDir = new File('../../node_modules/@capacitor/status-bar/android')
+
+include ':capgo-capacitor-audio-recorder'
+project(':capgo-capacitor-audio-recorder').projectDir = new File('../../node_modules/@capgo/capacitor-audio-recorder/android')
 
 include ':capacitor-secure-storage-plugin'
 project(':capacitor-secure-storage-plugin').projectDir = new File('../../node_modules/capacitor-secure-storage-plugin/android')
