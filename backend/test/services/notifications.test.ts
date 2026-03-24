@@ -66,11 +66,10 @@ describe('NotificationService', () => {
 
         it('should have stale_comment template with correct placeholders', () => {
             const template = NOTIFICATION_TEMPLATES.stale_comment;
-            expect(template.titles.en).toBe('Unreplied Comments Need Attention');
-            expect(template.bodies.en).toContain('{count}');
-            expect(template.bodies.en).toContain('{minutes}');
-            expect(template.bodies.ar).toContain('{count}');
-            expect(template.bodies.ar).toContain('{minutes}');
+            expect(template.titles.en).toContain('{senderName}');
+            expect(template.titles.en).toContain('{pageName}');
+            expect(template.bodies.en).toContain('{preview}');
+            expect(template.bodies.ar).toContain('{preview}');
         });
 
         it('should have kb_gap template with correct placeholders', () => {
