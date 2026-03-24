@@ -15,6 +15,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Plan } from '@jawab24/shared';
+import { getDisplayPrice, getMonthlyEquivalent } from '@/utils/pricing';
 
 // Set to true to disable checkout (e.g. during Stripe price changes)
 function isCheckoutMaintenance() {
@@ -292,13 +293,18 @@ export default function CheckoutPage() {
                 {/* eslint-enable @typescript-eslint/no-explicit-any */}
                   <div className="flex items-baseline gap-1.5">
                     <span className="text-4xl sm:text-5xl font-bold text-brand-600 font-display">
-                      ${(plan.price / 100).toFixed(2).split('.')[0]}
-                      <span className="text-2xl sm:text-3xl opacity-70">.{(plan.price / 100).toFixed(2).split('.')[1]}</span>
+                      ${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[0]}
+                      <span className="text-2xl sm:text-3xl opacity-70">.{(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[1]}</span>
                     </span>
                     <span className="text-muted-foreground font-medium">
-                      / {tPlans('month')}
+                      / {billingInterval === 'year' ? tPlans('year') : tPlans('month')}
                     </span>
                   </div>
+                  {billingInterval === 'year' && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {tPlans('perMonthEquivalent', { amount: `$${(getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` })} &middot; {tPlans('billedAnnually')}
+                    </p>
+                  )}
                 </div>
 
                 {/* Features */}

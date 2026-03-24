@@ -19,6 +19,7 @@ import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { isRTLLocale } from '@/utils/locale';
 import { ShopifyIcon, SallaIcon } from '@/components/landing/LandingHero';
+import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings } from '@/utils/pricing';
 
 interface PricingPageProps {
   plans: Plan[];
@@ -65,9 +66,8 @@ function PlanCard({
   const isFree = plan.price === 0;
   const isAnnual = billingInterval === 'year';
 
-  // Annual = 10 months (save 2 months ≈ 17%)
-  const displayPrice = isAnnual && !isFree ? plan.price * 10 : plan.price;
-  const monthlyEquivalent = isAnnual && !isFree ? Math.round(displayPrice / 12) : plan.price;
+  const displayPrice = !isFree ? getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) : 0;
+  const monthlyEquivalent = !isFree ? getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) : 0;
 
   const planName = tPricing(plan.slug);
   const planDescription = tPricing(`${plan.slug}Desc`);
@@ -170,7 +170,7 @@ function PlanCard({
             </p>
             <div className="mt-2">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-green-100 text-green-700 text-xs font-bold rounded-full border border-green-200">
-                {t('pricing.annualSavingsAmount', { amount: formatPrice(plan.price * 2) })}
+                {t('pricing.annualSavingsAmount', { amount: formatPrice(getAnnualSavings(plan.price, plan.yearlyPrice)) })}
               </span>
             </div>
           </>

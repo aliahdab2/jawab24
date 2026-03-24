@@ -1,0 +1,1 @@
+ALTER TABLE "plans" ADD COLUMN "yearly_price" integer;

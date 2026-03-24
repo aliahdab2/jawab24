@@ -17,7 +17,8 @@ export const FALLBACK_PLANS: Plan[] = [
         name: 'Starter',
         slug: 'starter',
         description: 'Auto-reply to your Facebook & Instagram page - 30 days free trial',
-        price: 1500, // $15.00
+        price: 1500, // $15.00/month
+        yearlyPrice: 15000, // $150.00/year (10 months)
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
@@ -42,7 +43,8 @@ export const FALLBACK_PLANS: Plan[] = [
         name: 'Business',
         slug: 'business',
         description: 'Auto-reply to 2 Facebook/Instagram pages with unlimited templates',
-        price: 3900, // $39.00
+        price: 3900, // $39.00/month
+        yearlyPrice: 39000, // $390.00/year (10 months)
         currency: 'USD',
         interval: 'month',
         maxPages: 2,
@@ -67,7 +69,8 @@ export const FALLBACK_PLANS: Plan[] = [
         name: 'Pro',
         slug: 'pro',
         description: 'Auto-reply to 5 Facebook/Instagram pages - for agencies',
-        price: 7900, // $79.00
+        price: 7900, // $79.00/month
+        yearlyPrice: 79000, // $790.00/year (10 months)
         currency: 'USD',
         interval: 'month',
         maxPages: 5,

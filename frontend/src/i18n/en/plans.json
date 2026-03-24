@@ -1,5 +1,8 @@
 {
   "month": "month",
+  "year": "year",
+  "billedAnnually": "billed annually",
+  "perMonthEquivalent": "{amount} / month equivalent",
   "pages": "Pages",
   "aiReplies": "AI Replies per month",
   "trialDays": "days free trial",

@@ -1,5 +1,8 @@
 {
   "month": "شهرياً",
+  "year": "سنوياً",
+  "billedAnnually": "يُدفع سنوياً",
+  "perMonthEquivalent": "{amount} / شهرياً تقريباً",
   "pages": "صفحات",
   "aiReplies": "رد ذكي شهرياً",
   "trialDays": "يوم تجربة مجانية",
