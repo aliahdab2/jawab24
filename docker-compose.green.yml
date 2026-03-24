@@ -27,6 +27,14 @@ services:
         condition: service_healthy
     networks:
       - jawab24-network
+    deploy:
+      resources:
+        limits:
+          memory: 768m
+          cpus: "1.0"
+        reservations:
+          memory: 256m
+          cpus: "0.25"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000/health"]
       interval: 10s
@@ -57,6 +65,14 @@ services:
       - DEPLOY_ENV=green
     networks:
       - jawab24-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+        reservations:
+          memory: 128m
+          cpus: "0.1"
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3001"]
       interval: 10s
@@ -89,6 +105,14 @@ services:
         condition: service_healthy
     networks:
       - jawab24-network
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "0.5"
+        reservations:
+          memory: 128m
+          cpus: "0.1"
     logging:
       driver: "json-file"
       options:

@@ -351,7 +351,18 @@ cleanup() {
     echo "✅ Old $ACTIVE_ENV environment stopped"
 
     docker image prune -f --filter "until=24h" 2>/dev/null || true
-    echo "✅ Cleanup complete"
+
+    # Reclaim build cache created during this deployment
+    echo "🔄 Pruning post-build Docker cache..."
+    docker builder prune -af 2>/dev/null || true
+
+    # Rotate old system logs (compressed rotations + failed-login records)
+    echo "🔄 Cleaning rotated system logs..."
+    find /var/log -type f \( -name '*.gz' -o -name '*.1' -o -name '*.old' \) -delete 2>/dev/null || true
+    truncate -s 0 /var/log/btmp 2>/dev/null || true
+
+    DISK_AFTER=$(df -h / | awk 'NR==2 {print $5}')
+    echo "✅ Cleanup complete (disk usage: $DISK_AFTER)"
 }
 
 # Validate required environment variables exist in env files
