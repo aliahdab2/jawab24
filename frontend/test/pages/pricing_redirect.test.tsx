@@ -10,6 +10,7 @@ vi.mock('next/router', () => ({
 }));
 
 // Mock the API calls
+const mockBillingPortal = vi.fn().mockResolvedValue({ data: { url: 'https://billing.stripe.com/session/test' } });
 vi.mock('@/lib/api', () => ({
     subscriptionApi: {
         getUsage: vi.fn().mockResolvedValue({
@@ -21,6 +22,7 @@ vi.mock('@/lib/api', () => ({
                 aiReplies: { used: 0, limit: 10 }
             }
         }),
+        billingPortal: (...args: unknown[]) => mockBillingPortal(...args),
     },
 }));
 
@@ -119,7 +121,7 @@ describe('PricingPage Navigation Logic', () => {
         );
     });
 
-    it('redirects to CHECKOUT when authenticated', async () => {
+    it('opens Billing Portal when authenticated with existing subscription', async () => {
         // Setup: Authenticated
         useAuthStore.setState({
             isAuthenticated: true,
@@ -139,12 +141,9 @@ describe('PricingPage Navigation Logic', () => {
         // Action: Click upgrade
         fireEvent.click(upgradeButton);
 
-        // Wait for navigation
+        // Verify: Opens Stripe Billing Portal (not checkout) for existing subscribers
         await waitFor(() => {
-            expect(mockPush).toHaveBeenCalled();
+            expect(mockBillingPortal).toHaveBeenCalled();
         }, { timeout: 1000 });
-
-        // Verify: Redirects directly to Checkout
-        expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/checkout?planId=plan-1'));
     });
 });

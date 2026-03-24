@@ -74,8 +74,9 @@ export default function CheckoutPage() {
         const response = await publicApi.get(`/plans/${planId}`);
         const planData = response.data.data || response.data;
 
-        // If it's a FREE plan, redirect to dashboard as they get it for free
-        // But only if they don't have a plan yet (otherwise it might be a downgrade)
+        // If it's a FREE plan, redirect to dashboard — free plan activation
+        // is automatic. Downgrades (cancellations) are handled via the
+        // billing portal or cancel-subscription endpoint, not checkout.
         if (planData.price === 0 && isAuthenticated) {
           router.push('/dashboard');
           return;

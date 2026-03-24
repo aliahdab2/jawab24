@@ -105,5 +105,8 @@
   "faq5Q": "What happens when I reach my smart reply limit?",
   "faq5A": "When you reach your monthly smart reply limit, template-based replies continue working normally. Only AI-powered smart replies pause until your limit resets at the start of the next billing cycle. You can upgrade anytime for more replies.",
   "planTabs": "Plan selection",
-  "manageOnWeb": "Manage your subscription on our website"
+  "manageOnWeb": "Manage your subscription on our website",
+  "downgradeToFreeTitle": "Cancel Subscription?",
+  "downgradeToFreeMessage": "You will lose access to AI-powered smart replies, additional pages, and premium features at the end of your current billing period. Your templates and settings will be preserved.",
+  "downgradeToFreeConfirm": "Manage Subscription"
 }

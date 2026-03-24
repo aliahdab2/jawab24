@@ -338,6 +338,7 @@ export const subscriptionApi = {
   getUsage: (config?: AxiosRequestConfig) => api.get('/subscription/usage', config),
   changePlan: (planId: string) => api.post('/subscription/change-plan', { planId }),
   cancel: (reason?: string) => api.post('/subscription/cancel', { reason }),
+  billingPortal: () => api.post('/payment/billing-portal'),
   pause: () => api.post('/subscription/pause'),
   resume: () => api.post('/subscription/resume'),
   checkAiLimit: () => api.get('/subscription/limits/ai'),

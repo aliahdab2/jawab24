@@ -4,7 +4,7 @@ import Head from 'next/head';
 import type { GetStaticProps } from 'next';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button } from '@/components/ui';
+import { Card, Button, ConfirmationModal } from '@/components/ui';
 import { subscriptionApi, publicApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
@@ -349,6 +349,8 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   const [isSanctioned, setIsSanctioned] = useState<boolean>(false);
   const [billingInterval, setBillingInterval] = useState<'month' | 'year'>('month');
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
+  const [downgradeLoading, setDowngradeLoading] = useState(false);
 
   // Client-side: fetch real plans if ISR served fallback data
   useEffect(() => {
@@ -419,16 +421,12 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       if (!isAuthenticated) {
         // Just go to login, then dashboard will auto-activate trial
         router.push(`/login?redirect=${encodeURIComponent('/dashboard')}`);
+      } else if (!usage?.subscription) {
+        // No subscription — go to dashboard to trigger auto-activation
+        router.push('/dashboard');
       } else {
-        // If already logged in, check if they already have an active sub
-        // If they don't have a plan yet, just go to dashboard to trigger auto-activation
-        if (!usage?.subscription) {
-          router.push('/dashboard');
-        } else {
-          // If they have a plan and are "downgrading" or "switching" back to default,
-          // go to checkout to handle Stripe subscription update
-          router.push(`/checkout?planId=${planId}&interval=${billingInterval}`);
-        }
+        // Has active subscription — show confirmation, then open Stripe Billing Portal
+        setShowDowngradeDialog(true);
       }
       return;
     }
@@ -440,10 +438,37 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       return;
     }
 
+    // If user already has a subscription, use Stripe Billing Portal for plan changes
+    // (upgrades, downgrades, interval changes). Checkout is only for NEW subscriptions.
+    if (hasActiveSubscription) {
+      setChangingPlan(planId);
+      await openBillingPortal();
+      setChangingPlan(null);
+      return;
+    }
+
     setChangingPlan(planId);
 
-    // Navigate to checkout (backend will validate again)
+    // New subscription — navigate to checkout
     router.push(`/checkout?planId=${planId}&interval=${billingInterval}`);
+  };
+
+  /** Open Stripe Billing Portal for plan changes, downgrades, or cancellation. */
+  const openBillingPortal = async () => {
+    try {
+      const response = await subscriptionApi.billingPortal();
+      window.location.href = response.data.url;
+    } catch (err) {
+      captureError(err, 'Failed to open billing portal', { tags: { page: 'pricing', action: 'billing_portal' } });
+    }
+  };
+
+  const handleDowngradeConfirm = async () => {
+    setDowngradeLoading(true);
+    await openBillingPortal();
+    // If we're still here (portal didn't open), reset the dialog
+    setDowngradeLoading(false);
+    setShowDowngradeDialog(false);
   };
 
   // Filter out inactive plans (keep only plans where isActive is true)
@@ -740,6 +765,17 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           </div>
         </div>
         </div>
+
+      <ConfirmationModal
+        isOpen={showDowngradeDialog}
+        onClose={() => { setShowDowngradeDialog(false); setDowngradeLoading(false); }}
+        onConfirm={handleDowngradeConfirm}
+        title={tPricing('downgradeToFreeTitle')}
+        message={tPricing('downgradeToFreeMessage')}
+        confirmText={tPricing('downgradeToFreeConfirm')}
+        variant="warning"
+        loading={downgradeLoading}
+      />
     </>
   );
 };
