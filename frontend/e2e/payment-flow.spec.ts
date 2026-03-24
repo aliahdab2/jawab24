@@ -310,19 +310,36 @@ test.describe('Payment Flow — Existing Subscriber', () => {
   test('upgrade click opens billing portal', async ({ page }) => {
     let billingPortalCalled = false;
 
-    await page.route('**/api/subscription/usage**', async (route) => {
-      await route.fulfill({
-        status: 200, contentType: 'application/json',
-        body: JSON.stringify({ data: MOCK_USAGE_WITH_SUBSCRIPTION }),
-      });
-    });
-
-    await page.route('**/api/payment/billing-portal', async (route) => {
-      billingPortalCalled = true;
-      await route.fulfill({
-        status: 200, contentType: 'application/json',
-        body: JSON.stringify({ url: 'https://billing.stripe.com/test-portal' }),
-      });
+    // Override catch-all with a single handler that tracks billing portal calls
+    await page.unroute('**/api/**');
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/payment/billing-portal')) {
+        billingPortalCalled = true;
+        return route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ url: 'https://billing.stripe.com/test-portal' }),
+        });
+      }
+      if (url.includes('/geo/check')) {
+        return route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ sanctioned: false, country: 'SE' }),
+        });
+      }
+      if (url.includes('/plans')) {
+        return route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ data: MOCK_PLANS }),
+        });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ data: MOCK_USAGE_WITH_SUBSCRIPTION }),
+        });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
 
     await page.goto('/en/pricing');
@@ -331,7 +348,6 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     const upgradeBtn = page.locator('button').filter({ hasText: t('pricing.upgrade') }).first();
     await expect(upgradeBtn).toBeVisible({ timeout: 10000 });
 
-    // Start listening for the billing portal request before clicking
     const billingPortalRequest = page.waitForRequest(
       (req) => req.url().includes('/payment/billing-portal'),
       { timeout: 15000 },
