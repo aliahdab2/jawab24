@@ -14,6 +14,7 @@ import { formatBusinessProfile } from '../../utils/businessProfile';
 import { truncateAtSentence } from '../../utils/text';
 import { getStoreContextForAI } from '../ecommerce';
 import { publishSSEEvent } from '../../lib/eventBus';
+import { invalidateWorkspaceStatsCache } from '../pages';
 
 /**
  * Unified Comment Processor
@@ -119,6 +120,9 @@ export class CommentProcessor {
                 fromName: fromName ?? null,
                 message: commentMessage,
             });
+
+            // Invalidate dashboard stats so next load reflects the new comment
+            invalidateWorkspaceStatsCache(workspaceId);
 
             // Early exit: settings disabled (after storing so the comment is persisted)
             if (!isCommentsEnabled) {

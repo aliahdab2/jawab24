@@ -360,7 +360,7 @@ describe('PagesService', () => {
                 `stats:workspace:${workspaceId}`,
                 expect.any(String),
                 'EX',
-                60,
+                300,
             );
         });
     });

@@ -51,7 +51,7 @@ export class CommentsService {
         const limit = options?.limit || 50;
 
         // Resolve cursor timestamp once (could be FB or IG comment)
-        // Run both lookups in parallel to avoid sequential N+1 queries
+        // Both are fast PK lookups — run in parallel for lowest latency
         let cursorDate: Date | null = null;
         if (options?.cursor) {
             const [fbCursor, igCursor] = await Promise.all([

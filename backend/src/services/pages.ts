@@ -14,6 +14,11 @@ import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
 
+/** How long workspace stats stay cached in Redis (seconds). */
+const STATS_CACHE_TTL = 300;
+/** Minimum interval between cache invalidations per workspace (seconds). */
+const STATS_INVALIDATION_THROTTLE = 30;
+
 /**
  * Encrypt a page access token if encryption key is configured.
  * Skips empty strings (sentinel for disconnected pages).
@@ -230,7 +235,7 @@ export class PagesService {
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
         // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
-        // Cache stats in Redis for 60s to avoid repeated GROUP BY aggregations on every dashboard load
+        // Cache stats in Redis to avoid repeated GROUP BY aggregations on every dashboard load
         const cacheKey = `stats:workspace:${workspaceId}`;
         const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
         try {
@@ -300,7 +305,7 @@ export class PagesService {
                 // Write to Redis cache (fire-and-forget, 60s TTL)
                 const cacheObj: Record<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }> = {};
                 for (const [pageId, stats] of statsMap) cacheObj[pageId] = stats;
-                redis.set(cacheKey, JSON.stringify(cacheObj), 'EX', 60).catch(() => {});
+                redis.set(cacheKey, JSON.stringify(cacheObj), 'EX', STATS_CACHE_TTL).catch(() => {});
             }
         } catch (err) {
             captureError(err, 'Pages stats query failed', { level: 'warning', tags: { service: 'pages' } });
@@ -700,6 +705,20 @@ export class PagesService {
 }
 
 export const pagesService = new PagesService();
+
+/** Invalidate workspace stats cache so the next dashboard load fetches fresh data.
+ *  Throttled: skips if the cache was already invalidated within the last 30 seconds
+ *  to avoid defeating the cache under high message volume. */
+export function invalidateWorkspaceStatsCache(workspaceId: string): void {
+    const throttleKey = `stats:throttle:${workspaceId}`;
+    // SET NX EX: only sets if key doesn't exist, auto-expires after the throttle window.
+    // If the key already exists (recently invalidated), the DEL is skipped.
+    redis.set(throttleKey, '1', 'EX', STATS_INVALIDATION_THROTTLE, 'NX').then((result) => {
+        if (result === 'OK') {
+            redis.del(`stats:workspace:${workspaceId}`).catch(() => {});
+        }
+    }).catch(() => {});
+}
 
 /** Check if a page's Facebook access has been revoked (empty accessToken sentinel) */
 export function isPageDisconnected(page: { accessToken: string } | null | undefined): boolean {

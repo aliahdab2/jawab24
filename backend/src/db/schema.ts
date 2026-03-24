@@ -371,6 +371,8 @@ export const messages = pgTable('messages', {
         senderInboxIdx: index('idx_messages_sender_inbox').on(table.pageId, table.senderId, table.direction, table.replied, table.createdAt),
         // Covering index for unreplied message queries (getUnrepliedFromSender, dashboard counts)
         unrepliedIdx: index('idx_messages_page_unreplied').on(table.pageId, table.replied, table.createdAt),
+        // Composite index for escalation SLA queries (replied + needsAttention + direction + time)
+        escalationIdx: index('idx_messages_escalation').on(table.replied, table.needsAttention, table.direction, table.createdTime),
     };
 });
 
@@ -383,7 +385,8 @@ export const conversationPauses = pgTable('conversation_pauses', {
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => {
     return {
-        pageSenderIdx: index('idx_conversation_pauses_page_sender').on(table.pageId, table.senderId),
+        // Covering index for pause expiry lookups (pageId + senderId + pausedUntil range scan)
+        pageSenderIdx: index('idx_conversation_pauses_page_sender').on(table.pageId, table.senderId, table.pausedUntil),
     };
 });
 

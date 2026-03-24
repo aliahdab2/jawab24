@@ -9,6 +9,10 @@ import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../
 
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
+vi.mock('../../src/services/pages', () => ({
+    pagesService: {},
+    invalidateWorkspaceStatsCache: vi.fn(),
+}));
 vi.mock('../../src/services/reply/generator', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../src/services/reply/generator')>();
     return {

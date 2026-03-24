@@ -24,7 +24,7 @@ const DEFAULT_SIMILARITY_THRESHOLD = 0.93;
 
 /** Intents where exact answers matter — skip semantic cache entirely.
  * Exact cache (hash-based) still applies; only vector similarity is bypassed. */
-const SKIP_SEMANTIC_CACHE_INTENTS = new Set(['PRICE', 'PURCHASE_INTENT']);
+const SKIP_SEMANTIC_CACHE_INTENTS = new Set(['PRICE', 'PURCHASE_INTENT', 'COMPLAINT']);
 
 export interface SemanticCacheHit {
     reply: string;

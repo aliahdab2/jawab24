@@ -13,6 +13,7 @@ import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { getStoreContextForAI } from '../ecommerce';
 import { publishSSEEvent } from '../../lib/eventBus';
+import { invalidateWorkspaceStatsCache } from '../pages';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
@@ -129,6 +130,9 @@ export class MessageProcessor {
                     createdAt: new Date().toISOString(),
                 },
             });
+
+            // Invalidate dashboard stats so next load reflects the new message
+            invalidateWorkspaceStatsCache(page.workspaceId);
 
             // 4. Check auto-reply enabled — after storing so dashboard has the message with name
             // Page OFF = Jawab24 is invisible. No reply, no flag, no notification.

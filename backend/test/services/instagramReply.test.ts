@@ -32,6 +32,7 @@ vi.mock('../../src/services/pages', () => ({
     pagesService: {
         getPageByInstagramId: vi.fn(),
     },
+    invalidateWorkspaceStatsCache: vi.fn(),
 }));
 
 vi.mock('../../src/services/reply/generator', () => ({
