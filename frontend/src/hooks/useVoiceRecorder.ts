@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { voiceApi } from '@/lib/api';
-import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
+import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 
 const MAX_DURATION_MS = 60_000; // 60 seconds auto-stop
@@ -47,20 +47,15 @@ async function stopNativeRecording(): Promise<{ base64: string; mimeType: string
   const { CapacitorAudioRecorder } = await import('@capgo/capacitor-audio-recorder');
   const result = await CapacitorAudioRecorder.stopRecording();
 
-  if (result.duration && result.duration < MIN_DURATION_MS) return null;
-
   if (result.uri) {
-    // Native: read file as base64 via Capacitor Filesystem
     const { Filesystem } = await import('@capacitor/filesystem');
     const file = await Filesystem.readFile({ path: result.uri });
     const data = typeof file.data === 'string' ? file.data : '';
     if (!data) return null;
-    // Native recorder produces AAC in an m4a container
     return { base64: data, mimeType: 'audio/mp4' };
   }
 
   if (result.blob) {
-    // Web fallback inside the plugin
     const buffer = await result.blob.arrayBuffer();
     const base64 = btoa(
       new Uint8Array(buffer).reduce((d, byte) => d + String.fromCharCode(byte), ''),
@@ -106,6 +101,12 @@ function stopWebStream(handle: WebRecorderHandle | null): void {
   handle.stream.getTracks().forEach(t => t.stop());
 }
 
+function blobToBase64(blob: Blob): Promise<string> {
+  return blob.arrayBuffer().then(buf =>
+    btoa(new Uint8Array(buf).reduce((d, byte) => d + String.fromCharCode(byte), '')),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
@@ -123,8 +124,14 @@ export function useVoiceRecorder({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoStopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startTimeRef = useRef<number>(0);
-  const stopFnRef = useRef<() => void>(() => {});
   const native = isNativePlatform();
+
+  // Stable refs for callbacks passed by the consumer (avoids re-creating
+  // every callback when the consumer doesn't memoize their handlers).
+  const onTranscribedRef = useRef(onTranscribed);
+  const onErrorRef = useRef(onError);
+  onTranscribedRef.current = onTranscribed;
+  onErrorRef.current = onError;
 
   const isSupported = native || (
     typeof window !== 'undefined'
@@ -138,24 +145,86 @@ export function useVoiceRecorder({
     if (autoStopRef.current) { clearTimeout(autoStopRef.current); autoStopRef.current = null; }
   }, []);
 
+  const resetState = useCallback(() => {
+    setState('idle');
+    setElapsed(0);
+  }, []);
+
   // Send audio to transcription API
   const transcribe = useCallback(async (base64: string, mimeType: string) => {
     setState('transcribing');
     try {
       const result = await voiceApi.transcribe(base64, mimeType, languageHint, quality);
       if (result.success && result.data?.text) {
-        onTranscribed?.(result.data.text);
+        onTranscribedRef.current?.(result.data.text);
       } else {
-        onError?.('transcription_empty');
+        onErrorRef.current?.('transcription_empty');
       }
     } catch (err) {
       captureError(err instanceof Error ? err : new Error(String(err)), 'Voice transcription request failed');
-      onError?.('transcription_failed');
+      onErrorRef.current?.('transcription_failed');
     } finally {
-      setState('idle');
-      setElapsed(0);
+      resetState();
     }
-  }, [languageHint, quality, onTranscribed, onError]);
+  }, [languageHint, quality, resetState]);
+
+  // ---- Stop ----
+  const stopRecording = useCallback(async () => {
+    clearTimers();
+    const recordingDuration = Date.now() - startTimeRef.current;
+    const tooShort = recordingDuration < MIN_DURATION_MS;
+
+    if (native) {
+      try {
+        if (tooShort) {
+          await cancelNativeRecording();
+          resetState();
+          onErrorRef.current?.('recording_too_short');
+          return;
+        }
+        const result = await stopNativeRecording();
+        if (result) {
+          await transcribe(result.base64, result.mimeType);
+        } else {
+          resetState();
+          onErrorRef.current?.('recording_empty');
+        }
+      } catch (err) {
+        captureError(err instanceof Error ? err : new Error(String(err)), 'Native recording stop failed');
+        resetState();
+        onErrorRef.current?.('recording_failed');
+      }
+      return;
+    }
+
+    // Web: event-driven via onstop
+    const handle = webRef.current;
+    if (!handle || handle.recorder.state === 'inactive') return;
+
+    // Set handlers before calling stop to avoid race conditions
+    handle.recorder.onstop = async () => {
+      const blob = new Blob(handle.chunks, { type: handle.recorder.mimeType });
+      stopWebStream(handle);
+      webRef.current = null;
+
+      if (blob.size === 0 || tooShort) {
+        resetState();
+        onErrorRef.current?.(blob.size === 0 ? 'recording_empty' : 'recording_too_short');
+        return;
+      }
+
+      await transcribe(await blobToBase64(blob), blob.type);
+    };
+
+    handle.recorder.onerror = () => {
+      stopWebStream(handle);
+      webRef.current = null;
+      resetState();
+      onErrorRef.current?.('recording_failed');
+    };
+
+    handle.recorder.stop();
+  }, [native, clearTimers, resetState, transcribe]);
 
   // ---- Start ----
   const startRecording = useCallback(async () => {
@@ -175,13 +244,11 @@ export function useVoiceRecorder({
 
       setState('recording');
 
-      // Elapsed timer
       timerRef.current = setInterval(() => {
         setElapsed(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 1000);
 
-      // Auto-stop — uses stopFnRef to access the latest stopRecording without circular deps
-      autoStopRef.current = setTimeout(() => stopFnRef.current(), MAX_DURATION_MS);
+      autoStopRef.current = setTimeout(() => stopRecording(), MAX_DURATION_MS);
 
     } catch (err) {
       clearTimers();
@@ -190,84 +257,13 @@ export function useVoiceRecorder({
       setState('idle');
 
       if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        onError?.('mic_permission_denied');
+        onErrorRef.current?.('mic_permission_denied');
       } else {
         captureError(err instanceof Error ? err : new Error(String(err)), 'Voice recording failed to start');
-        onError?.('recording_failed');
+        onErrorRef.current?.('recording_failed');
       }
     }
-  }, [state, native, clearTimers, onError]);
-
-  // ---- Stop ----
-  const stopRecording = useCallback(() => {
-    clearTimers();
-    const recordingDuration = Date.now() - startTimeRef.current;
-
-    if (native) {
-      // Native stop — async
-      (async () => {
-        try {
-          if (recordingDuration < MIN_DURATION_MS) {
-            await cancelNativeRecording();
-            setState('idle');
-            setElapsed(0);
-            onError?.('recording_too_short');
-            return;
-          }
-          const result = await stopNativeRecording();
-          if (result) {
-            addErrorBreadcrumb('voice', 'native recording stopped', { mimeType: result.mimeType, size: result.base64.length });
-            await transcribe(result.base64, result.mimeType);
-          } else {
-            setState('idle');
-            setElapsed(0);
-            onError?.('recording_empty');
-          }
-        } catch (err) {
-          captureError(err instanceof Error ? err : new Error(String(err)), 'Native recording stop failed');
-          setState('idle');
-          setElapsed(0);
-          onError?.('recording_failed');
-        }
-      })();
-    } else {
-      // Web stop — event-driven via onstop
-      const handle = webRef.current;
-      if (!handle || handle.recorder.state === 'inactive') return;
-
-      handle.recorder.onstop = async () => {
-        const blob = new Blob(handle.chunks, { type: handle.recorder.mimeType });
-        stopWebStream(handle);
-        webRef.current = null;
-
-        if (blob.size === 0 || recordingDuration < MIN_DURATION_MS) {
-          setState('idle');
-          setElapsed(0);
-          onError?.(blob.size === 0 ? 'recording_empty' : 'recording_too_short');
-          return;
-        }
-
-        const buffer = await blob.arrayBuffer();
-        const base64 = btoa(
-          new Uint8Array(buffer).reduce((d, byte) => d + String.fromCharCode(byte), ''),
-        );
-        await transcribe(base64, blob.type);
-      };
-
-      handle.recorder.onerror = () => {
-        stopWebStream(handle);
-        webRef.current = null;
-        setState('idle');
-        setElapsed(0);
-        onError?.('recording_failed');
-      };
-
-      handle.recorder.stop();
-    }
-  }, [native, clearTimers, transcribe, onError]);
-
-  // Keep ref in sync so auto-stop timer calls latest stopRecording
-  stopFnRef.current = stopRecording;
+  }, [state, native, clearTimers, stopRecording]);
 
   // Cleanup on unmount
   useEffect(() => {
