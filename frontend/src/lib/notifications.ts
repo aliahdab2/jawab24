@@ -188,14 +188,24 @@ function handleForegroundNotification(notification: PushNotificationSchema): voi
  * Handle notification tap - navigate to appropriate screen
  */
 function handleNotificationTap(action: ActionPerformed): void {
-    const data = action.notification.data as Record<string, string> | undefined;
-    const type = data?.type;
+    const data = action.notification.data as Record<string, string | object> | undefined;
+    const type = data?.type as string | undefined;
 
-    // 1. Use deepLink from backend data if available
+    // Parse customData — on Android background, FCM may deliver it as
+    // an already-parsed object OR as a JSON string depending on OS version.
     let customData: Record<string, string> | undefined;
     try {
-        if (data?.customData) customData = JSON.parse(data.customData);
-    } catch { /* ignore parse errors */ }
+        const raw = data?.customData;
+        if (raw && typeof raw === 'string') {
+            customData = JSON.parse(raw);
+        } else if (raw && typeof raw === 'object') {
+            customData = raw as Record<string, string>;
+        }
+    } catch {
+        addErrorBreadcrumb('notification', 'customData parse failed', { raw: String(data?.customData) });
+    }
+
+    addErrorBreadcrumb('notification', 'tap', { type, hasCustomData: !!customData, keys: customData ? Object.keys(customData).join(',') : '' });
 
     // 1a. Prefer item-specific deep links for comment/message notifications
     const isCommentType = ACTIONABLE_NOTIFICATION_TYPES.includes(type as typeof ACTIONABLE_NOTIFICATION_TYPES[number]);
@@ -218,15 +228,21 @@ function handleNotificationTap(action: ActionPerformed): void {
     }
 
     // 2. Fallback: route based on notification type
-    const isMessage = data?.dataType === 'message';
+    // For types shared by comments and messages (flagged_reply, skipped_reply),
+    // use customData.type to pick the right page, default to comments.
+    const itemType = customData?.type;
     let route = '/dashboard';
     switch (type) {
         case 'stale_comment':
-        case 'stale_message':
         case 'new_comment':
+            route = '/comments?filter=needs_action';
+            break;
+        case 'stale_message':
+            route = '/messages?filter=needs_action';
+            break;
         case 'flagged_reply':
         case 'skipped_reply':
-            route = (isMessage || type === 'stale_message') ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
+            route = itemType === 'message' ? '/messages?filter=flagged' : '/comments?filter=flagged';
             break;
         case 'payment_failed':
         case 'subscription_expiring':
