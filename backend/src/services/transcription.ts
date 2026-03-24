@@ -15,17 +15,10 @@ export const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
  * OpenAI recommends gpt-4o-mini-transcribe over gpt-4o-transcribe (Jan 2026 changelog).
  * 89% fewer hallucinations vs whisper-1, 35% lower WER, half the cost.
  *
- * Language enforcement is weak on GPT-4o models — the `language` param is treated as a
- * soft hint, not strict. We reinforce it with a language-specific `prompt` (OpenAI's
- * recommended workaround) + `language` param as belt-and-suspenders.
+ * No `prompt` parameter — it caused the model to hallucinate the prompt text
+ * instead of transcribing the actual audio. The `language` hint alone is sufficient.
  */
 const MODEL_TRANSCRIBE = 'gpt-4o-mini-transcribe';
-
-/** Language-specific prompts to reinforce language detection (OpenAI recommended approach) */
-const LANGUAGE_PROMPTS: Record<string, string> = {
-    ar: 'هذه رسالة صوتية باللغة العربية. النص يتعلق بمنتجات وخدمات المتجر والرد على استفسارات العملاء.',
-    en: 'This is a voice message in English about business products, services, and customer inquiries.',
-};
 
 export type TranscriptionQuality = 'fast' | 'accurate';
 
@@ -35,14 +28,13 @@ export interface TranscriptionResult {
 
 /**
  * Build the transcription params shared by both methods.
- * Combines model + language param + language-specific prompt for reliable detection.
+ * Only passes model + language hint. No prompt — let the model transcribe freely.
  */
 function buildTranscribeParams(file: Awaited<ReturnType<typeof toFile>>, languageHint?: string) {
     return {
         file,
         model: MODEL_TRANSCRIBE,
         ...(languageHint ? { language: languageHint } : {}),
-        ...(languageHint && LANGUAGE_PROMPTS[languageHint] ? { prompt: LANGUAGE_PROMPTS[languageHint] } : {}),
         temperature: 0,
     };
 }
