@@ -217,6 +217,7 @@ export interface Subscription {
   planId: string;
   plan?: Plan; // Joined plan data
   status: SubscriptionStatus;
+  stripeCustomerId?: string | null;
   trialEndsAt?: string | Date | null;
   currentPeriodStart: string | Date;
   currentPeriodEnd?: string | Date | null;
@@ -268,6 +269,7 @@ export interface UsageSummary {
     status: SubscriptionStatus;
     trialDaysRemaining?: number;
     renewsAt?: string;
+    hasStripeCustomer?: boolean;
   };
 }
 

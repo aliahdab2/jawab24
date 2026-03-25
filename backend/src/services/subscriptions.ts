@@ -324,6 +324,7 @@ export const subscriptionsService = {
                 status: subscription.status,
                 trialDaysRemaining,
                 renewsAt: subscription.currentPeriodEnd?.toString(),
+                hasStripeCustomer: Boolean(subscription.stripeCustomerId),
             },
         };
     },

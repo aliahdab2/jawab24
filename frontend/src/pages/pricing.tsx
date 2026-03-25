@@ -449,15 +449,16 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       return;
     }
 
-    // If user already has a subscription, use Stripe Billing Portal for plan changes
-    // (upgrades, downgrades, interval changes). Checkout is only for NEW subscriptions.
-    if (hasActiveSubscription) {
+    // If user has a Stripe customer (went through checkout before),
+    // use Stripe Billing Portal for plan changes (upgrades, downgrades, interval changes).
+    // Users with trial/manual subscriptions (no Stripe customer) go through checkout instead.
+    if (hasActiveSubscription && usage?.subscription?.hasStripeCustomer) {
       await openBillingPortal();
       setChangingPlan(null);
       return;
     }
 
-    // New subscription — navigate to checkout
+    // New subscription or trial-to-paid upgrade — navigate to checkout
     router.push(`/checkout?planId=${planId}&interval=${billingInterval}`);
   };
 
