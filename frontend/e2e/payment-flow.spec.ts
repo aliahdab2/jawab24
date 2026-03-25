@@ -53,6 +53,7 @@ const MOCK_USAGE_WITH_SUBSCRIPTION = {
     plan: { id: 'plan_starter', slug: 'starter', name: 'Starter', price: 1500 },
     status: 'active',
     currentPeriodEnd: '2026-04-24T00:00:00Z',
+    hasStripeCustomer: true,
   },
 };
 
