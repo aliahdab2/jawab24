@@ -308,38 +308,11 @@ test.describe('Payment Flow — Existing Subscriber', () => {
   });
 
   test('upgrade click opens billing portal', async ({ page }) => {
-    let billingPortalCalled = false;
-
-    // Override catch-all with a single handler that tracks billing portal calls
-    await page.unroute('**/api/**');
-    await page.route('**/api/**', async (route) => {
-      const url = route.request().url();
-      if (url.includes('/payment/billing-portal')) {
-        billingPortalCalled = true;
-        return route.fulfill({
-          status: 200, contentType: 'application/json',
-          body: JSON.stringify({ url: 'https://billing.stripe.com/test-portal' }),
-        });
-      }
-      if (url.includes('/geo/check')) {
-        return route.fulfill({
-          status: 200, contentType: 'application/json',
-          body: JSON.stringify({ sanctioned: false, country: 'SE' }),
-        });
-      }
-      if (url.includes('/plans')) {
-        return route.fulfill({
-          status: 200, contentType: 'application/json',
-          body: JSON.stringify({ data: MOCK_PLANS }),
-        });
-      }
-      if (url.includes('/subscription/usage')) {
-        return route.fulfill({
-          status: 200, contentType: 'application/json',
-          body: JSON.stringify({ data: MOCK_USAGE_WITH_SUBSCRIPTION }),
-        });
-      }
-      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    await page.route('**/api/subscription/usage**', async (route) => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ data: MOCK_USAGE_WITH_SUBSCRIPTION }),
+      });
     });
 
     await page.goto('/en/pricing');
@@ -348,13 +321,12 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     const upgradeBtn = page.locator('button').filter({ hasText: t('pricing.upgrade') }).first();
     await expect(upgradeBtn).toBeVisible({ timeout: 10000 });
 
-    const billingPortalRequest = page.waitForRequest(
-      (req) => req.url().includes('/payment/billing-portal'),
-      { timeout: 15000 },
-    );
-    await upgradeBtn.click();
-    await billingPortalRequest;
-    expect(billingPortalCalled).toBe(true);
+    // Assert the billing portal request is made when upgrade is clicked
+    const [portalReq] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/payment/billing-portal'), { timeout: 15000 }),
+      upgradeBtn.click(),
+    ]);
+    expect(portalReq.method()).toBe('POST');
   });
 
   test('downgrade to free shows confirmation dialog', async ({ page }) => {
