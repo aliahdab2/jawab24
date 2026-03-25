@@ -121,8 +121,8 @@ describe('PricingPage Navigation Logic', () => {
         );
     });
 
-    it('opens Billing Portal when authenticated with existing subscription', async () => {
-        // Setup: Authenticated
+    it('routes to checkout when subscriber has no Stripe customer', async () => {
+        // Setup: Authenticated, subscription WITHOUT Stripe customer (trial/manual)
         useAuthStore.setState({
             isAuthenticated: true,
             _hasHydrated: true
@@ -130,20 +130,17 @@ describe('PricingPage Navigation Logic', () => {
 
         render(<PricingPage plans={TEST_PLANS} />);
 
-        // Plans are passed as props (SSR via getStaticProps), so they render immediately
         expect(screen.getAllByText('Starter').length).toBeGreaterThan(0);
 
-        // Wait for usage data to load (async useEffect fetches subscription info)
-        // Once loaded, button changes from "Subscribe" to "Upgrade"
         const upgradeButton = await screen.findByText('Upgrade', {}, { timeout: 3000 });
-        expect(upgradeButton).toBeInTheDocument();
-
-        // Action: Click upgrade
         fireEvent.click(upgradeButton);
 
-        // Verify: Opens Stripe Billing Portal (not checkout) for existing subscribers
+        // Verify: Routes to checkout (not billing portal) since no Stripe customer
         await waitFor(() => {
-            expect(mockBillingPortal).toHaveBeenCalled();
+            expect(mockPush).toHaveBeenCalledWith(
+                expect.stringContaining('/checkout?planId=plan-1')
+            );
         }, { timeout: 1000 });
+        expect(mockBillingPortal).not.toHaveBeenCalled();
     });
 });
