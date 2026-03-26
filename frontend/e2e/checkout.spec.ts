@@ -48,6 +48,13 @@ test.describe('Checkout Page', () => {
 
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
+      if (url.includes('/geo/check')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ sanctioned: false, country: 'US' }),
+        });
+      }
       if (url.match(/\/plans\/[^/]+$/)) {
         return route.fulfill({
           status: 200,
@@ -106,6 +113,12 @@ test.describe('Checkout Page', () => {
   test('should show error message when plan fetch fails', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
+      if (url.includes('/geo/check')) {
+        return route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ sanctioned: false, country: 'US' }),
+        });
+      }
       if (url.match(/\/plans\/[^/]+$/)) {
         return route.fulfill({ status: 500, body: 'Error' });
       }
@@ -161,6 +174,12 @@ test.describe('Checkout Page - unauthenticated user', () => {
     });
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
+      if (url.includes('/geo/check')) {
+        return route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ sanctioned: false, country: 'US' }),
+        });
+      }
       if (url.match(/\/plans\/[^/]+$/)) {
         return route.fulfill({
           status: 200,
