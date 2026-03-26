@@ -369,9 +369,8 @@ describe('SCENARIO 2 — Customer upgrades from Basic to Pro', () => {
             userId,
             'upgrader@example.com',
             proPlan.id,
-            expect.any(String),
-            expect.any(String),
-            expect.any(String),
+            expect.any(String), // stripePriceId
+            expect.any(String), // returnUrl
             0, // no trial for existing subscriber
         );
     });
@@ -488,9 +487,8 @@ describe('SCENARIO 3 — Customer downgrades from Pro to Basic', () => {
             userId,
             'downgrader@example.com',
             basicPlan.id,
-            expect.any(String),
-            expect.any(String),
-            expect.any(String),
+            expect.any(String), // stripePriceId
+            expect.any(String), // returnUrl
             0,
         );
     });
@@ -685,9 +683,8 @@ describe('SCENARIO 5 — Customer cancels then resubscribes to a new plan', () =
             userId,
             'resub@example.com',
             newPlan.id,
-            expect.any(String),
-            expect.any(String),
-            expect.any(String),
+            expect.any(String), // stripePriceId
+            expect.any(String), // returnUrl
             0, // newPlan.trialDays = 0
         );
     });
@@ -975,9 +972,8 @@ describe('SCENARIO 8 — Customer upgrades while on trial period', () => {
             userId,
             'trial-upgrader@example.com',
             proPlan.id,
-            expect.any(String),
-            expect.any(String),
-            expect.any(String),
+            expect.any(String), // stripePriceId
+            expect.any(String), // returnUrl
             0, // trialing subscription exists → no new trial
         );
     });

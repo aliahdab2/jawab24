@@ -233,9 +233,8 @@ describe('Payment — createCheckoutSession', () => {
             userId,
             'payer@test.com',
             newPlan.id,
-            expect.any(String),
-            expect.any(String),
-            expect.any(String),
+            expect.any(String), // stripePriceId
+            expect.any(String), // returnUrl
             0,
         );
     });
