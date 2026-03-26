@@ -8,6 +8,14 @@ const EMBEDDING_DIMENSIONS = 512;
 const MAX_BATCH_SIZE = 100;
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
+/** text-embedding-3-small has an 8192 token limit (~4 chars/token). Stay safely under. */
+const MAX_INPUT_CHARS = 28000;
+
+function truncateForEmbedding(text: string, logger: Logger): string {
+    if (text.length <= MAX_INPUT_CHARS) return text;
+    logger.warn('Truncating text for embedding API', { originalLength: text.length, truncatedTo: MAX_INPUT_CHARS });
+    return text.slice(0, MAX_INPUT_CHARS);
+}
 
 /** Retry with exponential backoff for transient API failures */
 async function withRetry<T>(fn: () => Promise<T>, logger: Logger, retries = MAX_RETRIES): Promise<T> {
@@ -49,10 +57,11 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
     }
 
     async embed(text: string): Promise<number[]> {
+        const safeText = truncateForEmbedding(text, this.logger);
         const response = await withRetry(() =>
             this.client.embeddings.create({
                 model: EMBEDDING_MODEL,
-                input: text,
+                input: safeText,
                 dimensions: EMBEDDING_DIMENSIONS,
             }),
             this.logger,
@@ -65,7 +74,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
 
         const results: number[][] = [];
         for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
-            const batch = texts.slice(i, i + MAX_BATCH_SIZE);
+            const batch = texts.slice(i, i + MAX_BATCH_SIZE).map(t => truncateForEmbedding(t, this.logger));
             this.logger.debug('Embedding batch', { batchStart: i, batchSize: batch.length, totalTexts: texts.length });
             const response = await withRetry(() =>
                 this.client.embeddings.create({
