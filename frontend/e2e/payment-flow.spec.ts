@@ -506,6 +506,7 @@ test.describe('Payment Flow — Checkout', () => {
   });
 
   test('renders plan details on checkout page', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.route('**/api/plans/plan_starter', async (route) => {
       await route.fulfill({
         status: 200, contentType: 'application/json',
@@ -520,6 +521,7 @@ test.describe('Payment Flow — Checkout', () => {
   });
 
   test('yearly interval shows yearly price', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.route('**/api/plans/plan_starter', async (route) => {
       await route.fulfill({
         status: 200, contentType: 'application/json',

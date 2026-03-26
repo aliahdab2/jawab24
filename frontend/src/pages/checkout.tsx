@@ -23,8 +23,32 @@ import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Plan } from '@jawab24/shared';
 import { getDisplayPrice, getMonthlyEquivalent } from '@/utils/pricing';
 
-function isCheckoutMaintenance() {
+function isCheckoutMaintenance(): boolean {
   return process.env.NEXT_PUBLIC_CHECKOUT_MAINTENANCE === 'true';
+}
+
+function CheckoutHeader({ className }: { className?: string }) {
+  const t = useTranslations('checkout');
+  return (
+    <div className={`mx-auto w-full flex items-center justify-between mb-6 sm:mb-8 ${className ?? ''}`}>
+      <Link href="/pricing" className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors">
+        <ArrowLeft className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
+        {t('backToPricing')}
+      </Link>
+      <Link href="/" className="inline-flex items-center gap-2 group">
+        <span className="font-display font-bold text-lg text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+        <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
+      </Link>
+    </div>
+  );
+}
+
+function FullPageSpinner() {
+  return (
+    <div className="flex-1 flex items-center justify-center" role="status" aria-busy="true">
+      <Loader2 className="w-8 h-8 animate-spin text-brand-600" aria-hidden="true" />
+    </div>
+  );
 }
 
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
@@ -77,10 +101,12 @@ function PaymentForm({
   type,
   plan,
   billingInterval,
+  displayPrice,
 }: {
   type: 'payment' | 'setup';
   plan: Plan;
   billingInterval: 'month' | 'year';
+  displayPrice: string;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -92,7 +118,6 @@ function PaymentForm({
   const returnUrl = `${siteUrl.replace(/\/$/, '')}/payment/return`;
 
   const hasTrial = plan.trialDays > 0 && type === 'setup';
-  const displayPrice = `$${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}`;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -155,9 +180,7 @@ function PaymentForm({
             <Lock className="w-4 h-4" aria-hidden="true" />
             {hasTrial
               ? t('startTrial', { days: plan.trialDays })
-              : billingInterval === 'year'
-                ? t('submitPaymentYearly', { amount: displayPrice })
-                : t('submitPayment', { amount: displayPrice })}
+              : t(billingInterval === 'year' ? 'submitPaymentYearly' : 'submitPayment', { amount: displayPrice })}
           </>
         )}
       </Button>
@@ -296,29 +319,27 @@ export default function CheckoutPage() {
   };
 
   const maintenanceMode = isCheckoutMaintenance();
+  const intervalLabel = tPlans(billingInterval === 'year' ? 'year' : 'month');
 
-   
-  const getPlanName = (p: Plan) => {
+  // Dynamic keys from plan slugs — next-intl types are statically generated so `as any` is unavoidable
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const getPlanName = (p: Plan): string => {
     const fromPricing = tPricing(p.slug as any);
     if (fromPricing !== p.slug) return fromPricing;
     const fromPlans = tPlans(`${p.slug}.name` as any);
     return fromPlans !== `${p.slug}.name` ? fromPlans : p.name;
   };
 
-   
-  const getPlanDesc = (p: Plan) => {
+  const getPlanDesc = (p: Plan): string => {
     const fromPricing = tPricing(`${p.slug}Desc` as any);
     if (fromPricing !== `${p.slug}Desc`) return fromPricing;
     const fromPlans = tPlans(`${p.slug}.description` as any);
-    return fromPlans !== `${p.slug}.description` ? fromPlans : p.description;
+    return fromPlans !== `${p.slug}.description` ? fromPlans : (p.description ?? '');
   };
+  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   if (isSanctioned === null) {
-    return (
-      <div className="flex-1 flex items-center justify-center" role="status" aria-busy="true">
-        <Loader2 className="w-8 h-8 animate-spin text-brand-600" aria-hidden="true" />
-      </div>
-    );
+    return <FullPageSpinner />;
   }
 
   if (isSanctioned) {
@@ -331,16 +352,7 @@ export default function CheckoutPage() {
         <div className="flex-1 flex flex-col overflow-y-auto bg-background">
           <div className="flex-1 px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
             <div className="max-w-md mx-auto w-full">
-              <div className="flex items-center justify-between mb-8 sm:mb-10">
-                <Link href="/pricing" className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors">
-                  <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                  {t('backToPricing')}
-                </Link>
-                <Link href="/" className="inline-flex items-center gap-2 group">
-                  <span className="font-display font-bold text-lg text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
-                  <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
-                </Link>
-              </div>
+              <CheckoutHeader className="max-w-md mb-8 sm:mb-10" />
               <div className="text-center mb-8 sm:mb-10">
                 <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">{t('title')}</h1>
               </div>
@@ -353,11 +365,7 @@ export default function CheckoutPage() {
   }
 
   if (!plan && !error) {
-    return (
-      <div className="flex-1 flex items-center justify-center" role="status" aria-busy="true">
-        <Loader2 className="w-8 h-8 animate-spin text-brand-600" aria-hidden="true" />
-      </div>
-    );
+    return <FullPageSpinner />;
   }
 
   const displayPrice = plan
@@ -375,17 +383,7 @@ export default function CheckoutPage() {
       <div className="flex-1 flex flex-col overflow-y-auto bg-background">
         <div className="flex-1 px-5 sm:px-6 py-6 sm:py-10 px-safe-landscape">
 
-          {/* Header */}
-          <div className="max-w-4xl mx-auto w-full flex items-center justify-between mb-6 sm:mb-8">
-            <Link href="/pricing" className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors">
-              <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-              {t('backToPricing')}
-            </Link>
-            <Link href="/" className="inline-flex items-center gap-2 group">
-              <span className="font-display font-bold text-lg text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
-              <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
-            </Link>
-          </div>
+          <CheckoutHeader className="max-w-4xl" />
 
           {error && (
             <div className="max-w-4xl mx-auto mb-6 p-4 alert-error border rounded-2xl text-start text-sm">
@@ -418,11 +416,11 @@ export default function CheckoutPage() {
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-medium text-muted-foreground">{t('orderSummary')}</span>
-                        <span className="text-sm font-bold text-foreground">{getPlanName(plan)} &middot; {displayPrice}/{billingInterval === 'year' ? tPlans('year') : tPlans('month')}</span>
+                        <span className="text-sm font-bold text-foreground">{getPlanName(plan)} &middot; {displayPrice}/{intervalLabel}</span>
                       </div>
                       {showMobileSummary
-                        ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                        : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                        ? <ChevronUp className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
+                        : <ChevronDown className="w-4 h-4 text-muted-foreground" aria-hidden="true" />}
                     </button>
 
                     {/* Desktop: always visible. Mobile: collapsible */}
@@ -444,7 +442,7 @@ export default function CheckoutPage() {
                             <span className="text-xl opacity-70">.{displayPrice.split('.')[1]}</span>
                           </span>
                           <span className="text-muted-foreground text-sm font-medium">
-                            / {billingInterval === 'year' ? tPlans('year') : tPlans('month')}
+                            / {intervalLabel}
                           </span>
                         </div>
                         {billingInterval === 'year' && (
@@ -504,7 +502,7 @@ export default function CheckoutPage() {
                             className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
                             onClick={handleLogin}
                           >
-                            <LogIn className="w-5 h-5" />
+                            <LogIn className="w-5 h-5" aria-hidden="true" />
                             {t('loginButton')}
                           </Button>
                         </div>
@@ -521,6 +519,7 @@ export default function CheckoutPage() {
                               type={intentType}
                               plan={plan}
                               billingInterval={billingInterval}
+                              displayPrice={displayPrice}
                             />
                           </Elements>
                         </div>

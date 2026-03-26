@@ -81,6 +81,8 @@ test.describe('Checkout Page', () => {
   });
 
   test('should render plan name and price', async ({ page }) => {
+    // Use desktop viewport so the full order summary sidebar is visible
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/en/checkout?planId=starter');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
@@ -88,6 +90,7 @@ test.describe('Checkout Page', () => {
   });
 
   test('should show plan features', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/en/checkout?planId=starter');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
@@ -96,6 +99,7 @@ test.describe('Checkout Page', () => {
   });
 
   test('should show trial days when plan has a trial', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/en/checkout?planId=starter');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
@@ -106,8 +110,16 @@ test.describe('Checkout Page', () => {
   test('should show "Back to Pricing" link', async ({ page }) => {
     await page.goto('/en/checkout?planId=starter');
 
-    await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('a[href*="/pricing"]').first()).toBeVisible({ timeout: 10000 });
+    // Back to pricing link is in the header — visible on all viewports
+    await expect(page.locator('a[href*="/pricing"]').first()).toBeVisible({ timeout: 15000 });
+  });
+
+  test('should show plan summary in collapsed header on mobile', async ({ page }) => {
+    await page.goto('/en/checkout?planId=starter');
+
+    // On mobile, the collapsed summary shows plan name and price inline
+    await expect(page.locator('text=/Starter/i').first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=/\\$19/').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should show error message when plan fetch fails', async ({ page }) => {
