@@ -322,9 +322,11 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     const upgradeBtn = page.locator('button').filter({ hasText: t('pricing.upgrade') }).first();
     await expect(upgradeBtn).toBeVisible({ timeout: 10000 });
 
-    // Assert the billing portal request is made when upgrade is clicked
+    // Assert the billing portal request is made when upgrade is clicked.
+    // Clicking triggers a geo sanctions re-check first, then the portal request —
+    // allow extra time for the sequential async calls.
     const [portalReq] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes('/payment/billing-portal'), { timeout: 15000 }),
+      page.waitForRequest((req) => req.url().includes('/payment/billing-portal'), { timeout: 25000 }),
       upgradeBtn.click(),
     ]);
     expect(portalReq.method()).toBe('POST');
@@ -517,7 +519,8 @@ test.describe('Payment Flow — Checkout', () => {
     await page.goto('/en/checkout?planId=plan_starter');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=/\\$15/').first()).toBeVisible({ timeout: 10000 });
+    // Target the desktop sidebar price (font-display class on the price container)
+    await expect(page.locator('.font-display >> text=/\\$15/').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('yearly interval shows yearly price', async ({ page }) => {
@@ -532,8 +535,8 @@ test.describe('Payment Flow — Checkout', () => {
     await page.goto('/en/checkout?planId=plan_starter&interval=year');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
-    // Yearly price: $150 ($15000 cents / 100)
-    await expect(page.locator('text=/\\$150/').first()).toBeVisible({ timeout: 10000 });
+    // Yearly price: $150 ($15000 cents / 100) — target desktop sidebar price
+    await expect(page.locator('.font-display >> text=/\\$150/').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('embedded checkout session is created automatically', async ({ page }) => {

@@ -66,7 +66,7 @@ test.describe('Checkout Page', () => {
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ clientSecret: 'pi_test_123_secret', type: 'payment', subscriptionId: 'sub_test_123' }),
+          body: JSON.stringify({ clientSecret: 'pi_3MtwBwLkdIwHu7ix_secret_YrKJUKribcBjcG8HVhfZluoGH', type: 'payment', subscriptionId: 'sub_test_123' }),
         });
       }
       if (url.includes('/auth/profile')) {
@@ -86,7 +86,8 @@ test.describe('Checkout Page', () => {
     await page.goto('/en/checkout?planId=starter');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=/\\$19/').first()).toBeVisible({ timeout: 10000 });
+    // Target the desktop sidebar price (inside the always-visible lg:block container)
+    await expect(page.locator('.font-display >> text=/\\$19/').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should show plan features', async ({ page }) => {
@@ -94,8 +95,10 @@ test.describe('Checkout Page', () => {
     await page.goto('/en/checkout?planId=starter');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=/3 Pages/i').first()).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('text=/500/').first()).toBeVisible({ timeout: 10000 });
+    // Features are inside the desktop sidebar (visible at 1280px)
+    const sidebar = page.locator('[class*="lg\\:sticky"]');
+    await expect(sidebar.locator('text=/3/i').first()).toBeVisible({ timeout: 10000 });
+    await expect(sidebar.locator('text=/500/').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should show trial days when plan has a trial', async ({ page }) => {
@@ -103,8 +106,9 @@ test.describe('Checkout Page', () => {
     await page.goto('/en/checkout?planId=starter');
 
     await expect(page.locator('h2').filter({ hasText: /Starter/i }).first()).toBeVisible({ timeout: 15000 });
-    // "7 day free trial" text
-    await expect(page.locator('text=/7/').first()).toBeVisible({ timeout: 10000 });
+    // "7 day free trial" text — in the desktop sidebar
+    const sidebar = page.locator('[class*="lg\\:sticky"]');
+    await expect(sidebar.locator('text=/7/').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should show "Back to Pricing" link', async ({ page }) => {
@@ -115,11 +119,14 @@ test.describe('Checkout Page', () => {
   });
 
   test('should show plan summary in collapsed header on mobile', async ({ page }) => {
+    // Set mobile viewport so the collapsible summary button is visible (lg:hidden = hidden above 1024px)
+    await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/en/checkout?planId=starter');
 
-    // On mobile, the collapsed summary shows plan name and price inline
-    await expect(page.locator('text=/Starter/i').first()).toBeVisible({ timeout: 15000 });
-    await expect(page.locator('text=/\\$19/').first()).toBeVisible({ timeout: 10000 });
+    // On mobile, the collapsed summary button shows plan name and price inline
+    const mobileSummary = page.locator('button[aria-expanded]');
+    await expect(mobileSummary.filter({ hasText: /Starter/i })).toBeVisible({ timeout: 15000 });
+    await expect(mobileSummary.filter({ hasText: /\$19/ })).toBeVisible({ timeout: 10000 });
   });
 
   test('should show error message when plan fetch fails', async ({ page }) => {
