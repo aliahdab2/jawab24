@@ -1,6 +1,7 @@
 {
   "title": "Checkout",
   "subtitle": "Complete your subscription",
+  "orderSummary": "Order Summary",
   "securePayment": "Secure payment processed by Stripe",
   "backToPricing": "Back to Pricing",
   "errorLoadPlan": "Failed to load plan details. Please try again later.",

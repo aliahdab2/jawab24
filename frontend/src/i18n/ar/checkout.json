@@ -1,6 +1,7 @@
 {
   "title": "إتمام الاشتراك",
   "subtitle": "أكمل اشتراكك",
+  "orderSummary": "ملخص الطلب",
   "securePayment": "دفع آمن عبر Stripe",
   "backToPricing": "العودة للأسعار",
   "errorLoadPlan": "فشل تحميل تفاصيل الباقة. يرجى المحاولة مرة أخرى لاحقاً.",

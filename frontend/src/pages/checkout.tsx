@@ -237,159 +237,152 @@ export default function CheckoutPage() {
       </Head>
 
       <div className="flex-1 flex flex-col overflow-y-auto bg-background">
-        {/* Content container - fills space with consistent background */}
-        <div className="flex-1  px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
-          <div className="max-w-lg mx-auto w-full">
+        <div className="flex-1 px-5 sm:px-6 py-6 sm:py-10 px-safe-landscape">
 
-            {/* Header: Back link on one side, Logo on other */}
-            <div className="flex items-center justify-between mb-8 sm:mb-10">
-              <Link
-                href="/pricing"
-                className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
-                {t('backToPricing')}
-              </Link>
+          {/* Header */}
+          <div className="max-w-4xl mx-auto w-full flex items-center justify-between mb-6 sm:mb-8">
+            <Link
+              href="/pricing"
+              className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
+              {t('backToPricing')}
+            </Link>
 
-              <Link href="/" className="inline-flex items-center gap-2 group">
-                <span className="font-display font-bold text-lg text-foreground tracking-tight">
-                  {BRAND_ASSETS.meta.appName}
-                </span>
-                <BrandLogo
-                  variant="main"
-                  className="w-9 h-9 transition-transform group-hover:scale-105"
-                />
-              </Link>
+            <Link href="/" className="inline-flex items-center gap-2 group">
+              <span className="font-display font-bold text-lg text-foreground tracking-tight">
+                {BRAND_ASSETS.meta.appName}
+              </span>
+              <BrandLogo
+                variant="main"
+                className="w-9 h-9 transition-transform group-hover:scale-105"
+              />
+            </Link>
+          </div>
+
+          {error && (
+            <div className="max-w-4xl mx-auto mb-6 p-4 alert-error border rounded-2xl text-start text-sm">
+              {error}
             </div>
+          )}
 
-            {/* Title */}
-            <div className="text-center mb-8 sm:mb-10">
-              <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">
-                {t('title')}
-              </h1>
-              <p className="text-muted-foreground text-base">
-                {t('subtitle')}
-              </p>
-            </div>
+          {plan && (
+            <div className="max-w-4xl mx-auto w-full">
 
-            {error && (
-              <div className="mb-6 p-4 alert-error border rounded-2xl text-start text-sm">
-                {error}
-              </div>
-            )}
+              {maintenanceMode && (
+                <div className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 mb-6">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" aria-hidden="true" />
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    {tLanding('comingSoon.subtitle')}
+                  </p>
+                </div>
+              )}
 
-            {plan && (
-              <>
-                {/* Plan Summary Card */}
-                <div className="bg-card rounded-3xl p-6 sm:p-8 shadow-xl shadow-surface-900/5 border border-theme-border mb-6">
-                  {/* Plan Details */}
-                  {/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plan slug keys */}
-                  <div className="text-start">
-                    <h2 className="text-xl sm:text-2xl font-bold text-foreground mb-1">
+              {/* Two-column layout: order summary + payment form */}
+              <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-start">
+
+                {/* Order Summary — sidebar on desktop, compact card on mobile */}
+                <div className="lg:w-80 lg:flex-shrink-0 lg:sticky lg:top-10">
+                  <div className="bg-card rounded-2xl p-5 sm:p-6 border border-theme-border shadow-sm">
+                    {/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plan slug keys */}
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                      {t('orderSummary')}
+                    </p>
+                    <h2 className="text-lg font-bold text-foreground mb-0.5 text-start">
                       {tPricing(plan.slug as any) !== plan.slug
                         ? tPricing(plan.slug as any)
                         : (tPlans(`${plan.slug}.name` as any) !== `${plan.slug}.name` ? tPlans(`${plan.slug}.name` as any) : plan.name)}
                     </h2>
-                    <p className="text-muted-foreground text-sm mb-5">
+                    <p className="text-muted-foreground text-xs mb-4 text-start">
                       {tPricing(`${plan.slug}Desc` as any) !== `${plan.slug}Desc`
                         ? tPricing(`${plan.slug}Desc` as any)
                         : (tPlans(`${plan.slug}.description` as any) !== `${plan.slug}.description` ? tPlans(`${plan.slug}.description` as any) : plan.description)}
                     </p>
-                  {/* eslint-enable @typescript-eslint/no-explicit-any */}
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="text-4xl sm:text-5xl font-bold text-brand-600 font-display">
-                        ${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[0]}
-                        <span className="text-2xl sm:text-3xl opacity-70">.{(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[1]}</span>
-                      </span>
-                      <span className="text-muted-foreground font-medium">
-                        / {billingInterval === 'year' ? tPlans('year') : tPlans('month')}
-                      </span>
-                    </div>
-                    {billingInterval === 'year' && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {tPlans('perMonthEquivalent', { amount: `$${(getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` })} &middot; {tPlans('billedAnnually')}
-                      </p>
-                    )}
-                  </div>
+                    {/* eslint-enable @typescript-eslint/no-explicit-any */}
 
-                  {/* Features */}
-                  <div className="space-y-4 mt-6">
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      </div>
-                      <span className="text-foreground/70 font-medium text-start">
-                        {plan.maxPages === null ? tPricing('unlimited') : plan.maxPages} {tPlans('pages')}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                        <CheckCircle2 className="w-4 h-4 text-green-600" />
-                      </div>
-                      <span className="text-foreground/70 font-medium text-start">
-                        {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
-                      </span>
-                    </div>
-                    {plan.trialDays > 0 && (
-                      <div className="flex items-center gap-3">
-                        <div className="w-6 h-6 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                          <CheckCircle2 className="w-4 h-4 text-green-600" />
-                        </div>
-                        <span className="text-foreground/70 font-medium text-start">
-                          {tPricing('trialDays', { days: plan.trialDays })}
+                    <div className="border-t border-theme-border pt-4 mb-4">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-bold text-brand-600 font-display">
+                          ${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[0]}
+                          <span className="text-xl opacity-70">.{(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[1]}</span>
+                        </span>
+                        <span className="text-muted-foreground text-sm font-medium">
+                          / {billingInterval === 'year' ? tPlans('year') : tPlans('month')}
                         </span>
                       </div>
-                    )}
+                      {billingInterval === 'year' && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {tPlans('perMonthEquivalent', { amount: `$${(getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` })} &middot; {tPlans('billedAnnually')}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Features */}
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                        <span className="text-foreground/80 text-sm text-start">
+                          {plan.maxPages === null ? tPricing('unlimited') : plan.maxPages} {tPlans('pages')}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                        <span className="text-foreground/80 text-sm text-start">
+                          {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
+                        </span>
+                      </div>
+                      {plan.trialDays > 0 && (
+                        <div className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                          <span className="text-foreground/80 text-sm text-start">
+                            {tPricing('trialDays', { days: plan.trialDays })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-center text-xs text-muted-foreground mt-4 pt-4 border-t border-theme-border">
+                      {t('securePayment')}
+                    </p>
                   </div>
                 </div>
 
-                {maintenanceMode && (
-                  <div className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 mb-6">
-                    <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-                    <p className="text-xs text-amber-700 dark:text-amber-300">
-                      {tLanding('comingSoon.subtitle')}
-                    </p>
-                  </div>
-                )}
-
-                {/* Stripe Embedded Checkout or Login Prompt */}
-                {!maintenanceMode && (
-                  <>
-                    {!isAuthenticated ? (
-                      <div className="bg-card rounded-3xl p-6 sm:p-8 shadow-xl shadow-surface-900/5 border border-theme-border text-center">
-                        <p className="text-muted-foreground mb-4">
-                          {t('loginToCheckout')}
-                        </p>
-                        <Button
-                          size="lg"
-                          className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
-                          onClick={handleLogin}
-                        >
-                          <LogIn className="w-5 h-5" />
-                          {t('loginButton')}
-                        </Button>
-                      </div>
-                    ) : clientSecret && getStripePromise() ? (
-                      <div className="rounded-3xl overflow-hidden border border-theme-border shadow-xl shadow-surface-900/5">
-                        <EmbeddedCheckoutProvider stripe={getStripePromise()!} options={{ clientSecret }}>
-                          <EmbeddedCheckout />
-                        </EmbeddedCheckoutProvider>
-                      </div>
-                    ) : sessionLoading ? (
-                      <div className="flex flex-col items-center justify-center py-12" role="status" aria-busy="true">
-                        <Loader2 className="w-8 h-8 animate-spin text-brand-600 mb-3" aria-hidden="true" />
-                        <p className="text-muted-foreground text-sm" aria-live="polite">{t('loadingPaymentForm')}</p>
-                      </div>
-                    ) : null}
-                  </>
-                )}
-
-                <p className="text-center text-xs text-muted-foreground mt-5 font-medium">
-                  {t('securePayment')}
-                </p>
-              </>
-            )}
-          </div>
+                {/* Payment Form — main area */}
+                <div className="flex-1 min-w-0">
+                  {!maintenanceMode && (
+                    <>
+                      {!isAuthenticated ? (
+                        <div className="bg-card rounded-2xl p-6 sm:p-8 border border-theme-border text-center">
+                          <p className="text-muted-foreground mb-4">
+                            {t('loginToCheckout')}
+                          </p>
+                          <Button
+                            size="lg"
+                            className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
+                            onClick={handleLogin}
+                          >
+                            <LogIn className="w-5 h-5" />
+                            {t('loginButton')}
+                          </Button>
+                        </div>
+                      ) : clientSecret && getStripePromise() ? (
+                        <div className="rounded-2xl overflow-hidden">
+                          <EmbeddedCheckoutProvider stripe={getStripePromise()!} options={{ clientSecret }}>
+                            <EmbeddedCheckout />
+                          </EmbeddedCheckoutProvider>
+                        </div>
+                      ) : sessionLoading ? (
+                        <div className="flex flex-col items-center justify-center py-16" role="status" aria-busy="true">
+                          <Loader2 className="w-8 h-8 animate-spin text-brand-600 mb-3" aria-hidden="true" />
+                          <p className="text-muted-foreground text-sm" aria-live="polite">{t('loadingPaymentForm')}</p>
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
