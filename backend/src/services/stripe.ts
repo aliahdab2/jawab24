@@ -9,6 +9,13 @@ export const stripe = config.stripe?.secretKey
     })
     : null;
 
+function requireStripe(): Stripe {
+    if (!stripe) {
+        throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY to environment variables.');
+    }
+    return stripe;
+}
+
 export class StripeService {
     /**
      * Create a Stripe Checkout Session for subscription
@@ -19,13 +26,10 @@ export class StripeService {
         userEmail: string,
         planId: string,
         priceId: string,
-        successUrl: string,
-        cancelUrl: string,
+        returnUrl: string,
         trialDays: number = 0
     ): Promise<Stripe.Checkout.Session> {
-        if (!stripe) {
-            throw new Error('Stripe is not configured. Please add STRIPE_SECRET_KEY to environment variables.');
-        }
+        const s = requireStripe();
 
         // Build subscription data - only include trial if trialDays > 0
         const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
@@ -40,11 +44,11 @@ export class StripeService {
             subscriptionData.trial_period_days = trialDays;
         }
 
-        const session = await stripe.checkout.sessions.create({
+        const session = await s.checkout.sessions.create({
             customer_email: userEmail,
             client_reference_id: userId,
-            payment_method_types: ['card'],
             mode: 'subscription',
+            ui_mode: 'embedded',
             payment_method_collection: 'if_required',
             line_items: [
                 {
@@ -52,8 +56,7 @@ export class StripeService {
                     quantity: 1,
                 },
             ],
-            success_url: successUrl,
-            cancel_url: cancelUrl,
+            return_url: returnUrl,
             subscription_data: subscriptionData,
             metadata: {
                 userId,
@@ -65,33 +68,31 @@ export class StripeService {
     }
 
     /**
+     * Retrieve a Checkout Session by ID (for checking completion status)
+     */
+    async getCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
+        return requireStripe().checkout.sessions.retrieve(sessionId);
+    }
+
+    /**
      * Get Stripe Customer by ID
      */
     async getCustomer(customerId: string): Promise<Stripe.Customer> {
-        if (!stripe) {
-            throw new Error('Stripe is not configured.');
-        }
-        return await stripe.customers.retrieve(customerId) as Stripe.Customer;
+        return await requireStripe().customers.retrieve(customerId) as Stripe.Customer;
     }
 
     /**
      * Get Stripe Subscription by ID
      */
     async getSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
-        if (!stripe) {
-            throw new Error('Stripe is not configured.');
-        }
-        return stripe.subscriptions.retrieve(subscriptionId);
+        return requireStripe().subscriptions.retrieve(subscriptionId);
     }
 
     /**
      * Cancel a subscription at period end (user-initiated cancellation)
      */
     async cancelSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
-        if (!stripe) {
-            throw new Error('Stripe is not configured.');
-        }
-        return stripe.subscriptions.update(subscriptionId, {
+        return requireStripe().subscriptions.update(subscriptionId, {
             cancel_at_period_end: true,
         });
     }
@@ -100,20 +101,14 @@ export class StripeService {
      * Cancel a subscription immediately (for plan changes/upgrades)
      */
     async cancelSubscriptionImmediately(subscriptionId: string): Promise<Stripe.Subscription> {
-        if (!stripe) {
-            throw new Error('Stripe is not configured.');
-        }
-        return stripe.subscriptions.cancel(subscriptionId);
+        return requireStripe().subscriptions.cancel(subscriptionId);
     }
 
     /**
      * Resume a canceled subscription
      */
     async resumeSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
-        if (!stripe) {
-            throw new Error('Stripe is not configured.');
-        }
-        return stripe.subscriptions.update(subscriptionId, {
+        return requireStripe().subscriptions.update(subscriptionId, {
             cancel_at_period_end: false,
         });
     }
@@ -125,10 +120,7 @@ export class StripeService {
         customerId: string,
         returnUrl: string
     ): Promise<Stripe.BillingPortal.Session> {
-        if (!stripe) {
-            throw new Error('Stripe is not configured.');
-        }
-        return stripe.billingPortal.sessions.create({
+        return requireStripe().billingPortal.sessions.create({
             customer: customerId,
             return_url: returnUrl,
         });
@@ -142,10 +134,7 @@ export class StripeService {
         signature: string,
         secret: string
     ): Stripe.Event {
-        if (!stripe) {
-            throw new Error('Stripe is not configured.');
-        }
-        return stripe.webhooks.constructEvent(payload, signature, secret);
+        return requireStripe().webhooks.constructEvent(payload, signature, secret);
     }
 }
 

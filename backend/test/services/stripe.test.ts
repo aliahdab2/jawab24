@@ -5,6 +5,7 @@ const mockStripeInstance = {
     checkout: {
         sessions: {
             create: vi.fn(),
+            retrieve: vi.fn(),
         },
     },
     webhooks: {
@@ -48,10 +49,10 @@ describe('Stripe Service', () => {
     });
 
     describe('createCheckoutSession', () => {
-        it('should create a checkout session without trial (default)', async () => {
+        it('should create an embedded checkout session without trial (default)', async () => {
             const mockSession = {
                 id: 'cs_test_123',
-                url: 'https://checkout.stripe.com/pay/cs_test_123',
+                client_secret: 'cs_test_123_secret',
                 customer_email: 'test@example.com',
                 metadata: {
                     userId: 'user_123',
@@ -69,16 +70,15 @@ describe('Stripe Service', () => {
                 'test@example.com',
                 'plan_456',
                 'price_123',
-                'https://example.com/success?session_id={CHECKOUT_SESSION_ID}',
-                'https://example.com/cancel'
+                'https://example.com/payment/return?session_id={CHECKOUT_SESSION_ID}'
                 // No trialDays = default 0 = no trial
             );
 
             expect(mockStripeInstance.checkout.sessions.create).toHaveBeenCalledWith({
                 customer_email: 'test@example.com',
                 client_reference_id: 'user_123',
-                payment_method_types: ['card'],
                 mode: 'subscription',
+                ui_mode: 'embedded',
                 payment_method_collection: 'if_required',
                 line_items: [
                     {
@@ -86,8 +86,7 @@ describe('Stripe Service', () => {
                         quantity: 1,
                     },
                 ],
-                success_url: 'https://example.com/success?session_id={CHECKOUT_SESSION_ID}',
-                cancel_url: 'https://example.com/cancel',
+                return_url: 'https://example.com/payment/return?session_id={CHECKOUT_SESSION_ID}',
                 subscription_data: {
                     metadata: {
                         userId: 'user_123',
@@ -104,10 +103,10 @@ describe('Stripe Service', () => {
             expect(session).toEqual(mockSession);
         });
 
-        it('should create a checkout session with trial period from plan', async () => {
+        it('should create an embedded checkout session with trial period from plan', async () => {
             const mockSession = {
                 id: 'cs_test_with_trial',
-                url: 'https://checkout.stripe.com/pay/cs_test_with_trial',
+                client_secret: 'cs_test_with_trial_secret',
             };
 
             mockStripeInstance.checkout.sessions.create.mockResolvedValue(mockSession);
@@ -119,8 +118,7 @@ describe('Stripe Service', () => {
                 'test@example.com',
                 'plan_456',
                 'price_123',
-                'https://example.com/success',
-                'https://example.com/cancel',
+                'https://example.com/payment/return?session_id={CHECKOUT_SESSION_ID}',
                 30 // 30 days trial from plan
             );
 
@@ -136,7 +134,7 @@ describe('Stripe Service', () => {
         it('should skip trial for existing paid subscribers (trialDays=0)', async () => {
             const mockSession = {
                 id: 'cs_upgrade',
-                url: 'https://checkout.stripe.com/pay/cs_upgrade',
+                client_secret: 'cs_upgrade_secret',
             };
 
             mockStripeInstance.checkout.sessions.create.mockResolvedValue(mockSession);
@@ -148,8 +146,7 @@ describe('Stripe Service', () => {
                 'test@example.com',
                 'plan_456',
                 'price_123',
-                'https://example.com/success',
-                'https://example.com/cancel',
+                'https://example.com/payment/return?session_id={CHECKOUT_SESSION_ID}',
                 0 // No trial for upgrade
             );
 
@@ -171,8 +168,7 @@ describe('Stripe Service', () => {
                     'test@example.com',
                     'plan_456',
                     'invalid_price',
-                    'https://example.com/success',
-                    'https://example.com/cancel'
+                    'https://example.com/payment/return?session_id={CHECKOUT_SESSION_ID}'
                 )
             ).rejects.toThrow('Invalid price ID');
         });
@@ -214,6 +210,26 @@ describe('Stripe Service', () => {
             expect(() =>
                 stripeService.verifyWebhookSignature('payload', 'invalid_sig', 'whsec_test')
             ).toThrow('Invalid signature');
+        });
+    });
+
+    describe('getCheckoutSession', () => {
+        it('should retrieve a checkout session by ID', async () => {
+            const mockSession = {
+                id: 'cs_test_123',
+                status: 'complete',
+                payment_status: 'paid',
+                client_reference_id: 'user_123',
+            };
+
+            mockStripeInstance.checkout.sessions.retrieve.mockResolvedValue(mockSession);
+
+            const { stripeService } = await import('../../src/services/stripe');
+
+            const session = await stripeService.getCheckoutSession('cs_test_123');
+
+            expect(mockStripeInstance.checkout.sessions.retrieve).toHaveBeenCalledWith('cs_test_123');
+            expect(session).toEqual(mockSession);
         });
     });
 

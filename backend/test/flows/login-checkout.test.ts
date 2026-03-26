@@ -240,7 +240,7 @@ describe('Integration: Login → Checkout Flow', () => {
 
             vi.mocked(stripeService.createCheckoutSession).mockResolvedValue({
                 id: 'cs_test_abc123',
-                url: 'https://checkout.stripe.com/pay/cs_test_abc123',
+                client_secret: 'cs_test_abc123_secret',
                 object: 'checkout.session',
                 customer_email: 'testuser@example.com',
                 metadata: {
@@ -262,7 +262,7 @@ describe('Integration: Login → Checkout Flow', () => {
 
             expect(checkoutResponse.statusCode).toBe(200);
             const checkoutBody = JSON.parse(checkoutResponse.body);
-            expect(checkoutBody.url).toBe('https://checkout.stripe.com/pay/cs_test_abc123');
+            expect(checkoutBody.clientSecret).toBe('cs_test_abc123_secret');
 
             // Verify the entire flow
             expect(facebookService.getAccessToken).toHaveBeenCalledWith('facebook_oauth_code', undefined);
@@ -273,8 +273,7 @@ describe('Integration: Login → Checkout Flow', () => {
                 'testuser@example.com',
                 planId,
                 'price_1234567890',
-                expect.stringContaining('success'),
-                expect.stringContaining('cancel'),
+                expect.stringContaining('return'),
                 0 // trialDays
             );
         });

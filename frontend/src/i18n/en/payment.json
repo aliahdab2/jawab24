@@ -12,6 +12,15 @@
     "backToPricing": "Try Again",
     "goToDashboard": "Go to Dashboard"
   },
+  "return": {
+    "checking": "Verifying your payment...",
+    "incomplete": "Payment Incomplete",
+    "incompleteMessage": "Your payment was not completed. No charges were made to your account.",
+    "expired": "Session Expired",
+    "expiredMessage": "This checkout session has expired. Please try again.",
+    "tryAgain": "Try Again",
+    "goToDashboard": "Go to Dashboard"
+  },
   "unavailable": {
     "title": "Payments are not available in your region",
     "message": "Due to regulatory requirements, payment processing is not available in your geographic location at this time. Contact us via WhatsApp to arrange an alternative payment method.",

@@ -1,10 +1,11 @@
 {
   "title": "Checkout",
   "subtitle": "Complete your subscription",
-  "processing": "Processing...",
-  "continueToPayment": "Continue to Payment",
   "securePayment": "Secure payment processed by Stripe",
   "backToPricing": "Back to Pricing",
   "errorLoadPlan": "Failed to load plan details. Please try again later.",
-  "errorInitiateCheckout": "Failed to initiate checkout"
+  "errorInitiateCheckout": "Failed to initiate checkout",
+  "loginToCheckout": "Log in to complete your subscription",
+  "loginButton": "Log In",
+  "loadingPaymentForm": "Loading payment form..."
 }

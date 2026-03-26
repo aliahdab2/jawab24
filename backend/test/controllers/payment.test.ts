@@ -6,6 +6,7 @@ import type Stripe from 'stripe';
 vi.mock('../../src/services/stripe', () => ({
     stripeService: {
         createCheckoutSession: vi.fn(),
+        getCheckoutSession: vi.fn(),
         verifyWebhookSignature: vi.fn(),
         getSubscription: vi.fn(),
         cancelSubscriptionImmediately: vi.fn(),
@@ -105,7 +106,7 @@ describe('Payment Controller', () => {
 
             const mockSession = {
                 id: 'cs_test_123',
-                url: 'https://checkout.stripe.com/pay/cs_test_123',
+                client_secret: 'cs_test_123_secret',
             };
 
             // Mock db.select() for user, plan, and existing subscriptions
@@ -139,14 +140,13 @@ describe('Payment Controller', () => {
                 'test@example.com',
                 'plan_123',
                 'price_123',
-                expect.stringContaining('/payment/success?session_id='),
-                expect.stringContaining('/payment/cancel'),
+                expect.stringContaining('/payment/return?session_id='),
                 0 // No trial for Business plan
             );
 
             expect(mockReply.send).toHaveBeenCalledWith({
                 sessionId: mockSession.id,
-                url: mockSession.url,
+                clientSecret: mockSession.client_secret,
             });
         });
 
@@ -162,7 +162,7 @@ describe('Payment Controller', () => {
                 stripeYearlyPriceId: 'price_yearly',
                 trialDays: 30,
             };
-            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/pay/cs_test' };
+            const mockSession = { id: 'cs_test', client_secret: 'cs_test_secret' };
 
             const mockDb = vi.mocked(db);
             mockDb.select
@@ -176,7 +176,7 @@ describe('Payment Controller', () => {
 
             expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
                 'user_123', 'test@example.com', 'plan_123', 'price_yearly',
-                expect.any(String), expect.any(String), 30
+                expect.any(String), 30
             );
         });
 
@@ -191,7 +191,7 @@ describe('Payment Controller', () => {
                 stripeYearlyPriceId: null,
                 trialDays: 0,
             };
-            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/pay/cs_test' };
+            const mockSession = { id: 'cs_test', client_secret: 'cs_test_secret' };
 
             const mockDb = vi.mocked(db);
             mockDb.select
@@ -205,7 +205,7 @@ describe('Payment Controller', () => {
 
             expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
                 'user_123', 'test@example.com', 'plan_123', 'price_monthly',
-                expect.any(String), expect.any(String), 0
+                expect.any(String), 0
             );
         });
 
@@ -220,7 +220,7 @@ describe('Payment Controller', () => {
                 stripeYearlyPriceId: 'price_yearly',
                 trialDays: 0,
             };
-            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/pay/cs_test' };
+            const mockSession = { id: 'cs_test', client_secret: 'cs_test_secret' };
 
             const mockDb = vi.mocked(db);
             mockDb.select
@@ -234,7 +234,7 @@ describe('Payment Controller', () => {
 
             expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
                 'user_123', 'test@example.com', 'plan_123', 'price_monthly',
-                expect.any(String), expect.any(String), 0
+                expect.any(String), 0
             );
         });
 
@@ -602,7 +602,7 @@ describe('Payment Controller', () => {
                     }),
                 } as any);
 
-            const mockSession = { id: 'cs_test', url: 'https://checkout.stripe.com/cs_test' };
+            const mockSession = { id: 'cs_test', client_secret: 'cs_test_secret' };
             vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
 
             await paymentController.createCheckoutSession(
@@ -616,7 +616,6 @@ describe('Payment Controller', () => {
                 'test@example.com',
                 'plan_business',
                 'price_biz',
-                expect.any(String),
                 expect.any(String),
                 0 // No trial for existing subscriber
             );
@@ -656,7 +655,7 @@ describe('Payment Controller', () => {
                     }),
                 } as any);
 
-            const mockSession = { id: 'cs_trial', url: 'https://checkout.stripe.com/cs_trial' };
+            const mockSession = { id: 'cs_trial', client_secret: 'cs_trial_secret' };
             vi.mocked(stripeService.createCheckoutSession).mockResolvedValue(mockSession as any);
 
             await paymentController.createCheckoutSession(
@@ -670,7 +669,6 @@ describe('Payment Controller', () => {
                 'new@example.com',
                 'plan_starter',
                 'price_start',
-                expect.any(String),
                 expect.any(String),
                 30 // 30 day trial from plan
             );

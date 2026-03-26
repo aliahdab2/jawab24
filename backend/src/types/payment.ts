@@ -1,13 +1,11 @@
 export interface CreateCheckoutSessionRequest {
     planId: string;
     billingInterval?: 'month' | 'year';
-    successUrl?: string;
-    cancelUrl?: string;
 }
 
 export interface CreateCheckoutSessionResponse {
     sessionId: string;
-    url: string;
+    clientSecret: string;
 }
 
 export interface SubscriptionStatus {

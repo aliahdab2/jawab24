@@ -5,7 +5,10 @@ import Fastify, { FastifyInstance } from 'fastify';
 vi.mock('../../src/controllers/payment', () => ({
     paymentController: {
         createCheckoutSession: vi.fn().mockImplementation(async (request, reply) => {
-            return reply.send({ url: 'https://checkout.stripe.com/pay/cs_test' });
+            return reply.send({ sessionId: 'cs_test', clientSecret: 'cs_test_secret' });
+        }),
+        getCheckoutSessionStatus: vi.fn().mockImplementation(async (request, reply) => {
+            return reply.send({ status: 'complete', paymentStatus: 'paid' });
         }),
         getSubscriptionStatus: vi.fn().mockImplementation(async (request, reply) => {
             return reply.send({ status: 'active' });
@@ -73,6 +76,19 @@ describe('Payment Routes', () => {
             });
 
             expect(response.statusCode).toBe(401);
+        });
+    });
+
+    describe('GET /api/payment/checkout-session-status', () => {
+        it('should call getCheckoutSessionStatus controller', async () => {
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/payment/checkout-session-status?session_id=cs_test_123',
+            });
+
+            expect(authenticate).toHaveBeenCalled();
+            expect(paymentController.getCheckoutSessionStatus).toHaveBeenCalled();
+            expect(response.statusCode).toBe(200);
         });
     });
 

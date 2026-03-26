@@ -14,6 +14,15 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
         }
     );
 
+    // Get checkout session status (for embedded checkout return page)
+    fastify.get<{ Querystring: { session_id: string } }>(
+        '/checkout-session-status',
+        { config: { rateLimit: { max: 20, timeWindow: '1 minute' } }, schema: { tags: ['Payment'], summary: 'Get checkout session status', security: auth }, preHandler: [authenticate] },
+        async (request, reply) => {
+            return paymentController.getCheckoutSessionStatus(request, reply);
+        }
+    );
+
     // Get subscription status
     fastify.get(
         '/subscription-status',

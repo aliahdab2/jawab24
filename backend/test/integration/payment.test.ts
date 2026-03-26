@@ -14,7 +14,7 @@ vi.mock('../../src/services/stripe', () => ({
     stripeService: {
         createCheckoutSession: vi.fn().mockResolvedValue({
             id: 'cs_test_123',
-            url: 'https://checkout.stripe.com/test',
+            client_secret: 'cs_test_123_secret',
         }),
         getSubscription: vi.fn().mockImplementation(async (id: string) => ({
             id,
@@ -201,14 +201,13 @@ describe('Payment — createCheckoutSession', () => {
         });
 
         expect(res.statusCode).toBe(200);
-        expect(res.json().url).toBe('https://checkout.stripe.com/test');
+        expect(res.json().clientSecret).toBe('cs_test_123_secret');
         expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
             userId,
             'payer@test.com',
             plan.id,
             'price_test_123',
-            expect.any(String),
-            expect.any(String),
+            expect.any(String), // returnUrl
             7, // trial days for new user
         );
     });

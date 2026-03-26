@@ -1,10 +1,11 @@
 {
   "title": "إتمام الاشتراك",
   "subtitle": "أكمل اشتراكك",
-  "processing": "جاري المعالجة...",
-  "continueToPayment": "المتابعة للدفع",
   "securePayment": "دفع آمن عبر Stripe",
   "backToPricing": "العودة للأسعار",
   "errorLoadPlan": "فشل تحميل تفاصيل الباقة. يرجى المحاولة مرة أخرى لاحقاً.",
-  "errorInitiateCheckout": "فشل بدء عملية الدفع"
+  "errorInitiateCheckout": "فشل بدء عملية الدفع",
+  "loginToCheckout": "سجّل دخولك لإتمام الاشتراك",
+  "loginButton": "تسجيل الدخول",
+  "loadingPaymentForm": "جاري تحميل نموذج الدفع..."
 }

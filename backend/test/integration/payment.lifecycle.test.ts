@@ -37,7 +37,7 @@ vi.mock('../../src/services/stripe', () => ({
     stripeService: {
         createCheckoutSession: vi.fn().mockResolvedValue({
             id: 'cs_lifecycle_default',
-            url: 'https://checkout.stripe.com/pay/lifecycle',
+            client_secret: 'cs_lifecycle_default_secret',
         }),
         // Configured per-scenario via mockResolvedValue in beforeEach
         getSubscription: vi.fn(),
@@ -241,14 +241,13 @@ describe('SCENARIO 1 — New customer completes first purchase (with trial)', ()
         });
 
         expect(res.statusCode).toBe(200);
-        expect(res.json().url).toContain('checkout.stripe.com');
+        expect(res.json().clientSecret).toBeDefined();
         expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
             userId,
             'new.customer@example.com',
             plan.id,
             expect.any(String), // stripePriceId
-            expect.any(String), // successUrl
-            expect.any(String), // cancelUrl
+            expect.any(String), // returnUrl
             7,                  // trial days — plan.trialDays for new user
         );
     });

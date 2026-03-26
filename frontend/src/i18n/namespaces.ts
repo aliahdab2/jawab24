@@ -42,6 +42,7 @@ export const PAGE_NAMESPACES = {
   checkout:           ['checkout', 'payment', 'plans', 'pricing', 'landing'],
   paymentSuccess:     ['payment'],
   paymentCancel:      ['payment'],
+  paymentReturn:      ['payment'],
 
   // ── Dashboard pages (include DASHBOARD_LAYOUT) ────────────────
   pricing:            [...DASHBOARD_LAYOUT, 'payment', 'subscription'],

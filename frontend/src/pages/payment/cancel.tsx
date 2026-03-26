@@ -13,13 +13,13 @@ export default function PaymentCancelPage() {
         <title>{t('cancel.title')} - Jawab24</title>
       </Head>
 
-      <div className="min-h-[100dvh] bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center px-4">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-red-50 via-white to-orange-50 dark:from-red-950/20 dark:via-background dark:to-orange-950/20 flex items-center justify-center px-4">
         <div className="max-w-md w-full">
           <div className="bg-card rounded-3xl shadow-xl p-8 text-center">
             {/* Cancel Icon */}
-            <div className="mb-6 flex justify-center">
-              <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center">
-                <XCircle className="w-12 h-12 text-red-600" />
+            <div className="mb-6 flex justify-center" aria-hidden="true">
+              <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
+                <XCircle className="w-12 h-12 text-red-600 dark:text-red-400" />
               </div>
             </div>
 

@@ -1,3 +1,6 @@
+// Set env before module import so stripePromise initializes correctly
+process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock';
+
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { useRouter } from 'next/router';
@@ -38,6 +41,18 @@ vi.mock('@/lib/sentryHelpers', () => ({
   captureError: vi.fn(),
 }));
 
+// Mock Stripe
+vi.mock('@stripe/stripe-js', () => ({
+  loadStripe: vi.fn(() => Promise.resolve({})),
+}));
+
+vi.mock('@stripe/react-stripe-js', () => ({
+  EmbeddedCheckoutProvider: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="checkout-provider">{children}</div>
+  ),
+  EmbeddedCheckout: () => <div data-testid="embedded-checkout">Stripe Checkout Form</div>,
+}));
+
 // These are the key mocks we control per-test
 const mockGeoCheck = vi.fn();
 vi.mock('@/utils/geoCheck', () => ({
@@ -45,9 +60,13 @@ vi.mock('@/utils/geoCheck', () => ({
 }));
 
 const mockApiPost = vi.fn();
+const mockApiGet = vi.fn();
 const mockPublicApiGet = vi.fn();
 vi.mock('@/lib/api', () => ({
-  api: { post: (...args: unknown[]) => mockApiPost(...args) },
+  api: {
+    post: (...args: unknown[]) => mockApiPost(...args),
+    get: (...args: unknown[]) => mockApiGet(...args),
+  },
   publicApi: { get: (...args: unknown[]) => mockPublicApiGet(...args) },
 }));
 
@@ -88,7 +107,10 @@ describe('CheckoutPage', () => {
       data: { data: mockPlan },
     });
 
-    mockApiPost.mockReset();
+    // Default: session creation succeeds
+    mockApiPost.mockResolvedValue({
+      data: { sessionId: 'cs_test_123', clientSecret: 'cs_test_123_secret' },
+    });
   });
 
   afterEach(() => {
@@ -103,7 +125,7 @@ describe('CheckoutPage', () => {
     render(<CheckoutPage />);
 
     // Should not show plan or error — just loading
-    expect(screen.queryByText('Continue to Payment')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('embedded-checkout')).not.toBeInTheDocument();
     expect(screen.queryByTestId('sanctions-notice')).not.toBeInTheDocument();
   });
 
@@ -120,14 +142,26 @@ describe('CheckoutPage', () => {
     expect(mockPublicApiGet).not.toHaveBeenCalled();
   });
 
-  it('should allow non-sanctioned geos to proceed', async () => {
-    mockGeoCheck.mockResolvedValue(false);
+  it('should create checkout session and render embedded form', async () => {
+    const { container } = render(<CheckoutPage />);
 
-    render(<CheckoutPage />);
-
+    // Wait for plan details to appear (means plan is loaded)
     await waitFor(() => {
-      expect(screen.getByText('Continue to Payment')).toBeInTheDocument();
+      expect(screen.getByText('$15')).toBeInTheDocument();
     });
+
+    // Wait for the checkout session API call
+    await waitFor(() => {
+      expect(mockApiPost).toHaveBeenCalledWith(
+        '/payment/create-checkout-session',
+        expect.objectContaining({ planId: 'plan-1' })
+      );
+    }, { timeout: 3000 });
+
+    // After session creation, embedded checkout should render
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="embedded-checkout"]')).toBeTruthy();
+    }, { timeout: 3000 });
   });
 
   // ─── Plan loading ────────────────────────────────────────
@@ -166,8 +200,8 @@ describe('CheckoutPage', () => {
     });
   });
 
-  // ─── Checkout button ─────────────────────────────────────
-  it('should redirect unauthenticated users to login with return URL', async () => {
+  // ─── Authentication ────────────────────────────────────
+  it('should show login prompt for unauthenticated users', async () => {
     (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       isAuthenticated: false,
     });
@@ -175,48 +209,39 @@ describe('CheckoutPage', () => {
     render(<CheckoutPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Continue to Payment')).toBeInTheDocument();
+      expect(screen.getByText('Log in to complete your subscription')).toBeInTheDocument();
+      expect(screen.getByText('Log In')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Continue to Payment'));
-
-    await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith(
-        expect.stringContaining('/login?redirect=')
-      );
-    });
+    // Should NOT create checkout session
+    expect(mockApiPost).not.toHaveBeenCalled();
   });
 
-  it('should disable button while checkout is in progress', async () => {
-    mockApiPost.mockImplementation(() => new Promise(() => {})); // never resolves
+  it('should redirect to login when login button is clicked', async () => {
+    (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+      isAuthenticated: false,
+    });
 
     render(<CheckoutPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Continue to Payment')).toBeInTheDocument();
+      expect(screen.getByText('Log In')).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText('Continue to Payment'));
+    fireEvent.click(screen.getByText('Log In'));
 
-    await waitFor(() => {
-      expect(screen.getByText('Processing...')).toBeInTheDocument();
-    });
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.stringContaining('/login?redirect=')
+    );
   });
 
-  it('should block checkout for sanctioned users even if button is clicked', async () => {
-    // Start not sanctioned, then backend catches it
-    mockGeoCheck.mockResolvedValue(false);
+  // ─── Session creation errors ───────────────────────────
+  it('should block checkout when backend returns SANCTIONED_GEO_BLOCK', async () => {
     mockApiPost.mockRejectedValue({
       response: { data: { code: 'SANCTIONED_GEO_BLOCK' } },
     });
 
     render(<CheckoutPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Continue to Payment')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText('Continue to Payment'));
 
     await waitFor(() => {
       expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
@@ -229,12 +254,6 @@ describe('CheckoutPage', () => {
     });
 
     render(<CheckoutPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Continue to Payment')).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText('Continue to Payment'));
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith(
@@ -251,13 +270,17 @@ describe('CheckoutPage', () => {
     render(<CheckoutPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Continue to Payment')).toBeInTheDocument();
+      expect(screen.getByText('Card declined')).toBeInTheDocument();
     });
+  });
 
-    fireEvent.click(screen.getByText('Continue to Payment'));
+  it('should show loading state while session is being created', async () => {
+    mockApiPost.mockImplementation(() => new Promise(() => {})); // never resolves
+
+    render(<CheckoutPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Card declined')).toBeInTheDocument();
+      expect(screen.getByText('Loading payment form...')).toBeInTheDocument();
     });
   });
 

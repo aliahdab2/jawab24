@@ -55,6 +55,13 @@ test.describe('Checkout Page', () => {
           body: JSON.stringify({ data: MOCK_PLAN }),
         });
       }
+      if (url.includes('/create-checkout-session')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ sessionId: 'cs_test_123', clientSecret: 'cs_test_123_secret' }),
+        });
+      }
       if (url.includes('/auth/profile')) {
         return route.fulfill({
           status: 200,
@@ -96,14 +103,6 @@ test.describe('Checkout Page', () => {
     await expect(page.locator('a[href*="/pricing"]').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('should show "Continue to Payment" button', async ({ page }) => {
-    await page.goto('/en/checkout?planId=starter');
-
-    await expect(
-      page.locator('button').filter({ hasText: /Continue to Payment/i }).first()
-    ).toBeVisible({ timeout: 15000 });
-  });
-
   test('should show error message when plan fetch fails', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
@@ -136,9 +135,8 @@ test.describe('Checkout Page', () => {
   });
 });
 
-// TODO: Re-enable when NEXT_PUBLIC_CHECKOUT_MAINTENANCE=false (Stripe prices updated)
-test.describe.skip('Checkout Page - unauthenticated user', () => {
-  test('should redirect to login when unauthenticated user clicks Continue', async ({ page }) => {
+test.describe('Checkout Page - unauthenticated user', () => {
+  test('should show login prompt for unauthenticated users', async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
 
     await page.addInitScript(() => {
@@ -175,9 +173,15 @@ test.describe.skip('Checkout Page - unauthenticated user', () => {
 
     await page.goto('/en/checkout?planId=starter');
 
-    const continueBtn = page.locator('button').filter({ hasText: /Continue to Payment/i }).first();
-    await expect(continueBtn).toBeVisible({ timeout: 15000 });
-    await continueBtn.click();
+    // Should show login prompt instead of checkout form
+    await expect(
+      page.locator('text=/Log in to complete your subscription/i').first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Click login button should redirect to login
+    const loginBtn = page.locator('button').filter({ hasText: /Log In/i }).first();
+    await expect(loginBtn).toBeVisible({ timeout: 10000 });
+    await loginBtn.click();
 
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });
   });

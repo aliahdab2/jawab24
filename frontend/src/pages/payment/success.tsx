@@ -41,13 +41,13 @@ export default function PaymentSuccessPage() {
         <title>{t('success.title')} - Jawab24</title>
       </Head>
 
-      <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 via-white to-emerald-50 flex items-center justify-center px-4">
+      <div className="min-h-[100dvh] bg-gradient-to-br from-green-50 via-white to-emerald-50 dark:from-green-950/20 dark:via-background dark:to-emerald-950/20 flex items-center justify-center px-4">
         <div className="max-w-md w-full">
           <div className="bg-card rounded-3xl shadow-xl p-8 text-center">
             {/* Success Icon */}
-            <div className="mb-6 flex justify-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center">
-                <CheckCircle2 className="w-12 h-12 text-green-600" />
+            <div className="mb-6 flex justify-center" aria-hidden="true">
+              <div className="w-20 h-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
+                <CheckCircle2 className="w-12 h-12 text-green-600 dark:text-green-400" />
               </div>
             </div>
 
@@ -60,8 +60,8 @@ export default function PaymentSuccessPage() {
             </p>
 
             {/* Redirect Info */}
-            <div className="bg-brand-50 rounded-lg p-4 mb-6">
-              <p className="text-sm text-brand-700">
+            <div className="bg-brand-50 dark:bg-brand-900/20 rounded-lg p-4 mb-6" aria-live="polite">
+              <p className="text-sm text-brand-700 dark:text-brand-300">
                 {t('success.redirecting')} {countdown}s...
               </p>
             </div>

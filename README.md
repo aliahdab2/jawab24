@@ -166,6 +166,7 @@ OPENAI_API_KEY=sk-proj-...
 ```bash
 NEXT_PUBLIC_API_URL=https://your-domain.com/api
 NEXT_PUBLIC_FB_APP_ID=your_facebook_app_id
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_your_stripe_publishable_key
 ```
 
 ### GitHub Secrets

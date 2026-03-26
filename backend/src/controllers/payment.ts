@@ -61,7 +61,7 @@ export class PaymentController {
                 });
             }
 
-            const { planId, successUrl, cancelUrl } = request.body;
+            const { planId } = request.body;
 
             if (!planId) {
                 return reply.status(400).send({ error: 'Plan ID is required' });
@@ -130,32 +130,62 @@ export class PaymentController {
                 );
             }
 
-            // Validate redirect URLs to prevent open redirect attacks
-            const validatedSuccessUrl = successUrl && successUrl.startsWith(config.frontendUrl)
-                ? successUrl
-                : `${config.frontendUrl}/payment/success?session_id={CHECKOUT_SESSION_ID}`;
-            const validatedCancelUrl = cancelUrl && cancelUrl.startsWith(config.frontendUrl)
-                ? cancelUrl
-                : `${config.frontendUrl}/payment/cancel`;
+            // Build return URL server-side (no client-supplied URLs = no open-redirect risk)
+            const returnUrl = `${config.frontendUrl}/payment/return?session_id={CHECKOUT_SESSION_ID}`;
 
-            // Create checkout session with appropriate trial
+            // Create embedded checkout session with appropriate trial
             const session = await stripeService.createCheckoutSession(
                 userId,
                 user.email,
                 planId,
                 stripePriceId,
-                validatedSuccessUrl,
-                validatedCancelUrl,
+                returnUrl,
                 trialDays
             );
 
             return reply.send({
                 sessionId: session.id,
-                url: session.url,
+                clientSecret: session.client_secret,
             });
         } catch (error) {
             request.log.error({ err: error }, 'Create checkout session error');
             return reply.status(500).send({ error: 'Failed to create checkout session' });
+        }
+    }
+
+    /**
+     * Get checkout session status (for embedded checkout return page)
+     * GET /api/payment/checkout-session-status?session_id=...
+     */
+    async getCheckoutSessionStatus(
+        request: FastifyRequest<{ Querystring: { session_id: string } }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user?.userId;
+            if (!userId) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+
+            const sessionId = request.query.session_id;
+            if (!sessionId) {
+                return reply.status(400).send({ error: 'session_id is required' });
+            }
+
+            const session = await stripeService.getCheckoutSession(sessionId);
+
+            // Verify the session belongs to this user
+            if (session.client_reference_id !== userId) {
+                return reply.status(403).send({ error: 'Forbidden' });
+            }
+
+            return reply.send({
+                status: session.status,
+                paymentStatus: session.payment_status,
+            });
+        } catch (error) {
+            request.log.error({ err: error }, 'Get checkout session status error');
+            return reply.status(500).send({ error: 'Failed to retrieve session status' });
         }
     }
 

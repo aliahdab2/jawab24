@@ -534,7 +534,7 @@ test.describe('Payment Flow — Checkout', () => {
     await expect(page.locator('text=/\\$150/').first()).toBeVisible({ timeout: 10000 });
   });
 
-  test('continue to payment creates Stripe session', async ({ page }) => {
+  test('embedded checkout session is created automatically', async ({ page }) => {
     let stripeSessionCreated = false;
     let stripeRequestBody: Record<string, unknown> = {};
 
@@ -550,21 +550,19 @@ test.describe('Payment Flow — Checkout', () => {
       stripeRequestBody = JSON.parse(route.request().postData() || '{}');
       await route.fulfill({
         status: 200, contentType: 'application/json',
-        body: JSON.stringify({ url: 'https://checkout.stripe.com/test-session' }),
+        body: JSON.stringify({ sessionId: 'cs_test_123', clientSecret: 'cs_test_123_secret' }),
       });
     });
 
-    await page.goto('/en/checkout?planId=plan_business&interval=month');
-
-    const continueBtn = page.locator('button').filter({ hasText: /Continue to Payment/i }).first();
-    await expect(continueBtn).toBeVisible({ timeout: 15000 });
-
+    // Start waiting for the request BEFORE navigating (session fires automatically on load)
     const stripeRequest = page.waitForRequest(
       (req) => req.url().includes('/create-checkout-session'),
-      { timeout: 15000 },
+      { timeout: 20000 },
     );
-    await continueBtn.click();
+
+    await page.goto('/en/checkout?planId=plan_business&interval=month');
     await stripeRequest;
+
     expect(stripeSessionCreated).toBe(true);
     expect(stripeRequestBody.planId).toBe('plan_business');
     expect(stripeRequestBody.billingInterval).toBe('month');
@@ -587,12 +585,8 @@ test.describe('Payment Flow — Checkout', () => {
 
     await page.goto('/en/checkout?planId=plan_business');
 
-    const continueBtn = page.locator('button').filter({ hasText: /Continue to Payment/i }).first();
-    await expect(continueBtn).toBeVisible({ timeout: 15000 });
-    await continueBtn.click();
-
-    // Button should re-enable after error (not stuck loading)
-    await expect(continueBtn).toBeEnabled({ timeout: 10000 });
+    // Session creation is automatic — error should show without clicking any button
+    await expect(page.locator('[class*="alert-error"]').first()).toBeVisible({ timeout: 15000 });
     // Page should not show error boundary
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
