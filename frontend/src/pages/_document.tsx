@@ -99,7 +99,7 @@ export default function MyDocument({ locale }: DocProps) {
               "@context": "https://schema.org",
               "@type": "Organization",
               "name": "Jawab24",
-              "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24"],
+              "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24", "جواب 24"],
               "url": "https://jawab24.com",
               "logo": "https://jawab24.com/brand/apple-touch-icon.png",
               "description": "Arabic-first AI auto-reply platform for businesses on Facebook, Instagram, Shopify, and Salla. Bilingual customer support automation in Arabic and English with 6 dialect families, product catalog sync, and price verification. 24/7 automated responses.",
@@ -137,7 +137,7 @@ export default function MyDocument({ locale }: DocProps) {
               "@type": "WebSite",
               "@id": "https://jawab24.com/#website",
               "name": "Jawab24",
-              "alternateName": ["جواب24", "جواب٢٤", "Jawab 24", "جواب"],
+              "alternateName": ["جواب24", "جواب٢٤", "Jawab 24", "جواب 24", "جواب", "Jawab"],
               "url": "https://jawab24.com",
               "inLanguage": ["ar", "en"],
               "publisher": {
