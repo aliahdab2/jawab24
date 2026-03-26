@@ -2,6 +2,7 @@
   "title": "إتمام الاشتراك",
   "subtitle": "أكمل اشتراكك",
   "orderSummary": "ملخص الطلب",
+  "paymentDetails": "تفاصيل الدفع",
   "securePayment": "دفع آمن عبر Stripe",
   "backToPricing": "العودة للأسعار",
   "errorLoadPlan": "فشل تحميل تفاصيل الباقة. يرجى المحاولة مرة أخرى لاحقاً.",
@@ -9,5 +10,11 @@
   "loginToCheckout": "سجّل دخولك لإتمام الاشتراك",
   "loginButton": "تسجيل الدخول",
   "loadingPaymentForm": "جاري تحميل نموذج الدفع...",
-  "submitPayment": "اشترك"
+  "submitPayment": "ادفع {amount}/شهر",
+  "submitPaymentYearly": "ادفع {amount}/سنة",
+  "startTrial": "ابدأ تجربة مجانية لمدة {days} يوم",
+  "cancelAnytime": "إلغاء في أي وقت. بدون أسئلة.",
+  "trialNote": "لن يتم خصم أي مبلغ حتى انتهاء الفترة التجريبية.",
+  "showDetails": "عرض تفاصيل الطلب",
+  "hideDetails": "إخفاء تفاصيل الطلب"
 }

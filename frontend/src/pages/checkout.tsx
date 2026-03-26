@@ -12,7 +12,10 @@ import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotic
 import { useAuthStore } from '@/lib/store';
 
 import { Button, BrandLogo } from '@/components/ui';
-import { CheckCircle2, Loader2, ArrowLeft, AlertTriangle, LogIn, Lock } from 'lucide-react';
+import {
+  CheckCircle2, Loader2, ArrowLeft, AlertTriangle,
+  LogIn, Lock, Shield, ChevronDown, ChevronUp,
+} from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -32,7 +35,6 @@ function getStripePromise() {
   return stripePromise;
 }
 
-/** Build Stripe appearance based on current theme */
 function getStripeAppearance(isDark: boolean): Appearance {
   return {
     theme: isDark ? 'night' : 'stripe',
@@ -71,7 +73,15 @@ function getStripeAppearance(isDark: boolean): Appearance {
 }
 
 /** Inner form component — must be rendered inside <Elements> */
-function PaymentForm({ type }: { type: 'payment' | 'setup' }) {
+function PaymentForm({
+  type,
+  plan,
+  billingInterval,
+}: {
+  type: 'payment' | 'setup';
+  plan: Plan;
+  billingInterval: 'month' | 'year';
+}) {
   const stripe = useStripe();
   const elements = useElements();
   const [submitting, setSubmitting] = useState(false);
@@ -80,6 +90,9 @@ function PaymentForm({ type }: { type: 'payment' | 'setup' }) {
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
   const returnUrl = `${siteUrl.replace(/\/$/, '')}/payment/return`;
+
+  const hasTrial = plan.trialDays > 0 && type === 'setup';
+  const displayPrice = `$${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}`;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -97,7 +110,6 @@ function PaymentForm({ type }: { type: 'payment' | 'setup' }) {
       confirmParams: { return_url: returnUrl },
     });
 
-    // error only returned if redirect didn't happen (validation error)
     if (error) {
       captureError(error, 'Payment confirmation error', { tags: { page: 'checkout', type } });
       setErrorMessage(error.message || t('errorInitiateCheckout'));
@@ -113,21 +125,47 @@ function PaymentForm({ type }: { type: 'payment' | 'setup' }) {
           {errorMessage}
         </div>
       )}
+
+      {/* Trial callout — prominent, above the button */}
+      {hasTrial && (
+        <div className="mt-5 flex items-start gap-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800/30 px-4 py-3">
+          <Shield className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold text-brand-700 dark:text-brand-300">
+              {t('startTrial', { days: plan.trialDays })}
+            </p>
+            <p className="text-xs text-brand-600/80 dark:text-brand-400/80 mt-0.5">
+              {t('trialNote')}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Smart submit button */}
       <Button
         type="submit"
         size="lg"
         disabled={!stripe || submitting}
-        className="w-full h-14 mt-6 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
+        className="w-full h-14 mt-5 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
       >
         {submitting ? (
           <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
         ) : (
           <>
             <Lock className="w-4 h-4" aria-hidden="true" />
-            {t('submitPayment')}
+            {hasTrial
+              ? t('startTrial', { days: plan.trialDays })
+              : billingInterval === 'year'
+                ? t('submitPaymentYearly', { amount: displayPrice })
+                : t('submitPayment', { amount: displayPrice })}
           </>
         )}
       </Button>
+
+      {/* Trust signal */}
+      <p className="text-center text-xs text-muted-foreground mt-3">
+        {t('cancelAnytime')}
+      </p>
     </form>
   );
 }
@@ -163,8 +201,8 @@ export default function CheckoutPage() {
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const [showMobileSummary, setShowMobileSummary] = useState(false);
 
-  // Track dark mode for Stripe appearance
   useEffect(() => {
     const check = () => setIsDark(document.documentElement.classList.contains('dark'));
     check();
@@ -259,7 +297,22 @@ export default function CheckoutPage() {
 
   const maintenanceMode = isCheckoutMaintenance();
 
-  // EARLY RETURN 1: Show loading while checking geo
+   
+  const getPlanName = (p: Plan) => {
+    const fromPricing = tPricing(p.slug as any);
+    if (fromPricing !== p.slug) return fromPricing;
+    const fromPlans = tPlans(`${p.slug}.name` as any);
+    return fromPlans !== `${p.slug}.name` ? fromPlans : p.name;
+  };
+
+   
+  const getPlanDesc = (p: Plan) => {
+    const fromPricing = tPricing(`${p.slug}Desc` as any);
+    if (fromPricing !== `${p.slug}Desc`) return fromPricing;
+    const fromPlans = tPlans(`${p.slug}.description` as any);
+    return fromPlans !== `${p.slug}.description` ? fromPlans : p.description;
+  };
+
   if (isSanctioned === null) {
     return (
       <div className="flex-1 flex items-center justify-center" role="status" aria-busy="true">
@@ -268,7 +321,6 @@ export default function CheckoutPage() {
     );
   }
 
-  // EARLY RETURN 2: Show blocked message for sanctioned geos
   if (isSanctioned) {
     return (
       <>
@@ -276,29 +328,21 @@ export default function CheckoutPage() {
           <title>{t('title')} - Jawab24</title>
           <meta name="robots" content="noindex, follow" />
         </Head>
-
         <div className="flex-1 flex flex-col overflow-y-auto bg-background">
           <div className="flex-1 px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
             <div className="max-w-md mx-auto w-full">
               <div className="flex items-center justify-between mb-8 sm:mb-10">
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
-                >
+                <Link href="/pricing" className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors">
                   <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                   {t('backToPricing')}
                 </Link>
                 <Link href="/" className="inline-flex items-center gap-2 group">
-                  <span className="font-display font-bold text-lg text-foreground tracking-tight">
-                    {BRAND_ASSETS.meta.appName}
-                  </span>
+                  <span className="font-display font-bold text-lg text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
                   <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
                 </Link>
               </div>
               <div className="text-center mb-8 sm:mb-10">
-                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">
-                  {t('title')}
-                </h1>
+                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">{t('title')}</h1>
               </div>
               <PaymentsUnavailableNotice />
             </div>
@@ -308,7 +352,6 @@ export default function CheckoutPage() {
     );
   }
 
-  // EARLY RETURN 3: Show loading while fetching plan
   if (!plan && !error) {
     return (
       <div className="flex-1 flex items-center justify-center" role="status" aria-busy="true">
@@ -317,7 +360,10 @@ export default function CheckoutPage() {
     );
   }
 
-  // NORMAL CHECKOUT FLOW
+  const displayPrice = plan
+    ? `$${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}`
+    : '';
+
   return (
     <>
       <Head>
@@ -331,17 +377,12 @@ export default function CheckoutPage() {
 
           {/* Header */}
           <div className="max-w-4xl mx-auto w-full flex items-center justify-between mb-6 sm:mb-8">
-            <Link
-              href="/pricing"
-              className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors"
-            >
+            <Link href="/pricing" className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors">
               <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
               {t('backToPricing')}
             </Link>
             <Link href="/" className="inline-flex items-center gap-2 group">
-              <span className="font-display font-bold text-lg text-foreground tracking-tight">
-                {BRAND_ASSETS.meta.appName}
-              </span>
+              <span className="font-display font-bold text-lg text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
               <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
             </Link>
           </div>
@@ -358,89 +399,106 @@ export default function CheckoutPage() {
               {maintenanceMode && (
                 <div className="flex items-center gap-2 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 px-4 py-3 mb-6">
                   <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" aria-hidden="true" />
-                  <p className="text-xs text-amber-700 dark:text-amber-300">
-                    {tLanding('comingSoon.subtitle')}
-                  </p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">{tLanding('comingSoon.subtitle')}</p>
                 </div>
               )}
 
-              {/* Two-column layout: order summary + payment form */}
               <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-start">
 
-                {/* Order Summary sidebar */}
-                <div className="lg:w-80 lg:flex-shrink-0 lg:sticky lg:top-10">
-                  <div className="bg-card rounded-2xl p-5 sm:p-6 border border-theme-border shadow-sm">
-                    {/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plan slug keys */}
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                      {t('orderSummary')}
-                    </p>
-                    <h2 className="text-lg font-bold text-foreground mb-0.5 text-start">
-                      {tPricing(plan.slug as any) !== plan.slug
-                        ? tPricing(plan.slug as any)
-                        : (tPlans(`${plan.slug}.name` as any) !== `${plan.slug}.name` ? tPlans(`${plan.slug}.name` as any) : plan.name)}
-                    </h2>
-                    <p className="text-muted-foreground text-xs mb-4 text-start">
-                      {tPricing(`${plan.slug}Desc` as any) !== `${plan.slug}Desc`
-                        ? tPricing(`${plan.slug}Desc` as any)
-                        : (tPlans(`${plan.slug}.description` as any) !== `${plan.slug}.description` ? tPlans(`${plan.slug}.description` as any) : plan.description)}
-                    </p>
-                    {/* eslint-enable @typescript-eslint/no-explicit-any */}
+                {/* Order Summary — collapsible on mobile, sticky sidebar on desktop */}
+                <div className="lg:w-80 lg:flex-shrink-0 lg:sticky lg:top-10 lg:order-last">
+                  <div className="bg-card rounded-2xl border border-theme-border shadow-sm overflow-hidden">
 
-                    <div className="border-t border-theme-border pt-4 mb-4">
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-3xl font-bold text-brand-600 font-display">
-                          ${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[0]}
-                          <span className="text-xl opacity-70">.{(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2).split('.')[1]}</span>
-                        </span>
-                        <span className="text-muted-foreground text-sm font-medium">
-                          / {billingInterval === 'year' ? tPlans('year') : tPlans('month')}
-                        </span>
+                    {/* Mobile: collapsible header with price */}
+                    <button
+                      type="button"
+                      className="lg:hidden w-full flex items-center justify-between p-4 text-start"
+                      onClick={() => setShowMobileSummary(!showMobileSummary)}
+                      aria-expanded={showMobileSummary}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-muted-foreground">{t('orderSummary')}</span>
+                        <span className="text-sm font-bold text-foreground">{getPlanName(plan)} &middot; {displayPrice}/{billingInterval === 'year' ? tPlans('year') : tPlans('month')}</span>
                       </div>
-                      {billingInterval === 'year' && (
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {tPlans('perMonthEquivalent', { amount: `$${(getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` })} &middot; {tPlans('billedAnnually')}
-                        </p>
-                      )}
-                    </div>
+                      {showMobileSummary
+                        ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                        : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                    </button>
 
-                    <div className="space-y-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
-                        <span className="text-foreground/80 text-sm text-start">
-                          {plan.maxPages === null ? tPricing('unlimited') : plan.maxPages} {tPlans('pages')}
-                        </span>
+                    {/* Desktop: always visible. Mobile: collapsible */}
+                    <div className={`${showMobileSummary ? 'block' : 'hidden'} lg:block p-5 sm:p-6 ${showMobileSummary ? 'pt-0' : ''} lg:pt-5`}>
+                      <p className="hidden lg:block text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                        {t('orderSummary')}
+                      </p>
+                      <h2 className="text-lg font-bold text-foreground mb-0.5 text-start">
+                        {getPlanName(plan)}
+                      </h2>
+                      <p className="text-muted-foreground text-xs mb-4 text-start">
+                        {getPlanDesc(plan)}
+                      </p>
+
+                      <div className="border-t border-theme-border pt-4 mb-4">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-3xl font-bold text-brand-600 font-display">
+                            {displayPrice.split('.')[0]}
+                            <span className="text-xl opacity-70">.{displayPrice.split('.')[1]}</span>
+                          </span>
+                          <span className="text-muted-foreground text-sm font-medium">
+                            / {billingInterval === 'year' ? tPlans('year') : tPlans('month')}
+                          </span>
+                        </div>
+                        {billingInterval === 'year' && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {tPlans('perMonthEquivalent', { amount: `$${(getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` })} &middot; {tPlans('billedAnnually')}
+                          </p>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2.5">
-                        <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
-                        <span className="text-foreground/80 text-sm text-start">
-                          {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
-                        </span>
-                      </div>
-                      {plan.trialDays > 0 && (
+
+                      <div className="space-y-2.5">
                         <div className="flex items-center gap-2.5">
                           <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
                           <span className="text-foreground/80 text-sm text-start">
-                            {tPricing('trialDays', { days: plan.trialDays })}
+                            {plan.maxPages === null ? tPricing('unlimited') : plan.maxPages} {tPlans('pages')}
                           </span>
                         </div>
-                      )}
-                    </div>
+                        <div className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                          <span className="text-foreground/80 text-sm text-start">
+                            {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
+                          </span>
+                        </div>
+                        {plan.trialDays > 0 && (
+                          <div className="flex items-center gap-2.5">
+                            <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                            <span className="text-foreground/80 text-sm text-start">
+                              {tPricing('trialDays', { days: plan.trialDays })}
+                            </span>
+                          </div>
+                        )}
+                      </div>
 
-                    <p className="text-center text-xs text-muted-foreground mt-4 pt-4 border-t border-theme-border">
-                      {t('securePayment')}
-                    </p>
+                      <p className="text-center text-xs text-muted-foreground mt-4 pt-4 border-t border-theme-border">
+                        {t('securePayment')}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Payment Form */}
-                <div className="flex-1 min-w-0">
+                {/* Payment Form — primary area, appears first on both mobile and desktop */}
+                <div className="flex-1 min-w-0 lg:order-first">
+                  {/* Section heading */}
+                  <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-1 tracking-tight font-display">
+                    {t('paymentDetails')}
+                  </h1>
+                  <p className="text-muted-foreground text-sm mb-6">
+                    {t('subtitle')}
+                  </p>
+
                   {!maintenanceMode && (
                     <>
                       {!isAuthenticated ? (
                         <div className="bg-card rounded-2xl p-6 sm:p-8 border border-theme-border text-center">
-                          <p className="text-muted-foreground mb-4">
-                            {t('loginToCheckout')}
-                          </p>
+                          <p className="text-muted-foreground mb-4">{t('loginToCheckout')}</p>
                           <Button
                             size="lg"
                             className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
@@ -459,7 +517,11 @@ export default function CheckoutPage() {
                               appearance: getStripeAppearance(isDark),
                             }}
                           >
-                            <PaymentForm type={intentType} />
+                            <PaymentForm
+                              type={intentType}
+                              plan={plan}
+                              billingInterval={billingInterval}
+                            />
                           </Elements>
                         </div>
                       ) : sessionLoading ? (

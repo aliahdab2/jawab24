@@ -2,6 +2,7 @@
   "title": "Checkout",
   "subtitle": "Complete your subscription",
   "orderSummary": "Order Summary",
+  "paymentDetails": "Payment Details",
   "securePayment": "Secure payment processed by Stripe",
   "backToPricing": "Back to Pricing",
   "errorLoadPlan": "Failed to load plan details. Please try again later.",
@@ -9,5 +10,11 @@
   "loginToCheckout": "Log in to complete your subscription",
   "loginButton": "Log In",
   "loadingPaymentForm": "Loading payment form...",
-  "submitPayment": "Subscribe"
+  "submitPayment": "Pay {amount}/month",
+  "submitPaymentYearly": "Pay {amount}/year",
+  "startTrial": "Start {days}-day free trial",
+  "cancelAnytime": "Cancel anytime. No questions asked.",
+  "trialNote": "You won't be charged until your trial ends.",
+  "showDetails": "Show order details",
+  "hideDetails": "Hide order details"
 }
