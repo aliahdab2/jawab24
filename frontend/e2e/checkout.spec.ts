@@ -55,11 +55,11 @@ test.describe('Checkout Page', () => {
           body: JSON.stringify({ data: MOCK_PLAN }),
         });
       }
-      if (url.includes('/create-checkout-session')) {
+      if (url.includes('/create-subscription-intent')) {
         return route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ sessionId: 'cs_test_123', clientSecret: 'cs_test_123_secret' }),
+          body: JSON.stringify({ clientSecret: 'pi_test_123_secret', type: 'payment', subscriptionId: 'sub_test_123' }),
         });
       }
       if (url.includes('/auth/profile')) {

@@ -68,6 +68,75 @@ export class StripeService {
     }
 
     /**
+     * Find or create a Stripe Customer for a user.
+     */
+    async findOrCreateCustomer(email: string, userId: string): Promise<string> {
+        const s = requireStripe();
+        const existing = await s.customers.list({ email, limit: 1 });
+        if (existing.data.length > 0) {
+            return existing.data[0].id;
+        }
+        const customer = await s.customers.create({
+            email,
+            metadata: { userId },
+        });
+        return customer.id;
+    }
+
+    /**
+     * Create an incomplete subscription and return the client_secret
+     * from either a PaymentIntent (no trial) or SetupIntent (trial).
+     */
+    async createSubscriptionIntent(params: {
+        customerId: string;
+        priceId: string;
+        userId: string;
+        planId: string;
+        trialDays: number;
+    }): Promise<{
+        subscriptionId: string;
+        clientSecret: string;
+        type: 'payment' | 'setup';
+    }> {
+        const s = requireStripe();
+
+        const subscriptionParams: Stripe.SubscriptionCreateParams = {
+            customer: params.customerId,
+            items: [{ price: params.priceId }],
+            metadata: { userId: params.userId, planId: params.planId },
+            payment_settings: {
+                save_default_payment_method: 'on_subscription',
+            },
+            expand: ['latest_invoice.payment_intent', 'pending_setup_intent'],
+        };
+
+        if (params.trialDays > 0) {
+            subscriptionParams.trial_period_days = params.trialDays;
+        } else {
+            subscriptionParams.payment_behavior = 'default_incomplete';
+        }
+
+        const subscription = await s.subscriptions.create(subscriptionParams);
+
+        if (params.trialDays > 0) {
+            const setupIntent = subscription.pending_setup_intent as Stripe.SetupIntent;
+            return {
+                subscriptionId: subscription.id,
+                clientSecret: setupIntent.client_secret!,
+                type: 'setup',
+            };
+        }
+
+        const invoice = subscription.latest_invoice as Stripe.Invoice;
+        const paymentIntent = invoice.payment_intent as Stripe.PaymentIntent;
+        return {
+            subscriptionId: subscription.id,
+            clientSecret: paymentIntent.client_secret!,
+            type: 'payment',
+        };
+    }
+
+    /**
      * Retrieve a Checkout Session by ID (for checking completion status)
      */
     async getCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {

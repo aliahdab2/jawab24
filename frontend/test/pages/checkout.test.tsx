@@ -47,10 +47,12 @@ vi.mock('@stripe/stripe-js', () => ({
 }));
 
 vi.mock('@stripe/react-stripe-js', () => ({
-  EmbeddedCheckoutProvider: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="checkout-provider">{children}</div>
+  Elements: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="stripe-elements">{children}</div>
   ),
-  EmbeddedCheckout: () => <div data-testid="embedded-checkout">Stripe Checkout Form</div>,
+  PaymentElement: () => <div data-testid="payment-element">Payment Form</div>,
+  useStripe: () => ({}),
+  useElements: () => ({}),
 }));
 
 // These are the key mocks we control per-test
@@ -107,9 +109,9 @@ describe('CheckoutPage', () => {
       data: { data: mockPlan },
     });
 
-    // Default: session creation succeeds
+    // Default: subscription intent creation succeeds
     mockApiPost.mockResolvedValue({
-      data: { sessionId: 'cs_test_123', clientSecret: 'cs_test_123_secret' },
+      data: { clientSecret: 'pi_test_123_secret', type: 'payment', subscriptionId: 'sub_test_123' },
     });
   });
 
@@ -142,7 +144,7 @@ describe('CheckoutPage', () => {
     expect(mockPublicApiGet).not.toHaveBeenCalled();
   });
 
-  it('should create checkout session and render embedded form', async () => {
+  it('should create subscription intent and render payment form', async () => {
     const { container } = render(<CheckoutPage />);
 
     // Wait for plan details to appear (means plan is loaded)
@@ -150,17 +152,17 @@ describe('CheckoutPage', () => {
       expect(screen.getByText('$15')).toBeInTheDocument();
     });
 
-    // Wait for the checkout session API call
+    // Wait for the subscription intent API call
     await waitFor(() => {
       expect(mockApiPost).toHaveBeenCalledWith(
-        '/payment/create-checkout-session',
+        '/payment/create-subscription-intent',
         expect.objectContaining({ planId: 'plan-1' })
       );
     }, { timeout: 3000 });
 
-    // After session creation, embedded checkout should render
+    // After intent creation, PaymentElement should render inside Elements
     await waitFor(() => {
-      expect(container.querySelector('[data-testid="embedded-checkout"]')).toBeTruthy();
+      expect(container.querySelector('[data-testid="payment-element"]')).toBeTruthy();
     }, { timeout: 3000 });
   });
 

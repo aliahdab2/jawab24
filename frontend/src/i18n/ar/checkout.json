@@ -8,5 +8,6 @@
   "errorInitiateCheckout": "فشل بدء عملية الدفع",
   "loginToCheckout": "سجّل دخولك لإتمام الاشتراك",
   "loginButton": "تسجيل الدخول",
-  "loadingPaymentForm": "جاري تحميل نموذج الدفع..."
+  "loadingPaymentForm": "جاري تحميل نموذج الدفع...",
+  "submitPayment": "اشترك"
 }

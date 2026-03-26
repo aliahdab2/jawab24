@@ -154,6 +154,102 @@ export class PaymentController {
     }
 
     /**
+     * Create Subscription with PaymentElement support
+     * POST /api/payment/create-subscription-intent
+     * Returns clientSecret for PaymentIntent (no trial) or SetupIntent (trial)
+     */
+    async createSubscriptionIntent(
+        request: FastifyRequest<{ Body: CreateCheckoutSessionRequest }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user?.userId;
+            if (!userId) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+
+            // SANCTIONS CHECK
+            const { isSanctionedGeo } = await import('../utils/sanctions');
+            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
+
+            if (request.geo && isSanctionedGeo(request.geo)) {
+                request.log.warn({ userId, geo: request.geo }, 'Payment blocked: sanctioned jurisdiction');
+                return reply.status(403).send({ error: 'Payments are not available in your region', code: 'SANCTIONED_GEO_BLOCK' });
+            }
+            if (shouldBlockUnknownGeo(request.geo)) {
+                request.log.warn({ userId, geo: request.geo }, 'Payment blocked: unknown geo');
+                return reply.status(403).send({ error: 'Unable to process payment at this time', code: 'GEO_VERIFICATION_REQUIRED' });
+            }
+
+            const { planId } = request.body;
+            if (!planId) {
+                return reply.status(400).send({ error: 'Plan ID is required' });
+            }
+
+            // Get user
+            const [user] = await db.select().from(users).where(eq(users.id, userId));
+            if (!user) return reply.status(404).send({ error: 'User not found' });
+            if (!user.email) {
+                return reply.status(400).send({ error: 'Email required', message: 'Please add your email address to complete the purchase', code: 'EMAIL_REQUIRED' });
+            }
+
+            // Get plan
+            const [plan] = await db.select().from(plans).where(eq(plans.id, planId));
+            if (!plan) return reply.status(404).send({ error: 'Plan not found' });
+
+            const rawInterval = request.body.billingInterval;
+            const billingInterval = rawInterval === 'year' ? 'year' : 'month';
+            const stripePriceId = billingInterval === 'year' && plan.stripeYearlyPriceId
+                ? plan.stripeYearlyPriceId
+                : plan.stripePriceId;
+
+            if (!stripePriceId) {
+                return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
+            }
+
+            // Check existing subscriptions for trial eligibility
+            const existingSubscriptions = await db
+                .select({ id: subscriptions.id, status: subscriptions.status, planId: subscriptions.planId, stripeCustomerId: subscriptions.stripeCustomerId })
+                .from(subscriptions)
+                .where(eq(subscriptions.userId, userId));
+
+            const activeSubscription = existingSubscriptions.find(s => s.status === 'active' || s.status === 'trialing');
+
+            let trialDays = 0;
+            if (!activeSubscription && plan.trialDays && plan.trialDays > 0) {
+                trialDays = plan.trialDays;
+                request.log.info({ userId, planId, trialDays }, 'New user eligible for trial');
+            } else if (activeSubscription) {
+                request.log.info({ userId, planId, existingPlanId: activeSubscription.planId }, 'Existing subscriber - no trial on plan change');
+            }
+
+            // Find or create Stripe Customer (check existing subscriptions first)
+            let stripeCustomerId = existingSubscriptions.find(s => s.stripeCustomerId)?.stripeCustomerId;
+            if (!stripeCustomerId) {
+                stripeCustomerId = await stripeService.findOrCreateCustomer(user.email, userId);
+            }
+
+            // Create subscription with PaymentIntent or SetupIntent
+            const result = await stripeService.createSubscriptionIntent({
+                customerId: stripeCustomerId,
+                priceId: stripePriceId,
+                userId,
+                planId,
+                trialDays,
+            });
+
+            return reply.send({
+                clientSecret: result.clientSecret,
+                type: result.type,
+                subscriptionId: result.subscriptionId,
+            });
+        } catch (error) {
+            request.log.error({ err: error }, 'Create subscription intent error');
+            return reply.status(500).send({ error: 'Failed to create subscription' });
+        }
+    }
+
+    /**
      * Get checkout session status (for embedded checkout return page)
      * GET /api/payment/checkout-session-status?session_id=...
      */

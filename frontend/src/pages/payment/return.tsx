@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import { loadStripe } from '@stripe/stripe-js';
 import { Button } from '@/components/ui';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -10,9 +11,16 @@ import { captureError } from '@/lib/sentryHelpers';
 
 type SessionStatus = 'loading' | 'complete' | 'open' | 'expired';
 
+let stripePromise: ReturnType<typeof loadStripe> | null = null;
+function getStripePromise() {
+  if (!stripePromise && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
+    stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+  }
+  return stripePromise;
+}
+
 export default function PaymentReturnPage() {
   const router = useRouter();
-  const { session_id } = router.query;
   const t = useTranslations('payment');
   const [status, setStatus] = useState<SessionStatus>('loading');
   const [countdown, setCountdown] = useState(5);
@@ -21,28 +29,56 @@ export default function PaymentReturnPage() {
   routerRef.current = router;
   const redirectedRef = useRef(false);
 
-  // Check session status
+  // Check payment status from Stripe query params or legacy session_id
   useEffect(() => {
-    // Missing or invalid session_id — show incomplete state
-    if (router.isReady && (!session_id || typeof session_id !== 'string')) {
-      setStatus('open');
+    if (!router.isReady) return;
+
+    const {
+      payment_intent_client_secret,
+      setup_intent_client_secret,
+      session_id,
+    } = router.query;
+
+    // PaymentElement flow: check via Stripe.js client-side
+    if (payment_intent_client_secret || setup_intent_client_secret) {
+      const checkStripeIntent = async () => {
+        const stripe = await getStripePromise();
+        if (!stripe) { setStatus('open'); return; }
+
+        if (typeof payment_intent_client_secret === 'string') {
+          const { paymentIntent } = await stripe.retrievePaymentIntent(payment_intent_client_secret);
+          setStatus(paymentIntent?.status === 'succeeded' || paymentIntent?.status === 'processing' ? 'complete' : 'open');
+        } else if (typeof setup_intent_client_secret === 'string') {
+          const { setupIntent } = await stripe.retrieveSetupIntent(setup_intent_client_secret);
+          setStatus(setupIntent?.status === 'succeeded' ? 'complete' : 'open');
+        }
+      };
+      checkStripeIntent().catch((err) => {
+        captureError(err, 'Failed to check intent status', { tags: { page: 'payment-return' } });
+        setStatus('open');
+      });
       return;
     }
-    if (!session_id || typeof session_id !== 'string') return;
 
-    const checkStatus = async () => {
-      try {
-        const response = await api.get(`/payment/checkout-session-status?session_id=${encodeURIComponent(session_id)}`);
-        const { status: sessionStatus } = response.data;
-        setStatus(sessionStatus === 'complete' ? 'complete' : sessionStatus === 'expired' ? 'expired' : 'open');
-      } catch (err) {
-        captureError(err, 'Failed to check checkout session status', { tags: { page: 'payment-return' } });
-        setStatus('open');
-      }
-    };
+    // Legacy EmbeddedCheckout flow: check via backend API
+    if (typeof session_id === 'string') {
+      const checkSession = async () => {
+        try {
+          const response = await api.get(`/payment/checkout-session-status?session_id=${encodeURIComponent(session_id)}`);
+          const { status: sessionStatus } = response.data;
+          setStatus(sessionStatus === 'complete' ? 'complete' : sessionStatus === 'expired' ? 'expired' : 'open');
+        } catch (err) {
+          captureError(err, 'Failed to check checkout session status', { tags: { page: 'payment-return' } });
+          setStatus('open');
+        }
+      };
+      checkSession();
+      return;
+    }
 
-    checkStatus();
-  }, [session_id, router.isReady]);
+    // No valid params
+    setStatus('open');
+  }, [router.isReady, router.query]);
 
   // Countdown redirect on success
   useEffect(() => {

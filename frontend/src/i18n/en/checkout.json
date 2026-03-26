@@ -8,5 +8,6 @@
   "errorInitiateCheckout": "Failed to initiate checkout",
   "loginToCheckout": "Log in to complete your subscription",
   "loginButton": "Log In",
-  "loadingPaymentForm": "Loading payment form..."
+  "loadingPaymentForm": "Loading payment form...",
+  "submitPayment": "Subscribe"
 }

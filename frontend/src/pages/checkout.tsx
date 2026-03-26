@@ -4,14 +4,15 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { loadStripe } from '@stripe/stripe-js';
-import { EmbeddedCheckoutProvider, EmbeddedCheckout } from '@stripe/react-stripe-js';
+import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import type { Appearance } from '@stripe/stripe-js';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 import { useAuthStore } from '@/lib/store';
 
 import { Button, BrandLogo } from '@/components/ui';
-import { CheckCircle2, Loader2, ArrowLeft, AlertTriangle, LogIn } from 'lucide-react';
+import { CheckCircle2, Loader2, ArrowLeft, AlertTriangle, LogIn, Lock } from 'lucide-react';
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -19,18 +20,116 @@ import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { Plan } from '@jawab24/shared';
 import { getDisplayPrice, getMonthlyEquivalent } from '@/utils/pricing';
 
-// Set to true to disable checkout (e.g. during Stripe price changes)
 function isCheckoutMaintenance() {
   return process.env.NEXT_PUBLIC_CHECKOUT_MAINTENANCE === 'true';
 }
 
-// Initialize Stripe lazily — singleton pattern avoids re-creating on each render
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
 function getStripePromise() {
   if (!stripePromise && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
     stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
   }
   return stripePromise;
+}
+
+/** Build Stripe appearance based on current theme */
+function getStripeAppearance(isDark: boolean): Appearance {
+  return {
+    theme: isDark ? 'night' : 'stripe',
+    variables: {
+      colorPrimary: isDark ? '#3e877e' : '#0d9488',
+      colorBackground: isDark ? '#0e182a' : '#ffffff',
+      colorText: isDark ? '#ebf0f5' : '#121c1b',
+      colorDanger: '#f87171',
+      fontFamily: 'Inter, system-ui, sans-serif',
+      borderRadius: '12px',
+      spacingUnit: '4px',
+    },
+    rules: {
+      '.Input': {
+        backgroundColor: isDark ? '#060d18' : '#ffffff',
+        borderColor: isDark ? '#1c283c' : '#dae4e3',
+        color: isDark ? '#ebf0f5' : '#121c1b',
+      },
+      '.Input:focus': {
+        borderColor: isDark ? '#3e877e' : '#0d9488',
+        boxShadow: `0 0 0 1px ${isDark ? '#3e877e' : '#0d9488'}`,
+      },
+      '.Label': {
+        color: isDark ? '#788da0' : '#556361',
+      },
+      '.Tab': {
+        backgroundColor: isDark ? '#0e182a' : '#ffffff',
+        borderColor: isDark ? '#1c283c' : '#dae4e3',
+      },
+      '.Tab--selected': {
+        backgroundColor: isDark ? '#3e877e' : '#0d9488',
+        color: '#ffffff',
+      },
+    },
+  };
+}
+
+/** Inner form component — must be rendered inside <Elements> */
+function PaymentForm({ type }: { type: 'payment' | 'setup' }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const t = useTranslations('checkout');
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+  const returnUrl = `${siteUrl.replace(/\/$/, '')}/payment/return`;
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!stripe || !elements) return;
+
+    setSubmitting(true);
+    setErrorMessage('');
+
+    const confirmFn = type === 'setup'
+      ? stripe.confirmSetup
+      : stripe.confirmPayment;
+
+    const { error } = await confirmFn({
+      elements,
+      confirmParams: { return_url: returnUrl },
+    });
+
+    // error only returned if redirect didn't happen (validation error)
+    if (error) {
+      captureError(error, 'Payment confirmation error', { tags: { page: 'checkout', type } });
+      setErrorMessage(error.message || t('errorInitiateCheckout'));
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <PaymentElement />
+      {errorMessage && (
+        <div className="mt-4 p-3 alert-error border rounded-xl text-sm text-start">
+          {errorMessage}
+        </div>
+      )}
+      <Button
+        type="submit"
+        size="lg"
+        disabled={!stripe || submitting}
+        className="w-full h-14 mt-6 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
+      >
+        {submitting ? (
+          <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+        ) : (
+          <>
+            <Lock className="w-4 h-4" aria-hidden="true" />
+            {t('submitPayment')}
+          </>
+        )}
+      </Button>
+    </form>
+  );
 }
 
 export default function CheckoutPage() {
@@ -43,14 +142,12 @@ export default function CheckoutPage() {
   const tLanding = useTranslations('landing');
   const { isAuthenticated } = useAuthStore();
 
-  // Apply theme from URL param (used when opened from native app's in-app browser)
   useEffect(() => {
     if (themeParam === 'dark' || themeParam === 'light') {
       document.documentElement.classList.toggle('dark', themeParam === 'dark');
     }
   }, [themeParam]);
 
-  // On native (Android/iOS), redirect to web checkout — Google Play prohibits Stripe in-app
   useEffect(() => {
     if (isNativePlatform()) {
       const locale = router.locale === 'en' ? '/en' : '';
@@ -61,16 +158,25 @@ export default function CheckoutPage() {
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
   const [fetchError, setFetchError] = useState(false);
-  const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null); // null = checking
+  const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
+  const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [isDark, setIsDark] = useState(false);
 
-  // Extract translated string before useEffect to avoid dependency on t
+  // Track dark mode for Stripe appearance
+  useEffect(() => {
+    const check = () => setIsDark(document.documentElement.classList.contains('dark'));
+    check();
+    const observer = new MutationObserver(check);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+
   const errorLoadPlanMessage = t('errorLoadPlan');
 
-  // SANCTIONS CHECK: Check geo on page load
   useEffect(() => {
-    if (isNativePlatform()) return; // Skip on native — redirected above
+    if (isNativePlatform()) return;
     const checkGeo = async () => {
       const sanctioned = await isUserSanctioned();
       setIsSanctioned(sanctioned);
@@ -79,13 +185,8 @@ export default function CheckoutPage() {
   }, []);
 
   useEffect(() => {
-    // Prevent re-fetching if already loaded or errored
     if (plan || fetchError || !planId) return;
-
-    // Do not fetch plan if sanctioned (will show blocked message)
     if (isSanctioned === true) return;
-
-    // Wait for geo check to complete
     if (isSanctioned === null) return;
 
     const fetchPlan = async () => {
@@ -93,9 +194,6 @@ export default function CheckoutPage() {
         const response = await publicApi.get(`/plans/${planId}`);
         const planData = response.data.data || response.data;
 
-        // If it's a FREE plan, redirect to dashboard — free plan activation
-        // is automatic. Downgrades (cancellations) are handled via the
-        // billing portal or cancel-subscription endpoint, not checkout.
         if (planData.price === 0 && isAuthenticated) {
           router.push('/dashboard');
           return;
@@ -112,7 +210,6 @@ export default function CheckoutPage() {
     fetchPlan();
   }, [planId, plan, fetchError, errorLoadPlanMessage, isSanctioned, router, isAuthenticated]);
 
-  // Create embedded checkout session once plan is loaded and user is authenticated
   const createSession = useCallback(async () => {
     if (!plan || !isAuthenticated || clientSecret || sessionLoading || isSanctioned) return;
 
@@ -120,12 +217,13 @@ export default function CheckoutPage() {
     setError('');
 
     try {
-      const response = await api.post('/payment/create-checkout-session', {
+      const response = await api.post('/payment/create-subscription-intent', {
         planId: plan.id,
         billingInterval,
       });
 
       setClientSecret(response.data.clientSecret);
+      setIntentType(response.data.type);
     } catch (err: unknown) {
       captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session' } });
 
@@ -171,7 +269,6 @@ export default function CheckoutPage() {
   }
 
   // EARLY RETURN 2: Show blocked message for sanctioned geos
-  // CRITICAL: This prevents ANY Stripe code from being reachable
   if (isSanctioned) {
     return (
       <>
@@ -181,10 +278,8 @@ export default function CheckoutPage() {
         </Head>
 
         <div className="flex-1 flex flex-col overflow-y-auto bg-background">
-          <div className="flex-1  px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
+          <div className="flex-1 px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
             <div className="max-w-md mx-auto w-full">
-
-              {/* Header: Back link on one side, Logo on other */}
               <div className="flex items-center justify-between mb-8 sm:mb-10">
                 <Link
                   href="/pricing"
@@ -193,7 +288,6 @@ export default function CheckoutPage() {
                   <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
                   {t('backToPricing')}
                 </Link>
-
                 <Link href="/" className="inline-flex items-center gap-2 group">
                   <span className="font-display font-bold text-lg text-foreground tracking-tight">
                     {BRAND_ASSETS.meta.appName}
@@ -201,15 +295,11 @@ export default function CheckoutPage() {
                   <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
                 </Link>
               </div>
-
-              {/* Title */}
               <div className="text-center mb-8 sm:mb-10">
                 <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">
                   {t('title')}
                 </h1>
               </div>
-
-              {/* Blocked Message */}
               <PaymentsUnavailableNotice />
             </div>
           </div>
@@ -218,7 +308,7 @@ export default function CheckoutPage() {
     );
   }
 
-  // EARLY RETURN 3: Show loading while fetching plan (only for allowed geos)
+  // EARLY RETURN 3: Show loading while fetching plan
   if (!plan && !error) {
     return (
       <div className="flex-1 flex items-center justify-center" role="status" aria-busy="true">
@@ -227,7 +317,7 @@ export default function CheckoutPage() {
     );
   }
 
-  // NORMAL CHECKOUT FLOW - Only reachable if NOT sanctioned
+  // NORMAL CHECKOUT FLOW
   return (
     <>
       <Head>
@@ -248,15 +338,11 @@ export default function CheckoutPage() {
               <ArrowLeft className="w-4 h-4 rtl:rotate-180" />
               {t('backToPricing')}
             </Link>
-
             <Link href="/" className="inline-flex items-center gap-2 group">
               <span className="font-display font-bold text-lg text-foreground tracking-tight">
                 {BRAND_ASSETS.meta.appName}
               </span>
-              <BrandLogo
-                variant="main"
-                className="w-9 h-9 transition-transform group-hover:scale-105"
-              />
+              <BrandLogo variant="main" className="w-9 h-9 transition-transform group-hover:scale-105" />
             </Link>
           </div>
 
@@ -281,7 +367,7 @@ export default function CheckoutPage() {
               {/* Two-column layout: order summary + payment form */}
               <div className="flex flex-col lg:flex-row gap-6 lg:gap-8 lg:items-start">
 
-                {/* Order Summary — sidebar on desktop, compact card on mobile */}
+                {/* Order Summary sidebar */}
                 <div className="lg:w-80 lg:flex-shrink-0 lg:sticky lg:top-10">
                   <div className="bg-card rounded-2xl p-5 sm:p-6 border border-theme-border shadow-sm">
                     {/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plan slug keys */}
@@ -317,7 +403,6 @@ export default function CheckoutPage() {
                       )}
                     </div>
 
-                    {/* Features */}
                     <div className="space-y-2.5">
                       <div className="flex items-center gap-2.5">
                         <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
@@ -347,7 +432,7 @@ export default function CheckoutPage() {
                   </div>
                 </div>
 
-                {/* Payment Form — main area */}
+                {/* Payment Form */}
                 <div className="flex-1 min-w-0">
                   {!maintenanceMode && (
                     <>
@@ -365,11 +450,17 @@ export default function CheckoutPage() {
                             {t('loginButton')}
                           </Button>
                         </div>
-                      ) : clientSecret && getStripePromise() ? (
-                        <div className="rounded-2xl overflow-hidden">
-                          <EmbeddedCheckoutProvider stripe={getStripePromise()!} options={{ clientSecret }}>
-                            <EmbeddedCheckout />
-                          </EmbeddedCheckoutProvider>
+                      ) : clientSecret && intentType && getStripePromise() ? (
+                        <div className="bg-card rounded-2xl p-5 sm:p-6 border border-theme-border">
+                          <Elements
+                            stripe={getStripePromise()!}
+                            options={{
+                              clientSecret,
+                              appearance: getStripeAppearance(isDark),
+                            }}
+                          >
+                            <PaymentForm type={intentType} />
+                          </Elements>
                         </div>
                       ) : sessionLoading ? (
                         <div className="flex flex-col items-center justify-center py-16" role="status" aria-busy="true">

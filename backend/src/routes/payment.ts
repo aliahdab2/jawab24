@@ -14,6 +14,15 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
         }
     );
 
+    // Create Subscription with PaymentElement (returns PaymentIntent or SetupIntent clientSecret)
+    fastify.post<{ Body: CreateCheckoutSessionRequest }>(
+        '/create-subscription-intent',
+        { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { tags: ['Payment'], summary: 'Create subscription intent for PaymentElement', security: auth }, preHandler: [authenticate] },
+        async (request, reply) => {
+            return paymentController.createSubscriptionIntent(request, reply);
+        }
+    );
+
     // Get checkout session status (for embedded checkout return page)
     fastify.get<{ Querystring: { session_id: string } }>(
         '/checkout-session-status',
