@@ -112,10 +112,37 @@ export default function MyDocument({ locale }: DocProps) {
                 { "@type": "Country", "name": "Kuwait" },
                 { "@type": "Country", "name": "Qatar" }
               ],
+              "@id": "https://jawab24.com/#organization",
               "sameAs": [
-                "https://facebook.com/jawab24app",
-                "https://instagram.com/jawab24"
-              ]
+                "https://www.facebook.com/jawab24app",
+                "https://www.instagram.com/jawab24",
+                "https://x.com/jawab24"
+              ],
+              "contactPoint": {
+                "@type": "ContactPoint",
+                "contactType": "customer support",
+                "url": "https://jawab24.com/en/pricing",
+                "availableLanguage": ["Arabic", "English"]
+              }
+            })
+          }}
+        />
+
+        {/* WebSite Structured Data — helps Google associate brand name with domain */}
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebSite",
+              "@id": "https://jawab24.com/#website",
+              "name": "Jawab24",
+              "alternateName": ["جواب24", "جواب٢٤", "Jawab 24", "جواب"],
+              "url": "https://jawab24.com",
+              "inLanguage": ["ar", "en"],
+              "publisher": {
+                "@id": "https://jawab24.com/#organization"
+              }
             })
           }}
         />
