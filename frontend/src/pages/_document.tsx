@@ -99,10 +99,11 @@ export default function MyDocument({ locale }: DocProps) {
               "@context": "https://schema.org",
               "@type": "Organization",
               "name": "Jawab24",
-              "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24", "جواب 24"],
+              "alternateName": ["Jawab", "jawab", "جواب24", "جواب٢٤", "جواب", "Jawab 24", "جواب 24", "نظام جواب", "جواب للرد التلقائي", "Jawab Auto-Reply"],
               "url": "https://jawab24.com",
               "logo": "https://jawab24.com/brand/apple-touch-icon.png",
               "description": "Arabic-first AI auto-reply platform for businesses on Facebook, Instagram, Shopify, and Salla. Bilingual customer support automation in Arabic and English with 6 dialect families, product catalog sync, and price verification. 24/7 automated responses.",
+              "slogan": "جواب — نظام الرد التلقائي الذكي بالذكاء الاصطناعي لفيسبوك وإنستغرام",
               "knowsLanguage": ["ar", "en"],
               "areaServed": [
                 { "@type": "GeoShape", "name": "Middle East and North Africa" },
@@ -110,7 +111,24 @@ export default function MyDocument({ locale }: DocProps) {
                 { "@type": "Country", "name": "United Arab Emirates" },
                 { "@type": "Country", "name": "Egypt" },
                 { "@type": "Country", "name": "Kuwait" },
-                { "@type": "Country", "name": "Qatar" }
+                { "@type": "Country", "name": "Qatar" },
+                { "@type": "Country", "name": "Bahrain" },
+                { "@type": "Country", "name": "Oman" },
+                { "@type": "Country", "name": "Jordan" },
+                { "@type": "Country", "name": "Lebanon" },
+                { "@type": "Country", "name": "Iraq" },
+                { "@type": "Country", "name": "Syria" },
+                { "@type": "Country", "name": "Palestine" },
+                { "@type": "Country", "name": "Yemen" },
+                { "@type": "Country", "name": "Libya" },
+                { "@type": "Country", "name": "Tunisia" },
+                { "@type": "Country", "name": "Algeria" },
+                { "@type": "Country", "name": "Morocco" },
+                { "@type": "Country", "name": "Sudan" },
+                { "@type": "Country", "name": "Somalia" },
+                { "@type": "Country", "name": "Mauritania" },
+                { "@type": "Country", "name": "Djibouti" },
+                { "@type": "Country", "name": "Comoros" }
               ],
               "@id": "https://jawab24.com/#organization",
               "sameAs": [
@@ -118,10 +136,16 @@ export default function MyDocument({ locale }: DocProps) {
                 "https://www.instagram.com/jawab24",
                 "https://x.com/jawab24"
               ],
+              "foundingDate": "2024",
+              "numberOfEmployees": {
+                "@type": "QuantitativeValue",
+                "value": "1-10"
+              },
               "contactPoint": {
                 "@type": "ContactPoint",
                 "contactType": "customer support",
-                "url": "https://jawab24.com/en/pricing",
+                "email": "support@jawab24.com",
+                "url": "https://jawab24.com/contact",
                 "availableLanguage": ["Arabic", "English"]
               }
             })
@@ -137,11 +161,20 @@ export default function MyDocument({ locale }: DocProps) {
               "@type": "WebSite",
               "@id": "https://jawab24.com/#website",
               "name": "Jawab24",
-              "alternateName": ["جواب24", "جواب٢٤", "Jawab 24", "جواب 24", "جواب", "Jawab"],
+              "alternateName": ["جواب24", "جواب٢٤", "Jawab 24", "جواب 24", "جواب", "Jawab", "نظام جواب", "جواب للرد التلقائي"],
               "url": "https://jawab24.com",
+              "description": "جواب24 — أول نظام عربي متخصص في الرد الذكي على تعليقات ورسائل فيسبوك وإنستغرام بالذكاء الاصطناعي",
               "inLanguage": ["ar", "en"],
               "publisher": {
                 "@id": "https://jawab24.com/#organization"
+              },
+              "potentialAction": {
+                "@type": "SearchAction",
+                "target": {
+                  "@type": "EntryPoint",
+                  "urlTemplate": "https://jawab24.com/en/blog?q={search_term_string}"
+                },
+                "query-input": "required name=search_term_string"
               }
             })
           }}
@@ -155,29 +188,36 @@ export default function MyDocument({ locale }: DocProps) {
               "@context": "https://schema.org",
               "@type": "SoftwareApplication",
               "name": "Jawab24",
-              "alternateName": "جواب24",
+              "alternateName": ["جواب24", "جواب", "Jawab", "نظام جواب للرد التلقائي"],
               "applicationCategory": "BusinessApplication",
+              "applicationSubCategory": "AI Auto-Reply & Conversational Commerce",
               "operatingSystem": "Web, iOS, Android",
               "offers": {
-                "@type": "Offer",
-                "price": "0",
+                "@type": "AggregateOffer",
+                "lowPrice": "0",
+                "highPrice": "49",
                 "priceCurrency": "USD",
-                "description": "Start free trial - no credit card required"
+                "offerCount": "3",
+                "description": "Free trial available — plans from $0 to $49/month"
               },
               "description": "AI-powered auto-reply platform for Facebook and Instagram business pages. Integrates with Shopify and Salla e-commerce stores. Automatically respond to comments and messages in Arabic and English 24/7.",
               "featureList": [
-                "AI-powered automatic replies",
-                "Facebook & Instagram integration",
-                "Shopify store integration",
-                "Salla store integration",
-                "E-commerce product catalog sync",
-                "Arabic & English language support",
-                "24/7 automated responses",
-                "Custom reply templates",
-                "Business knowledge base"
+                "AI-powered automatic replies — رد تلقائي ذكي بالذكاء الاصطناعي",
+                "Facebook & Instagram integration — تكامل مع فيسبوك وإنستغرام",
+                "Shopify store integration — تكامل مع شوبيفاي",
+                "Salla store integration — تكامل مع سلة",
+                "E-commerce product catalog sync — مزامنة كتالوج المنتجات",
+                "Arabic dialect support (6 families) — دعم 6 عائلات لهجات عربية",
+                "24/7 automated responses — رد تلقائي على مدار الساعة",
+                "Custom reply templates — قوالب رد مخصصة",
+                "Business knowledge base — قاعدة معرفة ذكية"
               ],
               "screenshot": "https://jawab24.com/brand/og-social.png",
-              "softwareVersion": "1.0"
+              "softwareVersion": "1.0",
+              "creator": {
+                "@id": "https://jawab24.com/#organization"
+              },
+              "keywords": "جواب, jawab, رد تلقائي, auto reply, فيسبوك, إنستغرام, شوبيفاي, سلة, ذكاء اصطناعي, AI chatbot"
             })
           }}
         />
