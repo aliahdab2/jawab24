@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
 import compress from '@fastify/compress';
+import { registerPlugin } from '../utils/register-plugin';
 
 describe('Compression Middleware', () => {
     let server: FastifyInstance;
@@ -9,7 +10,7 @@ describe('Compression Middleware', () => {
         server = fastify();
 
         // Register compression middleware with same config as production
-        await server.register(compress, {
+        await registerPlugin(server, compress, {
             global: true,
             threshold: 1024,
             encodings: ['br', 'gzip', 'deflate'],

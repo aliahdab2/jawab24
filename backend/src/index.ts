@@ -11,6 +11,7 @@ import helmet from "@fastify/helmet";
 import compress from "@fastify/compress";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
+import { registerPlugin } from "./utils/register-plugin";
 import healthRoutes from "./routes/health";
 import authRoutes from "./routes/auth";
 import webhookRoutes from "./routes/webhook";
@@ -137,19 +138,19 @@ const start = async () => {
       ? [config.frontendUrl, ...mobileOrigins]
       : ["http://localhost:3000", "http://localhost:3001", ...mobileOrigins];
 
-    await server.register(cors, {
+    await registerPlugin(server, cors, {
       origin: allowedOrigins,
       credentials: true,
       methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
     });
 
-    await server.register(helmet, {
+    await registerPlugin(server, helmet, {
       contentSecurityPolicy: false, // Disable for API
     });
 
     // Register compression for better performance on poor connections
     // Reduces response sizes by 60-70%
-    await server.register(compress, {
+    await registerPlugin(server, compress, {
       global: true,
       threshold: 1024, // Only compress responses > 1KB
       encodings: ["br", "gzip", "deflate"], // Prefer brotli, fallback to gzip
@@ -164,7 +165,7 @@ const start = async () => {
 
     // Register cookie plugin
     // COOKIE_SECRET is validated at startup via validateEnv() - no fallback needed
-    await server.register(cookie, {
+    await registerPlugin(server, cookie, {
         secret: config.cookieSecret,
         hook: 'onRequest',
         parseOptions: {}
@@ -172,11 +173,11 @@ const start = async () => {
 
     // Register rate limiting
     // Use shared Redis instance for consistency across blue/green deployments
-    await server.register(rateLimit, {
+    await registerPlugin(server, rateLimit, {
       max: 2000, // 2000 requests per 15 minutes
       timeWindow: "15 minutes",
       redis,
-      errorResponseBuilder: (request, context) => ({
+      errorResponseBuilder: (request: { ip: string }, context: { after: string }) => ({
         error: true,
         message: "Rate limit exceeded. Please try again later.",
         code: "RATE_LIMIT_EXCEEDED",

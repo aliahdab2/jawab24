@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import { registerPlugin } from '../utils/register-plugin';
 
 describe('Swagger / OpenAPI smoke test', () => {
     let app: FastifyInstance;
@@ -9,13 +10,13 @@ describe('Swagger / OpenAPI smoke test', () => {
     beforeAll(async () => {
         app = fastify();
 
-        await app.register(swagger, {
+        await registerPlugin(app, swagger, {
             openapi: {
                 info: { title: 'Test API', version: '1.0.0' },
             },
         });
 
-        await app.register(swaggerUi, { routePrefix: '/docs' });
+        await registerPlugin(app, swaggerUi, { routePrefix: '/docs' });
 
         // Add a sample route with schema tags
         app.get(
