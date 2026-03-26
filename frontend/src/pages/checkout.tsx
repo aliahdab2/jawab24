@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import type { Appearance } from '@stripe/stripe-js';
+import type { Appearance, StripeElementLocale } from '@stripe/stripe-js';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 import { useAuthStore } from '@/lib/store';
+import { useLocale } from 'next-intl';
 
 import { Button, BrandLogo } from '@/components/ui';
 import {
@@ -197,6 +198,7 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { planId, interval, theme: themeParam } = router.query;
   const billingInterval = interval === 'year' ? 'year' : 'month';
+  const locale = useLocale();
   const t = useTranslations('checkout');
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
@@ -513,6 +515,7 @@ export default function CheckoutPage() {
                             options={{
                               clientSecret,
                               appearance: getStripeAppearance(isDark),
+                              locale: locale as StripeElementLocale,
                             }}
                           >
                             <PaymentForm
