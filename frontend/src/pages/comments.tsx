@@ -31,6 +31,7 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
+import { isNativePlatform } from '@/lib/capacitor';
 import type { Comment, Page } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
@@ -429,7 +430,7 @@ const CommentsPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={
+        action={!isNativePlatform() ? (
           <div ref={menuRef} className="relative">
             <button
               onClick={() => setMenuOpen(prev => !prev)}
@@ -452,7 +453,7 @@ const CommentsPage: NextPageWithLayout = () => {
               </div>
             )}
           </div>
-        }
+        ) : undefined}
       />
 
       {/* Filter Chips + Search */}

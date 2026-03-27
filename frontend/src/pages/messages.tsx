@@ -29,6 +29,7 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
+import { isNativePlatform } from '@/lib/capacitor';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
@@ -442,7 +443,7 @@ const MessagesPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={
+        action={!isNativePlatform() ? (
           <div ref={menuRef} className="relative">
             <button
               onClick={() => setMenuOpen(prev => !prev)}
@@ -465,7 +466,7 @@ const MessagesPage: NextPageWithLayout = () => {
               </div>
             )}
           </div>
-        }
+        ) : undefined}
       />
 
       {/* Filter Chips + Search */}
