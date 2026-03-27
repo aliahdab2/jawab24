@@ -3,10 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Mock config
 vi.mock('../../src/config', () => ({
     config: {
-        salla: {
+        zid: {
             clientId: '',
             clientSecret: '',
-            hostName: '',
             webhookSecret: '',
             scopes: '',
         },
@@ -31,17 +30,17 @@ vi.mock('../../src/services/ecommerce', () => ({
     cleanupExpiredInstalls: (...args: any[]) => mockCleanupExpiredInstalls(...args),
 }));
 
-// Mock salla service
+// Mock zid service
 const mockRegisterWebhooks = vi.fn().mockResolvedValue(undefined);
 const mockRefreshExpiringTokens = vi.fn().mockResolvedValue(0);
 
-vi.mock('../../src/services/salla', () => ({
+vi.mock('../../src/services/zid', () => ({
     registerWebhooks: (...args: any[]) => mockRegisterWebhooks(...args),
     refreshExpiringTokens: (...args: any[]) => mockRefreshExpiringTokens(...args),
 }));
 
 // Mock routes
-vi.mock('../../src/routes/salla', () => ({
+vi.mock('../../src/routes/zid', () => ({
     default: vi.fn(),
 }));
 
@@ -51,15 +50,21 @@ vi.mock('../../src/workers/ecommerceSyncWorker', () => ({
     setSyncWorkerLogger: vi.fn(),
 }));
 
-import { SallaIntegration } from '../../src/integrations/salla';
+import { ZidIntegration } from '../../src/integrations/zid';
 import { config } from '../../src/config';
 
-describe('SallaIntegration', () => {
-    let integration: SallaIntegration;
+describe('ZidIntegration', () => {
+    let integration: ZidIntegration;
 
     beforeEach(() => {
         vi.clearAllMocks();
-        integration = new SallaIntegration();
+        integration = new ZidIntegration();
+    });
+
+    describe('name', () => {
+        it('should be "zid"', () => {
+            expect(integration.name).toBe('zid');
+        });
     });
 
     describe('isEnabled', () => {
@@ -68,15 +73,9 @@ describe('SallaIntegration', () => {
         });
 
         it('should return true when clientId is set', () => {
-            (config.salla as any).clientId = 'test_client_id';
+            (config.zid as any).clientId = 'test_zid_client_id';
             expect(integration.isEnabled()).toBe(true);
-            (config.salla as any).clientId = '';
-        });
-    });
-
-    describe('name', () => {
-        it('should be "salla"', () => {
-            expect(integration.name).toBe('salla');
+            (config.zid as any).clientId = '';
         });
     });
 
@@ -97,19 +96,19 @@ describe('SallaIntegration', () => {
             expect(result).toBeNull();
         });
 
-        it('should return null when store is not a Salla store', async () => {
+        it('should return null when store is not a Zid store', async () => {
             mockGetStoreById.mockResolvedValue({ id: 'store-1', platform: 'shopify' });
             const result = await integration.enrichKnowledgeBase('some kb', { ecommerceStoreId: 'store-1' });
             expect(result).toBeNull();
         });
 
-        it('should return enriched KB when store is a Salla store', async () => {
-            mockGetStoreById.mockResolvedValue({ id: 'store-1', platform: 'salla' });
-            mockGetEnrichedKnowledgeBase.mockResolvedValue('enriched KB with products');
+        it('should return enriched KB when store is a Zid store', async () => {
+            mockGetStoreById.mockResolvedValue({ id: 'store-1', platform: 'zid' });
+            mockGetEnrichedKnowledgeBase.mockResolvedValue('enriched KB with Zid products');
 
             const result = await integration.enrichKnowledgeBase('page kb', { ecommerceStoreId: 'store-1' });
 
-            expect(result).toBe('enriched KB with products');
+            expect(result).toBe('enriched KB with Zid products');
             expect(mockGetEnrichedKnowledgeBase).toHaveBeenCalledWith('page kb', 'store-1');
         });
     });
@@ -136,7 +135,7 @@ describe('SallaIntegration', () => {
             expect(result).toBeNull();
         });
 
-        it('should return null when pendingSallaId cookie is missing', async () => {
+        it('should return null when pendingZidId cookie is missing', async () => {
             const req = mockRequest({ cookies: {} });
             const result = await integration.claimPendingInstall(req, mockReply(), 'user-1');
             expect(result).toBeNull();
@@ -144,7 +143,7 @@ describe('SallaIntegration', () => {
 
         it('should return null when unsignCookie is not available', async () => {
             const req = mockRequest({
-                cookies: { pendingSallaId: 'some-value' },
+                cookies: { pendingZidId: 'some-value' },
                 unsignCookie: undefined,
             });
             const result = await integration.claimPendingInstall(req, mockReply(), 'user-1');
@@ -153,7 +152,7 @@ describe('SallaIntegration', () => {
 
         it('should return null when cookie signature is invalid', async () => {
             const req = mockRequest({
-                cookies: { pendingSallaId: 'tampered' },
+                cookies: { pendingZidId: 'tampered' },
                 unsignCookie: vi.fn().mockReturnValue({ valid: false, value: null }),
             });
             const result = await integration.claimPendingInstall(req, mockReply(), 'user-1');
@@ -162,28 +161,28 @@ describe('SallaIntegration', () => {
 
         it('should claim pending install and clear cookie on success', async () => {
             const req = mockRequest({
-                cookies: { pendingSallaId: 'signed_pending_id' },
+                cookies: { pendingZidId: 'signed_pending_id' },
                 unsignCookie: vi.fn().mockReturnValue({ valid: true, value: 'pending-uuid-123' }),
             });
             const rep = mockReply();
 
-            mockClaimPendingInstall.mockResolvedValue({ id: 'store-new', storeDomain: 'store.salla.sa' });
+            mockClaimPendingInstall.mockResolvedValue({ id: 'store-new', storeDomain: 'new-store.zid.store' });
 
             const result = await integration.claimPendingInstall(req, rep, 'user-1');
 
             expect(mockClaimPendingInstall).toHaveBeenCalledWith(
                 'pending-uuid-123',
                 'user-1',
-                'salla',
-                expect.any(Function), // registerWebhooksFn callback
+                'zid',
+                expect.any(Function),
             );
-            expect(rep.clearCookie).toHaveBeenCalledWith('pendingSallaId', { path: '/' });
-            expect(result).toEqual({ sallaOnboarding: true, ecommerceStoreId: 'store-new' });
+            expect(rep.clearCookie).toHaveBeenCalledWith('pendingZidId', { path: '/' });
+            expect(result).toEqual({ zidOnboarding: true, ecommerceStoreId: 'store-new' });
         });
 
         it('should return null when claimPendingInstall returns null', async () => {
             const req = mockRequest({
-                cookies: { pendingSallaId: 'signed_pending_id' },
+                cookies: { pendingZidId: 'signed_pending_id' },
                 unsignCookie: vi.fn().mockReturnValue({ valid: true, value: 'non-existent' }),
             });
 
@@ -195,7 +194,7 @@ describe('SallaIntegration', () => {
 
         it('should return null and log error when claim throws', async () => {
             const req = mockRequest({
-                cookies: { pendingSallaId: 'signed_pending_id' },
+                cookies: { pendingZidId: 'signed_pending_id' },
                 unsignCookie: vi.fn().mockReturnValue({ valid: true, value: 'pending-id' }),
             });
 
@@ -208,7 +207,7 @@ describe('SallaIntegration', () => {
     });
 
     describe('onShutdown', () => {
-        it('should clear intervals without error', async () => {
+        it('should clear intervals without error when never started', async () => {
             await expect(integration.onShutdown()).resolves.not.toThrow();
         });
 

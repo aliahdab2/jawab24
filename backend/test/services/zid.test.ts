@@ -105,6 +105,8 @@ import {
     registerWebhooks,
     fetchStoreInfo,
     syncProducts,
+    fullSync,
+    refreshExpiringTokens,
     ZID_WEBHOOK_EVENTS,
 } from '../../src/services/zid';
 
@@ -683,6 +685,83 @@ describe('Zid Service', () => {
             mockGetStoreById.mockResolvedValue(null);
 
             await expect(syncProducts('no-such-store')).rejects.toThrow('Store not found');
+        });
+    });
+
+    // ============================================================
+    // fullSync
+    // ============================================================
+
+    describe('fullSync', () => {
+        it('updates store info and syncs products', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore());
+
+            // fetchStoreInfo response
+            mockFetch
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({
+                        store: {
+                            id: 99,
+                            name: 'Updated Store Name',
+                            email: 'updated@zid.sa',
+                            currency: 'SAR',
+                            domain: 'my-store.zid.store',
+                        },
+                    }),
+                })
+                // syncProducts — products page
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({
+                        store_products: [makeZidProduct()],
+                        meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
+                    }),
+                });
+
+            await fullSync('store-1');
+
+            // Should have called db.update for store info
+            const { db } = await import('../../src/db');
+            expect(db.update).toHaveBeenCalled();
+
+            // Should have called replaceProductsAndRebuildSummary for product sync
+            expect(mockReplaceProductsAndRebuildSummary).toHaveBeenCalled();
+        });
+
+        it('throws when store not found', async () => {
+            mockGetStoreById.mockResolvedValue(null);
+
+            await expect(fullSync('no-such-store')).rejects.toThrow('Store not found');
+        });
+    });
+
+    // ============================================================
+    // refreshExpiringTokens
+    // ============================================================
+
+    describe('refreshExpiringTokens', () => {
+        it('returns 0 when no stores need refresh', async () => {
+            // db.select mock returns empty array by default
+            const count = await refreshExpiringTokens();
+            expect(count).toBe(0);
+        });
+
+        it('captures errors for failed token refreshes and continues', async () => {
+            const { db } = await import('../../src/db');
+            (db.select as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ id: 'store-fail' }]),
+                }),
+            });
+
+            // Make the store lookup fail (simulating an error during refresh)
+            mockGetStoreById.mockResolvedValue(null);
+
+            const count = await refreshExpiringTokens();
+
+            // refreshAccessToken will throw for a store with no token data — captureError should be called
+            expect(count).toBe(0);
         });
     });
 });
