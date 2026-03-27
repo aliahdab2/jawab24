@@ -1,7 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import * as shopifyService from '../services/shopify';
-import { authService } from '../services/auth';
 import { workspaceService } from '../services/workspace';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
@@ -10,41 +9,7 @@ import {
     PENDING_SHOPIFY_COOKIE_OPTIONS,
     SHOPIFY_NONCE_COOKIE_OPTIONS,
 } from '../services/cookies';
-
-// --- Helpers ---
-
-/**
- * Try to get userId from JWT cookie or Bearer header.
- * Returns userId if valid, null if not authenticated.
- * Does NOT throw on missing/expired token.
- */
-function tryGetUserId(request: FastifyRequest): string | null {
-    try {
-        let token: string | undefined;
-
-        // Check Bearer header first (mobile)
-        const authHeader = request.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            token = authHeader.substring(7);
-        }
-        // Check HttpOnly cookie (web)
-        else if (request.cookies.token) {
-            const unsigned = request.unsignCookie(request.cookies.token);
-            if (unsigned.valid && unsigned.value) {
-                token = unsigned.value;
-            } else {
-                return null;
-            }
-        }
-
-        if (!token) return null;
-
-        const payload = authService.verifyToken(token);
-        return payload?.userId || null;
-    } catch {
-        return null;
-    }
-}
+import { tryGetUserId } from '../utils/authHelpers';
 
 // --- OAuth Flow (PUBLIC — no JWT required) ---
 

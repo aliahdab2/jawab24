@@ -16,6 +16,7 @@ import { ecommerceStores } from '../db/schema';
 import { config } from '../config';
 import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
+import { stripHtml } from '../utils/htmlUtils';
 
 // Re-export shared functions for backward compat
 export {
@@ -482,21 +483,6 @@ export function buildVariantSummary(variants: Array<{ title: string; selectedOpt
     return summary;
 }
 
-/**
- * Strip HTML tags and decode common HTML entities.
- */
-function stripHtml(html: string): string {
-    return html
-        .replace(/<[^>]*>/g, '')
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/&nbsp;/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-}
 
 /**
  * Sync store policies (shipping, returns, etc.)

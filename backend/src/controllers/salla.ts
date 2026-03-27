@@ -3,53 +3,19 @@ import crypto from 'crypto';
 import * as sallaService from '../services/salla';
 import {
     getStoreByDomain,
-    getStoreByWorkspace,
-    getStoreByWorkspaceAny,
     createStore,
     deactivateStore,
-    disconnectStore,
-    linkStoreToPage,
-    unlinkStoreFromPage,
-    getProducts,
-    mapToEcommerceStore,
     createPendingInstall,
 } from '../services/ecommerce';
-import { authService } from '../services/auth';
 import { workspaceService } from '../services/workspace';
-import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
 import {
     PENDING_SALLA_COOKIE_OPTIONS,
     SALLA_NONCE_COOKIE_OPTIONS,
 } from '../services/cookies';
-
-// --- Helpers ---
-
-function tryGetUserId(request: FastifyRequest): string | null {
-    try {
-        let token: string | undefined;
-
-        const authHeader = request.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            token = authHeader.substring(7);
-        } else if (request.cookies.token) {
-            const unsigned = request.unsignCookie(request.cookies.token);
-            if (unsigned.valid && unsigned.value) {
-                token = unsigned.value;
-            } else {
-                return null;
-            }
-        }
-
-        if (!token) return null;
-
-        const payload = authService.verifyToken(token);
-        return payload?.userId || null;
-    } catch {
-        return null;
-    }
-}
+import { tryGetUserId } from '../utils/authHelpers';
+import { createEcommerceControllers } from './ecommerceControllers';
 
 // --- OAuth Flow (PUBLIC — no JWT required) ---
 
@@ -203,102 +169,17 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
 
 // --- Protected API (Jawab24 JWT required) ---
 
-export async function getStore(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
-    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    // Return inactive stores too so the frontend can show a Reconnect card
-    const store = await getStoreByWorkspaceAny('salla', req.workspaceId);
-    if (!store) {
-        return reply.status(404).send({ error: 'No Salla store connected' });
-    }
-    return reply.send(mapToEcommerceStore(store));
-}
-
-export async function connectStore(_request: FastifyRequest, reply: FastifyReply) {
-    // Salla doesn't need a shop domain — just return the auth URL
-    const nonce = crypto.randomBytes(16).toString('hex');
-    reply.setCookie('sallaNonce', nonce, SALLA_NONCE_COOKIE_OPTIONS);
-
-    const authUrl = sallaService.buildAuthUrl(nonce);
-    return reply.send({ authUrl });
-}
-
-export async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
-    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await getStoreByWorkspace('salla', req.workspaceId);
-    if (!store) {
-        return reply.status(404).send({ error: 'No Salla store connected' });
-    }
-    await disconnectStore(store.id);
-    return reply.send({ ok: true });
-}
-
-export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
-    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await getStoreByWorkspace('salla', req.workspaceId);
-    if (!store) {
-        return reply.status(404).send({ error: 'No Salla store connected' });
-    }
-
-    const result = await sallaService.fullSync(store.id);
-    return reply.send(result);
-}
-
-export async function getStoreProducts(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
-    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await getStoreByWorkspace('salla', req.workspaceId);
-    if (!store) {
-        return reply.status(404).send({ error: 'No Salla store connected' });
-    }
-
-    const products = await getProducts(store.id);
-    return reply.send({ products, total: products.length });
-}
-
-export async function linkPage(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
-    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { pageId } = request.body as { pageId?: string };
-
-    if (!pageId) {
-        return reply.status(400).send({ error: 'pageId is required' });
-    }
-
-    const store = await getStoreByWorkspace('salla', req.workspaceId);
-    if (!store) {
-        return reply.status(404).send({ error: 'No Salla store connected' });
-    }
-
-    try {
-        await linkStoreToPage(store.id, pageId, req.workspaceId);
-        return reply.send({ ok: true });
-    } catch (error) {
-        if (error instanceof Error && error.message?.includes('does not belong to workspace')) {
-            return reply.status(403).send({ error: 'Page does not belong to workspace' });
-        }
-        throw error;
-    }
-}
-
-export async function unlinkPage(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
-    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const { pageId } = request.body as { pageId?: string };
-
-    if (!pageId) {
-        return reply.status(400).send({ error: 'pageId is required' });
-    }
-
-    try {
-        await unlinkStoreFromPage(pageId, req.workspaceId);
-        return reply.send({ ok: true });
-    } catch (error) {
-        if (error instanceof Error && error.message?.includes('does not belong to workspace')) {
-            return reply.status(403).send({ error: 'Page does not belong to workspace' });
-        }
-        throw error;
-    }
-}
+export const {
+    getStore,
+    connectStore,
+    disconnectStoreHandler,
+    syncStore,
+    getStoreProducts,
+    linkPage,
+    unlinkPage,
+} = createEcommerceControllers('salla', {
+    fullSync: sallaService.fullSync,
+    buildAuthUrl: sallaService.buildAuthUrl,
+    nonceCookieName: 'sallaNonce',
+    nonceCookieOptions: SALLA_NONCE_COOKIE_OPTIONS,
+});

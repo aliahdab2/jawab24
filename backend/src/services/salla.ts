@@ -24,6 +24,7 @@ import {
     updateStoreTokens,
     replaceProductsAndRebuildSummary,
 } from './ecommerce';
+import { stripHtml } from '../utils/htmlUtils';
 
 const MAX_PRODUCTS_PER_PAGE = 65;
 const MAX_PAGES_TO_FETCH = 4; // 260 products max
@@ -180,6 +181,7 @@ export async function getStoresNeedingTokenRefresh() {
 // --- Webhook Verification (hex HMAC, NOT base64) ---
 
 export function verifyWebhookHmac(body: string, signature: string): boolean {
+    if (!config.salla.webhookSecret) return false;
     const hash = crypto
         .createHmac('sha256', config.salla.webhookSecret)
         .update(body, 'utf8')
@@ -328,10 +330,6 @@ interface SallaProduct {
     sku: string | null;
 }
 
-/** Strip HTML tags and collapse whitespace to get plain text from Salla descriptions */
-function stripHtml(html: string): string {
-    return html.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-}
 
 interface SallaProductsResponse {
     data: SallaProduct[];
