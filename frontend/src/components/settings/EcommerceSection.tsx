@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { Card, Button } from '@/components/ui';
-import { ecommerceApi, sallaApi, pagesApi } from '@/lib/api';
+import { ecommerceApi, sallaApi, zidApi, pagesApi } from '@/lib/api';
 import { toast } from 'sonner';
 import {
   ShoppingBag,
@@ -25,7 +25,7 @@ export function EcommerceSection() {
   }, []);
 
   const fetchStore = useCallback(async () => {
-    // Try Shopify first, then Salla
+    // Try Shopify first, then Salla, then Zid
     try {
       const data = await ecommerceApi.getStore();
       if (isMounted.current) setStore(data);
@@ -35,6 +35,13 @@ export function EcommerceSection() {
     }
     try {
       const data = await sallaApi.getStore();
+      if (isMounted.current) setStore(data);
+      return;
+    } catch {
+      // Not a Salla store — try Zid
+    }
+    try {
+      const data = await zidApi.getStore();
       if (isMounted.current) setStore(data);
     } catch {
       if (isMounted.current) setStore(null);
@@ -60,6 +67,7 @@ export function EcommerceSection() {
 
   const getApiForPlatform = (platform?: string) => {
     if (platform === 'salla') return sallaApi;
+    if (platform === 'zid') return zidApi;
     return ecommerceApi;
   };
 

@@ -80,6 +80,9 @@ export const config = {
     zid: {
         clientId: process.env.ZID_CLIENT_ID || '',
         clientSecret: process.env.ZID_CLIENT_SECRET || '',
+        hostName: process.env.ZID_HOST_NAME || '',
+        webhookSecret: process.env.ZID_WEBHOOK_SECRET || '',
+        scopes: 'offline_access products.read orders.read webhooks.manage',
     },
 
     // Stripe Payment

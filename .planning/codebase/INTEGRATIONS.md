@@ -130,13 +130,25 @@
 
 ---
 
-### Zid (Placeholder)
-- **Status**: Configuration defined but not fully integrated
-- **Purpose**: Saudi Arabia e-commerce platform (future integration)
+### Zid
+- **Status**: Fully implemented, production-ready
+- **Purpose**: Saudi Arabia e-commerce platform — product sync + KB enrichment + AI agent tools
+- **Auth Flow**: OAuth2 (same pattern as Salla — redirect flow, no domain input required)
+- **Token Auth**: `X-MANAGER-TOKEN` header (not `Authorization: Bearer`)
+- **Token Expiry**: ~1 year; refresh uses Redis distributed lock (single-use safety)
 - **Configuration**:
   - `ZID_CLIENT_ID` - OAuth app ID
   - `ZID_CLIENT_SECRET` - OAuth secret
-- **Implementation Location**: `/backend/src/integrations/zid.ts` (stub)
+  - `ZID_HOST_NAME` - App hostname for redirect URI
+  - `ZID_WEBHOOK_SECRET` - HMAC secret for webhook verification
+  - `ZID_SCOPES` - Comma-separated OAuth scopes
+- **Implementation**:
+  - Integration: `/backend/src/integrations/zid.ts`
+  - Service: `/backend/src/services/zid.ts`
+  - Controller: `/backend/src/controllers/zid.ts`
+  - Routes: `/backend/src/routes/zid.ts`
+- **Webhook**: `POST /zid/webhooks` — HMAC-verified (SHA256 hex, `X-ZID-SIGNATURE`); handles `app.uninstalled` + product events; resolves store by domain OR `platformData.merchantId` (JSONB fallback)
+- **AI Agent Tools**: `lookupOrder`, `getShipmentTracking`, `checkInventory` via `ecommerceActions.ts`
 
 ---
 
@@ -436,7 +448,7 @@
 | Instagram API | Comments + DM auto-replies | `FACEBOOK_*` env vars | ✅ Production |
 | Shopify | Product sync + KB enrichment | `SHOPIFY_*` env vars | ✅ Production |
 | Salla | Product sync (Middle East) | `SALLA_*` env vars | ✅ Production |
-| Zid | e-commerce (Saudi) | `ZID_*` env vars | ⏳ Planned |
+| Zid | Product sync + KB enrichment (Saudi) | `ZID_*` env vars | ✅ Production |
 | OpenAI | Smart reply generation | `OPENAI_API_KEY` | ✅ Production |
 | Anthropic Claude | Fallback LLM + playground | `ANTHROPIC_API_KEY` | ✅ Fallback only |
 | Stripe | Subscription payments | `STRIPE_*` env vars | ✅ Production |

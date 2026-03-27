@@ -15,11 +15,12 @@
  *   ADMIN_TOKEN=<jwt> npx tsx scripts/ecommerce-integration-test.ts
  *   ADMIN_TOKEN=<jwt> PLATFORM=shopify npx tsx scripts/ecommerce-integration-test.ts
  *   ADMIN_TOKEN=<jwt> PLATFORM=salla npx tsx scripts/ecommerce-integration-test.ts
+ *   ADMIN_TOKEN=<jwt> PLATFORM=zid npx tsx scripts/ecommerce-integration-test.ts
  *
  * Options (env vars):
  *   ADMIN_TOKEN  — Required. JWT token for an authenticated user.
  *   BASE_URL     — Backend base URL. Default: http://localhost:3000
- *   PLATFORM     — Test only this platform: 'shopify' | 'salla' | 'all'. Default: all
+ *   PLATFORM     — Test only this platform: 'shopify' | 'salla' | 'zid' | 'all'. Default: all
  *   VERBOSE      — Set to "1" for detailed output. Default: summary only
  */
 
@@ -297,13 +298,19 @@ async function testKBEnrichment(platform: string, _storeName: string) {
             return { pass: true, detail: 'Skipped — no page linked to store for KB enrichment test' };
         }
 
-        // Ask a product question via playground
+        // Ask a product question via playground — question and matcher are platform-specific
+        const platformQuestion = platform === 'salla'
+            ? 'عندكم عبايات؟'
+            : platform === 'zid'
+                ? 'عندكم منتجات للبيع؟'
+                : 'في لابتوب عندكم؟';
+
         const { status, data } = await api<{
             success: boolean;
             data: { reply: string; replyMethod: string; confidence: string };
         }>('POST', '/admin/ai/playground', {
             pageId: linkedPage.id,
-            question: platform === 'salla' ? 'عندكم عبايات؟' : 'في لابتوب عندكم؟',
+            question: platformQuestion,
             channel: 'dm',
         });
 
@@ -317,7 +324,9 @@ async function testKBEnrichment(platform: string, _storeName: string) {
         // Check if reply contains product-related info
         const hasProductInfo = platform === 'salla'
             ? /عباي|عباية|كلاسيك|450/i.test(reply)
-            : /MacBook|لابتوب|laptop|5,?200/i.test(reply);
+            : platform === 'zid'
+                ? /منتج|سعر|متوفر|ريال|SAR/i.test(reply)
+                : /MacBook|لابتوب|laptop|5,?200/i.test(reply);
 
         return {
             pass: hasProductInfo,
@@ -346,7 +355,7 @@ async function testDisconnectSafety(platform: string, prefix: string) {
 // Main
 // ---------------------------------------------------------------------------
 
-async function runPlatformTests(platform: 'shopify' | 'salla') {
+async function runPlatformTests(platform: 'shopify' | 'salla' | 'zid') {
     const prefix = `/${platform}`;
     console.log(`\n${'═'.repeat(60)}`);
     console.log(`  ${platform.toUpperCase()} Integration Tests`);
@@ -404,6 +413,9 @@ async function main() {
     if (PLATFORM_FILTER === 'all' || PLATFORM_FILTER === 'salla') {
         await runPlatformTests('salla');
     }
+    if (PLATFORM_FILTER === 'all' || PLATFORM_FILTER === 'zid') {
+        await runPlatformTests('zid');
+    }
 
     // Summary
     console.log(`\n${'═'.repeat(60)}`);
@@ -427,6 +439,7 @@ async function main() {
     console.log(`  ${passed}/${total} passed (${pct}%) in ${(totalTime / 1000).toFixed(1)}s`);
     console.log(`  Shopify: ${results.filter(r => r.platform === 'shopify' && r.pass).length}/${results.filter(r => r.platform === 'shopify').length}`);
     console.log(`  Salla:   ${results.filter(r => r.platform === 'salla' && r.pass).length}/${results.filter(r => r.platform === 'salla').length}`);
+    console.log(`  Zid:     ${results.filter(r => r.platform === 'zid' && r.pass).length}/${results.filter(r => r.platform === 'zid').length}`);
 
     process.exit(failed > 0 ? 1 : 0);
 }

@@ -36,6 +36,14 @@ export const INTEGRATIONS: Record<string, Integration> = {
     featureCount: 5,
     faqCount: 4,
   },
+  zid: {
+    slug: 'zid',
+    name: 'Zid',
+    brandColor: '#E94F1C',
+    stepCount: 3,
+    featureCount: 5,
+    faqCount: 4,
+  },
 };
 
 /** Get all integration slugs for static path generation */

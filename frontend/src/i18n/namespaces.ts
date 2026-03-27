@@ -16,7 +16,7 @@ const ADMIN_LAYOUT = ['admin'] as const;
 export const PAGE_NAMESPACES = {
   // ── Public pages ──────────────────────────────────────────────
   landing:            ['landing', 'pricing', 'dataDeletion'],
-  login:              ['auth', 'salla', 'shopify'],
+  login:              ['auth', 'salla', 'shopify', 'zid'],
   index:              ['landing'],
   whatIsJawab24:      ['about'],
   compare:            ['compare'],
@@ -53,7 +53,7 @@ export const PAGE_NAMESPACES = {
   rules:              [...DASHBOARD_LAYOUT, 'rules', 'templates'],
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'team', 'time', 'logout'],
-  integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'salla', 'shopify'],
+  integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'salla', 'shopify', 'zid'],
 
   // ── Admin pages (include ADMIN_LAYOUT) ────────────────────────
   adminWaitlist:      [...ADMIN_LAYOUT],
@@ -65,4 +65,5 @@ export const PAGE_NAMESPACES = {
   // ── Integration onboarding ────────────────────────────────────
   shopifyOnboard:     ['shopify', 'integrations', 'onboarding'],
   sallaOnboard:       ['salla', 'integrations', 'onboarding'],
+  zidOnboard:         ['zid', 'integrations', 'onboarding'],
 } as const;

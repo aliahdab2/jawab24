@@ -68,6 +68,26 @@ export const SALLA_NONCE_COOKIE_OPTIONS = {
     maxAge: 10 * 60,  // 10 minutes
 };
 
+// Zid pending install cookie (lax sameSite for cross-site redirect from Zid)
+export const PENDING_ZID_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax' as const,
+    path: '/',
+    signed: true,
+    maxAge: 30 * 60,  // 30 minutes
+};
+
+// Zid OAuth nonce cookie (CSRF protection during OAuth round-trip)
+export const ZID_NONCE_COOKIE_OPTIONS = {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax' as const,
+    path: '/',
+    signed: true,
+    maxAge: 10 * 60,  // 10 minutes
+};
+
 export class CookiesService {
     /**
      * Set authentication cookies

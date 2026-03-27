@@ -71,6 +71,22 @@ export async function getAllActiveStores(platform?: EcommercePlatform): Promise<
         .where(conditions);
 }
 
+/**
+ * Look up an active store by merchant ID stored in platformData JSONB.
+ * Used as a fallback when a webhook sends a numeric merchant ID instead of a domain.
+ * Example: Zid webhooks send { store_id: "12345" } — we match against platformData->>'merchantId'.
+ */
+export async function getStoreByMerchantId(platform: EcommercePlatform, merchantId: string) {
+    const result = await db.select().from(ecommerceStores).where(
+        and(
+            eq(ecommerceStores.platform, platform),
+            eq(ecommerceStores.isActive, true),
+            sql`${ecommerceStores.platformData}->>'merchantId' = ${merchantId}`,
+        )
+    ).limit(1);
+    return result[0] || null;
+}
+
 /** @deprecated Use getStoreByWorkspace — kept for OAuth flows that lack workspace context */
 export async function getStoreByUserId(platform: EcommercePlatform, userId: string) {
     const result = await db.select().from(ecommerceStores).where(
@@ -235,9 +251,10 @@ export async function unlinkStoreFromPage(pageId: string, workspaceId: string) {
 
 /** Build the public product URL from platform + domain + handle/slug */
 function buildProductUrl(platform: string | undefined, storeDomain: string, handle: string): string {
-    return platform === 'salla'
-        ? `https://${storeDomain}/p/${handle}`
-        : `https://${storeDomain}/products/${handle}`;
+    if (platform === 'salla') return `https://${storeDomain}/p/${handle}`;
+    if (platform === 'zid') return `https://${storeDomain}/products/${handle}`;
+    // shopify + default
+    return `https://${storeDomain}/products/${handle}`;
 }
 
 /**

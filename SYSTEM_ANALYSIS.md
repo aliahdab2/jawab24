@@ -1009,7 +1009,7 @@ Top Products:
 |----------|--------|-------|-------------|--------------|
 | **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL (unlimited) |
 | **Salla** | Active | OAuth 2.0 | 14 days (auto-refresh) | REST, max 260 |
-| **Zid** | **Planned** (schema ready, no code) | - | - | Not yet implemented |
+| **Zid** | **Active** | OAuth 2.0 | ~1 year (auto-refresh via Redis lock) | REST, paginated |
 
 ### Product Sync → Cache Invalidation
 
@@ -1058,7 +1058,7 @@ Products synced from Shopify/Salla
 **المنصات المدعومة:**
 - **Shopify**: نشط، OAuth 2.0، التوكن لا ينتهي أبداً
 - **سلة (Salla)**: نشط، OAuth 2.0، التوكن ينتهي كل 14 يوم (تجديد تلقائي)
-- **زد (Zid)**: المخطط جاهز لكن التكامل لم يُنفذ بعد
+- **زد (Zid)**: نشط، OAuth 2.0، التوكن ينتهي بعد ~سنة (تجديد تلقائي بقفل Redis)
 
 ---
 
@@ -1536,7 +1536,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 | # | Gap | Severity | Impact |
 |---|-----|----------|--------|
-| 1 | Zid e-commerce not implemented | Medium | Zid merchants can't connect |
+| ~~1~~ | ~~Zid e-commerce not implemented~~ | ~~RESOLVED~~ | Full Zid integration shipped — OAuth, sync, KB enrichment, AI agent tools, webhooks |
 | ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
 | 3 | Single-language KB | Medium | Must mix both languages in one text |
 | 4 | Templates not auto-translated | Low | Manual both-language maintenance |

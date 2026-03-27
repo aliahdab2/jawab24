@@ -32,6 +32,18 @@ async function processJob(job: Job<EcommerceSyncJobData>) {
         }
     }
 
+    if (platform === 'zid') {
+        const zidService = await import('../services/zid');
+        switch (jobType) {
+            case 'full_sync':
+                return zidService.fullSync(ecommerceStoreId);
+            case 'product_update':
+                return zidService.syncProducts(ecommerceStoreId);
+            default:
+                throw new Error(`[EcommerceSync] Unknown job type: ${jobType}`);
+        }
+    }
+
     // Default: Shopify
     switch (jobType) {
         case 'full_sync':

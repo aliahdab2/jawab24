@@ -152,6 +152,10 @@ export default function AuthCallback() {
         routerRef.current.replace('/salla/onboarding', '/salla/onboarding', { locale: finalLocale });
         return;
       }
+      if (data.zidOnboarding) {
+        routerRef.current.replace('/zid/onboarding', '/zid/onboarding', { locale: finalLocale });
+        return;
+      }
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {

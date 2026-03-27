@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
-import { ecommerceApi, sallaApi, pagesApi } from '@/lib/api';
+import { ecommerceApi, sallaApi, zidApi, pagesApi } from '@/lib/api';
 import { toast } from 'sonner';
 import {
   ShoppingBag,
@@ -25,6 +25,7 @@ import type { NextPageWithLayout } from './_app';
 function usePlatformT() {
   const tShopify = useTranslations('shopify');
   const tSalla = useTranslations('salla');
+  const tZid = useTranslations('zid');
   const tInt = useTranslations('integrations');
   const tCommon = useTranslations('common');
   return (key: string, params?: Record<string, string | number>): string => {
@@ -34,6 +35,7 @@ function usePlatformT() {
     const k = key.slice(dot + 1);
     if (ns === 'shopify') return params ? tShopify(k, params) : tShopify(k);
     if (ns === 'salla') return params ? tSalla(k, params) : tSalla(k);
+    if (ns === 'zid') return params ? tZid(k, params) : tZid(k);
     if (ns === 'common') return params ? tCommon(k, params) : tCommon(k);
     return params ? tInt(k, params) : tInt(k);
   };
@@ -149,6 +151,39 @@ const PLATFORMS: PlatformConfig[] = [
     linkPageDescKey: 'salla.linkPageDesc',
     requiresDomain: false,
     connectStore: () => sallaApi.connectStore(),
+  },
+  {
+    id: 'zid',
+    nameKey: 'zid.title',
+    descKey: 'integrations.zidDesc',
+    icon: <Store className="w-8 h-8" />,
+    iconClass: 'icon-bg-accent',
+    storeMetaClass: 'status-accent border',
+    getReconnectPath: () => '/zid/auth',
+    getStore: zidApi.getStore,
+    syncProducts: zidApi.syncProducts,
+    disconnectStore: zidApi.disconnectStore,
+    linkPage: zidApi.linkPage,
+    unlinkPage: zidApi.unlinkPage,
+    disconnectConfirmKey: 'zid.disconnectConfirm',
+    syncSuccessKey: 'zid.syncSuccess',
+    syncErrorKey: 'zid.syncError',
+    disconnectedKey: 'zid.disconnected',
+    disconnectErrorKey: 'zid.disconnectError',
+    pageLinkedKey: 'zid.pageLinked',
+    pageLinkErrorKey: 'zid.pageLinkError',
+    pageUnlinkedKey: 'zid.pageUnlinked',
+    pageUnlinkErrorKey: 'zid.pageUnlinkError',
+    productsKey: 'zid.products',
+    lastSyncKey: 'zid.lastSync',
+    syncNowKey: 'zid.syncNow',
+    syncingKey: 'zid.syncing',
+    disconnectKey: 'zid.disconnect',
+    neverKey: 'zid.never',
+    linkPageKey: 'zid.linkPage',
+    linkPageDescKey: 'zid.linkPageDesc',
+    requiresDomain: false,
+    connectStore: () => zidApi.connectStore(),
   },
 ];
 

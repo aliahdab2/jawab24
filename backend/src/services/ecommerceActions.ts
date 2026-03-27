@@ -132,6 +132,9 @@ export async function executeToolCall(
             case 'salla':
                 result = await executeSallaTool(ecommerceStoreId, toolCall);
                 break;
+            case 'zid':
+                result = await executeZidTool(ecommerceStoreId, toolCall);
+                break;
             default:
                 return { tool_name: toolCall.name, success: false, error: 'unsupported_platform' };
         }
@@ -260,6 +263,11 @@ async function executeShopifyTool(storeId: string, toolCall: EcommerceToolCall):
 
 async function executeSallaTool(storeId: string, toolCall: EcommerceToolCall): Promise<EcommerceToolResult> {
     const mod = await import('./salla');
+    return executePlatformTool(mod, storeId, toolCall);
+}
+
+async function executeZidTool(storeId: string, toolCall: EcommerceToolCall): Promise<EcommerceToolResult> {
+    const mod = await import('./zid');
     return executePlatformTool(mod, storeId, toolCall);
 }
 

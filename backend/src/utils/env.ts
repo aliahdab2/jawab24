@@ -49,6 +49,20 @@ const EnvSchema = z.object({
     SHOPIFY_HOST_NAME: z.string().optional(),
     SHOPIFY_TOKEN_ENCRYPTION_KEY: z.string().min(32, 'SHOPIFY_TOKEN_ENCRYPTION_KEY must be at least 32 characters').optional(),
 
+    // Salla (optional — required for Salla integration)
+    SALLA_CLIENT_ID: z.string().optional(),
+    SALLA_CLIENT_SECRET: z.string().optional(),
+    SALLA_HOST_NAME: z.string().optional(),
+    SALLA_WEBHOOK_SECRET: z.string().min(16, 'SALLA_WEBHOOK_SECRET must be at least 16 characters').optional(),
+    SALLA_SCOPES: z.string().optional(),
+
+    // Zid (optional — required for Zid integration)
+    ZID_CLIENT_ID: z.string().optional(),
+    ZID_CLIENT_SECRET: z.string().optional(),
+    ZID_HOST_NAME: z.string().optional(),
+    ZID_WEBHOOK_SECRET: z.string().min(16, 'ZID_WEBHOOK_SECRET must be at least 16 characters').optional(),
+    ZID_SCOPES: z.string().optional(),
+
     // Stripe (optional for development)
     STRIPE_SECRET_KEY: z.string().optional(),
     STRIPE_PUBLISHABLE_KEY: z.string().optional(),

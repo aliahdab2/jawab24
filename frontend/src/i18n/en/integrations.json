@@ -3,6 +3,7 @@
   "subtitle": "Connect your e-commerce store to supercharge Jawab smart replies with real product data",
   "shopifyDesc": "Sync your Shopify product catalog to enrich smart replies with real product info",
   "sallaDesc": "Sync your Salla product catalog to enrich smart replies with real product info",
+  "zidDesc": "Sync your Zid product catalog to enrich smart replies with real product info",
   "disconnectedState": "This store was disconnected. Reconnect to restore smart replies.",
   "reconnect": "Reconnect",
   "notConnected": {
@@ -23,6 +24,11 @@
     "sallaBenefit1": "AI understands your products and answers customer questions accurately",
     "sallaBenefit2": "Products, prices, and stock sync automatically from your store",
     "sallaBenefit3": "Your customers get instant answers 24/7 in Arabic and English",
-    "sallaConnectHint": "You will be redirected to Salla to authorize"
+    "sallaConnectHint": "You will be redirected to Salla to authorize",
+    "zidHeadline": "Connect your Zid store and let Jawab24 answer product questions automatically",
+    "zidBenefit1": "AI understands your products and answers customer questions accurately",
+    "zidBenefit2": "Products, prices, and stock sync automatically from your store",
+    "zidBenefit3": "Your customers get instant answers 24/7 in Arabic and English",
+    "zidConnectHint": "You will be redirected to Zid to authorize"
   }
 }

@@ -621,6 +621,38 @@ export const sallaApi = {
   },
 };
 
+// Zid E-commerce API
+export const zidApi = {
+  getStore: async () => {
+    const response = await api.get('/zid/store');
+    return response.data;
+  },
+  connectStore: async () => {
+    const response = await api.post('/zid/store/connect');
+    return response.data;
+  },
+  disconnectStore: async () => {
+    const response = await api.delete('/zid/store');
+    return response.data;
+  },
+  syncProducts: async () => {
+    const response = await api.post('/zid/store/sync');
+    return response.data;
+  },
+  getProducts: async () => {
+    const response = await api.get('/zid/store/products');
+    return response.data;
+  },
+  linkPage: async (pageId: string) => {
+    const response = await api.patch('/zid/store/link-page', { pageId });
+    return response.data;
+  },
+  unlinkPage: async (pageId: string) => {
+    const response = await api.patch('/zid/store/unlink-page', { pageId });
+    return response.data;
+  },
+};
+
 // Workspace API
 export const workspaceApi = {
   list: () => api.get('/workspaces'),

@@ -31,6 +31,7 @@ export default function LoginPage() {
   const tc = useTranslations('common');
   const tShopify = useTranslations('shopify');
   const tSalla = useTranslations('salla');
+  const tZid = useTranslations('zid');
   const locale = useLocale();
   const { setLanguage } = useLanguage();
   const { isAuthenticated, _hasHydrated } = useAuthStore();
@@ -369,6 +370,41 @@ export default function LoginPage() {
                   <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
                     <p className="font-bold text-red-900 dark:text-red-300 text-sm">
                       {tSalla('errorAuthFailed')}
+                    </p>
+                  </div>
+                )}
+
+                {/* Zid-first install banner */}
+                {urlParams?.get('zid_pending') === 'true' && (
+                  <div className="p-4 rounded-2xl bg-teal-50 dark:bg-teal-900/30 border border-teal-200 dark:border-teal-700">
+                    <div className="flex gap-3 items-start">
+                      <div className="w-10 h-10 rounded-xl bg-teal-100 dark:bg-teal-800/40 flex items-center justify-center flex-shrink-0">
+                        <ShoppingBag className="w-5 h-5 text-teal-700 dark:text-teal-400" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-teal-900 dark:text-teal-300 text-sm">
+                          {tZid('installDetected')}
+                        </p>
+                        <p className="text-teal-700 dark:text-teal-400 text-sm mt-1">
+                          {tZid('loginToConnect')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {urlParams?.get('zid_error') === 'already_connected' && (
+                  <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
+                    <p className="font-bold text-red-900 dark:text-red-300 text-sm">
+                      {tZid('errorAlreadyConnected')}
+                    </p>
+                  </div>
+                )}
+
+                {urlParams?.get('zid_error') === 'auth_failed' && (
+                  <div className="p-4 rounded-2xl bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700">
+                    <p className="font-bold text-red-900 dark:text-red-300 text-sm">
+                      {tZid('errorAuthFailed')}
                     </p>
                   </div>
                 )}
