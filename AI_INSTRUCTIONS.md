@@ -140,6 +140,21 @@ Public pages must render full HTML on the server. Never wrap content in hydratio
 
 Away/greeting messages auto-translated on save via `backend/src/services/translation.ts`. Both `*_ar` and `*_en` stored; system picks by customer language.
 
+### 14. Documentation — Keep In Sync
+
+After any feature addition, integration, or architectural change, update these docs **in the same commit**:
+
+| Doc | Update when |
+|-----|-------------|
+| `SYSTEM_ANALYSIS.md` | New platform, resolved gap, changed status |
+| `.planning/codebase/INTEGRATIONS.md` | New/changed integration details |
+| `.planning/codebase/ARCHITECTURE.md` | Structural changes to how the system is built |
+
+Rules:
+- Never leave a doc saying "Planned" or "Not implemented" after shipping the feature
+- Never leave a gap table entry un-struck after fixing the gap
+- Doc update belongs in the **same commit** as the code — not a follow-up
+
 ---
 
 ## Common Commands
