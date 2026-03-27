@@ -32,6 +32,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { getPageExternalUrl } from '@/utils/pageUrl';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
@@ -562,19 +563,8 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Inbox: Comments + Messages side by side */}
       {(() => {
-        // Shared time-label helper for both sections
-        const getTimeLabel = (date: string | Date | null | undefined) => {
-          if (!date) return '';
-          const d = new Date(typeof date === 'string' ? date : date);
-          const diffMs = Date.now() - d.getTime();
-          const diffMin = Math.floor(diffMs / 60_000);
-          const diffHr = Math.floor(diffMs / 3_600_000);
-          const diffDay = Math.floor(diffMs / 86_400_000);
-          if (diffMin < 1) return tTime('justNow');
-          if (diffMin < 60) return tTime('minutesAgo', { count: diffMin });
-          if (diffHr < 24) return tTime('hoursAgo', { count: diffHr });
-          return tTime('daysAgo', { count: diffDay });
-        };
+        const getTimeLabel = (date: string | Date | null | undefined) =>
+          formatRelativeTime(date, tTime);
 
         // Determine max items to show — cap at 5, match shorter column
         const commentItems = recentComments.slice(0, 5);

@@ -61,13 +61,13 @@
     "avgSpeed": "Avg Speed"
   },
   "smartBanner": {
-    "needsAttention": "{count} items need your attention",
+    "needsAttention": "{count, plural, one {# item needs} other {# items need}} your attention",
     "reasonNoReply": "No reply",
-    "viewAllComments": "View {count} comments",
-    "viewAllMessages": "View {count} messages",
-    "viewAllItems": "View all {count} items",
-    "commentsCount": "{count} Comments",
-    "messagesCount": "{count} Messages",
+    "viewAllComments": "View {count, plural, one {# comment} other {# comments}}",
+    "viewAllMessages": "View {count, plural, one {# message} other {# messages}}",
+    "viewAllItems": "View all {count, plural, one {# item} other {# items}}",
+    "commentsCount": "{count, plural, one {# Comment} other {# Comments}}",
+    "messagesCount": "{count, plural, one {# Message} other {# Messages}}",
     "goToComments": "Go to Comments",
     "goToMessages": "Go to Messages",
     "waitingSince": "waiting {time}"

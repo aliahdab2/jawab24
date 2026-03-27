@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useTranslations } from 'next-intl';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 
 // Unified item type for both comments and messages needing attention
 export interface NeedsAttentionItem {
@@ -62,23 +63,6 @@ function getReasonTag(
     return flagReason.replace(/_/g, ' ');
   }
   return tDash('smartBanner.reasonNoReply');
-}
-
-function formatRelativeTime(
-  date: string | Date | null,
-  tTime: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  if (!date) return '';
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const diffMs = Date.now() - d.getTime();
-  const diffMin = Math.floor(diffMs / 60_000);
-  const diffHr = Math.floor(diffMs / 3_600_000);
-  const diffDay = Math.floor(diffMs / 86_400_000);
-
-  if (diffMin < 1) return tTime('justNow');
-  if (diffMin < 60) return tTime('minutesAgo', { count: diffMin });
-  if (diffHr < 24) return tTime('hoursAgo', { count: diffHr });
-  return tTime('daysAgo', { count: diffDay });
 }
 
 export function SmartStatusBanner({

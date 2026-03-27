@@ -34,7 +34,7 @@
     "storeConnected": "تم ربط المتجر!",
     "storeNotFound": "لم يتم العثور على المتجر. حاول التثبيت مرة أخرى من شوبيفاي.",
     "syncingProducts": "جاري مزامنة المنتجات...",
-    "productsSynced": "تمت مزامنة {count} منتج",
+    "productsSynced": "{count, plural, zero {لا منتجات} one {تمت مزامنة منتج واحد} two {تمت مزامنة منتجين} few {تمت مزامنة # منتجات} many {تمت مزامنة # منتج} other {تمت مزامنة # منتج}}",
     "syncError": "فشلت مزامنة المنتجات. يرجى المحاولة مجدداً.",
     "retrySync": "إعادة المزامنة",
     "syncBackground": "سيتم إكمال مزامنة المنتجات في الخلفية",
@@ -52,7 +52,7 @@
     "welcomeBenefit2": "العملاء يحصلون على إجابات فورية ودقيقة — على مدار الساعة",
     "welcomeBenefit3": "المنتجات تُزامن تلقائياً — تستغرق حوالي دقيقتين",
     "welcomeCta": "ابدأ الآن",
-    "doneCheckProducts": "تمت مزامنة {count} منتج",
+    "doneCheckProducts": "{count, plural, zero {لا منتجات} one {تمت مزامنة منتج واحد} two {تمت مزامنة منتجين} few {تمت مزامنة # منتجات} many {تمت مزامنة # منتج} other {تمت مزامنة # منتج}}",
     "doneCheckPage": "تم ربط {name}",
     "doneCheckActive": "الردود التلقائية مفعّلة"
   }

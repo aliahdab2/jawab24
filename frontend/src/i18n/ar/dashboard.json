@@ -61,13 +61,13 @@
     "avgSpeed": "متوسط السرعة"
   },
   "smartBanner": {
-    "needsAttention": "{count} عناصر تحتاج انتباهك",
+    "needsAttention": "{count, plural, zero {لا عناصر تحتاج انتباهك} one {عنصر واحد يحتاج انتباهك} two {عنصران يحتاجان انتباهك} few {# عناصر تحتاج انتباهك} many {# عنصر يحتاج انتباهك} other {# عنصر يحتاج انتباهك}}",
     "reasonNoReply": "بدون رد",
-    "viewAllComments": "عرض {count} تعليقات",
-    "viewAllMessages": "عرض {count} رسائل",
-    "viewAllItems": "عرض جميع العناصر ({count})",
-    "commentsCount": "{count} تعليقات",
-    "messagesCount": "{count} رسائل",
+    "viewAllComments": "{count, plural, zero {لا تعليقات} one {عرض تعليق واحد} two {عرض تعليقين} few {عرض # تعليقات} many {عرض # تعليق} other {عرض # تعليق}}",
+    "viewAllMessages": "{count, plural, zero {لا رسائل} one {عرض رسالة واحدة} two {عرض رسالتين} few {عرض # رسائل} many {عرض # رسالة} other {عرض # رسالة}}",
+    "viewAllItems": "{count, plural, zero {لا عناصر} one {عرض عنصر واحد} two {عرض عنصرين} few {عرض # عناصر} many {عرض # عنصر} other {عرض # عنصر}}",
+    "commentsCount": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليق} other {# تعليق}}",
+    "messagesCount": "{count, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالة} other {# رسالة}}",
     "goToComments": "انتقل للتعليقات",
     "goToMessages": "انتقل للرسائل",
     "waitingSince": "بالانتظار {time}"

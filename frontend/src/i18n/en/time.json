@@ -4,11 +4,8 @@
   "mShort": "m",
   "sShort": "s",
   "justNow": "Just now",
-  "minuteAgo": "1 min ago",
-  "minutesAgo": "{count} min ago",
-  "hourAgo": "1 hour ago",
-  "hoursAgo": "{count} hours ago",
-  "dayAgo": "1 day ago",
-  "daysAgo": "{count} days ago",
-  "weeksAgo": "{count} weeks ago"
+  "minutesAgo": "{count, plural, one {1 min ago} other {# min ago}}",
+  "hoursAgo": "{count, plural, one {1 hour ago} other {# hours ago}}",
+  "daysAgo": "{count, plural, one {1 day ago} other {# days ago}}",
+  "weeksAgo": "{count, plural, one {1 week ago} other {# weeks ago}}"
 }

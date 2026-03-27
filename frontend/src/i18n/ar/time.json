@@ -4,11 +4,8 @@
   "mShort": "د",
   "sShort": "ث",
   "justNow": "الآن",
-  "minuteAgo": "منذ دقيقة",
-  "minutesAgo": "منذ {count} دقيقة",
-  "hourAgo": "منذ ساعة",
-  "hoursAgo": "منذ {count} ساعة",
-  "dayAgo": "منذ يوم",
-  "daysAgo": "منذ {count} يوم",
-  "weeksAgo": "منذ {count} أسبوع"
+  "minutesAgo": "{count, plural, zero {الآن} one {منذ دقيقة} two {منذ دقيقتين} few {منذ # دقائق} many {منذ # دقيقة} other {منذ # دقيقة}}",
+  "hoursAgo": "{count, plural, zero {الآن} one {منذ ساعة} two {منذ ساعتين} few {منذ # ساعات} many {منذ # ساعة} other {منذ # ساعة}}",
+  "daysAgo": "{count, plural, zero {اليوم} one {منذ يوم} two {منذ يومين} few {منذ # أيام} many {منذ # يوم} other {منذ # يوم}}",
+  "weeksAgo": "{count, plural, zero {هذا الأسبوع} one {منذ أسبوع} two {منذ أسبوعين} few {منذ # أسابيع} many {منذ # أسبوع} other {منذ # أسبوع}}"
 }

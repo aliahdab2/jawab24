@@ -17,6 +17,7 @@ import { SwipeableNotificationItem } from './SwipeableNotificationItem';
 import { NotificationFilterPills, FILTER_TYPE_MAP, ACTIONABLE_NOTIFICATION_TYPES, type NotificationFilter } from '../notifications/NotificationFilterPills';
 import { NotificationGroupHeader } from '../notifications/NotificationGroup';
 import { NotificationEmptyState } from '../notifications/NotificationEmptyState';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -256,19 +257,8 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
 
     // ── Handlers ──
 
-    const getRelativeTime = (dateString: string) => {
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffMs = now.getTime() - date.getTime();
-        const diffMins = Math.floor(diffMs / 60000);
-        const diffHours = Math.floor(diffMins / 60);
-        const diffDays = Math.floor(diffHours / 24);
-
-        if (diffMins < 1) return t('justNow');
-        if (diffMins < 60) return t('minutesAgo', { count: diffMins });
-        if (diffHours < 24) return t('hoursAgo', { count: diffHours });
-        return t('daysAgo', { count: diffDays });
-    };
+    const getRelativeTime = (dateString: string) =>
+        formatRelativeTime(dateString, t);
 
     const handleMarkAsRead = async (notificationId: string) => {
         await markNotificationAsRead(notificationId);

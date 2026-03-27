@@ -32,6 +32,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { useWorkspaceRole } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/formatConnectedDate';
+import { formatRelativeTime } from '@/utils/formatRelativeTime';
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
@@ -221,17 +222,7 @@ const PagesPage: NextPageWithLayout = () => {
 
   const formatTime = (epochMs: number) => {
     if (!epochMs) return tc('noData');
-    const diffMs = Date.now() - epochMs;
-    const minutes = Math.floor(diffMs / 60000);
-    if (minutes < 1) return tTime('justNow');
-    if (minutes === 1) return tTime('minuteAgo');
-    if (minutes < 60) return tTime('minutesAgo', { count: minutes });
-    const hours = Math.floor(minutes / 60);
-    if (hours === 1) return tTime('hourAgo');
-    if (hours < 24) return tTime('hoursAgo', { count: hours });
-    const days = Math.floor(hours / 24);
-    if (days === 1) return tTime('dayAgo');
-    return tTime('daysAgo', { count: days });
+    return formatRelativeTime(new Date(epochMs), tTime);
   };
 
   const formatDate = (dateStr: string | null) => formatConnectedDate(dateStr, t, tc('noData'));

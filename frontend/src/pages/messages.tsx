@@ -531,10 +531,7 @@ const MessagesPage: NextPageWithLayout = () => {
         const incomingCount = allMessages.filter(m => m.direction === 'incoming').length;
         return conversations.length !== incomingCount ? (
           <p className="text-xs text-muted-foreground mb-3 -mt-2">
-            {conversations.length === 1
-              ? t('oneConversation', { msgCount: incomingCount })
-              : t('conversationCount', { count: conversations.length, msgCount: incomingCount })
-            }
+            {t('conversationCount', { count: conversations.length, msgCount: incomingCount })}
           </p>
         ) : null;
       })()}
