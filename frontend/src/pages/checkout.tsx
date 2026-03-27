@@ -225,6 +225,7 @@ export default function CheckoutPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
+  const [isNetworkError, setIsNetworkError] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [showMobileSummary, setShowMobileSummary] = useState(false);
 
@@ -278,6 +279,7 @@ export default function CheckoutPage() {
 
     setSessionLoading(true);
     setError('');
+    setIsNetworkError(false);
 
     try {
       const response = await api.post('/payment/create-subscription-intent', {
@@ -304,7 +306,10 @@ export default function CheckoutPage() {
         return;
       }
 
-      setError(errorData?.error || errorData?.message || t('errorInitiateCheckout'));
+      const axiosCode = (err as { code?: string }).code;
+      const isNetwork = axiosCode === 'ERR_NETWORK' || axiosCode === 'ECONNABORTED';
+      setError(isNetwork ? t('errorNetwork') : (errorData?.error || errorData?.message || t('errorInitiateCheckout')));
+      setIsNetworkError(isNetwork);
     } finally {
       setSessionLoading(false);
     }
@@ -389,7 +394,25 @@ export default function CheckoutPage() {
 
           {error && (
             <div className="max-w-4xl mx-auto mb-6 p-4 alert-error border rounded-2xl text-start text-sm">
-              {error}
+              <p>{error}</p>
+              {isNetworkError && (
+                <div className="flex gap-3 mt-3">
+                  <Button
+                    size="sm"
+                    onClick={() => createSession()}
+                    disabled={sessionLoading}
+                  >
+                    {sessionLoading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : t('retry')}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => router.push('/pricing')}
+                  >
+                    {t('cancel')}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
