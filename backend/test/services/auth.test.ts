@@ -428,6 +428,61 @@ describe('Auth Service', () => {
         });
     });
 
+    describe('linkFacebookToUser', () => {
+        it('calls db.update with facebookId and encrypted token', async () => {
+            const { db: mockDb } = await import('../../src/db');
+            const mockSet = vi.fn().mockReturnThis();
+            const mockWhere = vi.fn().mockResolvedValue(undefined);
+            vi.mocked(mockDb.update).mockReturnValue({ set: mockSet } as any);
+            mockSet.mockReturnValue({ where: mockWhere });
+
+            await service.linkFacebookToUser('user-1', 'fb-999', 'raw-token', new Date('2026-12-31'));
+
+            expect(mockDb.update).toHaveBeenCalled();
+            const setArg = mockSet.mock.calls[0][0];
+            expect(setArg.facebookId).toBe('fb-999');
+            // Token stored (encrypted when key is configured, plaintext in test env)
+            expect(setArg.facebookAccessToken).toBeDefined();
+            expect(setArg.facebookTokenExpiresAt).toEqual(new Date('2026-12-31'));
+        });
+
+        it('sets facebookTokenExpiresAt to null when tokenExpiresAt is undefined', async () => {
+            const { db: mockDb } = await import('../../src/db');
+            const mockSet = vi.fn().mockReturnThis();
+            vi.mocked(mockDb.update).mockReturnValue({ set: mockSet } as any);
+            mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+
+            await service.linkFacebookToUser('user-2', 'fb-888', 'token', undefined);
+
+            const setArg = mockSet.mock.calls[0][0];
+            expect(setArg.facebookTokenExpiresAt).toBeNull();
+        });
+
+        it('includes picture when provided', async () => {
+            const { db: mockDb } = await import('../../src/db');
+            const mockSet = vi.fn().mockReturnThis();
+            vi.mocked(mockDb.update).mockReturnValue({ set: mockSet } as any);
+            mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+
+            await service.linkFacebookToUser('user-3', 'fb-777', 'token', undefined, 'https://pic.example.com/me.jpg');
+
+            const setArg = mockSet.mock.calls[0][0];
+            expect(setArg.picture).toBe('https://pic.example.com/me.jpg');
+        });
+
+        it('omits picture when not provided', async () => {
+            const { db: mockDb } = await import('../../src/db');
+            const mockSet = vi.fn().mockReturnThis();
+            vi.mocked(mockDb.update).mockReturnValue({ set: mockSet } as any);
+            mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
+
+            await service.linkFacebookToUser('user-4', 'fb-666', 'token', undefined);
+
+            const setArg = mockSet.mock.calls[0][0];
+            expect(setArg.picture).toBeUndefined();
+        });
+    });
+
     describe('Token round-trip', () => {
         it('should successfully encode and decode token', () => {
             const user = {

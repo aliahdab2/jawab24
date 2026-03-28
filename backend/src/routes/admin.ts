@@ -80,6 +80,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             id: users.id,
                             email: users.email,
                             name: users.name,
+                            phone: users.phone,
                             facebookId: users.facebookId,
                             createdAt: users.createdAt,
                             subscriptionId: subscriptions.id,
@@ -102,9 +103,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     // Apply filters
                     if (search && search.trim().length > 0) {
                         const searchLower = search.trim().toLowerCase();
-                        allUsers = allUsers.filter(u => 
+                        allUsers = allUsers.filter(u =>
                             u.email?.toLowerCase().includes(searchLower) ||
-                            u.name?.toLowerCase().includes(searchLower)
+                            u.name?.toLowerCase().includes(searchLower) ||
+                            u.phone?.toLowerCase().includes(searchLower)
                         );
                     }
 
@@ -127,6 +129,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         id: u.id,
                         email: u.email,
                         name: u.name,
+                        phone: u.phone,
                         facebookId: u.facebookId,
                         createdAt: u.createdAt,
                         subscription: u.subscriptionId ? {
@@ -248,6 +251,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             id: users.id,
                             email: users.email,
                             name: users.name,
+                            phone: users.phone,
                             facebookId: users.facebookId,
                             createdAt: users.createdAt,
                         })

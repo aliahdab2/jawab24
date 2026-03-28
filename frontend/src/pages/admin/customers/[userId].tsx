@@ -15,7 +15,8 @@ interface CustomerDetail {
     id: string;
     email: string | null;
     name: string | null;
-    facebookId: string;
+    phone: string | null;
+    facebookId: string | null;
     createdAt: string | null;
     subscription: {
         id: string;
@@ -195,7 +196,7 @@ export default function AdminCustomerDetailPage() {
     }
 
     return (
-        <AdminLayout title={customer.name || customer.email || 'Customer'}>
+        <AdminLayout title={customer.name || customer.phone || customer.email || 'Customer'}>
             <div className="space-y-6">
                 {/* Header */}
                 <div className="flex items-center gap-4">
@@ -207,10 +208,10 @@ export default function AdminCustomerDetailPage() {
                     </Link>
                     <div>
                         <h1 className="text-2xl font-display font-bold text-foreground">
-                            {customer.name || t('customer.noName')}
+                            {customer.name || customer.phone || t('customer.noName')}
                         </h1>
                         <p className="text-muted-foreground">
-                            {customer.email || t('customer.noEmail')}
+                            {customer.email || customer.phone || t('customer.noEmail')}
                         </p>
                     </div>
                 </div>

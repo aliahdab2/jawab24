@@ -15,7 +15,8 @@ interface Customer {
     id: string;
     email: string | null;
     name: string | null;
-    facebookId: string;
+    phone: string | null;
+    facebookId: string | null;
     createdAt: string | null;
     subscription: {
         id: string;
@@ -259,10 +260,10 @@ export default function AdminCustomersPage() {
                                                     </div>
                                                     <div>
                                                         <div className="font-medium text-foreground">
-                                                            {customer.name || t('customers.noName')}
+                                                            {customer.name || customer.phone || t('customers.noName')}
                                                         </div>
                                                         <div className="text-sm text-muted-foreground">
-                                                            {customer.email || t('customers.noEmail')}
+                                                            {customer.email || customer.phone || t('customers.noEmail')}
                                                         </div>
                                                     </div>
                                                 </div>

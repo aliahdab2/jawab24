@@ -80,7 +80,7 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { 
     onError?.();
   }, [imageSrc, onError]);
 
-  const fallbackInitial = name?.charAt(0) || 'U';
+  const fallbackInitial = name?.replace(/^\+/, '').charAt(0)?.toUpperCase() || 'U';
 
   return (
     <div className="relative w-10 h-10 flex-shrink-0">
@@ -210,7 +210,7 @@ export const Sidebar = memo(function Sidebar() {
 
   // Memoize user data to prevent ProfileAvatar re-renders
   const userPicture = pictureOverride ?? user?.picture;
-  const userName = isDemoUser ? tAuth('demoUserName') : user?.name;
+  const userName = isDemoUser ? tAuth('demoUserName') : (user?.name || user?.phone || undefined);
 
   return (
     <aside
