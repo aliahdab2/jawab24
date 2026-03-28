@@ -201,9 +201,11 @@ export default function AuthCallback() {
       }
 
       // Check if phone is required (PHONE_AUTH_ENABLED and user has no phone yet)
+      // Use preferredLocale (login page locale) not finalLocale (dashboard language) —
+      // phone-collect is part of the auth flow, not the dashboard.
       if (data.requiresPhone) {
         const collectUrl = `/auth/phone-collect?redirect=${encodeURIComponent(safeUrl)}`;
-        routerRef.current.replace(collectUrl, collectUrl, { locale: finalLocale });
+        routerRef.current.replace(collectUrl, collectUrl, { locale: preferredLocale });
         return;
       }
 
