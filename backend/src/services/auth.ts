@@ -205,6 +205,26 @@ export class AuthService {
     }
 
     /**
+     * Link a Facebook account to an existing user (reconnect flow).
+     * Stores the access token with the same encryption used everywhere else.
+     */
+    async linkFacebookToUser(
+        userId: string,
+        facebookId: string,
+        accessToken: string,
+        tokenExpiresAt: Date | undefined,
+        picture?: string,
+    ): Promise<void> {
+        await db.update(users).set({
+            facebookId,
+            facebookAccessToken: this.maybeEncrypt(accessToken),
+            facebookTokenExpiresAt: tokenExpiresAt ?? null,
+            ...(picture && { picture }),
+            updatedAt: new Date(),
+        }).where(eq(users.id, userId));
+    }
+
+    /**
      * Find or create user by phone number (phone OTP login)
      */
     async findOrCreateUserByPhone(phone: string, name?: string): Promise<User> {

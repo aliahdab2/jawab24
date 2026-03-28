@@ -553,15 +553,8 @@ export class AuthController {
             const fbProfile = await facebookService.getUserProfile(longLivedToken);
 
             // 4. Update existing user with Facebook data (don't create a new user)
-            await db.update(users)
-                .set({
-                    facebookId: fbProfile.id,
-                    facebookAccessToken: longLivedToken,
-                    facebookTokenExpiresAt: tokenExpiresAt ?? null,
-                    ...(fbProfile.picture && { picture: fbProfile.picture }),
-                    updatedAt: new Date(),
-                })
-                .where(eq(users.id, userId));
+            // Uses authService so the token is encrypted at rest (same as facebookLogin).
+            await authService.linkFacebookToUser(userId, fbProfile.id, longLivedToken, tokenExpiresAt, fbProfile.picture);
 
             // 5. Sync pages to the user's existing workspace
             const workspaces = await workspaceService.getUserWorkspaces(userId);
