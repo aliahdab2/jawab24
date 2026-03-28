@@ -36,17 +36,19 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
         inputsRef.current[index]?.focus();
     };
 
+    // Shared by handlePaste and iOS SMS autofill (which injects all digits into box 0)
+    const fillAll = (raw: string) => {
+        const digits = raw.slice(0, OTP_LENGTH);
+        const newDigits = Array(OTP_LENGTH).fill('');
+        digits.split('').forEach((char, i) => { newDigits[i] = char; });
+        setDigits(newDigits);
+        emit(newDigits);
+        focusAt(Math.min(digits.length, OTP_LENGTH - 1));
+    };
+
     const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
         const raw = e.target.value.replace(/\D/g, '');
-        // iOS SMS autofill injects all 6 digits into box 0 — spread them across boxes
-        if (raw.length > 1) {
-            const newDigits = Array(OTP_LENGTH).fill('');
-            raw.slice(0, OTP_LENGTH).split('').forEach((char, i) => { newDigits[i] = char; });
-            setDigits(newDigits);
-            emit(newDigits);
-            focusAt(Math.min(raw.length, OTP_LENGTH - 1));
-            return;
-        }
+        if (raw.length > 1) { fillAll(raw); return; }
         const char = raw.slice(-1);
         const newDigits = [...digits];
         newDigits[index] = char;
@@ -76,15 +78,8 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
 
     const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
         e.preventDefault();
-        const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
-        if (!pasted) return;
-        const newDigits = Array(OTP_LENGTH).fill('');
-        pasted.split('').forEach((char, i) => { newDigits[i] = char; });
-        setDigits(newDigits);
-        emit(newDigits);
-        // Focus first empty box after pasted content, or last box if full
-        const nextFocus = Math.min(pasted.length, OTP_LENGTH - 1);
-        focusAt(nextFocus);
+        const raw = e.clipboardData.getData('text').replace(/\D/g, '');
+        if (raw) fillAll(raw);
     };
 
     return (
