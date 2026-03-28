@@ -236,9 +236,10 @@ export class SettingsController {
             if (!updates.dualReplyNudge && updates.dualReplyNudgeMulti) {
                 updates.dualReplyNudge = updates.dualReplyNudgeMulti['en'] || updates.dualReplyNudgeMulti['ar'];
             }
-            // Legacy brandVoiceNotes compatibility
-            if (!updates.brandVoiceNotes && updates.brandVoiceNotesMulti) {
-                updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'];
+            // Legacy brandVoiceNotes compatibility — always derived from multi when multi is present,
+            // so clearing multi also clears the legacy field (prevents stale data on reload).
+            if (updates.brandVoiceNotesMulti !== undefined && updates.brandVoiceNotesMulti !== null) {
+                updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'] || '';
             }
 
             const settings = await settingsService.updateSettings(userId, updates);
