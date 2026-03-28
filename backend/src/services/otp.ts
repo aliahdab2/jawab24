@@ -104,7 +104,7 @@ export class OtpService {
     }
 
     async sendOtp(phone: string, code: string): Promise<void> {
-        const message = `Your Jawab24 verification code is: ${code}. Valid for ${OTP_EXPIRY_MINUTES} minutes.`;
+        const message = `جواب24: رمز التحقق ${code}. صالح ${OTP_EXPIRY_MINUTES} دقائق`;
         await smsService.send(phone, message);
     }
 
