@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef } from 'react';
 import type { KeyboardEvent, ClipboardEvent } from 'react';
 
 const OTP_LENGTH = 6;
@@ -13,16 +13,8 @@ interface OtpInputProps {
 
 export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: OtpInputProps) {
     const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
-    const [digits, setDigits] = useState<string[]>(() =>
-        Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '')
-    );
-
-    // Reset digits when value is cleared externally
-    useEffect(() => {
-        if (value === '') {
-            setDigits(Array(OTP_LENGTH).fill(''));
-        }
-    }, [value]);
+    // Derived directly from value — no internal state, no useEffect needed
+    const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '');
 
     const emit = (newDigits: string[]) => {
         const joined = newDigits.join('');
@@ -38,12 +30,11 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
 
     // Shared by handlePaste and iOS SMS autofill (which injects all digits into box 0)
     const fillAll = (raw: string) => {
-        const digits = raw.slice(0, OTP_LENGTH);
+        const clipped = raw.slice(0, OTP_LENGTH);
         const newDigits = Array(OTP_LENGTH).fill('');
-        digits.split('').forEach((char, i) => { newDigits[i] = char; });
-        setDigits(newDigits);
+        clipped.split('').forEach((char, i) => { newDigits[i] = char; });
         emit(newDigits);
-        focusAt(Math.min(digits.length, OTP_LENGTH - 1));
+        focusAt(Math.min(clipped.length, OTP_LENGTH - 1));
     };
 
     const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,7 +43,6 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
         const char = raw.slice(-1);
         const newDigits = [...digits];
         newDigits[index] = char;
-        setDigits(newDigits);
         emit(newDigits);
         if (char && index < OTP_LENGTH - 1) {
             focusAt(index + 1);
@@ -64,7 +54,6 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
             if (digits[index]) {
                 const newDigits = [...digits];
                 newDigits[index] = '';
-                setDigits(newDigits);
                 emit(newDigits);
             } else if (index > 0) {
                 focusAt(index - 1);
