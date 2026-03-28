@@ -614,7 +614,15 @@ export class AuthController {
 
             if (result !== 'valid') return replyOtpError(result, reply);
 
-            // OTP valid — update user's phone
+            // OTP valid — check phone isn't already owned by a different account
+            const existing = await db.select({ id: users.id })
+                .from(users)
+                .where(eq(users.phone, phone))
+                .limit(1);
+            if (existing.length > 0 && existing[0].id !== userId) {
+                return reply.status(409).send({ error: 'phone_already_linked', message: 'This phone number is already linked to another account' });
+            }
+
             await db.update(users)
                 .set({ phone, phoneVerified: true, updatedAt: new Date() })
                 .where(eq(users.id, userId));

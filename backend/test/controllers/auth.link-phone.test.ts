@@ -69,6 +69,13 @@ describe('AuthController - linkPhone', () => {
             ...overrides,
         } as unknown as AuthenticatedRequest);
 
+    const mockSelectChain = (rows: { id: string }[]) => {
+        const mockLimit = vi.fn().mockResolvedValue(rows);
+        const mockWhere = vi.fn().mockReturnValue({ limit: mockLimit });
+        const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+        (db.select as ReturnType<typeof vi.fn>).mockReturnValue({ from: mockFrom });
+    };
+
     beforeEach(() => {
         vi.clearAllMocks();
         authController = new AuthController();
@@ -77,6 +84,9 @@ describe('AuthController - linkPhone', () => {
             status: vi.fn().mockReturnThis(),
             send: vi.fn().mockReturnThis(),
         };
+
+        // Default: no existing phone conflict
+        mockSelectChain([]);
 
         // Default: db.update chain
         const mockSet = vi.fn().mockReturnThis();
@@ -158,6 +168,31 @@ describe('AuthController - linkPhone', () => {
         expect(mockReply.send).toHaveBeenCalledWith(
             expect.objectContaining({ error: 'invalid_code' })
         );
+    });
+
+    it('returns 409 when phone is already linked to a different account', async () => {
+        vi.mocked(otpService.verifyOtp).mockResolvedValue('valid');
+        mockSelectChain([{ id: 'other-user-xyz' }]); // different user owns this phone
+        const req = makeRequest();
+
+        await authController.linkPhone(req, mockReply as FastifyReply);
+
+        expect(mockReply.status).toHaveBeenCalledWith(409);
+        expect(mockReply.send).toHaveBeenCalledWith(
+            expect.objectContaining({ error: 'phone_already_linked' })
+        );
+        expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it('updates phone and returns success when phone is already linked to the same user', async () => {
+        vi.mocked(otpService.verifyOtp).mockResolvedValue('valid');
+        mockSelectChain([{ id: 'user-abc' }]); // same user re-verifying their own phone
+        const req = makeRequest();
+
+        await authController.linkPhone(req, mockReply as FastifyReply);
+
+        expect(db.update).toHaveBeenCalled();
+        expect(mockReply.send).toHaveBeenCalledWith({ success: true });
     });
 
     it('updates phone and returns success on valid OTP', async () => {
