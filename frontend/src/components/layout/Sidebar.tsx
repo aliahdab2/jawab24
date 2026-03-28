@@ -80,14 +80,18 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { 
     onError?.();
   }, [imageSrc, onError]);
 
-  const fallbackInitial = name?.replace(/^\+/, '').charAt(0)?.toUpperCase() || 'U';
+  // Phone numbers (e.g. +46700224720): use last 2 subscriber digits, not the country code
+  const fallbackInitial = name?.startsWith('+')
+    ? name.slice(-2)
+    : name?.charAt(0)?.toUpperCase() || 'U';
 
   return (
     <div className="relative w-10 h-10 flex-shrink-0">
       {/* Fallback - always rendered, fades out when image loads */}
-      <div 
+      <div
         className={clsx(
-          "absolute inset-0 w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-sm border border-brand-500/20 transition-opacity duration-200",
+          "absolute inset-0 w-10 h-10 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold border border-brand-500/20 transition-opacity duration-200",
+          fallbackInitial.length > 1 ? "text-xs" : "text-sm",
           imageLoaded && imageSrc ? "opacity-0" : "opacity-100"
         )}
       >
@@ -211,6 +215,8 @@ export const Sidebar = memo(function Sidebar() {
   // Memoize user data to prevent ProfileAvatar re-renders
   const userPicture = pictureOverride ?? user?.picture;
   const userName = isDemoUser ? tAuth('demoUserName') : (user?.name || user?.phone || undefined);
+  // Phone-only: no name set, phone is the only identifier — needs LTR direction
+  const isPhoneOnly = !isDemoUser && !user?.name && !!user?.phone;
 
   return (
     <aside
@@ -446,7 +452,12 @@ export const Sidebar = memo(function Sidebar() {
             <ProfileAvatar picture={userPicture} name={userName} onError={handlePictureRefresh} />
             {sidebarOpen && (
               <div className="min-w-0 text-start">
-                <p className="text-sm font-bold text-white truncate leading-tight">{userName}</p>
+                <p
+                  className="text-sm font-bold text-white truncate leading-tight"
+                  dir={isPhoneOnly ? 'ltr' : undefined}
+                >
+                  {userName}
+                </p>
               </div>
             )}
           </div>
