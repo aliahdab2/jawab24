@@ -181,7 +181,7 @@ test.describe('Team Section', () => {
     await expect(page.locator('input[readonly]')).toHaveValue(/mock-invite-token-123/);
   });
 
-  test('validates invalid email', async ({ page }) => {
+  test('validates invalid contact', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page);
     await page.goto('/en/settings');
@@ -193,7 +193,7 @@ test.describe('Team Section', () => {
     await page.getByRole('button', { name: t('team.sendInvite') }).click();
 
     // Should show error toast
-    await expect(page.getByText(t('team.invalidEmail'))).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(t('team.invalidContact'))).toBeVisible({ timeout: 5000 });
   });
 
   test('shows remove button for non-owner members', async ({ page }) => {
