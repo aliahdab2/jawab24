@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js';
 import type { CountryCode } from 'libphonenumber-js';
@@ -68,6 +68,23 @@ export function PhoneInput({
     const [showDropdown, setShowDropdown] = useState(false);
     const inputRef = useRef<HTMLInputElement>(null);
     const dropdownRef = useRef<HTMLDivElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown when tapping/clicking outside (mobile + desktop)
+    useEffect(() => {
+        if (!showDropdown) return;
+        const handleOutside = (e: MouseEvent | TouchEvent) => {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setShowDropdown(false);
+            }
+        };
+        document.addEventListener('mousedown', handleOutside);
+        document.addEventListener('touchstart', handleOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleOutside);
+            document.removeEventListener('touchstart', handleOutside);
+        };
+    }, [showDropdown]);
 
     const computeE164 = (digits: string, country: typeof COUNTRY_OPTIONS[0]) => {
         const withDial = `${country.dial}${digits}`;
@@ -95,7 +112,7 @@ export function PhoneInput({
     };
 
     return (
-        <div className="relative">
+        <div className="relative" ref={containerRef}>
             <div className="flex">
                 {/* Country selector button */}
                 <button

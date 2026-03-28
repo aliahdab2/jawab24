@@ -37,8 +37,17 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
     };
 
     const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-        // Take the last digit typed (handles paste-into-single-box edge case)
-        const char = e.target.value.replace(/\D/g, '').slice(-1);
+        const raw = e.target.value.replace(/\D/g, '');
+        // iOS SMS autofill injects all 6 digits into box 0 — spread them across boxes
+        if (raw.length > 1) {
+            const newDigits = Array(OTP_LENGTH).fill('');
+            raw.slice(0, OTP_LENGTH).split('').forEach((char, i) => { newDigits[i] = char; });
+            setDigits(newDigits);
+            emit(newDigits);
+            focusAt(Math.min(raw.length, OTP_LENGTH - 1));
+            return;
+        }
+        const char = raw.slice(-1);
         const newDigits = [...digits];
         newDigits[index] = char;
         setDigits(newDigits);
@@ -86,7 +95,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
                     ref={el => { inputsRef.current[i] = el; }}
                     type="text"
                     inputMode="numeric"
-                    maxLength={1}
+                    maxLength={i === 0 ? OTP_LENGTH : 1}
                     value={digits[i]}
                     onChange={e => handleChange(i, e)}
                     onKeyDown={e => handleKeyDown(i, e)}
