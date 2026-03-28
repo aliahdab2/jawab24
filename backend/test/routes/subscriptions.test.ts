@@ -5,118 +5,46 @@ import subscriptionsRoutes from '../../src/routes/subscriptions';
 // Mock the subscriptions service
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
-        getUserSubscription: vi.fn().mockResolvedValue({
-            id: 'sub_123',
-            userId: 'user_123',
-            planId: 'plan_business',
-            status: 'active',
-            plan: {
-                id: 'plan_business',
-                name: 'Business',
-                slug: 'business',
-                price: 2500,
-                maxPages: 3,
-                maxAiRepliesPerMonth: 1500,
-            },
-        }),
-        getUsageSummary: vi.fn().mockResolvedValue({
-            currentPeriod: {
-                start: '2024-01-01',
-                end: '2024-02-01',
-            },
-            aiReplies: {
-                used: 500,
-                limit: 1500,
-                remaining: 1000,
-                percentUsed: 33.33,
-            },
-            pages: {
-                used: 2,
-                limit: 3,
-                remaining: 1,
-            },
-            templates: {
-                used: 5,
-                limit: null,
-                remaining: null,
-            },
-            rules: {
-                used: 3,
-                limit: null,
-                remaining: null,
-            },
-            subscription: {
-                plan: {
-                    id: 'plan_business',
-                    name: 'Business',
-                },
-                status: 'active',
-                renewsAt: '2024-02-01',
-            },
-        }),
-        canUseAiReplies: vi.fn().mockResolvedValue({
-            allowed: true,
-            limit: 1500,
-            used: 500,
-            remaining: 1000,
-        }),
-        canAddPage: vi.fn().mockResolvedValue({
-            allowed: true,
-            limit: 3,
-            used: 2,
-            remaining: 1,
-        }),
-        canAddTemplate: vi.fn().mockResolvedValue({
-            allowed: true,
-        }),
-        canAddRule: vi.fn().mockResolvedValue({
-            allowed: true,
-        }),
-        changePlan: vi.fn().mockResolvedValue({
-            id: 'sub_123',
-            userId: 'user_123',
-            planId: 'plan_pro',
-            status: 'active',
-        }),
-        cancelSubscription: vi.fn().mockResolvedValue({
-            id: 'sub_123',
-            userId: 'user_123',
-            status: 'canceled',
-            canceledAt: new Date(),
-        }),
-        pauseSubscription: vi.fn().mockResolvedValue({
-            id: 'sub_123',
-            userId: 'user_123',
-            status: 'paused',
-        }),
-        resumeSubscription: vi.fn().mockResolvedValue({
-            id: 'sub_123',
-            userId: 'user_123',
-            status: 'active',
-        }),
+        getUserSubscription: vi.fn(),
+        getUsageSummary: vi.fn(),
+        canUseAiReplies: vi.fn(),
+        canAddPage: vi.fn(),
+        canAddTemplate: vi.fn(),
+        canAddRule: vi.fn(),
+        changePlan: vi.fn(),
+        cancelSubscription: vi.fn(),
+        pauseSubscription: vi.fn(),
+        resumeSubscription: vi.fn(),
     },
 }));
 
 vi.mock('../../src/services/auth', () => ({
     authService: {
-        getUserById: vi.fn().mockResolvedValue(null),
+        getUserById: vi.fn(),
     },
+    ACCESS_TOKEN_EXPIRY: 900,
 }));
 
-// Mock auth middleware
 vi.mock('../../src/middleware/auth', () => ({
-    authenticate: vi.fn(async (request, reply) => {
-        request.user = { userId: 'user_123' };
-    }),
-    AuthenticatedRequest: {},
+    authenticate: vi.fn((_req: unknown, _reply: unknown, done?: () => void) => done?.()),
 }));
+
 vi.mock('../../src/middleware/workspace', () => ({
-    resolveWorkspace: async (req: any) => {
-        req.workspaceId = 'workspace_123';
-        req.workspaceRole = 'owner';
-    },
+    resolveWorkspace: vi.fn((req: { user?: unknown; workspaceId?: string }, _reply: unknown, done?: () => void) => {
+        req.user = { userId: 'user-abc', isAdmin: false };
+        req.workspaceId = 'ws-abc';
+        done?.();
+    }),
     WorkspaceRequest: {},
     requireRole: () => async () => {},
+}));
+
+vi.mock('../../src/config', () => ({
+    config: {
+        demo: { enabled: false, userFacebookId: 'fb_demo' },
+        phoneAuthEnabled: false,
+        vonage: { apiKey: '', apiSecret: '', senderId: '' },
+    },
 }));
 
 describe('Subscriptions Routes', () => {
@@ -126,125 +54,324 @@ describe('Subscriptions Routes', () => {
         app = Fastify();
         await app.register(subscriptionsRoutes, { prefix: '/api/subscription' });
         await app.ready();
+        vi.clearAllMocks();
     });
 
+    // ── GET / ──────────────────────────────────────────────────────────────────
+
     describe('GET /api/subscription', () => {
-        it('should return current subscription', async () => {
+        it('should return 200 with subscription data on success', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue({
+                id: 'sub_123',
+                userId: 'user-abc',
+                planId: 'plan_business',
+                status: 'active',
+                plan: {
+                    id: 'plan_business',
+                    name: 'Business',
+                    slug: 'business',
+                    price: 2500,
+                    maxPages: 3,
+                    maxAiRepliesPerMonth: 1500,
+                },
+            } as never);
+
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/subscription',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                headers: { authorization: 'Bearer test_token' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.data.id).toBe('sub_123');
             expect(body.data.status).toBe('active');
             expect(body.data.plan.name).toBe('Business');
         });
-    });
 
-    describe('GET /api/subscription/usage', () => {
-        it('should return usage summary', async () => {
+        it('should return 404 when subscription is null', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUserSubscription).mockResolvedValue(null as never);
+
             const response = await app.inject({
                 method: 'GET',
-                url: '/api/subscription/usage',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                url: '/api/subscription',
+                headers: { authorization: 'Bearer test_token' },
             });
 
-            expect(response.statusCode).toBe(200);
-            
+            expect(response.statusCode).toBe(404);
             const body = JSON.parse(response.payload);
-            expect(body.success).toBe(true);
-            expect(body.data.aiReplies.used).toBe(500);
-            expect(body.data.aiReplies.limit).toBe(1500);
-            expect(body.data.pages.used).toBe(2);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('No subscription found');
+        });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUserSubscription).mockRejectedValue(new Error('db error'));
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to fetch subscription');
         });
     });
 
-    describe('GET /api/subscription/limits/ai', () => {
-        it('should return AI limit check result', async () => {
+    // ── GET /usage ─────────────────────────────────────────────────────────────
+
+    describe('GET /api/subscription/usage', () => {
+        it('should return 200 with usage summary on success', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUsageSummary).mockResolvedValue({
+                aiReplies: { used: 500, limit: 1500, remaining: 1000, percentUsed: 33.33 },
+                pages: { used: 2, limit: 3, remaining: 1 },
+            } as never);
+
             const response = await app.inject({
                 method: 'GET',
-                url: '/api/subscription/limits/ai',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                url: '/api/subscription/usage',
+                headers: { authorization: 'Bearer test_token' },
             });
 
             expect(response.statusCode).toBe(200);
-            
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(true);
+            expect(body.data.aiReplies.used).toBe(500);
+            expect(body.data.pages.used).toBe(2);
+        });
+
+        it('should return 404 when usage is null', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUsageSummary).mockResolvedValue(null as never);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/usage',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(404);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('No usage data found');
+        });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.getUsageSummary).mockRejectedValue(new Error('db error'));
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/usage',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to fetch usage');
+        });
+    });
+
+    // ── GET /limits/ai ─────────────────────────────────────────────────────────
+
+    describe('GET /api/subscription/limits/ai', () => {
+        it('should return 200 with AI limit data on success', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+                allowed: true,
+                limit: 1500,
+                used: 500,
+                remaining: 1000,
+            } as never);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/limits/ai',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(200);
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.data.allowed).toBe(true);
             expect(body.data.remaining).toBe(1000);
         });
+
+        it('should return {allowed:true} for demo user when demo mode is enabled', async () => {
+            const configMod = await import('../../src/config');
+            const authMod = await import('../../src/services/auth');
+
+            // Enable demo mode for this test
+            (configMod.config as { demo: { enabled: boolean; userFacebookId: string } }).demo.enabled = true;
+            vi.mocked(authMod.authService.getUserById).mockResolvedValue({
+                id: 'user-abc',
+                facebookId: 'fb_demo',
+            } as never);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/limits/ai',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            // Restore demo mode
+            (configMod.config as { demo: { enabled: boolean; userFacebookId: string } }).demo.enabled = false;
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(true);
+            expect(body.data.allowed).toBe(true);
+        });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canUseAiReplies).mockRejectedValue(new Error('limit check failed'));
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/limits/ai',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to check limits');
+        });
     });
 
+    // ── GET /limits/pages ──────────────────────────────────────────────────────
+
     describe('GET /api/subscription/limits/pages', () => {
-        it('should return page limit check result', async () => {
+        it('should return 200 on success', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canAddPage).mockResolvedValue({
+                allowed: true,
+                limit: 3,
+                used: 2,
+                remaining: 1,
+            } as never);
+
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/subscription/limits/pages',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                headers: { authorization: 'Bearer test_token' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.data.allowed).toBe(true);
             expect(body.data.limit).toBe(3);
             expect(body.data.used).toBe(2);
         });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canAddPage).mockRejectedValue(new Error('error'));
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/limits/pages',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+        });
     });
 
+    // ── GET /limits/templates ──────────────────────────────────────────────────
+
     describe('GET /api/subscription/limits/templates', () => {
-        it('should return template limit check result', async () => {
+        it('should return 200 on success', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canAddTemplate).mockResolvedValue({ allowed: true } as never);
+
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/subscription/limits/templates',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                headers: { authorization: 'Bearer test_token' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.data.allowed).toBe(true);
         });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canAddTemplate).mockRejectedValue(new Error('error'));
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/limits/templates',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+        });
     });
 
+    // ── GET /limits/rules ─────────────────────────────────────────────────────
+
     describe('GET /api/subscription/limits/rules', () => {
-        it('should return rule limit check result', async () => {
+        it('should return 200 on success', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canAddRule).mockResolvedValue({ allowed: true } as never);
+
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/subscription/limits/rules',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                headers: { authorization: 'Bearer test_token' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.data.allowed).toBe(true);
         });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.canAddRule).mockRejectedValue(new Error('error'));
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/api/subscription/limits/rules',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+        });
     });
 
+    // ── POST /change-plan ─────────────────────────────────────────────────────
+
     describe('POST /api/subscription/change-plan', () => {
-        it('should change subscription plan', async () => {
+        it('should return 200 on successful plan change', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.changePlan).mockResolvedValue({
+                id: 'sub_123',
+                userId: 'user-abc',
+                planId: 'plan_pro',
+                status: 'active',
+            } as never);
+
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/subscription/change-plan',
@@ -252,13 +379,10 @@ describe('Subscriptions Routes', () => {
                     authorization: 'Bearer test_token',
                     'content-type': 'application/json',
                 },
-                payload: {
-                    planId: 'plan_pro',
-                },
+                payload: { planId: 'plan_pro' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.message).toBe('Plan changed successfully');
@@ -276,15 +400,61 @@ describe('Subscriptions Routes', () => {
             });
 
             expect(response.statusCode).toBe(400);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(false);
             expect(body.error).toBe('Plan ID is required');
         });
+
+        it('should return 400 when changePlan returns null', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.changePlan).mockResolvedValue(null as never);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/change-plan',
+                headers: {
+                    authorization: 'Bearer test_token',
+                    'content-type': 'application/json',
+                },
+                payload: { planId: 'plan_pro' },
+            });
+
+            expect(response.statusCode).toBe(400);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to change plan');
+        });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.changePlan).mockRejectedValue(new Error('unexpected db failure'));
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/change-plan',
+                headers: {
+                    authorization: 'Bearer test_token',
+                    'content-type': 'application/json',
+                },
+                payload: { planId: 'plan_pro' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+        });
     });
 
+    // ── POST /cancel ──────────────────────────────────────────────────────────
+
     describe('POST /api/subscription/cancel', () => {
-        it('should cancel subscription', async () => {
+        it('should return 200 on successful cancellation', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.cancelSubscription).mockResolvedValue({
+                id: 'sub_123',
+                status: 'canceled',
+            } as never);
+
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/subscription/cancel',
@@ -292,55 +462,166 @@ describe('Subscriptions Routes', () => {
                     authorization: 'Bearer test_token',
                     'content-type': 'application/json',
                 },
-                payload: {
-                    reason: 'Too expensive',
-                },
+                payload: { reason: 'Too expensive' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.message).toBe('Subscription canceled');
             expect(body.data.status).toBe('canceled');
         });
+
+        it('should return 400 when cancelSubscription returns null', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.cancelSubscription).mockResolvedValue(null as never);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/cancel',
+                headers: {
+                    authorization: 'Bearer test_token',
+                    'content-type': 'application/json',
+                },
+                payload: {},
+            });
+
+            expect(response.statusCode).toBe(400);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to cancel subscription');
+        });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.cancelSubscription).mockRejectedValue(new Error('db error'));
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/cancel',
+                headers: {
+                    authorization: 'Bearer test_token',
+                    'content-type': 'application/json',
+                },
+                payload: {},
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to cancel subscription');
+        });
     });
 
+    // ── POST /pause ───────────────────────────────────────────────────────────
+
     describe('POST /api/subscription/pause', () => {
-        it('should pause subscription', async () => {
+        it('should return 200 on successful pause', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.pauseSubscription).mockResolvedValue({
+                id: 'sub_123',
+                status: 'paused',
+            } as never);
+
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/subscription/pause',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                headers: { authorization: 'Bearer test_token' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.message).toBe('Subscription paused');
             expect(body.data.status).toBe('paused');
         });
+
+        it('should return 400 when pauseSubscription returns null', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.pauseSubscription).mockResolvedValue(null as never);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/pause',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(400);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to pause subscription');
+        });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.pauseSubscription).mockRejectedValue(new Error('error'));
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/pause',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to pause subscription');
+        });
     });
 
+    // ── POST /resume ──────────────────────────────────────────────────────────
+
     describe('POST /api/subscription/resume', () => {
-        it('should resume subscription', async () => {
+        it('should return 200 on successful resume', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.resumeSubscription).mockResolvedValue({
+                id: 'sub_123',
+                status: 'active',
+            } as never);
+
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/subscription/resume',
-                headers: {
-                    authorization: 'Bearer test_token',
-                },
+                headers: { authorization: 'Bearer test_token' },
             });
 
             expect(response.statusCode).toBe(200);
-            
             const body = JSON.parse(response.payload);
             expect(body.success).toBe(true);
             expect(body.message).toBe('Subscription resumed');
             expect(body.data.status).toBe('active');
+        });
+
+        it('should return 400 when resumeSubscription returns null', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.resumeSubscription).mockResolvedValue(null as never);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/resume',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(400);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to resume subscription');
+        });
+
+        it('should return 500 when service throws', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.resumeSubscription).mockRejectedValue(new Error('error'));
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/subscription/resume',
+                headers: { authorization: 'Bearer test_token' },
+            });
+
+            expect(response.statusCode).toBe(500);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(false);
+            expect(body.error).toBe('Failed to resume subscription');
         });
     });
 });
@@ -362,9 +643,7 @@ describe('Subscription Edge Cases', () => {
     it('should handle trial expiration scenario', () => {
         const trialEnd = new Date('2024-01-01');
         const now = new Date('2024-01-15');
-        
         const isExpired = trialEnd < now;
-        
         expect(isExpired).toBe(true);
     });
 
@@ -376,10 +655,7 @@ describe('Subscription Edge Cases', () => {
                 remaining: null,
             },
         };
-
-        // Unlimited means no cap
         expect(usage.templates.limit).toBeNull();
         expect(usage.templates.remaining).toBeNull();
     });
 });
-

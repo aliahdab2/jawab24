@@ -21,6 +21,13 @@ vi.mock('../../src/db/schema', () => ({
     ecommerceStores: { id: 'id', userId: 'user_id', isActive: 'is_active' },
 }));
 
+vi.mock('../../src/config', () => ({
+    config: {
+        phoneAuthEnabled: true,
+        vonage: { apiKey: '', apiSecret: '', senderId: '' },
+    },
+}));
+
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args: unknown[]) => ({ op: 'and', conditions: args })),
@@ -726,6 +733,27 @@ describe('Auth Routes - Login Flow', () => {
             });
 
             expect(response.statusCode).toBe(401);
+        });
+    });
+
+    describe('Phone OTP Routes (phoneAuthEnabled=true)', () => {
+        it('POST /auth/phone/request should be registered', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/phone/request',
+                payload: { phone: '+966500000000' },
+            });
+            // Route exists — not 404. Controller handles the logic (may return any status).
+            expect(response.statusCode).not.toBe(404);
+        });
+
+        it('POST /auth/phone/verify should be registered', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/auth/phone/verify',
+                payload: { phone: '+966500000000', code: '123456' },
+            });
+            expect(response.statusCode).not.toBe(404);
         });
     });
 });
