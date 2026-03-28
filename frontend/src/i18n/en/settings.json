@@ -51,6 +51,7 @@
     "addBrandVoice": "+ Add Brand Voice Notes",
     "hideBrandVoice": "− Hide Brand Voice Notes",
     "brandVoicePlaceholder": "e.g. Always mention free delivery, use customer's name when possible...",
+    "autoTranslated": "Auto-translated — edit to customise",
     "holdLowConfidence": "Review Uncertain Replies",
     "holdLowConfidenceDesc": "Hold low-confidence AI replies for your review before sending"
   },

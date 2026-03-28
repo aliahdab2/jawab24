@@ -63,28 +63,31 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
           const currentLang = settings.dashboardLanguage;
           const value = settings.brandVoiceNotesMulti?.[currentLang] || '';
           const sourceLang = settings.brandVoiceNotesMulti?.sourceLang;
-          const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-          const displayValue = isAutoTranslated ? '' : value;
-          const placeholder = isAutoTranslated && value ? value : t('replyStyle.brandVoicePlaceholder');
+          const isAutoTranslated = !!(sourceLang && sourceLang !== 'manual' && sourceLang !== 'default' && sourceLang !== currentLang && value);
 
           return (
             <>
               <label htmlFor="brandVoiceNotes" className="sr-only">
                 {t('replyStyle.brandVoice')}
               </label>
+              {isAutoTranslated && (
+                <p className="text-xs text-muted-foreground mb-1">
+                  {t('replyStyle.autoTranslated')}
+                </p>
+              )}
               <textarea
                 id="brandVoiceNotes"
                 aria-label={t('replyStyle.brandVoice')}
                 className={clsx(
                   'input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic',
-                  isAutoTranslated && 'placeholder:italic',
-                  currentLang === 'ar' && 'italic italic-arabic',
+                  isAutoTranslated && 'text-muted-foreground italic',
+                  currentLang === 'ar' && 'italic-arabic',
                 )}
-                dir={displayValue ? 'auto' : undefined}
+                dir="auto"
                 maxLength={500}
                 rows={3}
-                placeholder={placeholder}
-                value={displayValue}
+                placeholder={t('replyStyle.brandVoicePlaceholder')}
+                value={value}
                 onChange={(e) => {
                   const newValue = e.target.value;
                   setSettings({
@@ -98,7 +101,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
                 }}
               />
               <p className="text-xs text-muted-foreground mt-1 text-end">
-                {displayValue.length}/500
+                {value.length}/500
               </p>
             </>
           );
