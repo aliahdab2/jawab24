@@ -83,6 +83,7 @@ export default function LoginPage() {
     return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
   }, []);
 
+
   const handleRequestOtp = useCallback(async () => {
     setPhoneTouched(true);
     if (!phoneValid) return;
@@ -525,151 +526,140 @@ export default function LoginPage() {
 
                 {/* CTA zone */}
                 <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 dark:from-transparent to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
-                  {PHONE_AUTH_ENABLED ? (
-                    /* ── Phone OTP Login ── */
-                    <div className="space-y-4">
-                      {otpStep === 'phone' ? (
-                        /* Step 1: Enter phone */
-                        <div className="space-y-3">
-                          <div>
-                            <label className="block text-sm font-medium text-foreground/70 mb-2 text-start">
-                              {t('phoneNumber')}
-                            </label>
-                            <PhoneInput
-                              value={phoneE164}
-                              onChange={(e164, valid) => {
-                                setPhoneE164(e164);
-                                setPhoneValid(valid);
-                                setOtpError('');
-                              }}
-                              disabled={otpLoading}
-                              autoFocus
-                              aria-label={t('phoneNumber')}
-                              aria-describedby={phoneTouched && !phoneValid ? 'phone-error' : undefined}
-                            />
-                            {phoneTouched && !phoneValid && (
-                              <p id="phone-error" className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
-                                {t('invalidPhone')}
-                              </p>
-                            )}
-                          </div>
-                          {otpError && (
-                            <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
-                              {otpError}
-                            </p>
-                          )}
-                          <Button
-                            onClick={handleRequestOtp}
-                            disabled={otpLoading}
-                            size="lg"
-                            className="w-full py-6 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
-                          >
-                            {otpLoading ? (
-                              <span className="flex items-center justify-center gap-2">
-                                <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                                {t('sendingCode')}
-                              </span>
-                            ) : (
-                              <span className="flex items-center justify-center gap-2">
-                                <Phone className="w-5 h-5" aria-hidden="true" />
-                                {t('sendCode')}
-                              </span>
-                            )}
-                          </Button>
-                          {/* Fallback Facebook login */}
+                  <div className="space-y-4">
+
+                    {/* PRIMARY: Facebook — always shown, always prominent */}
+                    {otpStep === 'phone' && (
+                      <Button
+                        onClick={handleFacebookLogin}
+                        disabled={isRedirecting || otpLoading}
+                        size="lg"
+                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                      >
+                        <div className="flex items-center justify-center gap-3 text-white">
+                          <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
+                          <span className="text-white">{t('loginWithFacebook')}</span>
+                        </div>
+                      </Button>
+                    )}
+
+                    {/* SECONDARY: Phone OTP — only when enabled */}
+                    {PHONE_AUTH_ENABLED && (
+                      <>
+                        {otpStep === 'phone' && (
                           <div className="flex items-center gap-3">
                             <div className="flex-1 h-px bg-theme-border" />
                             <span className="text-xs font-medium text-muted-foreground">{t('or')}</span>
                             <div className="flex-1 h-px bg-theme-border" />
                           </div>
-                          <Button
-                            onClick={handleFacebookLogin}
-                            disabled={isRedirecting || otpLoading}
-                            variant="ghost"
-                            size="lg"
-                            className="w-full rounded-2xl font-bold"
-                          >
-                            <span className="flex items-center justify-center gap-2">
-                              <FacebookIcon className="w-5 h-5" aria-hidden="true" />
-                              {t('orLoginWithFacebook')}
-                            </span>
-                          </Button>
-                        </div>
-                      ) : (
-                        /* Step 2: Enter OTP code */
-                        <div className="space-y-4">
-                          <div className="text-center">
-                            <p className="text-sm text-muted-foreground mb-1">{t('otpSubtitle')}</p>
-                            <p className="font-bold text-foreground" dir="ltr">{phoneE164}</p>
-                          </div>
-                          <OtpInput
-                            value={otpCode}
-                            onChange={code => { setOtpCode(code); setOtpError(''); }}
-                            disabled={otpLoading}
-                            autoFocus
-                          />
-                          {otpError && (
-                            <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
-                              {otpError}
-                            </p>
-                          )}
-                          <Button
-                            onClick={handleVerifyOtp}
-                            disabled={otpLoading || otpCode.length !== 6}
-                            size="lg"
-                            className="w-full py-6 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
-                          >
-                            {otpLoading ? (
-                              <span className="flex items-center justify-center gap-2">
-                                <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                                {t('verifyingCode')}
-                              </span>
-                            ) : t('verifyCode')}
-                          </Button>
-                          <div className="flex items-center justify-between text-sm">
-                            <button
-                              type="button"
-                              onClick={() => { setOtpStep('phone'); setOtpError(''); setOtpCode(''); }}
-                              className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                        )}
+
+                        {otpStep === 'phone' ? (
+                          /* Step 1: phone number */
+                          <div className="space-y-3">
+                            <div>
+                              <label className="block text-sm font-medium text-foreground/70 mb-2 text-start">
+                                {t('phoneNumber')}
+                              </label>
+                              <PhoneInput
+                                value={phoneE164}
+                                onChange={(e164, valid) => {
+                                  setPhoneE164(e164);
+                                  setPhoneValid(valid);
+                                  setOtpError('');
+                                }}
+                                disabled={otpLoading}
+                                aria-label={t('phoneNumber')}
+                                aria-describedby={phoneTouched && !phoneValid ? 'phone-error' : undefined}
+                              />
+                              {phoneTouched && !phoneValid && (
+                                <p id="phone-error" className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+                                  {t('invalidPhone')}
+                                </p>
+                              )}
+                            </div>
+                            {otpError && (
+                              <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
+                                {otpError}
+                              </p>
+                            )}
+                            <Button
+                              onClick={handleRequestOtp}
+                              disabled={otpLoading}
+                              variant="outline"
+                              size="lg"
+                              className="w-full rounded-2xl font-bold"
                             >
-                              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-                              {t('changePhone')}
-                            </button>
-                            {resendCountdown > 0 ? (
-                              <span className="text-muted-foreground">
-                                {t('resendIn', { seconds: resendCountdown })}
-                              </span>
-                            ) : (
+                              {otpLoading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                                  {t('sendingCode')}
+                                </span>
+                              ) : (
+                                <span className="flex items-center justify-center gap-2">
+                                  <Phone className="w-5 h-5" aria-hidden="true" />
+                                  {t('sendCode')}
+                                </span>
+                              )}
+                            </Button>
+                          </div>
+                        ) : (
+                          /* Step 2: OTP code — auto-submits on 6th digit */
+                          <div className="space-y-4">
+                            <div className="text-center">
+                              <p className="text-sm text-muted-foreground mb-1">{t('otpSubtitle')}</p>
+                              <p className="font-bold text-foreground" dir="ltr">{phoneE164}</p>
+                            </div>
+                            <OtpInput
+                              value={otpCode}
+                              onChange={code => { setOtpCode(code); setOtpError(''); }}
+                              onComplete={handleVerifyOtp}
+                              disabled={otpLoading}
+                              autoFocus
+                            />
+                            {otpLoading && (
+                              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                                {t('verifyingCode')}
+                              </div>
+                            )}
+                            {otpError && (
+                              <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
+                                {otpError}
+                              </p>
+                            )}
+                            <div className="flex items-center justify-between text-sm">
                               <button
                                 type="button"
-                                onClick={handleRequestOtp}
-                                disabled={otpLoading}
-                                className="text-brand-600 dark:text-brand-400 font-medium hover:underline disabled:opacity-50"
+                                onClick={() => { setOtpStep('phone'); setOtpError(''); setOtpCode(''); }}
+                                className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
                               >
-                                {t('resendCode')}
+                                <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                                {t('changePhone')}
                               </button>
-                            )}
+                              {resendCountdown > 0 ? (
+                                <span className="text-muted-foreground">
+                                  {t('resendIn', { seconds: resendCountdown })}
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={handleRequestOtp}
+                                  disabled={otpLoading}
+                                  className="text-brand-600 dark:text-brand-400 font-medium hover:underline disabled:opacity-50"
+                                >
+                                  {t('resendCode')}
+                                </button>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    /* ── Facebook Login (default) ── */
-                    <Button
-                      onClick={handleFacebookLogin}
-                      disabled={isRedirecting}
-                      size="lg"
-                      className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
-                    >
-                      <div className="flex items-center justify-center gap-3 text-white">
-                        <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
-                        <span className="text-white">{t('loginWithFacebook')}</span>
-                      </div>
-                    </Button>
-                  )}
+                        )}
+                      </>
+                    )}
 
-                  {/* Demo Mode - Self-contained component (only renders when enabled) */}
-                  <DemoLoginButton />
+                    {/* Demo Mode */}
+                    <DemoLoginButton />
+                  </div>
                 </div>
               </div>
             </div>

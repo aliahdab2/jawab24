@@ -211,6 +211,7 @@ export default function PhoneCollectPage() {
                             <OtpInput
                                 value={otpCode}
                                 onChange={code => { setOtpCode(code); setError(''); }}
+                                onComplete={handleLinkPhone}
                                 disabled={loading}
                                 autoFocus
                             />

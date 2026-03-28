@@ -23,10 +23,23 @@ const COUNTRY_OPTIONS = [
     { code: 'US' as CountryCode, dial: '+1', flag: '🇺🇸', name: 'USA', nameAr: 'الولايات المتحدة' },
 ];
 
-// Default country based on locale: Arabic → Saudi Arabia, otherwise Saudi Arabia
-const LOCALE_TO_COUNTRY: Record<string, CountryCode> = {
-    ar: 'SA',
-    en: 'SA',
+// Detect default country from browser timezone — more accurate than locale
+const TIMEZONE_TO_COUNTRY: Record<string, CountryCode> = {
+    'Asia/Riyadh': 'SA', 'Asia/Dubai': 'AE', 'Asia/Damascus': 'SY',
+    'Asia/Amman': 'JO', 'Asia/Kuwait': 'KW', 'Asia/Bahrain': 'BH',
+    'Asia/Qatar': 'QA', 'Asia/Muscat': 'OM', 'Africa/Cairo': 'EG',
+    'Asia/Baghdad': 'IQ', 'Asia/Beirut': 'LB', 'Europe/Istanbul': 'TR',
+    'Europe/Stockholm': 'SE', 'Europe/London': 'GB', 'America/New_York': 'US',
+    'America/Chicago': 'US', 'America/Los_Angeles': 'US',
+};
+
+const getDefaultCountry = (): CountryCode => {
+    try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        return TIMEZONE_TO_COUNTRY[tz] ?? 'SA';
+    } catch {
+        return 'SA';
+    }
 };
 
 interface PhoneInputProps {
@@ -47,10 +60,9 @@ export function PhoneInput({
 }: PhoneInputProps) {
     const locale = useLocale();
     const isRTL = isRTLLocale(locale);
-    const defaultCode = LOCALE_TO_COUNTRY[locale] ?? 'SA';
 
     const [selectedCountry, setSelectedCountry] = useState(
-        () => COUNTRY_OPTIONS.find(c => c.code === defaultCode) ?? COUNTRY_OPTIONS[0]
+        () => COUNTRY_OPTIONS.find(c => c.code === getDefaultCountry()) ?? COUNTRY_OPTIONS[0]
     );
     const [localValue, setLocalValue] = useState('');
     const [showDropdown, setShowDropdown] = useState(false);

@@ -6,11 +6,12 @@ const OTP_LENGTH = 6;
 interface OtpInputProps {
     value: string;
     onChange: (value: string) => void;
+    onComplete?: (value: string) => void;
     disabled?: boolean;
     autoFocus?: boolean;
 }
 
-export function OtpInput({ value, onChange, disabled, autoFocus }: OtpInputProps) {
+export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: OtpInputProps) {
     const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
     const [digits, setDigits] = useState<string[]>(() =>
         Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '')
@@ -24,7 +25,11 @@ export function OtpInput({ value, onChange, disabled, autoFocus }: OtpInputProps
     }, [value]);
 
     const emit = (newDigits: string[]) => {
-        onChange(newDigits.join(''));
+        const joined = newDigits.join('');
+        onChange(joined);
+        if (joined.length === OTP_LENGTH && onComplete) {
+            onComplete(joined);
+        }
     };
 
     const focusAt = (index: number) => {
