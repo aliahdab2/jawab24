@@ -69,6 +69,18 @@ const regularMember = {
   userName: 'Omar', userEmail: 'omar@test.com', userPicture: null,
 };
 
+const pendingEmailInvite = {
+  id: 'inv-1', email: 'ali@test.com', phone: null, role: 'member' as const, status: 'pending',
+  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  createdAt: new Date().toISOString(),
+};
+
+const pendingPhoneInvite = {
+  id: 'inv-2', email: null, phone: '+966501234567', role: 'member' as const, status: 'pending',
+  expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  createdAt: new Date().toISOString(),
+};
+
 describe('TeamSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -85,7 +97,7 @@ describe('TeamSection', () => {
 
   it('shows invite form for owner', async () => {
     renderTeamSection();
-    expect(await screen.findByPlaceholderText('Email address')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)')).toBeInTheDocument();
     expect(await screen.findByText('Invite')).toBeInTheDocument();
   });
 
@@ -105,25 +117,27 @@ describe('TeamSection', () => {
     expect(await screen.findByText('Omar')).toBeInTheDocument();
   });
 
-  it('shows pending invites', async () => {
-    mockInvites.mockResolvedValue({
-      data: [{
-        id: 'inv-1', email: 'ali@test.com', role: 'member', status: 'pending',
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        createdAt: new Date().toISOString(),
-      }],
-    });
+  it('shows pending email invite', async () => {
+    mockInvites.mockResolvedValue({ data: [pendingEmailInvite] });
     renderTeamSection();
 
     expect(await screen.findByText('ali@test.com')).toBeInTheDocument();
     expect(await screen.findByText('Pending')).toBeInTheDocument();
   });
 
-  it('sends invite on button click', async () => {
+  it('shows pending phone invite', async () => {
+    mockInvites.mockResolvedValue({ data: [pendingPhoneInvite] });
+    renderTeamSection();
+
+    expect(await screen.findByText('+966501234567')).toBeInTheDocument();
+    expect(await screen.findByText('Pending')).toBeInTheDocument();
+  });
+
+  it('sends invite with email on button click', async () => {
     mockCreateInvite.mockResolvedValue({ data: { id: 'inv-new' } });
     renderTeamSection();
 
-    const input = await screen.findByPlaceholderText('Email address');
+    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
     fireEvent.change(input, { target: { value: 'new@test.com' } });
 
     const button = screen.getByText('Invite');
@@ -134,17 +148,66 @@ describe('TeamSection', () => {
     });
   });
 
-  it('rejects invalid email', async () => {
+  it('sends invite with phone number on button click', async () => {
+    mockCreateInvite.mockResolvedValue({ data: { id: 'inv-new', token: 'tok123' } });
     renderTeamSection();
 
-    const input = await screen.findByPlaceholderText('Email address');
-    fireEvent.change(input, { target: { value: 'not-an-email' } });
+    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    fireEvent.change(input, { target: { value: '+966501234567' } });
+
+    const button = screen.getByText('Invite');
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(mockCreateInvite).toHaveBeenCalledWith('+966501234567');
+    });
+  });
+
+  it('rejects invalid contact (no + prefix phone)', async () => {
+    renderTeamSection();
+
+    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    fireEvent.change(input, { target: { value: '0501234567' } });
 
     const button = screen.getByText('Invite');
     fireEvent.click(button);
 
     await waitFor(() => {
       expect(mockCreateInvite).not.toHaveBeenCalled();
+    });
+  });
+
+  it('rejects invalid contact (malformed string)', async () => {
+    renderTeamSection();
+
+    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    fireEvent.change(input, { target: { value: 'not-valid' } });
+
+    const button = screen.getByText('Invite');
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(mockCreateInvite).not.toHaveBeenCalled();
+    });
+  });
+
+  it('shows resend button on pending invites', async () => {
+    mockInvites.mockResolvedValue({ data: [pendingEmailInvite] });
+    renderTeamSection();
+
+    expect(await screen.findByText('Resend')).toBeInTheDocument();
+  });
+
+  it('resend calls createInvite with invite contact', async () => {
+    mockCreateInvite.mockResolvedValue({ data: { token: 'newtoken' } });
+    mockInvites.mockResolvedValue({ data: [pendingEmailInvite] });
+    renderTeamSection();
+
+    const resendButton = await screen.findByText('Resend');
+    fireEvent.click(resendButton);
+
+    await waitFor(() => {
+      expect(mockCreateInvite).toHaveBeenCalledWith('ali@test.com');
     });
   });
 
@@ -178,7 +241,6 @@ describe('TeamSection', () => {
   });
 
   it('shows limit reached at max capacity', async () => {
-    // user-1 (current user) must be in the list as owner
     const members = [
       ownerMember,
       ...Array.from({ length: 4 }, (_, i) => ({
@@ -190,6 +252,14 @@ describe('TeamSection', () => {
     renderTeamSection();
 
     expect(await screen.findByText('Member limit reached (5)')).toBeInTheDocument();
+  });
+
+  it('shows member count in header', async () => {
+    mockMembers.mockResolvedValue({ data: [ownerMember, adminMember] });
+    renderTeamSection();
+
+    // Header shows "2 / 5"
+    expect(await screen.findByText('2 / 5')).toBeInTheDocument();
   });
 
   it('shows email below name when both exist', async () => {

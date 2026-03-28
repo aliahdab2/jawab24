@@ -148,16 +148,18 @@ async function createInvite(request: WorkspaceRequest, reply: FastifyReply) {
         if (!request.workspaceId || !request.user) {
             return reply.status(400).send({ error: true, message: 'Workspace not resolved' });
         }
-        const { email, role } = request.body as { email: string; role?: WorkspaceRole };
+        // Accept `contact` (email or phone). Fall back to `email` for backwards compatibility.
+        const body = request.body as { contact?: string; email?: string; role?: WorkspaceRole };
+        const contact = (body.contact ?? body.email ?? '').trim();
 
-        if (!email?.trim()) {
-            return reply.status(400).send({ error: true, message: 'Email is required' });
+        if (!contact) {
+            return reply.status(400).send({ error: true, message: 'Email or phone number is required' });
         }
 
         const { invite, rawToken } = await workspaceInviteService.createInvite(
             request.workspaceId,
-            email.trim().toLowerCase(),
-            role || 'member',
+            contact.toLowerCase(),
+            body.role || 'member',
             request.user.userId,
         );
 

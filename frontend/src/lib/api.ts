@@ -673,8 +673,8 @@ export const workspaceApi = {
   getMembers: () => api.get('/workspaces/current/members'),
   getSettings: () => api.get('/workspaces/current/settings'),
   updateSettings: (data: Record<string, unknown>) => api.put('/workspaces/current/settings', data),
-  createInvite: (email: string, role?: string) =>
-    api.post('/workspaces/current/invites', { email, role }),
+  createInvite: (contact: string, role?: string) =>
+    api.post('/workspaces/current/invites', { contact, role }),
   listInvites: () => api.get('/workspaces/current/invites'),
   revokeInvite: (inviteId: string) =>
     api.delete(`/workspaces/current/invites/${inviteId}`),

@@ -73,7 +73,8 @@ export const workspaceMembers = pgTable('workspace_members', {
 export const workspaceInvites = pgTable('workspace_invites', {
     id: uuid('id').defaultRandom().primaryKey(),
     workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
-    email: varchar('email', { length: 255 }).notNull(),
+    email: varchar('email', { length: 255 }), // nullable — either email or phone must be set
+    phone: varchar('phone', { length: 20 }), // E.164 format (+966xxxxxxxxx)
     tokenHash: varchar('token_hash', { length: 255 }).notNull().unique(),
     role: varchar('role', { length: 20 }).default('member'),
     status: varchar('status', { length: 20 }).default('pending'), // 'pending' | 'accepted' | 'expired' | 'revoked'
@@ -87,6 +88,7 @@ export const workspaceInvites = pgTable('workspace_invites', {
         tokenHashIdx: index('idx_workspace_invites_token_hash').on(table.tokenHash),
         workspaceIdIdx: index('idx_workspace_invites_workspace_id').on(table.workspaceId),
         workspaceEmailUnique: uniqueIndex('idx_workspace_invites_ws_email').on(table.workspaceId, table.email),
+        workspacePhoneUnique: uniqueIndex('idx_workspace_invites_ws_phone').on(table.workspaceId, table.phone),
     };
 });
 

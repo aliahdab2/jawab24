@@ -15,6 +15,7 @@ import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
 import { config } from '../config';
+import { isValidPhone, isValidEmail } from '@jawab24/shared';
 
 function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: FastifyReply) {
     if (result === 'expired') {
@@ -320,8 +321,7 @@ export class AuthController {
         try {
             // Validate email format if provided
             if (email) {
-                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-                if (!emailRegex.test(email)) {
+                if (!isValidEmail(email)) {
                     return reply.status(400).send({ error: 'Invalid email format' });
                 }
             }
@@ -460,7 +460,7 @@ export class AuthController {
     async requestOtp(request: FastifyRequest<{ Body: PhoneOtpRequest }>, reply: FastifyReply) {
         const { phone } = request.body;
 
-        if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+        if (!phone || !isValidPhone(phone)) {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format: +966xxxxxxxx' });
         }
 
@@ -603,7 +603,7 @@ export class AuthController {
 
         const { phone, code } = request.body as { phone?: string; code?: string };
 
-        if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
+        if (!phone || !isValidPhone(phone)) {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format' });
         }
         if (!code || code.length !== 6) {

@@ -3,6 +3,7 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaceInvites } from '../db/schema';
 import { workspaceService } from './workspace';
+import { detectContactType } from '@jawab24/shared';
 import type { WorkspaceRole } from '@jawab24/shared';
 
 /** Invite expiry: 48 hours */
@@ -11,18 +12,22 @@ const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
 export class WorkspaceInviteService {
     /**
      * Create an invite for a workspace.
+     * `contact` can be an email address or an E.164 phone number (+966xxxxxxxxx).
      * Returns the raw token (for the invite URL) and the invite record.
+     *
+     * TODO Phase 2: when phone invite is created, send invite link via WhatsApp Business API
      */
     async createInvite(
         workspaceId: string,
-        email: string,
+        contact: string,
         role: WorkspaceRole = 'member',
         createdBy: string,
     ) {
         const rawToken = crypto.randomBytes(32).toString('hex');
         const tokenHash = this.hashToken(rawToken);
+        const { email, phone } = detectContactType(contact);
 
-        // Upsert: if an invite already exists for this email+workspace, update it
+        // Upsert: if an invite already exists for this contact+workspace, update it
         // (handles re-inviting after expiry/revocation)
         const existing = await db
             .select({ id: workspaceInvites.id })
@@ -30,14 +35,15 @@ export class WorkspaceInviteService {
             .where(
                 and(
                     eq(workspaceInvites.workspaceId, workspaceId),
-                    eq(workspaceInvites.email, email),
+                    phone
+                        ? eq(workspaceInvites.phone, phone)
+                        : eq(workspaceInvites.email, email ?? ''),
                 )
             )
             .limit(1);
 
         let invite;
         if (existing.length > 0) {
-            // Update existing invite (re-invite)
             [invite] = await db
                 .update(workspaceInvites)
                 .set({
@@ -57,6 +63,7 @@ export class WorkspaceInviteService {
                 .values({
                     workspaceId,
                     email,
+                    phone,
                     tokenHash,
                     role,
                     status: 'pending',
@@ -92,7 +99,6 @@ export class WorkspaceInviteService {
         }
 
         if (new Date() > invite.expiresAt) {
-            // Mark as expired
             await db
                 .update(workspaceInvites)
                 .set({ status: 'expired' })
@@ -100,7 +106,6 @@ export class WorkspaceInviteService {
             throw new Error('Invite has expired');
         }
 
-        // Add user as member
         const member = await workspaceService.addMember(
             invite.workspaceId,
             userId,
@@ -108,7 +113,6 @@ export class WorkspaceInviteService {
             invite.createdBy ?? undefined,
         );
 
-        // Mark invite as accepted
         await db
             .update(workspaceInvites)
             .set({
@@ -155,9 +159,6 @@ export class WorkspaceInviteService {
             );
     }
 
-    /**
-     * Hash a raw token for storage.
-     */
     private hashToken(rawToken: string): string {
         return crypto.createHash('sha256').update(rawToken).digest('hex');
     }

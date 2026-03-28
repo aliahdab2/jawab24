@@ -6,6 +6,7 @@ export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { matchesKeyword, testKeywordsMatch } from './utils/keyword-matching';
+export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType } from './utils/validation';
 
 // --- SSE Event Types ---
 export * from './sse-events';
@@ -484,7 +485,8 @@ export interface WorkspaceMember {
 export interface WorkspaceInvite {
   id: string;
   workspaceId: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   role: WorkspaceRole;
   status: 'pending' | 'accepted' | 'expired' | 'revoked';
   expiresAt: string | Date;

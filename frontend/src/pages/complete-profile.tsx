@@ -8,9 +8,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
 import { isRTLLocale } from '@/utils/locale';
-
-// Email validation regex
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import { isValidEmail } from '@jawab24/shared';
 
 export default function CompleteProfilePage() {
   const router = useRouter();
@@ -29,7 +27,7 @@ export default function CompleteProfilePage() {
   const [mounted, setMounted] = useState(false);
 
   // Check if email is valid
-  const isEmailValid = EMAIL_REGEX.test(email);
+  const isEmailValid = isValidEmail(email);
   const showEmailError = emailTouched && email.length > 0 && !isEmailValid;
   const showEmailSuccess = emailTouched && email.length > 0 && isEmailValid;
 
