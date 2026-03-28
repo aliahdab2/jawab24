@@ -52,8 +52,10 @@ export default function LoginPage() {
   // for statically exported pages (autoExport: true)
   const [urlParams, setUrlParams] = useState<URLSearchParams | null>(null);
 
-  // ── Phone OTP state ───────────────────────────────────────────────────────
+  // ── Auth tab + Phone OTP state ────────────────────────────────────────────
+  type AuthTab = 'facebook' | 'phone';
   type OtpStep = 'phone' | 'code';
+  const [authTab, setAuthTab] = useState<AuthTab>('facebook');
   const [otpStep, setOtpStep] = useState<OtpStep>('phone');
   const [phoneE164, setPhoneE164] = useState('');
   const [phoneValid, setPhoneValid] = useState(false);
@@ -528,56 +530,77 @@ export default function LoginPage() {
                 <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 dark:from-transparent to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
                   <div className="space-y-4">
 
-                    {/* PRIMARY: Facebook — always shown, always prominent */}
-                    {otpStep === 'phone' && (
-                      <Button
-                        onClick={handleFacebookLogin}
-                        disabled={isRedirecting || otpLoading}
-                        size="lg"
-                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
-                      >
-                        <div className="flex items-center justify-center gap-3 text-white">
-                          <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
-                          <span className="text-white">{t('loginWithFacebook')}</span>
-                        </div>
-                      </Button>
-                    )}
-
-                    {/* SECONDARY: Phone OTP — only when enabled */}
-                    {PHONE_AUTH_ENABLED && (
+                    {PHONE_AUTH_ENABLED ? (
                       <>
+                        {/* Tab selector — hidden once user enters OTP step */}
                         {otpStep === 'phone' && (
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-px bg-theme-border" />
-                            <span className="text-xs font-medium text-muted-foreground">{t('or')}</span>
-                            <div className="flex-1 h-px bg-theme-border" />
+                          <div className="flex rounded-2xl bg-surface-100 dark:bg-surface-800 p-1 gap-1" role="tablist">
+                            <button
+                              type="button"
+                              role="tab"
+                              aria-selected={authTab === 'facebook'}
+                              onClick={() => { setAuthTab('facebook'); setOtpError(''); setOtpCode(''); }}
+                              className={clsx(
+                                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all',
+                                authTab === 'facebook'
+                                  ? 'bg-card text-foreground shadow-sm'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              <FacebookIcon className="w-4 h-4" aria-hidden="true" />
+                              {t('tabFacebook')}
+                            </button>
+                            <button
+                              type="button"
+                              role="tab"
+                              aria-selected={authTab === 'phone'}
+                              onClick={() => { setAuthTab('phone'); setOtpError(''); }}
+                              className={clsx(
+                                'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all',
+                                authTab === 'phone'
+                                  ? 'bg-card text-foreground shadow-sm'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              )}
+                            >
+                              <Phone className="w-4 h-4" aria-hidden="true" />
+                              {t('tabPhone')}
+                            </button>
                           </div>
                         )}
 
-                        {otpStep === 'phone' ? (
-                          /* Step 1: phone number */
-                          <div className="space-y-3">
-                            <div>
-                              <label className="block text-sm font-medium text-foreground/70 mb-2 text-start">
-                                {t('phoneNumber')}
-                              </label>
-                              <PhoneInput
-                                value={phoneE164}
-                                onChange={(e164, valid) => {
-                                  setPhoneE164(e164);
-                                  setPhoneValid(valid);
-                                  setOtpError('');
-                                }}
-                                disabled={otpLoading}
-                                aria-label={t('phoneNumber')}
-                                aria-describedby={phoneTouched && !phoneValid ? 'phone-error' : undefined}
-                              />
-                              {phoneTouched && !phoneValid && (
-                                <p id="phone-error" className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
-                                  {t('invalidPhone')}
-                                </p>
-                              )}
+                        {/* Tab content */}
+                        {authTab === 'facebook' ? (
+                          /* ── Facebook tab ── */
+                          <Button
+                            onClick={handleFacebookLogin}
+                            disabled={isRedirecting}
+                            size="lg"
+                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                          >
+                            <div className="flex items-center justify-center gap-3 text-white">
+                              <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
+                              <span className="text-white">{t('loginWithFacebook')}</span>
                             </div>
+                          </Button>
+                        ) : otpStep === 'phone' ? (
+                          /* ── Phone tab — Step 1: enter number ── */
+                          <div className="space-y-3">
+                            <PhoneInput
+                              value={phoneE164}
+                              onChange={(e164, valid) => {
+                                setPhoneE164(e164);
+                                setPhoneValid(valid);
+                                setOtpError('');
+                              }}
+                              disabled={otpLoading}
+                              aria-label={t('phoneNumber')}
+                              aria-describedby={phoneTouched && !phoneValid ? 'phone-error' : undefined}
+                            />
+                            {phoneTouched && !phoneValid && (
+                              <p id="phone-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                                {t('invalidPhone')}
+                              </p>
+                            )}
                             {otpError && (
                               <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
                                 {otpError}
@@ -586,9 +609,8 @@ export default function LoginPage() {
                             <Button
                               onClick={handleRequestOtp}
                               disabled={otpLoading}
-                              variant="outline"
                               size="lg"
-                              className="w-full rounded-2xl font-bold"
+                              className="w-full py-6 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
                             >
                               {otpLoading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -604,7 +626,7 @@ export default function LoginPage() {
                             </Button>
                           </div>
                         ) : (
-                          /* Step 2: OTP code — auto-submits on 6th digit */
+                          /* ── Phone tab — Step 2: OTP (auto-submits on 6th digit) ── */
                           <div className="space-y-4">
                             <div className="text-center">
                               <p className="text-sm text-muted-foreground mb-1">{t('otpSubtitle')}</p>
@@ -655,6 +677,19 @@ export default function LoginPage() {
                           </div>
                         )}
                       </>
+                    ) : (
+                      /* ── Phone auth disabled: Facebook only ── */
+                      <Button
+                        onClick={handleFacebookLogin}
+                        disabled={isRedirecting}
+                        size="lg"
+                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                      >
+                        <div className="flex items-center justify-center gap-3 text-white">
+                          <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
+                          <span className="text-white">{t('loginWithFacebook')}</span>
+                        </div>
+                      </Button>
                     )}
 
                     {/* Demo Mode */}
