@@ -243,7 +243,7 @@ export default function PhoneCollectPage() {
                                     onClick={() => { setStep('phone'); setError(''); setOtpCode(''); }}
                                     className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
                                 >
-                                    <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                                    <ArrowLeft className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
                                     {t('changePhone')}
                                 </button>
                                 {resendCountdown > 0 ? (

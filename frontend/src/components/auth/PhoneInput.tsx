@@ -113,7 +113,8 @@ export function PhoneInput({
 
     return (
         <div className="relative" ref={containerRef}>
-            <div className="flex">
+            {/* Phone numbers are always LTR — country code left, digits right, regardless of page direction */}
+            <div className="flex" dir="ltr">
                 {/* Country selector button */}
                 <button
                     type="button"
