@@ -13,7 +13,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
-import { useTranslations, useLocale } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { Loader2, ArrowLeft, Phone, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -28,7 +28,6 @@ export default function PhoneCollectPage() {
     const router = useRouter();
     const t = useTranslations('auth');
     const tc = useTranslations('common');
-    const locale = useLocale();
     const { user, _hasHydrated } = useAuthStore();
 
     type Step = 'phone' | 'code';
@@ -266,7 +265,7 @@ export default function PhoneCollectPage() {
                     {/* Trust indicator */}
                     <div className="mt-6 pt-5 border-t border-theme-border flex items-center justify-center gap-2 text-xs text-muted-foreground">
                         <ShieldCheck className="w-4 h-4 text-brand-500" aria-hidden="true" />
-                        <span>{locale === 'ar' ? 'رقمك آمن ومحمي' : 'Your number is safe and secure'}</span>
+                        <span>{t('numberSafe')}</span>
                     </div>
                 </div>
             </div>

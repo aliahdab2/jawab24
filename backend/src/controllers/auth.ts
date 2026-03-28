@@ -13,8 +13,18 @@ import { users, ecommerceStores } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
-import { otpService, OtpRateLimitError } from '../services/otp';
+import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
 import { config } from '../config';
+
+function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: FastifyReply) {
+    if (result === 'expired') {
+        return reply.status(400).send({ error: 'code_expired', message: 'Code has expired, please request a new one' });
+    }
+    if (result === 'exceeded') {
+        return reply.status(429).send({ error: 'too_many_attempts', message: 'Too many attempts, please request a new code' });
+    }
+    return reply.status(400).send({ error: 'invalid_code', message: 'Incorrect code' });
+}
 
 export class AuthController {
     /**
@@ -483,15 +493,7 @@ export class AuthController {
         try {
             const result = await otpService.verifyOtp(phone, code);
 
-            if (result === 'expired') {
-                return reply.status(400).send({ error: 'code_expired', message: 'Code has expired, please request a new one' });
-            }
-            if (result === 'exceeded') {
-                return reply.status(429).send({ error: 'too_many_attempts', message: 'Too many attempts, please request a new code' });
-            }
-            if (result === 'invalid') {
-                return reply.status(400).send({ error: 'invalid_code', message: 'Incorrect code' });
-            }
+            if (result !== 'valid') return replyOtpError(result, reply);
 
             // OTP valid — find or create user
             const user = await authService.findOrCreateUserByPhone(phone);
@@ -610,15 +612,7 @@ export class AuthController {
         try {
             const result = await otpService.verifyOtp(phone, code);
 
-            if (result === 'expired') {
-                return reply.status(400).send({ error: 'code_expired', message: 'Code has expired, please request a new one' });
-            }
-            if (result === 'exceeded') {
-                return reply.status(429).send({ error: 'too_many_attempts', message: 'Too many attempts, please request a new code' });
-            }
-            if (result === 'invalid') {
-                return reply.status(400).send({ error: 'invalid_code', message: 'Incorrect code' });
-            }
+            if (result !== 'valid') return replyOtpError(result, reply);
 
             // OTP valid — update user's phone
             await db.update(users)
