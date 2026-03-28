@@ -61,6 +61,49 @@ export default function AuthCallback() {
       // Exchange code for token via our backend with timeout
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
+      // If the user is already authenticated and this is a reconnect (e.g. phone user
+      // connecting Facebook pages), link Facebook to their existing account instead of
+      // creating a second user.
+      if (isReconnect && useAuthStore.getState().isAuthenticated) {
+        const existingToken = useAuthStore.getState().token;
+        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
+        const canonicalOrigin = siteUrl.replace(/\/+$/, '');
+        const origin = platform === 'mobile' ? canonicalOrigin : (window.location.hostname === 'localhost' ? window.location.origin.replace(/\/+$/, '') : canonicalOrigin);
+        const localePath = getLocalePath(preferredLocale);
+        const redirectUri = `${origin}${localePath}${FB_CALLBACK_PATH}`;
+
+        const linkResponse = await fetch(`${apiUrl}/auth/facebook/link`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(existingToken ? { 'Authorization': `Bearer ${existingToken}` } : {}),
+          },
+          body: JSON.stringify({ code, redirectUri }),
+          credentials: 'include',
+          signal: abortSignal,
+        });
+
+        if (!linkResponse.ok) {
+          const errData = await linkResponse.json();
+          throw new Error(errData.message || t('loginError'));
+        }
+
+        const linkData = await linkResponse.json();
+        setAuthRef.current(linkData.user, linkData.token, linkData.fbAccessToken);
+        if (linkData.workspaces?.length) setWorkspacesRef.current(linkData.workspaces);
+
+        if (platform === 'mobile') {
+          const tokenStr = encodeURIComponent(linkData.token);
+          const fbTokenStr = encodeURIComponent(linkData.fbAccessToken || '');
+          const userStr = encodeURIComponent(JSON.stringify(linkData.user));
+          window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
+          return;
+        }
+
+        routerRef.current.replace('/pages', '/pages', { locale: preferredLocale });
+        return;
+      }
+
       // Create a timeout promise (15 seconds)
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => reject(new Error(t('loginTimeout'))), 15000);

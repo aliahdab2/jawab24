@@ -114,7 +114,7 @@ export default function LoginPage() {
       const { data } = await otpApi.verifyOtp(phoneE164, otpCode);
       // Hydrate auth store — fbToken is empty for phone-only users
       useAuthStore.getState().setAuth(
-        { ...data.user, name: data.user.name ?? '' },
+        { ...data.user, name: data.user.name ?? data.user.phone ?? '' },
         data.token,
         '',
       );

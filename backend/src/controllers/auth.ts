@@ -517,6 +517,82 @@ export class AuthController {
         }
     }
     /**
+     * Link Facebook account to an existing authenticated user
+     * POST /auth/facebook/link
+     *
+     * Requires auth. Used by the reconnect flow when a phone-only user connects
+     * Facebook pages from within the app — avoids creating a duplicate user.
+     */
+    async linkFacebook(request: AuthenticatedRequest, reply: FastifyReply) {
+        const userId = request.user?.userId;
+        if (!userId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const { code, redirectUri } = request.body as { code?: string; redirectUri?: string };
+        if (!code) {
+            return reply.status(400).send({ error: 'code is required' });
+        }
+
+        try {
+            // 1. Exchange code for access token
+            const accessToken = await facebookService.getAccessToken(code, redirectUri);
+
+            // 2. Try to get long-lived token
+            let longLivedToken = accessToken;
+            let tokenExpiresAt: Date | undefined;
+            try {
+                const { token: llt, expiresAt } = await facebookService.getLongLivedToken(accessToken);
+                longLivedToken = llt;
+                tokenExpiresAt = expiresAt;
+            } catch (err) {
+                request.log.warn({ err }, 'Could not exchange for long-lived token');
+            }
+
+            // 3. Get Facebook profile
+            const fbProfile = await facebookService.getUserProfile(longLivedToken);
+
+            // 4. Update existing user with Facebook data (don't create a new user)
+            await db.update(users)
+                .set({
+                    facebookId: fbProfile.id,
+                    facebookAccessToken: longLivedToken,
+                    facebookTokenExpiresAt: tokenExpiresAt ?? null,
+                    ...(fbProfile.picture && { picture: fbProfile.picture }),
+                    updatedAt: new Date(),
+                })
+                .where(eq(users.id, userId));
+
+            // 5. Sync pages to the user's existing workspace
+            const workspaces = await workspaceService.getUserWorkspaces(userId);
+            const workspaceId = workspaces[0]?.id;
+            if (workspaceId) {
+                try {
+                    await pagesService.syncFromFacebook(workspaceId, userId, longLivedToken);
+                } catch (err) {
+                    request.log.error({ err }, 'Page sync after Facebook link failed (non-fatal)');
+                }
+            }
+
+            // 6. Issue a new token so the store gets updated fbAccessToken
+            const updatedUser = await authService.getUserById(userId);
+            if (!updatedUser) {
+                return reply.status(404).send({ error: 'User not found' });
+            }
+
+            const newToken = authService.generateToken(updatedUser, ACCESS_TOKEN_EXPIRY);
+            cookiesService.setAuthCookies(reply, newToken);
+
+            const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, workspaces);
+            return reply.send(response);
+
+        } catch (error) {
+            request.log.error({ err: error }, 'Facebook link failed');
+            return reply.status(500).send({ error: 'server_error', message: 'Failed to link Facebook account' });
+        }
+    }
+
+    /**
      * Link phone number to an existing authenticated user
      * POST /auth/phone/link
      *

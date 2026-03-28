@@ -93,6 +93,27 @@ export default async function authRoutes(fastify: FastifyInstance) {
         preHandler: [authenticate],
     }, authController.deleteAccount);
 
+    // Link Facebook account to existing authenticated user (reconnect flow)
+    // Used when a phone-only user connects Facebook pages from within the app
+    fastify.post('/auth/facebook/link', {
+        config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+        schema: {
+            tags: ['Auth'],
+            summary: 'Link Facebook account to authenticated user',
+            security: auth,
+            body: {
+                type: 'object',
+                required: ['code'],
+                properties: {
+                    code: { type: 'string' },
+                    redirectUri: { type: 'string' },
+                },
+                additionalProperties: false,
+            },
+        },
+        preHandler: [authenticate],
+    }, authController.linkFacebook);
+
     // Link phone to existing authenticated user (used in phone-collect flow)
     // Registered regardless of PHONE_AUTH_ENABLED so Facebook users can always add a phone
     fastify.post('/auth/phone/link', {
