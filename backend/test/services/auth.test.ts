@@ -72,7 +72,7 @@ describe('Auth Service', () => {
             expect(token.length).toBeGreaterThan(0);
         });
 
-        it('should encode userId and facebookId in token', () => {
+        it('should encode userId in token', () => {
             const user = {
                 id: 'user_123',
                 facebookId: 'fb_456',
@@ -88,7 +88,7 @@ describe('Auth Service', () => {
             const decoded = JSON.parse(Buffer.from(payloadStr, 'base64url').toString('utf-8'));
 
             expect(decoded.userId).toBe('user_123');
-            expect(decoded.facebookId).toBe('fb_456');
+            expect(decoded.facebookId).toBeUndefined();
             expect(decoded.exp).toBeDefined(); // Token now includes expiration
         });
     });
@@ -109,7 +109,6 @@ describe('Auth Service', () => {
 
             expect(payload).not.toBeNull();
             expect(payload?.userId).toBe('user_123');
-            expect(payload?.facebookId).toBe('fb_456');
         });
 
         it('should return null for invalid token', () => {
@@ -445,7 +444,6 @@ describe('Auth Service', () => {
 
             expect(payload).not.toBeNull();
             expect(payload?.userId).toBe(user.id);
-            expect(payload?.facebookId).toBe(user.facebookId);
         });
     });
 });

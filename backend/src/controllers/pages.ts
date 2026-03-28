@@ -6,6 +6,7 @@ import { gapDetectorService } from '../services/kb/gap-detector';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
+import { authService } from '../services/auth';
 
 /** Add isConnected flag and strip accessToken from page response */
 function serializePage<T extends { accessToken?: string | null }>(page: T) {
@@ -212,7 +213,8 @@ export class PagesController {
         }
 
         // Demo users have no real Facebook token — return their seeded pages directly
-        if (req.user.facebookId === config.demo.userFacebookId) {
+        const dbUser = config.demo.enabled ? await authService.getUserById(userId) : null;
+        if (dbUser?.facebookId === config.demo.userFacebookId) {
             const pages = await pagesService.getPages(workspaceId);
             return reply.send({ synced: pages.length, pages: pages.map(serializePage), skipped: 0 });
         }

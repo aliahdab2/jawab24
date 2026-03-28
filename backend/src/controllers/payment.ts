@@ -11,7 +11,7 @@ import type Stripe from 'stripe';
 
 // Type for authenticated requests
 interface AuthenticatedRequest extends FastifyRequest {
-    user?: { userId: string; facebookId: string };
+    user?: { userId: string; isAdmin?: boolean };
 }
 
 export class PaymentController {

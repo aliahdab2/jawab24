@@ -115,6 +115,16 @@ export const config = {
         userEmail: 'demo@jawab24.com',
     },
 
+    // Phone OTP Authentication (feature flag — disabled until WhatsApp/SMS provider is configured)
+    phoneAuthEnabled: process.env.PHONE_AUTH_ENABLED === 'true',
+
+    // Vonage SMS — OTP delivery provider
+    vonage: {
+        apiKey: process.env.VONAGE_API_KEY || '',
+        apiSecret: process.env.VONAGE_API_SECRET || '',
+        senderId: process.env.VONAGE_SENDER_ID || 'Jawab24',
+    },
+
     // Circuit Breaker (ai-worker HTTP calls)
     circuitBreaker: {
         /** Consecutive failures before opening the circuit (default: 5) */

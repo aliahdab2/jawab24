@@ -6,13 +6,15 @@ import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
 import { integrationRegistry } from '../integrations';
-import { AuthRequest, AuthResponse } from '../types';
+import { AuthRequest, AuthResponse, PhoneOtpRequest, PhoneOtpVerifyRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, ecommerceStores } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
+import { otpService, OtpRateLimitError } from '../services/otp';
+import { config } from '../config';
 
 export class AuthController {
     /**
@@ -86,10 +88,11 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 9. Build response
+            // 9. Build response — include requiresPhone if PHONE_AUTH_ENABLED and user has no phone yet
+            const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces);
+            }, workspaces, requiresPhone);
 
             // 10. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -436,6 +439,127 @@ export class AuthController {
         } catch (error) {
             request.log.error({ err: error }, 'Token refresh failed');
             return reply.status(401).send({ error: 'Refresh failed' });
+        }
+    }
+
+    /**
+     * Request OTP via phone number
+     * POST /auth/phone/request
+     */
+    async requestOtp(request: FastifyRequest<{ Body: PhoneOtpRequest }>, reply: FastifyReply) {
+        const { phone } = request.body;
+
+        if (!phone || !/^\+[1-9]\d{6,14}$/.test(phone)) {
+            return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format: +966xxxxxxxx' });
+        }
+
+        try {
+            const code = otpService.generateCode();
+            await otpService.storeOtp(phone, code);
+            await otpService.sendOtp(phone, code);
+
+            // Never reveal whether the phone already exists — always return 200
+            return reply.send({ message: 'sent' });
+        } catch (error) {
+            if (error instanceof OtpRateLimitError) {
+                return reply.status(429).send({ error: 'rate_limited', message: 'Please wait before requesting a new code' });
+            }
+            request.log.error({ err: error }, 'OTP request failed');
+            return reply.status(500).send({ error: 'server_error', message: 'Failed to send verification code' });
+        }
+    }
+
+    /**
+     * Verify OTP and issue session
+     * POST /auth/phone/verify
+     */
+    async verifyOtp(request: FastifyRequest<{ Body: PhoneOtpVerifyRequest }>, reply: FastifyReply) {
+        const { phone, code } = request.body;
+
+        if (!phone || !code) {
+            return reply.status(400).send({ error: 'invalid_request', message: 'phone and code are required' });
+        }
+
+        try {
+            const result = await otpService.verifyOtp(phone, code);
+
+            if (result === 'expired') {
+                return reply.status(400).send({ error: 'code_expired', message: 'Code has expired, please request a new one' });
+            }
+            if (result === 'exceeded') {
+                return reply.status(429).send({ error: 'too_many_attempts', message: 'Too many attempts, please request a new code' });
+            }
+            if (result === 'invalid') {
+                return reply.status(400).send({ error: 'invalid_code', message: 'Incorrect code' });
+            }
+
+            // OTP valid — find or create user
+            const user = await authService.findOrCreateUserByPhone(phone);
+
+            const token = authService.generateToken(user, ACCESS_TOKEN_EXPIRY);
+            const [userSettings, workspaces] = await Promise.all([
+                settingsService.getSettings(user.id),
+                workspaceService.getUserWorkspaces(user.id),
+            ]);
+            const refreshToken = await refreshTokenService.createRefreshToken(user.id);
+
+            cookiesService.setAuthCookies(reply, token);
+            cookiesService.setRefreshTokenCookie(reply, refreshToken);
+
+            const response: AuthResponse = authService.createAuthResponse(user, token, '', {
+                dashboardLanguage: userSettings.dashboardLanguage,
+            }, workspaces);
+
+            return reply.send(response);
+        } catch (error) {
+            request.log.error({ err: error }, 'OTP verification failed');
+            return reply.status(500).send({ error: 'server_error', message: 'Failed to verify code' });
+        }
+    }
+    /**
+     * Link phone number to an existing authenticated user
+     * POST /auth/phone/link
+     *
+     * Requires auth. Used by the phone-collect flow for Facebook users who
+     * already have a session but haven't added a phone number yet.
+     */
+    async linkPhone(request: AuthenticatedRequest, reply: FastifyReply) {
+        const userId = request.user?.userId;
+        if (!userId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        const { phone, code } = request.body as { phone?: string; code?: string };
+
+        if (!phone || !/^\+[1-9]\d{6,14}$/.test(phone)) {
+            return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format' });
+        }
+        if (!code || code.length !== 6) {
+            return reply.status(400).send({ error: 'invalid_request', message: 'phone and code are required' });
+        }
+
+        try {
+            const result = await otpService.verifyOtp(phone, code);
+
+            if (result === 'expired') {
+                return reply.status(400).send({ error: 'code_expired', message: 'Code has expired, please request a new one' });
+            }
+            if (result === 'exceeded') {
+                return reply.status(429).send({ error: 'too_many_attempts', message: 'Too many attempts, please request a new code' });
+            }
+            if (result === 'invalid') {
+                return reply.status(400).send({ error: 'invalid_code', message: 'Incorrect code' });
+            }
+
+            // OTP valid — update user's phone
+            await db.update(users)
+                .set({ phone, phoneVerified: true, updatedAt: new Date() })
+                .where(eq(users.id, userId));
+
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error({ err: error }, 'Phone link failed');
+            return reply.status(500).send({ error: 'server_error', message: 'Failed to link phone number' });
         }
     }
 }

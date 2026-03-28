@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { authController } from '../controllers/auth';
 import { authenticate } from '../middleware/auth';
 import { auth } from '../utils/swagger';
+import { config } from '../config';
 
 export default async function authRoutes(fastify: FastifyInstance) {
     // Public routes (stricter rate limit — prevent brute force)
@@ -91,4 +92,61 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
         preHandler: [authenticate],
     }, authController.deleteAccount);
+
+    // Link phone to existing authenticated user (used in phone-collect flow)
+    // Registered regardless of PHONE_AUTH_ENABLED so Facebook users can always add a phone
+    fastify.post('/auth/phone/link', {
+        config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+        schema: {
+            tags: ['Auth'],
+            summary: 'Link phone number to authenticated user (OTP verified)',
+            security: auth,
+            body: {
+                type: 'object',
+                required: ['phone', 'code'],
+                properties: {
+                    phone: { type: 'string', description: 'E.164 format' },
+                    code: { type: 'string', minLength: 6, maxLength: 6 },
+                },
+                additionalProperties: false,
+            },
+        },
+        preHandler: [authenticate],
+    }, authController.linkPhone);
+
+    // Phone OTP Authentication — only registered when PHONE_AUTH_ENABLED=true
+    if (config.phoneAuthEnabled) {
+        fastify.post('/auth/phone/request', {
+            config: { rateLimit: { max: 3, timeWindow: '10 minutes' } },
+            schema: {
+                tags: ['Auth'],
+                summary: 'Request OTP code via phone number',
+                body: {
+                    type: 'object',
+                    required: ['phone'],
+                    properties: {
+                        phone: { type: 'string', description: 'E.164 format: +966xxxxxxxx' },
+                    },
+                    additionalProperties: false,
+                },
+            },
+        }, authController.requestOtp);
+
+        fastify.post('/auth/phone/verify', {
+            config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+            schema: {
+                tags: ['Auth'],
+                summary: 'Verify OTP code and issue session',
+                body: {
+                    type: 'object',
+                    required: ['phone', 'code'],
+                    properties: {
+                        phone: { type: 'string' },
+                        code: { type: 'string', minLength: 6, maxLength: 6 },
+                    },
+                    additionalProperties: false,
+                },
+            },
+        }, authController.verifyOtp);
+    }
 }

@@ -97,10 +97,16 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        getUserById: vi.fn().mockResolvedValue(null),
+    },
+}));
+
 // Mock auth middleware
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: vi.fn(async (request, reply) => {
-        request.user = { userId: 'user_123', facebookId: 'fb_123' };
+        request.user = { userId: 'user_123' };
     }),
     AuthenticatedRequest: {},
 }));

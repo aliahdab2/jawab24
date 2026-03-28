@@ -85,7 +85,7 @@ describe('Payment Controller', () => {
         beforeEach(() => {
             mockRequest = {
                 body: { planId: 'plan_123' },
-                user: { userId: 'user_123', facebookId: 'fb_123' },
+                user: { userId: 'user_123' },
                 geo: { country: 'US' }, // Mock allowed geo for sanctions check
                 log: { error: vi.fn() },
             };
@@ -562,7 +562,7 @@ describe('Payment Controller', () => {
         beforeEach(() => {
             mockRequest = {
                 body: { planId: 'plan_business' },
-                user: { userId: 'user_123', facebookId: 'fb_123' },
+                user: { userId: 'user_123' },
                 log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
             };
         });
@@ -633,7 +633,7 @@ describe('Payment Controller', () => {
 
             const mockDb = vi.mocked(db);
 
-            mockRequest.user = { userId: 'user_new', facebookId: 'fb_new' };
+            mockRequest.user = { userId: 'user_new' };
             mockRequest.body = { planId: 'plan_starter' };
             mockRequest.geo = { country: 'US' }; // Add geo mock for sanctions check
 

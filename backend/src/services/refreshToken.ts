@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import { authService } from './auth';
 import type { User } from '../types';
 
-const REFRESH_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const REFRESH_TOKEN_EXPIRY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — B2B SaaS standard (Shopify, Salla, Slack)
 
 export class RefreshTokenService {
     /**

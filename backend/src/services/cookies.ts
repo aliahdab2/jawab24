@@ -2,7 +2,8 @@ import { FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import { config } from '../config';
 
-const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;      // 7 days  — access token cookie
+const REFRESH_TOKEN_EXPIRY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — must match refreshToken.ts
 
 const isProduction = config.nodeEnv === 'production';
 
@@ -112,10 +113,9 @@ export class CookiesService {
      * Set refresh token cookie
      */
     setRefreshTokenCookie(reply: FastifyReply, token: string): void {
-         const REFRESH_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
-         reply.setCookie('refreshToken', token, {
+        reply.setCookie('refreshToken', token, {
             ...REFRESH_COOKIE_OPTIONS,
-            maxAge: REFRESH_EXPIRY_MS / 1000,
+            maxAge: REFRESH_TOKEN_EXPIRY_MS / 1000,
         });
     }
 

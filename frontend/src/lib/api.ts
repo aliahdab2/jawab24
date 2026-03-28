@@ -116,6 +116,19 @@ export const authApi = {
     api.post('/auth/refresh'),
 };
 
+// Phone OTP API (unauthenticated — used on the login page)
+export const otpApi = {
+  requestOtp: (phone: string) =>
+    publicApi.post('/auth/phone/request', { phone }),
+
+  verifyOtp: (phone: string, code: string) =>
+    publicApi.post<{ user: { id: string; name: string | null; phone: string | null; picture?: string; isAdmin?: boolean }; token: string; workspaces: unknown[] }>('/auth/phone/verify', { phone, code }),
+
+  // Link phone to an already-authenticated user (used in phone-collect flow)
+  linkPhone: (phone: string, code: string) =>
+    api.post('/auth/phone/link', { phone, code }),
+};
+
 // Pages API
 export const pagesApi = {
   getAll: () => api.get('/pages'),

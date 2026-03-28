@@ -434,20 +434,41 @@ Each service is independently deployable but shares:
 
 ### Authentication & Multi-Workspace (Web)
 
+**Identity model:** phone number = identity. Facebook/Instagram/WhatsApp = channels connected after login.
+
+**Phone OTP Login (primary, `PHONE_AUTH_ENABLED=true`):**
 ```
-1. User logs in with Facebook OAuth
+1. User enters phone number (E.164) on login page
    ↓
-2. authController creates session, sets HttpOnly cookie
+2. POST /auth/phone/request → OTP generated, bcrypt-hashed, stored in otpCodes table, sent via Vonage SMS
    ↓
-3. Subsequent requests:
+3. User enters 6-digit code → POST /auth/phone/verify
+   ↓
+4. otpService verifies hash (timing-safe) → findOrCreateUserByPhone() upsert
+   ↓
+5. authController issues JWT (15min access) + refresh token (60 days), sets HttpOnly cookies
+   ↓
+6. Subsequent requests:
    - Cookie auto-sent by browser
-   - auth middleware validates JWS payload, extracts userId + workspaceId
+   - auth middleware validates JWT payload, extracts userId
    - X-Workspace-Id header scopes all DB queries
+```
+
+**Facebook OAuth (secondary):**
+```
+1. User clicks "Login with Facebook" → Facebook OAuth redirect
    ↓
-4. Multiple workspaces:
-   - Frontend: useAuthStore.activeWorkspaceId
-   - Backend middleware: all queries filtered by workspace_id
-   - Backend: uses tenancy library for auto-scoping
+2. /auth/callback exchanges code → authController creates session
+   ↓
+3. If PHONE_AUTH_ENABLED and user.phone is null → redirect to /auth/phone-collect
+   ↓
+4. POST /auth/phone/link (authenticated) links phone to existing account
+```
+
+**Multiple workspaces:**
+```
+- Frontend: useAuthStore.activeWorkspaceId
+- Backend middleware: all queries filtered by workspace_id
 ```
 
 ## Key Abstractions

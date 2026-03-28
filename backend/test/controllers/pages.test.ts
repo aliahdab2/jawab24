@@ -30,6 +30,12 @@ vi.mock('../../src/services/facebook', () => ({
     },
 }));
 
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        getUserById: vi.fn().mockResolvedValue(null),
+    },
+}));
+
 // Import after mocks
 import { pagesController } from '../../src/controllers/pages';
 import { pagesService } from '../../src/services/pages';

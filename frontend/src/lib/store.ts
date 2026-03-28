@@ -28,7 +28,8 @@ interface User {
   id: string;
   name: string;
   email?: string;
-  facebookId: string;
+  facebookId?: string | null;
+  phone?: string | null;
   picture?: string;
   isAdmin?: boolean;
   hasEcommerceStore?: boolean;

@@ -205,15 +205,39 @@ export class AuthService {
     }
 
     /**
+     * Find or create user by phone number (phone OTP login)
+     */
+    async findOrCreateUserByPhone(phone: string, name?: string): Promise<User> {
+        // Upsert: atomic insert-or-ignore on the unique phone column.
+        // ON CONFLICT DO NOTHING avoids a race window between SELECT and INSERT.
+        await db
+            .insert(users)
+            .values({ phone, phoneVerified: true, name: name ?? null })
+            .onConflictDoNothing();
+
+        // Now the row is guaranteed to exist — fetch it.
+        const rows = await db.select().from(users).where(eq(users.phone, phone));
+        const user = rows[0];
+
+        await this.ensureSubscription(user.id);
+        await this.ensureWorkspace(user.id, user.name || name || 'My Workspace');
+
+        return {
+            ...user,
+            facebookAccessToken: this.maybeDecrypt(user.facebookAccessToken),
+        };
+    }
+
+    /**
      * Generate secure token for user
      * Uses HMAC signature with expiry timestamp
      */
     generateToken(user: User, expiryMs: number = LEGACY_TOKEN_EXPIRY_MS): string {
         const payload: JWTPayload & { exp: number } = {
             userId: user.id,
-            facebookId: user.facebookId,
             isAdmin: user.isAdmin || false,
-            exp: Date.now() + expiryMs,
+            // RFC 7519: exp is Unix timestamp in SECONDS, not milliseconds
+            exp: Math.floor((Date.now() + expiryMs) / 1000),
         };
 
         const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -248,14 +272,13 @@ export class AuthService {
                 Buffer.from(payloadStr, 'base64url').toString('utf-8')
             ) as JWTPayload & { exp?: number };
 
-            // Check expiry
-            if (payload.exp && payload.exp < Date.now()) {
+            // Check expiry (exp is in seconds per RFC 7519)
+            if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
                 return null;
             }
 
             return {
                 userId: payload.userId,
-                facebookId: payload.facebookId,
                 isAdmin: payload.isAdmin || false,
             };
         } catch {
@@ -295,6 +318,7 @@ export class AuthService {
         fbAccessToken: string,
         settings?: { dashboardLanguage: string },
         workspaces: AuthResponse['workspaces'] = [],
+        requiresPhone?: boolean,
     ): AuthResponse {
         return {
             token,
@@ -304,11 +328,13 @@ export class AuthService {
                 name: user.name || '',
                 email: user.email || undefined,
                 facebookId: user.facebookId,
+                phone: user.phone,
                 picture: user.picture || undefined,
                 isAdmin: user.isAdmin || false,
             },
             settings,
             workspaces,
+            requiresPhone,
         };
     }
 

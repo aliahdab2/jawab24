@@ -5,6 +5,7 @@ import { resolveWorkspace } from '../middleware/workspace';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 import { config } from '../config';
+import { authService } from '../services/auth';
 
 interface ChangePlanBody {
     planId: string;
@@ -100,7 +101,8 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             const { userId } = user;
 
             // Demo users always have unlimited AI access
-            if (user.facebookId === config.demo.userFacebookId) {
+            const dbUser = config.demo.enabled ? await authService.getUserById(userId) : null;
+            if (dbUser?.facebookId === config.demo.userFacebookId) {
                 return reply.send({ success: true, data: { allowed: true } });
             }
 

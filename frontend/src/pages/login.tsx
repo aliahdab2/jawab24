@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -11,7 +11,10 @@ import {
   MessageSquare,
   Bot,
   Star,
-  ShoppingBag
+  ShoppingBag,
+  Loader2,
+  ArrowLeft,
+  Phone,
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -20,10 +23,16 @@ import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore, type Language, type WorkspaceSummary } from '@/lib/store';
+import { otpApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { getNextLocale, getLocalePath } from '@/utils/locale';
 import { DemoLoginButton } from '@/features/demo';
+import { PhoneInput } from '@/components/auth/PhoneInput';
+import { OtpInput } from '@/components/auth/OtpInput';
+
+const PHONE_AUTH_ENABLED = process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === 'true';
+const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -42,6 +51,96 @@ export default function LoginPage() {
   // Read query params from URL directly — router.query is empty on first render
   // for statically exported pages (autoExport: true)
   const [urlParams, setUrlParams] = useState<URLSearchParams | null>(null);
+
+  // ── Phone OTP state ───────────────────────────────────────────────────────
+  type OtpStep = 'phone' | 'code';
+  const [otpStep, setOtpStep] = useState<OtpStep>('phone');
+  const [phoneE164, setPhoneE164] = useState('');
+  const [phoneValid, setPhoneValid] = useState(false);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState('');
+  const [resendCountdown, setResendCountdown] = useState(0);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startCountdown = useCallback(() => {
+    setResendCountdown(RESEND_COOLDOWN_SECONDS);
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    countdownRef.current = setInterval(() => {
+      setResendCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(countdownRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  // Cleanup countdown on unmount
+  useEffect(() => {
+    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
+  }, []);
+
+  const handleRequestOtp = useCallback(async () => {
+    setPhoneTouched(true);
+    if (!phoneValid) return;
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      await otpApi.requestOtp(phoneE164);
+      setOtpStep('code');
+      setOtpCode('');
+      startCountdown();
+    } catch (err: unknown) {
+      captureError(err, 'OTP request failed', { tags: { page: 'login' } });
+      const axiosErr = err as { response?: { status?: number } };
+      if (axiosErr.response?.status === 429) {
+        setOtpError(t('tooManyAttempts'));
+      } else {
+        setOtpError(t('loginError'));
+      }
+    } finally {
+      setOtpLoading(false);
+    }
+  }, [phoneValid, phoneE164, t, startCountdown]);
+
+  const handleVerifyOtp = useCallback(async () => {
+    if (otpCode.length !== 6) return;
+    setOtpLoading(true);
+    setOtpError('');
+    try {
+      const { data } = await otpApi.verifyOtp(phoneE164, otpCode);
+      // Hydrate auth store — fbToken is empty for phone-only users
+      useAuthStore.getState().setAuth(
+        { ...data.user, name: data.user.name ?? '' },
+        data.token,
+        '',
+      );
+      if (data.workspaces?.length) {
+        useAuthStore.getState().setWorkspaces(
+          data.workspaces as WorkspaceSummary[],
+        );
+      }
+      // Apply default language
+      useUIStore.getState().setLanguage(locale as Language);
+      // Redirect
+      const returnUrl = urlParams?.get('redirect') || (router.query.redirect as string) || '/dashboard';
+      const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
+      router.replace(safeUrl);
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
+      const errCode = axiosErr.response?.data?.error;
+      if (errCode === 'invalid_code') setOtpError(t('invalidCode'));
+      else if (errCode === 'code_expired') setOtpError(t('codeExpired'));
+      else if (errCode === 'too_many_attempts' || axiosErr.response?.status === 429) setOtpError(t('tooManyAttempts'));
+      else setOtpError(t('loginError'));
+      captureError(err, 'OTP verify failed', { tags: { page: 'login' } });
+    } finally {
+      setOtpLoading(false);
+    }
+  }, [otpCode, phoneE164, router, urlParams, locale, t]);
 
   useEffect(() => {
     setUrlParams(new URLSearchParams(window.location.search));
@@ -426,17 +525,148 @@ export default function LoginPage() {
 
                 {/* CTA zone */}
                 <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 dark:from-transparent to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
-                  <Button
-                    onClick={handleFacebookLogin}
-                    disabled={isRedirecting}
-                    size="lg"
-                    className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
-                  >
-                    <div className="flex items-center justify-center gap-3 text-white">
-                      <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
-                      <span className="text-white">{t('loginWithFacebook')}</span>
+                  {PHONE_AUTH_ENABLED ? (
+                    /* ── Phone OTP Login ── */
+                    <div className="space-y-4">
+                      {otpStep === 'phone' ? (
+                        /* Step 1: Enter phone */
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium text-foreground/70 mb-2 text-start">
+                              {t('phoneNumber')}
+                            </label>
+                            <PhoneInput
+                              value={phoneE164}
+                              onChange={(e164, valid) => {
+                                setPhoneE164(e164);
+                                setPhoneValid(valid);
+                                setOtpError('');
+                              }}
+                              disabled={otpLoading}
+                              autoFocus
+                              aria-label={t('phoneNumber')}
+                              aria-describedby={phoneTouched && !phoneValid ? 'phone-error' : undefined}
+                            />
+                            {phoneTouched && !phoneValid && (
+                              <p id="phone-error" className="mt-2 text-sm text-red-600 dark:text-red-400" role="alert">
+                                {t('invalidPhone')}
+                              </p>
+                            )}
+                          </div>
+                          {otpError && (
+                            <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
+                              {otpError}
+                            </p>
+                          )}
+                          <Button
+                            onClick={handleRequestOtp}
+                            disabled={otpLoading}
+                            size="lg"
+                            className="w-full py-6 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
+                          >
+                            {otpLoading ? (
+                              <span className="flex items-center justify-center gap-2">
+                                <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                                {t('sendingCode')}
+                              </span>
+                            ) : (
+                              <span className="flex items-center justify-center gap-2">
+                                <Phone className="w-5 h-5" aria-hidden="true" />
+                                {t('sendCode')}
+                              </span>
+                            )}
+                          </Button>
+                          {/* Fallback Facebook login */}
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 h-px bg-theme-border" />
+                            <span className="text-xs font-medium text-muted-foreground">{t('or')}</span>
+                            <div className="flex-1 h-px bg-theme-border" />
+                          </div>
+                          <Button
+                            onClick={handleFacebookLogin}
+                            disabled={isRedirecting || otpLoading}
+                            variant="outline"
+                            size="lg"
+                            className="w-full rounded-2xl font-bold"
+                          >
+                            <span className="flex items-center justify-center gap-2">
+                              <FacebookIcon className="w-5 h-5" aria-hidden="true" />
+                              {t('orLoginWithFacebook')}
+                            </span>
+                          </Button>
+                        </div>
+                      ) : (
+                        /* Step 2: Enter OTP code */
+                        <div className="space-y-4">
+                          <div className="text-center">
+                            <p className="text-sm text-muted-foreground mb-1">{t('otpSubtitle')}</p>
+                            <p className="font-bold text-foreground" dir="ltr">{phoneE164}</p>
+                          </div>
+                          <OtpInput
+                            value={otpCode}
+                            onChange={code => { setOtpCode(code); setOtpError(''); }}
+                            disabled={otpLoading}
+                            autoFocus
+                          />
+                          {otpError && (
+                            <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
+                              {otpError}
+                            </p>
+                          )}
+                          <Button
+                            onClick={handleVerifyOtp}
+                            disabled={otpLoading || otpCode.length !== 6}
+                            size="lg"
+                            className="w-full py-6 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
+                          >
+                            {otpLoading ? (
+                              <span className="flex items-center justify-center gap-2">
+                                <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                                {t('verifyingCode')}
+                              </span>
+                            ) : t('verifyCode')}
+                          </Button>
+                          <div className="flex items-center justify-between text-sm">
+                            <button
+                              type="button"
+                              onClick={() => { setOtpStep('phone'); setOtpError(''); setOtpCode(''); }}
+                              className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                              <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+                              {t('changePhone')}
+                            </button>
+                            {resendCountdown > 0 ? (
+                              <span className="text-muted-foreground">
+                                {t('resendIn', { seconds: resendCountdown })}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={handleRequestOtp}
+                                disabled={otpLoading}
+                                className="text-brand-600 dark:text-brand-400 font-medium hover:underline disabled:opacity-50"
+                              >
+                                {t('resendCode')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </Button>
+                  ) : (
+                    /* ── Facebook Login (default) ── */
+                    <Button
+                      onClick={handleFacebookLogin}
+                      disabled={isRedirecting}
+                      size="lg"
+                      className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl group transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                    >
+                      <div className="flex items-center justify-center gap-3 text-white">
+                        <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
+                        <span className="text-white">{t('loginWithFacebook')}</span>
+                      </div>
+                    </Button>
+                  )}
 
                   {/* Demo Mode - Self-contained component (only renders when enabled) */}
                   <DemoLoginButton />

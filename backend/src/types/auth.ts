@@ -6,7 +6,9 @@ import type { WorkspaceSummary } from '@jawab24/shared';
 // User types
 export interface User {
     id: string;
-    facebookId: string;
+    facebookId: string | null; // nullable — phone is now the primary identity
+    phone: string | null;      // primary identity for phone OTP login
+    phoneVerified: boolean;
     name: string | null;
     email: string | null;
     picture?: string | null;
@@ -15,12 +17,12 @@ export interface User {
     updatedAt: Date | null;
     facebookAccessToken?: string | null;
     facebookTokenExpiresAt?: Date | null;
+    hasInstagramPermission?: boolean | null;
 }
 
-// JWT payload
+// JWT payload — facebookId removed, phone is identity
 export interface JWTPayload {
     userId: string;
-    facebookId: string;
     isAdmin?: boolean;
     iat?: number;
     exp?: number;
@@ -39,7 +41,8 @@ export interface AuthResponse {
         id: string;
         name: string;
         email?: string;
-        facebookId: string;
+        facebookId?: string | null;
+        phone?: string | null;
         picture?: string;
         isAdmin?: boolean;
     };
@@ -47,8 +50,17 @@ export interface AuthResponse {
         dashboardLanguage: string;
     };
     workspaces: WorkspaceSummary[];
+    requiresPhone?: boolean; // true when PHONE_AUTH_ENABLED and user has no phone yet
     // E-commerce onboarding context (set when pending install is claimed)
     shopifyOnboarding?: boolean;
     ecommerceStoreId?: string;
 }
 
+export interface PhoneOtpRequest {
+    phone: string; // E.164 format: +966xxxxxxxx
+}
+
+export interface PhoneOtpVerifyRequest {
+    phone: string;
+    code: string;
+}

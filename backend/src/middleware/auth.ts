@@ -5,7 +5,6 @@ import { authService } from '../services/auth';
 export interface AuthenticatedRequest extends FastifyRequest {
     user?: {
         userId: string;
-        facebookId: string;
         isAdmin?: boolean;
     };
 }
@@ -55,7 +54,6 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
         // Attach user info to request (isAdmin cached in JWT, refreshed every 15 min)
         request.user = {
             userId: payload.userId,
-            facebookId: payload.facebookId,
             isAdmin: payload.isAdmin || false,
         };
     } catch (error) {

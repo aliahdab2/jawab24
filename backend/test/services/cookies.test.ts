@@ -87,11 +87,11 @@ describe('CookiesService', () => {
             }));
         });
 
-        it('should set maxAge for 7 days', () => {
+        it('should set maxAge for 60 days', () => {
             service.setRefreshTokenCookie(mockReply as any, 'refresh-token-456');
 
             const call = mockReply.setCookie.mock.calls[0];
-            const expectedMaxAge = (7 * 24 * 60 * 60 * 1000) / 1000;
+            const expectedMaxAge = (60 * 24 * 60 * 60 * 1000) / 1000;
             expect(call[2].maxAge).toBe(expectedMaxAge);
         });
     });

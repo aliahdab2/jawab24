@@ -37,6 +37,7 @@ export const PAGE_NAMESPACES = {
   authCallback:       ['auth'],
   authSync:           ['auth'],
   completeProfile:    ['profile'],
+  phoneCollect:       ['auth'],
 
   // ── Payment flow ──────────────────────────────────────────────
   checkout:           ['checkout', 'payment', 'plans', 'pricing', 'landing'],

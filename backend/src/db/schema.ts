@@ -5,7 +5,9 @@ import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared
 // 1. Users Table
 export const users = pgTable('users', {
     id: uuid('id').defaultRandom().primaryKey(),
-    facebookId: varchar('facebook_id', { length: 255 }).unique().notNull(),
+    facebookId: varchar('facebook_id', { length: 255 }).unique(), // nullable — phone is now the primary identity
+    phone: varchar('phone', { length: 20 }).unique(), // primary identity for phone OTP login
+    phoneVerified: boolean('phone_verified').default(false).notNull(),
     name: varchar('name', { length: 255 }),
     email: varchar('email', { length: 255 }),
     picture: text('picture'), // Facebook profile picture URL
@@ -15,7 +17,20 @@ export const users = pgTable('users', {
     hasInstagramPermission: boolean('has_instagram_permission').default(false),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
+    // App-level invariant: at least one of facebookId or phone must be non-null
 });
+
+// OTP Codes Table — for phone number verification
+export const otpCodes = pgTable('otp_codes', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    phone: varchar('phone', { length: 20 }).notNull(),
+    codeHash: varchar('code_hash', { length: 255 }).notNull(), // bcrypt hash of 6-digit code
+    expiresAt: timestamp('expires_at').notNull(), // now + 5 minutes
+    attempts: integer('attempts').default(0).notNull(), // max 3 before lockout
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+    phoneIdx: index('otp_codes_phone_idx').on(table.phone),
+}));
 
 // ============================================
 // WORKSPACE / TEAM TABLES

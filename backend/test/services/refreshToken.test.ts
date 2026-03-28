@@ -88,7 +88,7 @@ describe('RefreshTokenService', () => {
             expect(insertArg.expiresAt).toBeInstanceOf(Date);
         });
 
-        it('should set expiry to approximately 7 days from now', async () => {
+        it('should set expiry to approximately 60 days from now', async () => {
             mockInsertValues.mockResolvedValue(undefined);
 
             const before = Date.now();
@@ -96,9 +96,9 @@ describe('RefreshTokenService', () => {
             const after = Date.now();
 
             const insertArg = mockInsertValues.mock.calls[0][0];
-            const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-            expect(insertArg.expiresAt.getTime()).toBeGreaterThanOrEqual(before + sevenDaysMs);
-            expect(insertArg.expiresAt.getTime()).toBeLessThanOrEqual(after + sevenDaysMs);
+            const sixtyDaysMs = 60 * 24 * 60 * 60 * 1000;
+            expect(insertArg.expiresAt.getTime()).toBeGreaterThanOrEqual(before + sixtyDaysMs);
+            expect(insertArg.expiresAt.getTime()).toBeLessThanOrEqual(after + sixtyDaysMs);
         });
 
         it('should generate unique tokens on each call', async () => {

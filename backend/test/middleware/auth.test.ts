@@ -47,7 +47,6 @@ describe('Authenticate Middleware', () => {
     // Mock verifyToken to return payload
     vi.mocked(authService.verifyToken).mockReturnValue({
       userId: 'user-123',
-      facebookId: 'fb-123',
     } as any);
 
     await authenticate(mockRequest as FastifyRequest, mockReply as FastifyReply);
@@ -57,7 +56,6 @@ describe('Authenticate Middleware', () => {
     expect(authService.verifyToken).toHaveBeenCalledWith(validToken);
     expect(mockRequest.user).toEqual({
       userId: 'user-123',
-      facebookId: 'fb-123',
       isAdmin: false,
     });
     expect(mockReply.status).not.toHaveBeenCalled();
@@ -69,7 +67,6 @@ describe('Authenticate Middleware', () => {
 
     vi.mocked(authService.verifyToken).mockReturnValue({
       userId: 'user-123',
-      facebookId: 'fb-123',
     } as any);
 
     await authenticate(mockRequest as FastifyRequest, mockReply as FastifyReply);

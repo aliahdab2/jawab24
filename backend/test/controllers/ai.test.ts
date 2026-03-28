@@ -18,6 +18,12 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        getUserById: vi.fn().mockResolvedValue(null),
+    },
+}));
+
 // Import controller AFTER mocks
 import { aiController } from '../../src/controllers/ai';
 import { aiService } from '../../src/services/ai';

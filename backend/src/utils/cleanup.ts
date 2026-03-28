@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { aiCache, logs, usageLogs, refreshTokens } from '../db/schema';
+import { aiCache, logs, usageLogs, refreshTokens, otpCodes } from '../db/schema';
 import { lt, sql } from 'drizzle-orm';
 import { Logger, noopLogger, CleanupResult } from '../types';
 
@@ -153,6 +153,22 @@ export async function cleanupRefreshTokens(): Promise<CleanupResult> {
     }
 }
 
+export async function cleanupOtpCodes(): Promise<CleanupResult> {
+    try {
+        const deleted = await db
+            .delete(otpCodes)
+            .where(lt(otpCodes.expiresAt, new Date()))
+            .returning({ id: otpCodes.id });
+        return { table: 'otp_codes', deletedCount: deleted.length };
+    } catch (error) {
+        return {
+            table: 'otp_codes',
+            deletedCount: 0,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        };
+    }
+}
+
 /**
  * Run all cleanup tasks
  * @param options - Configuration options including retention days
@@ -179,6 +195,7 @@ export async function runAllCleanupTasks(
         cleanupLogs(logsDays),
         cleanupUsageLogs(usageLogsDays),
         cleanupRefreshTokens(),
+        cleanupOtpCodes(),
     ]);
     
     // Log results

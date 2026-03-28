@@ -2103,6 +2103,28 @@ Jawab24 يدعم **مساحات عمل متعددة المستأجرين** مع 
 
 ## English
 
+### Authentication Architecture
+
+**Identity model:** phone number = identity. Facebook/Instagram/WhatsApp = channels connected after login.
+
+**Login methods:**
+- **Phone OTP (primary)** — E.164 phone → 6-digit SMS code via Vonage → JWT + 60-day refresh token
+- **Facebook OAuth (secondary)** — remains available; users prompted to add phone after login
+
+**OTP security:**
+- Codes bcrypt-hashed before storage (10 rounds)
+- Dummy bcrypt compare on missing record (timing attack prevention)
+- Max 3 attempts per OTP, 1 OTP per phone per 60s
+- 5-minute expiry, automatic cleanup
+
+**Session security:**
+- Access token: 15-minute JWT (HMAC-SHA256, RFC 7519 — exp in seconds)
+- Refresh token: 60-day opaque token, DB-stored, rotated on every use
+- Cookies: HttpOnly + Secure + SameSite:strict
+- Feature flag: `PHONE_AUTH_ENABLED` — phone routes hidden until enabled
+
+---
+
 ### Page Token Encryption at Rest
 
 Facebook page access tokens are now **encrypted at rest** using AES-256-GCM encryption.

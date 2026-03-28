@@ -3,6 +3,7 @@ import { aiService } from '../services/ai';
 import { AiGenerateRequest } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { config } from '../config';
+import { authService } from '../services/auth';
 
 export class AiController {
     /**
@@ -37,7 +38,8 @@ export class AiController {
             return reply.status(400).send({ error: 'Comment is required' });
         }
 
-        if (user && user.facebookId !== config.demo.userFacebookId) {
+        const dbUser = user && config.demo.enabled ? await authService.getUserById(user.userId) : null;
+        if (user && dbUser?.facebookId !== config.demo.userFacebookId) {
             // Check subscription limits (skip for demo users)
             const { subscriptionsService } = await import('../services/subscriptions');
             const limitCheck = await subscriptionsService.canUseAiReplies(user.userId);

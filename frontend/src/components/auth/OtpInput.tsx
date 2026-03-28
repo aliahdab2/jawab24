@@ -1,0 +1,99 @@
+import { useRef, useState, useEffect } from 'react';
+import type { KeyboardEvent, ClipboardEvent } from 'react';
+
+const OTP_LENGTH = 6;
+
+interface OtpInputProps {
+    value: string;
+    onChange: (value: string) => void;
+    disabled?: boolean;
+    autoFocus?: boolean;
+}
+
+export function OtpInput({ value, onChange, disabled, autoFocus }: OtpInputProps) {
+    const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+    const [digits, setDigits] = useState<string[]>(() =>
+        Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '')
+    );
+
+    // Reset digits when value is cleared externally
+    useEffect(() => {
+        if (value === '') {
+            setDigits(Array(OTP_LENGTH).fill(''));
+        }
+    }, [value]);
+
+    const emit = (newDigits: string[]) => {
+        onChange(newDigits.join(''));
+    };
+
+    const focusAt = (index: number) => {
+        inputsRef.current[index]?.focus();
+    };
+
+    const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+        // Take the last digit typed (handles paste-into-single-box edge case)
+        const char = e.target.value.replace(/\D/g, '').slice(-1);
+        const newDigits = [...digits];
+        newDigits[index] = char;
+        setDigits(newDigits);
+        emit(newDigits);
+        if (char && index < OTP_LENGTH - 1) {
+            focusAt(index + 1);
+        }
+    };
+
+    const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Backspace') {
+            if (digits[index]) {
+                const newDigits = [...digits];
+                newDigits[index] = '';
+                setDigits(newDigits);
+                emit(newDigits);
+            } else if (index > 0) {
+                focusAt(index - 1);
+            }
+        } else if (e.key === 'ArrowLeft' && index > 0) {
+            focusAt(index - 1);
+        } else if (e.key === 'ArrowRight' && index < OTP_LENGTH - 1) {
+            focusAt(index + 1);
+        }
+    };
+
+    const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
+        if (!pasted) return;
+        const newDigits = Array(OTP_LENGTH).fill('');
+        pasted.split('').forEach((char, i) => { newDigits[i] = char; });
+        setDigits(newDigits);
+        emit(newDigits);
+        // Focus first empty box after pasted content, or last box if full
+        const nextFocus = Math.min(pasted.length, OTP_LENGTH - 1);
+        focusAt(nextFocus);
+    };
+
+    return (
+        <div className="flex gap-2 justify-center" role="group" aria-label="Verification code">
+            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+                <input
+                    key={i}
+                    ref={el => { inputsRef.current[i] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={digits[i]}
+                    onChange={e => handleChange(i, e)}
+                    onKeyDown={e => handleKeyDown(i, e)}
+                    onPaste={handlePaste}
+                    onFocus={e => e.target.select()}
+                    disabled={disabled}
+                    autoFocus={autoFocus && i === 0}
+                    className="w-11 h-14 text-center text-xl font-bold border-2 border-surface-300 dark:border-surface-600 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all bg-card text-foreground disabled:opacity-50"
+                    aria-label={`Digit ${i + 1} of ${OTP_LENGTH}`}
+                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                />
+            ))}
+        </div>
+    );
+}

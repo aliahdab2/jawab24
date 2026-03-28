@@ -12,9 +12,8 @@ import { FastifyRequest } from 'fastify';
 /** Authenticated request with user info attached by auth middleware */
 export interface AuthenticatedRequest extends FastifyRequest {
     user: {
-        id: string;
-        email?: string;
-        facebookId?: string;
+        userId: string;
+        isAdmin?: boolean;
     };
 }
 

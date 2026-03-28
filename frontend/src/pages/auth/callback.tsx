@@ -157,6 +157,13 @@ export default function AuthCallback() {
         return;
       }
 
+      // Check if phone is required (PHONE_AUTH_ENABLED and user has no phone yet)
+      if (data.requiresPhone) {
+        const collectUrl = `/auth/phone-collect?redirect=${encodeURIComponent(safeUrl)}`;
+        routerRef.current.replace(collectUrl, collectUrl, { locale: finalLocale });
+        return;
+      }
+
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {
         const profileUrl = `/complete-profile?redirect=${encodeURIComponent(safeUrl)}`;

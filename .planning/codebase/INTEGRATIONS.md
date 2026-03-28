@@ -356,21 +356,38 @@
 
 ### JWT (JSON Web Tokens)
 - **Purpose**: Stateless authentication for API requests
-- **Algorithm**: HS256 (HMAC-SHA256)
+- **Algorithm**: HMAC-SHA256 (custom implementation, RFC 7519 compliant)
 - **Secret**: `JWT_SECRET` (minimum 32 chars)
-- **Expiration**: `JWT_EXPIRES_IN` (default: 7 days)
-- **Payload**: `{ userId, facebookId, iat, exp }`
-- **Storage (Frontend)**: Secure storage via Capacitor (not cookies in mobile)
-- **Transmission**: Authorization header: `Bearer <token>`
-
-- **Token Encryption**:
-  - Tokens stored in Capacitor secure storage (encrypted by OS)
-  - No plaintext storage in browser localStorage
+- **Access token expiry**: 15 minutes
+- **Refresh token expiry**: 60 days (database-stored, rotated on use)
+- **Payload**: `{ userId, isAdmin, exp }` — exp is Unix timestamp in **seconds** per RFC 7519
+- **Storage (Web)**: HttpOnly + Secure + SameSite:strict cookies (no localStorage)
+- **Storage (Mobile)**: Bearer token in Capacitor secure storage
 
 - **Implementation Location**:
   - Issuer: `/backend/src/services/auth.ts`
   - Middleware: `/backend/src/middleware/auth.ts`
-  - Verification: Fastify hook on protected routes
+  - Cookies: `/backend/src/services/cookies.ts`
+  - Refresh: `/backend/src/services/refreshToken.ts`
+
+---
+
+### Phone OTP Authentication
+- **Purpose**: Primary login method — universal identity not tied to any platform
+- **Flow**: Phone (E.164) → 6-digit OTP via SMS → bcrypt verify → JWT + refresh token
+- **OTP storage**: `otpCodes` table — bcrypt-hashed, 5-min expiry, max 3 attempts
+- **Rate limiting**: 1 OTP per phone per 60s (store-level) + 3 requests/10min (route-level)
+- **Timing attack protection**: dummy bcrypt compare when no OTP record exists
+- **Feature flag**: `PHONE_AUTH_ENABLED=true` — routes hidden until flag is on
+- **SMS delivery**: Vonage SMS API (see Vonage SMS below)
+- **Phone linking**: `POST /auth/phone/link` (authenticated) — links phone to existing Facebook users
+
+- **Implementation Location**:
+  - OTP lifecycle: `/backend/src/services/otp.ts`
+  - Controller: `/backend/src/controllers/auth.ts` (`requestOtp`, `verifyOtp`, `linkPhone`)
+  - Routes: `/backend/src/routes/auth.ts`
+  - Frontend components: `/frontend/src/components/auth/PhoneInput.tsx`, `OtpInput.tsx`
+  - Frontend pages: `/frontend/src/pages/login.tsx`, `/frontend/src/pages/auth/phone-collect.tsx`
 
 ---
 
@@ -407,6 +424,23 @@
   - Service: `/backend/src/services/facebook.ts`
   - Controller: `/backend/src/controllers/auth.ts`
   - Routes: `/backend/src/routes/auth.ts`
+
+---
+
+### Vonage SMS
+- **Purpose**: OTP delivery for phone authentication
+- **API**: Vonage SMS REST API (`https://rest.nexmo.com/sms/json`)
+- **Credentials**: `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_SENDER_ID`
+- **Coverage**: 200+ countries including Syria (+963), Saudi Arabia (+966), Turkey (+90), Sweden (+46)
+- **Development**: console.log only (no real SMS sent)
+- **Production**: live Vonage delivery — keys required
+- **Phase 3**: WhatsApp Cloud API as primary delivery, Vonage SMS as fallback (after Meta WABA approval)
+
+- **Implementation Location**: `/backend/src/services/sms.ts`
+- **Env vars**:
+  - `VONAGE_API_KEY` — from Vonage API Settings
+  - `VONAGE_API_SECRET` — from Vonage API Settings
+  - `VONAGE_SENDER_ID` — alphanumeric sender name (default: `Jawab24`)
 
 ---
 

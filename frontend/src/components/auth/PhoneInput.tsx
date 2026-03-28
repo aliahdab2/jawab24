@@ -1,0 +1,151 @@
+import { useState, useRef } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js';
+import type { CountryCode } from 'libphonenumber-js';
+import { useLocale } from 'next-intl';
+import { isRTLLocale } from '@/utils/locale';
+
+const COUNTRY_OPTIONS = [
+    { code: 'SA' as CountryCode, dial: '+966', flag: '🇸🇦', name: 'Saudi Arabia', nameAr: 'السعودية' },
+    { code: 'SY' as CountryCode, dial: '+963', flag: '🇸🇾', name: 'Syria', nameAr: 'سوريا' },
+    { code: 'AE' as CountryCode, dial: '+971', flag: '🇦🇪', name: 'UAE', nameAr: 'الإمارات' },
+    { code: 'JO' as CountryCode, dial: '+962', flag: '🇯🇴', name: 'Jordan', nameAr: 'الأردن' },
+    { code: 'KW' as CountryCode, dial: '+965', flag: '🇰🇼', name: 'Kuwait', nameAr: 'الكويت' },
+    { code: 'BH' as CountryCode, dial: '+973', flag: '🇧🇭', name: 'Bahrain', nameAr: 'البحرين' },
+    { code: 'QA' as CountryCode, dial: '+974', flag: '🇶🇦', name: 'Qatar', nameAr: 'قطر' },
+    { code: 'OM' as CountryCode, dial: '+968', flag: '🇴🇲', name: 'Oman', nameAr: 'عُمان' },
+    { code: 'EG' as CountryCode, dial: '+20', flag: '🇪🇬', name: 'Egypt', nameAr: 'مصر' },
+    { code: 'IQ' as CountryCode, dial: '+964', flag: '🇮🇶', name: 'Iraq', nameAr: 'العراق' },
+    { code: 'LB' as CountryCode, dial: '+961', flag: '🇱🇧', name: 'Lebanon', nameAr: 'لبنان' },
+    { code: 'TR' as CountryCode, dial: '+90', flag: '🇹🇷', name: 'Turkey', nameAr: 'تركيا' },
+    { code: 'SE' as CountryCode, dial: '+46', flag: '🇸🇪', name: 'Sweden', nameAr: 'السويد' },
+    { code: 'GB' as CountryCode, dial: '+44', flag: '🇬🇧', name: 'UK', nameAr: 'المملكة المتحدة' },
+    { code: 'US' as CountryCode, dial: '+1', flag: '🇺🇸', name: 'USA', nameAr: 'الولايات المتحدة' },
+];
+
+// Default country based on locale: Arabic → Saudi Arabia, otherwise Saudi Arabia
+const LOCALE_TO_COUNTRY: Record<string, CountryCode> = {
+    ar: 'SA',
+    en: 'SA',
+};
+
+interface PhoneInputProps {
+    value: string; // E.164 format emitted to parent
+    onChange: (e164: string, isValid: boolean) => void;
+    disabled?: boolean;
+    autoFocus?: boolean;
+    'aria-label'?: string;
+    'aria-describedby'?: string;
+}
+
+export function PhoneInput({
+    onChange,
+    disabled,
+    autoFocus,
+    'aria-label': ariaLabel,
+    'aria-describedby': ariaDescribedBy,
+}: PhoneInputProps) {
+    const locale = useLocale();
+    const isRTL = isRTLLocale(locale);
+    const defaultCode = LOCALE_TO_COUNTRY[locale] ?? 'SA';
+
+    const [selectedCountry, setSelectedCountry] = useState(
+        () => COUNTRY_OPTIONS.find(c => c.code === defaultCode) ?? COUNTRY_OPTIONS[0]
+    );
+    const [localValue, setLocalValue] = useState('');
+    const [showDropdown, setShowDropdown] = useState(false);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const computeE164 = (digits: string, country: typeof COUNTRY_OPTIONS[0]) => {
+        const withDial = `${country.dial}${digits}`;
+        if (isValidPhoneNumber(withDial, country.code)) {
+            const parsed = parsePhoneNumber(withDial, country.code);
+            return { e164: parsed.format('E.164'), valid: true };
+        }
+        return { e164: withDial, valid: false };
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const raw = e.target.value.replace(/\D/g, '');
+        setLocalValue(e.target.value.replace(/[^\d\s\-()]/g, ''));
+        const { e164, valid } = computeE164(raw, selectedCountry);
+        onChange(e164, valid);
+    };
+
+    const handleCountrySelect = (country: typeof COUNTRY_OPTIONS[0]) => {
+        setSelectedCountry(country);
+        setShowDropdown(false);
+        const digits = localValue.replace(/\D/g, '');
+        const { e164, valid } = computeE164(digits, country);
+        onChange(e164, valid);
+        inputRef.current?.focus();
+    };
+
+    return (
+        <div className="relative">
+            <div className="flex">
+                {/* Country selector button */}
+                <button
+                    type="button"
+                    onClick={() => setShowDropdown(v => !v)}
+                    disabled={disabled}
+                    className="flex items-center gap-1.5 px-3 py-3 border border-e-0 border-surface-300 dark:border-surface-600 rounded-s-xl bg-surface-50 dark:bg-surface-800 hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors text-sm font-medium flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-500"
+                    aria-haspopup="listbox"
+                    aria-expanded={showDropdown}
+                    aria-label={`Country: ${selectedCountry.name}`}
+                >
+                    <span aria-hidden="true">{selectedCountry.flag}</span>
+                    <span className="text-muted-foreground text-xs">{selectedCountry.dial}</span>
+                    <ChevronDown className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
+                </button>
+
+                {/* Phone number input */}
+                <input
+                    ref={inputRef}
+                    type="tel"
+                    inputMode="numeric"
+                    value={localValue}
+                    onChange={handleChange}
+                    disabled={disabled}
+                    placeholder="5XX XXX XXXX"
+                    className="flex-1 px-4 py-3 border border-surface-300 dark:border-surface-600 rounded-e-xl focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition-all bg-card text-foreground placeholder:text-muted-foreground disabled:opacity-50 min-w-0"
+                    dir="ltr"
+                    autoFocus={autoFocus}
+                    autoComplete="tel-national"
+                    aria-label={ariaLabel}
+                    aria-describedby={ariaDescribedBy}
+                />
+            </div>
+
+            {/* Country dropdown */}
+            {showDropdown && (
+                <div
+                    ref={dropdownRef}
+                    className="absolute top-full start-0 mt-1 w-64 bg-card border border-theme-border rounded-xl shadow-xl z-50 overflow-hidden"
+                    role="listbox"
+                    aria-label="Select country"
+                >
+                    <div className="max-h-56 overflow-y-auto">
+                        {COUNTRY_OPTIONS.map(country => (
+                            <button
+                                key={country.code}
+                                type="button"
+                                onClick={() => handleCountrySelect(country)}
+                                className="flex items-center gap-3 w-full px-4 py-2.5 text-sm hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors text-start"
+                                role="option"
+                                aria-selected={selectedCountry.code === country.code}
+                            >
+                                <span aria-hidden="true">{country.flag}</span>
+                                <span className="font-medium text-foreground">
+                                    {isRTL ? country.nameAr : country.name}
+                                </span>
+                                <span className="text-muted-foreground text-xs ms-auto">{country.dial}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}

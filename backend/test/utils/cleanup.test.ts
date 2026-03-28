@@ -117,7 +117,7 @@ describe('cleanup utilities', () => {
 
             const results = await runAllCleanupTasks(undefined, logger);
 
-            expect(results).toHaveLength(4);
+            expect(results).toHaveLength(5); // aiCache, logs, usageLogs, refreshTokens, otpCodes
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting'));
         });
 
