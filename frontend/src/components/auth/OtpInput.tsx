@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import type { KeyboardEvent, ClipboardEvent } from 'react';
 
-const OTP_LENGTH = 6;
+export const OTP_LENGTH = 6;
 
 interface OtpInputProps {
     value: string;
@@ -72,7 +72,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
     };
 
     return (
-        <div className="flex gap-2 justify-center" role="group" aria-label="Verification code">
+        <div className="flex gap-2 justify-center" role="group" aria-label="Verification code" dir="ltr">
             {Array.from({ length: OTP_LENGTH }).map((_, i) => (
                 <input
                     key={i}

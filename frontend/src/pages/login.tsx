@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -26,13 +26,14 @@ import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { useAuthStore, useUIStore, type Language, type WorkspaceSummary } from '@/lib/store';
 import { otpApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { handleOtpVerifyError } from '@/lib/otpErrors';
 import { getNextLocale, getLocalePath } from '@/utils/locale';
 import { DemoLoginButton } from '@/features/demo';
 import { PhoneInput } from '@/components/auth/PhoneInput';
-import { OtpInput } from '@/components/auth/OtpInput';
+import { OtpInput, OTP_LENGTH } from '@/components/auth/OtpInput';
+import { useOtpRequest } from '@/hooks/useOtpRequest';
 
 const PHONE_AUTH_ENABLED = process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === 'true';
-const RESEND_COOLDOWN_SECONDS = 60;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -57,62 +58,27 @@ export default function LoginPage() {
   type OtpStep = 'phone' | 'code';
   const [authTab, setAuthTab] = useState<AuthTab>('facebook');
   const [otpStep, setOtpStep] = useState<OtpStep>('phone');
-  const [phoneE164, setPhoneE164] = useState('');
-  const [phoneValid, setPhoneValid] = useState(false);
-  const [phoneTouched, setPhoneTouched] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
-  const [resendCountdown, setResendCountdown] = useState(0);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const startCountdown = useCallback(() => {
-    setResendCountdown(RESEND_COOLDOWN_SECONDS);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    countdownRef.current = setInterval(() => {
-      setResendCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(countdownRef.current!);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, []);
-
-  // Cleanup countdown on unmount
-  useEffect(() => {
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-  }, []);
-
-
-  const handleRequestOtp = useCallback(async () => {
-    setPhoneTouched(true);
-    if (!phoneValid) return;
-    setOtpLoading(true);
-    setOtpError('');
-    try {
-      await otpApi.requestOtp(phoneE164);
-      setOtpStep('code');
-      setOtpCode('');
-      startCountdown();
-    } catch (err: unknown) {
-      captureError(err, 'OTP request failed', { tags: { page: 'login' } });
-      const axiosErr = err as { response?: { status?: number } };
-      if (axiosErr.response?.status === 429) {
-        setOtpError(t('tooManyAttempts'));
-      } else {
-        setOtpError(t('loginError'));
-      }
-    } finally {
-      setOtpLoading(false);
-    }
-  }, [phoneValid, phoneE164, t, startCountdown]);
+  const {
+    phoneE164, setPhoneE164,
+    phoneValid, setPhoneValid,
+    phoneTouched,
+    loading: otpRequestLoading,
+    error: otpRequestError, setError: setOtpRequestError,
+    resendCountdown,
+    requestOtp: handleRequestOtp,
+  } = useOtpRequest({
+    page: 'login',
+    onSuccess: () => { setOtpStep('code'); setOtpCode(''); },
+  });
 
   const handleVerifyOtp = useCallback(async (completedCode?: string) => {
     // onComplete passes the code directly; button click falls back to state
     const code = completedCode ?? otpCode;
-    if (code.length !== 6) return;
+    if (code.length !== OTP_LENGTH) return;
     setOtpLoading(true);
     setOtpError('');
     try {
@@ -135,13 +101,7 @@ export default function LoginPage() {
       const safeUrl = returnUrl.startsWith('/') ? returnUrl : '/dashboard';
       router.replace(safeUrl);
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
-      const errCode = axiosErr.response?.data?.error;
-      if (errCode === 'invalid_code') setOtpError(t('invalidCode'));
-      else if (errCode === 'code_expired') setOtpError(t('codeExpired'));
-      else if (errCode === 'too_many_attempts' || axiosErr.response?.status === 429) setOtpError(t('tooManyAttempts'));
-      else setOtpError(t('loginError'));
-      captureError(err, 'OTP verify failed', { tags: { page: 'login' } });
+      handleOtpVerifyError(err, t, setOtpError, 'OTP verify failed', { page: 'login' });
     } finally {
       setOtpLoading(false);
     }
@@ -592,9 +552,9 @@ export default function LoginPage() {
                               onChange={(e164, valid) => {
                                 setPhoneE164(e164);
                                 setPhoneValid(valid);
-                                setOtpError('');
+                                setOtpRequestError('');
                               }}
-                              disabled={otpLoading}
+                              disabled={otpRequestLoading}
                               aria-label={t('phoneNumber')}
                               aria-describedby={phoneTouched && !phoneValid ? 'phone-error' : undefined}
                             />
@@ -603,18 +563,18 @@ export default function LoginPage() {
                                 {t('invalidPhone')}
                               </p>
                             )}
-                            {otpError && (
+                            {otpRequestError && (
                               <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
-                                {otpError}
+                                {otpRequestError}
                               </p>
                             )}
                             <Button
                               onClick={handleRequestOtp}
-                              disabled={otpLoading}
+                              disabled={otpRequestLoading}
                               size="lg"
                               className="w-full py-6 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
                             >
-                              {otpLoading ? (
+                              {otpRequestLoading ? (
                                 <span className="flex items-center justify-center gap-2">
                                   <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                                   {t('sendingCode')}

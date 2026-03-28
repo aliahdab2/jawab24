@@ -10,7 +10,7 @@
  *   Step 2 → Enter code  → link phone to account (POST /auth/phone/link)
  *   → Redirect to intended destination
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useTranslations } from 'next-intl';
@@ -18,11 +18,10 @@ import { Loader2, ArrowLeft, Phone, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { otpApi } from '@/lib/api';
-import { captureError } from '@/lib/sentryHelpers';
+import { handleOtpVerifyError } from '@/lib/otpErrors';
 import { PhoneInput } from '@/components/auth/PhoneInput';
-import { OtpInput } from '@/components/auth/OtpInput';
-
-const RESEND_COOLDOWN_SECONDS = 60;
+import { OtpInput, OTP_LENGTH } from '@/components/auth/OtpInput';
+import { useOtpRequest } from '@/hooks/useOtpRequest';
 
 export default function PhoneCollectPage() {
     const router = useRouter();
@@ -32,14 +31,22 @@ export default function PhoneCollectPage() {
 
     type Step = 'phone' | 'code';
     const [step, setStep] = useState<Step>('phone');
-    const [phoneE164, setPhoneE164] = useState('');
-    const [phoneValid, setPhoneValid] = useState(false);
-    const [phoneTouched, setPhoneTouched] = useState(false);
     const [otpCode, setOtpCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [resendCountdown, setResendCountdown] = useState(0);
-    const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const {
+        phoneE164, setPhoneE164,
+        phoneValid, setPhoneValid,
+        phoneTouched,
+        loading: requestLoading,
+        error: requestError, setError: setRequestError,
+        resendCountdown,
+        requestOtp: handleRequestOtp,
+    } = useOtpRequest({
+        page: 'phone-collect',
+        onSuccess: () => { setStep('code'); setOtpCode(''); },
+    });
 
     // Guard: if no authenticated user, redirect to login
     useEffect(() => {
@@ -48,21 +55,6 @@ export default function PhoneCollectPage() {
             router.replace('/login');
         }
     }, [_hasHydrated, user, router]);
-
-    useEffect(() => {
-        return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-    }, []);
-
-    const startCountdown = useCallback(() => {
-        setResendCountdown(RESEND_COOLDOWN_SECONDS);
-        if (countdownRef.current) clearInterval(countdownRef.current);
-        countdownRef.current = setInterval(() => {
-            setResendCountdown(prev => {
-                if (prev <= 1) { clearInterval(countdownRef.current!); return 0; }
-                return prev - 1;
-            });
-        }, 1000);
-    }, []);
 
     const getRedirectUrl = useCallback(() => {
         const redirect = router.query.redirect as string;
@@ -73,29 +65,10 @@ export default function PhoneCollectPage() {
         router.replace(getRedirectUrl());
     };
 
-    const handleRequestOtp = useCallback(async () => {
-        setPhoneTouched(true);
-        if (!phoneValid) return;
-        setLoading(true);
-        setError('');
-        try {
-            await otpApi.requestOtp(phoneE164);
-            setStep('code');
-            setOtpCode('');
-            startCountdown();
-        } catch (err: unknown) {
-            captureError(err, 'Phone collect: OTP request failed', { tags: { page: 'phone-collect' } });
-            const axiosErr = err as { response?: { status?: number } };
-            setError(axiosErr.response?.status === 429 ? t('tooManyAttempts') : t('loginError'));
-        } finally {
-            setLoading(false);
-        }
-    }, [phoneValid, phoneE164, t, startCountdown]);
-
     const handleLinkPhone = useCallback(async (completedCode?: string) => {
         // onComplete passes the code directly; button click falls back to state
         const code = completedCode ?? otpCode;
-        if (code.length !== 6) return;
+        if (code.length !== OTP_LENGTH) return;
         setLoading(true);
         setError('');
         try {
@@ -109,13 +82,7 @@ export default function PhoneCollectPage() {
             }
             router.replace(getRedirectUrl());
         } catch (err: unknown) {
-            const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
-            const errCode = axiosErr.response?.data?.error;
-            if (errCode === 'invalid_code') setError(t('invalidCode'));
-            else if (errCode === 'code_expired') setError(t('codeExpired'));
-            else if (errCode === 'too_many_attempts' || axiosErr.response?.status === 429) setError(t('tooManyAttempts'));
-            else setError(t('loginError'));
-            captureError(err, 'Phone collect: link failed', { tags: { page: 'phone-collect' } });
+            handleOtpVerifyError(err, t, setError, 'Phone collect: link failed', { page: 'phone-collect' });
         } finally {
             setLoading(false);
         }
@@ -159,9 +126,9 @@ export default function PhoneCollectPage() {
                                     onChange={(e164, valid) => {
                                         setPhoneE164(e164);
                                         setPhoneValid(valid);
-                                        setError('');
+                                        setRequestError('');
                                     }}
-                                    disabled={loading}
+                                    disabled={requestLoading}
                                     autoFocus
                                     aria-label={t('phoneNumber')}
                                     aria-describedby={phoneTouched && !phoneValid ? 'phone-error' : undefined}
@@ -173,19 +140,19 @@ export default function PhoneCollectPage() {
                                 )}
                             </div>
 
-                            {error && (
+                            {requestError && (
                                 <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
-                                    {error}
+                                    {requestError}
                                 </p>
                             )}
 
                             <Button
                                 onClick={handleRequestOtp}
-                                disabled={loading}
+                                disabled={requestLoading}
                                 size="lg"
                                 className="w-full transition-all hover:shadow-lg"
                             >
-                                {loading ? (
+                                {requestLoading ? (
                                     <span className="flex items-center justify-center gap-2">
                                         <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
                                         {t('sendingCode')}
@@ -224,7 +191,7 @@ export default function PhoneCollectPage() {
                             )}
 
                             <Button
-                                onClick={handleLinkPhone}
+                                onClick={() => handleLinkPhone()}
                                 disabled={loading || otpCode.length !== 6}
                                 size="lg"
                                 className="w-full transition-all hover:shadow-lg"
@@ -254,7 +221,7 @@ export default function PhoneCollectPage() {
                                     <button
                                         type="button"
                                         onClick={handleRequestOtp}
-                                        disabled={loading}
+                                        disabled={requestLoading}
                                         className="text-brand-600 dark:text-brand-400 font-medium hover:underline disabled:opacity-50"
                                     >
                                         {t('resendCode')}
