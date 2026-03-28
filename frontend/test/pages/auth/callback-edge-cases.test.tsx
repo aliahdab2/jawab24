@@ -55,6 +55,12 @@ describe('AuthCallback - edge cases', () => {
     (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       setAuth: mockSetAuth,
     });
+    (useAuthStore as unknown as { getState: ReturnType<typeof vi.fn> }).getState = vi.fn(() => ({
+      isAuthenticated: false,
+      token: null,
+      setAuth: mockSetAuth,
+      setWorkspaces: vi.fn(),
+    }));
 
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
