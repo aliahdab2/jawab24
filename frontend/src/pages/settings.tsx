@@ -120,11 +120,7 @@ const SettingsPage: NextPageWithLayout = () => {
         awayMessageMulti: data.awayMessageMulti || {},
         greetingMessageMulti: data.greetingMessageMulti || {},
         dualReplyNudgeMulti: data.dualReplyNudgeMulti || {},
-        brandVoiceNotesMulti: data.brandVoiceNotesMulti && Object.keys(data.brandVoiceNotesMulti).some(k => k !== 'sourceLang' && data.brandVoiceNotesMulti[k])
-          ? data.brandVoiceNotesMulti
-          : data.brandVoiceNotes
-            ? { [data.dashboardLanguage || language]: data.brandVoiceNotes, sourceLang: data.dashboardLanguage || language }
-            : {},
+        brandVoiceNotesMulti: data.brandVoiceNotesMulti || {},
         awayMessage: data.awayMessage || '',
         greetingMessage: data.greetingMessage || '',
         replyDelay: data.replyDelay ?? 0,

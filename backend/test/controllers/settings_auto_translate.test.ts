@@ -268,22 +268,6 @@ describe('SettingsController Auto-Translation Logic', () => {
             }));
         });
 
-        it('should backfill legacy brandVoiceNotes from multi', async () => {
-            mockRequest.body = {
-                brandVoiceNotesMulti: {
-                    ar: 'اذكر التوصيل المجاني',
-                    en: ''
-                }
-            };
-
-            await settingsController.update(mockRequest, mockReply);
-
-            // Legacy field should be backfilled (prefers EN, then AR)
-            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
-                brandVoiceNotes: 'اذكر التوصيل المجاني [translated to en]'
-            }));
-        });
-
         it('should set sourceLang to manual when both languages changed', async () => {
             mockRequest.body = {
                 brandVoiceNotesMulti: {
