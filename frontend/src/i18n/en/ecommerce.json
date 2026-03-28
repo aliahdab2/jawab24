@@ -34,6 +34,33 @@
     "faqA4": "Yes. Jawab24 has 2-tier price hallucination detection that checks every AI-generated price against your real Shopify catalog before sending."
   },
 
+  "zid": {
+    "seoTitle": "Jawab24 for Zid — AI Auto-Reply with Product Sync",
+    "seoDescription": "Connect your Zid store to Jawab24 and let AI reply to Facebook & Instagram customers with real product data — prices, availability, and descriptions. Built for Arabic e-commerce.",
+    "seoKeywords": "Zid chatbot, Jawab24 Zid, auto reply Zid store, Zid Facebook bot, Zid Instagram auto reply Arabic",
+    "heroTitle": "Jawab24 for Zid",
+    "heroSubtitle": "Built for Arabic e-commerce. Connect your Zid store and let AI answer customer questions on Facebook and Instagram with real product data — prices, availability, and descriptions.",
+    "step1Title": "Connect Your Zid Store",
+    "step1Desc": "Authorize Jawab24 through Zid's app marketplace. No API keys or technical setup required.",
+    "step2Title": "Sync Your Products",
+    "step2Desc": "Jawab24 imports your Zid product catalog — names, prices, descriptions, and availability — in Arabic and English.",
+    "step3Title": "AI Replies with Real Data",
+    "step3Desc": "When customers ask about products on Facebook or Instagram, Jawab24 replies with accurate information from your Zid catalog.",
+    "feature1": "Native Zid integration — the only auto-reply tool built for Zid stores",
+    "feature2": "Bilingual product sync — Arabic and English catalog data",
+    "feature3": "6 Arabic dialect families detected and matched automatically",
+    "feature4": "Price verification prevents AI from inventing or guessing prices",
+    "feature5": "Knowledge Base with RAG search powered by your Zid product data",
+    "faqQ1": "How do I connect my Zid store to Jawab24?",
+    "faqA1": "Go to Settings → Integrations, click 'Connect Zid', and authorize through Zid's app marketplace. No API keys or coding needed.",
+    "faqQ2": "Does Jawab24 sync my Zid products automatically?",
+    "faqA2": "Yes. After connecting, Jawab24 imports your full product catalog and keeps it updated automatically.",
+    "faqQ3": "Can Jawab24 reply in Arabic to Zid store customers?",
+    "faqA3": "Yes. Jawab24 detects 6 Arabic dialect families — Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA — and replies naturally in the customer's dialect.",
+    "faqQ4": "Does Jawab24 verify product prices before replying?",
+    "faqA4": "Yes. Jawab24 checks every AI-generated price against your real Zid catalog before sending, preventing price hallucination."
+  },
+
   "salla": {
     "seoTitle": "Jawab24 for Salla — AI Auto-Reply for Arabic E-commerce",
     "seoDescription": "Connect your Salla store to Jawab24 for AI-powered auto-replies on Facebook & Instagram with real product data. Built for Arabic businesses.",
