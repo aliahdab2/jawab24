@@ -92,12 +92,14 @@ export default function PhoneCollectPage() {
         }
     }, [phoneValid, phoneE164, t, startCountdown]);
 
-    const handleLinkPhone = useCallback(async () => {
-        if (otpCode.length !== 6) return;
+    const handleLinkPhone = useCallback(async (completedCode?: string) => {
+        // onComplete passes the code directly; button click falls back to state
+        const code = completedCode ?? otpCode;
+        if (code.length !== 6) return;
         setLoading(true);
         setError('');
         try {
-            await otpApi.linkPhone(phoneE164, otpCode);
+            await otpApi.linkPhone(phoneE164, code);
             // Update store: add phone to current user
             const currentUser = useAuthStore.getState().user;
             const token = useAuthStore.getState().token ?? '';

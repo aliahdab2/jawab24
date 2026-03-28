@@ -109,12 +109,14 @@ export default function LoginPage() {
     }
   }, [phoneValid, phoneE164, t, startCountdown]);
 
-  const handleVerifyOtp = useCallback(async () => {
-    if (otpCode.length !== 6) return;
+  const handleVerifyOtp = useCallback(async (completedCode?: string) => {
+    // onComplete passes the code directly; button click falls back to state
+    const code = completedCode ?? otpCode;
+    if (code.length !== 6) return;
     setOtpLoading(true);
     setOtpError('');
     try {
-      const { data } = await otpApi.verifyOtp(phoneE164, otpCode);
+      const { data } = await otpApi.verifyOtp(phoneE164, code);
       // Hydrate auth store — fbToken is empty for phone-only users
       useAuthStore.getState().setAuth(
         { ...data.user, name: data.user.name ?? data.user.phone ?? '' },
