@@ -459,7 +459,7 @@ export class AuthController {
     async requestOtp(request: FastifyRequest<{ Body: PhoneOtpRequest }>, reply: FastifyReply) {
         const { phone } = request.body;
 
-        if (!phone || !/^\+[1-9]\d{6,14}$/.test(phone)) {
+        if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format: +966xxxxxxxx' });
         }
 
@@ -602,7 +602,7 @@ export class AuthController {
 
         const { phone, code } = request.body as { phone?: string; code?: string };
 
-        if (!phone || !/^\+[1-9]\d{6,14}$/.test(phone)) {
+        if (!phone || !/^\+[1-9]\d{1,14}$/.test(phone)) {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format' });
         }
         if (!code || code.length !== 6) {
