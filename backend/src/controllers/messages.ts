@@ -5,6 +5,7 @@ import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
+import { parseInboxFilters, parseLimit } from '../lib/queryParsers';
 import type { WorkspaceRequest } from '../middleware/workspace';
 
 export class MessagesController {
@@ -31,44 +32,12 @@ export class MessagesController {
         try {
             const { cursor, limit, direction, replied, resolved, needsAttention, actionRequired } = request.query;
 
-            const options: {
-                cursor?: string;
-                limit?: number;
-                direction?: 'incoming' | 'outgoing';
-                replied?: boolean;
-                resolved?: boolean;
-                needsAttention?: boolean;
-                actionRequired?: boolean;
-            } = {};
-
-            if (cursor) {
-                options.cursor = cursor;
-            }
-
-            if (limit) {
-                const parsedLimit = parseInt(limit, 10);
-                options.limit = Math.min(Math.max(parsedLimit, 1), 100);
-            }
-
-            if (direction && ['incoming', 'outgoing'].includes(direction)) {
-                options.direction = direction;
-            }
-
-            if (replied !== undefined) {
-                options.replied = replied === 'true';
-            }
-
-            if (resolved !== undefined) {
-                options.resolved = resolved === 'true';
-            }
-
-            if (needsAttention !== undefined) {
-                options.needsAttention = needsAttention === 'true';
-            }
-
-            if (actionRequired !== undefined) {
-                options.actionRequired = actionRequired === 'true';
-            }
+            const options = {
+                ...(cursor && { cursor }),
+                ...(limit !== undefined && { limit: parseLimit(limit) }),
+                ...(direction && ['incoming', 'outgoing'].includes(direction) && { direction }),
+                ...parseInboxFilters({ replied, resolved, needsAttention, actionRequired }),
+            };
 
             const result = await messagesService.getMessages(req.workspaceId, options);
             return reply.send(result);

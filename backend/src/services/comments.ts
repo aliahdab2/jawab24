@@ -64,7 +64,7 @@ export class CommentsService {
         }
 
         // --- Facebook comments query ---
-        const fbConditions = [eq(pages.workspaceId, workspaceId)];
+        const fbConditions = [eq(pages.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)];
         if (options?.actionRequired) {
             fbConditions.push(eq(comments.resolved, false));
             fbConditions.push(sql`(${comments.replied} = false OR ${comments.needsAttention} = true)`);
@@ -109,7 +109,7 @@ export class CommentsService {
             .limit(limit + 1);
 
         // --- Instagram comments query ---
-        const igConditions = [eq(pages.workspaceId, workspaceId)];
+        const igConditions = [eq(pages.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true)];
         if (options?.actionRequired) {
             igConditions.push(eq(instagramComments.resolved, false));
             igConditions.push(sql`(${instagramComments.replied} = false OR ${instagramComments.needsAttention} = true)`);
@@ -425,7 +425,7 @@ export class CommentsService {
                 .from(comments)
                 .innerJoin(posts, eq(comments.postId, posts.id))
                 .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(eq(pages.workspaceId, workspaceId)),
+                .where(and(eq(pages.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true))),
 
             // Instagram comments — single query with FILTER
             db.select({
@@ -442,7 +442,7 @@ export class CommentsService {
                 .from(instagramComments)
                 .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
                 .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(eq(pages.workspaceId, workspaceId)),
+                .where(and(eq(pages.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true))),
         ]);
 
         const fb = fbStats[0];

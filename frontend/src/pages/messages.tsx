@@ -35,37 +35,10 @@ import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 
-type FilterType = 'needs_action' | 'all' | 'auto_replied' | 'handled';
-
-const VALID_FILTERS: FilterType[] = ['needs_action', 'all', 'auto_replied', 'handled'];
-
-// Map legacy/dashboard filter values to valid filter types
-const FILTER_ALIASES: Record<string, FilterType> = {
-  pending: 'needs_action',
-  flagged: 'needs_action',
-  replied_today: 'auto_replied',
-};
-
-function resolveFilter(value: string | undefined): FilterType {
-  if (!value) return 'needs_action';
-  if (VALID_FILTERS.includes(value as FilterType)) return value as FilterType;
-  return FILTER_ALIASES[value] || 'needs_action';
-}
-
-// Map frontend filters to API params
-function getApiParams(filter: FilterType): MessagesQueryParams {
-  switch (filter) {
-    case 'needs_action':
-      return { actionRequired: true };
-    case 'auto_replied':
-      return { replied: true };
-    case 'handled':
-      return { resolved: true };
-    case 'all':
-    default:
-      return {};
-  }
-}
+import { type InboxFilterType, resolveInboxFilter, inboxFilterToApiParams } from '@/utils/inboxFilters';
+type FilterType = InboxFilterType;
+const resolveFilter = resolveInboxFilter;
+const getApiParams = (filter: FilterType): MessagesQueryParams => inboxFilterToApiParams(filter);
 
 const MESSAGES_PER_PAGE = 50;
 

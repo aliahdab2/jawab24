@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { commentsService } from '../services/comments';
 import { UpdateCommentDTO } from '../types';
+import { parseInboxFilters, parseLimit } from '../lib/queryParsers';
 import type { WorkspaceRequest } from '../middleware/workspace';
 
 export class CommentsController {
@@ -39,51 +40,12 @@ export class CommentsController {
         const { cursor, limit, replied, replyMethod, needsAttention, resolved, actionRequired } = request.query;
 
         try {
-            const options: {
-                cursor?: string;
-                limit?: number;
-                replied?: boolean;
-                replyMethod?: 'ai' | 'template' | 'manual';
-                needsAttention?: boolean;
-                resolved?: boolean;
-                actionRequired?: boolean;
-            } = {};
-
-            // Parse cursor for pagination
-            if (cursor) {
-                options.cursor = cursor;
-            }
-
-            // Parse limit (default 50, max 100)
-            if (limit) {
-                const parsedLimit = parseInt(limit, 10);
-                options.limit = Math.min(Math.max(parsedLimit, 1), 100);
-            }
-
-            // Parse replied filter
-            if (replied !== undefined) {
-                options.replied = replied === 'true';
-            }
-
-            // Parse replyMethod filter
-            if (replyMethod && ['ai', 'template', 'manual'].includes(replyMethod)) {
-                options.replyMethod = replyMethod;
-            }
-
-            // Parse needsAttention filter
-            if (needsAttention !== undefined) {
-                options.needsAttention = needsAttention === 'true';
-            }
-
-            // Parse resolved filter
-            if (resolved !== undefined) {
-                options.resolved = resolved === 'true';
-            }
-
-            // Parse actionRequired composite filter
-            if (actionRequired !== undefined) {
-                options.actionRequired = actionRequired === 'true';
-            }
+            const options = {
+                ...(cursor && { cursor }),
+                ...(limit !== undefined && { limit: parseLimit(limit) }),
+                ...(replyMethod && ['ai', 'template', 'manual'].includes(replyMethod) && { replyMethod }),
+                ...parseInboxFilters({ replied, resolved, needsAttention, actionRequired }),
+            };
 
             const result = await commentsService.getCommentsByWorkspace(req.workspaceId, options);
             return reply.send(result);

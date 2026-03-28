@@ -35,7 +35,7 @@ export class MessagesService {
         const limit = options?.limit || 50;
 
         const workspacePages = await db.query.pages.findMany({
-            where: eq(pages.workspaceId, workspaceId),
+            where: and(eq(pages.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)),
             columns: { id: true },
         });
 
@@ -628,7 +628,8 @@ export class MessagesService {
             .innerJoin(pages, eq(messages.pageId, pages.id))
             .where(and(
                 eq(pages.workspaceId, workspaceId),
-                eq(messages.direction, 'incoming')
+                eq(messages.direction, 'incoming'),
+                eq(pages.autoReplyEnabled, true)
             ));
 
         const row = result[0];
