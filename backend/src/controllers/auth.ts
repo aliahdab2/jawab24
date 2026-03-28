@@ -100,6 +100,7 @@ export class AuthController {
 
             // 9. Build response — include requiresPhone if PHONE_AUTH_ENABLED and user has no phone yet
             const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
+            request.log.info({ userId: user.id, phone: user.phone, requiresPhone: !!requiresPhone }, 'facebookLogin: phone check');
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
             }, workspaces, requiresPhone);
@@ -623,9 +624,11 @@ export class AuthController {
                 return reply.status(409).send({ error: 'phone_already_linked', message: 'This phone number is already linked to another account' });
             }
 
-            await db.update(users)
+            const updateResult = await db.update(users)
                 .set({ phone, phoneVerified: true, updatedAt: new Date() })
                 .where(eq(users.id, userId));
+
+            request.log.info({ userId, phone, updated: Array.isArray(updateResult) ? updateResult.length : 'done' }, 'linkPhone: DB update result');
 
             return reply.send({ success: true });
         } catch (error) {
