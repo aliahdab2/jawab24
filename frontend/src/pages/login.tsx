@@ -585,7 +585,7 @@ export default function LoginPage() {
                           <Button
                             onClick={handleFacebookLogin}
                             disabled={isRedirecting || otpLoading}
-                            variant="outline"
+                            variant="ghost"
                             size="lg"
                             className="w-full rounded-2xl font-bold"
                           >
