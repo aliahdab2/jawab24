@@ -25,6 +25,7 @@
     "statusCanceled": "Canceled",
     "statusPaused": "Paused",
     "tableCustomer": "Customer",
+    "tablePhone": "Phone",
     "tablePlan": "Plan",
     "tableStatus": "Status",
     "tablePeriodEnd": "Period End",

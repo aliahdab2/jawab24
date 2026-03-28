@@ -233,6 +233,9 @@ export default function AdminCustomersPage() {
                                             {t('customers.tableCustomer')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                            {t('customers.tablePhone')}
+                                        </th>
+                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('customers.tablePlan')}
                                         </th>
                                         <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -260,13 +263,22 @@ export default function AdminCustomersPage() {
                                                     </div>
                                                     <div>
                                                         <div className="font-medium text-foreground">
-                                                            {customer.name || customer.phone || t('customers.noName')}
+                                                            {customer.name || t('customers.noName')}
                                                         </div>
                                                         <div className="text-sm text-muted-foreground">
-                                                            {customer.email || customer.phone || t('customers.noEmail')}
+                                                            {customer.email || t('customers.noEmail')}
                                                         </div>
                                                     </div>
                                                 </div>
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                {customer.phone ? (
+                                                    <span className="text-sm text-foreground font-mono" dir="ltr">
+                                                        {customer.phone}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-sm text-muted-foreground">-</span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-4">
                                                 <span className="text-sm font-medium text-foreground/70">
