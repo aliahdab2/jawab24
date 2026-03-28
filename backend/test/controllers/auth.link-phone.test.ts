@@ -170,18 +170,16 @@ describe('AuthController - linkPhone', () => {
         );
     });
 
-    it('returns 409 when phone is already linked to a different account', async () => {
+    it('reassigns phone and returns success when phone is linked to a different account (OTP proves ownership)', async () => {
         vi.mocked(otpService.verifyOtp).mockResolvedValue('valid');
-        mockSelectChain([{ id: 'other-user-xyz' }]); // different user owns this phone
+        mockSelectChain([{ id: 'other-user-xyz' }]); // different user currently holds this phone
         const req = makeRequest();
 
         await authController.linkPhone(req, mockReply as FastifyReply);
 
-        expect(mockReply.status).toHaveBeenCalledWith(409);
-        expect(mockReply.send).toHaveBeenCalledWith(
-            expect.objectContaining({ error: 'phone_already_linked' })
-        );
-        expect(db.update).not.toHaveBeenCalled();
+        // db.update called twice: once to clear old holder, once to set on current user
+        expect(db.update).toHaveBeenCalledTimes(2);
+        expect(mockReply.send).toHaveBeenCalledWith({ success: true });
     });
 
     it('updates phone and returns success when phone is already linked to the same user', async () => {

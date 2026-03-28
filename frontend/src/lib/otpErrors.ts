@@ -18,7 +18,6 @@ export function handleOtpVerifyError(
     if (errCode === 'invalid_code') setError(t('invalidCode'));
     else if (errCode === 'code_expired') setError(t('codeExpired'));
     else if (errCode === 'too_many_attempts' || axiosErr.response?.status === 429) setError(t('tooManyAttempts'));
-    else if (errCode === 'phone_already_linked') setError(t('phoneAlreadyLinked'));
     else setError(t('loginError'));
     captureError(err, context, { tags });
 }
