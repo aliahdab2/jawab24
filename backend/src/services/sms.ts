@@ -30,6 +30,7 @@ export class SmsService {
                 from: config.vonage.senderId,
                 to: phone.replace('+', ''), // Vonage expects no leading +
                 text: message,
+                type: 'unicode',
             }),
         });
 
