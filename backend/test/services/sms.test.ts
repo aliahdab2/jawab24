@@ -67,9 +67,25 @@ describe('SmsService', () => {
                         from: 'Jawab24',
                         to: '966500000000',
                         text: 'رمز التحقق: 123456',
+                        type: 'unicode',
                     }),
                 })
             );
+        });
+
+        it('should send type=unicode so Arabic characters are not garbled', async () => {
+            // Arabic SMS requires UCS-2 encoding via type='unicode'.
+            // If this is removed, Arabic text arrives as ????? on the recipient's phone.
+            const mockResponse = {
+                ok: true,
+                json: vi.fn().mockResolvedValue({ messages: [{ status: '0' }] }),
+            };
+            vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse as unknown as Response);
+
+            await smsService.send('+966500000000', 'جواب24: رمز التحقق 123456');
+
+            const body = JSON.parse((global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].body);
+            expect(body.type).toBe('unicode');
         });
 
         it('should strip leading + from phone number', async () => {
