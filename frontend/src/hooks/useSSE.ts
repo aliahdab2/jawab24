@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
-import type { SSEEvent } from '@jawab24/shared';
+import type { SSEEvent, Page } from '@jawab24/shared';
 import type { Message } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -73,6 +73,10 @@ export function useSSE(): void {
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const lastToastRef = useRef(0);
+    // Keep a ref to router so event handlers always see the current value
+    // without making connectSSE depend on router (which changes on every navigation).
+    const routerRef = useRef(router);
+    useEffect(() => { routerRef.current = router; });
 
     /** Rate-limited toast — max 1 per TOAST_THROTTLE ms */
     const showToast = useCallback(
@@ -87,8 +91,8 @@ export function useSSE(): void {
 
     /** Whether the user is currently on a given page path */
     const isOnPage = useCallback(
-        (page: string) => router.pathname.includes(page),
-        [router.pathname],
+        (page: string) => routerRef.current.pathname.includes(page),
+        [],
     );
 
     // ── Web: SSE via EventSource ──────────────────────────────────────
@@ -115,7 +119,7 @@ export function useSSE(): void {
                 incrementUnreadComments();
                 showToast(
                     t('newComment', { name: event.data.fromName || '' }),
-                    { label: t('view'), onClick: () => router.push('/comments') },
+                    { label: t('view'), onClick: () => routerRef.current.push('/comments') },
                 );
             }
         });
@@ -140,11 +144,13 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['messages'] });
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
             appendToConversationCache(queryClient, event.data.message as Message | undefined, event.data.senderId);
-            if (!isOnPage('/messages')) {
+            const pages = queryClient.getQueryData<Page[]>(['pages']);
+            const fromConnectedPage = !pages || pages.some(p => p.id === event.data.pageId && p.isConnected !== false);
+            if (!isOnPage('/messages') && fromConnectedPage) {
                 incrementUnreadMessages();
                 showToast(
                     t('newMessage', { name: event.data.senderName || '' }),
-                    { label: t('view'), onClick: () => router.push('/messages') },
+                    { label: t('view'), onClick: () => routerRef.current.push('/messages') },
                 );
             }
         });
@@ -199,7 +205,6 @@ export function useSSE(): void {
         isOnPage,
         showToast,
         t,
-        router,
     ]);
 
     // ── Native mobile: lightweight polling ─────────────────────────────
