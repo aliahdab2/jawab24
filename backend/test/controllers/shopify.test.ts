@@ -785,7 +785,7 @@ describe('Shopify Controller', () => {
 
             await getStore(req, rep);
 
-            expect(mockMapToShopifyStore).toHaveBeenCalled();
+            expect(mockMapToEcommerceStore).toHaveBeenCalled();
             expect(rep.send).toHaveBeenCalled();
         });
     });

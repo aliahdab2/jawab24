@@ -434,7 +434,7 @@ describe('Payment Controller', () => {
                         }),
                     }),
                 } as any)
-                .mockReturnValue({
+                .mockReturnValueOnce({
                     values: vi.fn().mockResolvedValue([]),
                 } as any);
 
