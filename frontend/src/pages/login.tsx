@@ -153,7 +153,9 @@ export default function LoginPage() {
         const normalizedOrigin = siteUrl.replace(/\/$/, '');
         const localePath = getLocalePath(locale);
         const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
-        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
+        // pages_manage_engagement omitted: Facebook injects deprecated pages_read_user_content
+        // when it's present (pending App Review), which breaks the OAuth flow. Re-add after approval.
+        const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
         const returnUrl = router.query.redirect as string || '/dashboard';
         const state = encodeURIComponent(`${returnUrl}|mobile|${locale}`);
@@ -174,7 +176,9 @@ export default function LoginPage() {
       const localePath = getLocalePath(locale);
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);
-      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
+      // pages_manage_engagement omitted: Facebook injects deprecated pages_read_user_content
+      // when it's present (pending App Review), which breaks the OAuth flow. Re-add after approval.
+      const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
       const urlParams = new URLSearchParams(window.location.search);
       const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';

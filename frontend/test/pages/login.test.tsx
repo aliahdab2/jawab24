@@ -167,7 +167,9 @@ describe('LoginPage', () => {
             expect(decodedScope).toContain('email');
             expect(decodedScope).toContain('pages_show_list');
             expect(decodedScope).toContain('pages_read_engagement');
-            expect(decodedScope).toContain('pages_manage_engagement');
+            // pages_manage_engagement intentionally absent until App Review approves it
+            // (Facebook injects deprecated pages_read_user_content when it's present, breaking OAuth)
+            expect(decodedScope).not.toContain('pages_manage_engagement');
             expect(decodedScope).toContain('pages_messaging');
         });
     });
@@ -273,7 +275,8 @@ describe('LoginPage', () => {
             expect(decodedScope).toContain('email');
             expect(decodedScope).toContain('pages_show_list');
             expect(decodedScope).toContain('pages_read_engagement');
-            expect(decodedScope).toContain('pages_manage_engagement');
+            // pages_manage_engagement intentionally absent until App Review approves it
+            expect(decodedScope).not.toContain('pages_manage_engagement');
             expect(decodedScope).toContain('pages_messaging');
             expect(decodedScope).toContain('instagram_basic');
             expect(decodedScope).toContain('instagram_manage_messages');
