@@ -27,8 +27,7 @@ interface AnalyticsOverview {
 export class AnalyticsService {
     async getOverview(workspaceId: string, days: number = 30, pageId?: string): Promise<AnalyticsOverview> {
         const now = new Date();
-        const since = new Date(now);
-        since.setDate(since.getDate() - days);
+        const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
         const [fbComments, igComments, msgRows, responseTimes] = await Promise.all([
             this.queryFbComments(workspaceId, since, pageId),
@@ -266,8 +265,7 @@ export class AnalyticsService {
 
     async getAiUsage(userId: string, days: number = 30): Promise<AiUsageReport> {
         const now = new Date();
-        const since = new Date(now);
-        since.setDate(since.getDate() - days);
+        const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
         const rows = await db
             .select({
