@@ -167,6 +167,7 @@ describe('LoginPage', () => {
             expect(decodedScope).toContain('email');
             expect(decodedScope).toContain('pages_show_list');
             expect(decodedScope).toContain('pages_read_engagement');
+            expect(decodedScope).toContain('pages_manage_engagement');
             expect(decodedScope).toContain('pages_messaging');
         });
     });
@@ -272,6 +273,7 @@ describe('LoginPage', () => {
             expect(decodedScope).toContain('email');
             expect(decodedScope).toContain('pages_show_list');
             expect(decodedScope).toContain('pages_read_engagement');
+            expect(decodedScope).toContain('pages_manage_engagement');
             expect(decodedScope).toContain('pages_messaging');
             expect(decodedScope).toContain('instagram_basic');
             expect(decodedScope).toContain('instagram_manage_messages');
