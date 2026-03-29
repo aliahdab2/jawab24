@@ -1,9 +1,9 @@
 ---
-seoTitle: "5 Common Mistakes in Facebook Auto-Reply (and How to Fix Them)"
-seoDescription: "Avoid the most common auto-reply mistakes that drive customers away. Learn how to set up Facebook auto-replies that feel natural, helpful, and on-brand."
-seoKeywords: "Facebook auto reply mistakes, chatbot mistakes, auto reply best practices, Facebook messenger bot errors, auto reply common errors"
+seoTitle: "5 Facebook Auto-Reply Mistakes That Lose You Customers (2026)"
+seoDescription: "These 5 auto-reply mistakes silently drive customers away from your Facebook page. See the fixes with real before/after examples."
+seoKeywords: "Facebook auto reply mistakes, chatbot mistakes, auto reply best practices, Facebook messenger bot errors, auto reply common errors, facebook auto reply not working"
 title: "5 Common Mistakes in Facebook Auto-Reply (and How to Fix Them)"
-excerpt: "Auto-reply can save you hours daily — or drive customers away. Here are the 5 mistakes most businesses make and how to avoid them."
+excerpt: "These 5 auto-reply mistakes silently drive customers away. See the fixes with real before/after examples from live Facebook pages."
 ---
 
 ## Auto-Reply Is a Double-Edged Sword

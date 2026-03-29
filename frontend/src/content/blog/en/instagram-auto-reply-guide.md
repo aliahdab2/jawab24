@@ -1,9 +1,9 @@
 ---
-seoTitle: "Instagram Auto Reply: The Complete Guide for Small Businesses in 2026"
-seoDescription: "Learn how to set up auto-replies for Instagram comments and DMs. Complete guide covering Instagram's built-in tools, AI-powered alternatives, and multilingual support."
-seoKeywords: "Instagram auto reply, Instagram DM auto reply, Instagram comment auto reply, Instagram auto reply for business"
+seoTitle: "How to Set Up Instagram Auto Reply in 5 Minutes (2026 Guide)"
+seoDescription: "Step-by-step guide to auto-replying to Instagram comments & DMs — no coding needed. Covers free tools, AI bots, and Arabic language support."
+seoKeywords: "Instagram auto reply, Instagram DM auto reply, Instagram comment auto reply, Instagram auto reply for business, how to set up Instagram auto reply, Instagram auto reply bot free"
 title: "Instagram Auto Reply: The Complete Guide for Small Businesses"
-excerpt: "Instagram drives massive engagement — but manually replying to every comment and DM is impossible at scale. Here's how to automate without losing the personal touch."
+excerpt: "Step-by-step guide to setting up auto-replies on Instagram in minutes — no coding needed. Covers free tools, AI bots, and multilingual support."
 ---
 
 ## Why Instagram Auto Reply Is Different from Facebook
