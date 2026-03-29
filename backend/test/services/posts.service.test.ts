@@ -57,7 +57,9 @@ function mockSelectWithJoinAndOrder(returnValue: any) {
     return {
         from: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
-                orderBy: vi.fn().mockResolvedValue(returnValue),
+                orderBy: vi.fn().mockReturnValue({
+                    limit: vi.fn().mockResolvedValue(returnValue),
+                }),
             }),
         }),
     };
@@ -68,7 +70,9 @@ function mockSelectWithInnerJoinAndOrder(returnValue: any) {
         from: vi.fn().mockReturnValue({
             innerJoin: vi.fn().mockReturnValue({
                 where: vi.fn().mockReturnValue({
-                    orderBy: vi.fn().mockResolvedValue(returnValue),
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue(returnValue),
+                    }),
                 }),
             }),
         }),

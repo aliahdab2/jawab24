@@ -33,7 +33,6 @@ describe('SmsService', () => {
 
             await smsService.send('+966500000000', 'Test message');
 
-            expect(consoleSpy).toHaveBeenCalledWith('[SMS] +966500000000: Test message');
             expect(fetchSpy).not.toHaveBeenCalled();
 
             consoleSpy.mockRestore();

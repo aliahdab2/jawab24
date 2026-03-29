@@ -26,6 +26,7 @@ import { captureError } from '../utils/sentryHelpers';
 
 const CACHE_TTL_SECONDS = 300; // 5 minutes
 const VERIFICATION_TTL_SECONDS = 600; // 10 minutes — pending verification data
+const PRODUCT_NAME_MAX_LENGTH = 200;
 
 // --- Input Sanitization ---
 
@@ -39,7 +40,7 @@ export function sanitizeOrderNumber(raw: string): string | null {
 
 /** Sanitize product name: alphanumeric + common chars, max 200 chars */
 export function sanitizeProductName(raw: string): string | null {
-    const cleaned = raw.trim().slice(0, 200);
+    const cleaned = raw.trim().slice(0, PRODUCT_NAME_MAX_LENGTH);
     if (cleaned.length === 0) return null;
     // Strip control characters and obvious injection chars but allow
     // Arabic, Latin, digits, spaces, hyphens, parentheses

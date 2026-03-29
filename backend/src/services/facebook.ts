@@ -8,6 +8,7 @@ const traced = <T>(method: string, fn: () => Promise<T>) =>
     tracedExternalCall('facebook', method, fn);
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
+const DEFAULT_TOKEN_EXPIRY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — Facebook long-lived token default
 
 export class FacebookService {
     private logger: Logger = noopLogger;
@@ -160,7 +161,7 @@ export class FacebookService {
             );
 
             const data = response.data;
-            const expiresIn = data.expires_in ? data.expires_in * 1000 : 60 * 24 * 60 * 60 * 1000; // Default 60 days if missing
+            const expiresIn = data.expires_in ? data.expires_in * 1000 : DEFAULT_TOKEN_EXPIRY_MS;
 
             return {
                 token: data.access_token,

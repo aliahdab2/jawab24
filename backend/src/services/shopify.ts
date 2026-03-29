@@ -52,6 +52,9 @@ import {
 const SHOPIFY_API_VERSION = '2025-01';
 const MAX_PRODUCTS_PER_PAGE = 50;
 const MAX_PAGES_TO_FETCH = 5; // 250 products max
+const ERROR_TEXT_MAX_LENGTH = 200;
+const POLICY_PREVIEW_LENGTH = 100;
+const GRAPHQL_STRING_MAX_LENGTH = 100;
 
 // --- OAuth ---
 
@@ -128,7 +131,7 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
                     // 422 = already registered, treat as success
                     registered.push(topic);
                 } else {
-                    failed.push({ topic, status: response.status, error: text.slice(0, 200) });
+                    failed.push({ topic, status: response.status, error: text.slice(0, ERROR_TEXT_MAX_LENGTH) });
                     captureError(new Error(`Shopify webhook registration failed: ${topic} ${response.status}`), `Shopify webhook registration failed: ${topic}`, { tags: { service: 'shopify' }, extra: { topic, status: response.status, body: text } });
                 }
             } else {
@@ -512,11 +515,11 @@ export async function syncPolicies(storeId: string, opts?: { storeDomain: string
     const policies: string[] = [];
     if (data.data.shop.shippingPolicy?.body) {
         const text = stripHtml(data.data.shop.shippingPolicy.body);
-        policies.push(`Shipping: ${text.slice(0, 100)}`);
+        policies.push(`Shipping: ${text.slice(0, POLICY_PREVIEW_LENGTH)}`);
     }
     if (data.data.shop.refundPolicy?.body) {
         const text = stripHtml(data.data.shop.refundPolicy.body);
-        policies.push(`Returns: ${text.slice(0, 100)}`);
+        policies.push(`Returns: ${text.slice(0, POLICY_PREVIEW_LENGTH)}`);
     }
 
     const policiesSummary = policies.join('\n') || null;
@@ -858,5 +861,5 @@ function mapShopifyFinancialStatus(status: string): string {
 
 /** Sanitize user input for use in Shopify GraphQL query strings */
 function sanitizeGraphQLString(input: string): string {
-    return input.replace(/["\\\n\r]/g, '').slice(0, 100);
+    return input.replace(/["\\\n\r]/g, '').slice(0, GRAPHQL_STRING_MAX_LENGTH);
 }

@@ -48,7 +48,9 @@ function mockSelectWithOrder(returnValue: any) {
     return {
         from: vi.fn().mockReturnValue({
             where: vi.fn().mockReturnValue({
-                orderBy: vi.fn().mockResolvedValue(returnValue),
+                orderBy: vi.fn().mockReturnValue({
+                    limit: vi.fn().mockResolvedValue(returnValue),
+                }),
             }),
         }),
     };

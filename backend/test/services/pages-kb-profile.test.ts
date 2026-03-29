@@ -316,7 +316,7 @@ describe('PR2: KB Versioning + Business Profile', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([])
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) })
                     })
                 })
             } as any);
@@ -358,9 +358,9 @@ describe('PR2: KB Versioning + Business Profile', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([
                             { id: 'p1', facebookPageId: 'fb-page-1', name: 'Old Business' }
-                        ])
+                        ]) })
                     })
                 })
             } as any);
@@ -400,7 +400,7 @@ describe('PR2: KB Versioning + Business Profile', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([])
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) })
                     })
                 })
             } as any);

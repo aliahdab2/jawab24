@@ -64,7 +64,7 @@ describe('PagesService', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([]) 
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) })
                     })
                 })
             } as any);
@@ -111,7 +111,7 @@ describe('PagesService', () => {
              vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([existingPage]) 
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([existingPage]) })
                     })
                 })
             } as any);
@@ -158,7 +158,7 @@ describe('PagesService', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([]) 
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) })
                     })
                 })
             } as any);
@@ -213,7 +213,7 @@ describe('PagesService', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue(existingPages)
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(existingPages) })
                     })
                 })
             } as any);
@@ -260,7 +260,7 @@ describe('PagesService', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([]) 
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) })
                     })
                 })
             } as any);
@@ -301,7 +301,9 @@ describe('PagesService', () => {
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue(mockPages),
+                        orderBy: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue(mockPages),
+                        }),
                     }),
                 }),
             } as any);
@@ -332,7 +334,9 @@ describe('PagesService', () => {
                     return {
                         from: vi.fn().mockReturnValue({
                             where: vi.fn().mockReturnValue({
-                                orderBy: vi.fn().mockResolvedValue(mockPages),
+                                orderBy: vi.fn().mockReturnValue({
+                                    limit: vi.fn().mockResolvedValue(mockPages),
+                                }),
                             }),
                         }),
                     } as any;

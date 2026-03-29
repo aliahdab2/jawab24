@@ -94,7 +94,8 @@ describe('InstagramController', () => {
             vi.mocked(pagesService.getPage).mockResolvedValue(page as any);
 
             const mediaItems = [{ id: 'media-1', caption: 'Post 1' }];
-            const mockOrderBy = vi.fn().mockResolvedValue(mediaItems);
+            const mockLimit = vi.fn().mockResolvedValue(mediaItems);
+            const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });
             const mockWhere = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
             const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
             vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
@@ -168,7 +169,9 @@ describe('InstagramController', () => {
                 return {
                     from: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            orderBy: vi.fn().mockResolvedValue(comments),
+                            orderBy: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue(comments),
+                            }),
                         }),
                     }),
                 } as any;

@@ -29,6 +29,8 @@ const MAX_PRODUCTS_PER_PAGE = 50;
 const MAX_PAGES_TO_FETCH = 6; // 300 products max
 const MAX_RETRIES = 3;
 const RETRY_BASE_DELAY_MS = 1000;
+const LOCK_WAIT_DELAY_MS = 2000; // wait for concurrent token refresh to finish
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 // --- OAuth ---
 
@@ -94,7 +96,7 @@ export async function refreshAccessToken(storeId: string): Promise<void> {
 
     const acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
     if (!acquired) {
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, LOCK_WAIT_DELAY_MS));
         return;
     }
 
@@ -102,7 +104,7 @@ export async function refreshAccessToken(storeId: string): Promise<void> {
         const store = await getStoreById(storeId);
         if (!store) throw new Error('Store not found');
 
-        const oneDayFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const oneDayFromNow = new Date(Date.now() + ONE_DAY_MS);
         if (store.tokenExpiresAt && store.tokenExpiresAt > oneDayFromNow) return;
 
         if (!store.refreshToken || !store.refreshTokenIv) {
@@ -151,14 +153,14 @@ export async function ensureValidToken(storeId: string): Promise<void> {
 
     if (!store.tokenExpiresAt) return;
 
-    const oneDayFromNow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    const oneDayFromNow = new Date(Date.now() + ONE_DAY_MS);
     if (store.tokenExpiresAt > oneDayFromNow) return;
 
     await refreshAccessToken(storeId);
 }
 
 export async function getStoresNeedingTokenRefresh() {
-    const twoDaysFromNow = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    const twoDaysFromNow = new Date(Date.now() + 2 * ONE_DAY_MS);
     return db.select({ id: ecommerceStores.id }).from(ecommerceStores).where(
         and(
             eq(ecommerceStores.platform, 'zid'),
