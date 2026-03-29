@@ -35,6 +35,9 @@ vi.mock('../../src/db', () => ({
         })),
         insert: vi.fn(() => ({
             values: vi.fn(() => ({
+                onConflictDoNothing: vi.fn(() => ({
+                    returning: vi.fn(() => Promise.resolve([{ eventId: 'evt_default' }])),
+                })),
                 onConflictDoUpdate: vi.fn(() => Promise.resolve([])),
             })),
         })),
@@ -45,6 +48,7 @@ vi.mock('../../src/db/schema', () => ({
     users: { id: 'id', email: 'email' },
     plans: { id: 'id', stripePriceId: 'stripe_price_id', stripeYearlyPriceId: 'stripe_yearly_price_id' },
     subscriptions: {},
+    stripeWebhookEvents: { eventId: 'event_id', eventType: 'event_type' },
 }));
 
 vi.mock('../../src/config', () => ({
@@ -422,9 +426,17 @@ describe('Payment Controller', () => {
                     where: vi.fn().mockResolvedValue([]), // No existing subscriptions
                 }),
             } as any);
-            mockDb.insert.mockReturnValue({
-                values: vi.fn().mockResolvedValue([]),
-            } as any);
+            mockDb.insert
+                .mockReturnValueOnce({
+                    values: vi.fn().mockReturnValue({
+                        onConflictDoNothing: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ eventId: 'cs_123' }]),
+                        }),
+                    }),
+                } as any)
+                .mockReturnValue({
+                    values: vi.fn().mockResolvedValue([]),
+                } as any);
 
             await paymentController.handleWebhook(
                 mockRequest as FastifyRequest,

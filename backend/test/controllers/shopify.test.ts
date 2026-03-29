@@ -25,6 +25,7 @@ const mockFullSync = vi.fn().mockResolvedValue({ synced: 10 });
 const mockGetProducts = vi.fn().mockResolvedValue([]);
 const mockLinkStoreToPage = vi.fn().mockResolvedValue(undefined);
 const mockMapToShopifyStore = vi.fn((store) => ({ id: store.id, shopDomain: store.shopDomain }));
+const mockMapToEcommerceStore = vi.fn((store) => ({ id: store.id, shopDomain: store.shopDomain }));
 const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-uuid-123');
 
 vi.mock('../../src/services/shopify', () => ({
@@ -42,6 +43,7 @@ vi.mock('../../src/services/shopify', () => ({
     getProducts: (...args: any[]) => mockGetProducts(...args),
     linkStoreToPage: (...args: any[]) => mockLinkStoreToPage(...args),
     mapToShopifyStore: (...args: any[]) => mockMapToShopifyStore(...args),
+    mapToEcommerceStore: (...args: any[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
 }));
 
