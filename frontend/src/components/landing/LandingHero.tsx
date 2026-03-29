@@ -28,6 +28,15 @@ export function SallaIcon({ className }: { className?: string }) {
   );
 }
 
+export function ZidIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
+      <rect width="24" height="24" rx="5" fill="#E94F1C" />
+      <path d="M6 7h8.5l-7 10H16" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function MetaIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 36 24" fill="currentColor" className={className} aria-hidden="true">
@@ -114,6 +123,10 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-salla font-bold text-sm sm:text-base transition-all cursor-default">
                 <SallaIcon className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>{t('platforms.salla')}</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full landing-platform-chip-zid font-bold text-sm sm:text-base transition-all cursor-default">
+                <ZidIcon className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>{t('platforms.zid')}</span>
               </div>
             </div>
 

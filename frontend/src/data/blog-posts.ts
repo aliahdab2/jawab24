@@ -46,6 +46,12 @@ export const BLOG_POSTS: BlogPost[] = [
     readingTime: 7,
   },
   {
+    slug: 'zid-store-facebook-auto-reply',
+    date: '2026-03-18',
+    category: 'integrations',
+    readingTime: 7,
+  },
+  {
     slug: 'shopify-facebook-auto-reply-arabic',
     date: '2026-03-18',
     category: 'integrations',

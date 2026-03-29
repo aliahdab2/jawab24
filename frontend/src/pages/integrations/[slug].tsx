@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
-import { ShopifyIcon, SallaIcon } from '@/components/landing';
+import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing';
 import {
   getAllIntegrationSlugs,
   getIntegration,
@@ -23,6 +23,7 @@ interface IntegrationPageProps {
 const PLATFORM_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   shopify: ShopifyIcon,
   salla: SallaIcon,
+  zid: ZidIcon,
 };
 
 export default function IntegrationPage({ integration }: IntegrationPageProps) {

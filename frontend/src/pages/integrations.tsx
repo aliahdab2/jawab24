@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
+import { ZidIcon } from '@/components/landing';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
@@ -156,9 +157,9 @@ const PLATFORMS: PlatformConfig[] = [
     id: 'zid',
     nameKey: 'zid.title',
     descKey: 'integrations.zidDesc',
-    icon: <Store className="w-8 h-8" />,
-    iconClass: 'icon-bg-accent',
-    storeMetaClass: 'status-accent border',
+    icon: <ZidIcon className="w-8 h-8" />,
+    iconClass: 'icon-bg-orange',
+    storeMetaClass: 'status-orange border',
     getReconnectPath: () => '/zid/auth',
     getStore: zidApi.getStore,
     syncProducts: zidApi.syncProducts,

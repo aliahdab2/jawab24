@@ -439,6 +439,10 @@
     @apply bg-brand-50 text-brand-700 border-brand-100
            dark:bg-brand-900/30 dark:text-brand-300 dark:border-brand-800;
   }
+  .status-orange {
+    @apply bg-orange-50 text-orange-700 border-orange-100
+           dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800;
+  }
 
   /* --- Icon backgrounds (circle/rounded-lg containers for icons) --- */
   .icon-bg-emerald {
@@ -664,6 +668,10 @@
 
   .landing-platform-chip-salla {
     @apply bg-[#2DC0C8]/10 text-[#2DC0C8] hover:bg-[#2DC0C8] hover:text-white;
+  }
+
+  .landing-platform-chip-zid {
+    @apply bg-[#E94F1C]/10 text-[#E94F1C] hover:bg-[#E94F1C] hover:text-white;
   }
 
   /* Decorative radial glow orbs for landing sections */

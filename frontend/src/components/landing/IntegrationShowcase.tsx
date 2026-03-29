@@ -1,7 +1,7 @@
 import { useTranslations } from 'next-intl';
 import { AnimatePresence, motion, useInView, type Variants } from 'framer-motion';
 import { useEffect, useRef, useState } from 'react';
-import { ShopifyIcon, SallaIcon } from './LandingHero';
+import { ShopifyIcon, SallaIcon, ZidIcon } from './LandingHero';
 
 interface IntegrationShowcaseProps {
   isAuthenticated: boolean;
@@ -426,6 +426,7 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
 
   const shopifyLink = isAuthenticated ? '/integrations' : '/integrations/shopify';
   const sallaLink = isAuthenticated ? '/integrations' : '/integrations/salla';
+  const zidLink = isAuthenticated ? '/integrations' : '/integrations/zid';
 
   return (
     <section
@@ -562,6 +563,30 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 <div>
                   <div style={{ fontSize: 10, color: 'rgba(249, 250, 251, 0.4)' }}>{t('showcase.availableOn')}</div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#F9FAFB' }}>{t('showcase.sallaStore')}</div>
+                </div>
+              </a>
+              <a
+                href={zidLink}
+                className="flex items-center gap-2.5 no-underline rounded-xl px-[18px] py-2.5 transition-all duration-200 hover:-translate-y-0.5"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(8px)',
+                  WebkitBackdropFilter: 'blur(8px)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.boxShadow = '0 0 20px rgba(233, 79, 28, 0.25)';
+                  e.currentTarget.style.borderColor = 'rgba(233, 79, 28, 0.4)';
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.boxShadow = 'none';
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                }}
+              >
+                <ZidIcon className="w-6 h-6" />
+                <div>
+                  <div style={{ fontSize: 10, color: 'rgba(249, 250, 251, 0.4)' }}>{t('showcase.availableOn')}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: '#F9FAFB' }}>{t('showcase.zidStore')}</div>
                 </div>
               </a>
             </div>

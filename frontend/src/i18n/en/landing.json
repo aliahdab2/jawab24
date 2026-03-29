@@ -23,6 +23,7 @@
     "instagram": "Instagram",
     "shopify": "Shopify",
     "salla": "Salla",
+    "zid": "Zid",
     "comingSoon": "Coming Soon"
   },
   "metaBadge": {
@@ -54,7 +55,7 @@
     "instantDesc": "Never keep customers waiting, we respond in less than a second even while you sleep",
     "knowledgeTitle": "Custom Knowledge Base",
     "knowledgeDesc": "Add your business info, products, and prices to train your own AI assistant",
-    "ecommerceTitle": "Shopify & Salla",
+    "ecommerceTitle": "Shopify, Salla & Zid",
     "ecommerceDesc": "Syncs your product catalog in real-time for accurate replies",
     "mobileTitle": "Mobile Optimized",
     "mobileDesc": "Manage your business from anywhere with an easy-to-use interface on all devices"
@@ -71,6 +72,7 @@
     "availableOn": "Available on",
     "shopifyStore": "Shopify App Store",
     "sallaStore": "Salla App Store",
+    "zidStore": "Zid App Store",
     "chatHeader": "Customer Chat",
     "chatChannel": "via Instagram DM",
     "chatCustomer1": "I'm looking for a leather laptop bag, not too big. Do you have anything? 🤔",
@@ -118,8 +120,8 @@
     "a3": "Through the \"Knowledge Base\" you add, the AI sticks to the information you provide to ensure no wrong answers are given.",
     "q4": "Can I upgrade or change my plan later?",
     "a4": "Absolutely! You can upgrade or change your plan anytime from the dashboard. Changes apply immediately.",
-    "q5": "Does Jawab24 integrate with Shopify and Salla?",
-    "a5": "Yes! Connect your Shopify or Salla store and Jawab24 will understand your products so it can answer customer questions accurately based on what you actually sell."
+    "q5": "Does Jawab24 integrate with Shopify, Salla, and Zid?",
+    "a5": "Yes! Connect your Shopify, Salla, or Zid store and Jawab24 will understand your products so it can answer customer questions accurately based on what you actually sell."
   },
   "footer": {
     "description": "The next-generation smart auto-reply system powered by advanced AI for businesses and entrepreneurs.",

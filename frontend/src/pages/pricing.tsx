@@ -19,7 +19,7 @@ import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { isRTLLocale } from '@/utils/locale';
-import { ShopifyIcon, SallaIcon } from '@/components/landing/LandingHero';
+import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
 import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings } from '@/utils/pricing';
 
 interface PricingPageProps {
@@ -229,6 +229,7 @@ function PlanCard({
               <>
                 <ShopifyIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0" />
                 <SallaIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0 text-[#00b4b6]" />
+                <ZidIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0" />
               </>
             }
           />
