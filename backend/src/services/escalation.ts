@@ -3,6 +3,11 @@ import { comments, messages, pages, posts, settings } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { notificationService, NotificationType } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
+import type { Logger } from '../types/logger';
+import { noopLogger } from '../types/logger';
+
+let logger: Logger = noopLogger;
+export function setEscalationLogger(l: Logger): void { logger = l; }
 
 const DEFAULT_COMMENT_ESCALATION_MINUTES = 60;
 const DEFAULT_MESSAGE_ESCALATION_MINUTES = 30;
@@ -238,9 +243,12 @@ async function escalateMessages(): Promise<void> {
  */
 export function startEscalationCron(): void {
     if (intervalHandle) return;
-    console.warn('[Escalation] Cron started (every 5 min)');
+    logger.info('Escalation cron started (every 5 min)');
     intervalHandle = setInterval(runEscalationSweep, SWEEP_INTERVAL_MS);
-    runEscalationSweep().catch(err => console.warn('[Escalation] Initial sweep failed:', err));
+    runEscalationSweep().catch(err => {
+        captureError(err, 'Escalation initial sweep failed');
+        logger.error('Escalation initial sweep failed', { error: String(err) });
+    });
 }
 
 /**
@@ -250,6 +258,6 @@ export function stopEscalationCron(): void {
     if (intervalHandle) {
         clearInterval(intervalHandle);
         intervalHandle = null;
-        console.warn('[Escalation] Cron stopped');
+        logger.info('Escalation cron stopped');
     }
 }

@@ -1,18 +1,22 @@
 import { config } from '../config';
+import type { Logger } from '../types/logger';
+import { noopLogger } from '../types/logger';
 
 /**
  * SMS Service — Vonage (Nexmo) delivery
  *
  * Swap provider here without touching OTP logic.
- * Phase 1: console log in development.
+ * Phase 1: logger.debug in development.
  * Phase 2: Vonage SMS (works in SA, SY, TR, SE and 200+ countries).
  * Phase 3: WhatsApp Cloud API as primary, Vonage SMS as fallback.
  */
 export class SmsService {
+    private logger: Logger = noopLogger;
+    setLogger(l: Logger): void { this.logger = l; }
+
     async send(phone: string, message: string): Promise<void> {
         if (process.env.NODE_ENV === 'development') {
-            // eslint-disable-next-line no-console
-            console.log(`[SMS] ${phone}: ${message}`);
+            this.logger.debug('SMS (dev)', { phone, message });
             return;
         }
 

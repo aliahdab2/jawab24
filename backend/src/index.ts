@@ -47,7 +47,8 @@ import { csrfProtection } from "./middleware/auth";
 import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
-import { startEscalationCron, stopEscalationCron } from "./services/escalation";
+import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
+import { smsService } from "./services/sms";
 import { createRequestLogger } from "./types";
 import { config } from "./config";
 import demoPlugin from "./plugins/demo";
@@ -259,6 +260,8 @@ const start = async () => {
     }
 
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
+    setEscalationLogger(workerLogger);
+    smsService.setLogger(workerLogger);
     startEscalationCron();
 
     // Database cleanup scheduler — runs every 6 hours to enforce data retention
