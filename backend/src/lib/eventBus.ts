@@ -30,7 +30,6 @@ export function getSubscriber(): Redis {
             },
         });
         subscriber.on('error', (err) => {
-            console.error('Redis SSE Subscriber Error:', err);
             captureError(err, 'Redis SSE subscriber error', { tags: { service: 'sse-subscriber' } });
         });
     }

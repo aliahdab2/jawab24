@@ -8,7 +8,7 @@ export { Textarea } from './Textarea';
 export { Modal } from './Modal';
 export { EmptyState } from './EmptyState';
 export { PageHeader } from './PageHeader';
-export { FacebookIcon, InstagramIcon } from './BrandIcons';
+export { FacebookIcon, InstagramIcon, PlatformIcon } from './BrandIcons';
 export { BrandLogo } from './BrandLogo';
 export { Toggle } from './Toggle';
 export { VersionBadge } from './VersionBadge';

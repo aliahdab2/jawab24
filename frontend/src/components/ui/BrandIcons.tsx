@@ -1,4 +1,5 @@
 import React from 'react';
+import clsx from 'clsx';
 
 /**
  * Custom Brand Icons to replace deprecated Lucide brand icons.
@@ -46,5 +47,41 @@ export function InstagramIcon({ size = 24, className, ...props }: IconProps) {
       <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
       <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
     </svg>
+  );
+}
+
+const INSTAGRAM_PATH = 'M7.03013 19.6332C4.98648 19.6332 3.61554 18.2774 3.61554 16.2573V13.8834V7.74268C3.61554 5.72266 4.98648 4.36682 7.03013 4.36682H13.1678H16.9734C19.017 4.36682 20.3879 5.72266 20.3879 7.74268V13.8834V16.2573C20.3879 18.2774 19.017 19.6332 16.9734 19.6332H13.1678H7.03013ZM16.9734 18.4116C18.3375 18.4116 19.167 17.5898 19.167 16.2573V13.8834V7.74268C19.167 6.41016 18.3375 5.58838 16.9734 5.58838H13.1678H7.03013C5.66608 5.58838 4.83658 6.41016 4.83658 7.74268V13.8834V16.2573C4.83658 17.5898 5.66608 18.4116 7.03013 18.4116H13.1678H16.9734ZM12.0017 15.5684C10.0526 15.5684 8.52838 14.072 8.52838 12.006C8.52838 9.94006 10.0526 8.44373 12.0017 8.44373C13.9509 8.44373 15.4751 9.94006 15.4751 12.006C15.4751 14.072 13.9509 15.5684 12.0017 15.5684ZM12.0017 14.3468C13.2847 14.3468 14.2541 13.3854 14.2541 12.006C14.2541 10.6267 13.2847 9.66528 12.0017 9.66528C10.7187 9.66528 9.74933 10.6267 9.74933 12.006C9.74933 13.3854 10.7187 14.3468 12.0017 14.3468ZM16.6853 8.35632C16.2163 8.35632 15.8208 8.01221 15.8208 7.50293C15.8208 6.99365 16.2163 6.64954 16.6853 6.64954C17.1543 6.64954 17.5498 6.99365 17.5498 7.50293C17.5498 8.01221 17.1543 8.35632 16.6853 8.35632Z';
+const FACEBOOK_PATH = 'M9.101 23.691v-7.98H6.627v-3.667h2.474v-1.58c0-4.085 1.848-5.978 5.858-5.978.401 0 .955.042 1.468.103a8.68 8.68 0 0 1 1.141.195v3.325a8.623 8.623 0 0 0-.653-.036c-2.148 0-2.797 1.66-2.797 3.592v1.402h3.475l-.532 3.665h-2.943v7.98h-5.018Z';
+
+interface PlatformIconProps {
+  platform: 'instagram' | 'facebook';
+  /** sm = w-4/h-4 container (w-2.5 icon), md = w-5/h-5 container (w-3.5 icon) */
+  size?: 'sm' | 'md';
+  ariaLabel?: string;
+  className?: string;
+}
+
+export function PlatformIcon({ platform, size = 'sm', ariaLabel, className }: PlatformIconProps) {
+  const isInstagram = platform === 'instagram';
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center justify-center rounded-full flex-shrink-0',
+        size === 'sm' ? 'w-4 h-4' : 'w-5 h-5',
+        isInstagram
+          ? 'bg-pink-50 text-pink-600 dark:bg-pink-900/20 dark:text-pink-400'
+          : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400',
+        className,
+      )}
+      aria-label={ariaLabel}
+    >
+      <svg
+        className={clsx('fill-current', size === 'sm' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5')}
+        viewBox="0 0 24 24"
+        aria-hidden="true"
+      >
+        <path d={isInstagram ? INSTAGRAM_PATH : FACEBOOK_PATH} />
+      </svg>
+    </span>
   );
 }

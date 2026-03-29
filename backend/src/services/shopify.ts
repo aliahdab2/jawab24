@@ -25,7 +25,6 @@ export {
     invalidateCachesForStore,
     getProducts,
     mapToEcommerceStore,
-    mapToShopifyStore,
     buildProductSummary,
     disconnectStore,
     linkStoreToPage,

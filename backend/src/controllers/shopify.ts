@@ -246,7 +246,7 @@ export async function getStore(request: FastifyRequest, reply: FastifyReply) {
     if (!store) {
         return reply.status(404).send({ error: 'No Shopify store connected' });
     }
-    return reply.send(shopifyService.mapToShopifyStore(store));
+    return reply.send(shopifyService.mapToEcommerceStore(store));
 }
 
 export async function connectStore(request: FastifyRequest, reply: FastifyReply) {

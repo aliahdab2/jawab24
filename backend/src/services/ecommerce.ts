@@ -650,9 +650,6 @@ export function mapToEcommerceStore(row: typeof ecommerceStores.$inferSelect): E
     };
 }
 
-/** @deprecated Use mapToEcommerceStore */
-export const mapToShopifyStore = mapToEcommerceStore;
-
 // --- Helpers for product sync (used by platform-specific sync functions) ---
 
 /**
