@@ -145,8 +145,8 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
             appendToConversationCache(queryClient, event.data.message as Message | undefined, event.data.senderId);
             const pages = queryClient.getQueryData<Page[]>(['pages']);
-            const fromConnectedPage = !pages || pages.some(p => p.id === event.data.pageId && p.isConnected !== false);
-            if (!isOnPage('/messages') && fromConnectedPage) {
+            const fromActivePage = !pages || pages.some(p => p.id === event.data.pageId && p.isConnected !== false && (p.autoReplyEnabled || p.instagramAutoReplyEnabled));
+            if (!isOnPage('/messages') && fromActivePage) {
                 incrementUnreadMessages();
                 showToast(
                     t('newMessage', { name: event.data.senderName || '' }),
