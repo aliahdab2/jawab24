@@ -5,11 +5,23 @@
 ### Facebook / Instagram (Meta)
 - **Purpose**: Primary platform for auto-reply automation
 - **API Version**: Graph API v18.0 (configurable in environment)
+- **App Status**: **Live mode** (approved 2026-03-21, App ID: 774211662298446)
+
 - **OAuth Flow**:
   - User connects via Facebook Login
-  - App requests scopes: `pages_messaging`, `pages_manage_metadata`, `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`
   - Access token stored encrypted (AES-256-GCM) in database
   - Token refresh: on-demand via `/refresh-token` endpoint
+
+- **Meta App Review — Permission Status**:
+  - ✅ `pages_messaging` — Approved (2026-03-21) — send/receive Messenger DMs
+  - ✅ `pages_manage_metadata` — Approved (2026-03-21) — webhook subscription for pages
+  - ✅ `pages_show_list` — Approved (2026-03-21) — list user's pages in dashboard
+  - ✅ `public_profile`, `email` — Always approved
+  - 🔄 `pages_read_engagement` — Pending submission — read comments (feed webhooks)
+  - 🔄 `pages_manage_engagement` — Pending submission — reply to comments
+  - ⏳ `instagram_basic`, `instagram_business_basic` — Deferred (needs IG Business account demo)
+  - ⏳ `instagram_manage_comments` — Deferred (needs IG Business account demo)
+  - ⏳ `instagram_manage_messages`, `instagram_business_manage_messages` — Deferred
 
 - **Webhook Setup** (for incoming messages/comments):
   - Endpoint: `/webhook` (POST)
@@ -18,7 +30,7 @@
   - Events Subscribed:
     - `messages` - incoming DMs to pages/Instagram
     - `messaging_postbacks` - button clicks
-    - `feed` - post/comment activity (comments/likes/replies)
+    - `feed` - post/comment activity — **active in Live mode** (was blocked in dev mode)
     - `message_deliveries` - delivery confirmation
     - `message_reads` - read receipts
 
@@ -170,11 +182,12 @@
   ```json
   {
     "confidence": "high|medium|low",
-    "intent": "PURCHASE_INTENT|FAQ|FEEDBACK|COMPLAINT|OTHER",
+    "intent": "QUESTION|COMPLIMENT|COMPLAINT|PURCHASE_INTENT|GREETING|BUSINESS_INQUIRY|OFFENSIVE|SPAM_OR_IRRELEVANT",
     "reply": "...",
     "flags": { "angry_customer": false, "needs_escalation": false }
   }
   ```
+  Source of truth: `ai-worker/src/services/openai.ts` (enum) + `ai-worker/src/services/providers/types.ts`
 
 - **Caching**:
   - Semantic cache: Skip generation for similar requests
@@ -183,8 +196,12 @@
   - Scoped by workspace + page
 
 - **Error Handling**:
-  - Circuit breaker: Stop calls after 5 consecutive failures (30s cool-off)
-  - Fallback: Claude Haiku when OpenAI unavailable
+  - Circuit breaker: Stop calls after 5 consecutive failures (30s cool-off) — Redis-backed (`lib/circuitBreaker.ts`)
+  - **Fallback chain** (3 tiers):
+    1. **Tier 1 (normal)**: OpenAI via ai-worker
+    2. **Tier 2 (circuit open)**: Claude Haiku via ai-worker `/generate?model=claude-haiku-*` — bypasses circuit, different API key
+    3. **Tier 3 (both fail)**: Static "Thank you for your comment!" reply + lightweight keyword classifier (`classifyFallback()`) for intent/confidence
+  - Fallback model configurable via `AI_FALLBACK_MODEL` env (default: `claude-haiku-4-5-20251001`)
   - Timeout: 30 seconds per request
 
 - **Configuration**:
@@ -197,15 +214,15 @@
 
 ---
 
-### Anthropic (Claude - Fallback/Playground)
-- **Purpose**: Fallback LLM when OpenAI unavailable, playground testing
+### Anthropic (Claude - Tier-2 Failover / Playground)
+- **Purpose**: Tier-2 failover LLM when OpenAI circuit breaker opens, plus playground testing
 - **SDK**: Anthropic SDK 0.78.0
-- **Models Available**: Claude 3.5 Sonnet, Claude 3 Haiku (configurable)
-- **API Key**: `ANTHROPIC_API_KEY` (optional, only needed for Claude fallback)
+- **Models Available**: `claude-haiku-4-5-20251001` (default failover), `claude-sonnet-4-20250514` (configurable)
+- **API Key**: `ANTHROPIC_API_KEY` (required for failover; optional for playground-only use)
 - **Usage Pattern**:
-  - Fallback when OpenAI circuit breaker is open
-  - Playground: Users can test different models
-  - Same JSON schema response format as OpenAI
+  - **Failover (production)**: When `aiWorkerCircuit` opens (5 consecutive OpenAI failures), backend calls ai-worker `/generate?model=claude-haiku-*` directly (bypassing circuit). Uses `AI_FALLBACK_MODEL` env to select model.
+  - **Playground**: Admins can compare model outputs side-by-side
+  - Same JSON schema response format as OpenAI; `provider_failover` flag added to response
 
 - **Configuration**:
   - `ANTHROPIC_API_KEY` - Claude API key (optional)
@@ -224,13 +241,19 @@
 - **SDK**: Stripe 14.11.0
 - **API Key**: `STRIPE_SECRET_KEY` (private), `STRIPE_PUBLISHABLE_KEY` (frontend)
 
-- **Checkout Flow**:
-  1. User clicks "Upgrade to Plan"
-  2. Backend creates checkout session via `/payment/create-checkout-session`
-  3. Frontend redirects to Stripe-hosted checkout
-  4. Webhook at `/webhook` receives `checkout.session.completed`
-  5. Backend creates subscription record in DB
-  6. User granted plan features
+- **Checkout Flows** (two paths):
+  1. **Embedded Checkout** (primary for new subscriptions):
+     - Backend creates checkout session via `POST /payment/create-checkout-session`
+     - Returns `clientSecret` for Stripe Embedded Checkout component in frontend
+     - Frontend renders inline Stripe Embedded Checkout (no redirect to Stripe-hosted page)
+     - Supports monthly + yearly billing intervals
+     - After completion, frontend polls `GET /payment/checkout-session/:sessionId` for status
+  2. **PaymentElement** (subscription creation path):
+     - `POST /payment/create-subscription` → returns `clientSecret` for PaymentElement
+  3. **Billing Portal** (plan changes, cancellation, invoices):
+     - `POST /payment/billing-portal` → redirects user to Stripe Billing Portal
+     - Sanctions check applied before portal creation
+  4. Webhook at `/webhook` receives `checkout.session.completed` → subscription record created
 
 - **Webhook Events**:
   - `checkout.session.completed` - subscription started
@@ -404,11 +427,14 @@
   8. Frontend stores JWT in secure storage
 
 - **Scopes Requested** (via OAuth):
-  - `pages_messaging` - send/read DMs
-  - `pages_manage_metadata` - modify page settings
-  - `instagram_basic` - Instagram access
-  - `instagram_manage_comments` - reply to comments
-  - `instagram_manage_messages` - Instagram DMs
+  - `pages_messaging` - send/read DMs ✅ approved
+  - `pages_manage_metadata` - webhook subscription ✅ approved
+  - `pages_show_list` - list pages ✅ approved
+  - `pages_read_engagement` - read comments 🔄 pending submission
+  - `pages_manage_engagement` - reply to comments 🔄 pending submission
+  - `instagram_basic` - Instagram access ⏳ deferred
+  - `instagram_manage_comments` - reply to IG comments ⏳ deferred
+  - `instagram_manage_messages` - Instagram DMs ⏳ deferred
 
 - **Token Verification**:
   - Debug endpoint: `/debug_token` (Graph API)
@@ -479,18 +505,18 @@
 | Service | Purpose | Config Location | Status |
 |---------|---------|-----------------|--------|
 | Facebook Graph API | OAuth + webhooks for messages | `FACEBOOK_*` env vars | ✅ Production |
-| Instagram API | Comments + DM auto-replies | `FACEBOOK_*` env vars | ✅ Production |
+| Instagram API | Comments + DM auto-replies | `FACEBOOK_*` env vars | ⚠️ Code ready, permissions deferred |
 | Shopify | Product sync + KB enrichment | `SHOPIFY_*` env vars | ✅ Production |
 | Salla | Product sync (Middle East) | `SALLA_*` env vars | ✅ Production |
 | Zid | Product sync + KB enrichment (Saudi) | `ZID_*` env vars | ✅ Production |
 | OpenAI | Smart reply generation | `OPENAI_API_KEY` | ✅ Production |
-| Anthropic Claude | Fallback LLM + playground | `ANTHROPIC_API_KEY` | ✅ Fallback only |
+| Anthropic Claude | Tier-2 failover LLM + playground | `ANTHROPIC_API_KEY` | ✅ Active (circuit-open failover) |
 | Stripe | Subscription payments | `STRIPE_*` env vars | ✅ Production |
 | Firebase | Push notifications | Service account JSON | ✅ Production |
 | PostgreSQL | Primary database | `DATABASE_URL` | ✅ Production |
 | Redis | Cache + job queue | `REDIS_*` env vars | ✅ Production |
 | Sentry | Error tracking | `SENTRY_DSN` | ✅ Production |
-| Geoip-lite | User geolocation | (npm package) | ✅ Production |
+| Geoip-lite | User geolocation (fallback when CDN header missing) | (npm package) | ✅ Production (Tier 2 fallback after Cloudflare) |
 
 ---
 

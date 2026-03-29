@@ -25,14 +25,11 @@
 **Impact**: Mobile app (Capacitor) with RTL and landscape mode is high-risk for visual regressions—safe area positioning, keyboard overlays, RTL text direction can break without detection.
 **Recommendation**: Generate Linux snapshot baselines or switch to centralized screenshot hosting (Percy, Chromatic).
 
-### 4. Plural Strings Not Fully Migrated to ICU Format
-**Status**: Deferred work
-**Severity**: Low (translation correctness issue)
-**Files**: Multiple translation keys use `(s)` workaround pattern, not ICU format
-**Description**: AI_INSTRUCTIONS.md requires ICU Message Format for pluralization (2+ forms for English, 6 for Arabic), but some keys still use `"{count} item(s)"` pattern.
-**Impact**: Grammatically incorrect in Arabic (forms don't match CLDR rules), poor UX in other languages.
-**Examples**: Check any translation key with `(s)` pattern in `frontend/src/i18n/en/` and `ar/` directories.
-**Workaround**: Fully implemented pluralization keys work correctly; missing/partial migrations have visual-only impact.
+### 4. Plural Strings — ICU Migration Complete
+**Status**: Resolved (as of 2026-03-09 i18n migration)
+**Files**: `frontend/src/i18n/en/` and `ar/` namespace directories
+**Description**: All plural strings have been migrated to ICU Message Format. No `(s)` workaround patterns remain. English uses `{count, plural, one {…} other {…}}`. Arabic uses all 6 CLDR forms (zero/one/two/few/many/other).
+**Verification**: `grep -r "(s)" frontend/src/i18n/` returns no matches.
 
 ### 5. OnboardingWizard Translation Refactoring Needed
 **Status**: Documented TODO
@@ -47,8 +44,8 @@
 | Area | Description | Severity | File(s) |
 |------|-------------|----------|---------|
 | **Fastify Plugin Versions** | @fastify/* plugins are all on Fastify 5 compatible versions (verified in package.json), but older projects might have stale dependencies in lock files. | Low | `backend/package.json` |
-| **IP-Based Geolocation** | Current implementation uses Cloudflare/Vercel headers only. IP-API, MaxMind, geoip-lite fallbacks are documented as "future work". | Low | `backend/src/middleware/geo.ts` (line 25) |
-| **E-commerce Integrations** | Code explicitly notes "future WooCommerce, etc." The foundation is Shopify + Salla only. | Low | `backend/src/index.ts` (lines 231, 252) |
+| **IP-Based Geolocation** | Primary: Cloudflare `CF-IPCountry` header. Fallback: geoip-lite (npm, offline). MaxMind/IP-API are not implemented. | Low | `backend/src/middleware/geo.ts` (line 25) |
+| **E-commerce Integrations** | Code explicitly notes "future WooCommerce, etc." Current platforms: Shopify + Salla + Zid. | Low | `backend/src/integrations/` |
 | **Product Image URL Field** | Schema has `imageUrl` column (line 699 in `schema.ts`) marked "future use", not yet integrated into product sync or AI context. | Low | `backend/src/db/schema.ts` (line 699) |
 | **Backwards Compatibility Shims** | `comments.ts` has unpaginated `getCommentsForUser()` wrapper for backwards compatibility. Safe but adds small API surface. | Low | `backend/src/services/comments.ts` (lines 180-221) |
 | **Type Casting for Dynamic i18n Keys** | Smart status banner and theme selector use `as any` casts for dynamic translation key lookups (e.g., `t(labelKey as any)`). Should use type-safe lookup builder. | Low-Medium | `frontend/src/components/dashboard/SmartStatusBanner.tsx`, `frontend/src/components/settings/ThemeSelector.tsx` |
@@ -88,14 +85,14 @@
 - Audit trail: `createdBy`, `usedBy` tracking
 
 ### 4. Facebook Access Token Storage
-**Status**: Implemented, no encryption layer
-**Severity**: Medium
-**Files**: `backend/src/db/schema.ts` (line 12 - users table, line 102 - pages table)
+**Status**: Implemented with field-level encryption
+**Files**: `backend/src/db/schema.ts` (line 12 - users table, line 102 - pages table), `backend/src/services/facebook.ts`
 **Details**:
-- Tokens stored in plaintext in `users.facebookAccessToken` and `pages.accessToken`
-- Database is encrypted at rest (Postgres instance-level or hosting provider)
-- No field-level encryption applied
-- **Recommendation**: If data sensitivity increases, add field-level encryption (AES-256) to token columns
+- Page access tokens are encrypted AES-256-GCM before storage via `maybeEncryptPageToken()` / `maybeDecryptPageToken()`
+- Encryption key configured via `FACEBOOK_TOKEN_ENCRYPTION_KEY` environment variable (see INTEGRATIONS.md)
+- IV stored alongside ciphertext in the `pages.accessToken` column
+- User-level `facebookAccessToken` in users table (short-lived, used for OAuth) follows same protection
+- Database is also encrypted at rest (Postgres instance-level or hosting provider) — defense in depth
 
 ### 5. Stripe Webhook Signature Verification
 **Status**: Implemented
@@ -154,11 +151,11 @@
 ## Fragile Areas
 
 ### 1. Geolocation Fallback Chain
-**Severity**: Medium
+**Severity**: Low
 **File**: `backend/src/middleware/geo.ts`
-**Details**: Currently relies on Cloudflare `CF-IPCountry` header (or Vercel equivalent). If header is missing or wrong, sanctions checks may fail silently or allow sanctioned users through.
-**Risk**: Production deployment to different CDN/infrastructure requires header remapping.
-**Mitigation**: IP-based fallback (MaxMind, IP-API) is documented but not implemented.
+**Details**: Two-tier implementation: (1) Cloudflare `CF-IPCountry` header; (2) geoip-lite (npm, offline local DB). If both sources are unavailable or ambiguous, sanctions checks may fail silently.
+**Risk**: Low for current Cloudflare-based production deployment. Higher if deployed behind a non-Cloudflare proxy that drops CDN headers (geoip-lite covers this).
+**Remaining gap**: MaxMind/IP-API (cloud-based accuracy upgrade) not implemented — not needed for current use.
 
 ### 2. Workspace Member Roles
 **Status**: Simple string enum
@@ -189,7 +186,7 @@
 ### 6. AI Prompt Version Management
 **Status**: Manual version bumping
 **Files**: `backend/src/config/aiPricing.ts`, `ai-worker/src/`
-**Details**: `PROMPT_VERSION` is hardcoded in code (currently v19). Changing prompts requires code deploy + AI worker restart.
+**Details**: `PROMPT_VERSION` is hardcoded in code (currently v21). Changing prompts requires code deploy + AI worker restart.
 **Risk**: Medium—prompt bugs are discovered post-deploy; rollback requires code push.
 **Improvement**: Move prompt versions to database/Redis so they can be hot-swapped without redeployment.
 
@@ -214,11 +211,11 @@
 **Impact**: Low (code quality, not functional)
 **Status**: Deferred post-i18n migration
 
-### 2. IP-Based Geolocation Fallback
+### 2. IP-Based Geolocation — MaxMind/IP-API Upgrade
 **File**: `backend/src/middleware/geo.ts:25`
 **Task**: "Note: IP-based geolocation fallback (MaxMind, IP-API) can be added later"
-**Impact**: Medium (robustness for non-CDN deployments)
-**Status**: Deferred pending infrastructure changes
+**Impact**: Low — geoip-lite already covers the non-CDN case
+**Status**: Not needed unless higher geolocation accuracy is required
 
 ### 3. Product Image Integration
 **File**: `backend/src/db/schema.ts:699`
@@ -227,10 +224,20 @@
 **Status**: Deferred to v2 (not yet integrated into sync or AI)
 
 ### 4. E-commerce Integrations (WooCommerce)
-**Files**: `backend/src/index.ts:231`, `backend/src/index.ts:252`
+**Files**: `backend/src/integrations/`
 **Task**: "Future WooCommerce, etc."
 **Impact**: Medium (integration coverage)
-**Status**: Deferred; Shopify + Salla currently supported
+**Status**: Deferred; Shopify + Salla + Zid currently supported
+
+## Planned Features
+
+### E-Commerce Customer Notifications
+**Plan**: `.planning/ECOMMERCE_NOTIFICATIONS_PLAN.md`
+**Scope**: Abandoned cart recovery, order status notifications (confirmed/shipped/delivered), review requests, digital product delivery — for Salla, Shopify, and Zid.
+**Channel**: SMS via Vonage (current) → WhatsApp Cloud API (when Meta approves).
+**Status**: Fully planned, not yet implemented. Estimated 3–4 weeks.
+
+---
 
 ## Deferred Work
 
@@ -247,19 +254,18 @@
    - Deferred pending CI infrastructure change
 
 3. **Plural Translation Migration (ICU Format)**
-   - Several keys still use `(s)` workaround
-   - Full migration deferred
-   - Functional but grammatically imperfect in Arabic
+   - ✅ Completed — all `(s)` patterns replaced with ICU format
+   - Arabic uses all 6 CLDR plural forms
 
 ### Tier 2 — Future Features (Low Priority)
 
 1. **Field-Level Encryption for Tokens**
-   - Facebook access tokens stored in plaintext
-   - Encrypted at rest via Postgres/hosting provider
-   - Field-level encryption deferred unless compliance requires
+   - ✅ Facebook page tokens are AES-256-GCM encrypted at rest (shipped)
+   - See Security section #4 and INTEGRATIONS.md for details
+   - No further action needed unless scope expands to other token types
 
 2. **Prompt Version Hot-Swapping**
-   - AI prompt versions hardcoded in code
+   - AI prompt version hardcoded in code (currently v21)
    - Changing requires deploy + restart
    - Database/Redis version management deferred
 
@@ -272,9 +278,9 @@
    - Streaming/pagination deferred
    - Affects stores with >5000 products
 
-5. **IP-based Geolocation Fallback**
-   - Cloudflare headers only; IP-API fallback deferred
-   - Affects non-CDN deployments
+5. **IP-based Geolocation — MaxMind/IP-API Upgrade**
+   - Cloudflare + geoip-lite (offline) already implemented
+   - MaxMind/IP-API cloud accuracy upgrade deferred — low priority
 
 ## Recommendations
 
@@ -299,9 +305,9 @@
 
 ### Priority 2 — Address in Next Cycle
 
-4. **Geolocation Fallback Chain** (Low-medium effort, Medium impact)
-   - Implement IP-API or MaxMind fallback when Cloudflare header missing
-   - Ensures sanctions checks work on any deployment infrastructure
+4. **Geolocation — MaxMind/IP-API Upgrade** (Low effort, Low impact)
+   - Cloudflare + geoip-lite already provide two-tier fallback
+   - MaxMind/IP-API cloud upgrade only needed for higher geolocation accuracy
    - File: `backend/src/middleware/geo.ts`
 
 5. **Complete ICU Plural Migration** (Low effort, Low impact)
@@ -321,10 +327,9 @@
    - Pass namespace translators directly to sub-components
    - File: `frontend/src/components/onboarding/OnboardingWizard.tsx`
 
-8. **Field-Level Encryption for Tokens** (Medium effort, Low-medium impact)
-   - If compliance or security audit requires it
-   - Wrap token columns with AES-256 encryption/decryption
-   - Files: `backend/src/db/schema.ts`, token read/write services
+8. **Field-Level Encryption for Tokens** — ✅ Shipped
+   - Facebook page tokens are now AES-256-GCM encrypted (FACEBOOK_TOKEN_ENCRYPTION_KEY)
+   - No further action needed unless other token types require the same treatment
 
 9. **Prompt Version Hot-Swapping** (Medium effort, Medium impact)
    - Move `PROMPT_VERSION` to Redis/database
@@ -367,7 +372,7 @@
 
 **Critical Issues**: Visual regression gap for mobile (RTL/landscape), webhook idempotency gap for payments, JSON validation gap for business profile.
 
-**Medium Issues**: Geolocation fallback missing, plural migration incomplete, type casting for i18n keys.
+**Medium Issues**: Geolocation fallback missing, type casting for i18n keys.
 
 **Low Issues**: Backwards compatibility shims, future feature placeholders, refactoring TODOs.
 

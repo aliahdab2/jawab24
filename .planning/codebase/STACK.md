@@ -4,7 +4,7 @@
 - **Language**: TypeScript 5.6.0
 - **Runtime**: Node.js 22.0.0+ (workspaces monorepo)
 - **Package Manager**: npm with workspace support
-- **TypeScript Compilation**: tsc (frontend), tsc (backend), tsc (ai-worker)
+- **TypeScript Compilation**: type-checking via `tsc --noEmit` (all workspaces); frontend app bundled via Next.js (webpack/Turbopack), backend/ai-worker run directly as TypeScript via ts-node-dev
 
 ## Frontend
 - **Framework**: Next.js 15.5.12 with React 19.0.0
@@ -19,7 +19,7 @@
 - **Internationalization**: next-intl 4.8.3 (Arabic + English)
 - **Error Tracking**: Sentry NextJS 10.35.0
 - **Authentication**: @capacitor-community/facebook-login 8.0.0
-- **Payments**: @stripe/stripe-js 2.4.0
+- **Payments**: @stripe/stripe-js 2.4.0 — Embedded Checkout + PaymentElement (no redirect to Stripe-hosted page)
 - **Device APIs**: Capacitor plugins (keyboard, network, preferences, push-notifications, status-bar, haptics)
 - **Storage**: capacitor-secure-storage-plugin 0.13.0
 - **Testing**: Vitest 3.0.0, @testing-library/{react, dom, jest-dom}
@@ -37,10 +37,10 @@
 - **Job Queue**: BullMQ 5.66.4 (job scheduling)
 - **AI/LLM**: OpenAI SDK 6.27.0 (pinned exact version for stability)
 - **Payments**: Stripe 14.11.0
-- **Authentication**: JWT (custom), Facebook OAuth
+- **Authentication**: JWT (custom), Facebook OAuth, Phone OTP via Vonage SMS
 - **Error Tracking**: Sentry Node 10.35.0
 - **Push Notifications**: Firebase Admin SDK 13.6.1
-- **Geolocation**: geoip-lite 1.4.10
+- **Geolocation**: CDN header-based primary (Cloudflare `CF-IPCountry`) + geoip-lite 1.4.10 as offline fallback
 - **Schema Validation**: Zod 3.25.76 + zod-to-json-schema 3.25.1
 - **API Documentation**: OpenAPI/Swagger via Fastify plugins
 - **Testing**: Vitest 3.0.0 (unit + integration)
@@ -52,7 +52,7 @@
 - **Framework**: Fastify 5.7.4
 - **LLM Providers**:
   - **Primary**: OpenAI 6.27.0 (gpt-4.1-mini, pinned exact version)
-  - **Fallback/Playground**: Anthropic SDK 0.78.0 (Claude models)
+  - **Tier-2 failover / Playground**: Anthropic SDK 0.78.0 (Claude models; default model: claude-haiku-4-5-20251001)
 - **Job Queue**: Redis via ioredis 5.3.2 + BullMQ 5.66.4
 - **Error Tracking**: Sentry Node 10.35.0
 - **HTTP Plugins**: @fastify/{cors, rate-limit}
@@ -77,7 +77,8 @@
 - **Connection Pool**: Built-in via postgres driver
 
 ## Build & Dev Tools
-- **Bundler**: Next.js (frontend), Fastify (backend/ai-worker)
+- **Frontend Build**: Next.js (webpack/Turbopack bundling + static export for Capacitor)
+- **Backend/AI Worker Build**: No bundler — run as TypeScript source via ts-node-dev (dev) or compiled to JS (production Docker)
 - **Linter**: ESLint 9.0.0 (all workspaces)
 - **Type Checker**: TypeScript tsc (all workspaces)
 - **Unit Testing**: Vitest 3.0.0 (all workspaces)
@@ -108,12 +109,12 @@
 | Next.js | 15.5.12 | React framework + SSR/SSG | Frontend |
 | React | 19.0.0 | UI library | Frontend |
 | Tailwind CSS | 3.4.0 | Utility-first CSS + RTL | Frontend |
-| Fastify | 5.7.4 | HTTP server (3x faster than Express) | Backend, AI Worker |
+| Fastify | 5.7.4 | HTTP server framework (low-overhead, strong plugin ecosystem) | Backend, AI Worker |
 | Drizzle ORM | 0.29.3 | Type-safe SQL ORM | Backend |
 | PostgreSQL | 15 | Relational database + pgvector | Infrastructure |
 | Redis | 7-alpine | Cache + job queue (BullMQ) | Infrastructure |
 | OpenAI SDK | 6.27.0 | GPT-4.1-mini LLM provider | AI Worker, Backend (embeddings) |
-| Anthropic SDK | 0.78.0 | Claude fallback + playground | AI Worker |
+| Anthropic SDK | 0.78.0 | Tier-2 failover LLM + playground | AI Worker |
 | Stripe | 14.11.0 | Payment processing | Backend |
 | Firebase Admin | 13.6.1 | Push notifications | Backend |
 | Sentry | 10.35.0 | Error tracking + performance monitoring | Backend, AI Worker, Frontend |
@@ -149,6 +150,9 @@
 - `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` - Stripe payment
 - `SHOPIFY_API_KEY`, `SHOPIFY_API_SECRET`, `SHOPIFY_HOST_NAME` - Shopify OAuth
 - `SALLA_CLIENT_ID`, `SALLA_CLIENT_SECRET` - Salla e-commerce
+- `ZID_CLIENT_ID`, `ZID_CLIENT_SECRET`, `ZID_APP_ID` - Zid e-commerce
+- `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_FROM_NUMBER` - Vonage SMS (phone OTP)
+- `PHONE_AUTH_ENABLED` - Feature flag for phone OTP login
 - `SENTRY_DSN` - Sentry error tracking
 - `AI_SERVICE_URL` - AI worker endpoint
 - `FRONTEND_URL` - Frontend base URL
@@ -156,7 +160,8 @@
 
 ### AI Worker (.env/ai.env)
 - `OPENAI_API_KEY` - OpenAI API key (primary LLM)
-- `ANTHROPIC_API_KEY` - Anthropic API key (Claude fallback)
+- `ANTHROPIC_API_KEY` - Anthropic API key (Claude tier-2 failover)
+- `AI_FALLBACK_MODEL` - Fallback model ID (default: `claude-haiku-4-5-20251001`)
 - `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` - Redis config
 - `SENTRY_DSN` - Sentry error tracking
 
@@ -194,9 +199,9 @@
 
 ## Architecture Notes
 - **Monorepo**: npm workspaces (shared, frontend, backend, ai-worker)
-- **API Style**: RESTful JSON (Fastify) + WebSockets (Server-Sent Events)
-- **Authentication**: JWT (issued on Facebook login, persisted in secure storage)
+- **API Style**: RESTful JSON (Fastify) + Server-Sent Events (SSE) for real-time push — not WebSockets
+- **Authentication**: JWT (Facebook OAuth or Phone OTP); web: HttpOnly + Secure + SameSite cookies; mobile: Capacitor secure storage (native keychain/KeyStore)
 - **Database Transactions**: Drizzle transaction support for consistency
 - **Caching Strategy**: Redis for sessions, job queue, rate-limit counters
-- **Type Safety**: Full TypeScript across all services (no `any` types)
+- **Type Safety**: TypeScript-first across all services; a few localized `as any` escape hatches exist (documented in CONCERNS.md)
 - **i18n**: next-intl for frontend (39 namespace files per language)

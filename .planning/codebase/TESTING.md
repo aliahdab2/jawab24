@@ -7,7 +7,7 @@ This document describes the testing architecture, frameworks, and patterns used 
 ## Test Frameworks
 
 ### Vitest
-- **Unit & Integration Testing**: Vitest 1.x with jsdom (frontend) and node (backend)
+- **Unit & Integration Testing**: Vitest 3.0.0 with jsdom (frontend) and node (backend)
 - **Configuration**:
   - Frontend: `frontend/vitest.config.ts` (jsdom environment)
   - Backend: `backend/vitest.config.ts` (node environment)
@@ -17,7 +17,7 @@ This document describes the testing architecture, frameworks, and patterns used 
   - Backend: `backend/test/setup.ts` (mocks database)
 
 ### Playwright
-- **E2E Testing**: Playwright 1.x (chromium only)
+- **E2E Testing**: Playwright 1.58.1 (chromium only)
 - **Configuration**: `frontend/playwright.config.ts`
 - **Test Files**: `frontend/e2e/<feature>.spec.ts`
 - **Server**: Reuses local dev server in local mode, spins up standalone in CI
@@ -32,7 +32,7 @@ This document describes the testing architecture, frameworks, and patterns used 
 
 | Type | Location | Command | Coverage | Runs |
 |------|----------|---------|----------|------|
-| **Unit Tests** | `frontend/src/**/*.test.ts`, `backend/src/**/*.test.ts` | `npm run test` | 35% (frontend), 80% (backend) | On push, PR, CI |
+| **Unit Tests** | `frontend/src/**/*.test.{ts,tsx}`, `backend/src/**/*.test.ts` | `npm run test` | Thresholds: 35% stmts (frontend), 80% stmts (backend) | On push, PR, CI |
 | **Hook Tests** | `frontend/src/hooks/*.test.ts` | `npm run test` | 75% (hooks folder) | On push, PR, CI |
 | **Service Tests** | `backend/src/services/**/*.test.ts` | `npm run test` | 80% (statements/lines) | On push, PR, CI |
 | **Middleware Tests** | `backend/test/middleware/*.test.ts` | `npm run test` | Part of 80% threshold | On push, PR, CI |
@@ -245,8 +245,8 @@ export default defineConfig({
 **Key Points:**
 - Spins up Next.js dev server locally (reuses if already running)
 - Uses standalone server in CI (`.next/standalone/frontend/server.js`)
-- Retries twice on CI (once locally)
-- Stores HTML reports in `test-results/`
+- Retries twice on CI, zero retries locally (per `retries: process.env.CI ? 2 : 0`)
+- HTML reports in `playwright-report/`; trace artifacts in `test-results/`
 
 ### Test Files
 
@@ -254,16 +254,24 @@ export default defineConfig({
 
 **List of E2E Test Files** (all in `frontend/e2e/`):
 - `comments.spec.ts` — Comment listing, filtering, replying, resolution
-- `login.spec.ts` — Login page rendering, OAuth URL validation
+- `complete-profile.spec.ts` — Profile completion onboarding flow
+- `checkout.spec.ts` — Stripe Embedded Checkout (PaymentElement, monthly + yearly)
+- `dashboard.spec.ts` — Dashboard stats, needs-attention list
+- `integrations.spec.ts` — E-commerce integration listing (Shopify, Salla, Zid)
 - `landing.spec.ts` — Landing page content, responsive design
+- `login.spec.ts` — Login page: Facebook OAuth + Phone OTP tabs
 - `messages.spec.ts` — Message listing, pagination, customer context
 - `pages.spec.ts` — Page listing, KB gaps, page settings
+- `payment.spec.ts` — Payment intent and subscription management
+- `payment-flow.spec.ts` — Full checkout + subscription lifecycle
+- `pricing.spec.ts` — Pricing page, plan selection
 - `rules.spec.ts` — Rule creation, editing, deletion, priority
-- `templates.spec.ts` — Template creation, updating, deletion
 - `settings.spec.ts` — Workspace settings, business hours, language toggle
-- `checkout.spec.ts` — Payment flow, Stripe integration (if applicable)
 - `seo.spec.ts` — 39 tests for canonical URLs, hreflang, OG tags, structured data
-- `visual.spec.ts` — Visual regression tests (snapshots)
+- `ssr.spec.ts` — Server-side rendering (public pages render full HTML)
+- `team.spec.ts` — Team member invite (email + phone), role management
+- `templates.spec.ts` — Template creation, updating, deletion
+- `visual.spec.ts` — Visual regression tests (snapshots, macOS baselines only)
 
 ### Example E2E Test
 
@@ -359,7 +367,7 @@ test.describe('SEO — Landing Page', () => {
 **Location**: `backend/test/integration/`
 
 **Setup:**
-- Uses real PostgreSQL instance (CI spins up service container)
+- Uses real PostgreSQL instance (local DB; not part of default PR CI)
 - Runs migrations before each test suite
 - Creates isolated test database per run
 - NOT included in unit test runs (`npm run test`)
@@ -603,9 +611,9 @@ test('should use correct translation for title', async ({ page }) => {
 1. **Install dependencies**: `npm ci`
 2. **Lint**: `npm run lint` (0 errors, 0 warnings required)
 3. **Unit tests**: `npm run test` (all packages)
-   - Frontend: 35% coverage threshold
-   - Backend: 80% coverage threshold
-   - AI Worker: similar to backend
+   - Frontend: 35% statements threshold (E2E covers most UI paths)
+   - Backend: 80% statements threshold
+   - AI Worker: node environment, no strict threshold
 4. **E2E tests**: `cd frontend && npm run test:e2e`
    - Runs all Playwright specs
    - Retries twice on failure
@@ -627,7 +635,7 @@ npm run test:integration   # Only if deploying backend
 cd frontend && npm run test:e2e
 ```
 
-**All checks must PASS to deploy to production.**
+**Unit + E2E + Lighthouse must pass on every PR. Integration tests run as a separate pre-deploy gate (not default PR CI).**
 
 ---
 
@@ -739,7 +747,8 @@ CONCURRENCY=5 ADMIN_TOKEN="$ADMIN_TOKEN" npm run eval
 - **Location**: `<package>/coverage/index.html` to view
 
 ### E2E Test Reports
-- **HTML Report**: `frontend/test-results/` (auto-generated)
+- **HTML Report**: `frontend/playwright-report/` (auto-generated)
+- **Traces/Screenshots**: `frontend/test-results/` (artifacts, only on retry)
 - **Traces**: `.zip` files with screenshots/video on retry
 - **View**: `npm run test:e2e:report` to open in browser
 

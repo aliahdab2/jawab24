@@ -30,7 +30,7 @@ AutoReply/
 
 ## Frontend Structure
 
-**Location**: `/Users/aliahdab/Documents/AutoReply/frontend`
+**Location**: `/frontend`
 
 ### Directory Tree
 
@@ -41,7 +41,7 @@ frontend/
 │   ├── components/
 │   │   ├── comments/           # Comment-related components
 │   │   ├── dashboard/          # Dashboard layout + features
-│   │   ├── knowledge-base/     # KB UI components
+│   │   ├── knowledge-base/     # KB UI components (incl. VoiceRecordButton.tsx)
 │   │   ├── landing/            # Landing page sections
 │   │   ├── layout/             # Layouts (DashboardLayout, PublicLayout, AppShell)
 │   │   ├── messages/           # Message UI + conversation
@@ -59,17 +59,19 @@ frontend/
 │   ├── data/                   # Seed data (pricing plans, features)
 │   ├── features/
 │   │   └── demo/               # Demo mode feature flag
-│   ├── hooks/                  # Custom React hooks
+│   ├── hooks/                  # Custom React hooks (14 hooks)
 │   │   ├── index.ts            # Barrel export
 │   │   ├── useAiGeneration.ts  # Draft/polish AI replies
 │   │   ├── useConversationActions.ts # Mark handled, resend, replay
 │   │   ├── useSSE.ts           # Server-Sent Events subscription
 │   │   ├── useTheme.ts         # Dark/light/system theme
 │   │   ├── useBodyScrollLock.ts # Prevent scroll in modals
-│   │   ├── useKeyboardHeight.ts # Mobile keyboard adjustment
 │   │   ├── useMobileMessages.ts # Mobile message handling
 │   │   ├── useLandscape.ts     # Landscape mode detection
 │   │   ├── useSwipeToDismiss.ts # Touch gesture handling
+│   │   ├── useOtpRequest.ts    # Phone OTP request flow
+│   │   ├── useVoiceRecorder.ts # Voice recording for KB input
+│   │   ├── useWorkspaceRole.ts # Current user's workspace role
 │   │   ├── useDebounce.ts
 │   │   ├── useEscapeKey.ts
 │   │   └── useSwipe.ts
@@ -127,6 +129,7 @@ frontend/
 │   │   ├── payment/            # Payment flows
 │   │   ├── shopify/            # Shopify OAuth callback
 │   │   ├── salla/              # Salla OAuth callback
+│   │   ├── zid/                # Zid OAuth onboarding callback
 │   │   ├── _app.tsx            # App wrapper, providers, SSE setup
 │   │   ├── _document.tsx       # HTML document shell (dir, lang, fonts)
 │   │   ├── 404.tsx             # Not found page
@@ -136,23 +139,28 @@ frontend/
 │   └── utils/                  # Utility functions
 │       ├── locale.ts           # getOGLocale(), isRTLLocale(), getNextLocale(), etc.
 │       └── [other utilities]
-├── test/                       # E2E + unit test setup
-│   ├── setup.ts                # Vitest setup (mock translations, browser APIs)
-│   └── e2e/                    # Playwright E2E tests
-│       ├── comments.spec.ts
-│       ├── dashboard.spec.ts
-│       ├── landing.spec.ts
-│       ├── login.spec.ts
-│       ├── messages.spec.ts
-│       ├── pages.spec.ts
-│       ├── payment.spec.ts
-│       ├── pricing.spec.ts
-│       ├── rules.spec.ts
-│       ├── settings.spec.ts
-│       ├── templates.spec.ts
-│       ├── integrations.spec.ts
-│       ├── visual.spec.ts      # Visual regression tests (12 snapshots, macOS only)
-│       └── seo.spec.ts         # 39 SEO regression tests (canonical, hreflang, OG, noindex, JSON-LD)
+├── test/                       # Unit test setup
+│   └── setup.ts                # Vitest setup (mock translations, browser APIs)
+├── e2e/                        # Playwright E2E tests (19 spec files) — NOT under test/
+│   ├── checkout.spec.ts
+│   ├── comments.spec.ts
+│   ├── complete-profile.spec.ts
+│   ├── dashboard.spec.ts
+│   ├── integrations.spec.ts
+│   ├── landing.spec.ts
+│   ├── login.spec.ts
+│   ├── messages.spec.ts
+│   ├── pages.spec.ts
+│   ├── payment-flow.spec.ts
+│   ├── payment.spec.ts
+│   ├── pricing.spec.ts
+│   ├── rules.spec.ts
+│   ├── seo.spec.ts             # 39 SEO regression tests (canonical, hreflang, OG, noindex, JSON-LD)
+│   ├── settings.spec.ts
+│   ├── ssr.spec.ts
+│   ├── team.spec.ts
+│   ├── templates.spec.ts
+│   └── visual.spec.ts          # Visual regression tests (macOS baselines only)
 ├── android/                    # Capacitor Android project
 │   ├── app/
 │   ├── build.gradle
@@ -177,7 +185,7 @@ frontend/
 
 ### Environments
 - Dev: `npm run dev` (Next.js dev server, hot reload)
-- Build: `npm run build` (Static site generation + server component optimization)
+- Build: `npm run build` (Next.js production build — Pages Router, webpack/Turbopack bundling)
 - Mobile: `npm run build:mobile` (Output to `out/` for Capacitor sync)
 - Test: `npm run test` (Vitest), `npm run test:e2e` (Playwright)
 ```
@@ -196,17 +204,17 @@ frontend/
 | Styles/variables | `src/styles/globals.css` |
 | i18n messages | `src/i18n/[en,ar]/[39 namespace files].json` |
 | Locale utilities | `src/utils/locale.ts` |
-| Custom hooks | `src/hooks/[14 hook files]` |
+| Custom hooks | `src/hooks/[14 hooks + index.ts barrel]` |
 | Landing page | `src/pages/index.tsx` |
 | Dashboard pages | `src/pages/[comments, messages, rules, templates, settings, integrations].tsx` |
-| E2E tests | `test/e2e/[14 spec files]` |
+| E2E tests | `e2e/[19 spec files]` (NOT under test/) |
 | Unit tests | `src/**/*.test.tsx`, `test/setup.ts` |
 
 ---
 
 ## Backend Structure
 
-**Location**: `/Users/aliahdab/Documents/AutoReply/backend`
+**Location**: `/backend`
 
 ### Directory Tree
 
@@ -285,6 +293,7 @@ backend/
 │   │   ├── integrations.ts     # E-commerce integration list
 │   │   ├── shopify.ts          # Shopify OAuth callback
 │   │   ├── salla.ts            # Salla OAuth callback
+│   │   ├── zid.ts              # Zid OAuth callback
 │   │   ├── translation.ts      # Multi-language message translation
 │   │   ├── geo.ts              # Geolocation endpoint
 │   │   ├── version.ts          # Version info
@@ -317,6 +326,8 @@ backend/
 │   │   ├── ecommerce.ts        # E-commerce integration utilities
 │   │   ├── shopify.ts          # Shopify API client
 │   │   ├── salla.ts            # Salla API client
+│   │   ├── sms.ts              # Vonage SMS (phone OTP delivery)
+│   │   ├── transcription.ts    # Whisper (GPT-4o-mini-transcribe) for voice messages
 │   │   ├── stripe.ts           # Stripe subscription management
 │   │   ├── analytics.ts        # Reply metrics + aggregation
 │   │   ├── workspace.ts        # Workspace management
@@ -370,14 +381,14 @@ backend/
 | Server entry | `src/index.ts` |
 | Fastify config | `src/index.ts` (lines 66–120) |
 | Config loading | `src/config/index.ts` |
-| Routes | `src/routes/[25 files]` |
-| Controllers | `src/controllers/[15+ files]` |
-| Services | `src/services/[30+ files]` |
+| Routes | `src/routes/[~30 files]` |
+| Controllers | `src/controllers/[~19 files]` |
+| Services | `src/services/[~39 top-level + subdirs]` |
 | DB schema | `src/db/schema.ts` |
 | DB client | `src/db/index.ts` |
 | Middleware | `src/middleware/[7 files]` |
 | Workers | `src/workers/[3 files]` |
-| Integrations | `src/integrations/[4 files]` |
+| Integrations | `src/integrations/[4 files: index, shopify, salla, zid]` |
 | Types | `src/types/`, `src/interfaces/` |
 | Utils | `src/utils/` |
 | Migrations | `src/migrations/` (auto-generated) |
@@ -386,7 +397,7 @@ backend/
 
 ## AI Worker Structure
 
-**Location**: `/Users/aliahdab/Documents/AutoReply/ai-worker`
+**Location**: `/ai-worker`
 
 ### Directory Tree
 
@@ -401,14 +412,18 @@ ai-worker/
 │   │   ├── redis.ts            # Redis client
 │   │   └── [other utilities]
 │   ├── services/               # Business logic
-│   │   ├── openai.ts           # OpenAI GPT-4o integration
-│   │   │                        # - Prompt building (v19 system + user prompt)
-│   │   │                        # - Token counting
-│   │   │                        # - Retry logic
+│   │   ├── openai.ts           # Primary LLM service (gpt-4.1-mini)
+│   │   │                        # - Prompt building (v21 system + user prompt)
+│   │   │                        # - Token counting + structured JSON response
+│   │   │                        # - Retry logic + fallback reply
 │   │   │                        # - Cache key generation
-│   │   ├── anthropic.ts        # Anthropic Claude integration (alternative)
-│   │   └── providers/          # Provider abstraction layer
-│   │       └── [provider interfaces]
+│   │   ├── ecommerceToolHandler.ts # AI agent tools for order/inventory lookup
+│   │   ├── translation.ts      # AI-powered translation service
+│   │   └── providers/          # Provider abstraction layer (adapter pattern)
+│   │       ├── openai-adapter.ts   # OpenAI API adapter
+│   │       ├── claude-adapter.ts   # Anthropic Claude adapter (tier-2 failover)
+│   │       ├── index.ts            # Provider registry + generateReplyWithProvider()
+│   │       └── types.ts            # LLMProvider interface + intent schema
 │   ├── types/                  # TypeScript types
 │   │   └── index.ts
 │   ├── index.ts                # Entry point (startup, graceful shutdown)
@@ -442,7 +457,7 @@ ai-worker/
 
 ## Shared Package Structure
 
-**Location**: `/Users/aliahdab/Documents/AutoReply/packages/shared`
+**Location**: `/packages/shared`
 
 ### Directory Tree
 
@@ -492,29 +507,29 @@ packages/shared/
 
 | What | Where |
 |------|-------|
-| **API Routes** | `backend/src/routes/[25 feature files]` |
-| **API Controllers** | `backend/src/controllers/[15+ files]` |
-| **API Services** | `backend/src/services/[30+ files]` |
+| **API Routes** | `backend/src/routes/[~30 feature files]` |
+| **API Controllers** | `backend/src/controllers/[~19 files]` |
+| **API Services** | `backend/src/services/[~39 top-level + kb/, reply/, protection/ subdirs]` |
 | **Database Schema** | `backend/src/db/schema.ts` |
-| **Database Migrations** | `backend/src/migrations/[auto-generated]` |
+| **Database Migrations** | `backend/src/migrations/` (auto-generated — do not edit manually) |
 | **Drizzle Client** | `backend/src/db/index.ts` |
 | **Components** | `frontend/src/components/[10 feature dirs + ui/]` |
-| **Pages** | `frontend/src/pages/[22 route files]` |
-| **Custom Hooks** | `frontend/src/hooks/[14 hook files]` |
+| **Pages** | `frontend/src/pages/[23 top-level .tsx + subdirs: admin, auth, blog, compare, integrations, payment, shopify, salla, zid]` |
+| **Custom Hooks** | `frontend/src/hooks/[14 hooks + index.ts barrel]` |
 | **Stores (Zustand)** | `frontend/src/lib/store.ts` |
 | **API Client** | `frontend/src/lib/api.ts` |
 | **Translations EN** | `frontend/src/i18n/en/[39 namespace files]` |
 | **Translations AR** | `frontend/src/i18n/ar/[39 namespace files]` |
 | **Styles/Variables** | `frontend/src/styles/globals.css` |
-| **E2E Tests** | `frontend/test/e2e/[14 spec files]` |
-| **Unit Tests (Frontend)** | `frontend/src/**/*.test.tsx`, `frontend/test/setup.ts` |
+| **E2E Tests** | `frontend/e2e/[19 spec files]` (NOT under `test/`) |
+| **Unit Tests (Frontend)** | `frontend/src/**/*.test.{ts,tsx}`, `frontend/test/setup.ts` |
 | **Unit Tests (Backend)** | `backend/src/**/*.test.ts`, `backend/test/setup.ts` |
 | **BullMQ Workers** | `backend/src/workers/[3 files]` |
 | **BullMQ Queue Helpers** | `backend/src/lib/replyQueue.ts` |
 | **AI Worker** | `ai-worker/src/worker.ts` |
-| **OpenAI Service** | `ai-worker/src/services/openai.ts` |
-| **Integrations** | `backend/src/integrations/[4 files]` |
-| **Shared Package** | `packages/shared/src/[3 files]` |
+| **OpenAI Service** | `ai-worker/src/services/openai.ts` + `ai-worker/src/services/providers/` |
+| **Integrations** | `backend/src/integrations/[4 files: index, shopify, salla, zid]` |
+| **Shared Package** | `packages/shared/src/[index.ts, sse-events.ts, ecommerce-tools.ts, utils/]` |
 | **Middleware** | `backend/src/middleware/[7 files]` |
 | **Config Files** | `backend/src/config/`, `ai-worker/src/config/`, `frontend/next.config.js` |
 
@@ -529,9 +544,9 @@ packages/shared/
 | **React Components** | PascalCase, `.tsx` | `DashboardLayout.tsx`, `CommentCard.tsx`, `Button.tsx` |
 | **Pages** | kebab-case, `.tsx` | `dashboard.tsx`, `complete-profile.tsx`, `what-is-jawab24.tsx` |
 | **Hooks** | camelCase, `use*`, `.ts/.tsx` | `useAiGeneration.ts`, `useSSE.ts`, `useBodyScrollLock.ts` |
-| **Services** | camelCase, `*Service`, `.ts` | `replyService.ts`, `instagramReplyService.ts`, `embeddings.ts` |
-| **Controllers** | camelCase, `*Controller`, `.ts` | `webhookController.ts`, `commentsController.ts` |
-| **Routes** | camelCase, `*Routes`, `.ts` | `webhookRoutes.ts`, `commentsRoutes.ts` |
+| **Services** | camelCase, feature-based filename, `.ts` | `comments.ts`, `messages.ts`, `shopify.ts`, `transcription.ts` |
+| **Controllers** | camelCase, feature-based filename, `.ts` | `webhook.ts`, `auth.ts`, `payment.ts` |
+| **Routes** | camelCase, feature-based filename, `.ts` | `webhook.ts`, `comments.ts`, `shopify.ts` |
 | **Middleware** | camelCase, `.ts` | `auth.ts`, `errorHandler.ts`, `workspace.ts` |
 | **Utilities** | camelCase, `.ts` | `locale.ts`, `formatDuration.ts`, `validation.ts` |
 | **Types/Interfaces** | PascalCase, `.ts` | `User.ts`, `ReplyJobData.ts`, `EcommerceIntegration.ts` |
@@ -565,7 +580,7 @@ packages/shared/
 | `comments` | Comments on posts |
 | `rules` | Rule-based templates (keyword matching) |
 | `templates` | User-created template replies |
-| `integrations` | E-commerce platform connections (Shopify, Salla) |
+| `integrations` | E-commerce platform connections (Shopify, Salla, Zid) |
 | `subscriptions` | Subscription tiers (Free, Pro, Business) |
 | `reply_logs` | Reply history + metrics |
 | `embeddings` | KB vector embeddings (pgvector) |
@@ -621,8 +636,8 @@ npm run build         # Build all services
 ## Testing Structure
 
 ### Frontend Tests
-- **Unit**: Vitest + jsdom, `frontend/src/**/*.test.tsx`, `frontend/test/setup.ts`
-- **E2E**: Playwright, `frontend/test/e2e/[14 spec files]`
+- **Unit**: Vitest + jsdom, `frontend/src/**/*.test.{ts,tsx}`, `frontend/test/setup.ts`
+- **E2E**: Playwright, `frontend/e2e/[19 spec files]` (NOT under test/)
 - **Visual**: Playwright snapshots (macOS baselines only)
 - **SEO**: 39 regression tests in `e2e/seo.spec.ts`
 

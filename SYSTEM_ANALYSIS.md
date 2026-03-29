@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **System Reference Document / وثيقة مرجعية للنظام**
-> Generated: 2026-02-28 | Updated: 2026-03-20 (v21 — added RBAC/workspaces, page token encryption, blog, comparison pages, admin observability, prompt v21)
+> Generated: 2026-02-28 | Updated: 2026-03-29 (v22 — added Zid e-commerce, phone OTP auth, voice KB input, GPT-4o transcription, Stripe Embedded Checkout, yearly billing, comments grouping, team phone invites, e-commerce notifications plan)
 
 ---
 
@@ -65,11 +65,12 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 
 **External Integrations:**
 - Facebook Graph API (comments + DMs)
-- Instagram Graph API (comments + DMs)
+- Instagram Graph API (comments + DMs) ⚠️ code path exists; permissions deferred — not yet live
 - Shopify API (products + policies)
 - Salla API (products + policies)
 - OpenAI API (reply generation + embeddings + translation)
-- Stripe API (subscriptions + billing)
+- Stripe API (subscriptions + billing; Embedded Checkout with PaymentElement, monthly + yearly billing intervals, Billing Portal for plan changes)
+- Vonage SMS API (phone OTP authentication + team invites)
 
 ## عربي
 
@@ -83,11 +84,12 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 
 **التكاملات الخارجية:**
 - Facebook Graph API (التعليقات + الرسائل المباشرة)
-- Instagram Graph API (التعليقات + الرسائل المباشرة)
+- Instagram Graph API (التعليقات + الرسائل المباشرة) ⚠️ مسار الكود موجود؛ الصلاحيات مؤجلة — غير مفعّل بعد
 - Shopify API (المنتجات + السياسات)
 - Salla API (المنتجات + السياسات)
 - OpenAI API (توليد الردود + التضمينات + الترجمة)
-- Stripe API (الاشتراكات + الفواتير)
+- Stripe API (الاشتراكات + الفواتير؛ Embedded Checkout مع PaymentElement، دوري شهري وسنوي)
+- Vonage SMS API (رمز OTP عبر SMS + دعوة الفريق)
 
 ---
 
@@ -765,7 +767,11 @@ After OpenAI returns, the system runs **6 automated checks**:
 
 ### Fallback Classifier (when AI Worker is down)
 
-When the circuit breaker is open, a **zero-cost keyword-based classifier** (`fallbackClassifier.ts`) provides basic metadata (intent, confidence, flags) instead of returning empty data. It detects:
+When the AI worker circuit breaker opens, the 3-tier fallback chain activates:
+1. **Tier 2 — Claude Haiku** (`AI_FALLBACK_MODEL=claude-haiku-4-5-20251001`): attempts LLM classification via Anthropic SDK
+2. **Tier 3 — keyword classifier** (`fallbackClassifier.ts`): if Claude also fails, a zero-cost keyword-based classifier provides basic metadata (intent, confidence, flags) instead of returning empty data
+
+The keyword classifier detects:
 - Spam/irrelevant (emoji-only, mentions, spam keywords EN/AR/Franco, punctuation-only)
 - Compliments (Arabic + English patterns, compliment emoji)
 - Basic intent classification via keyword matching
@@ -864,12 +870,16 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **defaultReplyLanguage** | enum | 'ar' | Default if auto-detect fails |
 | **autoDetectLanguage** | boolean | true | Detect customer language from message |
 | **supportedLanguages** | array | ['en','ar'] | Languages business supports |
-| **notificationsEnabled** | boolean | true | Push/in-app notifications |
+| **notificationsEnabled** | boolean | true | Push/in-app notifications. SSE badge/toast are skipped for disabled or disconnected pages |
 | **dashboardLanguage** | enum | 'ar' | UI language preference for dashboard |
 | **aiModel** | string | gpt-4.1-mini | AI model selection (locked to DEFAULT_AI_MODEL) |
 | **dualReplyNudgeMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated nudge messages |
 | **dualReplyNudgeVariations** | JSONB | {} | `{ar: [...], en: [...]}` - anti-spam nudge variations per language |
 | **brandVoiceNotesMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated brand voice notes |
+
+### Comments UI
+
+Comments dashboard groups conversations by commenter + post, so all replies from the same person on the same post appear as a thread.
 
 ### Settings Save Flow
 
@@ -1133,6 +1143,21 @@ Products synced from Shopify/Salla
 └────────────────────────────────────────────────────────────────┘
 ```
 
+### Voice KB Input (Merchant Side)
+
+Merchants can add KB content via voice recording in addition to typing:
+- **UI**: `VoiceRecordButton.tsx` in the knowledge-base components
+- **Transcription**: `backend/src/services/transcription.ts` — audio sent to GPT-4o-mini-transcribe
+- **Flow**: Voice recording → upload → transcribe → transcription text inserted into KB text field → normal chunking/embedding pipeline
+
+### Incoming Voice Messages (Customer Side)
+
+When a customer sends a voice/audio message via Facebook Messenger or Instagram:
+- **Handler**: `backend/src/services/reply/nonTextHandler.ts`
+- **Flow**: Audio URL → GPT-4o-mini-transcribe → transcribed text → fed into AI reply pipeline (same as text message)
+- **Fallback**: If transcription fails or message is non-audio (image, video, sticker) → store placeholder text + send nudge reply (e.g. "Please send a text message")
+- **Non-text types handled**: voice, image, video, file, sticker
+
 ### RAG Modes
 
 | Mode | Behavior | Use Case |
@@ -1175,6 +1200,16 @@ When the AI can't find an answer in KB:
 4. دمج النتائج: 0.7 * متجه + 0.3 * نص + مكافأة اللغة
 5. تصفية > عتبة 0.3
 6. إرجاع أعلى 5 أجزاء
+
+**الإدخال الصوتي لقاعدة المعرفة (من جانب التاجر):**
+- `VoiceRecordButton.tsx` يتيح للتاجر تسجيل محتوى بصوته
+- الصوت يُرسل إلى `backend/src/services/transcription.ts` ويُحوَّل نصاً عبر GPT-4o-mini-transcribe
+- النص المحوَّل يدخل خط المعالجة المعتاد (تقطيع + تضمين)
+
+**رسائل العميل الصوتية الواردة (من جانب العميل):**
+- عند إرسال العميل رسالة صوتية عبر Messenger أو Instagram
+- `nonTextHandler.ts` يتولى المعالجة: URL الصوت → GPT-4o-mini-transcribe → النص المحوَّل → خط معالجة AI كرسالة نصية عادية
+- عند فشل التحويل أو وجود نوع آخر (صورة، فيديو، ملصق): تخزين نص بديل + إرسال رد توجيهي
 
 **كشف الفجوات:**
 - يُسجل السؤال في جدول `kbGaps`
@@ -1538,18 +1573,20 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 |---|-----|----------|--------|
 | ~~1~~ | ~~Zid e-commerce not implemented~~ | ~~RESOLVED~~ | Full Zid integration shipped — OAuth, sync, KB enrichment, AI agent tools, webhooks |
 | ~~2~~ | ~~No scheduled product sync~~ | ~~RESOLVED~~ | Scheduled sync runs every 6 hours via `setInterval` in `index.ts` — **note**: `setInterval` doesn't survive process restart without external scheduler; acceptable for single-instance deploy |
-| 3 | Single-language KB | Medium | Must mix both languages in one text |
-| 4 | Templates not auto-translated | Low | Manual both-language maintenance |
-| 5 | No visual regression tests | Medium | RTL/landscape may break silently (macOS baselines only) |
-| 6 | One store per workspace | Low | Multi-store needs workaround |
-| ~~7~~ | ~~No pluralization in i18n~~ | ~~RESOLVED~~ | Migrated to next-intl v4 with ICU Message Format support. Arabic uses all 6 CLDR plural forms (zero/one/two/few/many/other) |
-| 8 | Inventory is point-in-time | Info | AI adds "verify before ordering" caveat |
+| ~~3~~ | ~~No voice input for KB~~ | ~~RESOLVED~~ | Voice recording via VoiceRecordButton.tsx — transcribed via GPT-4o-mini-transcribe before KB ingestion |
+| 4 | Single-language KB | Medium | Must mix both languages in one text |
+| 5 | Templates not auto-translated | Low | Manual both-language maintenance |
+| 6 | No visual regression tests | Medium | RTL/landscape may break silently (macOS baselines only) |
+| 7 | One store per workspace | Low | Multi-store needs workaround |
+| ~~8~~ | ~~No pluralization in i18n~~ | ~~RESOLVED~~ | Migrated to next-intl v4 with ICU Message Format support. Arabic uses all 6 CLDR plural forms (zero/one/two/few/many/other) |
+| 9 | Inventory is point-in-time | Info | AI adds "verify before ordering" caveat |
+| 10 | E-commerce customer notifications (abandoned cart, order updates, review requests) | PLANNED | See .planning/ECOMMERCE_NOTIFICATIONS_PLAN.md — SMS via Vonage → WhatsApp when Meta approves |
 
 ### System Resilience
 
 | Failure Point | What Happens | User Impact |
 |---------------|-------------|-------------|
-| AI Worker down | Circuit breaker → fallback classifier (keyword-based intent/confidence/flags) | Classified fallback replies (not empty metadata) |
+| AI Worker down | Circuit breaker open → (Tier 2) Claude Haiku → (Tier 3) static reply + keyword classifier | Classified fallback replies (not empty metadata) |
 | Redis down | Fail-open → bypass cache + lock | Higher cost, possible double-reply (rare) |
 | PostgreSQL down | Fatal → service down | No replies |
 | OpenAI API down | Timeout → fallback | Generic replies |
@@ -1588,6 +1625,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Price Detection | Two-tier: Tier A (currency-adjacent) + Tier B (price-cue phrases) |
 | Workspace Roles | owner (level 3), admin (level 2), member (level 1) |
 | Page Token Encryption | AES-256-GCM at rest |
+| E2E Spec Files | 19 Playwright spec files |
 
 ## عربي
 
@@ -1595,13 +1633,16 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 
 | # | الفجوة | الشدة | التأثير |
 |---|--------|-------|---------|
-| 1 | تكامل زد غير مُنفذ | متوسط | تجار زد لا يمكنهم الربط |
+| ~~1~~ | ~~تكامل زد غير مُنفذ~~ | ~~تم الحل~~ | تكامل زد كامل — OAuth، مزامنة، إثراء قاعدة المعرفة، أدوات AI، webhooks |
 | ~~2~~ | ~~لا مزامنة تلقائية للمنتجات~~ | ~~تم الحل~~ | مزامنة تلقائية كل 6 ساعات عبر `setInterval` — **ملاحظة**: لا تنجو من إعادة تشغيل العملية؛ مقبول للنشر على خادم واحد |
-| 3 | قاعدة معرفة بلغة واحدة | متوسط | خلط اللغتين في نص واحد |
-| 4 | القوالب لا تُترجم تلقائياً | منخفض | صيانة يدوية |
-| 5 | لا اختبارات بصرية | متوسط | أعطال RTL قد لا تُكتشف |
-| ~~7~~ | ~~لا صيغ جمع في الترجمة~~ | ~~تم الحل~~ | تم الترحيل إلى next-intl v4 مع دعم ICU Message Format. العربية تستخدم جميع صيغ CLDR الستة |
-| 8 | المخزون نقطة زمنية | معلوماتي | AI يضيف "تأكد قبل الطلب" |
+| ~~3~~ | ~~لا إدخال صوتي لقاعدة المعرفة~~ | ~~تم الحل~~ | تسجيل صوتي عبر VoiceRecordButton.tsx — يُحوَّل نصاً عبر GPT-4o-mini-transcribe قبل الإضافة |
+| 4 | قاعدة معرفة بلغة واحدة | متوسط | خلط اللغتين في نص واحد |
+| 5 | القوالب لا تُترجم تلقائياً | منخفض | صيانة يدوية |
+| 6 | لا اختبارات بصرية | متوسط | أعطال RTL قد لا تُكتشف |
+| 7 | متجر واحد لكل مساحة عمل | منخفض | يتطلب حلاً بديلاً للمتعدد |
+| ~~8~~ | ~~لا صيغ جمع في الترجمة~~ | ~~تم الحل~~ | تم الترحيل إلى next-intl v4 مع دعم ICU Message Format. العربية تستخدم جميع صيغ CLDR الستة |
+| 9 | المخزون نقطة زمنية | معلوماتي | AI يضيف "تأكد قبل الطلب" |
+| 10 | إشعارات العملاء للتجارة الإلكترونية (سلة مهجورة، تحديثات الطلب، طلبات المراجعة) | مخطط | انظر .planning/ECOMMERCE_NOTIFICATIONS_PLAN.md — SMS عبر Vonage ← WhatsApp عند موافقة Meta |
 
 ### مرونة النظام
 
@@ -2122,6 +2163,7 @@ Jawab24 يدعم **مساحات عمل متعددة المستأجرين** مع 
 - Refresh token: 60-day opaque token, DB-stored, rotated on every use
 - Cookies: HttpOnly + Secure + SameSite:strict
 - Feature flag: `PHONE_AUTH_ENABLED` — phone routes hidden until enabled
+- **Team phone invites**: Workspace members can be invited via phone number (same OTP flow)
 
 ---
 
@@ -2275,7 +2317,8 @@ Internal dashboard for monitoring system health and AI costs:
 ║  2. Exact cache hit (Redis/Postgres) → FREE, instant            ║
 ║  3. Semantic cache hit (pgvector) → FREE, instant               ║
 ║  4. Full AI call (gpt-4.1-mini) → COST, ~2-5 seconds           ║
-║  5. Fallback (circuit breaker open) → FREE, instant             ║
+║  5a. Tier-2 fallback (circuit open) → Claude Haiku              ║
+║  5b. Tier-3 fallback (Claude also fails) → keyword classifier   ║
 ║                                                                  ║
 ║  CONCURRENCY: Redis distributed lock (SET NX EX 60)              ║
 ║  DM key: reply_lock:{pageId}:{senderId}                          ║
