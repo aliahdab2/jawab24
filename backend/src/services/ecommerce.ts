@@ -424,8 +424,11 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
                         nextVersion,
                     );
                 }
-            } catch {
-                // Non-critical — continue with other pages
+            } catch (error) {
+                captureError(error, 'Page RAG ingestion failed during KB sync', {
+                    tags: { service: 'ecommerce' },
+                    extra: { storeId, pageId },
+                });
             }
         }
 

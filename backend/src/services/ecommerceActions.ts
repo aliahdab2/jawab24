@@ -188,7 +188,11 @@ async function handleVerification(
     let storedJson: string | null;
     try {
         storedJson = await redis.get(redisKey);
-    } catch {
+    } catch (error) {
+        captureError(error, 'Redis unavailable during order verification Phase 2', {
+            tags: { service: 'ecommerce-tools' },
+            extra: { storeId, orderNumber, toolType },
+        });
         return { tool_name: toolCall.name, success: false, error: 'verification_expired' };
     }
 
@@ -283,8 +287,11 @@ async function storePendingVerification(
     const key = pendingVerificationKey(storeId, orderNumber, toolType);
     try {
         await redis.set(key, JSON.stringify(data), 'EX', VERIFICATION_TTL_SECONDS);
-    } catch {
-        // Non-critical — verification will fail with 'verification_expired'
+    } catch (error) {
+        captureError(error, 'Redis unavailable: failed to store pending verification (Phase 2 will fail)', {
+            tags: { service: 'ecommerce-tools' },
+            extra: { storeId, orderNumber, toolType },
+        });
     }
 }
 

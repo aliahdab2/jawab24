@@ -133,8 +133,8 @@ export class AiService {
                 // Populate Redis for next time (JSON format with metadata)
                 try {
                     await redis.set(cacheKey, JSON.stringify(result), 'EX', 30 * 24 * 60 * 60);
-                } catch {
-                    // Ignore redis set error
+                } catch (error) {
+                    this.logger.warn('Failed to populate Redis from Postgres cache hit', { hash, error });
                 }
 
                 // Update DB hit count
