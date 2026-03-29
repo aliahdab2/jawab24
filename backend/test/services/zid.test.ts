@@ -108,6 +108,9 @@ import {
     fullSync,
     refreshExpiringTokens,
     ZID_WEBHOOK_EVENTS,
+    lookupOrder,
+    getShipmentTracking,
+    checkInventory,
 } from '../../src/services/zid';
 
 // --- Helpers ---
@@ -762,6 +765,119 @@ describe('Zid Service', () => {
 
             // refreshAccessToken will throw for a store with no token data — captureError should be called
             expect(count).toBe(0);
+        });
+    });
+
+    // ============================================================
+    // lookupOrder / getShipmentTracking / checkInventory
+    // ============================================================
+
+    describe('lookupOrder', () => {
+        it('returns mapped order info when order is found', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore());
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    orders: [{
+                        id: 'zid-order-1',
+                        reference_id: '12345',
+                        status: 'delivered',
+                        total_amount: 300,
+                        currency: 'SAR',
+                        customer_name: 'Ahmed Ali',
+                        customer_phone: '+966512345678',
+                        shipping_city: 'Riyadh',
+                        created_at: '2026-01-15T10:00:00Z',
+                        items: [{ name: 'Widget', quantity: 1, price: 300, currency: 'SAR' }],
+                    }],
+                }),
+            });
+
+            const result = await lookupOrder('store-1', '12345');
+
+            expect(result).not.toBeNull();
+            expect(result?.orderNumber).toBe('12345');
+            expect(result?.customerFirstName).toBe('Ahmed'); // first word of customer_name
+            expect(result?.status).toBe('delivered');
+            expect(result?.totalAmount).toBe('300');
+            expect(result?.currency).toBe('SAR');
+            expect(result?.shippingCity).toBe('Riyadh');
+        });
+
+        it('returns null when order is not found', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore());
+
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ orders: [] }),
+            });
+
+            const result = await lookupOrder('store-1', '99999');
+
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('getShipmentTracking', () => {
+        it('returns shipment tracking info when order has tracking data', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore());
+
+            const orderBase = {
+                id: 'zid-order-1',
+                reference_id: '12345',
+                status: 'shipped',
+                total_amount: 300,
+                currency: 'SAR',
+                customer_name: 'Ahmed Ali',
+                customer_phone: '+966512345678',
+                shipping_city: 'Jeddah',
+                tracking_number: 'TRK-ZID-001',
+                courier_name: 'SMSA',
+                tracking_url: 'https://track.smsa.com.sa/TRK-ZID-001',
+            };
+
+            // First fetch: search
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ orders: [orderBase] }),
+            });
+            // Second fetch: order detail
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ order: orderBase }),
+            });
+
+            const result = await getShipmentTracking('store-1', '12345');
+
+            expect(result).not.toBeNull();
+            expect(result?.trackingNumber).toBe('TRK-ZID-001');
+            expect(result?.courierName).toBe('SMSA');
+            expect(result?.trackingUrl).toBe('https://track.smsa.com.sa/TRK-ZID-001');
+            expect(result?.status).toBe('shipped');
+        });
+    });
+
+    describe('checkInventory', () => {
+        it('returns inventory info for a matching product', async () => {
+            mockGetStoreById.mockResolvedValue(makeStore({ storeDomain: 'mystore.zid.sa' }));
+
+            const product = makeZidProduct({ name: 'Phone Case', quantity: 8, price: 45 });
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    store_products: [product],
+                    meta: { current_page: 1, last_page: 1, per_page: 50, total: 1 },
+                }),
+            });
+
+            const result = await checkInventory('store-1', 'Phone Case');
+
+            expect(result).not.toBeNull();
+            expect(result?.productName).toBe('Phone Case');
+            expect(result?.available).toBe(true);
+            expect(result?.quantity).toBe(8);
+            expect(result?.price).toBe('45 SAR');
         });
     });
 });

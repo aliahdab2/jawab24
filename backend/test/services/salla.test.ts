@@ -102,6 +102,9 @@ import {
     registerWebhooks,
     getStoresNeedingTokenRefresh,
     refreshExpiringTokens,
+    lookupOrder,
+    getShipmentTracking,
+    checkInventory,
 } from '../../src/services/salla';
 
 // --- Helpers ---
@@ -1002,6 +1005,135 @@ describe('Salla Service', () => {
 
             const count = await refreshExpiringTokens();
             expect(count).toBe(0);
+        });
+    });
+
+    // ============================================================
+    // lookupOrder / getShipmentTracking / checkInventory
+    // ============================================================
+
+    describe('lookupOrder', () => {
+        beforeEach(() => {
+            // Token is far in the future — ensureValidToken short-circuits
+            mockGetStoreById.mockResolvedValue(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+            }));
+        });
+
+        it('returns mapped order info when order is found', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: [{
+                        id: 5001,
+                        reference_id: '12345',
+                        status: { slug: 'completed', name: 'Completed' },
+                        payment_method: 'card',
+                        amounts: { total: { amount: 250, currency: 'SAR' }, cash_on_delivery: { amount: 0 } },
+                        customer: { first_name: 'Ahmed', mobile: '+966512345678' },
+                        shipping: { address: { city: 'Riyadh', district: 'Olaya' } },
+                        items: [{ name: 'Widget', quantity: 2, amounts: { price_without_tax: { amount: 100 }, total: { amount: 200, currency: 'SAR' } } }],
+                        date: { date: '2026-01-15 10:00:00' },
+                    }],
+                }),
+            });
+
+            const result = await lookupOrder('store-1', '12345');
+
+            expect(result).not.toBeNull();
+            expect(result?.orderNumber).toBe('12345');
+            expect(result?.customerFirstName).toBe('Ahmed');
+            expect(result?.status).toBe('delivered'); // 'completed' maps to 'delivered'
+            expect(result?.totalAmount).toBe('250');
+            expect(result?.currency).toBe('SAR');
+            expect(result?.shippingCity).toBe('Riyadh');
+        });
+
+        it('returns null when order is not found', async () => {
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ data: [] }),
+            });
+
+            const result = await lookupOrder('store-1', '99999');
+
+            expect(result).toBeNull();
+        });
+    });
+
+    describe('getShipmentTracking', () => {
+        beforeEach(() => {
+            mockGetStoreById.mockResolvedValue(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+            }));
+        });
+
+        it('returns shipment tracking info when order has a shipment', async () => {
+            const orderBase = {
+                id: 5001,
+                reference_id: '12345',
+                status: { slug: 'shipped', name: 'Shipped' },
+                payment_method: 'card',
+                amounts: { total: { amount: 250, currency: 'SAR' }, cash_on_delivery: { amount: 0 } },
+                customer: { first_name: 'Ahmed', mobile: '+966512345678' },
+                shipping: { address: { city: 'Jeddah', district: 'Al Hamra' } },
+                items: [],
+                date: { date: '2026-01-15 10:00:00' },
+            };
+
+            // First fetch: keyword search
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ data: [orderBase] }),
+            });
+            // Second fetch: order detail with shipments
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({
+                    data: {
+                        ...orderBase,
+                        shipments: [{
+                            tracking_number: 'TRK-ARX-001',
+                            courier_name: 'Aramex',
+                            tracking_link: 'https://www.aramex.com/track/TRK-ARX-001',
+                        }],
+                    },
+                }),
+            });
+
+            const result = await getShipmentTracking('store-1', '12345');
+
+            expect(result).not.toBeNull();
+            expect(result?.orderNumber).toBe('12345');
+            expect(result?.trackingNumber).toBe('TRK-ARX-001');
+            expect(result?.courierName).toBe('Aramex');
+            expect(result?.trackingUrl).toBe('https://www.aramex.com/track/TRK-ARX-001');
+            expect(result?.status).toBe('shipped');
+        });
+    });
+
+    describe('checkInventory', () => {
+        beforeEach(() => {
+            mockGetStoreById.mockResolvedValue(makeStore({
+                tokenExpiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+                storeDomain: 'mystore.salla.sa',
+            }));
+        });
+
+        it('returns inventory info for a matching product', async () => {
+            const product = makeSallaProduct({ name: 'Phone Case', quantity: 15, status: 'sale' });
+            mockFetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ data: [product] }),
+            });
+
+            const result = await checkInventory('store-1', 'Phone Case');
+
+            expect(result).not.toBeNull();
+            expect(result?.productName).toBe('Phone Case');
+            expect(result?.available).toBe(true);
+            expect(result?.quantity).toBe(15);
+            expect(result?.price).toBe('100 SAR');
         });
     });
 });
