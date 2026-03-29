@@ -41,7 +41,8 @@ export class InstagramController {
                 .select()
                 .from(instagramMedia)
                 .where(eq(instagramMedia.pageId, pageId))
-                .orderBy(desc(instagramMedia.createdTime));
+                .orderBy(desc(instagramMedia.createdTime))
+                .limit(100);
 
             return reply.send(media);
         } catch (error) {
@@ -90,7 +91,8 @@ export class InstagramController {
                 .select()
                 .from(instagramComments)
                 .where(eq(instagramComments.mediaId, mediaId))
-                .orderBy(desc(instagramComments.createdTime));
+                .orderBy(desc(instagramComments.createdTime))
+                .limit(200);
 
             return reply.send(comments);
         } catch (error) {

@@ -38,7 +38,8 @@ export class PostsService {
             .select()
             .from(posts)
             .where(eq(posts.pageId, pageId))
-            .orderBy(desc(posts.createdAt));
+            .orderBy(desc(posts.createdAt))
+            .limit(200);
     }
 
     /**
@@ -60,7 +61,8 @@ export class PostsService {
             .from(posts)
             .innerJoin(pages, eq(posts.pageId, pages.id))
             .where(eq(pages.workspaceId, workspaceId))
-            .orderBy(desc(posts.createdAt));
+            .orderBy(desc(posts.createdAt))
+            .limit(200);
     }
 
     /**

@@ -30,7 +30,8 @@ export class TemplatesService {
             .select()
             .from(templates)
             .where(eq(templates.workspaceId, workspaceId))
-            .orderBy(desc(templates.createdAt));
+            .orderBy(desc(templates.createdAt))
+            .limit(500);
     }
 
     /**

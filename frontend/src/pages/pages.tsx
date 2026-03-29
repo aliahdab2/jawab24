@@ -375,7 +375,7 @@ const PagesPage: NextPageWithLayout = () => {
                           page.instagramUsername
                             ? (page.instagramAutoReplyEnabled ? 'text-pink-900 dark:text-pink-300' : 'text-muted-foreground')
                             : 'text-muted-foreground'
-                        )}>Instagram</p>
+                        )}>{t('platformInstagram')}</p>
                         <div className="flex items-center gap-1">
                           <p className={clsx(
                             'text-xs font-medium',

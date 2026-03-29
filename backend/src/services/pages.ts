@@ -228,7 +228,8 @@ export class PagesService {
             .select()
             .from(pages)
             .where(eq(pages.workspaceId, workspaceId))
-            .orderBy(desc(pages.createdAt));
+            .orderBy(desc(pages.createdAt))
+            .limit(100);
 
         const emptyStats = { commentsCount: 0, repliesCount: 0, replyRate: 0, lastActivity: null as number | null };
         if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: maybeDecryptPageToken(p.accessToken), ...emptyStats }));

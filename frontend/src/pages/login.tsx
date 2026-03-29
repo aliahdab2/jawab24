@@ -282,7 +282,7 @@ export default function LoginPage() {
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-brand-500 dark:bg-brand-400 flex items-center justify-center text-white font-bold text-xs">MA</div>
                 <div>
-                  <div className="text-white font-bold text-xs">Mohammed A.</div>
+                  <div className="text-white font-bold text-xs">{t('testimonialAuthorName')}</div>
                   <div className="text-white/40 text-[10px] font-bold uppercase tracking-widest">{t('testimonialAuthor')}</div>
                 </div>
               </div>
