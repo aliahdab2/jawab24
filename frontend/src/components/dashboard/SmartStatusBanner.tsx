@@ -116,31 +116,29 @@ export function SmartStatusBanner({
   const hasMore = totalCount > 5;
 
   // Build "View all" links
-  /* eslint-disable @typescript-eslint/no-explicit-any -- next-intl deep nested keys need cast */
   const viewAllLinks: { label: string; href: string }[] = [];
   if (hasMore) {
     if (commentNeedsAction > 0 && messageNeedsAction > 0) {
       viewAllLinks.push({
-        label: tDash('smartBanner.viewAllComments' as any, { count: commentNeedsAction }),
+        label: tDash('smartBanner.viewAllComments', { count: commentNeedsAction }),
         href: '/comments?filter=needs_action',
       });
       viewAllLinks.push({
-        label: tDash('smartBanner.viewAllMessages' as any, { count: messageNeedsAction }),
+        label: tDash('smartBanner.viewAllMessages', { count: messageNeedsAction }),
         href: '/messages?filter=needs_action',
       });
     } else if (commentNeedsAction > 0) {
       viewAllLinks.push({
-        label: tDash('smartBanner.viewAllItems' as any, { count: totalCount }),
+        label: tDash('smartBanner.viewAllItems', { count: totalCount }),
         href: '/comments?filter=needs_action',
       });
     } else {
       viewAllLinks.push({
-        label: tDash('smartBanner.viewAllItems' as any, { count: totalCount }),
+        label: tDash('smartBanner.viewAllItems', { count: totalCount }),
         href: '/messages?filter=needs_action',
       });
     }
   }
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   return (
     <Card
@@ -157,8 +155,7 @@ export function SmartStatusBanner({
         onClick={toggle}
         className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-5 text-start cursor-pointer select-none"
         aria-expanded={expanded}
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- next-intl deep nested key
-        aria-label={tDash('smartBanner.needsAttention' as any, { count: totalCount })}
+        aria-label={tDash('smartBanner.needsAttention', { count: totalCount })}
       >
         {/* Warning icon */}
         <div className={clsx(
@@ -171,8 +168,7 @@ export function SmartStatusBanner({
         {/* Title + breakdown */}
         <div className="flex-1 min-w-0">
           <p className="font-bold text-sm sm:text-base leading-tight">
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- next-intl deep nested key */}
-            {tDash('smartBanner.needsAttention' as any, { count: totalCount })}
+            {tDash('smartBanner.needsAttention', { count: totalCount })}
           </p>
           {breakdown && (
             <p className="text-xs sm:text-sm text-amber-700/80 mt-0.5 truncate">

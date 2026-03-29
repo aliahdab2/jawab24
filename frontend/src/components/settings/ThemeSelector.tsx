@@ -1,10 +1,13 @@
 import { Card } from '@/components/ui';
 import { Sun, Moon, Monitor } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import type { MessageKeys, NestedKeyOf } from 'use-intl';
 import { useTheme } from '@/hooks';
 import type { Theme } from '@/lib/store';
 
-const THEME_OPTIONS: { value: Theme; icon: typeof Sun; labelKey: string }[] = [
+type SettingsKey = MessageKeys<IntlMessages['settings'], NestedKeyOf<IntlMessages['settings']>>;
+
+const THEME_OPTIONS: { value: Theme; icon: typeof Sun; labelKey: SettingsKey }[] = [
   { value: 'light', icon: Sun, labelKey: 'lightTheme' },
   { value: 'dark', icon: Moon, labelKey: 'darkTheme' },
   { value: 'system', icon: Monitor, labelKey: 'autoTheme' },
@@ -52,8 +55,7 @@ export function ThemeSelector() {
               }`}
             >
               <Icon className="w-4 h-4" aria-hidden="true" />
-              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic key from config */}
-              <span className="hidden sm:inline">{t(labelKey as any)}</span>
+              <span className="hidden sm:inline">{t(labelKey)}</span>
             </button>
           ))}
         </div>

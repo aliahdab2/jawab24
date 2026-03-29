@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
+import type { MessageKeys, NestedKeyOf } from 'use-intl';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import type { Appearance, StripeElementLocale } from '@stripe/stripe-js';
@@ -328,22 +329,23 @@ export default function CheckoutPage() {
   const maintenanceMode = isCheckoutMaintenance();
   const intervalLabel = tPlans(billingInterval === 'year' ? 'year' : 'month');
 
-  // Dynamic keys from plan slugs — next-intl types are statically generated so `as any` is unavoidable
-  /* eslint-disable @typescript-eslint/no-explicit-any */
+  // Dynamic keys from plan slugs — keys are validated at build time via translation:validate
+  type PricingKey = MessageKeys<IntlMessages['pricing'], NestedKeyOf<IntlMessages['pricing']>>;
+  type PlansKey = MessageKeys<IntlMessages['plans'], NestedKeyOf<IntlMessages['plans']>>;
+
   const getPlanName = (p: Plan): string => {
-    const fromPricing = tPricing(p.slug as any);
+    const fromPricing = tPricing(p.slug as unknown as PricingKey);
     if (fromPricing !== p.slug) return fromPricing;
-    const fromPlans = tPlans(`${p.slug}.name` as any);
+    const fromPlans = tPlans(`${p.slug}.name` as unknown as PlansKey);
     return fromPlans !== `${p.slug}.name` ? fromPlans : p.name;
   };
 
   const getPlanDesc = (p: Plan): string => {
-    const fromPricing = tPricing(`${p.slug}Desc` as any);
+    const fromPricing = tPricing(`${p.slug}Desc` as unknown as PricingKey);
     if (fromPricing !== `${p.slug}Desc`) return fromPricing;
-    const fromPlans = tPlans(`${p.slug}.description` as any);
+    const fromPlans = tPlans(`${p.slug}.description` as unknown as PlansKey);
     return fromPlans !== `${p.slug}.description` ? fromPlans : (p.description ?? '');
   };
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   if (isSanctioned === null) {
     return <FullPageSpinner />;

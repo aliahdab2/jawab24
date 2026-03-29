@@ -167,7 +167,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       // Note: is-native class is already added in the earlier useEffect
 
       // StatusBar overlay/style already configured in the early useEffect above
-      const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
+      const [{ StatusBar, Style }, { Keyboard, KeyboardResize }, { App }, { SplashScreen }, { Network }] = await Promise.all([
         import("@capacitor/status-bar"),
         import("@capacitor/keyboard"),
         import("@capacitor/app"),
@@ -180,8 +180,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         // Android works correctly with 'body' mode, so override at runtime.
         const { getCapacitor } = await import('@/lib/capacitor');
         if (getCapacitor()?.getPlatform() === 'android') {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Capacitor Keyboard plugin type lacks 'body' mode
-          await Keyboard.setResizeMode({ mode: 'body' } as any);
+          await Keyboard.setResizeMode({ mode: KeyboardResize.Body });
         }
       } catch (err) {
         addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });

@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
+type ZodToJsonSchemaFn = (schema: z.ZodTypeAny, opts: { target: string }) => Record<string, unknown>;
+
 /** Convert a Zod schema to JSON Schema for Fastify route definitions */
 export function zs(schema: z.ZodTypeAny): Record<string, unknown> {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const jsonSchema = zodToJsonSchema(schema as any, { target: 'openApi3' }) as Record<string, unknown>;
+    const jsonSchema = (zodToJsonSchema as unknown as ZodToJsonSchemaFn)(schema, { target: 'openApi3' });
     delete jsonSchema.$schema;
     return jsonSchema;
 }

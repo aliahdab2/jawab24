@@ -39,8 +39,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
             )}
           >
             {settings.replyStyle === style && <Check className="w-3.5 h-3.5" aria-hidden="true" />}
-            {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic key from style list */}
-            {t(`replyStyle.${style}` as any)}
+            {t(`replyStyle.${style}`)}
           </button>
         ))}
       </div>

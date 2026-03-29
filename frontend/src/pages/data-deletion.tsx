@@ -3,8 +3,6 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft } from 'lucide-react';
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- dynamic translation keys need `as any` cast for next-intl */
-
 export default function DataDeletion() {
   const t = useTranslations('dataDeletion');
   const tNav = useTranslations('nav');
@@ -23,8 +21,8 @@ export default function DataDeletion() {
       <div className="flex-1 overflow-y-auto bg-background py-12 px-4 sm:px-6 lg:px-8 text-start">
         <div className="max-w-3xl mx-auto bg-card rounded-2xl shadow-sm p-8 border border-theme-border">
           <h1 className="text-3xl font-bold text-foreground mb-2">{t('header')}</h1>
-          <h2 className="text-lg font-semibold text-brand-600 mb-4">{t('subheader' as any)}</h2>
-          <p className="text-muted-foreground mb-8 leading-relaxed">{t('intro' as any)}</p>
+          <h2 className="text-lg font-semibold text-brand-600 mb-4">{t('subheader')}</h2>
+          <p className="text-muted-foreground mb-8 leading-relaxed">{t('intro')}</p>
 
           <div className="prose prose-slate max-w-none">
             <p className="text-muted-foreground mb-6 italic text-sm">
@@ -95,13 +93,13 @@ export default function DataDeletion() {
 
             {/* Section 2: Data Associated with Meta Platforms */}
             <section className="mb-8 p-6 bg-background rounded-2xl border border-theme-border">
-              <h2 className="text-xl font-semibold text-foreground mb-4">{t('metaDataTitle' as any)}</h2>
-              <p className="text-muted-foreground mb-4">{t('metaDataIntro' as any)}</p>
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('metaDataTitle')}</h2>
+              <p className="text-muted-foreground mb-4">{t('metaDataIntro')}</p>
               <ul className="list-disc ps-6 text-muted-foreground space-y-2">
-                <li>{t('metaItemPageIds' as any)}</li>
-                <li>{t('metaItemInstagramIds' as any)}</li>
-                <li>{t('metaItemWebhooks' as any)}</li>
-                <li>{t('metaItemTokens' as any)}</li>
+                <li>{t('metaItemPageIds')}</li>
+                <li>{t('metaItemInstagramIds')}</li>
+                <li>{t('metaItemWebhooks')}</li>
+                <li>{t('metaItemTokens')}</li>
               </ul>
             </section>
 
@@ -120,24 +118,24 @@ export default function DataDeletion() {
 
             {/* Section 4: Processing Time */}
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4">{t('processingTimeTitle' as any)}</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('processingTimeTitle')}</h2>
               <p className="text-muted-foreground leading-relaxed">
-                {t('processingTimeText' as any)}
+                {t('processingTimeText')}
               </p>
             </section>
 
             {/* Section 5: Revoking Access */}
             <section className="mb-8">
-              <h2 className="text-xl font-semibold text-foreground mb-4">{t('revokeAccessTitle' as any)}</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">{t('revokeAccessTitle')}</h2>
               <p className="text-muted-foreground leading-relaxed">
-                {t('revokeAccessText' as any)}{' '}
+                {t('revokeAccessText')}{' '}
                 <a
                   href="https://www.facebook.com/settings?tab=applications"
                   className="text-brand-600 hover:underline font-medium"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
-                  {t('revokeAccessLink' as any)}
+                  {t('revokeAccessLink')}
                 </a>.
               </p>
             </section>

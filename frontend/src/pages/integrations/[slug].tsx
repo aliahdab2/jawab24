@@ -6,6 +6,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing';
+import type { MessageKeys, NestedKeyOf } from 'use-intl';
 import {
   getAllIntegrationSlugs,
   getIntegration,
@@ -13,8 +14,8 @@ import {
 } from '@/data/integrations';
 
 /** Cast a dynamic ecommerce key for next-intl — all keys are validated at build time via translation:validate */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic keys from integration slug
-const k = (key: string) => key as any;
+type IntegrationKey = MessageKeys<IntlMessages['integrations'], NestedKeyOf<IntlMessages['integrations']>>;
+const k = (key: string) => key as unknown as IntegrationKey;
 
 interface IntegrationPageProps {
   integration: Integration;

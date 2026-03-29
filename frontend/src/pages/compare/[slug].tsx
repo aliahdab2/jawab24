@@ -4,6 +4,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
+import type { MessageKeys, NestedKeyOf } from 'use-intl';
 import {
   getAllCompetitorSlugs,
   getCompetitor,
@@ -12,8 +13,8 @@ import {
 } from '@/data/competitors';
 
 /** Cast a dynamic compare key for next-intl — all keys are validated at build time via translation:validate */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic keys from competitor slug
-const k = (key: string) => key as any;
+type CompareKey = MessageKeys<IntlMessages['compare'], NestedKeyOf<IntlMessages['compare']>>;
+const k = (key: string) => key as unknown as CompareKey;
 
 interface ComparePageProps {
   competitor: Competitor;
@@ -161,8 +162,8 @@ export default function ComparePage({ competitor }: ComparePageProps) {
                     return (
                       <tr key={key} className="border-t border-theme-border hover:bg-muted/30 transition-colors">
                         <td className="py-3 px-4 text-foreground">
-                          {/* eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic feature key */}
-                          {t(`feat.${key}` as any)}
+                          { }
+                          {t(k(`feat.${key}`))}
                         </td>
                         <td className="py-3 px-4 text-center">
                           <FeatureValue value={feature.jawab24} />
