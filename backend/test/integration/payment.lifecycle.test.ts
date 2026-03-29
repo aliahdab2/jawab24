@@ -803,7 +803,7 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
         expect(updated.status).toBe('active');
     });
 
-    it('STEP 4 — duplicate payment_failed webhook sends a second notification (known idempotency gap)', async () => {
+    it('STEP 4 — duplicate payment_failed handler call (isolation test, dedup enforced at handleWebhook level)', async () => {
         // Mark already past_due to simulate second delivery
         await testDb
             .update(schema.subscriptions)
@@ -819,8 +819,9 @@ describe('SCENARIO 6 — Payment failure and recovery', () => {
             mockReq(),
         );
 
-        // KNOWN BUG: No event-ID deduplication — notification fires again.
-        // Change this expectation to 0 once idempotency is implemented.
+        // Private handler is intentionally tested in isolation here.
+        // Duplicate event protection is enforced at the handleWebhook dispatcher level
+        // via stripe_webhook_events deduplication — see SCENARIO 12.
         expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(1);
     });
 
@@ -902,19 +903,18 @@ describe('SCENARIO 7 — Race condition: payment_succeeded before checkout.sessi
         expect(updated.status).toBe('active');
     });
 
-    it('duplicate checkout.session.completed webhook — documents idempotency gap (known bug)', async () => {
+    it('duplicate checkout handler call (isolation test, dedup enforced at handleWebhook level)', async () => {
         const { paymentController } = await import('../../src/controllers/payment');
         const session = stripeSession(userId, plan.id, 'sub_race_001', 'cs_dup_001');
 
         // First delivery
         await (paymentController as any).handleCheckoutComplete(session, mockReq());
-        // Second delivery of the same event (Stripe retries on network timeout)
+        // Second direct call bypasses handleWebhook deduplication intentionally for isolation.
+        // Real duplicate webhook protection is enforced at the handleWebhook dispatcher level
+        // via stripe_webhook_events deduplication — see SCENARIO 12.
         await (paymentController as any).handleCheckoutComplete(session, mockReq());
 
         const allSubs = await userSubs(userId);
-
-        // KNOWN BUG: No Stripe event-ID deduplication → second delivery inserts a duplicate.
-        // When fixed: change assertion to expect(allSubs).toHaveLength(1)
         expect(allSubs.length).toBeGreaterThanOrEqual(1);
         expect(allSubs.some(s => s.planId === plan.id)).toBe(true);
     });
@@ -1275,5 +1275,112 @@ describe('SCENARIO 11 — customer.subscription.created backup handler', () => {
             expect.objectContaining({ subscriptionId: 'sub_ghost_not_in_db' }),
             expect.any(String),
         );
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SCENARIO 12 — Webhook-level idempotency via stripe_webhook_events table
+//
+// Duplicate Stripe event deliveries (same event ID) are deduplicated at the
+// handleWebhook dispatcher level before any handler is invoked.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('SCENARIO 12 — Webhook-level idempotency deduplication', () => {
+    let userId: string;
+    let plan: typeof schema.plans.$inferSelect;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: `dedup-${uid()}@example.com` });
+        userId = user.id;
+        plan = await createPlan({ name: 'Dedup Plan', price: 1900 });
+
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.getSubscription).mockResolvedValue(
+            stripeSubObj('sub_dedup_001', { status: 'trialing' }) as any,
+        );
+    });
+
+    it('duplicate checkout.session.completed with same event ID creates only one subscription', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { stripeService } = await import('../../src/services/stripe');
+
+        const eventId = `evt_dedup_checkout_${uid()}`;
+        const session = stripeSession(userId, plan.id, 'sub_dedup_001');
+        const fakeEvent = {
+            id: eventId,
+            type: 'checkout.session.completed',
+            data: { object: session },
+        };
+
+        const makeWebhookReq = () => ({
+            headers: { 'stripe-signature': 'sig_test' },
+            rawBody: Buffer.from('{}'),
+            log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        } as any);
+
+        const fakeReply = () => {
+            const r: any = {};
+            r.send = vi.fn().mockReturnValue(r);
+            r.status = vi.fn().mockReturnValue(r);
+            return r;
+        };
+
+        vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(fakeEvent as any);
+
+        // First delivery — should process and create subscription
+        await paymentController.handleWebhook(makeWebhookReq(), fakeReply());
+        const subsAfterFirst = await userSubs(userId);
+        expect(subsAfterFirst).toHaveLength(1);
+
+        // Second delivery with same event ID — should be skipped
+        await paymentController.handleWebhook(makeWebhookReq(), fakeReply());
+        const subsAfterSecond = await userSubs(userId);
+        expect(subsAfterSecond).toHaveLength(1);
+    });
+
+    it('duplicate invoice.payment_failed with same event ID sends only one notification', async () => {
+        const { paymentController } = await import('../../src/controllers/payment');
+        const { stripeService } = await import('../../src/services/stripe');
+        const { notificationService } = await import('../../src/services/notifications');
+
+        // Create a subscription so handlePaymentFailed can find it
+        const sub = await createSub(userId, plan.id, {
+            externalSubscriptionId: 'sub_dedup_001',
+            stripeCustomerId: 'cus_dedup_001',
+        });
+
+        const eventId = `evt_dedup_failed_${uid()}`;
+        const fakeEvent = {
+            id: eventId,
+            type: 'invoice.payment_failed',
+            data: { object: { id: `in_dedup_${uid()}`, subscription: 'sub_dedup_001' } },
+        };
+
+        const makeWebhookReq = () => ({
+            headers: { 'stripe-signature': 'sig_test' },
+            rawBody: Buffer.from('{}'),
+            log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        } as any);
+
+        const fakeReply = () => {
+            const r: any = {};
+            r.send = vi.fn().mockReturnValue(r);
+            r.status = vi.fn().mockReturnValue(r);
+            return r;
+        };
+
+        vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(fakeEvent as any);
+        vi.mocked(notificationService.sendTemplateNotification).mockClear();
+
+        // First delivery — processes, sends notification, marks past_due
+        await paymentController.handleWebhook(makeWebhookReq(), fakeReply());
+        expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(1);
+        expect((await testDb.select().from(schema.subscriptions).where(eq(schema.subscriptions.id, sub.id)))[0].status).toBe('past_due');
+
+        vi.mocked(notificationService.sendTemplateNotification).mockClear();
+
+        // Second delivery with same event ID — skipped entirely
+        await paymentController.handleWebhook(makeWebhookReq(), fakeReply());
+        expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(0);
     });
 });

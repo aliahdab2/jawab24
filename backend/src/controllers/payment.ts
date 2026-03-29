@@ -2,7 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { stripeService } from '../services/stripe';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
-import { subscriptions, users, plans } from '../db/schema';
+import { subscriptions, users, plans, stripeWebhookEvents } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
 import { notificationService } from '../services/notifications';
@@ -474,6 +474,18 @@ export class PaymentController {
             );
 
             request.log.info(`Webhook received: ${event.type}`);
+
+            // Idempotency: skip already-processed events (Stripe retries on network timeout)
+            const inserted = await db
+                .insert(stripeWebhookEvents)
+                .values({ eventId: event.id, eventType: event.type })
+                .onConflictDoNothing()
+                .returning({ eventId: stripeWebhookEvents.eventId });
+
+            if (inserted.length === 0) {
+                request.log.info({ eventId: event.id }, 'Duplicate webhook event, skipping');
+                return reply.send({ received: true });
+            }
 
             // Handle different event types
             switch (event.type) {

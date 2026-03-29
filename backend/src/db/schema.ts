@@ -846,6 +846,13 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
     };
 });
 
+// Stripe Webhook Events - idempotency deduplication
+export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
+    eventId: varchar('event_id', { length: 255 }).primaryKey(), // Stripe event ID (evt_*)
+    eventType: varchar('event_type', { length: 100 }).notNull(),
+    processedAt: timestamp('processed_at').defaultNow().notNull(),
+});
+
 // Waitlist - collects emails for upcoming features
 export const waitlistEmails = pgTable('waitlist_emails', {
     id: uuid('id').defaultRandom().primaryKey(),

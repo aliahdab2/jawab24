@@ -400,6 +400,13 @@
       "when": 1774720702364,
       "tag": "0056_material_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1774822305951,
+      "tag": "0057_quick_shockwave",
+      "breakpoints": true
     }
   ]
 }
