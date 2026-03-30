@@ -25,6 +25,7 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
   const invalidateShared = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
     queryClient.invalidateQueries({ queryKey: ['conversation'] });
+    queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-comments'] });
     for (const key of extraInvalidateKeys) {
       queryClient.invalidateQueries({ queryKey: key });
     }
