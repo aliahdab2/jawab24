@@ -119,16 +119,18 @@ export const MessageCard = React.memo(function MessageCard({
 
       {/* Content */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-        {/* Row 1: Name + status badge + time */}
+        {/* Row 1: Name + time */}
         <div className="flex items-center gap-2">
           <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">
             {conv.senderName || tc('unknownUser')}
           </span>
-          {statusBadge}
           <span className="flex-shrink-0 text-[11px] text-subtle tabular-nums">
             {formatTime(conv.lastMessage.createdAt)}
           </span>
         </div>
+
+        {/* Row 1b: Status badge */}
+        {statusBadge}
 
         {/* Flag tag (if any) */}
         <FlagTag flagReason={conv.lastMessage.flagReason} />
@@ -163,7 +165,7 @@ export const MessageCard = React.memo(function MessageCard({
         )}
       </div>
 
-      {/* Action button — resolve or unresolve (visible on hover/focus on desktop, always on mobile) */}
+      {/* Action button — resolve or unresolve (hover-reveal on desktop, always visible on mobile) */}
       {(onResolve || onUnresolve) && (
         <div
           className={clsx(
@@ -176,19 +178,19 @@ export const MessageCard = React.memo(function MessageCard({
           {onResolve && (
             <button
               onClick={onResolve}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 dark:hover:text-brand-400 transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 dark:hover:text-brand-400 transition-colors"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{t('resolve')}</span>
+              {t('resolve')}
             </button>
           )}
           {onUnresolve && (
             <button
               onClick={onUnresolve}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <Undo2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{tMessages('unresolve')}</span>
+              {tMessages('unresolve')}
             </button>
           )}
         </div>
