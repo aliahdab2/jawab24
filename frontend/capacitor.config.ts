@@ -9,7 +9,10 @@ const config: CapacitorConfig = {
     url: process.env.CAP_SERVER_URL,
     cleartext: !!process.env.CAP_SERVER_URL,
     androidScheme: 'https',
-    hostname: 'jawab24.com',
+    // Subdomain keeps API calls to jawab24.com/api unintercepted by the local
+    // asset server, while still satisfying the Web OTP API (which matches on
+    // eTLD+1 = jawab24.com, so @jawab24.com in the SMS works from any subdomain).
+    hostname: 'app.jawab24.com',
     allowNavigation: ['jawab24.com', '*.jawab24.com']
   },
   android: {
