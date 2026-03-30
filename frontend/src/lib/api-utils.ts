@@ -95,3 +95,14 @@ export function hasDataProperty(obj: unknown): obj is { data: unknown } {
   return typeof obj === 'object' && obj !== null && 'data' in obj;
 }
 
+/**
+ * Minimal Axios error shape used for status/code checks in catch blocks.
+ * Use this instead of inline `err as { response?: ... }` casts.
+ */
+export interface ApiError {
+  response?: {
+    status?: number;
+    data?: { error?: string; message?: string };
+  };
+}
+

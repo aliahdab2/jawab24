@@ -487,7 +487,7 @@ export class AuthController {
     async verifyOtp(request: FastifyRequest<{ Body: PhoneOtpVerifyRequest }>, reply: FastifyReply) {
         const { phone, code } = request.body;
 
-        if (!phone || !code) {
+        if (!phone || !isValidPhone(phone) || !code || !/^\d{6}$/.test(code)) {
             return reply.status(400).send({ error: 'invalid_request', message: 'phone and code are required' });
         }
 

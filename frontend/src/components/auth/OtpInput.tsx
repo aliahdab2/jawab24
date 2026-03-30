@@ -17,6 +17,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
     const t = useTranslations('auth');
     const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
     const [pasted, setPasted] = useState(false);
+    const pasteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Derived directly from value — no internal state, no useEffect needed
     const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '');
 
@@ -91,6 +92,9 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
         return () => ac.abort();
     }, []);
 
+    // Clean up the paste feedback timer on unmount
+    useEffect(() => () => { if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current); }, []);
+
     const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
         e.preventDefault();
         const raw = e.clipboardData.getData('text').replace(/\D/g, '');
@@ -104,7 +108,8 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
             if (code.length > 0) {
                 fillAll(code);
                 setPasted(true);
-                setTimeout(() => setPasted(false), 2000);
+                if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
+                pasteTimerRef.current = setTimeout(() => setPasted(false), 2000);
             }
         } catch {
             // clipboard not available or permission denied — ignore silently

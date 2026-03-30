@@ -8,6 +8,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { otpApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import type { ApiError } from '@/lib/api-utils';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -55,7 +56,7 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
             startCountdown();
         } catch (err: unknown) {
             captureError(err, 'OTP request failed', { tags: { page } });
-            const axiosErr = err as { response?: { status?: number } };
+            const axiosErr = err as ApiError;
             setError(axiosErr.response?.status === 429 ? t('tooManyAttempts') : t('loginError'));
         } finally {
             setLoading(false);

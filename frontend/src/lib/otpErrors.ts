@@ -3,6 +3,7 @@
  * Maps API error codes to translated user-facing messages.
  */
 import { captureError } from '@/lib/sentryHelpers';
+import type { ApiError } from '@/lib/api-utils';
 
 type TranslateFn = (key: string) => string;
 
@@ -13,7 +14,7 @@ export function handleOtpVerifyError(
     context: string,
     tags: Record<string, string>,
 ) {
-    const axiosErr = err as { response?: { status?: number; data?: { error?: string } } };
+    const axiosErr = err as ApiError;
     const errCode = axiosErr.response?.data?.error;
     if (errCode === 'invalid_code') setError(t('invalidCode'));
     else if (errCode === 'code_expired') setError(t('codeExpired'));
