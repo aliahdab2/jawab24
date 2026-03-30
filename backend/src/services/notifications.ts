@@ -111,6 +111,21 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
     },
 };
 
+/** English human-readable labels for flag reason strings used in notifications. */
+const FLAG_REASON_EN: Record<string, string> = {
+    'offensive_or_abusive': 'offensive or abusive content',
+    'low_confidence': 'low confidence reply',
+    'held_low_confidence': 'low confidence reply',
+    'price_not_in_kb': 'price not in knowledge base',
+    'info_not_in_kb': 'information not in knowledge base',
+    'redirect_to_human': 'redirect to human agent',
+    'complaint': 'customer complaint',
+    'offensive': 'offensive content',
+    'invalid_json': 'reply processing error',
+    'fallback_reply': 'fallback reply used',
+    'AI flagged this reply': 'AI flagged this reply',
+};
+
 /** Arabic translations for flag reason strings used in notifications.
  *  High-stakes flags (cancellation, refund, etc.) are derived from URGENT_FLAG_MAP
  *  to avoid duplication — see messageProcessor.ts for the single source of truth. */
@@ -138,23 +153,25 @@ const FLAG_REASON_AR: Record<string, string> = {
 /** Arabic fallback for 'Unknown' sender name */
 const UNKNOWN_SENDER_AR = 'مجهول';
 
-function translateFlagReason(reason: string): string {
+function translateFlagReason(reason: string, lang: string): string {
+    const map = lang === 'ar' ? FLAG_REASON_AR : FLAG_REASON_EN;
+    const separator = lang === 'ar' ? '، ' : ', ';
+
     // Exact match (simple flags like "angry_customer")
-    if (FLAG_REASON_AR[reason]) return FLAG_REASON_AR[reason];
+    if (map[reason]) return map[reason];
 
     // Enriched reasons like "Cancellation Request — order #5678":
     // translate the label prefix and keep the suffix (order number).
-    // Only match when suffix starts with ' ' (not comma-separated flags).
-    for (const [en, ar] of Object.entries(FLAG_REASON_AR)) {
-        if (reason.startsWith(en) && reason.length > en.length && reason[en.length] === ' ') {
-            return ar + reason.slice(en.length);
+    for (const [key, val] of Object.entries(map)) {
+        if (reason.startsWith(key) && reason.length > key.length && reason[key.length] === ' ') {
+            return val + reason.slice(key.length);
         }
     }
 
-    // Comma-separated fallback (e.g., "angry_customer,cancellation_request")
+    // Comma-separated fallback (e.g., "info_not_in_kb,low_confidence")
     return reason.split(',')
-        .map(f => FLAG_REASON_AR[f.trim()] || f.trim())
-        .join('، ');
+        .map(f => map[f.trim()] || f.trim())
+        .join(separator);
 }
 
 /**
@@ -171,8 +188,8 @@ function replaceVariables(
         for (const [key, value] of Object.entries(variables)) {
             const placeholder = `{${key}}`;
             let replacement = value;
-            if (lang === 'ar' && key === 'reason') {
-                replacement = translateFlagReason(value);
+            if (key === 'reason') {
+                replacement = translateFlagReason(value, lang);
             } else if (lang === 'ar' && key === 'senderName' && value === 'Unknown') {
                 replacement = UNKNOWN_SENDER_AR;
             }
