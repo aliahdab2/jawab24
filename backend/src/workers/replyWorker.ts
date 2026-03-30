@@ -259,6 +259,7 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
             jobType,
             requestId,
             success: result.success,
+            skipReason: result.success ? undefined : result.error,
             duration,
             replyMethod: result.replyMethod,
         });
