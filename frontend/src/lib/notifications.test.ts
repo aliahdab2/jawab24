@@ -1,0 +1,247 @@
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+
+// ── Mocks ────────────────────────────────────────────────────────────────────
+
+// Track what Capacitor.isNativePlatform() returns
+let mockIsNative = false;
+
+vi.mock('@capacitor/core', () => ({
+    Capacitor: {
+        isNativePlatform: () => mockIsNative,
+        getPlatform: () => (mockIsNative ? 'android' : 'web'),
+    },
+}));
+
+const mockRequestPermissions = vi.fn();
+const mockRegister = vi.fn();
+const mockAddListener = vi.fn();
+
+vi.mock('@capacitor/push-notifications', () => ({
+    PushNotifications: {
+        requestPermissions: () => mockRequestPermissions(),
+        register: () => mockRegister(),
+        addListener: (...args: unknown[]) => mockAddListener(...args),
+    },
+}));
+
+// In-memory native preferences store (simulates SharedPreferences/UserDefaults)
+const nativeStore = new Map<string, string>();
+
+vi.mock('@capacitor/preferences', () => ({
+    Preferences: {
+        get: async ({ key }: { key: string }) => ({ value: nativeStore.get(key) ?? null }),
+        set: async ({ key, value }: { key: string; value: string }) => { nativeStore.set(key, value); },
+        remove: async ({ key }: { key: string }) => { nativeStore.delete(key); },
+    },
+}));
+
+vi.mock('@/lib/sentryHelpers', () => ({
+    captureError: vi.fn(),
+    addErrorBreadcrumb: vi.fn(),
+}));
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('./api', () => ({ api: {} }));
+vi.mock('axios', () => ({ default: { post: vi.fn() } }));
+vi.mock('@/components/notifications/NotificationFilterPills', () => ({
+    ACTIONABLE_NOTIFICATION_TYPES: [],
+}));
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const PERM_DISMISSED_KEY = 'push_prompt_dismissed_at';
+const PERM_GRANTED_KEY = 'push_permission_granted';
+const DISMISS_COOLDOWN_DAYS = 7;
+
+function daysAgoMs(days: number): string {
+    return String(Date.now() - days * 24 * 60 * 60 * 1000);
+}
+
+// ── Tests ────────────────────────────────────────────────────────────────────
+
+describe('Notification pre-prompt — web (non-native)', () => {
+    beforeEach(() => {
+        mockIsNative = false;
+        localStorage.clear();
+        nativeStore.clear();
+    });
+
+    it('shouldShow returns false on web', async () => {
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        expect(await shouldShowNotificationPrePrompt()).toBe(false);
+    });
+});
+
+describe('Notification pre-prompt — native', () => {
+    beforeEach(() => {
+        mockIsNative = true;
+        localStorage.clear();
+        nativeStore.clear();
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        mockIsNative = false;
+    });
+
+    it('shouldShow returns true when no prior interaction', async () => {
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        expect(await shouldShowNotificationPrePrompt()).toBe(true);
+    });
+
+    it('shouldShow returns false when permission was granted', async () => {
+        nativeStore.set(PERM_GRANTED_KEY, 'true');
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        expect(await shouldShowNotificationPrePrompt()).toBe(false);
+    });
+
+    it('shouldShow returns false when dismissed within cooldown', async () => {
+        nativeStore.set(PERM_DISMISSED_KEY, daysAgoMs(3)); // 3 days ago
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        expect(await shouldShowNotificationPrePrompt()).toBe(false);
+    });
+
+    it('shouldShow returns true when dismissed beyond cooldown', async () => {
+        nativeStore.set(PERM_DISMISSED_KEY, daysAgoMs(DISMISS_COOLDOWN_DAYS + 1));
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        expect(await shouldShowNotificationPrePrompt()).toBe(true);
+    });
+
+    it('dismiss saves timestamp to native preferences', async () => {
+        const { dismissNotificationPrePrompt } = await import('./notifications');
+        await dismissNotificationPrePrompt();
+        const stored = nativeStore.get(PERM_DISMISSED_KEY);
+        expect(stored).toBeDefined();
+        expect(Number(stored)).toBeGreaterThan(Date.now() - 5000);
+    });
+});
+
+describe('Notification pre-prompt — migration', () => {
+    beforeEach(() => {
+        mockIsNative = true;
+        localStorage.clear();
+        nativeStore.clear();
+        vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        mockIsNative = false;
+    });
+
+    it('migrates granted flag from localStorage to native preferences', async () => {
+        localStorage.setItem(PERM_GRANTED_KEY, 'true');
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        const result = await shouldShowNotificationPrePrompt();
+
+        expect(result).toBe(false); // granted → don't show
+        expect(nativeStore.get(PERM_GRANTED_KEY)).toBe('true');
+        expect(localStorage.getItem(PERM_GRANTED_KEY)).toBeNull(); // cleaned up
+    });
+
+    it('migrates dismissed timestamp from localStorage to native preferences', async () => {
+        const ts = daysAgoMs(2);
+        localStorage.setItem(PERM_DISMISSED_KEY, ts);
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        const result = await shouldShowNotificationPrePrompt();
+
+        expect(result).toBe(false); // within cooldown
+        expect(nativeStore.get(PERM_DISMISSED_KEY)).toBe(ts);
+        expect(localStorage.getItem(PERM_DISMISSED_KEY)).toBeNull();
+    });
+
+    it('skips migration if native preferences already has data', async () => {
+        nativeStore.set(PERM_GRANTED_KEY, 'true');
+        localStorage.setItem(PERM_DISMISSED_KEY, daysAgoMs(1)); // stale localStorage
+        const { shouldShowNotificationPrePrompt } = await import('./notifications');
+        await shouldShowNotificationPrePrompt();
+
+        // localStorage value should NOT be migrated (native already has data)
+        expect(nativeStore.has(PERM_DISMISSED_KEY)).toBe(false);
+    });
+});
+
+describe('requestAndRegisterPush', () => {
+    beforeEach(() => {
+        mockIsNative = true;
+        localStorage.clear();
+        nativeStore.clear();
+        vi.clearAllMocks();
+        mockRegister.mockResolvedValue(undefined);
+        mockAddListener.mockReturnValue({ remove: vi.fn() });
+    });
+
+    afterEach(() => {
+        mockIsNative = false;
+    });
+
+    it('saves granted flag when permission is granted', async () => {
+        mockRequestPermissions.mockResolvedValue({ receive: 'granted' });
+        const { requestAndRegisterPush } = await import('./notifications');
+
+        const result = await requestAndRegisterPush('test-token');
+
+        expect(result).toBe(true);
+        expect(nativeStore.get(PERM_GRANTED_KEY)).toBe('true');
+    });
+
+    it('saves dismissed timestamp when permission is denied', async () => {
+        mockRequestPermissions.mockResolvedValue({ receive: 'denied' });
+        const { requestAndRegisterPush } = await import('./notifications');
+
+        const result = await requestAndRegisterPush('test-token');
+
+        expect(result).toBe(false);
+        expect(nativeStore.has(PERM_DISMISSED_KEY)).toBe(true);
+        expect(nativeStore.has(PERM_GRANTED_KEY)).toBe(false);
+    });
+
+    it('saves dismissed timestamp when plugin throws error', async () => {
+        mockRequestPermissions.mockRejectedValue(new Error('Samsung WebView quirk'));
+        const { requestAndRegisterPush } = await import('./notifications');
+
+        const result = await requestAndRegisterPush('test-token');
+
+        expect(result).toBe(false);
+        expect(nativeStore.has(PERM_DISMISSED_KEY)).toBe(true);
+    });
+
+    it('returns false on web', async () => {
+        mockIsNative = false;
+        const { requestAndRegisterPush } = await import('./notifications');
+
+        const result = await requestAndRegisterPush('test-token');
+
+        expect(result).toBe(false);
+        expect(mockRequestPermissions).not.toHaveBeenCalled();
+    });
+
+    it('prompt does not reappear after granting', async () => {
+        mockRequestPermissions.mockResolvedValue({ receive: 'granted' });
+        const { requestAndRegisterPush, shouldShowNotificationPrePrompt } = await import('./notifications');
+
+        await requestAndRegisterPush('test-token');
+        const shouldShow = await shouldShowNotificationPrePrompt();
+
+        expect(shouldShow).toBe(false);
+    });
+
+    it('prompt does not reappear immediately after denying', async () => {
+        mockRequestPermissions.mockResolvedValue({ receive: 'denied' });
+        const { requestAndRegisterPush, shouldShowNotificationPrePrompt } = await import('./notifications');
+
+        await requestAndRegisterPush('test-token');
+        const shouldShow = await shouldShowNotificationPrePrompt();
+
+        expect(shouldShow).toBe(false);
+    });
+
+    it('prompt does not reappear immediately after plugin error', async () => {
+        mockRequestPermissions.mockRejectedValue(new Error('fail'));
+        const { requestAndRegisterPush, shouldShowNotificationPrePrompt } = await import('./notifications');
+
+        await requestAndRegisterPush('test-token');
+        const shouldShow = await shouldShowNotificationPrePrompt();
+
+        expect(shouldShow).toBe(false);
+    });
+});

@@ -307,9 +307,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       initPushNotifications(authToken).catch((err: unknown) => { captureError(err, 'Push notification init failed', { tags: { context: 'push-init' } }); });
 
       // 2. Check if we should show the pre-prompt (deferred by 5 seconds)
-      // shouldShowNotificationPrePrompt is sync (localStorage only, no Capacitor API)
+      // shouldShowNotificationPrePrompt is async (uses native Preferences)
       const timer = setTimeout(() => {
-        if (shouldShowNotificationPrePrompt()) setShowPushPrompt(true);
+        shouldShowNotificationPrePrompt().then(show => { if (show) setShowPushPrompt(true); });
       }, 5000);
       return () => clearTimeout(timer);
     });

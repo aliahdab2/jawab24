@@ -14,18 +14,74 @@ const PERM_GRANTED_KEY = 'push_permission_granted';
 const DISMISS_COOLDOWN_DAYS = 7;
 
 /**
+ * Native-safe key/value helpers.
+ * Uses @capacitor/preferences (SharedPreferences on Android, UserDefaults on
+ * iOS) which survives WebView cache clears — unlike localStorage which Samsung
+ * and other OEMs can wipe aggressively.
+ * Falls back to localStorage on web.
+ */
+async function prefGet(key: string): Promise<string | null> {
+    if (Capacitor.isNativePlatform()) {
+        const { Preferences } = await import('@capacitor/preferences');
+        const { value } = await Preferences.get({ key });
+        return value;
+    }
+    return localStorage.getItem(key);
+}
+
+async function prefSet(key: string, value: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+        const { Preferences } = await import('@capacitor/preferences');
+        await Preferences.set({ key, value });
+    } else {
+        localStorage.setItem(key, value);
+    }
+}
+
+/**
+ * One-time migration: move notification prefs from localStorage (WebView) to
+ * native Preferences so existing users don't get re-prompted after this update.
+ * Safe to call multiple times — skips if already migrated or nothing to migrate.
+ */
+async function migrateFromLocalStorage(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+    const { Preferences } = await import('@capacitor/preferences');
+
+    // Already migrated?
+    const { value: granted } = await Preferences.get({ key: PERM_GRANTED_KEY });
+    if (granted) return;
+
+    // Migrate granted flag
+    const lsGranted = localStorage.getItem(PERM_GRANTED_KEY);
+    if (lsGranted) {
+        await Preferences.set({ key: PERM_GRANTED_KEY, value: lsGranted });
+        localStorage.removeItem(PERM_GRANTED_KEY);
+    }
+
+    // Migrate dismissed timestamp
+    const lsDismissed = localStorage.getItem(PERM_DISMISSED_KEY);
+    if (lsDismissed) {
+        await Preferences.set({ key: PERM_DISMISSED_KEY, value: lsDismissed });
+        localStorage.removeItem(PERM_DISMISSED_KEY);
+    }
+}
+
+/**
  * Check if we should show the pre-prompt to the user.
- * Uses localStorage only — does NOT call any Capacitor Push API to avoid
+ * Uses native Preferences — does NOT call any Capacitor Push API to avoid
  * triggering the Android 13+ system permission dialog prematurely.
  */
-export function shouldShowNotificationPrePrompt(): boolean {
+export async function shouldShowNotificationPrePrompt(): Promise<boolean> {
     if (!Capacitor.isNativePlatform()) return false;
 
+    // Migrate any existing localStorage values to native Preferences
+    await migrateFromLocalStorage();
+
     // Already granted or user completed the flow before
-    if (localStorage.getItem(PERM_GRANTED_KEY) === 'true') return false;
+    if (await prefGet(PERM_GRANTED_KEY) === 'true') return false;
 
     // User dismissed the pre-prompt recently
-    const dismissedAt = localStorage.getItem(PERM_DISMISSED_KEY);
+    const dismissedAt = await prefGet(PERM_DISMISSED_KEY);
     if (dismissedAt) {
         const daysSince = (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24);
         if (daysSince < DISMISS_COOLDOWN_DAYS) return false;
@@ -37,8 +93,8 @@ export function shouldShowNotificationPrePrompt(): boolean {
 /**
  * Record that the user tapped "Not now" on the pre-prompt.
  */
-export function dismissNotificationPrePrompt(): void {
-    localStorage.setItem(PERM_DISMISSED_KEY, String(Date.now()));
+export async function dismissNotificationPrePrompt(): Promise<void> {
+    await prefSet(PERM_DISMISSED_KEY, String(Date.now()));
 }
 
 /**
@@ -51,15 +107,25 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
 
     try {
         const permResult = await PushNotifications.requestPermissions();
-        if (permResult.receive !== 'granted') return false;
+        if (permResult.receive !== 'granted') {
+            // User denied the system dialog — record as dismissed so the
+            // pre-prompt doesn't reappear immediately (respects cooldown).
+            await prefSet(PERM_DISMISSED_KEY, String(Date.now()));
+            return false;
+        }
 
         // Store granted flag so we never show pre-prompt again
-        // and can silently re-register on subsequent launches
-        localStorage.setItem(PERM_GRANTED_KEY, 'true');
+        // and can silently re-register on subsequent launches.
+        // Set this BEFORE registerPushListeners — if listener setup fails
+        // we still don't want to re-prompt (permission was granted).
+        await prefSet(PERM_GRANTED_KEY, 'true');
 
         await registerPushListeners(authToken);
         return true;
     } catch (error) {
+        // Plugin error (e.g. Samsung WebView quirk) — still mark as
+        // user-interacted so the prompt doesn't keep reappearing.
+        await prefSet(PERM_DISMISSED_KEY, String(Date.now()));
         captureError(error, 'Push permission request error', { tags: { context: 'push' } });
         return false;
     }
@@ -67,14 +133,15 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
 
 /**
  * Initialize push notifications for native platforms.
- * Only sets up listeners if user previously granted permission (checked via localStorage).
- * Does NOT call checkPermissions() to avoid triggering Android 13+ system dialog.
+ * Only sets up listeners if user previously granted permission (checked via
+ * native Preferences). Does NOT call checkPermissions() to avoid triggering
+ * Android 13+ system dialog.
  */
 export async function initPushNotifications(token: string): Promise<void> {
     if (!Capacitor.isNativePlatform()) return;
 
     // Only proceed if we know permission was previously granted
-    if (localStorage.getItem(PERM_GRANTED_KEY) !== 'true') return;
+    if (await prefGet(PERM_GRANTED_KEY) !== 'true') return;
 
     try {
         await registerPushListeners(token);
