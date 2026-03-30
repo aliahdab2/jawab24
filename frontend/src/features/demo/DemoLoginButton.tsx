@@ -28,7 +28,7 @@ export function DemoLoginButton() {
       {/* Divider */}
       <div className="flex items-center gap-3 my-1">
         <div className="flex-1 h-px bg-theme-border" />
-        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">or</span>
+        <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('or')}</span>
         <div className="flex-1 h-px bg-theme-border" />
       </div>
       {/* Demo Button */}

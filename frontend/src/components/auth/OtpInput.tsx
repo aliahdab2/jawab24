@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import type { KeyboardEvent, ClipboardEvent } from 'react';
+import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
 
 export const OTP_LENGTH = 6;
@@ -13,6 +14,7 @@ interface OtpInputProps {
 }
 
 export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: OtpInputProps) {
+    const t = useTranslations('auth');
     const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
     const [pasted, setPasted] = useState(false);
     // Derived directly from value — no internal state, no useEffect needed
@@ -117,7 +119,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
                     disabled={disabled}
                     className="w-full mt-3 py-2.5 rounded-xl border border-dashed border-surface-300 dark:border-surface-600 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-brand-400 transition-all disabled:opacity-50"
                 >
-                    {pasted ? '✓ Code pasted' : 'Paste from clipboard'}
+                    {pasted ? t('codePasted') : t('pasteCode')}
                 </button>
             )}
         </div>
