@@ -82,7 +82,7 @@ describe('MessageCard', () => {
       ).toBeTruthy();
     });
 
-    it('shows outgoing reply before incoming when customer message is newer', () => {
+    it('shows latest incoming in row 2 and latest outgoing in row 3 regardless of timestamp order', () => {
       const outgoing = makeMessage({
         id: '1',
         message: 'Previous reply',
@@ -109,12 +109,12 @@ describe('MessageCard', () => {
         />
       );
 
-      const replyMsg = screen.getByText('Previous reply');
       const customerMsg = screen.getByText('New customer message');
+      const replyMsg = screen.getByText('Previous reply');
 
-      // Outgoing (older) should appear before incoming (newer) in the DOM
+      // Latest incoming (row 2) always appears before latest outgoing (row 3)
       expect(
-        replyMsg.compareDocumentPosition(customerMsg) & Node.DOCUMENT_POSITION_FOLLOWING
+        customerMsg.compareDocumentPosition(replyMsg) & Node.DOCUMENT_POSITION_FOLLOWING
       ).toBeTruthy();
     });
 
@@ -137,8 +137,8 @@ describe('MessageCard', () => {
       );
 
       expect(screen.getByText('Unanswered question')).toBeInTheDocument();
-      // Reply link should be shown
-      expect(screen.getByText('Reply')).toBeInTheDocument();
+      // No outgoing reply row when there are no outgoing messages
+      expect(screen.queryByText('Reply')).not.toBeInTheDocument();
     });
 
     it('shows outgoing bubble even when needsHumanAttention is true', () => {
@@ -171,7 +171,7 @@ describe('MessageCard', () => {
       expect(screen.getByText('Auto reply')).toBeInTheDocument();
     });
 
-    it('shows both incoming messages when last 2 messages are from the customer', () => {
+    it('shows only the latest incoming message and latest outgoing reply', () => {
       const older = makeMessage({
         id: '1',
         message: 'مساء الخير',
@@ -202,11 +202,11 @@ describe('MessageCard', () => {
         />
       );
 
-      // Both incoming messages should be visible
-      expect(screen.getByText('مساء الخير')).toBeInTheDocument();
+      // Only the latest incoming should be visible (older incoming is not shown)
       expect(screen.getByText('باديش كيلو الموز')).toBeInTheDocument();
-      // The older outgoing reply should NOT be visible (not in last 2)
-      expect(screen.queryByText('Earlier reply')).not.toBeInTheDocument();
+      expect(screen.queryByText('مساء الخير')).not.toBeInTheDocument();
+      // The latest outgoing reply is always shown regardless of timestamp
+      expect(screen.getByText('Earlier reply')).toBeInTheDocument();
     });
   });
 
