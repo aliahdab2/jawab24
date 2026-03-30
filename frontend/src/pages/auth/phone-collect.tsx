@@ -10,10 +10,11 @@
  *   Step 2 → Enter code  → link phone to account (POST /auth/phone/link)
  *   → Redirect to intended destination
  */
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useTranslations } from 'next-intl';
+import clsx from 'clsx';
 import { Loader2, ArrowLeft, Phone, ShieldCheck } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
@@ -35,6 +36,21 @@ export default function PhoneCollectPage() {
     const [otpCode, setOtpCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [otpExpiry, setOtpExpiry] = useState(0);
+    const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const startExpiryTimer = useCallback(() => {
+        setOtpExpiry(5 * 60);
+        if (expiryRef.current) clearInterval(expiryRef.current);
+        expiryRef.current = setInterval(() => {
+            setOtpExpiry(prev => {
+                if (prev <= 1) { clearInterval(expiryRef.current!); return 0; }
+                return prev - 1;
+            });
+        }, 1000);
+    }, []);
+
+    useEffect(() => () => { if (expiryRef.current) clearInterval(expiryRef.current); }, []);
 
     const {
         phoneE164, setPhoneE164,
@@ -46,7 +62,7 @@ export default function PhoneCollectPage() {
         requestOtp: handleRequestOtp,
     } = useOtpRequest({
         page: 'phone-collect',
-        onSuccess: () => { setStep('code'); setOtpCode(''); },
+        onSuccess: () => { setStep('code'); setOtpCode(''); startExpiryTimer(); },
     });
 
     // Guard: if no authenticated user, redirect to login
@@ -171,11 +187,6 @@ export default function PhoneCollectPage() {
                     ) : (
                         /* Step 2: OTP entry */
                         <div className="space-y-4">
-                            <div className="text-center">
-                                <p className="text-sm text-muted-foreground mb-1">{t('otpSubtitle')}</p>
-                                <p className="font-bold text-foreground" dir="ltr">{phoneE164}</p>
-                            </div>
-
                             <OtpInput
                                 value={otpCode}
                                 onChange={code => { setOtpCode(code); setError(''); }}
@@ -183,6 +194,19 @@ export default function PhoneCollectPage() {
                                 disabled={loading}
                                 autoFocus
                             />
+
+                            {/* Expiry timer */}
+                            {otpExpiry > 0 && !loading && (
+                                <p className={clsx(
+                                    'text-xs text-center',
+                                    otpExpiry <= 60 ? 'text-red-500 dark:text-red-400' : 'text-muted-foreground'
+                                )}>
+                                    {t('codeExpiresIn', {
+                                        minutes: String(Math.floor(otpExpiry / 60)).padStart(2, '0'),
+                                        seconds: String(otpExpiry % 60).padStart(2, '0'),
+                                    })}
+                                </p>
+                            )}
 
                             {error && (
                                 <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
@@ -211,7 +235,7 @@ export default function PhoneCollectPage() {
                                     className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
                                 >
                                     <ArrowLeft className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
-                                    {t('changePhone')}
+                                    <span dir="ltr">{phoneE164}</span>
                                 </button>
                                 {resendCountdown > 0 ? (
                                     <span className="text-muted-foreground">

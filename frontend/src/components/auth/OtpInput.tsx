@@ -114,7 +114,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
                     onFocus={e => e.target.select()}
                     disabled={disabled}
                     autoFocus={autoFocus && i === 0}
-                    className="w-11 h-14 text-center text-xl font-bold border-2 border-surface-300 dark:border-surface-600 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all bg-card text-foreground disabled:opacity-50"
+                    className="w-12 h-16 text-center text-2xl font-bold border-2 border-surface-300 dark:border-surface-600 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all bg-card text-foreground disabled:opacity-50"
                     aria-label={t('otpDigitLabel', { n: i + 1, total: OTP_LENGTH })}
                     autoComplete={i === 0 ? 'one-time-code' : 'off'}
                 />

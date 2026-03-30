@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -62,6 +62,23 @@ export default function LoginPage() {
   const [otpCode, setOtpCode] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
+  const [otpExpiry, setOtpExpiry] = useState(0);
+  const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startExpiryTimer = useCallback(() => {
+    setOtpExpiry(5 * 60); // 5 minutes
+    if (expiryRef.current) clearInterval(expiryRef.current);
+    expiryRef.current = setInterval(() => {
+      setOtpExpiry(prev => {
+        if (prev <= 1) { clearInterval(expiryRef.current!); return 0; }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  useEffect(() => () => { if (expiryRef.current) clearInterval(expiryRef.current); }, []);
+
+  const isOtpStep = authTab === 'phone' && otpStep === 'code';
 
   const {
     phoneE164, setPhoneE164,
@@ -73,7 +90,7 @@ export default function LoginPage() {
     requestOtp: handleRequestOtp,
   } = useOtpRequest({
     page: 'login',
-    onSuccess: () => { setOtpStep('code'); setOtpCode(''); },
+    onSuccess: () => { setOtpStep('code'); setOtpCode(''); startExpiryTimer(); },
   });
 
   const handleVerifyOtp = useCallback(async (completedCode?: string) => {
@@ -351,8 +368,8 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Mobile feature highlights — compact row */}
-              <div className="flex gap-2 lg:hidden mb-2">
+              {/* Mobile feature highlights — compact row (hidden during OTP entry) */}
+              <div className={clsx('flex gap-2 lg:hidden mb-2', isOtpStep && 'hidden')}>
                 {features.map((f, i) => (
                   <div
                     key={i}
@@ -478,8 +495,8 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {/* Social proof card — motivates before the CTA */}
-                <div className="p-3 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20">
+                {/* Social proof card — motivates before the CTA (hidden during OTP entry) */}
+                <div className={clsx('p-3 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20', isOtpStep && 'hidden')}>
                   <div className="flex gap-3 items-center">
                     <div className="w-8 h-8 rounded-xl bg-brand-100 dark:bg-brand-400/15 flex items-center justify-center flex-shrink-0">
                       <Bot className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
@@ -594,10 +611,6 @@ export default function LoginPage() {
                         ) : (
                           /* ── Phone tab — Step 2: OTP (auto-submits on 6th digit) ── */
                           <div className="space-y-4">
-                            <div className="text-center">
-                              <p className="text-sm text-muted-foreground mb-1">{t('otpSubtitle')}</p>
-                              <p className="font-bold text-foreground" dir="ltr">{phoneE164}</p>
-                            </div>
                             <OtpInput
                               value={otpCode}
                               onChange={code => { setOtpCode(code); setOtpError(''); }}
@@ -605,17 +618,36 @@ export default function LoginPage() {
                               disabled={otpLoading}
                               autoFocus
                             />
-                            {otpLoading && (
-                              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                                <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                                {t('verifyingCode')}
-                              </div>
+                            {/* Expiry timer */}
+                            {otpExpiry > 0 && !otpLoading && (
+                              <p className={clsx(
+                                'text-xs text-center',
+                                otpExpiry <= 60 ? 'text-red-500 dark:text-red-400' : 'text-muted-foreground'
+                              )}>
+                                {t('codeExpiresIn', {
+                                  minutes: String(Math.floor(otpExpiry / 60)).padStart(2, '0'),
+                                  seconds: String(otpExpiry % 60).padStart(2, '0'),
+                                })}
+                              </p>
                             )}
                             {otpError && (
                               <p className="text-sm text-red-600 dark:text-red-400 text-center" role="alert">
                                 {otpError}
                               </p>
                             )}
+                            <Button
+                              onClick={() => handleVerifyOtp()}
+                              disabled={otpLoading || otpCode.length !== OTP_LENGTH}
+                              size="lg"
+                              className="w-full transition-all hover:shadow-lg"
+                            >
+                              {otpLoading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                                  {t('verifyingCode')}
+                                </span>
+                              ) : t('verifyCode')}
+                            </Button>
                             <div className="flex items-center justify-between text-sm">
                               <button
                                 type="button"
@@ -623,7 +655,7 @@ export default function LoginPage() {
                                 className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
                               >
                                 <ArrowLeft className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
-                                {t('changePhone')}
+                                <span dir="ltr">{phoneE164}</span>
                               </button>
                               {resendCountdown > 0 ? (
                                 <span className="text-muted-foreground">
@@ -658,8 +690,8 @@ export default function LoginPage() {
                       </Button>
                     )}
 
-                    {/* Demo Mode */}
-                    <DemoLoginButton />
+                    {/* Demo Mode — hidden during OTP entry */}
+                    {!isOtpStep && <DemoLoginButton />}
                   </div>
                 </div>
               </div>
