@@ -1,6 +1,7 @@
-import { useRef, useEffect } from 'react';
-import type { KeyboardEvent, ClipboardEvent } from 'react';
+import { useRef, useEffect, useCallback } from 'react';
+import type { ClipboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import clsx from 'clsx';
 import { isNativePlatform } from '@/lib/capacitor';
 
 export const OTP_LENGTH = 6;
@@ -13,70 +14,56 @@ interface OtpInputProps {
     autoFocus?: boolean;
 }
 
+/**
+ * OTP input using the "single real input + decorative boxes" pattern.
+ *
+ * A single <input> with autocomplete="one-time-code" is overlaid on top of
+ * decorative digit boxes. This is the standard approach used by major apps
+ * (WhatsApp, Telegram, banking apps) because it works with:
+ *   - iOS "From Messages" keyboard suggestion
+ *   - Samsung Keyboard OTP autofill
+ *   - Web OTP API (Chrome WebView)
+ *   - Any other autofill system that targets a single input
+ *
+ * The real input is transparent and spans the full width so tapping any
+ * digit box focuses it. The decorative boxes simply render the current value.
+ */
 export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: OtpInputProps) {
     const t = useTranslations('auth');
-    const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
-    // Derived directly from value — no internal state, no useEffect needed
+    const inputRef = useRef<HTMLInputElement | null>(null);
     const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '');
 
-    const emit = (newDigits: string[]) => {
-        const joined = newDigits.join('');
-        onChange(joined);
-        if (joined.length === OTP_LENGTH && onComplete) {
-            onComplete(joined);
+    const setValue = useCallback((raw: string) => {
+        const cleaned = raw.replace(/\D/g, '').slice(0, OTP_LENGTH);
+        onChange(cleaned);
+        if (cleaned.length === OTP_LENGTH && onComplete) {
+            onComplete(cleaned);
+        }
+    }, [onChange, onComplete]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setValue(e.target.value);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        // Allow natural backspace/arrow behavior on the single input
+        if (e.key === 'Backspace' && !value) {
+            e.preventDefault();
         }
     };
 
-    const focusAt = (index: number) => {
-        inputsRef.current[index]?.focus();
+    const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
+        e.preventDefault();
+        const raw = e.clipboardData.getData('text').replace(/\D/g, '');
+        if (raw) setValue(raw);
     };
 
-    // Shared by handlePaste and iOS SMS autofill (which injects all digits into box 0)
-    const fillAll = (raw: string) => {
-        const clipped = raw.slice(0, OTP_LENGTH);
-        const newDigits = Array(OTP_LENGTH).fill('');
-        clipped.split('').forEach((char, i) => { newDigits[i] = char; });
-        emit(newDigits);
-        focusAt(Math.min(clipped.length, OTP_LENGTH - 1));
-    };
-
-    const handleChange = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
-        const raw = e.target.value.replace(/\D/g, '');
-        if (raw.length > 1) { fillAll(raw); return; }
-        const char = raw.slice(-1);
-        const newDigits = [...digits];
-        newDigits[index] = char;
-        emit(newDigits);
-        if (char && index < OTP_LENGTH - 1) {
-            focusAt(index + 1);
-        }
-    };
-
-    const handleKeyDown = (index: number, e: KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Backspace') {
-            if (digits[index]) {
-                const newDigits = [...digits];
-                newDigits[index] = '';
-                emit(newDigits);
-            } else if (index > 0) {
-                focusAt(index - 1);
-            }
-        } else if (e.key === 'ArrowLeft' && index > 0) {
-            focusAt(index - 1);
-        } else if (e.key === 'ArrowRight' && index < OTP_LENGTH - 1) {
-            focusAt(index + 1);
-        }
-    };
-
-    // Keep a ref so the Web OTP effect always calls the current fillAll without
-    // needing to re-subscribe every render (empty deps array is intentional).
-    const fillAllRef = useRef(fillAll);
-    fillAllRef.current = fillAll;
+    // Stable ref for Web OTP callback
+    const setValueRef = useRef(setValue);
+    setValueRef.current = setValue;
 
     // Web OTP API — Android Chrome WebView 91+.
-    // Requires capacitor.config.ts hostname: 'app.jawab24.com' AND backend CORS
-    // allowing https://app.jawab24.com. Currently dormant (hostname not set).
-    // SMS must end with: @jawab24.com #<code>
+    // SMS must end with: @app.jawab24.com #<code> (matches capacitor hostname).
     useEffect(() => {
         if (!isNativePlatform()) return;
         if (!('OTPCredential' in window)) return;
@@ -86,39 +73,54 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
             otp: { transport: ['sms'] },
             signal: ac.signal,
         })
-            .then(credential => { if (credential?.code) fillAllRef.current(credential.code); })
+            .then(credential => { if (credential?.code) setValueRef.current(credential.code); })
             .catch(() => { /* dismissed or unsupported */ });
 
         return () => ac.abort();
     }, []);
 
-    const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
-        e.preventDefault();
-        const raw = e.clipboardData.getData('text').replace(/\D/g, '');
-        if (raw) fillAll(raw);
-    };
-
     return (
-        <div className="flex gap-2 justify-center" role="group" aria-label={t('otpGroupLabel')} dir="ltr">
-            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-                <input
+        <div
+            className="relative flex gap-2 justify-center"
+            role="group"
+            aria-label={t('otpGroupLabel')}
+            dir="ltr"
+        >
+            {/* Decorative digit boxes — purely visual */}
+            {digits.map((digit, i) => (
+                <div
                     key={i}
-                    ref={el => { inputsRef.current[i] = el; }}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={i === 0 ? OTP_LENGTH : 1}
-                    value={digits[i]}
-                    onChange={e => handleChange(i, e)}
-                    onKeyDown={e => handleKeyDown(i, e)}
-                    onPaste={handlePaste}
-                    onFocus={e => e.target.select()}
-                    disabled={disabled}
-                    autoFocus={autoFocus && i === 0}
-                    className="w-12 h-16 text-center text-2xl font-bold border-2 border-surface-300 dark:border-surface-600 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all bg-card text-foreground disabled:opacity-50"
-                    aria-label={t('otpDigitLabel', { n: i + 1, total: OTP_LENGTH })}
-                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
-                />
+                    aria-hidden="true"
+                    onClick={() => inputRef.current?.focus()}
+                    className={clsx(
+                        'w-12 h-16 flex items-center justify-center text-2xl font-bold rounded-xl border-2 transition-all select-none bg-card text-foreground',
+                        // Highlight the box at the current cursor position
+                        value.length === i && !disabled
+                            ? 'border-brand-500 ring-2 ring-brand-500/20'
+                            : 'border-surface-300 dark:border-surface-600',
+                        disabled && 'opacity-50'
+                    )}
+                >
+                    {digit}
+                </div>
             ))}
+
+            {/* Real input — transparent, overlaid on top, captures all autofill */}
+            <input
+                ref={inputRef}
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={OTP_LENGTH}
+                value={value}
+                onChange={handleChange}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                disabled={disabled}
+                autoFocus={autoFocus}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                aria-label={t('otpGroupLabel')}
+            />
         </div>
     );
 }

@@ -138,7 +138,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
     // Phone OTP Authentication — only registered when PHONE_AUTH_ENABLED=true
     if (config.phoneAuthEnabled) {
         fastify.post('/auth/phone/request', {
-            config: { rateLimit: { max: 3, timeWindow: '10 minutes' } },
+            config: { rateLimit: { max: 10, timeWindow: '15 minutes' } },
             schema: {
                 tags: ['Auth'],
                 summary: 'Request OTP code via phone number',
@@ -154,7 +154,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
         }, authController.requestOtp);
 
         fastify.post('/auth/phone/verify', {
-            config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+            config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
             schema: {
                 tags: ['Auth'],
                 summary: 'Verify OTP code and issue session',

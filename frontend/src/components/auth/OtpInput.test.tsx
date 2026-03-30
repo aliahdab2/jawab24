@@ -21,40 +21,67 @@ function renderOtp(props: Partial<Parameters<typeof OtpInput>[0]> = {}) {
     const utils = render(
         <OtpInput value="" onChange={onChange} onComplete={onComplete} {...props} />
     );
-    const inputs = () => screen.getAllByRole('textbox') as HTMLInputElement[];
-    return { ...utils, onChange, onComplete, inputs };
+    // Single real input (the overlay) — find by role
+    const input = () => screen.getByRole('textbox') as HTMLInputElement;
+    // Decorative digit boxes
+    const boxes = () => utils.container.querySelectorAll('[aria-hidden="true"]:not(svg)');
+    return { ...utils, onChange, onComplete, input, boxes };
 }
 
-// ── Keyboard & focus ─────────────────────────────────────────────────────────
+// ── Rendering ────────────────────────────────────────────────────────────────
 
-describe('OtpInput — keyboard navigation', () => {
-    it('renders OTP_LENGTH inputs', () => {
-        const { inputs } = renderOtp();
-        expect(inputs()).toHaveLength(OTP_LENGTH);
+describe('OtpInput — rendering', () => {
+    it('renders OTP_LENGTH decorative digit boxes', () => {
+        const { boxes } = renderOtp();
+        expect(boxes()).toHaveLength(OTP_LENGTH);
     });
 
-    it('calls onChange with updated value when digit entered', () => {
-        const { onChange, inputs } = renderOtp({ value: '' });
-        fireEvent.change(inputs()[0], { target: { value: '5' } });
+    it('renders a single real input with autocomplete one-time-code', () => {
+        const { input } = renderOtp();
+        expect(input()).toBeInTheDocument();
+        expect(input().getAttribute('autocomplete')).toBe('one-time-code');
+    });
+
+    it('displays digits in decorative boxes', () => {
+        const { boxes } = renderOtp({ value: '123456' });
+        const texts = Array.from(boxes()).map(b => b.textContent);
+        expect(texts).toEqual(['1', '2', '3', '4', '5', '6']);
+    });
+
+    it('highlights the box at current cursor position', () => {
+        const { boxes } = renderOtp({ value: '12' });
+        // Box at index 2 (next empty) should have the focus ring class
+        const box2 = boxes()[2];
+        expect(box2.className).toContain('border-brand-500');
+    });
+});
+
+// ── Input behavior ───────────────────────────────────────────────────────────
+
+describe('OtpInput — input', () => {
+    it('calls onChange with digits when typing', () => {
+        const { onChange, input } = renderOtp({ value: '' });
+        fireEvent.change(input(), { target: { value: '5' } });
         expect(onChange).toHaveBeenCalledWith('5');
     });
 
-    it('calls onComplete when all digits filled via onChange', () => {
-        const { onComplete, inputs } = renderOtp({ value: '12345' });
-        fireEvent.change(inputs()[5], { target: { value: '6' } });
+    it('calls onComplete when all digits filled', () => {
+        const { onChange, onComplete, input } = renderOtp({ value: '12345' });
+        fireEvent.change(input(), { target: { value: '123456' } });
+        expect(onChange).toHaveBeenCalledWith('123456');
         expect(onComplete).toHaveBeenCalledWith('123456');
     });
 
-    it('clears current digit on Backspace when digit is present', () => {
-        const { onChange, inputs } = renderOtp({ value: '123456' });
-        fireEvent.keyDown(inputs()[3], { key: 'Backspace' });
-        expect(onChange).toHaveBeenCalledWith('12356');
+    it('strips non-digits from input', () => {
+        const { onChange, input } = renderOtp({ value: '' });
+        fireEvent.change(input(), { target: { value: '12ab34' } });
+        expect(onChange).toHaveBeenCalledWith('1234');
     });
 
-    it('does not call onChange on Backspace when digit is already empty', () => {
-        const { onChange, inputs } = renderOtp({ value: '' });
-        fireEvent.keyDown(inputs()[0], { key: 'Backspace' });
-        expect(onChange).not.toHaveBeenCalled();
+    it('truncates input to OTP_LENGTH', () => {
+        const { onChange, input } = renderOtp({ value: '' });
+        fireEvent.change(input(), { target: { value: '12345678' } });
+        expect(onChange).toHaveBeenCalledWith('123456');
     });
 });
 
@@ -62,43 +89,43 @@ describe('OtpInput — keyboard navigation', () => {
 
 describe('OtpInput — paste', () => {
     it('fills all digits when a 6-digit code is pasted', () => {
-        const { onChange, onComplete, inputs } = renderOtp();
+        const { onChange, onComplete, input } = renderOtp();
         const pasteEvent = {
             clipboardData: { getData: () => '123456' },
             preventDefault: vi.fn(),
         };
-        fireEvent.paste(inputs()[0], pasteEvent);
+        fireEvent.paste(input(), pasteEvent);
         expect(onChange).toHaveBeenCalledWith('123456');
         expect(onComplete).toHaveBeenCalledWith('123456');
     });
 
     it('strips non-digits from pasted text', () => {
-        const { onChange, inputs } = renderOtp();
+        const { onChange, input } = renderOtp();
         const pasteEvent = {
             clipboardData: { getData: () => '12 34-56' },
             preventDefault: vi.fn(),
         };
-        fireEvent.paste(inputs()[0], pasteEvent);
+        fireEvent.paste(input(), pasteEvent);
         expect(onChange).toHaveBeenCalledWith('123456');
     });
 
     it('truncates paste to OTP_LENGTH digits', () => {
-        const { onChange, inputs } = renderOtp();
+        const { onChange, input } = renderOtp();
         const pasteEvent = {
             clipboardData: { getData: () => '12345678' },
             preventDefault: vi.fn(),
         };
-        fireEvent.paste(inputs()[0], pasteEvent);
+        fireEvent.paste(input(), pasteEvent);
         expect(onChange).toHaveBeenCalledWith('123456');
     });
 
     it('ignores paste with no digits', () => {
-        const { onChange, inputs } = renderOtp();
+        const { onChange, input } = renderOtp();
         const pasteEvent = {
             clipboardData: { getData: () => 'abcdef' },
             preventDefault: vi.fn(),
         };
-        fireEvent.paste(inputs()[0], pasteEvent);
+        fireEvent.paste(input(), pasteEvent);
         expect(onChange).not.toHaveBeenCalled();
     });
 });

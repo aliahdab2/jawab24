@@ -694,7 +694,7 @@ export default function LoginPage() {
                     {!isOtpStep && <DemoLoginButton />}
 
                     {/* Terms — inline so it stays visible when keyboard is open */}
-                    <p className="text-xs text-muted-foreground text-center pt-1">
+                    <p className="text-xs text-muted-foreground text-center pt-1 pb-8">
                       {t('termsAgreement')}
                       <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('termsOfService')}</Link>
                       {t('and')}
