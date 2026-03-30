@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import type { KeyboardEvent, ClipboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -69,6 +69,28 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
         }
     };
 
+    // Keep a ref so the Web OTP effect always calls the current fillAll without
+    // needing to re-subscribe every render (empty deps array is intentional).
+    const fillAllRef = useRef(fillAll);
+    fillAllRef.current = fillAll;
+
+    // Web OTP API — Android Chrome WebView 91+ with hostname: 'jawab24.com' in capacitor.config.ts.
+    // SMS must end with: @jawab24.com #<code>
+    useEffect(() => {
+        if (!isNativePlatform()) return;
+        if (!('OTPCredential' in window)) return;
+
+        const ac = new AbortController();
+        (navigator.credentials.get as (opts: object) => Promise<{ code: string } | null>)({
+            otp: { transport: ['sms'] },
+            signal: ac.signal,
+        })
+            .then(credential => { if (credential?.code) fillAllRef.current(credential.code); })
+            .catch(() => { /* dismissed or unsupported — paste button is the fallback */ });
+
+        return () => ac.abort();
+    }, []);
+
     const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
         e.preventDefault();
         const raw = e.clipboardData.getData('text').replace(/\D/g, '');
@@ -78,9 +100,9 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
     const handlePasteButton = async () => {
         try {
             const text = await navigator.clipboard.readText();
-            const digits = text.replace(/\D/g, '').slice(0, OTP_LENGTH);
-            if (digits.length > 0) {
-                fillAll(digits);
+            const code = text.replace(/\D/g, '').slice(0, OTP_LENGTH);
+            if (code.length > 0) {
+                fillAll(code);
                 setPasted(true);
                 setTimeout(() => setPasted(false), 2000);
             }
@@ -91,7 +113,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
 
     return (
         <div>
-            <div className="flex gap-2 justify-center" role="group" aria-label="Verification code" dir="ltr">
+            <div className="flex gap-2 justify-center" role="group" aria-label={t('otpGroupLabel')} dir="ltr">
                 {Array.from({ length: OTP_LENGTH }).map((_, i) => (
                     <input
                         key={i}
@@ -107,7 +129,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
                         disabled={disabled}
                         autoFocus={autoFocus && i === 0}
                         className="w-11 h-14 text-center text-xl font-bold border-2 border-surface-300 dark:border-surface-600 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all bg-card text-foreground disabled:opacity-50"
-                        aria-label={`Digit ${i + 1} of ${OTP_LENGTH}`}
+                        aria-label={t('otpDigitLabel', { n: i + 1, total: OTP_LENGTH })}
                         autoComplete={i === 0 ? 'one-time-code' : 'off'}
                     />
                 ))}

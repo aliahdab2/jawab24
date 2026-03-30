@@ -666,10 +666,9 @@ export default function LoginPage() {
             </div>
 
             {/* Terms */}
-            <div className="w-full max-w-lg mx-auto mt-6 py-4 lg:py-8 lg:mt-8 text-center lg:text-start">
-              <p className="text-sm text-muted-foreground font-medium">
+            <div className="w-full max-w-lg mx-auto mt-2 py-2 lg:py-8 lg:mt-8 text-center lg:text-start">
+              <p className="text-xs sm:text-sm text-muted-foreground font-medium">
                 {t('termsAgreement')}
-                <br className="sm:hidden" />
                 <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('termsOfService')}</Link>
                 {t('and')}
                 <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('privacyPolicy')}</Link>

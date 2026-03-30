@@ -9,6 +9,7 @@ const config: CapacitorConfig = {
     url: process.env.CAP_SERVER_URL,
     cleartext: !!process.env.CAP_SERVER_URL,
     androidScheme: 'https',
+    hostname: 'jawab24.com',
     allowNavigation: ['jawab24.com', '*.jawab24.com']
   },
   android: {
