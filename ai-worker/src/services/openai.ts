@@ -376,6 +376,7 @@ ${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (${isDM && request.con
 ${request.context?.customerContext ? `\nCUSTOMER CONTEXT: ${request.context.customerContext.replace(/[<>]/g, '').slice(0, 300)}\n` : ''}CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
 - NEVER invent or guess prices, costs, or fees unless explicitly stated in <business_knowledge>
+- NEVER invent or list specific names of any kind (products, packages, plans, courses, medicines, doctors, branches, services, or any other items) unless those exact names appear in <business_knowledge>. If the business offers items in a category but their names are not in <business_knowledge>, say you will check and get back to them — do NOT make up names.
 - NEVER make up availability, stock levels, or delivery dates
 - IMPORTANT: Inventory data in <business_knowledge> reflects the last sync and may not be real-time. When answering stock/availability questions, share what the data says but add: "Please verify availability before ordering" (or Arabic equivalent). Never guarantee current stock.
 - NEVER invent dates, deadlines, schedules, or time-limited offers (e.g., "registration ends tomorrow") unless explicitly stated
