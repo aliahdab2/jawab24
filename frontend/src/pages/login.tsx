@@ -200,8 +200,8 @@ export default function LoginPage() {
       icon: Zap,
       title: t('instantSetup'),
       desc: t('instantSetupDesc'),
-      color: 'text-amber-500 dark:text-brand-400',
-      bg: 'bg-amber-50 dark:bg-brand-400/10'
+      color: 'text-amber-500 dark:text-amber-400',
+      bg: 'bg-amber-50 dark:bg-amber-400/10'
     },
     {
       icon: ShieldCheck,
@@ -541,7 +541,7 @@ export default function LoginPage() {
                             onClick={handleFacebookLogin}
                             disabled={isRedirecting}
                             size="lg"
-                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                           >
                             <div className="flex items-center justify-center gap-3 text-white">
                               <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
@@ -649,7 +649,7 @@ export default function LoginPage() {
                         onClick={handleFacebookLogin}
                         disabled={isRedirecting}
                         size="lg"
-                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] dark:bg-brand-600 dark:hover:bg-brand-700 text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 dark:shadow-brand-400/40 dark:hover:shadow-brand-400/50 ring-4 ring-blue-400/15 dark:ring-brand-400/30 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                       >
                         <div className="flex items-center justify-center gap-3 text-white">
                           <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
