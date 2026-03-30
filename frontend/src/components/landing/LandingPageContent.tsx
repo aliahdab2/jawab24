@@ -8,7 +8,6 @@ import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
 import { motion, MotionConfig, useInView } from 'framer-motion';
-import { Rocket } from 'lucide-react';
 import {
   LandingHero,
   LandingFeatures,
@@ -18,6 +17,7 @@ import {
   LandingFAQ,
   LandingFooter,
   IntegrationShowcase,
+  AnnouncementBanner,
 } from '@/components/landing';
 
 function StatsSection({ statsList }: { statsList: { value: string; label: string }[] }) {
@@ -170,18 +170,14 @@ export default function LandingPageContent() {
         </div>
       </nav>
 
-      {process.env.NEXT_PUBLIC_LAUNCH_BANNER === 'true' && (
-        <div className="fixed top-16 sm:top-20 w-full z-40 bg-brand-600 text-white text-center py-2 px-4 text-sm font-medium shadow-md mt-safe">
-          <div className="flex items-center justify-center gap-2">
-            <Rocket className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            <span>
-              <strong>{t('banner.title')}</strong>
-              {' — '}
-              {t('banner.description')}
-            </span>
-          </div>
-        </div>
-      )}
+      <AnnouncementBanner
+        title={t('banner.title')}
+        description={t('banner.description')}
+        feature="launch"
+        placeholder={t('comingSoon.placeholder')}
+        buttonLabel={t('comingSoon.notify')}
+        successMessage={t('comingSoon.notified')}
+      />
 
       <LandingHero isAuthenticated={isAuthenticated} />
 
