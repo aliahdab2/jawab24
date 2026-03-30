@@ -443,7 +443,7 @@ const MessagesPage: NextPageWithLayout = () => {
       />
 
       {/* Filter Chips + Search */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-5">
         <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap items-center gap-1.5 sm:gap-2">
           {([
             { key: 'needs_action' as FilterType, label: t('needsAction'), count: stats.needsAction },

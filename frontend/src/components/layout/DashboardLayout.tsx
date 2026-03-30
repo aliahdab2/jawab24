@@ -222,7 +222,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         >
           <div
             className={clsx(
-              'px-4 pt-5 px-safe-landscape max-lg:landscape:pt-2 md:px-8 md:pt-8 lg:px-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
+              'px-4 pt-3 px-safe-landscape max-lg:landscape:pt-2 sm:pt-5 md:px-8 md:pt-8 lg:px-16 lg:pt-10 xl:px-20 max-w-[1600px] mx-auto',
               isCleanLayout ? 'pb-4' : 'pb-dash-mobile'
             )}
           >

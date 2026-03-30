@@ -165,7 +165,7 @@ export const MessageCard = React.memo(function MessageCard({
         )}
       </div>
 
-      {/* Action button — resolve or unresolve (hover-reveal on desktop, always visible on mobile) */}
+      {/* Action button — icon-only on mobile, icon+text on hover for desktop */}
       {(onResolve || onUnresolve) && (
         <div
           className={clsx(
@@ -178,19 +178,21 @@ export const MessageCard = React.memo(function MessageCard({
           {onResolve && (
             <button
               onClick={onResolve}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 dark:hover:text-brand-400 transition-colors"
+              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 dark:hover:text-brand-400 transition-colors"
+              title={t('resolve')}
             >
-              <CheckCircle className="w-3.5 h-3.5" />
-              {t('resolve')}
+              <CheckCircle className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              <span className="hidden sm:inline">{t('resolve')}</span>
             </button>
           )}
           {onUnresolve && (
             <button
               onClick={onUnresolve}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 rounded-xl text-[11px] font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title={tMessages('unresolve')}
             >
-              <Undo2 className="w-3.5 h-3.5" />
-              {tMessages('unresolve')}
+              <Undo2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              <span className="hidden sm:inline">{tMessages('unresolve')}</span>
             </button>
           )}
         </div>
