@@ -228,7 +228,7 @@ describe('NotificationService', () => {
             expect(sendNotificationSpy).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 type: 'flagged_reply',
                 bodies: expect.objectContaining({
-                    en: expect.stringContaining('angry_customer'),
+                    en: expect.stringContaining('Angry Customer'),
                 }),
                 data: expect.objectContaining({
                     commentId: 'c-123',
@@ -261,7 +261,8 @@ describe('NotificationService', () => {
             const payload = sendNotificationSpy.mock.calls[0][1];
             expect(payload.bodies.ar).toContain('عميل غاضب');
             expect(payload.bodies.ar).not.toContain('angry_customer');
-            expect(payload.bodies.en).toContain('angry_customer');
+            expect(payload.bodies.en).toContain('Angry Customer');
+            expect(payload.bodies.en).not.toContain('angry_customer');
         });
 
         it('should translate comma-separated flag reasons to Arabic', async () => {

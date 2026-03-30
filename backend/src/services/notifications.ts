@@ -111,19 +111,28 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
     },
 };
 
-/** English human-readable labels for flag reason strings used in notifications. */
+/** English human-readable labels for flag reason strings used in notifications.
+ *  Values must match frontend/src/i18n/en/flagReason.json — keep in sync. */
 const FLAG_REASON_EN: Record<string, string> = {
-    'offensive_or_abusive': 'offensive or abusive content',
-    'low_confidence': 'low confidence reply',
-    'held_low_confidence': 'low confidence reply',
-    'price_not_in_kb': 'price not in knowledge base',
-    'info_not_in_kb': 'information not in knowledge base',
-    'redirect_to_human': 'redirect to human agent',
-    'complaint': 'customer complaint',
-    'offensive': 'offensive content',
-    'invalid_json': 'reply processing error',
-    'fallback_reply': 'fallback reply used',
+    'offensive_or_abusive': 'Offensive or abusive',
+    'low_confidence': 'Low confidence reply',
+    'held_low_confidence': 'Low confidence reply',
+    'price_not_in_kb': 'Price not in knowledge base',
+    'info_not_in_kb': 'Information not in knowledge base',
+    'redirect_to_human': 'Redirect to human',
+    'complaint': 'Complaint',
+    'offensive': 'Offensive',
+    'invalid_json': 'Reply processing error',
+    'fallback_reply': 'Fallback reply',
+    'negative_sentiment': 'Negative sentiment',
+    'human_requested': 'Human requested',
     'AI flagged this reply': 'AI flagged this reply',
+    // Derived from URGENT_FLAG_MAP (same pattern as FLAG_REASON_AR)
+    ...Object.fromEntries(
+        Object.entries(URGENT_FLAG_MAP).flatMap(([key, { en }]) => [
+            [key, en],  // e.g. 'cancellation_request' → 'Cancellation Request'
+        ]),
+    ),
 };
 
 /** Arabic translations for flag reason strings used in notifications.
