@@ -75,7 +75,9 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
     const fillAllRef = useRef(fillAll);
     fillAllRef.current = fillAll;
 
-    // Web OTP API — Android Chrome WebView 91+ with hostname: 'jawab24.com' in capacitor.config.ts.
+    // Web OTP API — Android Chrome WebView 91+.
+    // Requires capacitor.config.ts hostname: 'app.jawab24.com' AND backend CORS
+    // allowing https://app.jawab24.com. Currently dormant (hostname not set).
     // SMS must end with: @jawab24.com #<code>
     useEffect(() => {
         if (!isNativePlatform()) return;

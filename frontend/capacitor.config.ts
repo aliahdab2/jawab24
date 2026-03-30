@@ -9,10 +9,12 @@ const config: CapacitorConfig = {
     url: process.env.CAP_SERVER_URL,
     cleartext: !!process.env.CAP_SERVER_URL,
     androidScheme: 'https',
-    // Subdomain keeps API calls to jawab24.com/api unintercepted by the local
-    // asset server, while still satisfying the Web OTP API (which matches on
-    // eTLD+1 = jawab24.com, so @jawab24.com in the SMS works from any subdomain).
-    hostname: 'app.jawab24.com',
+    // No custom hostname — app runs at https://localhost (Capacitor default).
+    // https://localhost is already in backend CORS allowed origins so all API
+    // calls work without a backend redeploy.
+    // NOTE: Web OTP API (auto SMS fill) requires hostname matching the SMS
+    // bound domain. To enable it later, set hostname: 'app.jawab24.com' AND
+    // deploy the backend CORS fix that adds https://app.jawab24.com.
     allowNavigation: ['jawab24.com', '*.jawab24.com']
   },
   android: {
