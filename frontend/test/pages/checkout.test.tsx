@@ -116,7 +116,7 @@ describe('CheckoutPage', () => {
   });
 
   afterEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   // ─── Sanctions: geo check ────────────────────────────────
