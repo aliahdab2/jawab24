@@ -150,5 +150,9 @@
   "images": {
     "dashboardPreview": "Dashboard Preview",
     "user": "User"
+  },
+  "banner": {
+    "title": "Launching Soon",
+    "description": "We're putting the finishing touches. Join the waitlist to be first in line!"
   }
 }
