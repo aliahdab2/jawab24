@@ -11,6 +11,7 @@ import {
 import { Card } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
+import { getPrimaryFlag } from '@/utils/flagReason';
 
 // Unified item type for both comments and messages needing attention
 export interface NeedsAttentionItem {
@@ -44,9 +45,10 @@ interface SmartStatusBannerProps {
 const DEFAULT_FLAG_REASONS = ['sla_no_reply', 'no_reply'];
 
 function isNotableFlagReason(flagReason: string | null): boolean {
-  if (!flagReason) return false;
+  const primaryFlag = getPrimaryFlag(flagReason);
+  if (!primaryFlag) return false;
   // sla_no_reply:30, sla_no_reply:60 etc. are default — strip the threshold
-  const base = flagReason.split(':')[0];
+  const base = primaryFlag.split(':')[0];
   return !DEFAULT_FLAG_REASONS.includes(base);
 }
 
@@ -55,12 +57,11 @@ function getReasonTag(
   tFlagReason: (key: string) => string,
   tDash: (key: string) => string,
 ): string {
-  if (flagReason) {
-    const translated = tFlagReason(flagReason);
-    // If the translation key exists (not returned as-is), use it
-    if (translated !== flagReason) return translated;
-    // Fallback: format the raw reason
-    return flagReason.replace(/_/g, ' ');
+  const primaryFlag = getPrimaryFlag(flagReason);
+  if (primaryFlag) {
+    const translated = tFlagReason(primaryFlag);
+    if (translated !== primaryFlag) return translated;
+    return primaryFlag.replace(/_/g, ' ');
   }
   return tDash('smartBanner.reasonNoReply');
 }
