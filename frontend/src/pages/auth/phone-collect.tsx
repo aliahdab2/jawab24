@@ -23,13 +23,14 @@ import { PhoneInput } from '@/components/auth/PhoneInput';
 import { OtpInput, OTP_LENGTH } from '@/components/auth/OtpInput';
 import { useOtpRequest } from '@/hooks/useOtpRequest';
 
+type Step = 'phone' | 'code';
+
 export default function PhoneCollectPage() {
     const router = useRouter();
     const t = useTranslations('auth');
     const tc = useTranslations('common');
     const { user, _hasHydrated } = useAuthStore();
 
-    type Step = 'phone' | 'code';
     const [step, setStep] = useState<Step>('phone');
     const [otpCode, setOtpCode] = useState('');
     const [loading, setLoading] = useState(false);
@@ -122,7 +123,6 @@ export default function PhoneCollectPage() {
                                     {t('phoneNumber')}
                                 </label>
                                 <PhoneInput
-                                    value={phoneE164}
                                     onChange={(e164, valid) => {
                                         setPhoneE164(e164);
                                         setPhoneValid(valid);
@@ -192,7 +192,7 @@ export default function PhoneCollectPage() {
 
                             <Button
                                 onClick={() => handleLinkPhone()}
-                                disabled={loading || otpCode.length !== 6}
+                                disabled={loading || otpCode.length !== OTP_LENGTH}
                                 size="lg"
                                 className="w-full transition-all hover:shadow-lg"
                             >

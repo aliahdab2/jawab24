@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import type { KeyboardEvent, ClipboardEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -16,8 +16,6 @@ interface OtpInputProps {
 export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: OtpInputProps) {
     const t = useTranslations('auth');
     const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
-    const [pasted, setPasted] = useState(false);
-    const pasteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Derived directly from value — no internal state, no useEffect needed
     const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '');
 
@@ -89,13 +87,10 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
             signal: ac.signal,
         })
             .then(credential => { if (credential?.code) fillAllRef.current(credential.code); })
-            .catch(() => { /* dismissed or unsupported — paste button is the fallback */ });
+            .catch(() => { /* dismissed or unsupported */ });
 
         return () => ac.abort();
     }, []);
-
-    // Clean up the paste feedback timer on unmount
-    useEffect(() => () => { if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current); }, []);
 
     const handlePaste = (e: ClipboardEvent<HTMLInputElement>) => {
         e.preventDefault();
@@ -103,54 +98,27 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
         if (raw) fillAll(raw);
     };
 
-    const handlePasteButton = async () => {
-        try {
-            const text = await navigator.clipboard.readText();
-            const code = text.replace(/\D/g, '').slice(0, OTP_LENGTH);
-            if (code.length > 0) {
-                fillAll(code);
-                setPasted(true);
-                if (pasteTimerRef.current) clearTimeout(pasteTimerRef.current);
-                pasteTimerRef.current = setTimeout(() => setPasted(false), 2000);
-            }
-        } catch {
-            // clipboard not available or permission denied — ignore silently
-        }
-    };
-
     return (
-        <div>
-            <div className="flex gap-2 justify-center" role="group" aria-label={t('otpGroupLabel')} dir="ltr">
-                {Array.from({ length: OTP_LENGTH }).map((_, i) => (
-                    <input
-                        key={i}
-                        ref={el => { inputsRef.current[i] = el; }}
-                        type="text"
-                        inputMode="numeric"
-                        maxLength={i === 0 ? OTP_LENGTH : 1}
-                        value={digits[i]}
-                        onChange={e => handleChange(i, e)}
-                        onKeyDown={e => handleKeyDown(i, e)}
-                        onPaste={handlePaste}
-                        onFocus={e => e.target.select()}
-                        disabled={disabled}
-                        autoFocus={autoFocus && i === 0}
-                        className="w-11 h-14 text-center text-xl font-bold border-2 border-surface-300 dark:border-surface-600 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all bg-card text-foreground disabled:opacity-50"
-                        aria-label={t('otpDigitLabel', { n: i + 1, total: OTP_LENGTH })}
-                        autoComplete={i === 0 ? 'one-time-code' : 'off'}
-                    />
-                ))}
-            </div>
-            {isNativePlatform() && (
-                <button
-                    type="button"
-                    onClick={handlePasteButton}
+        <div className="flex gap-2 justify-center" role="group" aria-label={t('otpGroupLabel')} dir="ltr">
+            {Array.from({ length: OTP_LENGTH }).map((_, i) => (
+                <input
+                    key={i}
+                    ref={el => { inputsRef.current[i] = el; }}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={i === 0 ? OTP_LENGTH : 1}
+                    value={digits[i]}
+                    onChange={e => handleChange(i, e)}
+                    onKeyDown={e => handleKeyDown(i, e)}
+                    onPaste={handlePaste}
+                    onFocus={e => e.target.select()}
                     disabled={disabled}
-                    className="w-full mt-3 py-2.5 rounded-xl border border-dashed border-surface-300 dark:border-surface-600 text-sm font-medium text-muted-foreground hover:text-foreground hover:border-brand-400 transition-all disabled:opacity-50"
-                >
-                    {pasted ? t('codePasted') : t('pasteCode')}
-                </button>
-            )}
+                    autoFocus={autoFocus && i === 0}
+                    className="w-11 h-14 text-center text-xl font-bold border-2 border-surface-300 dark:border-surface-600 rounded-xl focus:outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 transition-all bg-card text-foreground disabled:opacity-50"
+                    aria-label={t('otpDigitLabel', { n: i + 1, total: OTP_LENGTH })}
+                    autoComplete={i === 0 ? 'one-time-code' : 'off'}
+                />
+            ))}
         </div>
     );
 }

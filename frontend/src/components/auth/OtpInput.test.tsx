@@ -33,13 +33,6 @@ describe('OtpInput — keyboard navigation', () => {
         expect(inputs()).toHaveLength(OTP_LENGTH);
     });
 
-    it('moves focus forward when a digit is typed', () => {
-        const { inputs } = renderOtp();
-        fireEvent.change(inputs()[0], { target: { value: '1' } });
-        // focus progression is handled by the component after onChange
-        // We verify onChange was called with the digit
-    });
-
     it('calls onChange with updated value when digit entered', () => {
         const { onChange, inputs } = renderOtp({ value: '' });
         fireEvent.change(inputs()[0], { target: { value: '5' } });
@@ -55,9 +48,6 @@ describe('OtpInput — keyboard navigation', () => {
     it('clears current digit on Backspace when digit is present', () => {
         const { onChange, inputs } = renderOtp({ value: '123456' });
         fireEvent.keyDown(inputs()[3], { key: 'Backspace' });
-        expect(onChange).toHaveBeenCalledWith('123 56'.replace(' ', ''));
-        // digit at index 3 should be cleared → '123' + '' + '56' = '12356' → but value keeps length
-        // exact: digits = ['1','2','3','4','5','6'], clearing [3] → '123' + '' + '56'
         expect(onChange).toHaveBeenCalledWith('12356');
     });
 
@@ -113,96 +103,6 @@ describe('OtpInput — paste', () => {
     });
 });
 
-// ── Paste button (native only) ────────────────────────────────────────────────
-
-describe('OtpInput — paste button (native)', () => {
-    beforeEach(() => {
-        mockIsNativePlatform.mockReturnValue(true);
-    });
-    afterEach(() => {
-        mockIsNativePlatform.mockReturnValue(false);
-        vi.restoreAllMocks();
-    });
-
-    it('renders paste button on native', () => {
-        renderOtp();
-        expect(screen.getByRole('button')).toBeInTheDocument();
-    });
-
-    it('does not render paste button on web', () => {
-        mockIsNativePlatform.mockReturnValue(false);
-        renderOtp();
-        expect(screen.queryByRole('button')).toBeNull();
-    });
-
-    it('fills OTP from clipboard when paste button clicked', async () => {
-        const readText = vi.fn().mockResolvedValue('654321');
-        Object.assign(navigator, { clipboard: { readText } });
-
-        const { onChange, onComplete } = renderOtp();
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button'));
-        });
-
-        expect(onChange).toHaveBeenCalledWith('654321');
-        expect(onComplete).toHaveBeenCalledWith('654321');
-    });
-
-    it('strips non-digits from clipboard text', async () => {
-        const readText = vi.fn().mockResolvedValue('Your code: 9 8 7 6 5 4');
-        Object.assign(navigator, { clipboard: { readText } });
-
-        const { onChange } = renderOtp();
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button'));
-        });
-
-        expect(onChange).toHaveBeenCalledWith('987654');
-    });
-
-    it('does nothing when clipboard has no digits', async () => {
-        const readText = vi.fn().mockResolvedValue('no digits here');
-        Object.assign(navigator, { clipboard: { readText } });
-
-        const { onChange } = renderOtp();
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button'));
-        });
-
-        expect(onChange).not.toHaveBeenCalled();
-    });
-
-    it('does nothing when clipboard API throws', async () => {
-        const readText = vi.fn().mockRejectedValue(new Error('Permission denied'));
-        Object.assign(navigator, { clipboard: { readText } });
-
-        const { onChange } = renderOtp();
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button'));
-        });
-
-        expect(onChange).not.toHaveBeenCalled();
-    });
-
-    it('shows success label after pasting then reverts', async () => {
-        vi.useFakeTimers();
-        const readText = vi.fn().mockResolvedValue('123456');
-        Object.assign(navigator, { clipboard: { readText } });
-
-        renderOtp();
-        await act(async () => {
-            fireEvent.click(screen.getByRole('button'));
-        });
-
-        expect(screen.getByRole('button')).toHaveTextContent('codePasted');
-
-        act(() => { vi.advanceTimersByTime(2001); });
-        expect(screen.getByRole('button')).toHaveTextContent('pasteCode');
-
-        vi.useRealTimers();
-    });
-});
-
 // ── Web OTP API (native Android) ──────────────────────────────────────────────
 
 describe('OtpInput — Web OTP API', () => {
@@ -251,10 +151,8 @@ describe('OtpInput — Web OTP API', () => {
 
     it('does not subscribe on web (no OTPCredential support)', async () => {
         mockIsNativePlatform.mockReturnValue(false);
-        // OTPCredential absent → should not call credentials.get at all
         const credentialGet = vi.fn();
         Object.assign(navigator, { credentials: { get: credentialGet } });
-        // Ensure OTPCredential is not on window
         const desc = Object.getOwnPropertyDescriptor(window, 'OTPCredential');
         if (desc) delete (window as any).OTPCredential;
 

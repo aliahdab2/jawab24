@@ -35,6 +35,9 @@ import { useOtpRequest } from '@/hooks/useOtpRequest';
 
 const PHONE_AUTH_ENABLED = process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === 'true';
 
+type AuthTab = 'facebook' | 'phone';
+type OtpStep = 'phone' | 'code';
+
 export default function LoginPage() {
   const router = useRouter();
   const t = useTranslations('auth');
@@ -54,8 +57,6 @@ export default function LoginPage() {
   const [urlParams, setUrlParams] = useState<URLSearchParams | null>(null);
 
   // ── Auth tab + Phone OTP state ────────────────────────────────────────────
-  type AuthTab = 'facebook' | 'phone';
-  type OtpStep = 'phone' | 'code';
   const [authTab, setAuthTab] = useState<AuthTab>('facebook');
   const [otpStep, setOtpStep] = useState<OtpStep>('phone');
   const [otpCode, setOtpCode] = useState('');
@@ -180,8 +181,8 @@ export default function LoginPage() {
       // when it's present (pending App Review), which breaks the OAuth flow. Re-add after approval.
       const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_manage_metadata,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
-      const urlParams = new URLSearchParams(window.location.search);
-      const returnUrl = urlParams.get('redirect') || router.query.redirect as string || '/dashboard';
+      const webParams = new URLSearchParams(window.location.search);
+      const returnUrl = webParams.get('redirect') || router.query.redirect as string || '/dashboard';
       const state = encodeURIComponent(`${returnUrl}|web|${locale}`);
 
       const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -552,7 +553,6 @@ export default function LoginPage() {
                           /* ── Phone tab — Step 1: enter number ── */
                           <div className="space-y-3">
                             <PhoneInput
-                              value={phoneE164}
                               onChange={(e164, valid) => {
                                 setPhoneE164(e164);
                                 setPhoneValid(valid);

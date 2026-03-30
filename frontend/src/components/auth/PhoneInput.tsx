@@ -43,7 +43,6 @@ const getDefaultCountry = (): CountryCode => {
 };
 
 interface PhoneInputProps {
-    value: string; // E.164 format emitted to parent
     onChange: (e164: string, isValid: boolean) => void;
     disabled?: boolean;
     autoFocus?: boolean;

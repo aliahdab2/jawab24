@@ -106,7 +106,7 @@ export class OtpService {
     async sendOtp(phone: string, code: string): Promise<void> {
         // Trailing line enables Web OTP API autofill on Android (Chrome WebView 91+).
         // Format required: @<domain> #<code> — must be the last line of the SMS.
-        const message = `جواب24: رمز التحقق ${code}. صالح ${OTP_EXPIRY_MINUTES} دقائق\n@jawab24.com #${code}`;
+        const message = `جواب24: رمز التحقق ${code}. صالح ${OTP_EXPIRY_MINUTES} دقائق\n@app.jawab24.com #${code}`;
         await smsService.send(phone, message);
     }
 
