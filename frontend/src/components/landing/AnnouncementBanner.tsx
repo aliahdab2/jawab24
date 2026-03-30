@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Rocket, CheckCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { api } from '@/lib/api';
+import { publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 
 interface AnnouncementBannerProps {
@@ -15,6 +15,8 @@ interface AnnouncementBannerProps {
   buttonLabel: string;
   /** Success message after signup */
   successMessage: string;
+  /** Error message shown on failure */
+  errorMessage?: string;
   /** Banner background color class (default: bg-accent-500) */
   bgColor?: string;
   /** Icon component (default: Rocket) */
@@ -28,21 +30,25 @@ export function AnnouncementBanner({
   placeholder,
   buttonLabel,
   successMessage,
+  errorMessage = 'Something went wrong. Please try again.',
   bgColor = 'bg-accent-500',
   icon: Icon = Rocket,
 }: AnnouncementBannerProps) {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (submitting || submitted) return;
     setSubmitting(true);
+    setError(false);
     try {
-      await api.post('/waitlist', { email, feature });
+      await publicApi.post('/waitlist', { email, feature });
       setSubmitted(true);
     } catch (err) {
+      setError(true);
       captureError(err, 'Waitlist signup failed', { tags: { feature } });
     } finally {
       setSubmitting(false);
@@ -84,6 +90,9 @@ export function AnnouncementBanner({
             >
               {buttonLabel}
             </button>
+            {error && (
+              <span className="text-xs text-white/80">{errorMessage}</span>
+            )}
           </form>
         )}
       </div>
