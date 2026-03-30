@@ -84,13 +84,16 @@ import { gapDetectorService } from '../../src/services/kb/gap-detector';
 describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
     let generator: ReplyGenerator;
 
+    // KB must be >= 5000 chars so the small-KB optimization doesn't skip RAG.
+    // (KBs under the threshold bypass RAG and use full static text instead.)
+    const LARGE_KB = 'Product and service information. '.repeat(160); // ~5280 chars
     const baseContext = {
         userId: 'user-1',
         text: 'What is your return policy?',
         pageName: 'Test Shop',
         pageId: 'page-1',
         kbActiveVersion: 3,
-        knowledgeBase: 'Static KB fallback text',
+        knowledgeBase: LARGE_KB,
     };
 
     beforeEach(() => {

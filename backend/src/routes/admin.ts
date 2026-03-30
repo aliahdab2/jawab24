@@ -940,20 +940,26 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 const ragMode = config.ragMode || 'off';
 
                 const activeVersion = page.kbActiveVersion;
-                request.log.debug({ ragMode, hasApiKey: !!config.openai?.apiKey, activeVersion }, 'RAG check');
-                if (ragMode !== 'off' && config.openai?.apiKey && activeVersion !== null) {
+                // Small KB optimization: skip RAG for KBs under threshold — send full text to AI instead.
+                // This prevents semantic gaps where different terminology causes RAG to miss relevant chunks.
+                const KB_RAG_THRESHOLD_CHARS = 5000;
+                const kbTooSmallForRag = (page.knowledgeBase?.length ?? 0) < KB_RAG_THRESHOLD_CHARS && !!page.knowledgeBase;
+                request.log.debug({ ragMode, hasApiKey: !!config.openai?.apiKey, activeVersion, kbTooSmallForRag }, 'RAG check');
+                if (ragMode !== 'off' && config.openai?.apiKey && activeVersion !== null && !kbTooSmallForRag) {
                     ragAttempted = true;
                     try {
                         const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
                         const retrievalService = new RetrievalService(embeddingProvider);
                         retrievalService.setLogger(request.log);
 
-                        // Enrich vague follow-up queries with conversation context for better RAG retrieval
+                        // Enrich vague follow-up queries with prior user question for better RAG retrieval.
+                        // Using last USER message (not assistant reply) to avoid hallucination poisoning —
+                        // if the AI invented a name, using it as RAG context would reinforce the hallucination.
                         let ragQuery = question;
                         if (conversationHistory && conversationHistory.length > 0) {
-                            const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant');
-                            if (lastAssistant && question.trim().split(/\s+/).length <= 6) {
-                                ragQuery = `${lastAssistant.content.slice(0, 100)} ${question}`;
+                            const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
+                            if (lastUserMessage && question.trim().split(/\s+/).length <= 6) {
+                                ragQuery = `${lastUserMessage.content.slice(0, 100)} ${question}`;
                             }
                         }
 

@@ -135,7 +135,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — all 149 from docs/playground-edge-cases.md
+// Test cases — all 163 from docs/playground-edge-cases.md
 // ---------------------------------------------------------------------------
 
 const TEST_CASES: TestCase[] = [
@@ -1121,6 +1121,55 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['accredit', 'certif', 'اعتماد', 'معتمد', 'شهاد', 'certified', 'accredited'],
         },
         notes: 'First message in English — AI should mention accreditation (exists in KB)',
+    },
+
+    // ===== Category 24: Name Hallucination Guard =====
+    // Regression tests for the "باقة الورد" incident (2026-03-30):
+    // AI was inventing specific package/product names when KB mentioned the category but not the names.
+    {
+        id: 160, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'شوفي عندكم باقات',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            // Must NOT invent package names — training KB has courses, not subscription packages
+            replyNotContains: ['باقة الورد', 'باقة الذهب', 'باقة الفضة', 'باقة البرونز', 'الباقة الأساسية', 'الباقة المتقدمة'],
+        },
+        notes: 'KB has courses, not subscription packages — AI must not invent package names',
+    },
+    {
+        id: 161, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'ما هي الخطط المتاحة عندكم؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            // Electronics KB has products, not subscription plans — must not invent plan names
+            replyNotContains: ['خطة الأساسية', 'خطة المميزة', 'خطة البريميوم', 'خطة الذهبية', 'الخطة الفضية'],
+        },
+        notes: 'Electronics KB has no subscription plans — AI must not invent plan names',
+    },
+    {
+        id: 162, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'What plans or packages do you offer?',
+        page: 'school',
+        expected: {
+            replyMethod: ['ai'],
+            // School KB has enrollment fees, not packages — must not invent package names
+            replyNotContains: ['Rose package', 'Gold package', 'Silver package', 'Basic plan', 'Premium plan', 'Starter package'],
+        },
+        notes: 'School KB has no packages — AI must not invent package names in English',
+    },
+    {
+        id: 163, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'عندكم كورسات؟ ايش اسمائها؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            confidence: ['high', 'medium'],
+            // Training KB has explicit course names — AI SHOULD list them (not hallucinate)
+            replyContainsAny: ['PMP', 'IELTS', 'إنجليزي', 'مايكروسوفت', 'أوفيس'],
+        },
+        notes: 'When KB explicitly lists names, AI SHOULD name them — this tests the positive case',
     },
 ];
 

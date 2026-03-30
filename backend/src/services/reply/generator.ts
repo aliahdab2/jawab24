@@ -279,21 +279,40 @@ export class ReplyGenerator {
             return { effectiveKB: staticKB, ragAttempted: false };
         }
 
+        // Small KB optimization: if the entire KB fits comfortably in the context window,
+        // send it as-is instead of using RAG chunking. This avoids semantic gaps where the
+        // customer uses different terminology than the KB (e.g., "باقات" vs "خدمات").
+        // RAG only adds value for large KBs (e.g., large product catalogs) where we must
+        // selectively retrieve relevant chunks to stay within token limits.
+        const KB_RAG_THRESHOLD_CHARS = 5000;
+        if (staticKB && staticKB.length < KB_RAG_THRESHOLD_CHARS) {
+            this.logger.debug('[Generator] KB is small — skipping RAG, using full static KB', {
+                pageId, kbLength: staticKB.length, threshold: KB_RAG_THRESHOLD_CHARS,
+            });
+            return { effectiveKB: staticKB, ragAttempted: false };
+        }
+
         // Enrich vague follow-up queries with conversation context for better RAG retrieval.
         // When a customer says "شو مميزاتها؟" after asking about AirPods, the RAG query
         // becomes "AirPods Pro شو مميزاتها؟" so it finds the right product chunk.
+        //
+        // NOTE: We intentionally use the last USER message (not the last assistant reply)
+        // to avoid hallucination poisoning. If the AI invented a product name in its reply,
+        // using that reply as RAG context would retrieve chunks "confirming" the invented name,
+        // creating a self-reinforcing hallucination loop across turns.
+        // User messages are ground truth — they contain what the customer actually asked about.
         let enrichedQuery = query;
         if (conversationHistory && conversationHistory.length > 0) {
-            const lastAssistant = [...conversationHistory].reverse().find(m => m.role === 'assistant');
-            if (lastAssistant) {
+            const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
+            if (lastUserMessage) {
                 // Only enrich if current query is short/vague (likely a follow-up)
                 const isVague = query.trim().split(/\s+/).length <= 6;
                 if (isVague) {
-                    // Take first 100 chars of last assistant reply as context.
+                    // Take first 100 chars of last user question as context.
                     // Cap total length to 300 to keep embedding cost + quality sane.
-                    const context = lastAssistant.content.slice(0, 100);
+                    const context = lastUserMessage.content.slice(0, 100);
                     enrichedQuery = `${context} ${query}`.slice(0, 300);
-                    this.logger.debug('[Generator] Enriched RAG query with conversation context', {
+                    this.logger.debug('[Generator] Enriched RAG query with prior user question', {
                         original: query, enriched: enrichedQuery.slice(0, 120),
                     });
                 }
