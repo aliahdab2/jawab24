@@ -204,10 +204,11 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 11. Build response
+            // 11. Build response — include requiresPhone if PHONE_AUTH_ENABLED and user has no phone yet
+            const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces);
+            }, workspaces, requiresPhone);
 
             // 12. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -606,7 +607,7 @@ export class AuthController {
         if (!phone || !isValidPhone(phone)) {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format' });
         }
-        if (!code || code.length !== 6) {
+        if (!code || !/^\d{6}$/.test(code)) {
             return reply.status(400).send({ error: 'invalid_request', message: 'phone and code are required' });
         }
 
