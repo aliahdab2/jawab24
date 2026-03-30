@@ -457,9 +457,10 @@ echo "7️⃣  E2E tests..."
 # no HMR/Fast Refresh rewriting files mid-test (eliminates ENOENT race conditions).
 rm -rf frontend/test-results frontend/playwright-report frontend/blob-report
 
-# Safety: if .next is missing (e.g. step 2 was skipped), build it now
-if [ ! -d "frontend/.next" ]; then
-    echo "   ⚠️  No .next build found, building for E2E..."
+# Safety: if .next is missing OR standalone is missing (e.g. last build was mobile/export),
+# rebuild with standalone output now.
+if [ ! -d "frontend/.next" ] || [ ! -d "frontend/.next/standalone" ]; then
+    echo "   ⚠️  No standalone .next build found, building for E2E..."
     if ! (cd frontend && NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build) > /dev/null 2>&1; then
         echo -e "${RED}   ❌ E2E build failed!${NC}"
         (cd frontend && NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build)
