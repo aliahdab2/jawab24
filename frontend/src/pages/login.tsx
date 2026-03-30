@@ -692,19 +692,17 @@ export default function LoginPage() {
 
                     {/* Demo Mode — hidden during OTP entry */}
                     {!isOtpStep && <DemoLoginButton />}
+
+                    {/* Terms — inline so it stays visible when keyboard is open */}
+                    <p className="text-xs text-muted-foreground text-center pt-1">
+                      {t('termsAgreement')}
+                      <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('termsOfService')}</Link>
+                      {t('and')}
+                      <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('privacyPolicy')}</Link>
+                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Terms */}
-            <div className="w-full max-w-lg mx-auto mt-2 py-2 lg:py-8 lg:mt-8 text-center lg:text-start">
-              <p className="text-xs sm:text-sm text-muted-foreground font-medium">
-                {t('termsAgreement')}
-                <Link href="/terms" className="text-brand-600 font-bold hover:underline mx-1">{t('termsOfService')}</Link>
-                {t('and')}
-                <Link href="/privacy" className="text-brand-600 font-bold hover:underline mx-1">{t('privacyPolicy')}</Link>
-              </p>
             </div>
           </div>
 
