@@ -38,7 +38,7 @@ export function DemoLoginButton() {
         variant="secondary"
         size="lg"
         className={clsx(
-          'w-full mt-1 py-5 sm:py-6 rounded-2xl border-2 border-dashed font-bold text-base lg:text-lg transition-all active:scale-95',
+          'w-full mt-1 py-3 sm:py-6 rounded-2xl border-2 border-dashed font-bold text-base lg:text-lg transition-all active:scale-95',
           isLoading
             ? 'animate-pulse border-brand-400 bg-brand-50 dark:bg-brand-900/30'
             : 'border-brand-300 hover:border-brand-500 hover:bg-brand-50 dark:hover:bg-brand-900/30'

@@ -323,7 +323,7 @@ export default function LoginPage() {
           <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col justify-start pb-safe-content">
             {/* Main content wrapper */}
             <div className="w-full max-w-lg mx-auto pt-[4vh] sm:pt-[8vh] lg:pt-[6vh]">
-              <div className="text-center lg:text-start mb-6">
+              <div className="text-center lg:text-start mb-4">
                 <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-3 tracking-tight">
                   {t('welcome')}
                 </h2>
@@ -351,27 +351,27 @@ export default function LoginPage() {
               </div>
 
               {/* Mobile feature highlights — compact row */}
-              <div className="flex gap-3 lg:hidden mb-3">
+              <div className="flex gap-2 lg:hidden mb-2">
                 {features.map((f, i) => (
                   <div
                     key={i}
                     className={clsx(
-                      'flex-1 flex flex-col items-center gap-1.5 p-3 rounded-xl bg-background border border-theme-border',
+                      'flex-1 flex flex-col items-center gap-1 p-2 rounded-xl bg-background border border-theme-border',
                       'animate-slide-up',
                       i === 0 && 'animation-delay-100',
                       i === 1 && 'animation-delay-200',
                       i === 2 && 'animation-delay-300',
                     )}
                   >
-                    <div className={`w-8 h-8 rounded-lg ${f.bg} flex items-center justify-center`}>
-                      <f.icon className={`w-4 h-4 ${f.color}`} />
+                    <div className={`w-7 h-7 rounded-lg ${f.bg} flex items-center justify-center`}>
+                      <f.icon className={`w-3.5 h-3.5 ${f.color}`} />
                     </div>
                     <span className="text-[11px] font-bold text-foreground/70 text-center leading-tight">{f.title}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-3">
                 {/* Shopify-first install banner */}
                 {urlParams?.get('shopify_pending') === 'true' && (
                   <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700">
@@ -478,10 +478,10 @@ export default function LoginPage() {
                 )}
 
                 {/* Social proof card — motivates before the CTA */}
-                <div className="p-4 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20">
-                  <div className="flex gap-3 items-start">
-                    <div className="w-10 h-10 rounded-xl bg-brand-100 dark:bg-brand-400/15 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-5 h-5 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+                <div className="p-3 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20">
+                  <div className="flex gap-3 items-center">
+                    <div className="w-8 h-8 rounded-xl bg-brand-100 dark:bg-brand-400/15 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
                     </div>
                     <div>
                       <h3 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-0.5">{t('didYouKnow')}</h3>
@@ -541,7 +541,7 @@ export default function LoginPage() {
                             onClick={handleFacebookLogin}
                             disabled={isRedirecting}
                             size="lg"
-                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-4 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                           >
                             <div className="flex items-center justify-center gap-3 text-white">
                               <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
@@ -576,7 +576,7 @@ export default function LoginPage() {
                               onClick={handleRequestOtp}
                               disabled={otpRequestLoading}
                               size="lg"
-                              className="w-full py-6 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
+                              className="w-full py-4 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
                             >
                               {otpRequestLoading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -649,7 +649,7 @@ export default function LoginPage() {
                         onClick={handleFacebookLogin}
                         disabled={isRedirecting}
                         size="lg"
-                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-6 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-4 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                       >
                         <div className="flex items-center justify-center gap-3 text-white">
                           <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
