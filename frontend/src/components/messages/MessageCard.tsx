@@ -12,7 +12,6 @@ import {
   CheckCheck,
   Undo2,
   User,
-  MessageCircle,
   PauseCircle,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -55,188 +54,126 @@ export const MessageCard = React.memo(function MessageCard({
 
   const formatTime = (date?: string | Date | null) => {
     if (!date) return '';
-    return formatDistanceToNow(new Date(date), {
-      addSuffix: true,
-      locale: dateLocale,
-    });
+    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: dateLocale });
   };
 
-  // Get the last 2 messages chronologically (regardless of direction)
-  const lastTwoMessages = [...conv.messages]
-    .sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime())
-    .slice(-2);
-
-  // Reply Source Indicator (matches CommentCard)
-  const ReplySourceIndicator = ({ msg }: { msg: Message }) => {
-    if (!msg.replyMethod) return null;
-    const isAI = msg.replyMethod === 'ai';
-
-    return (
-      <div className="flex flex-col items-center gap-0.5 sm:gap-1">
-        <div
-          className={clsx(
-            'w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-sm border-2 border-card',
-            isAI ? 'reply-source-ai' : 'reply-source-template'
-          )}
-        >
-          {isAI ? <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-        </div>
-        <span
-          className={clsx(
-            'text-[8px] sm:text-[9px] font-bold uppercase tracking-wider',
-            isAI ? 'text-violet-600' : 'text-emerald-600'
-          )}
-        >
-          {isAI ? tDashboard('aiReply') : tDashboard('templateReply')}
-        </span>
-      </div>
-    );
-  };
-
-  // Check if the last message in the conversation has an outgoing reply
-  const hasOutgoingInLastTwo = lastTwoMessages.some(
-    (m) => m.direction === 'outgoing'
+  // Most recent customer message and most recent auto-reply
+  const sorted = [...conv.messages].sort(
+    (a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime()
   );
+  const lastIncoming = [...sorted].reverse().find(m => m.direction === 'incoming');
+  const lastOutgoing = [...sorted].reverse().find(m => m.direction === 'outgoing');
 
-  // Render a single message bubble based on direction
-  const renderBubble = (msg: Message) => {
-    if (msg.direction === 'incoming') {
-      return (
-        <div key={msg.id} className="me-6 sm:me-12">
-          <div
-            className={clsx(
-              'px-3 sm:px-4 py-2.5 sm:py-3 bg-muted rounded-2xl rounded-tl-sm text-foreground text-sm leading-relaxed border border-theme-border',
-              'transition-colors'
-            )}
-          >
-            <p className="line-clamp-3">{msg.message}</p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div key={msg.id} className="flex items-end justify-end gap-2 sm:gap-3 ms-6 sm:ms-12">
-        <div className="flex flex-col items-end gap-1 min-w-0">
-          <div className="relative">
-            <div className="px-3 sm:px-4 py-2.5 sm:py-3 reply-bubble rounded-2xl rounded-tr-sm text-sm leading-relaxed border shadow-sm">
-              <p className="line-clamp-2 italic">{msg.message}</p>
-              <div className="mt-1 flex justify-end">
-                <CheckCircle className="w-3 h-3 text-emerald-500" />
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="flex-shrink-0 mb-1">
-          <ReplySourceIndicator msg={msg} />
-        </div>
-      </div>
-    );
-  };
+  // Inline status badge
+  const statusBadge = conv.pauseStatus?.paused ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-violet border text-[9px] font-bold uppercase tracking-wider">
+      <PauseCircle className="w-2.5 h-2.5" />
+      {tMessages('smartReplyPaused')}
+    </span>
+  ) : conv.needsHumanAttention ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-error border text-[9px] font-bold uppercase tracking-wider animate-pulse-soft">
+      <AlertTriangle className="w-2.5 h-2.5" />
+      {t('needsAttention')}
+    </span>
+  ) : isResolved ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-success border text-[9px] font-bold uppercase tracking-wider">
+      <CheckCheck className="w-2.5 h-2.5" />
+      {tMessages('resolved')}
+    </span>
+  ) : isPending ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-warning border text-[9px] font-bold uppercase tracking-wider">
+      <Clock className="w-2.5 h-2.5" />
+      {t('pending')}
+    </span>
+  ) : null;
 
   return (
     <div
       className={clsx(
-        'relative rounded-2xl sm:rounded-3xl bg-card border border-theme-border shadow-sm hover:shadow-lg hover:-translate-y-0.5 active:scale-[0.98] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group',
-        conv.needsHumanAttention && 'ring-1 ring-red-100 dark:ring-red-900/50',
+        'group relative flex items-start gap-3 px-4 py-3.5 bg-card border border-theme-border rounded-2xl cursor-pointer',
+        'hover:shadow-md transition-all duration-200',
+        conv.needsHumanAttention && 'border-s-2 border-s-red-400 dark:border-s-red-600',
         className
       )}
       onClick={onClick}
-      style={{ animationDelay: `${animationDelay}s` } as React.CSSProperties}
+      style={animationDelay > 0 ? ({ animationDelay: `${animationDelay}s` } as React.CSSProperties) : undefined}
     >
-      {/* Status Badge (top-right) */}
-      {conv.pauseStatus?.paused ? (
-        <div className="absolute top-3 end-3 sm:top-4 sm:end-4 z-10 animate-fade-in">
-          <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full status-violet border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
-            <PauseCircle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-            {tMessages('smartReplyPaused')}
-          </div>
-        </div>
-      ) : conv.needsHumanAttention ? (
-        <div className="absolute top-3 end-3 sm:top-4 sm:end-4 z-10 animate-fade-in">
-          <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full status-error border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider animate-pulse-soft">
-            <AlertTriangle className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-            {t('needsAttention')}
-          </div>
-        </div>
-      ) : isResolved ? (
-        <div className="absolute top-3 end-3 sm:top-4 sm:end-4 z-10 animate-fade-in">
-          <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full status-success border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
-            <CheckCheck className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-            {tMessages('resolved')}
-          </div>
-        </div>
-      ) : (
-        isPending && (
-          <div className="absolute top-3 end-3 sm:top-4 sm:end-4 z-10 animate-fade-in">
-            <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full status-warning border text-[9px] sm:text-[10px] font-bold uppercase tracking-wider">
-              <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-              {t('pending')}
-            </div>
-          </div>
-        )
-      )}
+      {/* Avatar */}
+      <div className="flex-shrink-0 mt-0.5 w-10 h-10 rounded-full bg-muted flex items-center justify-center border border-theme-border shadow-sm">
+        <User className="w-5 h-5 text-muted-foreground" />
+      </div>
 
-      <div className="p-3.5 sm:p-5 flex flex-col gap-3 sm:gap-4">
-        {/* Header: Avatar + Name + Time + Message Count */}
-        <div className="flex items-start gap-2.5 sm:gap-3 me-16 sm:me-12">
-          <div className="flex-shrink-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground border-2 border-card shadow-sm">
-              <User className="w-4 h-4 sm:w-5 sm:h-5" />
-            </div>
-          </div>
+      {/* Content */}
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
+        {/* Row 1: Name + status badge + time */}
+        <div className="flex items-center gap-2">
+          <span className="flex-1 min-w-0 text-sm font-bold text-foreground truncate">
+            {conv.senderName || tc('unknownUser')}
+          </span>
+          {statusBadge}
+          <span className="flex-shrink-0 text-[11px] text-muted-foreground tabular-nums">
+            {formatTime(conv.lastMessage.createdAt)}
+          </span>
+        </div>
 
-          <div className="flex flex-col items-start min-w-0">
-            <div className="flex flex-col px-1">
-              <span className="text-sm font-bold text-foreground truncate">
-                {conv.senderName || tc('unknownUser')}
+        {/* Flag tag (if any) */}
+        <FlagTag flagReason={conv.lastMessage.flagReason} />
+
+        {/* Row 2: Last customer message */}
+        {lastIncoming && (
+          <p className="text-[13px] text-foreground/75 truncate leading-snug">
+            {lastIncoming.message}
+          </p>
+        )}
+
+        {/* Row 3: Reply preview + method badge */}
+        {lastOutgoing && (
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="flex-1 min-w-0 text-[12px] text-muted-foreground italic truncate leading-snug">
+              {lastOutgoing.message}
+            </p>
+            {lastOutgoing.replyMethod && (
+              <span className={clsx(
+                'flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider',
+                lastOutgoing.replyMethod === 'ai' ? 'reply-source-ai' : 'reply-source-template'
+              )}>
+                {lastOutgoing.replyMethod === 'ai'
+                  ? <Sparkles className="w-2.5 h-2.5" />
+                  : <Zap className="w-2.5 h-2.5" />
+                }
+                {lastOutgoing.replyMethod === 'ai' ? tDashboard('aiReply') : tDashboard('templateReply')}
               </span>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] text-muted-foreground">
-                  {formatTime(conv.lastMessage.createdAt)}
-                </span>
-              </div>
-              <FlagTag flagReason={conv.lastMessage.flagReason} />
-            </div>
+            )}
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Message Bubbles - last 2 in chronological order */}
-        {lastTwoMessages.map((msg) => renderBubble(msg))}
-
-        {/* Action Buttons */}
-        <div className="flex items-center justify-between mt-1">
-          {onResolve ? (
+      {/* Action button — resolve or unresolve */}
+      {(onResolve || onUnresolve) && (
+        <div
+          className="flex-shrink-0 self-center ms-2"
+          onClick={e => e.stopPropagation()}
+        >
+          {onResolve && (
             <button
-              onClick={(e) => { e.stopPropagation(); onResolve(); }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-muted text-muted-foreground border-theme-border hover:bg-muted/80 hover:text-foreground"
+              onClick={onResolve}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-semibold border border-theme-border bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
             >
               <CheckCircle className="w-3.5 h-3.5" />
               {t('resolve')}
             </button>
-          ) : <div />}
-
-          {!hasOutgoingInLastTwo && (
-            <div className="flex items-center gap-1.5 text-xs font-bold text-brand-600 opacity-60 group-hover:opacity-100 transition-opacity animate-fade-in">
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span>{t('reply')}</span>
-            </div>
           )}
-        </div>
-
-        {/* Unresolve action (shown for handled conversations) */}
-        {onUnresolve && (
-          <div className="flex items-center justify-end mt-2 animate-fade-in">
+          {onUnresolve && (
             <button
-              onClick={(e) => { e.stopPropagation(); onUnresolve(); }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all border bg-muted text-muted-foreground border-theme-border hover:bg-muted/80 hover:text-foreground"
+              onClick={onUnresolve}
+              className="flex items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-semibold border border-theme-border bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
             >
               <Undo2 className="w-3.5 h-3.5" />
               {tMessages('unresolve')}
             </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }, (prev, next) => {

@@ -243,7 +243,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const { data: recentMessages } = useQuery({
     queryKey: ['dashboard-recent-messages'],
     queryFn: async () => {
-      const res = await messagesApi.getAll({ limit: 20, direction: 'incoming', actionRequired: true });
+      const res = await messagesApi.getAll({ limit: 20, direction: 'incoming' });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
