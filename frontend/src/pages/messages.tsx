@@ -443,8 +443,8 @@ const MessagesPage: NextPageWithLayout = () => {
       />
 
       {/* Filter Chips + Search */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
-        <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap items-center gap-2">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
+        <div className="w-full sm:flex-1 sm:min-w-0 flex flex-wrap items-center gap-1.5 sm:gap-2">
           {([
             { key: 'needs_action' as FilterType, label: t('needsAction'), count: stats.needsAction },
             { key: 'all' as FilterType, label: t('allMessages'), count: stats.total },
@@ -456,26 +456,26 @@ const MessagesPage: NextPageWithLayout = () => {
               onClick={() => updateFilter(chip.key)}
               aria-pressed={filter === chip.key}
               className={clsx(
-                "flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold whitespace-nowrap transition-all duration-200",
+                "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200",
                 filter === chip.key
                   ? "bg-brand-500 text-white shadow-sm shadow-brand-500/25"
-                  : "bg-muted text-muted-foreground hover:bg-muted"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
               )}
             >
               {chip.label}
               <span className={clsx(
                 "text-xs tabular-nums",
-                filter === chip.key ? "text-white/80" : "text-muted-foreground"
+                filter === chip.key ? "text-white/70" : "text-subtle"
               )}>
-                ({chip.count.toLocaleString()})
+                {chip.count.toLocaleString()}
               </span>
             </button>
           ))}
         </div>
 
-        <div role="search" aria-label={tc('search')} className="relative group w-full sm:w-[300px] sm:flex-none">
+        <div role="search" aria-label={tc('search')} className="relative group w-full sm:w-[280px] sm:flex-none">
           <Search
-            className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4.5 h-4.5 text-muted-foreground group-focus-within:text-brand-500 transition-colors z-10"
+            className="absolute top-1/2 -translate-y-1/2 start-3.5 w-4 h-4 text-muted-foreground group-focus-within:text-brand-500 transition-colors z-10"
           />
           <Input
             type="search"
@@ -485,7 +485,7 @@ const MessagesPage: NextPageWithLayout = () => {
             placeholder={tc('search') + '...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="py-2.5 ps-10 pe-10 rounded-full bg-background border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all text-sm"
+            className="py-2 ps-10 pe-10 rounded-full bg-muted/50 border-none focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all text-sm"
           />
           {searchQuery.trim().length > 0 && (
             <button
@@ -500,22 +500,22 @@ const MessagesPage: NextPageWithLayout = () => {
         </div>
       </div>
 
-      {/* Conversations count hint - clarifies that tab counts refer to messages, not conversations */}
+      {/* Conversations count hint */}
       {conversations.length > 0 && (() => {
         const incomingCount = allMessages.filter(m => m.direction === 'incoming').length;
         return conversations.length !== incomingCount ? (
-          <p className="text-xs text-muted-foreground mb-3 -mt-2">
+          <p className="text-xs text-subtle mb-3 -mt-1">
             {t('conversationCount', { count: conversations.length, msgCount: incomingCount })}
           </p>
         ) : null;
       })()}
 
-      {/* Conversations Grid */}
+      {/* Conversations List */}
       {conversations.length > 0 ? (
-        <>
+        <div className="max-w-4xl">
           <div
             className={clsx(
-              "flex flex-col gap-2 pb-4 sm:pb-6 transition-all duration-300 ease-out",
+              "flex flex-col gap-1 sm:gap-1.5 pb-4 sm:pb-6 transition-all duration-300 ease-out",
               isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
             )}
           >
@@ -543,8 +543,8 @@ const MessagesPage: NextPageWithLayout = () => {
           <div ref={loadMoreRef} className="pb-12">
             {isFetchingNextPage ? (
               <div className="flex items-center justify-center py-8">
-                <Loader2 className="w-6 h-6 text-brand-500 animate-spin" />
-                <span className="ms-3 text-sm text-muted-foreground">{tc('loading')}...</span>
+                <Loader2 className="w-5 h-5 text-brand-500 animate-spin" />
+                <span className="ms-2.5 text-sm text-muted-foreground">{tc('loading')}...</span>
               </div>
             ) : hasNextPage ? (
               <div className="flex justify-center py-8">
@@ -558,14 +558,14 @@ const MessagesPage: NextPageWithLayout = () => {
                 </Button>
               </div>
             ) : conversations.length > 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">
+              <div className="text-center py-8 text-xs text-subtle">
                 <Check className="w-3.5 h-3.5 inline-block" /> {tc('allLoaded')}
               </div>
             ) : null}
           </div>
-        </>
+        </div>
       ) : (
-        <div className="rounded-2xl bg-card shadow-md shadow-surface-200/20">
+        <div className="max-w-4xl rounded-2xl bg-card shadow-md shadow-surface-200/20">
           <EmptyState
             icon={emptyStateContent.icon}
             variant={emptyStateContent.variant}

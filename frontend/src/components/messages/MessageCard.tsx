@@ -64,25 +64,30 @@ export const MessageCard = React.memo(function MessageCard({
   const lastIncoming = [...sorted].reverse().find(m => m.direction === 'incoming');
   const lastOutgoing = [...sorted].reverse().find(m => m.direction === 'outgoing');
 
+  // Avatar initials from sender name
+  const initials = conv.senderName
+    ? conv.senderName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+    : null;
+
   // Inline status badge
   const statusBadge = conv.pauseStatus?.paused ? (
-    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-violet border text-[9px] font-bold uppercase tracking-wider">
-      <PauseCircle className="w-2.5 h-2.5" />
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-violet border text-[10px] font-bold uppercase tracking-wide">
+      <PauseCircle className="w-3 h-3" />
       {tMessages('smartReplyPaused')}
     </span>
   ) : conv.needsHumanAttention ? (
-    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-error border text-[9px] font-bold uppercase tracking-wider animate-pulse-soft">
-      <AlertTriangle className="w-2.5 h-2.5" />
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-error border text-[10px] font-bold uppercase tracking-wide animate-pulse-soft">
+      <AlertTriangle className="w-3 h-3" />
       {t('needsAttention')}
     </span>
   ) : isResolved ? (
-    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-success border text-[9px] font-bold uppercase tracking-wider">
-      <CheckCheck className="w-2.5 h-2.5" />
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-success border text-[10px] font-bold uppercase tracking-wide">
+      <CheckCheck className="w-3 h-3" />
       {tMessages('resolved')}
     </span>
   ) : isPending ? (
-    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full status-warning border text-[9px] font-bold uppercase tracking-wider">
-      <Clock className="w-2.5 h-2.5" />
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-warning border text-[10px] font-bold uppercase tracking-wide">
+      <Clock className="w-3 h-3" />
       {t('pending')}
     </span>
   ) : null;
@@ -90,28 +95,37 @@ export const MessageCard = React.memo(function MessageCard({
   return (
     <div
       className={clsx(
-        'group relative flex items-start gap-3 px-4 py-3.5 bg-card border border-theme-border rounded-2xl cursor-pointer',
-        'hover:shadow-md transition-all duration-200',
-        conv.needsHumanAttention && 'border-s-2 border-s-red-400 dark:border-s-red-600',
+        'group relative flex items-start gap-3 sm:gap-4 px-3.5 sm:px-5 py-3 sm:py-4 bg-card rounded-2xl cursor-pointer',
+        'border border-transparent hover:border-theme-border',
+        'hover:shadow-md hover:shadow-surface-200/30 dark:hover:shadow-surface-900/20',
+        'transition-all duration-200',
+        conv.needsHumanAttention && 'border-s-[3px] border-s-red-400 dark:border-s-red-500 bg-red-50/30 dark:bg-red-950/10',
+        !conv.needsHumanAttention && 'hover:bg-muted/40 dark:hover:bg-muted/20',
         className
       )}
       onClick={onClick}
       style={animationDelay > 0 ? ({ animationDelay: `${animationDelay}s` } as React.CSSProperties) : undefined}
     >
       {/* Avatar */}
-      <div className="flex-shrink-0 mt-0.5 w-10 h-10 rounded-full bg-muted flex items-center justify-center border border-theme-border shadow-sm">
-        <User className="w-5 h-5 text-muted-foreground" />
+      <div className={clsx(
+        'flex-shrink-0 mt-0.5 w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center',
+        'text-sm font-bold',
+        conv.needsHumanAttention
+          ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
+          : 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400'
+      )}>
+        {initials || <User className="w-5 h-5" />}
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         {/* Row 1: Name + status badge + time */}
         <div className="flex items-center gap-2">
-          <span className="flex-1 min-w-0 text-sm font-bold text-foreground truncate">
+          <span className="flex-1 min-w-0 text-sm font-semibold text-foreground truncate">
             {conv.senderName || tc('unknownUser')}
           </span>
           {statusBadge}
-          <span className="flex-shrink-0 text-[11px] text-muted-foreground tabular-nums">
+          <span className="flex-shrink-0 text-[11px] text-subtle tabular-nums">
             {formatTime(conv.lastMessage.createdAt)}
           </span>
         </div>
@@ -121,20 +135,21 @@ export const MessageCard = React.memo(function MessageCard({
 
         {/* Row 2: Last customer message */}
         {lastIncoming && (
-          <p className="text-[13px] text-foreground/75 truncate leading-snug">
+          <p className="text-[13px] text-foreground/75 dark:text-foreground/85 truncate leading-relaxed mt-0.5">
             {lastIncoming.message}
           </p>
         )}
 
         {/* Row 3: Reply preview + method badge */}
         {lastOutgoing && (
-          <div className="flex items-center gap-2 mt-0.5">
-            <p className="flex-1 min-w-0 text-[12px] text-muted-foreground italic truncate leading-snug">
+          <div className="flex items-center gap-2 mt-1">
+            <span className="flex-shrink-0 w-3.5 h-px bg-surface-200 dark:bg-surface-700 rounded-full" aria-hidden="true" />
+            <p className="flex-1 min-w-0 text-xs text-muted-foreground truncate leading-snug">
               {lastOutgoing.message}
             </p>
             {lastOutgoing.replyMethod && (
               <span className={clsx(
-                'flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider',
+                'flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold',
                 lastOutgoing.replyMethod === 'ai' ? 'reply-source-ai' : 'reply-source-template'
               )}>
                 {lastOutgoing.replyMethod === 'ai'
@@ -148,28 +163,32 @@ export const MessageCard = React.memo(function MessageCard({
         )}
       </div>
 
-      {/* Action button — resolve or unresolve */}
+      {/* Action button — resolve or unresolve (visible on hover/focus on desktop, always on mobile) */}
       {(onResolve || onUnresolve) && (
         <div
-          className="flex-shrink-0 self-center ms-2"
+          className={clsx(
+            'flex-shrink-0 self-center ms-1',
+            'sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100',
+            'transition-opacity duration-150'
+          )}
           onClick={e => e.stopPropagation()}
         >
           {onResolve && (
             <button
               onClick={onResolve}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-semibold border border-theme-border bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20 dark:hover:text-brand-400 transition-colors"
             >
               <CheckCircle className="w-3.5 h-3.5" />
-              {t('resolve')}
+              <span className="hidden sm:inline">{t('resolve')}</span>
             </button>
           )}
           {onUnresolve && (
             <button
               onClick={onUnresolve}
-              className="flex items-center gap-1 px-3 py-2 rounded-xl text-[11px] font-semibold border border-theme-border bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             >
               <Undo2 className="w-3.5 h-3.5" />
-              {tMessages('unresolve')}
+              <span className="hidden sm:inline">{tMessages('unresolve')}</span>
             </button>
           )}
         </div>
