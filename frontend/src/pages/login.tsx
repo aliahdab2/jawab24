@@ -340,9 +340,9 @@ export default function LoginPage() {
               - Desktop: Content near top, terms below content */}
           <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col justify-start pb-safe-content">
             {/* Main content wrapper */}
-            <div className="w-full max-w-lg mx-auto pt-[4vh] sm:pt-[8vh] lg:pt-[6vh]">
-              <div className="text-center lg:text-start mb-4">
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-3 tracking-tight">
+            <div className="w-full max-w-lg mx-auto pt-[2vh] sm:pt-[8vh] lg:pt-[6vh]">
+              <div className="text-center lg:text-start mb-2 sm:mb-4">
+                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-1 sm:mb-3 tracking-tight">
                   {t('welcome')}
                 </h2>
                 <p className="text-base sm:text-lg lg:text-xl text-muted-foreground font-medium">
@@ -495,8 +495,8 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {/* Social proof card — motivates before the CTA (hidden during OTP entry) */}
-                <div className={clsx('p-3 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20', isOtpStep && 'hidden')}>
+                {/* Social proof card — motivates before the CTA (hidden during OTP entry and on short screens) */}
+                <div className={clsx('hidden sm:flex p-3 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20', isOtpStep && 'sm:hidden')}>
                   <div className="flex gap-3 items-center">
                     <div className="w-8 h-8 rounded-xl bg-brand-100 dark:bg-brand-400/15 flex items-center justify-center flex-shrink-0">
                       <Bot className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
@@ -511,8 +511,8 @@ export default function LoginPage() {
                 </div>
 
                 {/* CTA zone */}
-                <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 dark:from-transparent to-transparent p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
-                  <div className="space-y-4">
+                <div className="rounded-2xl bg-gradient-to-b from-blue-50/50 dark:from-transparent to-transparent p-3 sm:p-4 -mx-1 lg:bg-none lg:p-0 lg:mx-0">
+                  <div className="space-y-3 sm:space-y-4">
 
                     {PHONE_AUTH_ENABLED ? (
                       <>
@@ -559,7 +559,7 @@ export default function LoginPage() {
                             onClick={handleFacebookLogin}
                             disabled={isRedirecting}
                             size="lg"
-                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-4 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-3 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                           >
                             <div className="flex items-center justify-center gap-3 text-white">
                               <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
@@ -593,7 +593,7 @@ export default function LoginPage() {
                               onClick={handleRequestOtp}
                               disabled={otpRequestLoading}
                               size="lg"
-                              className="w-full py-4 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
+                              className="w-full py-3 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
                             >
                               {otpRequestLoading ? (
                                 <span className="flex items-center justify-center gap-2">

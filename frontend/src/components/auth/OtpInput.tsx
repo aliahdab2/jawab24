@@ -105,7 +105,11 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
                 </div>
             ))}
 
-            {/* Real input — transparent, overlaid on top, captures all autofill */}
+            {/* Real input — overlaid on top with transparent text/caret.
+                NOT opacity-0: Samsung Keyboard and other autofill systems skip
+                invisible inputs. Using text-transparent + caret-transparent keeps
+                the input "visible" to the OS while hiding text visually (the
+                decorative boxes above render the digits instead). */}
             <input
                 ref={inputRef}
                 type="text"
@@ -118,7 +122,7 @@ export function OtpInput({ value, onChange, onComplete, disabled, autoFocus }: O
                 onPaste={handlePaste}
                 disabled={disabled}
                 autoFocus={autoFocus}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                className="absolute inset-0 w-full h-full text-transparent caret-transparent bg-transparent border-none outline-none cursor-pointer"
                 aria-label={t('otpGroupLabel')}
             />
         </div>
