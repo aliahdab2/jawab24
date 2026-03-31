@@ -227,7 +227,7 @@ const start = async () => {
     await server.register(integrationsRoutes, { prefix: "/api/integrations" });
 
     // Waitlist (public - no auth required)
-    await server.register(waitlistRoutes, { prefix: "/api/waitlist" });
+    await server.register(waitlistRoutes, { prefix: "/waitlist" });
 
     // SSE real-time events (authenticated inside the route handler)
     await server.register(sseRoutes, { prefix: "/sse" });
