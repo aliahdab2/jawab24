@@ -57,5 +57,8 @@
   "reconnectSuccess": "تمت إعادة ربط الصفحة بنجاح!",
   "reconnectDialogTitle": "إعادة ربط الصفحة",
   "reconnectDialogBody": "سيتم توجيهك إلى فيسبوك لإعادة تفويض الوصول لهذه الصفحة. لتغيير الصفحات، انقر على \"تعديل الإعدادات السابقة\" في شاشة فيسبوك. بعد منح الصلاحيات، ستُستأنف الردود التلقائية تلقائيًا.",
-  "platformInstagram": "إنستغرام"
+  "platformInstagram": "إنستغرام",
+  "sectionActive": "نشطة",
+  "sectionInactive": "غير نشطة",
+  "sectionDisconnected": "تحتاج اهتمام"
 }

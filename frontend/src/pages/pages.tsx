@@ -67,7 +67,20 @@ const PagesPage: NextPageWithLayout = () => {
     enabled: isAuthenticated,
   });
 
-  const pages = useMemo(() => pagesRaw ?? [], [pagesRaw]);
+  const pages = useMemo(() => {
+    const raw = pagesRaw ?? [];
+    return [...raw].sort((a, b) => {
+      // Priority: active (0), inactive (1), disconnected (2)
+      const priority = (p: Page) =>
+        p.isConnected === false ? 2
+        : (p.autoReplyEnabled || p.instagramAutoReplyEnabled) ? 0
+        : 1;
+      const diff = priority(a) - priority(b);
+      if (diff !== 0) return diff;
+      // Within same group, most recent activity first
+      return (b.lastActivity || 0) - (a.lastActivity || 0);
+    });
+  }, [pagesRaw]);
 
   const setPages = useCallback((updater: Page[] | ((prev: Page[]) => Page[])) => {
     queryClient.setQueryData<Page[]>(['pages'], (old) => {
@@ -263,15 +276,39 @@ const PagesPage: NextPageWithLayout = () => {
 
       {/* Pages Grid */}
       {pages.length > 0 ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12 landscape:px-6">
-          {pages.map((page, i) => (
-            <Card
-              key={page.id}
-              id={`page-${page.id}`}
-              hover
-              className="animate-slide-up border-none shadow-2xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1"
-              style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
-            >
+        <div className="flex flex-col gap-8 pb-12 landscape:px-6">
+          {(() => {
+            const activePages = pages.filter(p => p.isConnected !== false && (p.autoReplyEnabled || p.instagramAutoReplyEnabled));
+            const inactivePages = pages.filter(p => p.isConnected !== false && !p.autoReplyEnabled && !p.instagramAutoReplyEnabled);
+            const disconnectedPages = pages.filter(p => p.isConnected === false);
+            const hasMultipleGroups = [activePages, inactivePages, disconnectedPages].filter(g => g.length > 0).length > 1;
+            let globalIndex = 0;
+
+            const renderSection = (sectionPages: Page[], label: string, dimmed: boolean) => {
+              if (sectionPages.length === 0) return null;
+              const section = (
+                <div key={label}>
+                  {hasMultipleGroups && (
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{label}</span>
+                      <span className="text-xs font-bold text-subtle bg-muted px-2 py-0.5 rounded-full">{sectionPages.length}</span>
+                      <div className="flex-1 h-px bg-theme-border" />
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {sectionPages.map((page) => {
+                      const i = globalIndex++;
+                      return (
+                        <Card
+                          key={page.id}
+                          id={`page-${page.id}`}
+                          hover
+                          className={clsx(
+                            'animate-slide-up border-none shadow-2xl shadow-surface-200/50 flex flex-col h-full overflow-hidden transition-all duration-300 hover:-translate-y-1',
+                            dimmed && 'opacity-75 hover:opacity-100'
+                          )}
+                          style={{ animationDelay: `${i * 0.05}s` } as React.CSSProperties}
+                        >
               {/* Header with gradient background */}
               <div className="p-4 sm:p-6 bg-gradient-to-br from-background to-card border-b border-theme-border flex items-start gap-4">
                 {/* Page avatar */}
@@ -497,7 +534,22 @@ const PagesPage: NextPageWithLayout = () => {
                 </div>
               </div>
             </Card>
-          ))}
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+              return section;
+            };
+
+            return (
+              <>
+                {renderSection(activePages, t('sectionActive'), false)}
+                {renderSection(inactivePages, t('sectionInactive'), true)}
+                {renderSection(disconnectedPages, t('sectionDisconnected'), true)}
+              </>
+            );
+          })()}
         </div>
       ) : (
         <Card>
