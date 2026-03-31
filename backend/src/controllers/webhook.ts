@@ -268,14 +268,16 @@ export class WebhookController {
      * Process a single change event
      */
     private async processChange(pageId: string, change: WebhookChange) {
-        this.log().debug('Processing change', { 
-            field: change.field, 
-            item: change.value.item, 
-            verb: change.value.verb 
+        this.log().info('Processing change', {
+            field: change.field,
+            item: change.value.item,
+            verb: change.value.verb,
+            pageId,
         });
 
         // Only process feed changes
         if (change.field !== 'feed') {
+            this.log().info('Skipping non-feed change', { field: change.field, pageId });
             return;
         }
 
@@ -284,12 +286,11 @@ export class WebhookController {
         // Only process new comments (not edits or deletes)
         if (value.item === 'comment' && value.verb === 'add') {
             await this.processNewComment(pageId, value);
-        }
-
-        // Could also handle new posts here if needed
-        if (value.item === 'post' && value.verb === 'add') {
+        } else if (value.item === 'post' && value.verb === 'add') {
             this.log().info('New post detected', { postId: value.post_id });
             // Posts are handled when comments come in
+        } else {
+            this.log().info('Skipping feed change', { item: value.item, verb: value.verb, pageId });
         }
     }
 
@@ -300,17 +301,18 @@ export class WebhookController {
         const { comment_id, post_id, message, from } = value;
 
         if (!comment_id || !post_id || !message) {
-            this.log().debug('Missing required fields for comment processing', { 
-                comment_id, 
-                post_id, 
-                hasMessage: !!message 
+            this.log().info('Missing required fields for comment processing', {
+                comment_id,
+                post_id,
+                hasMessage: !!message,
+                fromId: from?.id,
             });
             return;
         }
 
         // Don't reply to our own comments (page's comments)
         if (from?.id === pageId) {
-            this.log().debug('Skipping own comment', { comment_id });
+            this.log().info('Skipping own page comment', { comment_id, fromId: from?.id, pageId });
             return;
         }
 
