@@ -4,6 +4,7 @@ import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
 import { subscriptionApi, aiApi } from '@/lib/api';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { Comment } from '@jawab24/shared';
+import enMessages from '@/i18n/en/messages.json';
 
 vi.mock('@/lib/openExternalUrl', () => ({
   openExternalUrl: vi.fn()
@@ -203,14 +204,14 @@ describe('CommentDetailModal', () => {
     const commentWithSender: Comment = { ...mockComment, fromId: 'sender123', pageId: 'page1' };
     await renderModal({ comment: commentWithSender });
 
-    expect(screen.getByText('For this customer only')).toBeInTheDocument();
+    expect(screen.getByText(enMessages.pauseScope)).toBeInTheDocument();
   });
 
   it('does not render PauseToggle when comment has no fromId', async () => {
     const commentWithoutSender: Comment = { ...mockComment, fromId: undefined };
     await renderModal({ comment: commentWithoutSender });
 
-    expect(screen.queryByText('For this customer only')).not.toBeInTheDocument();
+    expect(screen.queryByText(enMessages.pauseScope)).not.toBeInTheDocument();
   });
 
   it('shows toast when pause is toggled', async () => {
@@ -224,7 +225,7 @@ describe('CommentDetailModal', () => {
 
     await waitFor(() => {
       expect(messagesApi.pauseConversation).toHaveBeenCalledWith('sender123', 'page1');
-      expect(toast.warning).toHaveBeenCalledWith('Smart reply paused', { id: 'smart-reply-status' });
+      expect(toast.warning).toHaveBeenCalledWith(enMessages.pauseSuccess, { id: 'smart-reply-status' });
     });
   });
 
@@ -244,7 +245,7 @@ describe('CommentDetailModal', () => {
 
     await waitFor(() => {
       expect(messagesApi.resumeConversation).toHaveBeenCalledWith('sender123', 'page1');
-      expect(toast.success).toHaveBeenCalledWith('Smart reply resumed', { id: 'smart-reply-status' });
+      expect(toast.success).toHaveBeenCalledWith(enMessages.resumeSuccess, { id: 'smart-reply-status' });
     });
   });
 
