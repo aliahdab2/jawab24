@@ -138,17 +138,7 @@ Use a comment ID from your test Page post.
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses instagram_basic to access basic profile information and media data for connected Instagram Business accounts. This allows the app to identify the linked Instagram account, display the account name and profile in the dashboard, and correlate incoming comment and message webhooks with the correct business account.
-
-We are requesting instagram_basic as a dependent permission for instagram_manage_messages and instagram_manage_comments.
-
-How to test:
-1. Go to https://jawab24.com/en/login
-2. Click "Login with Facebook"
-3. Connect a Facebook Page that has a linked Instagram Business Account
-4. Go to the "My Pages" section — the linked Instagram account name and profile picture will appear under the connected Page
-
-No Instagram credentials are needed — the reviewer connects via Facebook OAuth.
+Jawab24 uses instagram_basic to retrieve the Instagram Business Account linked to a user's Facebook Page. The app reads the account profile (username, profile picture) and fetches recent media posts to display comment activity in the dashboard. This allows page owners to manage Instagram comment auto-replies alongside their Facebook Page management.
 ```
 
 ### Screencast Requirements (from Meta)
@@ -183,18 +173,7 @@ GET /me/accounts?fields=instagram_business_account{name,username,profile_picture
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses instagram_manage_comments to read and reply to comments on Instagram Business account posts. When a customer comments on a post, Jawab24 receives a webhook notification, reads the comment, and automatically generates a reply using AI or user-configured template rules. The reply is posted directly on the Instagram post as a response.
-
-This allows business owners to automatically respond to customer comments on Instagram without manual monitoring.
-
-How to test:
-1. Go to https://jawab24.com/en/login and connect a Facebook Page with a linked Instagram Business Account
-2. Comment on any post from the connected Instagram Business Account using a different account
-3. Any comment will trigger an automatic reply — no specific keywords needed
-4. The reply appears on the Instagram post within 30 seconds
-5. The comment and reply also appear in Jawab24's Comments dashboard
-
-Post link for testing: [INSERT YOUR INSTAGRAM POST URL HERE]
+Jawab24 uses instagram_manage_comments to automatically reply to comments on Instagram posts. When a customer comments on a connected Instagram Business Account's post, the app receives the comment via webhook, generates an AI-powered or template-based reply, and posts it as a reply to the comment. Page owners can also hide inappropriate comments from the dashboard.
 ```
 
 ### Screencast Requirements (from Meta)
@@ -236,15 +215,7 @@ Use a media ID from your test Instagram Business Account.
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses instagram_manage_messages to receive and respond to Instagram direct messages through the Instagram Graph API. When a customer sends a DM to a connected Instagram Business account, Jawab24 receives the message via webhook and displays it in the Messages dashboard. The app then generates an automatic reply — either AI-powered or matched against user-configured template rules — and sends it back as an Instagram DM.
-
-This enables automatic AI-powered and template-based replies to customer DMs on Instagram Business accounts, providing consistent customer support across both Facebook and Instagram channels.
-
-How to test:
-1. Go to https://jawab24.com/en/login and connect a Facebook Page with a linked Instagram Business Account
-2. From a different Instagram account, send a DM to the connected Business Account
-3. The message appears in Jawab24's Messages dashboard
-4. Jawab24 automatically generates and sends a reply within seconds
+Jawab24 uses instagram_manage_messages to send automatic replies to customers who send direct messages to a connected Instagram Business Account. When a DM is received via webhook, the app generates a reply and sends it back to the customer. Page owners can configure greeting messages for new conversations and away messages for off-hours. The app only responds to customer-initiated messages within Instagram's 24-hour messaging window.
 ```
 
 ### Video Captions (add these in order in iMovie/CapCut)
