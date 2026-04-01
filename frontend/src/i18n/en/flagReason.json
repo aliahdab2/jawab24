@@ -15,5 +15,6 @@
   "exchange_request": "Exchange request",
   "negative_sentiment": "Negative sentiment",
   "human_requested": "Human requested",
-  "slaNoReply": "No reply after {minutes} min"
+  "slaNoReply": "No reply after {minutes} min",
+  "delivery_failed": "Reply not delivered"
 }

@@ -399,9 +399,11 @@ export class MessageProcessor {
             }
 
             // 13. Send reply
+            let deliveryFailed = false;
             try {
                 await adapter.sendReply(page, senderId, replyText);
             } catch (error) {
+                deliveryFailed = true;
                 pipelineMetrics.record(pipeline, 'send_failed');
                 this.logger.error(`[${platform}] Failed to send reply`, { error: String(error) });
                 // SSE: notify merchant of failed reply
@@ -410,7 +412,13 @@ export class MessageProcessor {
                     pageId: page.id,
                     error: 'Failed to send reply',
                 });
-                return { success: false, messageId: platformMessageId, error: 'Failed to send reply' };
+                // Still mark message as replied with delivery_failed flag so it doesn't
+                // stay in "Needs Action" forever. The AI did its job — delivery is a platform issue.
+                await messagesService.markAsReplied(
+                    storedMessage.id, replyText, replyMethod,
+                    true, 'delivery_failed', aiIntent, undefined, aiOriginalReply,
+                );
+                return { success: false, messageId: platformMessageId, replyText, replyMethod, error: 'Failed to send reply' };
             }
             lap('13-sendReply');
 

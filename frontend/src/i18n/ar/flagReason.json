@@ -15,5 +15,6 @@
   "exchange_request": "طلب استبدال",
   "negative_sentiment": "مشاعر سلبية",
   "human_requested": "طلب تحويل لموظف",
-  "slaNoReply": "لم يتم الرد خلال {minutes} دقيقة"
+  "slaNoReply": "لم يتم الرد خلال {minutes} دقيقة",
+  "delivery_failed": "لم يتم تسليم الرد"
 }
