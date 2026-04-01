@@ -138,17 +138,23 @@ Use a comment ID from your test Page post.
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses the instagram_business_basic permission to read the profile information and media of Instagram Business Accounts that are linked to connected Facebook Pages.
+Jawab24 uses instagram_business_basic to access basic profile information and media data for connected Instagram Business accounts. This allows the app to identify the linked Instagram account, display the account name and profile in the dashboard, and correlate incoming comment and message webhooks with the correct business account.
 
-When a user connects their Facebook Page to Jawab24, the app detects any linked Instagram Business Account and displays it in the dashboard. Jawab24 reads the Instagram account name, profile picture, and media posts so the user can monitor and manage their Instagram engagement alongside their Facebook Page.
+We are requesting instagram_business_basic as a dependent permission for instagram_business_manage_messages and instagram_business_manage_comments.
 
-This allows Page owners to:
-- See their linked Instagram Business Account in the Jawab24 dashboard
-- View Instagram media posts that customers are engaging with
-- Monitor comments across both Facebook and Instagram from one place
+How to test:
+1. Go to https://jawab24.com/en/login
+2. Click "Login with Facebook"
+3. Connect a Facebook Page that has a linked Instagram Business Account
+4. Go to the "My Pages" section — the linked Instagram account name and profile picture will appear under the connected Page
 
-The app only accesses Instagram accounts that are linked to Pages the user has explicitly connected. No data is stored beyond what is needed to display in the dashboard.
+No Instagram credentials are needed — the reviewer connects via Facebook OAuth.
 ```
+
+### Screencast Requirements (from Meta)
+
+- Show how an Instagram professional account can connect to your app
+- Show profile information like username, profile pic displayed in the app
 
 ### Video Captions (add these in order in iMovie/CapCut)
 
@@ -160,7 +166,7 @@ The app only accesses Instagram accounts that are linked to Pages the user has e
 | 4 | Permission dialog appears — zoom in, pause 3 seconds | "Facebook requests permission to access Instagram account info" |
 | 5 | Click Continue / Allow | "User grants permission" |
 | 6 | Jawab24 dashboard — My Pages shows the connected Page with Instagram account | "The linked Instagram Business Account appears in the dashboard" |
-| 7 | Click on the Page to show Instagram media/details — pause 4 seconds | "Jawab24 displays the Instagram account profile and media" |
+| 7 | Click on the Page to show Instagram username, profile pic, media — pause 4 seconds | "Jawab24 displays the Instagram account profile and media" |
 
 ### API Test Call
 
@@ -177,17 +183,26 @@ GET /me/accounts?fields=instagram_business_account{name,username,profile_picture
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses the instagram_business_manage_comments permission to read and reply to comments on Instagram Business Account media posts.
+Jawab24 uses instagram_business_manage_comments to read and reply to comments on Instagram Business account posts. When a customer comments on a post, Jawab24 receives a webhook notification, reads the comment, and automatically generates a reply using AI or user-configured template rules. The reply is posted directly on the Instagram post as a response.
 
-When a customer comments on an Instagram post, Jawab24 receives a webhook notification and reads the comment content. The comment is displayed in the Jawab24 dashboard, and the app generates an automatic reply — either AI-powered or matched against user-configured template rules. The reply is posted directly on the Instagram post as a response to the customer's comment.
+This allows business owners to automatically respond to customer comments on Instagram without manual monitoring.
 
-This allows Page owners to:
-- Read customer comments on their Instagram posts in real time
-- View Instagram comments in a centralized dashboard alongside Facebook comments
-- Automatically reply to Instagram comments using AI or template-based replies
+How to test:
+1. Go to https://jawab24.com/en/login and connect a Facebook Page with a linked Instagram Business Account
+2. Comment on any post from the connected Instagram Business Account using a different account
+3. Any comment will trigger an automatic reply — no specific keywords needed
+4. The reply appears on the Instagram post within 30 seconds
+5. The comment and reply also appear in Jawab24's Comments dashboard
 
-The app only reads and replies to comments on media owned by Instagram accounts the user has explicitly connected. Jawab24 does not post unsolicited comments.
+Post link for testing: [INSERT YOUR INSTAGRAM POST URL HERE]
 ```
+
+### Screencast Requirements (from Meta)
+
+- Show an Instagram user commenting on a post made by the connected Instagram professional account
+- Show the Instagram professional account responding to the comment **within 30 seconds**
+- Provide link to the post that has automation set up
+- Provide any keywords or phrases the reviewer should use when commenting (or say "any comment")
 
 ### Video Captions (add these in order in iMovie/CapCut)
 
@@ -221,16 +236,15 @@ Use a media ID from your test Instagram Business Account.
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses the instagram_business_manage_messages permission to read and reply to direct messages sent to Instagram Business Accounts that are linked to connected Facebook Pages.
+Jawab24 uses instagram_business_manage_messages to receive and respond to Instagram direct messages through the Instagram Business API. When a customer sends a DM to a connected Instagram Business account, Jawab24 receives the message via webhook and displays it in the Messages dashboard. The app then generates an automatic reply — either AI-powered or matched against user-configured template rules — and sends it back as an Instagram DM.
 
-When a customer sends a direct message to the Instagram Business Account, Jawab24 receives the message via webhook and displays it in the Messages section of the dashboard. The app then generates an automatic reply — either AI-powered or matched against user-configured template rules — and sends it back to the customer as an Instagram DM.
+This enables automatic AI-powered and template-based replies to customer DMs on Instagram Business accounts, providing consistent customer support across both Facebook and Instagram channels.
 
-This allows Page owners to:
-- Receive Instagram direct messages in the Jawab24 dashboard
-- Automatically reply to customer DMs using AI or template-based replies
-- Manage Instagram and Facebook messages from a single inbox
-
-The app only responds to customer-initiated messages within Instagram's 24-hour messaging window. Jawab24 does not send unsolicited messages.
+How to test:
+1. Go to https://jawab24.com/en/login and connect a Facebook Page with a linked Instagram Business Account
+2. From a different Instagram account, send a DM to the connected Business Account
+3. The message appears in Jawab24's Messages dashboard
+4. Jawab24 automatically generates and sends a reply within seconds
 ```
 
 ### Video Captions (add these in order in iMovie/CapCut)
