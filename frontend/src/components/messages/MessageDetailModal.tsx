@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Button, PlatformIcon } from '@/components/ui';
+import { Badge, Button, PlatformIcon, PauseToggle } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -20,8 +20,6 @@ import {
   CheckCircle,
   Undo2,
   UserCheck,
-  PauseCircle,
-  PlayCircle,
   ExternalLink,
   ChevronRight,
   ArrowDown,
@@ -496,35 +494,18 @@ export function MessageDetailModal({
 
           {/* Actions row: pause/resume + resolve */}
           <div className="flex items-center justify-between mt-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    if (isPaused) {
-                      onResume(conversation.senderId, pageId);
-                    } else {
-                      onPause(conversation.senderId, pageId);
-                    }
-                  }}
-                  disabled={isPausing || isResuming}
-                  aria-label={isPaused ? t('resumeSmartReply') : t('pauseSmartReply')}
-                  className={clsx(
-                    'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
-                    isPaused
-                      ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30'
-                      : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
-                  )}
-                >
-                  {isPaused ? <PlayCircle className="w-3.5 h-3.5" /> : <PauseCircle className="w-3.5 h-3.5" />}
-                  <span>{isPaused ? t('resumeSmartReply') : t('pauseSmartReply')}</span>
-                </button>
-                {conversation.pauseStatus?.paused && conversation.pauseStatus.remainingMinutes != null && (
-                  <span className="text-[10px] font-medium text-violet-500">
-                    {t('smartReplyPausedRemaining', { minutes: conversation.pauseStatus.remainingMinutes })}
-                  </span>
-                )}
-              </div>
-            </div>
+            <PauseToggle
+              paused={isPaused}
+              remainingMinutes={conversation.pauseStatus?.remainingMinutes}
+              loading={isPausing || isResuming}
+              onToggle={() => {
+                if (isPaused) {
+                  onResume(conversation.senderId, pageId);
+                } else {
+                  onPause(conversation.senderId, pageId);
+                }
+              }}
+            />
 
             {/* Resolve / Unresolve — end-aligned */}
             {hasUnresolvedUnreplied ? (

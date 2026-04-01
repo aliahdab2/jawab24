@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { Button, Badge, PlatformIcon, FlagTag } from '@/components/ui';
+import { Button, Badge, PlatformIcon, FlagTag, PauseToggle } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -25,7 +25,6 @@ import {
   CheckCircle,
   Undo2,
   PauseCircle,
-  PlayCircle,
   FileText,
   ChevronRight,
 } from 'lucide-react';
@@ -123,12 +122,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       if (pauseStatus?.paused) {
         await messagesApi.resumeConversation(comment.fromId, comment.pageId);
         setPauseStatus({ paused: false, pausedUntil: null, remainingMinutes: null });
+        toast.success(tMessages('resumeSuccess'), { id: 'smart-reply-status' });
       } else {
         const res = await messagesApi.pauseConversation(comment.fromId, comment.pageId);
         setPauseStatus({ paused: true, pausedUntil: res.data.pausedUntil, remainingMinutes: null });
+        toast.warning(tMessages('pauseSuccess'), { id: 'smart-reply-status' });
       }
     } catch {
-      /* ignore */
+      toast.error(tMessages('pauseFailed'), { id: 'smart-reply-status' });
     } finally {
       setPauseLoading(false);
     }
@@ -430,33 +431,13 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               </Button>
             </div>
           )}
-          {mode === 'full' && (
-            <div className="flex items-center justify-between">
-              {comment.fromId && (
-                <button
-                  onClick={handleTogglePause}
-                  disabled={pauseLoading}
-                  className={clsx(
-                    'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
-                    pauseStatus?.paused
-                      ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30'
-                      : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
-                  )}
-                >
-                  {pauseStatus?.paused ? (
-                    <>
-                      <PlayCircle className="w-3.5 h-3.5" />
-                      {tMessages('resumeSmartReply')}
-                    </>
-                  ) : (
-                    <>
-                      <PauseCircle className="w-3.5 h-3.5" />
-                      {tMessages('pauseSmartReply')}
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
+          {mode === 'full' && comment.fromId && (
+            <PauseToggle
+              paused={!!pauseStatus?.paused}
+              remainingMinutes={pauseStatus?.remainingMinutes}
+              loading={pauseLoading}
+              onToggle={handleTogglePause}
+            />
           )}
         </div>
 
