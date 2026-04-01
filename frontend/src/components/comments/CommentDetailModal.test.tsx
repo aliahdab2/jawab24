@@ -23,7 +23,9 @@ vi.mock('@/lib/api', () => ({
     resolve: vi.fn()
   },
   messagesApi: {
-    getPauseStatus: vi.fn().mockRejectedValue(new Error('not found'))
+    getPauseStatus: vi.fn().mockRejectedValue(new Error('not found')),
+    pauseConversation: vi.fn().mockResolvedValue({ data: { pausedUntil: '2026-04-01T12:00:00Z' } }),
+    resumeConversation: vi.fn().mockResolvedValue({ data: {} }),
   }
 }));
 
@@ -31,7 +33,8 @@ vi.mock('@/lib/api', () => ({
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
-    success: vi.fn()
+    success: vi.fn(),
+    warning: vi.fn(),
   }
 }));
 
@@ -194,6 +197,55 @@ describe('CommentDetailModal', () => {
     });
 
     expect(screen.queryByRole('button', { name: /Mark as handled/i })).not.toBeInTheDocument();
+  });
+
+  it('renders PauseToggle with scope hint when comment has fromId', async () => {
+    const commentWithSender: Comment = { ...mockComment, fromId: 'sender123', pageId: 'page1' };
+    await renderModal({ comment: commentWithSender });
+
+    expect(screen.getByText('Pauses Smart Reply for this conversation')).toBeInTheDocument();
+  });
+
+  it('does not render PauseToggle when comment has no fromId', async () => {
+    const commentWithoutSender: Comment = { ...mockComment, fromId: undefined };
+    await renderModal({ comment: commentWithoutSender });
+
+    expect(screen.queryByText('Pauses Smart Reply for this conversation')).not.toBeInTheDocument();
+  });
+
+  it('shows toast when pause is toggled', async () => {
+    const { toast } = await import('sonner');
+    const { messagesApi } = await import('@/lib/api');
+    const commentWithSender: Comment = { ...mockComment, fromId: 'sender123', pageId: 'page1' };
+    await renderModal({ comment: commentWithSender });
+
+    const pauseButton = screen.getByRole('button', { name: /Pause Smart Reply/i });
+    fireEvent.click(pauseButton);
+
+    await waitFor(() => {
+      expect(messagesApi.pauseConversation).toHaveBeenCalledWith('sender123', 'page1');
+      expect(toast.warning).toHaveBeenCalledWith('Smart reply paused', { id: 'smart-reply-status' });
+    });
+  });
+
+  it('shows toast when resume is toggled', async () => {
+    const { toast } = await import('sonner');
+    const { messagesApi } = await import('@/lib/api');
+    // Start with paused state
+    vi.mocked(messagesApi.getPauseStatus).mockResolvedValueOnce({ data: { paused: true, pausedUntil: '2026-04-01T12:00:00Z', remainingMinutes: 15 } } as never);
+    const commentWithSender: Comment = { ...mockComment, fromId: 'sender123', pageId: 'page1' };
+    await renderModal({ comment: commentWithSender });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Resume Smart Reply/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Resume Smart Reply/i }));
+
+    await waitFor(() => {
+      expect(messagesApi.resumeConversation).toHaveBeenCalledWith('sender123', 'page1');
+      expect(toast.success).toHaveBeenCalledWith('Smart reply resumed', { id: 'smart-reply-status' });
+    });
   });
 
   it('shows comment message in the modal body', async () => {
