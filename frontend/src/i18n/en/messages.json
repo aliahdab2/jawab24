@@ -23,7 +23,7 @@
   "replyFailed": "Failed to send reply",
   "voiceMessage": "Voice message",
   "pauseSmartReply": "Pause Smart Reply",
-  "pauseScope": "Pauses Smart Reply for this conversation",
+  "pauseScope": "For this customer only",
   "resumeSmartReply": "Resume Smart Reply",
   "smartReplyPaused": "Smart Reply Paused",
   "smartReplyPausedRemaining": "{minutes} min remaining",

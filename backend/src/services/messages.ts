@@ -15,6 +15,7 @@ export interface CreateMessageDTO {
     senderName?: string;
     message: string;
     direction?: 'incoming' | 'outgoing';
+    attachmentType?: string;
 }
 
 export class MessagesService {
@@ -150,6 +151,7 @@ export class MessagesService {
                 senderName: data.senderName,
                 message: data.message,
                 direction: data.direction || 'incoming',
+                ...(data.attachmentType ? { attachmentType: data.attachmentType } : {}),
                 createdTime: new Date(),
             })
             .returning();

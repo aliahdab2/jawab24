@@ -23,7 +23,7 @@
   "replyFailed": "فشل إرسال الرد",
   "voiceMessage": "رسالة صوتية",
   "pauseSmartReply": "إيقاف الرد الذكي",
-  "pauseScope": "يوقف الرد الذكي لهذه المحادثة",
+  "pauseScope": "لهذا العميل فقط",
   "resumeSmartReply": "استئناف الرد الذكي",
   "smartReplyPaused": "الرد الذكي متوقف",
   "smartReplyPausedRemaining": "{minutes} دقيقة متبقية",

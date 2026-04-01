@@ -203,14 +203,14 @@ describe('CommentDetailModal', () => {
     const commentWithSender: Comment = { ...mockComment, fromId: 'sender123', pageId: 'page1' };
     await renderModal({ comment: commentWithSender });
 
-    expect(screen.getByText('Pauses Smart Reply for this conversation')).toBeInTheDocument();
+    expect(screen.getByText('For this customer only')).toBeInTheDocument();
   });
 
   it('does not render PauseToggle when comment has no fromId', async () => {
     const commentWithoutSender: Comment = { ...mockComment, fromId: undefined };
     await renderModal({ comment: commentWithoutSender });
 
-    expect(screen.queryByText('Pauses Smart Reply for this conversation')).not.toBeInTheDocument();
+    expect(screen.queryByText('For this customer only')).not.toBeInTheDocument();
   });
 
   it('shows toast when pause is toggled', async () => {
