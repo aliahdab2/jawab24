@@ -2,7 +2,7 @@
 
 **App ID:** 774211662298446
 **Submission date:** April 1, 2026
-**Permissions to submit:** `pages_read_engagement`, `pages_read_user_content`, `pages_manage_engagement`, `instagram_business_basic`, `instagram_business_manage_comments`, `instagram_business_manage_messages`
+**Permissions to submit:** `pages_read_engagement`, `pages_read_user_content`, `pages_manage_engagement`, `instagram_basic`, `instagram_manage_comments`, `instagram_manage_messages`
 
 ---
 
@@ -133,14 +133,14 @@ Use a comment ID from your test Page post.
 
 ---
 
-## 4. instagram_business_basic
+## 4. instagram_basic
 
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses instagram_business_basic to access basic profile information and media data for connected Instagram Business accounts. This allows the app to identify the linked Instagram account, display the account name and profile in the dashboard, and correlate incoming comment and message webhooks with the correct business account.
+Jawab24 uses instagram_basic to access basic profile information and media data for connected Instagram Business accounts. This allows the app to identify the linked Instagram account, display the account name and profile in the dashboard, and correlate incoming comment and message webhooks with the correct business account.
 
-We are requesting instagram_business_basic as a dependent permission for instagram_business_manage_messages and instagram_business_manage_comments.
+We are requesting instagram_basic as a dependent permission for instagram_manage_messages and instagram_manage_comments.
 
 How to test:
 1. Go to https://jawab24.com/en/login
@@ -170,7 +170,7 @@ No Instagram credentials are needed — the reviewer connects via Facebook OAuth
 
 ### API Test Call
 
-**How to complete:** In Graph API Explorer, generate a User Access Token with `instagram_business_basic`, then run:
+**How to complete:** In Graph API Explorer, generate a User Access Token with `instagram_basic`, then run:
 
 ```
 GET /me/accounts?fields=instagram_business_account{name,username,profile_picture_url}
@@ -178,12 +178,12 @@ GET /me/accounts?fields=instagram_business_account{name,username,profile_picture
 
 ---
 
-## 5. instagram_business_manage_comments
+## 5. instagram_manage_comments
 
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses instagram_business_manage_comments to read and reply to comments on Instagram Business account posts. When a customer comments on a post, Jawab24 receives a webhook notification, reads the comment, and automatically generates a reply using AI or user-configured template rules. The reply is posted directly on the Instagram post as a response.
+Jawab24 uses instagram_manage_comments to read and reply to comments on Instagram Business account posts. When a customer comments on a post, Jawab24 receives a webhook notification, reads the comment, and automatically generates a reply using AI or user-configured template rules. The reply is posted directly on the Instagram post as a response.
 
 This allows business owners to automatically respond to customer comments on Instagram without manual monitoring.
 
@@ -221,7 +221,7 @@ Post link for testing: [INSERT YOUR INSTAGRAM POST URL HERE]
 
 ### API Test Call
 
-**How to complete:** In Graph API Explorer, generate a Page Access Token with `instagram_business_manage_comments`, then run:
+**How to complete:** In Graph API Explorer, generate a Page Access Token with `instagram_manage_comments`, then run:
 
 ```
 GET /{instagram-media-id}/comments
@@ -231,12 +231,12 @@ Use a media ID from your test Instagram Business Account.
 
 ---
 
-## 6. instagram_business_manage_messages
+## 6. instagram_manage_messages
 
 ### Submission Text (copy-paste this)
 
 ```
-Jawab24 uses instagram_business_manage_messages to receive and respond to Instagram direct messages through the Instagram Business API. When a customer sends a DM to a connected Instagram Business account, Jawab24 receives the message via webhook and displays it in the Messages dashboard. The app then generates an automatic reply — either AI-powered or matched against user-configured template rules — and sends it back as an Instagram DM.
+Jawab24 uses instagram_manage_messages to receive and respond to Instagram direct messages through the Instagram Graph API. When a customer sends a DM to a connected Instagram Business account, Jawab24 receives the message via webhook and displays it in the Messages dashboard. The app then generates an automatic reply — either AI-powered or matched against user-configured template rules — and sends it back as an Instagram DM.
 
 This enables automatic AI-powered and template-based replies to customer DMs on Instagram Business accounts, providing consistent customer support across both Facebook and Instagram channels.
 
@@ -264,7 +264,7 @@ How to test:
 
 ### API Test Call
 
-**How to complete:** In Graph API Explorer, generate a Page Access Token with `instagram_business_manage_messages`, then run:
+**How to complete:** In Graph API Explorer, generate a Page Access Token with `instagram_manage_messages`, then run:
 
 ```
 GET /{instagram-business-account-id}/conversations
@@ -310,15 +310,15 @@ GET /{instagram-business-account-id}/conversations
 
 ### Instagram Permissions
 
-- [ ] Record video for `instagram_business_basic`
-- [ ] Add captions to `instagram_business_basic` video
-- [ ] Complete API test call for `instagram_business_basic`
-- [ ] Record video for `instagram_business_manage_comments`
-- [ ] Add captions to `instagram_business_manage_comments` video
-- [ ] Complete API test call for `instagram_business_manage_comments`
-- [ ] Record video for `instagram_business_manage_messages`
-- [ ] Add captions to `instagram_business_manage_messages` video
-- [ ] Complete API test call for `instagram_business_manage_messages`
+- [ ] Record video for `instagram_basic`
+- [ ] Add captions to `instagram_basic` video
+- [ ] Complete API test call for `instagram_basic`
+- [ ] Record video for `instagram_manage_comments`
+- [ ] Add captions to `instagram_manage_comments` video
+- [ ] Complete API test call for `instagram_manage_comments`
+- [ ] Record video for `instagram_manage_messages`
+- [ ] Add captions to `instagram_manage_messages` video
+- [ ] Complete API test call for `instagram_manage_messages`
 - [ ] Copy-paste submission text for all 3 Instagram permissions
 - [ ] Check all agreement boxes for Instagram permissions
 - [ ] Submit Instagram permissions
