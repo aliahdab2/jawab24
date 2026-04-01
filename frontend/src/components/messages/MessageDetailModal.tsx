@@ -495,7 +495,7 @@ export function MessageDetailModal({
           {/* Actions row: pause/resume + resolve */}
           <div className="flex items-center justify-between mt-4">
             <PauseToggle
-              paused={isPaused}
+              paused={!!isPaused}
               remainingMinutes={conversation.pauseStatus?.remainingMinutes}
               loading={isPausing || isResuming}
               onToggle={() => {
