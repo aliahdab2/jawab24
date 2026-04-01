@@ -318,7 +318,8 @@ const MessagesPage: NextPageWithLayout = () => {
     if (!selectedConversation) return undefined;
     const page = pages.find(p => p.id === selectedConversation.lastMessage.pageId);
     if (!page) return undefined;
-    return getPageExternalUrl(page);
+    const source = selectedConversation.lastMessage.platform === 'instagram' ? 'instagram' : undefined;
+    return getPageExternalUrl(page, source);
   }, [selectedConversation, pages]);
 
   // Intersection Observer
@@ -594,7 +595,7 @@ const MessagesPage: NextPageWithLayout = () => {
           dateLocale={dateLocale}
           pageName={selectedPageName}
           pageUrl={selectedPageUrl}
-          isInstagram={false}
+          isInstagram={selectedConversation.lastMessage.platform === 'instagram'}
         />
       )}
     </>

@@ -420,6 +420,7 @@ export interface Message {
   aiIntent?: string | null;
   aiOriginalReply?: string | null;
   resolved?: boolean;
+  platform?: 'facebook' | 'instagram';
 }
 
 export interface MessagesPaginatedResponse {

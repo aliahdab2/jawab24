@@ -677,7 +677,7 @@ export class MessagesService {
         if (!result) return null;
         return {
             ...this.mapToMessage(result),
-            platform: result.platform || 'facebook',
+            platform: (result.platform || 'facebook') as 'facebook' | 'instagram',
         };
     }
 
@@ -712,6 +712,7 @@ export class MessagesService {
             aiIntent: record.aiIntent ?? null,
             aiOriginalReply: record.aiOriginalReply ?? null,
             resolved: record.resolved ?? false,
+            platform: (record.platform || 'facebook') as 'facebook' | 'instagram',
         };
     }
 }

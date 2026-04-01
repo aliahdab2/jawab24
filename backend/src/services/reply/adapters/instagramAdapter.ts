@@ -60,7 +60,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         instagramMessageId: string,
         senderId: string,
         text: string,
-        _senderName?: string,
+        senderName?: string,
     ): Promise<{ message: StoredMessage; isNew: boolean }> {
         // Check if message already exists by Instagram message ID
         const existingRows = await db
@@ -69,6 +69,10 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
             .where(eq(messages.instagramMessageId, instagramMessageId));
 
         if (existingRows[0]) {
+            // Update senderName if we have one and the record doesn't
+            if (senderName && !existingRows[0].senderName) {
+                await db.update(messages).set({ senderName }).where(eq(messages.id, existingRows[0].id));
+            }
             return {
                 message: { id: existingRows[0].id, replied: existingRows[0].replied ?? false, needsAttention: existingRows[0].needsAttention ?? false },
                 isNew: false,
@@ -85,6 +89,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
                 instagramMessageId,
                 platform: 'instagram',
                 senderId,
+                senderName,
                 message: text,
                 direction: 'incoming',
                 createdTime: new Date(),
