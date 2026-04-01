@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { Button, Badge, PlatformIcon } from '@/components/ui';
+import { Button, Badge, PlatformIcon, FlagTag } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -110,22 +110,21 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
   // Fetch pause status for the commenter
   useEffect(() => {
-    if (!comment.fromId || !comment.postId) return;
-    // Use postId as a proxy for pageId context — pause status is per sender
-    messagesApi.getPauseStatus(comment.fromId, comment.postId)
+    if (!comment.fromId || !comment.pageId) return;
+    messagesApi.getPauseStatus(comment.fromId, comment.pageId)
       .then(res => setPauseStatus(res.data))
       .catch(() => { /* ignore — pause status is optional */ });
-  }, [comment.fromId, comment.postId]);
+  }, [comment.fromId, comment.pageId]);
 
   const handleTogglePause = async () => {
-    if (!comment.fromId || !comment.postId) return;
+    if (!comment.fromId || !comment.pageId) return;
     setPauseLoading(true);
     try {
       if (pauseStatus?.paused) {
-        await messagesApi.resumeConversation(comment.fromId, comment.postId);
+        await messagesApi.resumeConversation(comment.fromId, comment.pageId);
         setPauseStatus({ paused: false, pausedUntil: null, remainingMinutes: null });
       } else {
-        const res = await messagesApi.pauseConversation(comment.fromId, comment.postId);
+        const res = await messagesApi.pauseConversation(comment.fromId, comment.pageId);
         setPauseStatus({ paused: true, pausedUntil: res.data.pausedUntil, remainingMinutes: null });
       }
     } catch {
@@ -257,10 +256,13 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               </Badge>
             )}
             {needsAttention && (
-              <Badge variant="warning">
-                <AlertTriangle className="w-3 h-3 me-1" />
-                {t('needsAttention')}
-              </Badge>
+              <div className="flex flex-col items-end gap-1">
+                <Badge variant="warning">
+                  <AlertTriangle className="w-3 h-3 me-1" />
+                  {t('needsAttention')}
+                </Badge>
+                <FlagTag flagReason={comment.flagReason} />
+              </div>
             )}
             <button
               onClick={onClose}
@@ -317,8 +319,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
-          {/* Reply Input Section */}
-          {!comment.replied && (
+          {/* Reply Input Section — show for unreplied OR flagged (needs-attention) comments */}
+          {(!comment.replied || needsAttention) && (
             <div className="bg-muted rounded-xl p-4 border border-theme-border">
               {isHeldReply && (
                 <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
@@ -328,7 +330,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               )}
               <div className="flex justify-between items-center mb-2">
                 <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground">
-                  {t('reply')}
+                  {comment.replied && needsAttention ? t('followUpReply') : t('reply')}
                   {replyText && !isGenerating && (
                     <span className="text-xs font-normal text-muted-foreground ms-2">{t('aiSuggestedReply')}</span>
                   )}
@@ -375,30 +377,32 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 disabled={isGenerating || isSending}
                 dir="auto"
               />
-              {onResolve && (
-                <div className="flex justify-center mt-3">
-                  <button
-                    onClick={() => { onResolve(); onClose(); }}
-                    disabled={isSending}
-                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors disabled:opacity-50"
-                  >
-                    <CheckCircle className="w-3.5 h-3.5" />
-                    {t('resolve')}
-                  </button>
-                </div>
-              )}
-              {onUnresolve && (
-                <div className="flex justify-center mt-3">
-                  <button
-                    onClick={() => { onUnresolve(); onClose(); }}
-                    disabled={isSending}
-                    className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                  >
-                    <Undo2 className="w-3.5 h-3.5" />
-                    {t('unresolve')}
-                  </button>
-                </div>
-              )}
+            </div>
+          )}
+
+          {/* Resolve/Unresolve — always visible, even after AI replied */}
+          {onResolve && (
+            <div className="flex justify-center mt-3">
+              <button
+                onClick={() => { onResolve(); onClose(); }}
+                disabled={isSending}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors disabled:opacity-50"
+              >
+                <CheckCircle className="w-3.5 h-3.5" />
+                {t('resolve')}
+              </button>
+            </div>
+          )}
+          {onUnresolve && (
+            <div className="flex justify-center mt-3">
+              <button
+                onClick={() => { onUnresolve(); onClose(); }}
+                disabled={isSending}
+                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+                {t('unresolve')}
+              </button>
             </div>
           )}
 
@@ -409,8 +413,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div
           className="px-4 md:px-6 pb-safe-modal pt-3 border-t border-theme-border bg-card flex-shrink-0"
         >
-          {/* Send buttons — shown when reply input is active */}
-          {!comment.replied && (
+          {/* Send buttons — shown when reply input is active (unreplied or flagged) */}
+          {(!comment.replied || needsAttention) && (
             <div className="flex justify-end gap-2 mb-2">
               <Button variant="secondary" onClick={onClose} disabled={isSending}>
                  {tc('cancel')}

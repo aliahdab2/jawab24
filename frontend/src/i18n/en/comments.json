@@ -77,5 +77,6 @@
   "platformInstagram": "Instagram",
   "commentCount": "{count, plural, one {# comment} other {# comments}}",
   "showEarlier": "Show earlier comments",
-  "hideEarlier": "Hide earlier comments"
+  "hideEarlier": "Hide earlier comments",
+  "followUpReply": "Add a follow-up reply"
 }

@@ -77,5 +77,6 @@
   "platformInstagram": "إنستغرام",
   "commentCount": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}}",
   "showEarlier": "عرض التعليقات السابقة",
-  "hideEarlier": "إخفاء التعليقات السابقة"
+  "hideEarlier": "إخفاء التعليقات السابقة",
+  "followUpReply": "إضافة رد متابعة"
 }
