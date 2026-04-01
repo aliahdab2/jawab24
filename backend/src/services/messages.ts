@@ -165,7 +165,8 @@ export class MessagesService {
         facebookMessageId: string,
         senderId: string,
         messageText: string,
-        senderName?: string
+        senderName?: string,
+        attachmentType?: string,
     ): Promise<{ message: Message; isNew: boolean }> {
         // Check if message already exists
         const existing = await db.query.messages.findFirst({
@@ -191,6 +192,7 @@ export class MessagesService {
             senderName,
             message: messageText,
             direction: 'incoming',
+            ...(attachmentType ? { attachmentType } : {}),
         });
 
         return { message: newMessage, isNew: true };
@@ -716,6 +718,7 @@ export class MessagesService {
             aiOriginalReply: record.aiOriginalReply ?? null,
             resolved: record.resolved ?? false,
             platform: (record.platform || 'facebook') as 'facebook' | 'instagram',
+            attachmentType: record.attachmentType ?? null,
         };
     }
 }

@@ -407,6 +407,13 @@
       "when": 1774822305951,
       "tag": "0057_quick_shockwave",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "5",
+      "when": 1775063943893,
+      "tag": "0058_early_the_executioner",
+      "breakpoints": true
     }
   ]
 }

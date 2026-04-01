@@ -21,6 +21,7 @@
   "typeReply": "Type your reply...",
   "replySent": "Reply sent successfully",
   "replyFailed": "Failed to send reply",
+  "voiceMessage": "Voice message",
   "pauseSmartReply": "Pause Smart Reply",
   "pauseScope": "Pauses Smart Reply for this conversation",
   "resumeSmartReply": "Resume Smart Reply",

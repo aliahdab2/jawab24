@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "attachment_type" varchar(20);

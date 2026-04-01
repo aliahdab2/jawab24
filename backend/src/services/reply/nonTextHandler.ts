@@ -61,8 +61,10 @@ export async function handleNonTextMessage(
                 });
 
                 // Store transcribed text in DB (not placeholder)
+                // Use platform-prefixed ID so the adapter's storeIncomingMessage dedup finds it
+                const prefixedMessageId = platform === 'instagram' ? `ig_${messageId}` : messageId;
                 await messagesService.findOrCreateFromWebhook(
-                    page.id, messageId, senderId, result.text,
+                    page.id, prefixedMessageId, senderId, result.text, undefined, 'audio',
                 );
 
                 // Enqueue for the normal AI reply pipeline
@@ -87,8 +89,9 @@ export async function handleNonTextMessage(
 
         // 4. Non-audio or failed transcription: store placeholder + send nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
+        const placeholderMsgId = platform === 'instagram' ? `ig_${messageId}` : messageId;
         await messagesService.findOrCreateFromWebhook(
-            page.id, messageId, senderId, placeholder,
+            page.id, placeholderMsgId, senderId, placeholder, undefined, attachmentType,
         );
 
         // 5. Check cooldown — one nudge per sender per page per hour

@@ -20,6 +20,7 @@ import {
   CheckCircle,
   Undo2,
   UserCheck,
+  Mic,
   ExternalLink,
   ChevronRight,
   ArrowDown,
@@ -361,6 +362,12 @@ export function MessageDetailModal({
                     ? 'bg-brand-600 text-white rounded-be-none'
                     : 'bg-card text-foreground rounded-bs-none border border-theme-border'
                 )}>
+                  {msg.direction === 'incoming' && msg.attachmentType === 'audio' && (
+                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground mb-1">
+                      <Mic className="w-3 h-3" />
+                      <span>{t('voiceMessage')}</span>
+                    </div>
+                  )}
                   <p className="text-sm leading-relaxed italic-arabic">{msg.message}</p>
                 </div>
                 <div className={clsx(

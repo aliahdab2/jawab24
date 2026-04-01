@@ -35,6 +35,7 @@ export interface Message {
   aiOriginalReply?: string | null;
   resolved?: boolean;
   platform?: 'facebook' | 'instagram';
+  attachmentType?: string | null;
 }
 
 // --- Comment Types ---

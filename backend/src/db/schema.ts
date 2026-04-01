@@ -368,6 +368,7 @@ export const messages = pgTable('messages', {
     flagReason: varchar('flag_reason', { length: 255 }),
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
+    attachmentType: varchar('attachment_type', { length: 20 }), // 'audio', 'image', 'video', 'file' — null for text
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),

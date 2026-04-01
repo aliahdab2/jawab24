@@ -21,6 +21,7 @@
   "typeReply": "اكتب ردك...",
   "replySent": "تم إرسال الرد بنجاح",
   "replyFailed": "فشل إرسال الرد",
+  "voiceMessage": "رسالة صوتية",
   "pauseSmartReply": "إيقاف الرد الذكي",
   "pauseScope": "يوقف الرد الذكي لهذه المحادثة",
   "resumeSmartReply": "استئناف الرد الذكي",
