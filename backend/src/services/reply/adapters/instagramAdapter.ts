@@ -1,10 +1,14 @@
+import axios from 'axios';
 import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { messagesService } from '../../messages';
 import { db } from '../../../db';
 import { messages } from '../../../db/schema';
+import { config } from '../../../config';
 import { eq } from 'drizzle-orm';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
+
+const INSTAGRAM_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 /**
  * Instagram Platform Adapter
@@ -33,9 +37,22 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         };
     }
 
-    async fetchSenderName(_senderId: string, _accessToken: string, _pageId?: string, _platformPageId?: string): Promise<string | undefined> {
-        // Instagram doesn't support fetching sender profile via API
-        return undefined;
+    async fetchSenderName(senderId: string, accessToken: string, pageId?: string): Promise<string | undefined> {
+        // 1. Check DB first: reuse name from a previous message
+        if (pageId) {
+            const cached = await messagesService.getSenderNameBySenderId(pageId, senderId);
+            if (cached) return cached;
+        }
+
+        // 2. Call Instagram Graph API to get sender profile
+        try {
+            const res = await axios.get(`${INSTAGRAM_GRAPH_API}/${senderId}`, {
+                params: { fields: 'name,username', access_token: accessToken },
+            });
+            return res.data.username || res.data.name;
+        } catch {
+            return undefined;
+        }
     }
 
     async storeIncomingMessage(
