@@ -886,7 +886,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored in DB
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_voice_1', 'user_123', '[رسالة صوتية]',
+                mockPage.id, 'msg_voice_1', 'user_123', '[رسالة صوتية]', undefined, 'audio',
             );
 
             // Nudge reply sent
@@ -931,7 +931,7 @@ describe('Webhook Controller', () => {
 
             // Transcribed text stored in DB (not placeholder)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_voice_transcribed', 'user_123', 'كم سعر الجاكيت الأسود؟',
+                mockPage.id, 'msg_voice_transcribed', 'user_123', 'كم سعر الجاكيت الأسود؟', undefined, 'audio',
             );
 
             // Enqueued for AI reply pipeline (pageId = platform ID, not internal UUID)
@@ -981,7 +981,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored (not transcription)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_voice_fail', 'user_123', '[رسالة صوتية]',
+                mockPage.id, 'msg_voice_fail', 'user_123', '[رسالة صوتية]', undefined, 'audio',
             );
 
             // Nudge sent as fallback
@@ -1059,7 +1059,7 @@ describe('Webhook Controller', () => {
 
             // English placeholder
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_img_1', 'user_en', '[Image]',
+                mockPage.id, 'msg_img_1', 'user_en', '[Image]', undefined, 'image',
             );
 
             // English nudge
@@ -1113,7 +1113,7 @@ describe('Webhook Controller', () => {
                     messaging: [{
                         sender: { id: 'ig_user_789' },
                         message: {
-                            mid: 'ig_msg_voice_1',
+                            mid: 'msg_voice_1',
                             attachments: [{ type: 'video' }],
                         },
                     }],
@@ -1132,7 +1132,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'ig_msg_voice_1', 'ig_user_789', '[فيديو]',
+                mockPage.id, 'ig_msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video',
             );
 
             // Nudge sent via Instagram API
