@@ -191,8 +191,8 @@ describe('CommentDetailModal', () => {
       onResolve: vi.fn(),
     });
 
-    // Reply section is hidden for replied comments, so resolve button shouldn't exist
-    expect(screen.queryByRole('button', { name: /Mark as handled/i })).not.toBeInTheDocument();
+    // Resolve button is always visible — even after AI replied (for needs-attention review)
+    expect(screen.queryByRole('button', { name: /Mark as handled/i })).toBeInTheDocument();
   });
 
   it('shows comment message in the modal body', async () => {
