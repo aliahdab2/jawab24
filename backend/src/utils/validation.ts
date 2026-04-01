@@ -104,6 +104,31 @@ export const CreatePlanSchema = z.object({
 export const UpdatePlanSchema = CreatePlanSchema.partial();
 
 // ==========================================
+// Business Profile
+// ==========================================
+export const BusinessProfileSchema = z.object({
+    name: z.string().max(255).optional(),
+    category: z.string().max(255).optional(),
+    about: z.string().max(2000).optional(),
+    phone: z.string().max(50).optional(),
+    website: z.string().max(500).optional(),
+    address: z.string().max(255).optional(),
+    city: z.string().max(100).optional(),
+    country: z.string().max(100).optional(),
+    hours: z.record(
+        z.string(),
+        z.array(z.string().max(30))
+    ).optional(),
+    channels: z.object({
+        preferred: z.enum(['dm', 'whatsapp', 'phone']).optional(),
+        whatsapp: z.string().max(50).optional(),
+    }).optional(),
+    language_hint: z.enum(['ar', 'en']).optional(),
+}).passthrough(); // Allow extra fields from Facebook API without breaking
+
+export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;
+
+// ==========================================
 // Generic ID Validation
 // ==========================================
 export const UUIDSchema = z.string().uuid('Invalid ID format');

@@ -476,63 +476,95 @@ export class PaymentController {
             request.log.info(`Webhook received: ${event.type}`);
 
             // Idempotency: skip already-processed events (Stripe retries on network timeout)
+            const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
             const inserted = await db
                 .insert(stripeWebhookEvents)
-                .values({ eventId: event.id, eventType: event.type })
+                .values({ eventId: event.id, eventType: event.type, status: 'processing' })
                 .onConflictDoNothing()
                 .returning({ eventId: stripeWebhookEvents.eventId });
 
             if (inserted.length === 0) {
-                request.log.info({ eventId: event.id }, 'Duplicate webhook event, skipping');
-                return reply.send({ received: true });
+                // Event exists — check if completed or stale processing
+                const [existing] = await db
+                    .select({ status: stripeWebhookEvents.status, processedAt: stripeWebhookEvents.processedAt })
+                    .from(stripeWebhookEvents)
+                    .where(eq(stripeWebhookEvents.eventId, event.id));
+
+                if (existing?.status === 'completed') {
+                    request.log.info({ eventId: event.id }, 'Duplicate webhook event (completed), skipping');
+                    return reply.send({ received: true });
+                }
+
+                // Still processing — allow retry only if stale (handler likely crashed)
+                const isStale = existing && (Date.now() - existing.processedAt.getTime()) > STALE_THRESHOLD_MS;
+                if (!isStale) {
+                    request.log.info({ eventId: event.id }, 'Webhook event currently processing, skipping');
+                    return reply.send({ received: true });
+                }
+
+                request.log.warn({ eventId: event.id }, 'Retrying stale webhook event');
+                await db.update(stripeWebhookEvents)
+                    .set({ status: 'processing', processedAt: new Date() })
+                    .where(eq(stripeWebhookEvents.eventId, event.id));
             }
 
             // Handle different event types
-            switch (event.type) {
-                case 'checkout.session.completed':
-                    await this.handleCheckoutComplete(
-                        event.data.object as Stripe.Checkout.Session,
-                        request
-                    );
-                    break;
+            try {
+                switch (event.type) {
+                    case 'checkout.session.completed':
+                        await this.handleCheckoutComplete(
+                            event.data.object as Stripe.Checkout.Session,
+                            request
+                        );
+                        break;
 
-                case 'customer.subscription.created':
-                    await this.handleSubscriptionCreated(
-                        event.data.object as Stripe.Subscription,
-                        request
-                    );
-                    break;
+                    case 'customer.subscription.created':
+                        await this.handleSubscriptionCreated(
+                            event.data.object as Stripe.Subscription,
+                            request
+                        );
+                        break;
 
-                case 'customer.subscription.updated':
-                    await this.handleSubscriptionUpdated(
-                        event.data.object as Stripe.Subscription,
-                        request
-                    );
-                    break;
+                    case 'customer.subscription.updated':
+                        await this.handleSubscriptionUpdated(
+                            event.data.object as Stripe.Subscription,
+                            request
+                        );
+                        break;
 
-                case 'customer.subscription.deleted':
-                    await this.handleSubscriptionDeleted(
-                        event.data.object as Stripe.Subscription,
-                        request
-                    );
-                    break;
+                    case 'customer.subscription.deleted':
+                        await this.handleSubscriptionDeleted(
+                            event.data.object as Stripe.Subscription,
+                            request
+                        );
+                        break;
 
-                case 'invoice.payment_succeeded':
-                    await this.handlePaymentSucceeded(
-                        event.data.object as Stripe.Invoice,
-                        request
-                    );
-                    break;
+                    case 'invoice.payment_succeeded':
+                        await this.handlePaymentSucceeded(
+                            event.data.object as Stripe.Invoice,
+                            request
+                        );
+                        break;
 
-                case 'invoice.payment_failed':
-                    await this.handlePaymentFailed(
-                        event.data.object as Stripe.Invoice,
-                        request
-                    );
-                    break;
+                    case 'invoice.payment_failed':
+                        await this.handlePaymentFailed(
+                            event.data.object as Stripe.Invoice,
+                            request
+                        );
+                        break;
 
-                default:
-                    request.log.info({ eventType: event.type }, 'Unhandled webhook event type');
+                    default:
+                        request.log.info({ eventType: event.type }, 'Unhandled webhook event type');
+                }
+
+                // Mark event as completed after successful processing
+                await db.update(stripeWebhookEvents)
+                    .set({ status: 'completed', processedAt: new Date() })
+                    .where(eq(stripeWebhookEvents.eventId, event.id));
+            } catch (handlerError) {
+                // Leave status as 'processing' so Stripe retry can re-attempt
+                request.log.error({ err: handlerError, eventId: event.id }, 'Webhook handler failed, event left as processing for retry');
+                throw handlerError;
             }
 
             return reply.send({ received: true });

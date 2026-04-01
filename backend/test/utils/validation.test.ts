@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    BusinessProfileSchema,
     CreatePlanSchema,
     UpdatePlanSchema,
     CreateRuleSchema,
@@ -356,6 +357,96 @@ describe('Validation Schemas', () => {
             if (!result.success) {
                 expect(result.errors.length).toBeGreaterThan(0);
                 expect(result.errors[0].field).toBe('name');
+            }
+        });
+    });
+
+    describe('BusinessProfileSchema', () => {
+        it('should validate a full profile', () => {
+            const result = BusinessProfileSchema.safeParse({
+                name: 'My Shop',
+                category: 'Restaurant',
+                about: 'Best shawarma in town',
+                phone: '+961 1 234 567',
+                website: 'https://myshop.com',
+                address: '123 Main St',
+                city: 'Beirut',
+                country: 'Lebanon',
+                hours: { mon: ['09:00-18:00'], tue: ['09:00-18:00'] },
+                channels: { preferred: 'whatsapp', whatsapp: '+961 1 999 000' },
+                language_hint: 'ar',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('should accept empty object (all fields optional)', () => {
+            const result = BusinessProfileSchema.safeParse({});
+            expect(result.success).toBe(true);
+        });
+
+        it('should accept partial profile', () => {
+            const result = BusinessProfileSchema.safeParse({
+                name: 'Cafe',
+                phone: '+1 555 1234',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('should reject name exceeding max length', () => {
+            const result = BusinessProfileSchema.safeParse({
+                name: 'A'.repeat(256),
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should reject about exceeding max length', () => {
+            const result = BusinessProfileSchema.safeParse({
+                about: 'A'.repeat(2001),
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should reject invalid language_hint', () => {
+            const result = BusinessProfileSchema.safeParse({
+                language_hint: 'fr',
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should reject invalid channel preferred value', () => {
+            const result = BusinessProfileSchema.safeParse({
+                channels: { preferred: 'email' },
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('should accept valid hours format', () => {
+            const result = BusinessProfileSchema.safeParse({
+                hours: {
+                    mon: ['09:00-18:00'],
+                    tue: ['08:00-12:00', '14:00-18:00'],
+                    fri: ['09:00-22:00'],
+                },
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('should allow extra fields from Facebook API (passthrough)', () => {
+            const result = BusinessProfileSchema.safeParse({
+                name: 'Shop',
+                some_facebook_field: 'value',
+            });
+            expect(result.success).toBe(true);
+        });
+
+        it('should work with validateSchema helper', () => {
+            const valid = validateSchema(BusinessProfileSchema, { name: 'Test', language_hint: 'en' });
+            expect(valid.success).toBe(true);
+
+            const invalid = validateSchema(BusinessProfileSchema, { language_hint: 'xyz' });
+            expect(invalid.success).toBe(false);
+            if (!invalid.success) {
+                expect(invalid.errors[0].field).toBe('language_hint');
             }
         });
     });

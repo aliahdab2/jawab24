@@ -851,6 +851,7 @@ export const adminAuditLogs = pgTable('admin_audit_logs', {
 export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
     eventId: varchar('event_id', { length: 255 }).primaryKey(), // Stripe event ID (evt_*)
     eventType: varchar('event_type', { length: 100 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('processing'), // 'processing' | 'completed'
     processedAt: timestamp('processed_at').defaultNow().notNull(),
 });
 

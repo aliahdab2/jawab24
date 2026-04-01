@@ -145,7 +145,7 @@ export interface UpdatePageDTO {
     accessToken?: string;
     autoReplyEnabled?: boolean;
     knowledgeBase?: string;
-    businessProfile?: Record<string, unknown>;
+    businessProfile?: import('../utils/validation').BusinessProfileInput;
 }
 
 // Post Types

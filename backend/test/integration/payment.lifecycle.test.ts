@@ -1332,7 +1332,14 @@ describe('SCENARIO 12 — Webhook-level idempotency deduplication', () => {
         const subsAfterFirst = await userSubs(userId);
         expect(subsAfterFirst).toHaveLength(1);
 
-        // Second delivery with same event ID — should be skipped
+        // Verify event is marked as 'completed' in stripe_webhook_events
+        const [eventRow] = await testDb
+            .select({ status: schema.stripeWebhookEvents.status })
+            .from(schema.stripeWebhookEvents)
+            .where(eq(schema.stripeWebhookEvents.eventId, eventId));
+        expect(eventRow.status).toBe('completed');
+
+        // Second delivery with same event ID — should be skipped (status = completed)
         await paymentController.handleWebhook(makeWebhookReq(), fakeReply());
         const subsAfterSecond = await userSubs(userId);
         expect(subsAfterSecond).toHaveLength(1);
@@ -1377,9 +1384,16 @@ describe('SCENARIO 12 — Webhook-level idempotency deduplication', () => {
         expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(1);
         expect((await testDb.select().from(schema.subscriptions).where(eq(schema.subscriptions.id, sub.id)))[0].status).toBe('past_due');
 
+        // Verify event marked as completed
+        const [eventRow] = await testDb
+            .select({ status: schema.stripeWebhookEvents.status })
+            .from(schema.stripeWebhookEvents)
+            .where(eq(schema.stripeWebhookEvents.eventId, eventId));
+        expect(eventRow.status).toBe('completed');
+
         vi.mocked(notificationService.sendTemplateNotification).mockClear();
 
-        // Second delivery with same event ID — skipped entirely
+        // Second delivery with same event ID — skipped entirely (status = completed)
         await paymentController.handleWebhook(makeWebhookReq(), fakeReply());
         expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(0);
     });

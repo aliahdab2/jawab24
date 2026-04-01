@@ -7,6 +7,7 @@ import { CreatePageDTO, UpdatePageDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
+import { BusinessProfileSchema, validateSchema } from '../utils/validation';
 
 /** Add isConnected flag and strip accessToken from page response */
 function serializePage<T extends { accessToken?: string | null }>(page: T) {
@@ -107,6 +108,15 @@ export class PagesController {
         const { id } = request.params;
 
         try {
+            // Validate businessProfile if present
+            if (request.body.businessProfile !== undefined) {
+                const validation = validateSchema(BusinessProfileSchema, request.body.businessProfile);
+                if (!validation.success) {
+                    return reply.status(400).send({ error: 'Invalid business profile', errors: validation.errors });
+                }
+                request.body.businessProfile = validation.data;
+            }
+
             const page = await pagesService.updatePage(req.workspaceId, id, request.body);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });

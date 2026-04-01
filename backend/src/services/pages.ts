@@ -8,6 +8,7 @@ import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
+import { BusinessProfileSchema } from '../utils/validation';
 import { redis } from '../lib/redis';
 import { encryptFbToken, decryptFbToken } from './facebookCrypto';
 import { KbIngestionService } from './kb/ingestion';
@@ -196,7 +197,18 @@ export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
         profile.language_hint = detectLanguageHint(textForDetection);
     }
 
-    return profile;
+    // Validate and strip unexpected fields from Facebook data
+    const validated = BusinessProfileSchema.safeParse(profile);
+    if (!validated.success) {
+        captureError(
+            new Error('Invalid businessProfile from Facebook sync'),
+            'BusinessProfile validation failed during Facebook sync',
+            { extra: { fbPageId: fbPage.id, errors: validated.error.errors.map(e => `${e.path.join('.')}: ${e.message}`) } },
+        );
+        return profile; // Return unvalidated rather than losing data
+    }
+
+    return validated.data;
 }
 
 export class PagesService {
