@@ -216,7 +216,7 @@ export class InstagramService {
     ): Promise<void> {
         try {
             await axios.post(
-                `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/messages`,
+                `${INSTAGRAM_GRAPH_API}/me/messages`,
                 {
                     recipient: { id: recipientId },
                     sender_action: 'typing_on',
@@ -238,7 +238,7 @@ export class InstagramService {
             this.logger.debug('[Instagram] Sending DM', { instagramAccountId, recipientId });
             
             const response = await axios.post(
-                `${INSTAGRAM_GRAPH_API}/${instagramAccountId}/messages`,
+                `${INSTAGRAM_GRAPH_API}/me/messages`,
                 {
                     recipient: { id: recipientId },
                     message: { text: message },
