@@ -381,8 +381,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
-          {/* Resolve/Unresolve — always visible, even after AI replied */}
-          {onResolve && (
+          {/* Resolve/Unresolve — only for comments that need manual attention */}
+          {needsAttention && onResolve && (
             <div className="flex justify-center mt-3">
               <button
                 onClick={() => { onResolve(); onClose(); }}
@@ -394,7 +394,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               </button>
             </div>
           )}
-          {onUnresolve && (
+          {comment.resolved && onUnresolve && (
             <div className="flex justify-center mt-3">
               <button
                 onClick={() => { onUnresolve(); onClose(); }}

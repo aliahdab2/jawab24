@@ -139,10 +139,11 @@ describe('CommentDetailModal', () => {
     expect(screen.queryByText('Special offer')).not.toBeInTheDocument();
   });
 
-  it('shows resolve button when onResolve is provided and comment is not replied', async () => {
+  it('shows resolve button when comment needs attention', async () => {
+    const attentionComment: Comment = { ...mockComment, needsAttention: true };
     render(
       <CommentDetailModal
-        comment={mockComment}
+        comment={attentionComment}
         onClose={vi.fn()}
         onReplySuccess={vi.fn()}
         onResolve={vi.fn()}
@@ -158,10 +159,11 @@ describe('CommentDetailModal', () => {
   it('calls onResolve and onClose when resolve button is clicked', async () => {
     const onResolve = vi.fn();
     const onClose = vi.fn();
+    const attentionComment: Comment = { ...mockComment, needsAttention: true };
 
     render(
       <CommentDetailModal
-        comment={mockComment}
+        comment={attentionComment}
         onClose={onClose}
         onReplySuccess={vi.fn()}
         onResolve={onResolve}
@@ -178,7 +180,7 @@ describe('CommentDetailModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('does not show resolve button when comment is already replied', async () => {
+  it('does not show resolve button for auto-replied comments without attention flag', async () => {
     const repliedComment: Comment = {
       ...mockComment,
       replied: true,
@@ -191,8 +193,7 @@ describe('CommentDetailModal', () => {
       onResolve: vi.fn(),
     });
 
-    // Resolve button is always visible — even after AI replied (for needs-attention review)
-    expect(screen.queryByRole('button', { name: /Mark as handled/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mark as handled/i })).not.toBeInTheDocument();
   });
 
   it('shows comment message in the modal body', async () => {
