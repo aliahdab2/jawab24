@@ -23,7 +23,7 @@ export class InstagramService {
 
     /**
      * Get Instagram Business Account linked to a Facebook Page
-     * Requires: instagram_basic permission
+     * Requires: instagram_business_basic permission
      */
     async getLinkedInstagramAccount(pageId: string, pageAccessToken: string): Promise<InstagramAccount | null> {
         try {
@@ -60,7 +60,7 @@ export class InstagramService {
 
     /**
      * Get Instagram media (posts, reels) for an account
-     * Requires: instagram_basic permission
+     * Requires: instagram_business_basic permission
      */
     async getMedia(instagramAccountId: string, pageAccessToken: string, limit: number = 25): Promise<InstagramMedia[]> {
         try {
@@ -90,7 +90,7 @@ export class InstagramService {
 
     /**
      * Get comments on an Instagram media object
-     * Requires: instagram_basic permission
+     * Requires: instagram_business_basic permission
      */
     async getComments(mediaId: string, pageAccessToken: string): Promise<InstagramComment[]> {
         try {
@@ -119,7 +119,7 @@ export class InstagramService {
 
     /**
      * Reply to an Instagram comment
-     * Requires: instagram_manage_comments permission
+     * Requires: instagram_business_manage_comments permission
      */
     async replyToComment(commentId: string, message: string, pageAccessToken: string): Promise<string> {
         try {
@@ -150,7 +150,7 @@ export class InstagramService {
 
     /**
      * Hide a comment on Instagram
-     * Requires: instagram_manage_comments permission
+     * Requires: instagram_business_manage_comments permission
      */
     async hideComment(commentId: string, pageAccessToken: string): Promise<void> {
         try {
@@ -180,7 +180,7 @@ export class InstagramService {
 
     /**
      * Delete a comment on Instagram (only for comments on own media)
-     * Requires: instagram_manage_comments permission
+     * Requires: instagram_business_manage_comments permission
      */
     async deleteComment(commentId: string, pageAccessToken: string): Promise<void> {
         try {
@@ -206,7 +206,7 @@ export class InstagramService {
     }
 
     /**
-     * Send a direct message reply to a user (requires instagram_manage_messages)
+     * Send a direct message reply to a user (requires instagram_business_manage_messages)
      * Note: Can only message users who have messaged the account first
      */
     async sendTypingIndicator(
@@ -263,7 +263,7 @@ export class InstagramService {
 
     /**
      * Get Instagram conversations (DMs)
-     * Requires: instagram_manage_messages permission
+     * Requires: instagram_business_manage_messages permission
      */
     async getConversations(instagramAccountId: string, pageAccessToken: string): Promise<unknown[]> {
         try {

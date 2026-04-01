@@ -44,7 +44,7 @@ const mockGetUserProfile = vi.fn().mockResolvedValue({
     picture: 'https://pic.url/avatar.jpg',
 });
 const mockVerifyAccessToken = vi.fn().mockResolvedValue({
-    scopes: ['pages_show_list', 'instagram_basic'],
+    scopes: ['pages_show_list', 'instagram_business_basic'],
 });
 const mockGetLongLivedToken = vi.fn().mockResolvedValue({
     token: 'long_lived_token',

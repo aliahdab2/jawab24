@@ -277,9 +277,9 @@ describe('LoginPage', () => {
             expect(decodedScope).toContain('pages_read_user_content');
             expect(decodedScope).toContain('pages_manage_engagement');
             expect(decodedScope).toContain('pages_messaging');
-            expect(decodedScope).toContain('instagram_basic');
-            expect(decodedScope).toContain('instagram_manage_messages');
-            expect(decodedScope).toContain('instagram_manage_comments');
+            expect(decodedScope).toContain('instagram_business_basic');
+            expect(decodedScope).toContain('instagram_business_manage_messages');
+            expect(decodedScope).toContain('instagram_business_manage_comments');
         });
     });
 

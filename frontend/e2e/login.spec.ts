@@ -84,9 +84,9 @@ test.describe('Login Page', () => {
 
     if (oauthUrl) {
       const decodedUrl = decodeURIComponent(oauthUrl);
-      expect(decodedUrl).toContain('instagram_manage_comments');
-      expect(decodedUrl).toContain('instagram_manage_messages');
-      expect(decodedUrl).toContain('instagram_basic');
+      expect(decodedUrl).toContain('instagram_business_manage_comments');
+      expect(decodedUrl).toContain('instagram_business_manage_messages');
+      expect(decodedUrl).toContain('instagram_business_basic');
       expect(decodedUrl).toContain('pages_show_list');
       expect(decodedUrl).toContain('pages_messaging');
     }

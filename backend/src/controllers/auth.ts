@@ -148,7 +148,7 @@ export class AuthController {
             }
 
             // Track Instagram permission status (informational, not blocking)
-            const hasInstagram = scopes.includes('instagram_basic');
+            const hasInstagram = scopes.includes('instagram_business_basic');
             request.log.info({ hasInstagram, scopes }, 'Login permissions granted');
 
             // 2. Exchange for Long-Lived Token (Critical for Background Jobs)
