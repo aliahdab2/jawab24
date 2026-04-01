@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, ne, isNotNull, count, max } from 'drizzle-orm';
+import { eq, desc, asc, and, or, sql, ne, isNotNull, count, max } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -36,7 +36,10 @@ export class MessagesService {
         const limit = options?.limit || 50;
 
         const workspacePages = await db.query.pages.findMany({
-            where: and(eq(pages.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)),
+            where: and(
+                eq(pages.workspaceId, workspaceId),
+                or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true)),
+            ),
             columns: { id: true },
         });
 
@@ -630,7 +633,7 @@ export class MessagesService {
             .where(and(
                 eq(pages.workspaceId, workspaceId),
                 eq(messages.direction, 'incoming'),
-                eq(pages.autoReplyEnabled, true)
+                or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true)),
             ));
 
         const row = result[0];
