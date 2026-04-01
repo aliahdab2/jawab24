@@ -98,7 +98,7 @@ describe('Meta Webhook Subscriptions', () => {
     it('should return false when Instagram subscription fails', async () => {
         const axiosError = Object.assign(new Error('Forbidden'), {
             isAxiosError: true,
-            response: { data: { error: { message: 'instagram_business_manage_messages not approved' } } },
+            response: { data: { error: { message: 'instagram_manage_messages not approved' } } },
         });
         vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
