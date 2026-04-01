@@ -289,7 +289,7 @@ export class CommentProcessor {
             // 9b. Enforce max length for public comment replies (280 chars, tweet-length)
             // Skip truncation for dual/private modes — the reply is sent as a DM where length is fine.
             if (commentReplyMode === 'public') {
-                const MAX_COMMENT_REPLY_CHARS = 280;
+                const MAX_COMMENT_REPLY_CHARS = 500;
                 if (replyText.length > MAX_COMMENT_REPLY_CHARS) {
                     const originalLength = replyText.length;
                     replyText = truncateAtSentence(replyText, MAX_COMMENT_REPLY_CHARS);
@@ -297,18 +297,6 @@ export class CommentProcessor {
                         originalLength,
                         truncatedLength: replyText.length,
                     });
-                }
-            }
-
-            // 9c. Auto-append DM CTA for question/purchase intents (public mode only)
-            if (commentReplyMode === 'public' && ['QUESTION', 'PURCHASE_INTENT'].includes(aiIntent || '')) {
-                const hasDmMention = /\b(DM|message|رسالة|خاص|الخاص)\b/i.test(replyText);
-                if (!hasDmMention) {
-                    const lang = detectLanguageCode(commentMessage);
-                    const cta = lang === 'ar' || /[\u0600-\u06FF]/.test(commentMessage)
-                        ? '\nراسلنا على الخاص للمزيد من التفاصيل 📩'
-                        : '\nSend us a message for more details 📩';
-                    replyText = replyText.trimEnd() + cta;
                 }
             }
 
