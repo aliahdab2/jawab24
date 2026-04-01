@@ -9,9 +9,11 @@ vi.mock('../../../src/services/pages', () => ({
 }));
 
 const mockReplyToComment = vi.fn();
+const mockSendDirectMessage = vi.fn();
 vi.mock('../../../src/services/instagram', () => ({
     instagramService: {
         replyToComment: (...args: unknown[]) => mockReplyToComment(...args),
+        sendDirectMessage: (...args: unknown[]) => mockSendDirectMessage(...args),
     },
 }));
 
@@ -392,6 +394,92 @@ describe('InstagramCommentAdapter', () => {
             // Instagram doesn't include postId or accessToken in context
             expect(ctx.postId).toBeUndefined();
             expect(ctx.accessToken).toBeUndefined();
+        });
+    });
+
+    describe('sendReply', () => {
+        const baseOpts = {
+            platformCommentId: 'ig-comment-1',
+            platformPageId: 'ig-account-1',
+            replyText: 'Full AI reply text',
+            commentMessage: 'مرحبا',
+            accessToken: 'token-123',
+            fromId: 'sender-1',
+            userSettings: {} as Record<string, unknown>,
+        };
+
+        beforeEach(() => {
+            mockReplyToComment.mockResolvedValue('reply-id');
+            mockSendDirectMessage.mockResolvedValue('msg-id');
+        });
+
+        it('public mode: replies on comment only', async () => {
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'public' } };
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(true);
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'Full AI reply text', 'token-123');
+            expect(mockSendDirectMessage).not.toHaveBeenCalled();
+        });
+
+        it('private mode: sends DM only', async () => {
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'private' } };
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(true);
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
+            expect(mockReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('dual mode: sends DM + short public nudge', async () => {
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(true);
+            expect(mockSendDirectMessage).toHaveBeenCalledWith('ig-account-1', 'sender-1', 'Full AI reply text', 'token-123');
+            // Public reply should be the nudge text, not the full reply
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', expect.not.stringContaining('Full AI reply'), 'token-123');
+        });
+
+        it('dual mode: uses custom nudge variation', async () => {
+            const opts = {
+                ...baseOpts,
+                userSettings: {
+                    commentReplyMode: 'dual',
+                    dualReplyNudgeVariations: { ar: ['تم إرسال التفاصيل في رسالة خاصة'] },
+                },
+            };
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(true);
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'تم إرسال التفاصيل في رسالة خاصة', 'token-123');
+        });
+
+        it('private mode: fails when fromId is missing', async () => {
+            const opts = { ...baseOpts, fromId: undefined, userSettings: { commentReplyMode: 'private' } };
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(false);
+            expect(result.error).toContain('commenter ID not available');
+        });
+
+        it('dual mode: falls back to public when DM fails', async () => {
+            mockSendDirectMessage.mockRejectedValue(new Error('DM blocked'));
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
+            const result = await adapter.sendReply(opts);
+
+            // DM failed but public reply should NOT proceed (errorMsg is set)
+            // This matches Facebook behavior: if DM fails in dual mode, don't post public nudge
+            expect(result.success).toBe(false);
+        });
+
+        it('defaults to public mode when commentReplyMode not set', async () => {
+            const opts = { ...baseOpts, userSettings: {} };
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(true);
+            expect(mockReplyToComment).toHaveBeenCalled();
+            expect(mockSendDirectMessage).not.toHaveBeenCalled();
         });
     });
 

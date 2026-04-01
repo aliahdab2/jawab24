@@ -1,8 +1,11 @@
 import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
+import { pickNudgeVariation } from '../nudge';
+import { detectLanguageCode } from '../../../utils/language';
 import { db } from '../../../db';
 import { instagramMedia, instagramComments } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
+import type { ReplyMode } from '../sender';
 import type {
     CommentPlatformAdapter,
     PlatformPage,
@@ -32,6 +35,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             knowledgeBase: page.knowledgeBase,
             kbActiveVersion: page.kbActiveVersion ?? null,
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
+            platformAccountId: page.instagramAccountId ?? undefined,
             ecommerceStoreId: page.ecommerceStoreId,
             businessProfile: page.businessProfile as Record<string, unknown> | null,
         };
@@ -113,20 +117,52 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         fromId?: string;
         userSettings: Record<string, unknown>;
     }): Promise<SendCommentResult> {
-        try {
-            await instagramService.replyToComment(
-                opts.platformCommentId,
-                opts.replyText,
-                opts.accessToken,
-            );
-            return { success: true };
-        } catch (error) {
-            const detail = error instanceof Error ? error.message : String(error);
-            return {
-                success: false,
-                error: `Failed to post reply to Instagram: ${detail}`,
-            };
+        const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
+        const commentLang = detectLanguageCode(opts.commentMessage);
+        const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
+        const dualReplyNudge = pickNudgeVariation(variationsMulti, commentLang);
+
+        let success = false;
+        let errorMsg = '';
+
+        // Private or Dual: send DM first
+        if (replyMode === 'private' || replyMode === 'dual') {
+            if (!opts.fromId) {
+                return { success: false, error: 'Cannot send DM: commenter ID not available' };
+            }
+            try {
+                await instagramService.sendDirectMessage(
+                    opts.platformPageId, opts.fromId, opts.replyText, opts.accessToken,
+                );
+                success = true;
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                if (replyMode === 'private') {
+                    return { success: false, error: `Failed to send Instagram DM: ${detail}` };
+                }
+                errorMsg = 'DM failed';
+            }
         }
+
+        // Public or Dual: post public comment reply
+        if (replyMode === 'public' || (replyMode === 'dual' && !errorMsg)) {
+            const publicText = replyMode === 'dual'
+                ? (dualReplyNudge || 'أرسلنا لك التفاصيل برسالة خاصة 📩').slice(0, 80)
+                : opts.replyText;
+            try {
+                await instagramService.replyToComment(
+                    opts.platformCommentId, publicText, opts.accessToken,
+                );
+                success = true;
+            } catch (error) {
+                const detail = error instanceof Error ? error.message : String(error);
+                if (replyMode === 'public') {
+                    errorMsg = `Failed to post reply to Instagram: ${detail}`;
+                }
+            }
+        }
+
+        return { success, error: errorMsg || undefined };
     }
 
     async markAsReplied(
