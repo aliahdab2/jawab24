@@ -1,11 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockInit = vi.fn();
+const mockSetTag = vi.fn();
 vi.mock('@sentry/node', () => ({
     init: mockInit,
     captureException: vi.fn(),
+    setTag: mockSetTag,
     default: {
         init: mockInit,
+        setTag: mockSetTag,
     },
 }));
 
@@ -19,6 +22,7 @@ describe('Sentry', () => {
         vi.doMock('@sentry/node', () => ({
             init: mockInit,
             captureException: vi.fn(),
+            setTag: mockSetTag,
         }));
     });
 
