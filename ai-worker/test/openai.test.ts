@@ -818,8 +818,8 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
         });
 
         const systemPrompt = capture.messages[0].content;
-        expect(systemPrompt).toContain('Public comment replies MUST be 1 sentence');
-        expect(systemPrompt).toContain('Send us a message for details');
+        expect(systemPrompt).toContain('Public comment replies must be concise');
+        expect(systemPrompt).toContain('DO include key facts');
         expect(systemPrompt).not.toContain('You may provide full detailed answers');
     });
 
