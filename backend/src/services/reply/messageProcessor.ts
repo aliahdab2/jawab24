@@ -159,6 +159,7 @@ export class MessageProcessor {
             const userSettings = await workspaceSettingsService.getSettings(workspaceId);
 
             // 5. Debounce: skip if a newer unreplied message exists from the same sender.
+            //    The newest message will consolidate all pending messages into one reply.
             //    When replyDelay > 0, skip this early check — the delay acts as a
             //    consolidation window, and we re-check after the delay (step 10b).
             const internalMessageId = adapter.getInternalMessageId(platformMessageId);

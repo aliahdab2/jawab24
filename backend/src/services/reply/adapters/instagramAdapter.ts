@@ -5,7 +5,7 @@ import { messagesService } from '../../messages';
 import { db } from '../../../db';
 import { messages } from '../../../db/schema';
 import { config } from '../../../config';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
 
 const INSTAGRAM_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
@@ -62,25 +62,31 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         text: string,
         senderName?: string,
     ): Promise<{ message: StoredMessage; isNew: boolean }> {
-        // Check if message already exists by Instagram message ID
+        const facebookMessageId = `ig_${instagramMessageId}`;
+
+        // Check if message already exists (by instagramMessageId or facebookMessageId)
+        // The nonTextHandler pre-creates records by facebookMessageId before the adapter runs
         const existingRows = await db
             .select()
             .from(messages)
-            .where(eq(messages.instagramMessageId, instagramMessageId));
+            .where(or(
+                eq(messages.instagramMessageId, instagramMessageId),
+                eq(messages.facebookMessageId, facebookMessageId),
+            ));
 
         if (existingRows[0]) {
-            // Update senderName if we have one and the record doesn't
-            if (senderName && !existingRows[0].senderName) {
-                await db.update(messages).set({ senderName }).where(eq(messages.id, existingRows[0].id));
+            // Backfill instagramMessageId if missing (pre-created by nonTextHandler)
+            const updates: Record<string, unknown> = {};
+            if (!existingRows[0].instagramMessageId) updates.instagramMessageId = instagramMessageId;
+            if (senderName && !existingRows[0].senderName) updates.senderName = senderName;
+            if (Object.keys(updates).length > 0) {
+                await db.update(messages).set(updates).where(eq(messages.id, existingRows[0].id));
             }
             return {
                 message: { id: existingRows[0].id, replied: existingRows[0].replied ?? false, needsAttention: existingRows[0].needsAttention ?? false },
                 isNew: false,
             };
         }
-
-        // Create with Instagram-specific fields
-        const facebookMessageId = `ig_${instagramMessageId}`;
         const [created] = await db
             .insert(messages)
             .values({

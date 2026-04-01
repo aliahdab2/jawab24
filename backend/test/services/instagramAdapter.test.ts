@@ -167,6 +167,7 @@ describe('InstagramMessageAdapter', () => {
                 replied: true,
                 needsAttention: false,
                 senderName: 'already_set',
+                instagramMessageId: IG_MESSAGE_ID, // already set
             };
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
@@ -181,16 +182,17 @@ describe('InstagramMessageAdapter', () => {
             expect(result.isNew).toBe(false);
             expect(result.message.id).toBe('existing-id');
             expect(result.message.replied).toBe(true);
-            // Should NOT update senderName since the existing record already has one
+            // No updates needed — both instagramMessageId and senderName already set
             expect(db.update).not.toHaveBeenCalled();
         });
 
-        it('updates senderName on existing message when it was missing', async () => {
+        it('backfills instagramMessageId and senderName on pre-created message', async () => {
             const existingRow = {
                 id: 'existing-id',
                 replied: false,
                 needsAttention: false,
-                senderName: null, // was missing
+                senderName: null,
+                instagramMessageId: null, // pre-created by nonTextHandler without this field
             };
             vi.mocked(db.select).mockReturnValue({
                 from: vi.fn().mockReturnValue({
@@ -209,10 +211,12 @@ describe('InstagramMessageAdapter', () => {
             );
 
             expect(result.isNew).toBe(false);
-            // Should update since existing record had no senderName
             expect(db.update).toHaveBeenCalled();
             const updateCall = vi.mocked(db.update).mock.results[0].value;
-            expect(updateCall.set).toHaveBeenCalledWith({ senderName: 'late_name' });
+            expect(updateCall.set).toHaveBeenCalledWith({
+                instagramMessageId: IG_MESSAGE_ID,
+                senderName: 'late_name',
+            });
         });
 
         it('creates message without senderName when not provided', async () => {
