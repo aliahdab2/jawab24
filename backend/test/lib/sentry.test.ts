@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockSentryInit = vi.fn();
+const mockSetTag = vi.fn();
 vi.mock('@sentry/node', () => ({
     init: mockSentryInit,
+    setTag: mockSetTag,
 }));
 
 describe('sentry', () => {
@@ -110,6 +112,33 @@ describe('sentry', () => {
         const sentryConfig = mockSentryInit.mock.calls[0][0];
         const mockEvent = { message: 'test' };
         expect(sentryConfig.beforeSend(mockEvent)).toBeNull();
+        logSpy.mockRestore();
+    });
+
+    it('should set service tag after init', async () => {
+        process.env.SENTRY_DSN = 'https://test@sentry.io/123';
+        process.env.NODE_ENV = 'production';
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        const { initSentry } = await import('../../src/lib/sentry');
+        initSentry();
+
+        expect(mockSetTag).toHaveBeenCalledWith('service', 'backend');
+        logSpy.mockRestore();
+    });
+
+    it('should use GIT_COMMIT as release when available', async () => {
+        process.env.SENTRY_DSN = 'https://test@sentry.io/123';
+        process.env.NODE_ENV = 'production';
+        process.env.GIT_COMMIT = 'abc123def';
+        const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        const { initSentry } = await import('../../src/lib/sentry');
+        initSentry();
+
+        expect(mockSentryInit).toHaveBeenCalledWith(expect.objectContaining({
+            release: 'abc123def',
+        }));
         logSpy.mockRestore();
     });
 

@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
+import * as Sentry from '@sentry/node';
 import { authService } from '../services/auth';
 
 export interface AuthenticatedRequest extends FastifyRequest {
@@ -56,6 +57,9 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
             userId: payload.userId,
             isAdmin: payload.isAdmin || false,
         };
+
+        // Set Sentry user context so every error in this request is linked to the user
+        Sentry.setUser({ id: payload.userId });
     } catch (error) {
         request.log.error(error);
         return reply.status(401).send({

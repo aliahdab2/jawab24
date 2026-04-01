@@ -88,10 +88,16 @@ export const useAuthStore = create<AuthState>()(
           });
         }
         
+        // Set Sentry user context so every frontend error is linked to the user
+        Sentry.setUser({ id: user.id, email: user.email });
+
         // Zustand persist handles storage automatically
         set({ user, token, fbToken, isAuthenticated: true });
       },
       logout: async () => {
+        // Clear Sentry user context on logout
+        Sentry.setUser(null);
+
         // Use centralized AuthManager for consistent logout behavior
         // This ensures the same logout flow is used everywhere (interceptors, UI, etc.)
         const { authManager } = await import('./authManager');
