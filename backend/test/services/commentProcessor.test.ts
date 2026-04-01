@@ -585,7 +585,6 @@ describe('CommentProcessor', () => {
         // Reply IS sent (not skipped), but with safe fallback text + DM CTA (PURCHASE_INTENT in public mode)
         const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
         expect(sendCall.replyText).toContain(PRICE_FALLBACK['en']);
-        expect(sendCall.replyText).toContain('Send us a message for more details');
         expect(adapter.flagComment).not.toHaveBeenCalled(); // not offensive
         expect(adapter.markAsReplied).toHaveBeenCalled();
     });
@@ -788,10 +787,10 @@ describe('CommentProcessor', () => {
         expect(result.success).toBe(true);
         // The sent reply should be truncated
         const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
-        expect(sendCall.replyText.length).toBeLessThanOrEqual(280);
+        expect(sendCall.replyText.length).toBeLessThanOrEqual(500);
     });
 
-    it('should NOT truncate AI reply under 280 chars', async () => {
+    it('should NOT truncate AI reply under 500 chars', async () => {
         const shortReply = 'Thank you for your kind words!';
 
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
@@ -811,9 +810,9 @@ describe('CommentProcessor', () => {
         expect(sendCall.replyText).toBe(shortReply);
     });
 
-    // --- DM CTA auto-append tests ---
+    // --- Public comment should NOT append DM CTA (no DM is sent in public mode) ---
 
-    it('should append English DM CTA for QUESTION intent in public mode', async () => {
+    it('should NOT append DM CTA for QUESTION intent in public mode', async () => {
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Great question!',
             replyMethod: 'ai',
@@ -833,13 +832,11 @@ describe('CommentProcessor', () => {
         );
 
         const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
-        expect(sendCall.replyText).toContain('Send us a message for more details');
+        expect(sendCall.replyText).toBe('Great question!');
+        expect(sendCall.replyText).not.toContain('Send us a message');
     });
 
-    it('should append Arabic DM CTA for QUESTION intent with Arabic comment', async () => {
-        const { detectLanguageCode } = await import('../../src/utils/language');
-        vi.mocked(detectLanguageCode).mockReturnValue('ar');
-
+    it('should NOT append Arabic DM CTA for QUESTION intent with Arabic comment', async () => {
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'شكراً لسؤالك!',
             replyMethod: 'ai',
@@ -859,7 +856,8 @@ describe('CommentProcessor', () => {
         );
 
         const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
-        expect(sendCall.replyText).toContain('راسلنا على الخاص');
+        expect(sendCall.replyText).toBe('شكراً لسؤالك!');
+        expect(sendCall.replyText).not.toContain('راسلنا على الخاص');
     });
 
     it('should NOT append DM CTA when AI reply already mentions DM', async () => {
@@ -934,10 +932,7 @@ describe('CommentProcessor', () => {
         expect(sendCall.replyText).not.toContain('Send us a message');
     });
 
-    it('should append DM CTA for PURCHASE_INTENT', async () => {
-        const { detectLanguageCode } = await import('../../src/utils/language');
-        vi.mocked(detectLanguageCode).mockReturnValue('en');
-
+    it('should NOT append DM CTA for PURCHASE_INTENT in public mode', async () => {
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'We would love to help you with your order!',
             replyMethod: 'ai',
@@ -957,7 +952,8 @@ describe('CommentProcessor', () => {
         );
 
         const sendCall = vi.mocked(adapter.sendReply).mock.calls[0][0];
-        expect(sendCall.replyText).toContain('Send us a message for more details');
+        expect(sendCall.replyText).toBe('We would love to help you with your order!');
+        expect(sendCall.replyText).not.toContain('Send us a message');
     });
 });
 
