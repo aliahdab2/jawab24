@@ -435,7 +435,7 @@ describe('InstagramReplyService', () => {
             expect(result.error).toBe('Message already replied');
         });
 
-        it('should return error when DM sending fails', async () => {
+        it('should mark message as replied with delivery_failed when DM sending fails', async () => {
             vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(new Error('Cannot DM'));
             setupDbForMessage();
 
@@ -443,6 +443,14 @@ describe('InstagramReplyService', () => {
 
             expect(result.success).toBe(false);
             expect(result.error).toContain('Failed to send reply');
+            // Message should still be marked as replied with delivery_failed flag
+            expect(messagesService.markAsReplied).toHaveBeenCalledWith(
+                'msg-uuid', expect.any(String), expect.any(String),
+                true, 'delivery_failed',
+                expect.toBeOneOf([expect.any(String), undefined]),
+                undefined,
+                expect.toBeOneOf([expect.any(String), undefined]),
+            );
         });
 
         it('should catch and return unexpected errors', async () => {

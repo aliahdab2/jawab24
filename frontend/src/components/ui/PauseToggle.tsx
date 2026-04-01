@@ -45,7 +45,7 @@ export const PauseToggle: React.FC<PauseToggleProps> = ({
           </span>
         )}
       </div>
-      <span className="text-[10px] text-subtle ps-2">{t('pauseScope')}</span>
+      <span className="text-[10px] text-muted-foreground ps-2">{t('pauseScope')}</span>
     </div>
   );
 };
