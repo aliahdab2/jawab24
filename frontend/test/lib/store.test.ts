@@ -6,6 +6,7 @@ vi.mock('@sentry/nextjs', () => ({
     captureMessage: vi.fn(),
     captureException: vi.fn(),
     addBreadcrumb: vi.fn(),
+    setUser: vi.fn(),
 }));
 
 describe('useAuthStore - setAuth validation', () => {
