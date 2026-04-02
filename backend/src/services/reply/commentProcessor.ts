@@ -137,38 +137,11 @@ export class CommentProcessor {
                 return { success: false, commentId: comment.id, error: 'Comment already replied' };
             }
 
-            // 4a. Subscription gate — send away message instead of AI reply for expired subscriptions
+            // 4a. Subscription gate — all automation stops when subscription is inactive
             const isActive = await subscriptionsService.isSubscriptionActive(userId);
             if (!isActive) {
                 pipelineMetrics.record(pipeline, 'subscription_inactive');
-                this.logger.info(`[${platform}] Subscription inactive — sending away message fallback`, { userId, pageId: page.id });
-
-                // Send away message so the customer isn't left hanging
-                const customerLang = detectLanguageCode(commentMessage);
-                const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
-                if (awayMessage && page.accessToken) {
-                    try {
-                        await adapter.sendReply({
-                            platformCommentId,
-                            platformPageId,
-                            replyText: awayMessage,
-                            commentMessage,
-                            accessToken: page.accessToken,
-                            fromId,
-                            userSettings: userSettings as unknown as Record<string, unknown>,
-                        });
-                        await commentsService.markAsReplied(comment.id, awayMessage, 'template');
-                        this.logger.info(`[${platform}] Sent away message for inactive subscription`, { commentId: comment.id });
-                    } catch (error) {
-                        this.logger.error(`[${platform}] Failed to send away message for inactive subscription`, { error: String(error) });
-                        // Flag so merchant sees it needs attention
-                        await adapter.flagComment(comment.id, 'subscription_inactive');
-                    }
-                } else {
-                    // No away message configured — flag for manual attention
-                    await adapter.flagComment(comment.id, 'subscription_inactive');
-                }
-
+                this.logger.info(`[${platform}] Subscription inactive — skipping reply`, { userId, pageId: page.id });
                 return { success: false, commentId: comment.id, error: 'Subscription inactive' };
             }
 
