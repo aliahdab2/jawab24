@@ -4,10 +4,13 @@ import {
   Instagram,
   Zap,
   Bot,
+  BotMessageSquare,
   Check,
   ShoppingBag,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { AnimatePresence, motion, type Variants } from 'framer-motion';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui';
 
 export function ShopifyIcon({ className }: { className?: string }) {
@@ -42,6 +45,185 @@ export function MetaIcon({ className }: { className?: string }) {
     <svg viewBox="0 0 36 24" fill="currentColor" className={className} aria-hidden="true">
       <path d="M7.5 2.4C5.7 2.4 4 4 2.8 6.6 1.2 10 .2 14.6.2 17.5c0 2.5.9 4.1 2.8 4.1 2 0 3.5-1.8 5.3-5.3l2-3.8c2.3-4.4 4.5-7.2 7.7-7.2s5.3 1.6 6.2 4.5c.7-2.8 2.8-7.4 6.3-7.4 1.7 0 2.9.8 3.7 2.1C33 2.4 30.7.9 27.6.9c-5.2 0-8 4.8-10.6 10l-1.8 3.5c-2 3.9-3.3 5.6-4.8 5.6-1 0-1.5-.8-1.5-2.5 0-2.7.9-6.7 2.3-9.9C12.6 4.6 14 3.1 15.3 2.8c-1-.3-2-.4-3-.4H7.5zm17.3 0c-1.8 0-3.2 2.4-4.5 5.5l-1.7 3.4c-1.6 3.2-2.8 5.4-2.8 7.2 0 2.5.9 4.1 2.8 4.1 2 0 3.5-1.8 5.3-5.3l2-3.8c1.2-2.2 2.2-3.6 3.2-4.3-.3-2.5-1.1-4.2-2.3-5.3-.6-.9-1.3-1.5-2-1.5z" />
     </svg>
+  );
+}
+
+/* ── Hero phone animation ── */
+const heroSpring = { type: 'spring' as const, stiffness: 220, damping: 20 };
+
+const heroFadeSlide: Variants = {
+  enter: { opacity: 0, y: 12, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: heroSpring },
+  exit: { opacity: 0, y: -6, scale: 0.98, transition: { duration: 0.18 } },
+};
+
+const heroConversationFade: Variants = {
+  visible: { opacity: 1, transition: { duration: 0 } },
+  resetting: { opacity: 0, y: -8, transition: { duration: 0.35, ease: 'easeInOut' } },
+};
+
+/*
+ * Step timeline — each entry is [delay, state]:
+ *  0→cust1, 1→dots, 2→bot1, 3→cust2, 4→dots, 5→bot2, 6→hold, 7→fade-out, 8→blank→restart
+ */
+const HERO_STEPS: [number, 'chat' | 'reset' | 'blank'][] = [
+  [800, 'chat'],   // 0: customer msg 1
+  [1000, 'chat'],  // 1: typing dots
+  [1400, 'chat'],  // 2: bot reply 1
+  [1000, 'chat'],  // 3: customer msg 2
+  [1000, 'chat'],  // 4: typing dots
+  [1400, 'chat'],  // 5: bot reply 2
+  [2000, 'chat'],  // 6: hold
+  [500, 'reset'],  // 7: fade out
+  [100, 'blank'],  // 8: blank → restart
+];
+
+function HeroTypingDots() {
+  return (
+    <motion.div
+      key="hero-dots"
+      variants={heroFadeSlide}
+      initial="enter"
+      animate="visible"
+      exit="exit"
+      className="flex items-end gap-0.5 sm:gap-1 justify-end"
+    >
+      <div className="bg-brand-500/80 rounded-lg sm:rounded-xl rounded-be-none px-1.5 py-1 sm:px-2 sm:py-1.5 shadow-lg shadow-brand-500/20 flex items-center gap-0.5 sm:gap-1">
+        {[0, 1, 2].map(i => (
+          <motion.span
+            key={i}
+            className="w-0.5 h-0.5 sm:w-1 sm:h-1 bg-white/70 rounded-full block"
+            animate={{ y: [0, -4, 0] }}
+            transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.15, ease: 'easeInOut' }}
+          />
+        ))}
+      </div>
+      <div className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0">
+        <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 text-brand-500" aria-hidden="true" />
+      </div>
+    </motion.div>
+  );
+}
+
+function CustomerBubble({ text }: { text: string }) {
+  return (
+    <div className="flex items-end gap-0.5 sm:gap-1">
+      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0">
+        <Facebook className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-surface-600" aria-hidden="true" />
+      </div>
+      <div className="landing-chat-bubble rounded-lg sm:rounded-xl rounded-es-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-sm max-w-[80%]">
+        <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-surface-800 font-medium leading-tight">{text}</p>
+      </div>
+    </div>
+  );
+}
+
+function BotBubble({ text }: { text: string }) {
+  return (
+    <div className="flex items-end gap-0.5 sm:gap-1 justify-end">
+      <div className="bg-brand-500 rounded-lg sm:rounded-xl rounded-ee-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-lg shadow-brand-500/20 max-w-[85%]">
+        <p className="text-[7px] sm:text-[10px] lg:text-sm text-white font-bold leading-tight">{text}</p>
+      </div>
+      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0">
+        <Zap className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-brand-500" aria-hidden="true" />
+      </div>
+    </div>
+  );
+}
+
+
+function HeroPhoneChat({ t }: { t: (key: string) => string }) {
+  const [step, setStep] = useState(0);
+
+  const [delay, mode] = HERO_STEPS[step] ?? HERO_STEPS[0];
+  const phase = mode === 'chat' ? step : -1;
+  const resetting = mode === 'reset';
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setStep(prev => (prev + 1) % HERO_STEPS.length);
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [step, delay]);
+
+  const show = (atPhase: number) => phase >= atPhase;
+
+  return (
+    <div className="landing-phone-screen rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative">
+      <div className="relative p-2.5 sm:p-4 h-full flex flex-col">
+        {/* Status Bar */}
+        <div className="flex items-center justify-between pt-7 sm:pt-9 pb-3 sm:pb-4 px-4">
+          {/* Signal bars */}
+          <div className="flex items-end gap-[1px] sm:gap-[1.5px]">
+            <div className="w-[2px] sm:w-[3px] h-[3px] sm:h-[4px] bg-brand-900/30 rounded-[0.5px]" />
+            <div className="w-[2px] sm:w-[3px] h-[5px] sm:h-[6px] bg-brand-900/30 rounded-[0.5px]" />
+            <div className="w-[2px] sm:w-[3px] h-[7px] sm:h-[8px] bg-brand-900/30 rounded-[0.5px]" />
+            <div className="w-[2px] sm:w-[3px] h-[9px] sm:h-[10px] bg-brand-900/30 rounded-[0.5px]" />
+          </div>
+          <div className="text-[8px] sm:text-[9px] lg:text-xs font-bold text-brand-900/30">9:41</div>
+          {/* Battery */}
+          <div className="flex items-center gap-[1px]">
+            <div className="relative w-4 sm:w-5 lg:w-6 h-2 sm:h-2.5 lg:h-3 border border-brand-900/25 rounded-[2px] sm:rounded-[3px] p-[1px] sm:p-[1.5px]">
+              <div className="h-full w-[75%] bg-brand-500/40 rounded-[1px]" />
+            </div>
+            <div className="w-[1.5px] sm:w-[2px] h-1 sm:h-1.5 bg-brand-900/25 rounded-e-sm" />
+          </div>
+        </div>
+
+        {/* Bot Icon */}
+        <div className="flex flex-col items-center justify-center mt-1 sm:mt-2 mb-2 sm:mb-3">
+          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center animate-float-pulse border border-brand-50">
+            <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500" aria-hidden="true" />
+          </div>
+        </div>
+
+        {/* Chat Messages */}
+        <motion.div
+          variants={heroConversationFade}
+          initial="visible"
+          animate={resetting ? 'resetting' : 'visible'}
+          className="flex-1 flex flex-col justify-start gap-2.5 sm:gap-3 lg:gap-4 px-1 sm:px-2 pt-2 sm:pt-3 overflow-hidden"
+        >
+          {/* Phase 0: Customer message 1 */}
+          <AnimatePresence>
+            {show(0) && (
+              <motion.div key="hc1" variants={heroFadeSlide} initial="enter" animate="visible" exit="exit">
+                <CustomerBubble text={t('hero.chatQuery')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Phase 1→2: Typing dots → Bot reply 1 */}
+          <AnimatePresence mode="wait">
+            {phase === 1 && <HeroTypingDots />}
+            {show(2) && (
+              <motion.div key="hr1" variants={heroFadeSlide} initial="enter" animate="visible" exit="exit">
+                <BotBubble text={t('hero.chatResponse')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Phase 3: Customer follow-up */}
+          <AnimatePresence>
+            {show(3) && (
+              <motion.div key="hc2" variants={heroFadeSlide} initial="enter" animate="visible" exit="exit">
+                <CustomerBubble text={t('hero.chatFollowUp')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Phase 4→5: Typing dots → Bot reply 2 */}
+          <AnimatePresence mode="wait">
+            {phase === 4 && <HeroTypingDots />}
+            {show(5) && (
+              <motion.div key="hr2" variants={heroFadeSlide} initial="enter" animate="visible" exit="exit">
+                <BotBubble text={t('hero.chatResponse2')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
+    </div>
   );
 }
 
@@ -138,49 +320,22 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
               {/* Glowing Background */}
               <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
 
-              {/* Phone Mockup */}
-              <div className="relative landing-phone-frame rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5 shadow-2xl shadow-brand-900/20">
-                <div className="absolute top-4 sm:top-5 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 landing-phone-notch rounded-full z-10"></div>
+              {/* Phone Mockup — floating with deeper shadow */}
+              <motion.div
+                animate={{ y: [0, -5, 0] }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                className="relative landing-phone-frame rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5"
+                style={{ boxShadow: '0 20px 60px -10px rgba(0, 128, 128, 0.25), 0 8px 24px -6px rgba(0, 0, 0, 0.15)' }}
+              >
+                <div className="absolute top-5 sm:top-7 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 landing-phone-notch rounded-full z-10" />
 
-                <div className="landing-phone-screen rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative">
-                  <div className="p-2.5 sm:p-4 h-full flex flex-col justify-evenly">
-                    <div className="flex items-center justify-between pt-1 sm:pt-2 px-4">
-                      <div className="flex items-center gap-0.5 sm:gap-1">
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-500 rounded-full" />
-                        <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-brand-300 rounded-full" />
-                      </div>
-                      <div className="text-[8px] sm:text-[9px] lg:text-xs font-bold text-brand-900/30">9:41</div>
-                      <div className="w-3 sm:w-4 lg:w-5 h-1.5 sm:h-2 bg-brand-500/10 rounded-sm" />
-                    </div>
-
-                    <div className="flex flex-col items-center justify-center">
-                      <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center mb-1 sm:mb-2 animate-float-pulse border border-brand-50">
-                        <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500" />
-                      </div>
-                      <span className="font-display font-bold text-[8px] sm:text-xs lg:text-base text-brand-600">jawab24.com</span>
-                    </div>
-
-                    <div className="space-y-1.5 sm:space-y-3 lg:space-y-4 pb-2 sm:pb-4">
-                      <div className="flex items-end gap-1 sm:gap-1.5 lg:gap-2 rtl:flex-row-reverse animate-slide-up">
-                        <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0 shadow-sm">
-                          <Facebook className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-surface-600" />
-                        </div>
-                        <div className="landing-chat-bubble rounded-xl sm:rounded-2xl rounded-bl-none rtl:rounded-bl-xl sm:rtl:rounded-bl-2xl rtl:rounded-br-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-sm max-w-full">
-                          <p className="text-[8px] sm:text-[11px] lg:text-base text-surface-700 font-medium leading-tight lg:leading-relaxed">{t('hero.chatQuery')}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-end gap-1 sm:gap-1.5 lg:gap-2 justify-end rtl:flex-row-reverse rtl:justify-start animate-slide-up animation-delay-500">
-                        <div className="bg-brand-500 rounded-xl sm:rounded-2xl rounded-br-none rtl:rounded-br-xl sm:rtl:rounded-br-2xl rtl:rounded-bl-none px-2 py-1 sm:px-3 sm:py-2 lg:px-4 lg:py-3 shadow-lg shadow-brand-500/20 max-w-[85%]">
-                          <p className="text-[8px] sm:text-[11px] lg:text-base text-white font-bold leading-tight lg:leading-relaxed">{t('hero.chatResponse')}</p>
-                        </div>
-                        <div className="w-4 h-4 sm:w-5 sm:h-5 lg:w-7 lg:h-7 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0 shadow-sm">
-                          <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 lg:w-4 lg:h-4 text-brand-500" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                {/* Glass reflection sweep */}
+                <div className="absolute inset-0 rounded-[28px] sm:rounded-[34px] overflow-hidden pointer-events-none z-20">
+                  <div className="absolute inset-0 animate-glass-sweep" />
                 </div>
-              </div>
+
+                <HeroPhoneChat t={t} />
+              </motion.div>
 
               {/* Floating Elements */}
               <div className="absolute -start-4 sm:-start-8 top-1/4 animate-float-rotate">

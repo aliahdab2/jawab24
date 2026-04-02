@@ -16,7 +16,9 @@
     "cta1": "Start Your Free Trial",
     "cta2": "View Plans & Pricing",
     "chatQuery": "What is the product price? 🤔",
-    "chatResponse": "Hi! The price is only $5 🎉"
+    "chatResponse": "Hi! The price is only 49 SAR 🎉",
+    "chatFollowUp": "Is shipping free? 🚚",
+    "chatResponse2": "Free shipping on orders over 100 SAR! 🎁"
   },
   "platforms": {
     "facebook": "Facebook",

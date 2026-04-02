@@ -1129,6 +1129,37 @@
   animation: float-pulse 4s ease-in-out infinite;
 }
 
+/* Glass reflection sweep across phone screen */
+@keyframes glass-sweep {
+  0%, 100% {
+    opacity: 0;
+    transform: translateX(-100%) rotate(25deg);
+  }
+  15% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 0;
+    transform: translateX(200%) rotate(25deg);
+  }
+  31%, 99% {
+    opacity: 0;
+    transform: translateX(-100%) rotate(25deg);
+  }
+}
+
+.animate-glass-sweep {
+  background: linear-gradient(
+    105deg,
+    transparent 40%,
+    rgba(255, 255, 255, 0.15) 45%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.15) 55%,
+    transparent 60%
+  );
+  animation: glass-sweep 6s ease-in-out infinite;
+}
+
 .animate-bounce-slow {
   animation: bounce-slow 3s ease-in-out infinite;
 }
@@ -1227,6 +1258,7 @@
   animation-delay: 0.5s;
 }
 
+
 .animation-delay-1000 {
   animation-delay: 1s;
 }
@@ -1235,6 +1267,7 @@
    - Infinite/looping animations (float, pulse, orbit) → disabled completely.
    - One-shot entrance animations (fade-in, slide-up) → instant (no motion, still appear). */
 @media (prefers-reduced-motion: reduce) {
+  .animate-glass-sweep,
   .animate-float,
   .animate-float-rotate,
   .animate-float-orbit,
