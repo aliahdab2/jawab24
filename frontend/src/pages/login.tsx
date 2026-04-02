@@ -243,7 +243,7 @@ export default function LoginPage() {
         <meta key="og:description" property="og:description" content={t('ogDescription')} />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] relative">
+      <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] max-lg:landscape:min-h-0 relative">
         {/* Dark mode decorative overlays — span both panels seamlessly */}
         <div className="hidden dark:block absolute inset-0 pointer-events-none z-0" aria-hidden="true">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.15),transparent_60%)]" />
@@ -309,19 +309,19 @@ export default function LoginPage() {
         </div>
 
         {/* Right Side: Login Form */}
-        <div className="flex-1 flex flex-col bg-gradient-to-br from-card via-card to-brand-50/30 dark:bg-none dark:from-transparent dark:via-transparent dark:to-transparent min-h-0 overflow-hidden relative z-[1]">
+        <div className="flex-1 flex flex-col bg-gradient-to-br from-card via-card to-brand-50/30 dark:bg-none dark:from-transparent dark:via-transparent dark:to-transparent min-h-0 overflow-hidden max-lg:landscape:overflow-visible relative z-[1]">
           {/* Subtle background pattern for visual interest (light mode only) */}
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(13,148,136,0.03),transparent_50%)] pointer-events-none dark:hidden" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(13,148,136,0.02),transparent_50%)] pointer-events-none dark:hidden" />
 
           {/* Header - Sticky so it stays visible when content scrolls (safe area handled by app-shell) */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm dark:bg-transparent dark:backdrop-blur-none flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 border-b border-theme-border/50 dark:border-transparent">
+          <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm dark:bg-transparent dark:backdrop-blur-none flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 max-lg:landscape:h-10 border-b border-theme-border/50 dark:border-transparent">
             <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
-                className="w-9 h-9 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform"
+                className="w-9 h-9 sm:w-12 sm:h-12 max-lg:landscape:w-7 max-lg:landscape:h-7 group-hover:rotate-6 transition-transform"
               />
-              <span className="font-display font-bold text-lg sm:text-2xl text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+              <span className="font-display font-bold text-lg sm:text-2xl max-lg:landscape:text-base text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <button
               onClick={toggleLanguage}
@@ -336,12 +336,12 @@ export default function LoginPage() {
               - Desktop: Content near top, terms below content */}
           <div className="relative z-10 flex-1 min-h-0 overflow-y-auto overscroll-none px-6 px-safe-landscape lg:px-12 flex flex-col justify-start pb-safe-content">
             {/* Main content wrapper */}
-            <div className="w-full max-w-lg mx-auto pt-[2vh] sm:pt-[8vh] lg:pt-[6vh]">
-              <div className="text-center lg:text-start mb-2 sm:mb-4">
-                <h2 className="text-2xl sm:text-4xl lg:text-5xl font-display font-extrabold text-foreground mb-1 sm:mb-3 tracking-tight">
+            <div className="w-full max-w-lg mx-auto pt-[2vh] sm:pt-[8vh] lg:pt-[6vh] max-lg:landscape:pt-2">
+              <div className="text-center lg:text-start mb-2 sm:mb-4 max-lg:landscape:mb-1">
+                <h2 className="text-2xl sm:text-4xl lg:text-5xl max-lg:landscape:text-xl font-display font-extrabold text-foreground mb-1 sm:mb-3 max-lg:landscape:mb-0.5 tracking-tight">
                   {t('welcome')}
                 </h2>
-                <p className="text-base sm:text-lg lg:text-xl text-muted-foreground font-medium">
+                <p className="text-base sm:text-lg lg:text-xl max-lg:landscape:text-sm text-muted-foreground font-medium">
                   {t('welcomeBackDesc')}
                 </p>
 
@@ -364,8 +364,8 @@ export default function LoginPage() {
                 </div>
               </div>
 
-              {/* Mobile feature highlights — compact row (hidden during OTP entry) */}
-              <div className={clsx('flex gap-2 lg:hidden mb-2', isOtpStep && 'hidden')}>
+              {/* Mobile feature highlights — compact row (hidden during OTP entry and in landscape) */}
+              <div className={clsx('flex gap-2 lg:hidden max-lg:landscape:hidden mb-2', isOtpStep && 'hidden')}>
                 {features.map((f, i) => (
                   <div
                     key={i}
@@ -492,7 +492,7 @@ export default function LoginPage() {
                 )}
 
                 {/* Social proof card — motivates before the CTA (hidden during OTP entry and on short screens) */}
-                <div className={clsx('hidden sm:flex p-3 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20', isOtpStep && 'sm:hidden')}>
+                <div className={clsx('hidden sm:flex max-lg:landscape:!hidden p-3 rounded-2xl bg-brand-50 dark:bg-brand-400/10 border border-brand-100 dark:border-brand-400/20', isOtpStep && 'sm:hidden')}>
                   <div className="flex gap-3 items-center">
                     <div className="w-8 h-8 rounded-xl bg-brand-100 dark:bg-brand-400/15 flex items-center justify-center flex-shrink-0">
                       <Bot className="w-4 h-4 text-brand-600 dark:text-brand-400" aria-hidden="true" />
@@ -555,7 +555,7 @@ export default function LoginPage() {
                             onClick={handleFacebookLogin}
                             disabled={isRedirecting}
                             size="lg"
-                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-3 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                            className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-3 sm:py-8 max-lg:landscape:py-2.5 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl max-lg:landscape:text-base transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                           >
                             <div className="flex items-center justify-center gap-3 text-white">
                               <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />
@@ -589,7 +589,7 @@ export default function LoginPage() {
                               onClick={handleRequestOtp}
                               disabled={otpRequestLoading}
                               size="lg"
-                              className="w-full py-3 sm:py-8 rounded-2xl font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95"
+                              className="w-full py-3 sm:py-8 max-lg:landscape:py-2.5 rounded-2xl font-bold text-lg lg:text-xl max-lg:landscape:text-base transition-all hover:scale-[1.02] active:scale-95"
                             >
                               {otpRequestLoading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -677,7 +677,7 @@ export default function LoginPage() {
                         onClick={handleFacebookLogin}
                         disabled={isRedirecting}
                         size="lg"
-                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-4 sm:py-8 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
+                        className="w-full bg-[#166FE5] hover:bg-[#1258B8] text-white py-4 sm:py-8 max-lg:landscape:py-2.5 rounded-2xl shadow-xl shadow-blue-500/25 hover:shadow-2xl hover:shadow-blue-500/40 ring-4 ring-blue-400/15 font-bold text-lg lg:text-xl max-lg:landscape:text-base transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:cursor-default disabled:scale-100"
                       >
                         <div className="flex items-center justify-center gap-3 text-white">
                           <FacebookIcon className="w-6 h-6 lg:w-7 lg:h-7" aria-hidden="true" />

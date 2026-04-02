@@ -14,7 +14,7 @@
     --header-height-lg: 5rem;   /* 80px on larger screens */
     
     /* Bottom navigation height (mobile only, authenticated pages) */
-    --nav-bottom-height: 4rem;  /* 64px */
+    --nav-bottom-height: 4rem;  /* 64px — overridden to 3rem in landscape */
     
     /* Content padding */
     --content-padding-x: 1rem;        /* 16px mobile */
@@ -42,7 +42,11 @@
     
     /* Landscape side padding - uses actual safe area or minimum 32px */
     --sai-side-landscape: 32px;
-    
+
+    /* Landscape compact layout — overridden below in @media (orientation: landscape) */
+    --header-height-landscape: 2.5rem;    /* 40px compact header */
+    --nav-bottom-height-landscape: 3rem;  /* 48px compact nav */
+
     /* ═══════════════════════════════════════════════════════════════════
        COLOR TOKENS — Light Mode (default)
        These CSS variables power all semantic Tailwind utilities
@@ -115,6 +119,16 @@
     --accent-700: 194 65 12;
     --accent-800: 154 52 18;
     --accent-900: 124 45 18;
+  }
+
+  /* Landscape on mobile: shrink fixed chrome to maximize content area.
+     Typical Android landscape viewport is 360-420px tall — header (64px)
+     + bottom nav (64px) = 128px = ~30% wasted. These overrides cut it to 88px. */
+  @media (orientation: landscape) and (max-width: 1023px) {
+    :root {
+      --header-height: 2.5rem;       /* 40px (was 64px) */
+      --nav-bottom-height: 3rem;     /* 48px (was 64px) */
+    }
   }
 
   /* ──────────────────────────────────────────────────────────────────
@@ -1652,9 +1666,15 @@ body.is-native .pt-hero {
   }
 }
 
-/* Dashboard mobile bottom padding — accounts for bottom nav (64px) + clearance (16px) */
+/* Dashboard mobile bottom padding — accounts for bottom nav + clearance */
 .pb-dash-mobile {
-  padding-bottom: 80px;
+  padding-bottom: 80px; /* 64px nav + 16px clearance */
+}
+
+@media (orientation: landscape) and (max-width: 1023px) {
+  .pb-dash-mobile {
+    padding-bottom: 60px; /* 48px compact nav + 12px clearance */
+  }
 }
 
 @media (min-width: 1024px) {

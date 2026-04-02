@@ -195,10 +195,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           /* Mobile APP Header — Logo at start, bell at end.
              Follows natural text direction (LTR/RTL). */
           <div
-            className="lg:hidden fixed top-0 left-0 right-0 h-14 sm:h-16 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content bg-card/90 backdrop-blur-md border-b border-theme-border"
+            className="lg:hidden fixed top-0 left-0 right-0 h-14 sm:h-16 max-lg:landscape:h-10 flex items-center justify-between px-4 px-safe-landscape z-40 pt-safe box-content bg-card/90 backdrop-blur-md border-b border-theme-border"
           >
-            <Link href="/dashboard" className="flex items-center min-w-[44px] min-h-[44px] justify-center">
-              <BrandLogo variant="vector" className="w-9 h-9" />
+            <Link href="/dashboard" className="flex items-center min-w-[44px] min-h-[44px] max-lg:landscape:min-h-[40px] justify-center">
+              <BrandLogo variant="vector" className="w-9 h-9 max-lg:landscape:w-7 max-lg:landscape:h-7" />
             </Link>
 
             <div className="flex items-center gap-2">
@@ -253,7 +253,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           <>
             {/* Bottom navigation - sits ABOVE the safe area in portrait, at bottom in landscape */}
             <nav
-              className="lg:hidden fixed left-0 right-0 bg-card border-t border-theme-border/50 flex justify-around items-center h-16 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] px-safe-landscape bottom-nav-position"
+              className="lg:hidden fixed left-0 right-0 bg-card border-t border-theme-border/50 flex justify-around items-center h-16 max-lg:landscape:h-12 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] px-safe-landscape bottom-nav-position"
             >
               <MobileNavButton
                 onClick={() => router.push('/dashboard')}
@@ -347,10 +347,10 @@ function MobileNavButton({ onClick, icon, label, active, badge }: {
   return (
     <button
       onClick={onClick}
-      className="flex flex-col items-center justify-center h-full w-full relative group min-h-[44px]"
+      className="flex flex-col items-center justify-center h-full w-full relative group min-h-[44px] max-lg:landscape:min-h-[40px]"
     >
       <div className={clsx(
-        "relative transition-all duration-200 mb-1",
+        "relative transition-all duration-200 mb-1 max-lg:landscape:mb-0 max-lg:landscape:[&>svg]:!w-5 max-lg:landscape:[&>svg]:!h-5",
         active ? "text-brand-600 scale-100 opacity-100" : "text-surface-500 scale-100 opacity-40 group-hover:opacity-60"
       )}>
         {icon}
@@ -360,8 +360,9 @@ function MobileNavButton({ onClick, icon, label, active, badge }: {
           </span>
         )}
       </div>
+      {/* Hide labels in landscape to save vertical space */}
       <span className={clsx(
-        "text-[11px] tracking-wide transition-all leading-tight",
+        "text-[11px] tracking-wide transition-all leading-tight max-lg:landscape:hidden",
         active ? "font-semibold text-brand-600 opacity-100" : "font-medium text-surface-500 opacity-50"
       )}>{label}</span>
       {active && (
