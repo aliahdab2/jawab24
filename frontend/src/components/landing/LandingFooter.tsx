@@ -59,6 +59,8 @@ export function LandingFooter() {
             <ul className="space-y-2 sm:space-y-4 font-medium text-sm sm:text-base">
               <li><Link href="/what-is-jawab24" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.whatIsJawab24')}</Link></li>
               <li><Link href="/blog" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.blog')}</Link></li>
+              <li><Link href="/compare/manychat" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.compareManyChat')}</Link></li>
+              <li><Link href="/compare/tidio" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.compareTidio')}</Link></li>
               <li><Link href="/contact" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.contactUs')}</Link></li>
               <li><Link href="/terms" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.termsOfService')}</Link></li>
               <li><Link href="/privacy" className="text-surface-400 hover:text-brand-400 transition-colors">{t('footer.privacyPolicy')}</Link></li>

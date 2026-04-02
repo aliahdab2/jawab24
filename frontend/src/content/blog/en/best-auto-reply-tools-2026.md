@@ -38,7 +38,7 @@ The downside? You need to build those flows. Setting up ManyChat properly takes 
 
 Arabic support is limited to basic translations — no dialect awareness. The AI features (ManyChat AI) exist but are newer and less mature than dedicated AI platforms. Shopify integration is strong; Salla integration doesn't exist. Comment replies are basic compared to DM flows.
 
-Starts at $15/month.
+Starts at $15/month. [See our full Jawab24 vs ManyChat comparison →](/compare/manychat)
 
 ### Chatfuel
 
@@ -54,7 +54,7 @@ Live chat + chatbot platform. Better known for website chat widgets than social 
 
 If your primary need is a website chat widget with chatbot fallback, Tidio is solid. For social media auto-reply — especially in multiple languages — it's not the right fit. No Arabic dialect support, no Salla integration.
 
-Starts at $29/month.
+Starts at $29/month. [See our full Jawab24 vs Tidio comparison →](/compare/tidio)
 
 ### Botpress
 
