@@ -122,7 +122,8 @@ test.describe('Templates Page', () => {
     // Template names should be visible (scroll on mobile where cards stack vertically)
     await expect(page.getByText('Welcome').first()).toBeVisible();
     const pricingCard = page.getByText('Pricing').first();
-    await pricingCard.scrollIntoViewIfNeeded();
+    await pricingCard.waitFor({ state: 'attached', timeout: 5000 });
+    await pricingCard.evaluate(el => el.scrollIntoView({ block: 'center' }));
     await expect(pricingCard).toBeVisible();
   });
 
@@ -234,7 +235,8 @@ test.describe('Templates Page', () => {
     // Both templates should be visible (scroll on mobile where cards stack vertically)
     await expect(page.getByText('Welcome').first()).toBeVisible();
     const pricingCard = page.getByText('Pricing').first();
-    await pricingCard.scrollIntoViewIfNeeded();
+    await pricingCard.waitFor({ state: 'attached', timeout: 5000 });
+    await pricingCard.evaluate(el => el.scrollIntoView({ block: 'center' }));
     await expect(pricingCard).toBeVisible();
 
     // Toggle switches should be present (one per template)

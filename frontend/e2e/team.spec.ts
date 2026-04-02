@@ -136,8 +136,9 @@ test.describe('Team Section', () => {
     await page.goto('/en/settings');
 
     const ownerText = page.getByText('Test Owner').first();
-    await ownerText.scrollIntoViewIfNeeded();
-    await expect(ownerText).toBeVisible({ timeout: 15000 });
+    await ownerText.waitFor({ state: 'attached', timeout: 15000 });
+    await ownerText.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(ownerText).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(t('team.roleOwner'), { exact: true })).toBeVisible();
     await expect(page.getByText(`(${t('team.you')})`)).toBeVisible();
   });
@@ -160,8 +161,9 @@ test.describe('Team Section', () => {
     await page.goto('/en/settings');
 
     const ownerText = page.getByText('Test Owner').first();
-    await ownerText.scrollIntoViewIfNeeded();
-    await expect(ownerText).toBeVisible({ timeout: 15000 });
+    await ownerText.waitFor({ state: 'attached', timeout: 15000 });
+    await ownerText.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(ownerText).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Sara', { exact: true })).toBeVisible();
     await expect(page.getByText('ali@test.com')).toBeVisible();
     await expect(page.getByText(t('team.pending'))).toBeVisible();
@@ -217,8 +219,9 @@ test.describe('Team Section', () => {
     await page.goto('/en/settings');
 
     const ownerBadge = page.getByText(t('team.roleOwner'), { exact: true });
-    await ownerBadge.scrollIntoViewIfNeeded();
-    await expect(ownerBadge).toBeVisible({ timeout: 15000 });
+    await ownerBadge.waitFor({ state: 'attached', timeout: 15000 });
+    await ownerBadge.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(ownerBadge).toBeVisible({ timeout: 5000 });
     await expect(page.getByText(t('team.roleMember')).first()).toBeVisible();
   });
 

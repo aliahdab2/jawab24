@@ -204,10 +204,11 @@ test.describe('Rules Page', () => {
       page.locator('h1').filter({ hasText: t('rules.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Should show the first-match-wins hint
+    // Should show the first-match-wins hint (inside overflow container on mobile)
     const hintText = page.getByText('First match wins').first();
-    await hintText.scrollIntoViewIfNeeded();
-    await expect(hintText).toBeVisible({ timeout: 10000 });
+    await hintText.waitFor({ state: 'attached', timeout: 10000 });
+    await hintText.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(hintText).toBeVisible({ timeout: 5000 });
   });
 
   test('should open create rule modal and fill form', async ({ page }) => {
@@ -317,10 +318,11 @@ test.describe('Rules Page', () => {
     // Rule name should still be visible (rule names are user-defined, not translated)
     await expect(page.getByText('Greeting Rule').first()).toBeVisible();
 
-    // Arabic hint text
+    // Arabic hint text (inside overflow container on mobile)
     const arHint = page.getByText(tAr('rules.firstMatchHint'), { exact: false }).first();
-    await arHint.scrollIntoViewIfNeeded();
-    await expect(arHint).toBeVisible({ timeout: 10000 });
+    await arHint.waitFor({ state: 'attached', timeout: 10000 });
+    await arHint.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(arHint).toBeVisible({ timeout: 5000 });
 
     // Add Rule button in Arabic
     await expect(

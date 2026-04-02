@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Locator } from '@playwright/test';
 import { t } from './i18n';
 
 /**
@@ -8,6 +8,12 @@ import { t } from './i18n';
  * including sanctions checks, auth redirects, billing portal,
  * and error recovery.
  */
+
+/** Scroll a locator into view via JS — works inside overflow containers on mobile. */
+async function scrollIntoView(locator: Locator, timeout = 10000) {
+  await locator.waitFor({ state: 'attached', timeout });
+  await locator.evaluate(el => el.scrollIntoView({ block: 'center' }));
+}
 
 const MOCK_PLANS = [
   {
@@ -143,6 +149,7 @@ test.describe('Payment Flow — Unauthenticated', () => {
 
     // Click the Starter plan CTA (has trial → "Start Free for 30 Days")
     const starterBtn = page.locator('button').filter({ hasText: t('pricing.startTrial') }).first();
+    await scrollIntoView(starterBtn);
     await expect(starterBtn).toBeVisible();
     await starterBtn.click();
 
@@ -161,6 +168,7 @@ test.describe('Payment Flow — Unauthenticated', () => {
 
     // Free plan button says "Get Started"
     const freeBtn = page.locator('button').filter({ hasText: t('pricing.getStarted') }).first();
+    await scrollIntoView(freeBtn);
     await expect(freeBtn).toBeVisible();
     await freeBtn.click();
 
@@ -228,6 +236,7 @@ test.describe('Payment Flow — Authenticated (no subscription)', () => {
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
     const starterBtn = page.locator('button').filter({ hasText: t('pricing.startTrial') }).first();
+    await scrollIntoView(starterBtn);
     await expect(starterBtn).toBeVisible();
     await starterBtn.click();
 
@@ -240,6 +249,7 @@ test.describe('Payment Flow — Authenticated (no subscription)', () => {
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
     const freeBtn = page.locator('button').filter({ hasText: t('pricing.getStarted') }).first();
+    await scrollIntoView(freeBtn);
     await expect(freeBtn).toBeVisible();
     await freeBtn.click();
 
@@ -287,7 +297,8 @@ test.describe('Payment Flow — Existing Subscriber', () => {
 
     // Current plan (Starter) should show a disabled "Current Plan" button
     const currentPlanBtn = page.locator('button').filter({ hasText: t('pricing.currentPlan') }).first();
-    await expect(currentPlanBtn).toBeVisible({ timeout: 10000 });
+    await scrollIntoView(currentPlanBtn);
+    await expect(currentPlanBtn).toBeVisible({ timeout: 5000 });
     await expect(currentPlanBtn).toBeDisabled();
   });
 
@@ -320,7 +331,8 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
     const upgradeBtn = page.locator('button').filter({ hasText: t('pricing.upgrade') }).first();
-    await expect(upgradeBtn).toBeVisible({ timeout: 10000 });
+    await scrollIntoView(upgradeBtn);
+    await expect(upgradeBtn).toBeVisible({ timeout: 5000 });
 
     // Assert the billing portal request is made when upgrade is clicked.
     // Clicking triggers a geo sanctions re-check first, then the portal request —
@@ -345,7 +357,8 @@ test.describe('Payment Flow — Existing Subscriber', () => {
 
     // Free plan button should say "Downgrade"
     const downgradeBtn = page.locator('button').filter({ hasText: t('pricing.downgrade') }).first();
-    await expect(downgradeBtn).toBeVisible({ timeout: 10000 });
+    await scrollIntoView(downgradeBtn);
+    await expect(downgradeBtn).toBeVisible({ timeout: 5000 });
     await downgradeBtn.click();
 
     // Confirmation dialog should appear
@@ -410,9 +423,9 @@ test.describe('Payment Flow — Sanctions', () => {
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
     // Should show WhatsApp support link instead of subscribe buttons
-    await expect(
-      page.getByText(t('payment.unavailable.message')).first()
-    ).toBeVisible({ timeout: 10000 });
+    const unavailableMsg = page.getByText(t('payment.unavailable.message')).first();
+    await scrollIntoView(unavailableMsg);
+    await expect(unavailableMsg).toBeVisible({ timeout: 5000 });
 
     // Subscribe buttons should NOT be visible
     await expect(
@@ -448,6 +461,7 @@ test.describe('Payment Flow — Sanctions', () => {
 
     // Click subscribe — should still work because cache says not sanctioned
     const starterBtn = page.locator('button').filter({ hasText: t('pricing.startTrial') }).first();
+    await scrollIntoView(starterBtn);
     await expect(starterBtn).toBeVisible();
     await starterBtn.click();
 

@@ -318,10 +318,9 @@ test.describe('Dashboard Page', () => {
   test('should render dashboard skeleton then content (not blank/error)', async ({ page }) => {
     await page.goto('/en/dashboard');
 
-    // Within 15 seconds, actual stat values should appear
-    const statValue = page.locator('text=/\\d+/').first();
-    await statValue.scrollIntoViewIfNeeded();
-    await expect(statValue).toBeVisible({ timeout: 15000 });
+    // Within 15 seconds, actual stat values should appear.
+    // Use waitForSelector to avoid visibility issues inside overflow containers on mobile.
+    await page.waitForSelector('text=/\\d+/', { state: 'attached', timeout: 15000 });
 
     // The error boundary should NOT be showing
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();

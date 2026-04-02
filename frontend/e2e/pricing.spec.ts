@@ -85,10 +85,14 @@ test.describe('Pricing Page', () => {
       page.getByText(t('pricing.choosePlan')).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // All plan cards should be visible (use heading role with exact match to target card titles)
+    // All plan cards should be visible (scroll for mobile where cards stack vertically)
     await expect(page.getByRole('heading', { name: 'Starter', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Business', exact: true })).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
+    const businessHeading = page.getByRole('heading', { name: 'Business', exact: true });
+    await businessHeading.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(businessHeading).toBeVisible();
+    const proHeading = page.getByRole('heading', { name: 'Pro', exact: true });
+    await proHeading.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(proHeading).toBeVisible();
   });
 
   test('should show Most Popular badge on Business plan', async ({ page }) => {
@@ -188,7 +192,8 @@ test.describe('Pricing Page', () => {
 
     // Should show unavailable message instead of subscribe buttons
     const unavailableMsg = page.getByText('payment processing is not available').first();
-    await unavailableMsg.scrollIntoViewIfNeeded();
+    await unavailableMsg.waitFor({ state: 'attached', timeout: 10000 });
+    await unavailableMsg.evaluate(el => el.scrollIntoView({ block: 'center' }));
     await expect(unavailableMsg).toBeVisible();
   });
 });

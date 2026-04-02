@@ -92,11 +92,14 @@ test.describe('Payment Flow', () => {
     // Based on en.json: "Subscribe", "Start Free for 30 Days", "Get Started"
     const subscribeButtons = page.locator('button:has-text("Subscribe"), button:has-text("Start Free"), button:has-text("Get Started")');
     
-    // Wait for at least one button
-    await expect(subscribeButtons.first()).toBeVisible({ timeout: 10000 });
-    
+    // Wait for at least one button (scroll into view for mobile)
+    const firstBtn = subscribeButtons.first();
+    await firstBtn.waitFor({ state: 'attached', timeout: 10000 });
+    await firstBtn.evaluate(el => el.scrollIntoView({ block: 'center' }));
+    await expect(firstBtn).toBeVisible({ timeout: 5000 });
+
     // Click the first one (usually Starter)
-    await subscribeButtons.first().click();
+    await firstBtn.click();
     
     // Verify we are redirected to login
     await expect(page).toHaveURL(/\/login/, { timeout: 10000 });

@@ -22,12 +22,29 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     {
+      // Mobile portrait — visual regression + public page layout tests only.
+      // Complex functional tests (mocked API flows) stay in chromium
+      // since they test business logic, not mobile-specific layout.
       name: 'mobile-chrome',
       use: { ...devices['Pixel 7'] },
+      testMatch: [
+        'visual.spec.ts',
+        'landing.spec.ts',
+        'login.spec.ts',
+        'ssr.spec.ts',
+        'seo.spec.ts',
+      ],
     },
     {
       name: 'mobile-chrome-landscape',
       use: { ...devices['Pixel 7 landscape'] },
+      testMatch: [
+        'visual.spec.ts',
+        'landing.spec.ts',
+        'login.spec.ts',
+        'ssr.spec.ts',
+        'seo.spec.ts',
+      ],
     },
   ],
   webServer: {
