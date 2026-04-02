@@ -36,6 +36,7 @@ export type Outcome =
     | 'skipped_risky'
     | 'held_low_confidence'
     | 'greeting_sent'
+    | 'subscription_inactive'
     | 'lock_contention'
     | 'error';
 

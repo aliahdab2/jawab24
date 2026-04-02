@@ -2,7 +2,13 @@ import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { subscriptions, plans, usage, usageLogs, pages, templates, rules } from '../db/schema';
 import { plansService } from './plans';
+import { redis } from '../lib/redis';
 import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, LimitCheckResult } from '@jawab24/shared';
+
+/** Statuses that allow AI reply generation. */
+const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
+/** Cache TTL for subscription status (seconds). Short so payment events reflect quickly. */
+const STATUS_CACHE_TTL = 60;
 
 /**
  * Subscriptions Service - Manages user subscriptions and usage
@@ -87,6 +93,44 @@ export const subscriptionsService = {
             ...this.mapToSubscription(sub),
             plan: plansService.mapToPlan(result[0].plan),
         };
+    },
+
+    /**
+     * Fast subscription status check for the reply pipeline.
+     * Returns true if the user has an active/trialing subscription.
+     * Cached in Redis for 60s to keep the hot path fast.
+     */
+    async isSubscriptionActive(userId: string): Promise<boolean> {
+        const cacheKey = `sub:active:${userId}`;
+
+        try {
+            const cached = await redis.get(cacheKey);
+            if (cached !== null) return cached === '1';
+        } catch {
+            // Redis down — fall through to DB
+        }
+
+        const sub = await this.getUserSubscription(userId);
+        const active = sub !== null && ACTIVE_STATUSES.has(sub.status);
+
+        try {
+            await redis.set(cacheKey, active ? '1' : '0', 'EX', STATUS_CACHE_TTL);
+        } catch {
+            // Cache write failure is non-critical
+        }
+
+        return active;
+    },
+
+    /**
+     * Invalidate cached subscription status (call after payment events).
+     */
+    async invalidateStatusCache(userId: string): Promise<void> {
+        try {
+            await redis.del(`sub:active:${userId}`);
+        } catch {
+            // Non-critical
+        }
     },
 
     /**

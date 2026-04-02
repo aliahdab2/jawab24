@@ -14,6 +14,7 @@ import { formatBusinessProfile } from '../../utils/businessProfile';
 import { getStoreContextForAI } from '../ecommerce';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
+import { subscriptionsService } from '../subscriptions';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
@@ -143,6 +144,15 @@ export class MessageProcessor {
 
             const userId = page.userId;
             const workspaceId = page.workspaceId;
+
+            // 4a. Subscription gate — don't generate AI replies for expired subscriptions
+            const isActive = await subscriptionsService.isSubscriptionActive(userId);
+            if (!isActive) {
+                pipelineMetrics.record(pipeline, 'subscription_inactive');
+                this.logger.info(`[${platform}] Subscription inactive — skipping AI reply`, { userId, pageId: page.id });
+                return { success: false, messageId: platformMessageId, error: 'Subscription inactive' };
+            }
+            lap('4a-subscriptionCheck');
 
             // 4b. Acquire distributed lock — prevents two workers from replying to
             //     the same sender simultaneously (covers greeting race + reply race).

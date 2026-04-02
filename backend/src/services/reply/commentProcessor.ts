@@ -15,6 +15,7 @@ import { truncateAtSentence } from '../../utils/text';
 import { getStoreContextForAI } from '../ecommerce';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
+import { subscriptionsService } from '../subscriptions';
 
 /**
  * Unified Comment Processor
@@ -134,6 +135,14 @@ export class CommentProcessor {
             if (!isNew && (comment.replied || comment.needsAttention)) {
                 pipelineMetrics.record(pipeline, 'already_replied');
                 return { success: false, commentId: comment.id, error: 'Comment already replied' };
+            }
+
+            // 4a. Subscription gate — don't generate AI replies for expired subscriptions
+            const isActive = await subscriptionsService.isSubscriptionActive(userId);
+            if (!isActive) {
+                pipelineMetrics.record(pipeline, 'subscription_inactive');
+                this.logger.info(`[${platform}] Subscription inactive — skipping AI reply`, { userId, pageId: page.id });
+                return { success: false, commentId: comment.id, error: 'Subscription inactive' };
             }
 
             // 4b. Acquire per-comment lock — prevents duplicate webhook replies
