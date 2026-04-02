@@ -5,7 +5,7 @@
  * Used by the login page (phone tab) and the phone-collect page.
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { otpApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { ApiError } from '@/lib/api-utils';
@@ -20,6 +20,7 @@ interface UseOtpRequestOptions {
 
 export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
     const t = useTranslations('auth');
+    const locale = useLocale();
 
     const [phoneE164, setPhoneE164] = useState('');
     const [phoneValid, setPhoneValid] = useState(false);
@@ -50,7 +51,7 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
         setLoading(true);
         setError('');
         try {
-            await otpApi.requestOtp(phoneE164);
+            await otpApi.requestOtp(phoneE164, locale);
             onSuccess();
             setResendCountdown(0); // reset before new countdown
             startCountdown();
@@ -61,7 +62,7 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
         } finally {
             setLoading(false);
         }
-    }, [phoneValid, phoneE164, page, t, onSuccess, startCountdown]);
+    }, [phoneValid, phoneE164, locale, page, t, onSuccess, startCountdown]);
 
     return {
         phoneE164, setPhoneE164,

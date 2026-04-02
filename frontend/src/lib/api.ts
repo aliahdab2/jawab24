@@ -118,8 +118,8 @@ export const authApi = {
 
 // Phone OTP API (unauthenticated — used on the login page)
 export const otpApi = {
-  requestOtp: (phone: string) =>
-    publicApi.post('/auth/phone/request', { phone }),
+  requestOtp: (phone: string, locale?: string) =>
+    publicApi.post('/auth/phone/request', { phone, locale }),
 
   verifyOtp: (phone: string, code: string) =>
     publicApi.post<{ user: { id: string; name: string | null; phone: string | null; picture?: string; isAdmin?: boolean }; token: string; workspaces: unknown[] }>('/auth/phone/verify', { phone, code }),

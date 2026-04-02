@@ -58,6 +58,7 @@ export interface AuthResponse {
 
 export interface PhoneOtpRequest {
     phone: string; // E.164 format: +966xxxxxxxx
+    locale?: string; // 'en' | 'ar' — defaults to 'ar'
 }
 
 export interface PhoneOtpVerifyRequest {

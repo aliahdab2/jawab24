@@ -26,6 +26,7 @@ vi.mock('../../src/services/sms', () => ({
 import { OtpService, OtpRateLimitError } from '../../src/services/otp';
 import { db } from '../../src/db';
 import bcrypt from 'bcrypt';
+import { smsService } from '../../src/services/sms';
 
 // ─── Helper: build a chainable query mock ────────────────────────────────────
 
@@ -227,6 +228,46 @@ describe('OtpService', () => {
             await service.verifyOtp('+966500000001', '000000');
 
             expect(callOrder).toEqual(['update', 'bcrypt']);
+        });
+    });
+
+    // ── sendOtp ───────────────────────────────────────────────────────────────
+
+    describe('sendOtp', () => {
+        it('sends Arabic message by default', async () => {
+            await service.sendOtp('+966500000001', '123456');
+
+            expect(smsService.send).toHaveBeenCalledWith(
+                '+966500000001',
+                expect.stringContaining('رمز التحقق'),
+            );
+        });
+
+        it('sends Arabic message when locale is ar', async () => {
+            await service.sendOtp('+966500000001', '123456', 'ar');
+
+            expect(smsService.send).toHaveBeenCalledWith(
+                '+966500000001',
+                expect.stringContaining('رمز التحقق'),
+            );
+        });
+
+        it('sends English message when locale is en', async () => {
+            await service.sendOtp('+966500000001', '123456', 'en');
+
+            expect(smsService.send).toHaveBeenCalledWith(
+                '+966500000001',
+                expect.stringContaining('Your verification code is 123456'),
+            );
+        });
+
+        it('includes Web OTP origin line matching Capacitor hostname', async () => {
+            await service.sendOtp('+966500000001', '123456', 'en');
+
+            expect(smsService.send).toHaveBeenCalledWith(
+                '+966500000001',
+                expect.stringContaining('@app.jawab24.com #123456'),
+            );
         });
     });
 

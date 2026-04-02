@@ -459,7 +459,7 @@ export class AuthController {
      * POST /auth/phone/request
      */
     async requestOtp(request: FastifyRequest<{ Body: PhoneOtpRequest }>, reply: FastifyReply) {
-        const { phone } = request.body;
+        const { phone, locale } = request.body;
 
         if (!phone || !isValidPhone(phone)) {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format: +966xxxxxxxx' });
@@ -468,7 +468,7 @@ export class AuthController {
         try {
             const code = otpService.generateCode();
             await otpService.storeOtp(phone, code);
-            await otpService.sendOtp(phone, code);
+            await otpService.sendOtp(phone, code, locale);
 
             // Never reveal whether the phone already exists — always return 200
             return reply.send({ message: 'sent' });
