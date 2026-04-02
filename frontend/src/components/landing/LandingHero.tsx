@@ -98,8 +98,8 @@ function HeroTypingDots() {
           />
         ))}
       </div>
-      <div className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 rounded-full bg-brand-50 dark:bg-brand-900/40 flex items-center justify-center flex-shrink-0">
-        <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 text-brand-500 dark:text-brand-400" aria-hidden="true" />
+      <div className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 rounded-full bg-brand-50 dark:bg-brand-400/20 flex items-center justify-center flex-shrink-0">
+        <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 text-brand-500 dark:text-brand-300" aria-hidden="true" />
       </div>
     </motion.div>
   );
@@ -108,11 +108,11 @@ function HeroTypingDots() {
 function CustomerBubble({ text }: { text: string }) {
   return (
     <div className="flex items-end gap-0.5 sm:gap-1">
-      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-surface-100 dark:bg-surface-300/30 flex items-center justify-center flex-shrink-0">
-        <Facebook className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-surface-600 dark:text-surface-400" aria-hidden="true" />
+      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-surface-100 dark:bg-surface-400/25 flex items-center justify-center flex-shrink-0">
+        <Facebook className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-surface-600 dark:text-surface-300" aria-hidden="true" />
       </div>
       <div className="landing-chat-bubble rounded-lg sm:rounded-xl rounded-es-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-sm max-w-[80%]">
-        <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-surface-200 font-medium leading-tight">{text}</p>
+        <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-surface-100 font-medium leading-tight">{text}</p>
       </div>
     </div>
   );
@@ -121,11 +121,11 @@ function CustomerBubble({ text }: { text: string }) {
 function BotBubble({ text }: { text: string }) {
   return (
     <div className="flex items-end gap-0.5 sm:gap-1 justify-end">
-      <div className="bg-brand-500 rounded-lg sm:rounded-xl rounded-ee-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-lg shadow-brand-500/20 max-w-[85%]">
+      <div className="bg-brand-500 dark:bg-brand-500/90 rounded-lg sm:rounded-xl rounded-ee-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-lg shadow-brand-500/20 dark:shadow-brand-400/15 max-w-[85%]">
         <p className="text-[7px] sm:text-[10px] lg:text-sm text-white font-bold leading-tight">{text}</p>
       </div>
-      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-brand-50 dark:bg-brand-900/40 flex items-center justify-center flex-shrink-0">
-        <Zap className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-brand-500 dark:text-brand-400" aria-hidden="true" />
+      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-brand-50 dark:bg-brand-400/20 flex items-center justify-center flex-shrink-0">
+        <Zap className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-brand-500 dark:text-brand-300" aria-hidden="true" />
       </div>
     </div>
   );
