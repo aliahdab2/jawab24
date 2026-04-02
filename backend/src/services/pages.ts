@@ -10,7 +10,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { BusinessProfileSchema } from '../utils/validation';
 import { redis } from '../lib/redis';
-import { encryptFbToken, decryptFbToken } from './facebookCrypto';
+import { maybeEncryptToken, maybeDecryptToken } from './facebookCrypto';
 import { KbIngestionService } from './kb/ingestion';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { PgVectorStore } from './kb/pgvector-store';
@@ -20,24 +20,6 @@ const STATS_CACHE_TTL = 300;
 /** Minimum interval between cache invalidations per workspace (seconds). */
 const STATS_INVALIDATION_THROTTLE = 30;
 
-/**
- * Encrypt a page access token if encryption key is configured.
- * Skips empty strings (sentinel for disconnected pages).
- */
-function maybeEncryptPageToken(token: string): string {
-    if (!token || !config.facebook.tokenEncryptionKey) return token;
-    return encryptFbToken(token);
-}
-
-/**
- * Decrypt a page access token if encrypted.
- * Falls back to plaintext for legacy unencrypted tokens.
- */
-function maybeDecryptPageToken(token: string | null | undefined): string {
-    if (!token) return '';
-    if (!config.facebook.tokenEncryptionKey) return token;
-    return decryptFbToken(token);
-}
 
 /** Lazy-init ingestion service (only created when OPENAI_API_KEY exists) */
 let _ingestionService: KbIngestionService | null = null;
@@ -224,7 +206,7 @@ export class PagesService {
                 userId,
                 facebookPageId: data.facebookPageId,
                 name: data.name,
-                accessToken: maybeEncryptPageToken(data.accessToken),
+                accessToken: maybeEncryptToken(data.accessToken),
                 autoReplyEnabled: data.autoReplyEnabled ?? true,
             })
             .returning();
@@ -244,7 +226,7 @@ export class PagesService {
             .limit(100);
 
         const emptyStats = { commentsCount: 0, repliesCount: 0, replyRate: 0, lastActivity: null as number | null };
-        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: maybeDecryptPageToken(p.accessToken), ...emptyStats }));
+        if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: maybeDecryptToken(p.accessToken), ...emptyStats }));
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
         // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
@@ -328,7 +310,7 @@ export class PagesService {
             const stats = statsMap.get(page.id) || { commentsCount: 0, repliesCount: 0, lastActivity: null };
             return {
                 ...page,
-                accessToken: maybeDecryptPageToken(page.accessToken),
+                accessToken: maybeDecryptToken(page.accessToken),
                 ...stats,
                 replyRate: stats.commentsCount > 0
                     ? Math.round((stats.repliesCount / stats.commentsCount) * 100)
@@ -347,7 +329,7 @@ export class PagesService {
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)));
 
         const page = result[0] || null;
-        if (page) page.accessToken = maybeDecryptPageToken(page.accessToken);
+        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
         return page;
     }
 
@@ -361,7 +343,7 @@ export class PagesService {
             .where(eq(pages.facebookPageId, facebookPageId));
 
         const page = result[0] || null;
-        if (page) page.accessToken = maybeDecryptPageToken(page.accessToken);
+        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
         return page;
     }
 
@@ -550,7 +532,8 @@ export class PagesService {
                     .update(pages)
                     .set({
                         name: fbPage.name,
-                        accessToken: maybeEncryptPageToken(fbPage.access_token),
+                        accessToken: maybeEncryptToken(fbPage.access_token),
+                        tokenLastVerifiedAt: new Date(),
                         instagramAccountId,
                         instagramUsername,
                         instagramProfilePicUrl,
@@ -584,7 +567,8 @@ export class PagesService {
                             workspaceId,
                             userId,
                             name: fbPage.name,
-                            accessToken: maybeEncryptPageToken(fbPage.access_token),
+                            accessToken: maybeEncryptToken(fbPage.access_token),
+                            tokenLastVerifiedAt: new Date(),
                             autoReplyEnabled: shouldAutoEnable,
                             instagramAccountId,
                             instagramUsername,
@@ -623,7 +607,8 @@ export class PagesService {
                             userId,
                             facebookPageId: fbPage.id,
                             name: fbPage.name,
-                            accessToken: maybeEncryptPageToken(fbPage.access_token),
+                            accessToken: maybeEncryptToken(fbPage.access_token),
+                            tokenLastVerifiedAt: new Date(),
                             autoReplyEnabled: shouldAutoEnable,
                             instagramAccountId,
                             instagramUsername,
@@ -673,6 +658,7 @@ export class PagesService {
                     autoReplyEnabled: false,
                     instagramAutoReplyEnabled: false,
                     accessToken: '',
+                    tokenLastVerifiedAt: null,
                     updatedAt: new Date(),
                 })
                 .where(eq(pages.id, revokedPage.id));
@@ -712,7 +698,7 @@ export class PagesService {
             .where(eq(pages.instagramAccountId, instagramAccountId));
 
         const page = result[0] || null;
-        if (page) page.accessToken = maybeDecryptPageToken(page.accessToken);
+        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
         return page;
     }
 }

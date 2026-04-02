@@ -48,6 +48,7 @@ import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
+import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { smsService } from "./services/sms";
 import { createRequestLogger } from "./types";
 import { config } from "./config";
@@ -265,6 +266,10 @@ const start = async () => {
     smsService.setLogger(workerLogger);
     startEscalationCron();
 
+    // Start Facebook token refresh cron (refreshes tokens expiring within 7 days, every 6h)
+    setTokenRefreshLogger(workerLogger);
+    startTokenRefreshCron();
+
     // Database cleanup scheduler — runs every 6 hours to enforce data retention
     // AI cache: 30 days, logs: 90 days, usage logs: 180 days
     const { runAllCleanupTasks } = await import("./utils/cleanup");
@@ -320,8 +325,9 @@ const gracefulShutdown = async (signal: string) => {
   console.log(`\n${signal} received, closing server gracefully...`);
 
   try {
-    // Stop the escalation cron
+    // Stop cron jobs
     stopEscalationCron();
+    stopTokenRefreshCron();
 
     // Stop workers (wait for in-progress jobs)
     console.log("⏳ Stopping workers...");

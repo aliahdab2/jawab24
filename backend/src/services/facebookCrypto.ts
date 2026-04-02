@@ -1,6 +1,25 @@
 import crypto from 'crypto';
 import { config } from '../config';
 
+/**
+ * Encrypt a page/user token if encryption key is configured.
+ * Skips empty strings (sentinel for disconnected pages).
+ */
+export function maybeEncryptToken(token: string): string {
+    if (!token || !config.facebook.tokenEncryptionKey) return token;
+    return encryptFbToken(token);
+}
+
+/**
+ * Decrypt a page/user token if encrypted.
+ * Falls back to plaintext for legacy unencrypted tokens.
+ */
+export function maybeDecryptToken(token: string | null | undefined): string {
+    if (!token) return '';
+    if (!config.facebook.tokenEncryptionKey) return token;
+    return decryptFbToken(token);
+}
+
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;

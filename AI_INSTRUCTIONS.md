@@ -116,9 +116,11 @@ Rules: never remove `alt` attrs, use semantic HTML, avoid layout-shifting elemen
 5. **Check `frontend/src/hooks/`** before writing inline hooks — reuse or create shared hooks
 6. **E2E tests import translation JSON** — never hardcode translated strings
 7. **`captureError()`** from `sentryHelpers.ts` for errors — never bare `console.error`
-8. **Extract shared utilities** — never duplicate logic across files
+8. **No duplication** — before writing a helper function, `grep` the codebase for existing implementations with similar logic. Reuse or extend existing code. If a utility is used in 2+ files, it must live in a shared module, not be copy-pasted
 9. **One file, one responsibility** — shared functions live in their own utility file
 10. **Run tests after ANY change** — `npm run test` + relevant E2E specs
+11. **Self-review before finishing** — after writing new code, re-read it and check: (a) no dead/unused code left behind, (b) no typos in variable names, (c) no columns/fields added to schema that are never read or written, (d) function signatures match actual usage (don't accept `string` if callers pass `undefined`)
+12. **Verify assumptions about external APIs** — before building features around third-party behavior (Facebook, Stripe, Shopify), confirm the actual API behavior from documentation. Never assume expiry times, refresh mechanisms, or token lifecycles — get it right first, not after
 
 ### 11. Dark Mode — Semantic CSS Classes
 

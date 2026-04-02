@@ -117,6 +117,7 @@ export const pages = pgTable('pages', {
     facebookPageId: varchar('facebook_page_id', { length: 255 }).unique().notNull(),
     name: varchar('name', { length: 255 }),
     accessToken: text('access_token').notNull(),
+    tokenLastVerifiedAt: timestamp('token_last_verified_at'),
     autoReplyEnabled: boolean('auto_reply_enabled').default(true),
     // Instagram Business Account linked to this page
     instagramAccountId: varchar('instagram_account_id', { length: 255 }),
