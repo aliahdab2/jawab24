@@ -112,6 +112,13 @@ vi.mock('../../src/lib/replyLock', () => ({
     releaseReplyLock: vi.fn().mockResolvedValue(undefined),
 }));
 
+// Subscription check — always active (subscription logic tested elsewhere)
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        isSubscriptionActive: vi.fn().mockResolvedValue(true),
+    },
+}));
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
