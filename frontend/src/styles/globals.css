@@ -665,7 +665,7 @@
   }
 
   .landing-chat-bubble {
-    @apply bg-card dark:bg-surface-400/20 border border-brand-50 dark:border-surface-400/40;
+    @apply bg-card dark:bg-surface-700/80 border border-brand-50 dark:border-surface-400/50;
   }
 
   .landing-platform-chip-facebook {
