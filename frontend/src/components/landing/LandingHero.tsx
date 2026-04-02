@@ -112,7 +112,7 @@ function CustomerBubble({ text }: { text: string }) {
         <Facebook className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-surface-600 dark:text-surface-300" aria-hidden="true" />
       </div>
       <div className="landing-chat-bubble rounded-lg sm:rounded-xl rounded-es-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-sm max-w-[80%]">
-        <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-surface-100 font-medium leading-tight">{text}</p>
+        <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-[#E5E7EB] font-medium leading-tight">{text}</p>
       </div>
     </div>
   );
