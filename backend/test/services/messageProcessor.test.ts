@@ -46,6 +46,7 @@ vi.mock('../../src/lib/replyLock', () => ({
 }));
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
+        isSubscriptionActive: vi.fn().mockResolvedValue(true),
         canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true }),
         incrementAiReplies: vi.fn(),
     },

@@ -76,6 +76,10 @@ vi.mock('../../src/middleware/geo', () => ({
     shouldBlockUnknownGeo: vi.fn().mockReturnValue(false),
 }));
 
+vi.mock('../../src/lib/redis', () => ({
+    redis: { get: vi.fn(), set: vi.fn(), del: vi.fn(), quit: vi.fn() },
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         frontendUrl: 'http://localhost:3001',

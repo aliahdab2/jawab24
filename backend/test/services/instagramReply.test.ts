@@ -28,6 +28,11 @@ vi.mock('../../src/db/schema', () => ({
     messages: { id: 'id', instagramMessageId: 'instagramMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction', facebookMessageId: 'facebookMessageId', message: 'message' },
 }));
 
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        isSubscriptionActive: vi.fn().mockResolvedValue(true),
+    },
+}));
 vi.mock('../../src/services/pages', () => ({
     pagesService: {
         getPageByInstagramId: vi.fn(),

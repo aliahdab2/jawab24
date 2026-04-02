@@ -47,6 +47,11 @@ vi.mock('../../src/services/comments', () => ({
 vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), quit: vi.fn(), incr: vi.fn(), expire: vi.fn() },
 }));
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        isSubscriptionActive: vi.fn().mockResolvedValue(true),
+    },
+}));
 vi.mock('../../src/lib/replyLock', () => ({
     acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
     releaseReplyLock: vi.fn().mockResolvedValue(undefined),

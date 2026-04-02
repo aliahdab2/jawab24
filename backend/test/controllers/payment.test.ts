@@ -51,6 +51,10 @@ vi.mock('../../src/db/schema', () => ({
     stripeWebhookEvents: { eventId: 'event_id', eventType: 'event_type' },
 }));
 
+vi.mock('../../src/lib/redis', () => ({
+    redis: { get: vi.fn(), set: vi.fn(), del: vi.fn(), quit: vi.fn() },
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         frontendUrl: 'http://localhost:3001',
