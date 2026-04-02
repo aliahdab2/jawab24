@@ -653,7 +653,7 @@
   }
 
   .landing-phone-frame {
-    @apply bg-surface-200 dark:bg-surface-300 border-[6px] border-surface-100 dark:border-surface-400;
+    @apply bg-surface-200 dark:bg-[rgb(20_30_48)] border-[6px] border-surface-100 dark:border-surface-500/50;
   }
 
   .landing-phone-notch {
@@ -661,11 +661,11 @@
   }
 
   .landing-phone-screen {
-    @apply bg-gradient-to-br from-white to-brand-50/30 dark:from-surface-100 dark:to-brand-900/20 border border-white/50 dark:border-surface-400/70;
+    @apply bg-gradient-to-br from-white to-brand-50/30 dark:from-[rgb(10_18_32)] dark:to-brand-900/30 border border-white/50 dark:border-surface-500/40;
   }
 
   .landing-chat-bubble {
-    @apply bg-card border border-brand-50 dark:border-surface-400;
+    @apply bg-card dark:bg-surface-500/15 border border-brand-50 dark:border-surface-400/50;
   }
 
   .landing-platform-chip-facebook {

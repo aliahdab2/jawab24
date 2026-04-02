@@ -172,8 +172,8 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
 
         {/* Bot Icon */}
         <div className="flex flex-col items-center justify-center mt-1 sm:mt-2 mb-2 sm:mb-3">
-          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white dark:bg-surface-200 shadow-xl shadow-brand-500/10 dark:shadow-brand-400/5 flex items-center justify-center animate-float-pulse border border-brand-50 dark:border-surface-400/50">
-            <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500" aria-hidden="true" />
+          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white dark:bg-brand-900/60 shadow-xl shadow-brand-500/10 dark:shadow-brand-400/20 flex items-center justify-center animate-float-pulse border border-brand-50 dark:border-brand-400/30">
+            <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500 dark:text-brand-300" aria-hidden="true" />
           </div>
         </div>
 
