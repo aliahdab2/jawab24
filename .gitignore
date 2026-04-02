@@ -40,3 +40,8 @@ frontend/ios/App/Pods/
 
 # Marketing assets (not code)
 marketing/
+
+# Android release keys and credentials (NEVER commit)
+android-release-keys/
+*.keystore
+*.jks
