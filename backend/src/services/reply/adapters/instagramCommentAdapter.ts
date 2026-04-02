@@ -90,6 +90,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             };
         }
 
+        const lang = message ? detectLanguageCode(message) : 'unknown';
         const [created] = await db
             .insert(instagramComments)
             .values({
@@ -99,6 +100,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 fromId,
                 fromUsername,
                 createdTime: new Date(),
+                detectedLanguage: lang !== 'unknown' ? lang : null,
             })
             .returning();
 

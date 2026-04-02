@@ -160,7 +160,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const handleGenerateAi = () => {
     generate({
       comment: comment.message,
-      language: comment.detectedLanguage || 'en',
+      language: comment.detectedLanguage || undefined,
       context: {},
     });
   };

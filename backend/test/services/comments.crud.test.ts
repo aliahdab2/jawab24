@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { commentsService } from '../../src/services/comments';
 import { db } from '../../src/db';
+import { detectLanguageCode } from '../../src/utils/language';
 
 vi.mock('../../src/db', () => ({
     db: {
@@ -9,6 +10,10 @@ vi.mock('../../src/db', () => ({
         delete: vi.fn(),
         select: vi.fn(),
     },
+}));
+
+vi.mock('../../src/utils/language', () => ({
+    detectLanguageCode: vi.fn().mockReturnValue('en'),
 }));
 
 /** Chainable mock helpers */
@@ -136,6 +141,52 @@ describe('CommentsService — CRUD & core methods', () => {
 
             expect(result).toEqual(sampleComment);
             expect(db.insert).toHaveBeenCalledTimes(1);
+        });
+
+        it('should detect language from message and set detectedLanguage', async () => {
+            vi.mocked(detectLanguageCode).mockReturnValue('ar');
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain({ ...sampleComment, detectedLanguage: 'ar' }) as any);
+
+            await commentsService.createComment({
+                postId: 'post-1',
+                facebookCommentId: 'fb-comment-2',
+                message: 'بيشتغل بسوريا زكاتك',
+            });
+
+            expect(detectLanguageCode).toHaveBeenCalledWith('بيشتغل بسوريا زكاتك');
+            const insertCall = vi.mocked(db.insert).mock.results[0].value;
+            const valuesCall = insertCall.values.mock.calls[0][0];
+            expect(valuesCall.detectedLanguage).toBe('ar');
+        });
+
+        it('should set detectedLanguage to null when language is unknown', async () => {
+            vi.mocked(detectLanguageCode).mockReturnValue('unknown');
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain({ ...sampleComment, detectedLanguage: null }) as any);
+
+            await commentsService.createComment({
+                postId: 'post-1',
+                facebookCommentId: 'fb-comment-3',
+                message: '😊👍',
+            });
+
+            const insertCall = vi.mocked(db.insert).mock.results[0].value;
+            const valuesCall = insertCall.values.mock.calls[0][0];
+            expect(valuesCall.detectedLanguage).toBeNull();
+        });
+
+        it('should set detectedLanguage to null when message is empty', async () => {
+            vi.mocked(detectLanguageCode).mockReturnValue('unknown');
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain({ ...sampleComment, detectedLanguage: null }) as any);
+
+            await commentsService.createComment({
+                postId: 'post-1',
+                facebookCommentId: 'fb-comment-4',
+                message: '',
+            });
+
+            const insertCall = vi.mocked(db.insert).mock.results[0].value;
+            const valuesCall = insertCall.values.mock.calls[0][0];
+            expect(valuesCall.detectedLanguage).toBeNull();
         });
     });
 

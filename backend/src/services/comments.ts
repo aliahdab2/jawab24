@@ -2,12 +2,14 @@ import { db } from '../db';
 import { comments, posts, pages, logs, instagramComments, instagramMedia } from '../db/schema';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import { CreateCommentDTO, UpdateCommentDTO } from '../types';
+import { detectLanguageCode } from '../utils/language';
 
 export class CommentsService {
     /**
      * Create a new comment
      */
     async createComment(data: CreateCommentDTO) {
+        const lang = data.message ? detectLanguageCode(data.message) : 'unknown';
         const [newComment] = await db
             .insert(comments)
             .values({
@@ -17,9 +19,10 @@ export class CommentsService {
                 fromId: data.fromId,
                 fromName: data.fromName,
                 createdTime: data.createdTime,
+                detectedLanguage: lang !== 'unknown' ? lang : null,
             })
             .returning();
-        
+
         return newComment;
     }
 

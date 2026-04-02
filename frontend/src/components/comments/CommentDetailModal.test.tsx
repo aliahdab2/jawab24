@@ -115,6 +115,58 @@ describe('CommentDetailModal', () => {
     }, { timeout: 3000 });
   });
 
+  it('does not default to English when detectedLanguage is null', async () => {
+    (aiApi.generateAsync as any).mockResolvedValue({ data: { jobId: 'job2' } });
+    (aiApi.getJobStatus as any).mockResolvedValue({
+      data: { status: 'completed', result: { reply: 'رد تلقائي' } }
+    });
+
+    const arabicComment: Comment = {
+      ...mockComment,
+      message: 'بيشتغل بسوريا زكاتك',
+      detectedLanguage: null,
+    };
+
+    await renderModal({ comment: arabicComment });
+
+    const generateBtn = screen.getByRole('button', { name: /Smart Reply/i });
+    fireEvent.click(generateBtn);
+
+    await waitFor(() => {
+      // Should NOT pass 'en' as language — passes undefined so AI worker auto-detects
+      expect(aiApi.generateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          comment: 'بيشتغل بسوريا زكاتك',
+        })
+      );
+      const callArgs = (aiApi.generateAsync as any).mock.calls[0][0];
+      expect(callArgs.language).toBeUndefined();
+    });
+  });
+
+  it('passes detectedLanguage when available', async () => {
+    (aiApi.generateAsync as any).mockResolvedValue({ data: { jobId: 'job3' } });
+    (aiApi.getJobStatus as any).mockResolvedValue({
+      data: { status: 'completed', result: { reply: 'شكراً' } }
+    });
+
+    const arabicComment: Comment = {
+      ...mockComment,
+      message: 'بيشتغل بسوريا زكاتك',
+      detectedLanguage: 'ar',
+    };
+
+    await renderModal({ comment: arabicComment });
+
+    const generateBtn = screen.getByRole('button', { name: /Smart Reply/i });
+    fireEvent.click(generateBtn);
+
+    await waitFor(() => {
+      const callArgs = (aiApi.generateAsync as any).mock.calls[0][0];
+      expect(callArgs.language).toBe('ar');
+    });
+  });
+
   it('closes on ESC key press', async () => {
     const onClose = vi.fn();
     await renderModal({ onClose });
