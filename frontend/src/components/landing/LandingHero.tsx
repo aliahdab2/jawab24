@@ -98,8 +98,8 @@ function HeroTypingDots() {
           />
         ))}
       </div>
-      <div className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0">
-        <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 text-brand-500" aria-hidden="true" />
+      <div className="w-3 h-3 sm:w-4 sm:h-4 lg:w-5 lg:h-5 rounded-full bg-brand-50 dark:bg-brand-900/40 flex items-center justify-center flex-shrink-0">
+        <Zap className="w-2 h-2 sm:w-2.5 sm:h-2.5 lg:w-3 lg:h-3 text-brand-500 dark:text-brand-400" aria-hidden="true" />
       </div>
     </motion.div>
   );
@@ -108,11 +108,11 @@ function HeroTypingDots() {
 function CustomerBubble({ text }: { text: string }) {
   return (
     <div className="flex items-end gap-0.5 sm:gap-1">
-      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-surface-100 flex items-center justify-center flex-shrink-0">
-        <Facebook className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-surface-600" aria-hidden="true" />
+      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-surface-100 dark:bg-surface-300/30 flex items-center justify-center flex-shrink-0">
+        <Facebook className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-surface-600 dark:text-surface-400" aria-hidden="true" />
       </div>
       <div className="landing-chat-bubble rounded-lg sm:rounded-xl rounded-es-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-sm max-w-[80%]">
-        <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-surface-800 font-medium leading-tight">{text}</p>
+        <p className="text-[7px] sm:text-[10px] lg:text-sm text-surface-700 dark:text-surface-200 font-medium leading-tight">{text}</p>
       </div>
     </div>
   );
@@ -124,8 +124,8 @@ function BotBubble({ text }: { text: string }) {
       <div className="bg-brand-500 rounded-lg sm:rounded-xl rounded-ee-none px-1.5 py-0.5 sm:px-2 sm:py-1 lg:px-2.5 lg:py-1.5 shadow-lg shadow-brand-500/20 max-w-[85%]">
         <p className="text-[7px] sm:text-[10px] lg:text-sm text-white font-bold leading-tight">{text}</p>
       </div>
-      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-brand-50 flex items-center justify-center flex-shrink-0">
-        <Zap className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-brand-500" aria-hidden="true" />
+      <div className="w-2.5 h-2.5 sm:w-3.5 sm:h-3.5 lg:w-4 lg:h-4 rounded-full bg-brand-50 dark:bg-brand-900/40 flex items-center justify-center flex-shrink-0">
+        <Zap className="w-1.5 h-1.5 sm:w-2 sm:h-2 lg:w-2.5 lg:h-2.5 text-brand-500 dark:text-brand-400" aria-hidden="true" />
       </div>
     </div>
   );
@@ -155,24 +155,24 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
         <div className="flex items-center justify-between pt-7 sm:pt-9 pb-3 sm:pb-4 px-4">
           {/* Signal bars */}
           <div className="flex items-end gap-[1px] sm:gap-[1.5px]">
-            <div className="w-[2px] sm:w-[3px] h-[3px] sm:h-[4px] bg-brand-900/30 rounded-[0.5px]" />
-            <div className="w-[2px] sm:w-[3px] h-[5px] sm:h-[6px] bg-brand-900/30 rounded-[0.5px]" />
-            <div className="w-[2px] sm:w-[3px] h-[7px] sm:h-[8px] bg-brand-900/30 rounded-[0.5px]" />
-            <div className="w-[2px] sm:w-[3px] h-[9px] sm:h-[10px] bg-brand-900/30 rounded-[0.5px]" />
+            <div className="w-[2px] sm:w-[3px] h-[3px] sm:h-[4px] bg-brand-900/30 dark:bg-brand-300/30 rounded-[0.5px]" />
+            <div className="w-[2px] sm:w-[3px] h-[5px] sm:h-[6px] bg-brand-900/30 dark:bg-brand-300/30 rounded-[0.5px]" />
+            <div className="w-[2px] sm:w-[3px] h-[7px] sm:h-[8px] bg-brand-900/30 dark:bg-brand-300/30 rounded-[0.5px]" />
+            <div className="w-[2px] sm:w-[3px] h-[9px] sm:h-[10px] bg-brand-900/30 dark:bg-brand-300/30 rounded-[0.5px]" />
           </div>
-          <div className="text-[8px] sm:text-[9px] lg:text-xs font-bold text-brand-900/30">9:41</div>
+          <div className="text-[8px] sm:text-[9px] lg:text-xs font-bold text-brand-900/30 dark:text-brand-300/30">9:41</div>
           {/* Battery */}
           <div className="flex items-center gap-[1px]">
-            <div className="relative w-4 sm:w-5 lg:w-6 h-2 sm:h-2.5 lg:h-3 border border-brand-900/25 rounded-[2px] sm:rounded-[3px] p-[1px] sm:p-[1.5px]">
+            <div className="relative w-4 sm:w-5 lg:w-6 h-2 sm:h-2.5 lg:h-3 border border-brand-900/25 dark:border-brand-300/25 rounded-[2px] sm:rounded-[3px] p-[1px] sm:p-[1.5px]">
               <div className="h-full w-[75%] bg-brand-500/40 rounded-[1px]" />
             </div>
-            <div className="w-[1.5px] sm:w-[2px] h-1 sm:h-1.5 bg-brand-900/25 rounded-e-sm" />
+            <div className="w-[1.5px] sm:w-[2px] h-1 sm:h-1.5 bg-brand-900/25 dark:bg-brand-300/25 rounded-e-sm" />
           </div>
         </div>
 
         {/* Bot Icon */}
         <div className="flex flex-col items-center justify-center mt-1 sm:mt-2 mb-2 sm:mb-3">
-          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white shadow-xl shadow-brand-500/10 flex items-center justify-center animate-float-pulse border border-brand-50">
+          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white dark:bg-surface-200 shadow-xl shadow-brand-500/10 dark:shadow-brand-400/5 flex items-center justify-center animate-float-pulse border border-brand-50 dark:border-surface-400/50">
             <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500" aria-hidden="true" />
           </div>
         </div>
@@ -328,11 +328,6 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
                 style={{ boxShadow: '0 20px 60px -10px rgba(0, 128, 128, 0.25), 0 8px 24px -6px rgba(0, 0, 0, 0.15)' }}
               >
                 <div className="absolute top-5 sm:top-7 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 landing-phone-notch rounded-full z-10" />
-
-                {/* Glass reflection sweep */}
-                <div className="absolute inset-0 rounded-[28px] sm:rounded-[34px] overflow-hidden pointer-events-none z-20">
-                  <div className="absolute inset-0 animate-glass-sweep" />
-                </div>
 
                 <HeroPhoneChat t={t} />
               </motion.div>
