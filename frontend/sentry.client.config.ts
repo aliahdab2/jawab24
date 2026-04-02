@@ -15,11 +15,12 @@ Sentry.init({
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0.1, // 10% of errors get replay
 
-    // Filter noisy errors
+    // Filter noisy/expected errors
     ignoreErrors: [
         'ResizeObserver loop',
         'Network request failed',
         'Load failed',
         'ChunkLoadError',
+        'Session expired',
     ],
 });

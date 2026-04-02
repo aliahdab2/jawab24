@@ -37,6 +37,7 @@
   "writeBusinessInfo": "Write your business information here...",
   "characters": "characters",
   "savedStatus": "Saved!",
+  "saveFailed": "Failed to save. Please try again.",
   "connectDialogTitle": "Connect a Page",
   "connectDialogBody": "You'll be redirected to Facebook. To add or change pages, click \"Edit previous settings\" on the Facebook screen.",
   "continueToFacebook": "Continue to Facebook",

@@ -582,6 +582,7 @@ const PagesPage: NextPageWithLayout = () => {
               setTimeout(() => setSaved(false), 3000);
             } catch (error) {
               captureError(error, 'Failed to save knowledge base', { tags: { page: 'pages', action: 'save-kb' } });
+              toast.error(t('saveFailed'));
             } finally {
               setSaving(false);
             }
