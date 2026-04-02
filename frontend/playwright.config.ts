@@ -21,6 +21,14 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 7'] },
+    },
+    {
+      name: 'mobile-chrome-landscape',
+      use: { ...devices['Pixel 7 landscape'] },
+    },
   ],
   webServer: {
     // CI: use standalone server (output: 'standalone' in next.config.js).

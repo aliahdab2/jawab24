@@ -57,7 +57,10 @@ test.describe('Login Page', () => {
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
 
-  test('OAuth URL should include all required Instagram and Pages scopes', async ({ page }) => {
+  // Facebook encrypts query params (encrypted_query_string) on mobile user agents,
+  // so scope inspection only works on desktop.
+  test('OAuth URL should include all required Instagram and Pages scopes', async ({ page, browserName }, testInfo) => {
+    test.skip(testInfo.project.name.includes('mobile'), 'Facebook encrypts OAuth params on mobile user agents');
     await page.goto('/en/login');
 
     await expect(

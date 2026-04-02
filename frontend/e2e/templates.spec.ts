@@ -119,9 +119,11 @@ test.describe('Templates Page', () => {
       page.locator('h1').filter({ hasText: t('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Template names should be visible
+    // Template names should be visible (scroll on mobile where cards stack vertically)
     await expect(page.getByText('Welcome').first()).toBeVisible();
-    await expect(page.getByText('Pricing').first()).toBeVisible();
+    const pricingCard = page.getByText('Pricing').first();
+    await pricingCard.scrollIntoViewIfNeeded();
+    await expect(pricingCard).toBeVisible();
   });
 
   test('should show empty state when no templates', async ({ page }) => {
@@ -229,9 +231,11 @@ test.describe('Templates Page', () => {
       page.locator('h1').filter({ hasText: t('templates.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Both templates should be visible
+    // Both templates should be visible (scroll on mobile where cards stack vertically)
     await expect(page.getByText('Welcome').first()).toBeVisible();
-    await expect(page.getByText('Pricing').first()).toBeVisible();
+    const pricingCard = page.getByText('Pricing').first();
+    await pricingCard.scrollIntoViewIfNeeded();
+    await expect(pricingCard).toBeVisible();
 
     // Toggle switches should be present (one per template)
     const toggles = page.locator('[role="switch"]');

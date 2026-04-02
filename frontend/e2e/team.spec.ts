@@ -135,7 +135,9 @@ test.describe('Team Section', () => {
     await setupRoutes(page);
     await page.goto('/en/settings');
 
-    await expect(page.getByText('Test Owner').first()).toBeVisible({ timeout: 15000 });
+    const ownerText = page.getByText('Test Owner').first();
+    await ownerText.scrollIntoViewIfNeeded();
+    await expect(ownerText).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(t('team.roleOwner'), { exact: true })).toBeVisible();
     await expect(page.getByText(`(${t('team.you')})`)).toBeVisible();
   });
@@ -157,7 +159,9 @@ test.describe('Team Section', () => {
     });
     await page.goto('/en/settings');
 
-    await expect(page.getByText('Test Owner').first()).toBeVisible({ timeout: 15000 });
+    const ownerText = page.getByText('Test Owner').first();
+    await ownerText.scrollIntoViewIfNeeded();
+    await expect(ownerText).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('Sara', { exact: true })).toBeVisible();
     await expect(page.getByText('ali@test.com')).toBeVisible();
     await expect(page.getByText(t('team.pending'))).toBeVisible();
@@ -212,7 +216,9 @@ test.describe('Team Section', () => {
     await setupRoutes(page, { members: [MOCK_OWNER, MOCK_MEMBER] });
     await page.goto('/en/settings');
 
-    await expect(page.getByText(t('team.roleOwner'))).toBeVisible({ timeout: 15000 });
+    const ownerBadge = page.getByText(t('team.roleOwner'), { exact: true });
+    await ownerBadge.scrollIntoViewIfNeeded();
+    await expect(ownerBadge).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(t('team.roleMember')).first()).toBeVisible();
   });
 

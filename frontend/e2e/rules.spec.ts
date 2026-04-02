@@ -205,9 +205,9 @@ test.describe('Rules Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // Should show the first-match-wins hint
-    await expect(
-      page.getByText('First match wins').first()
-    ).toBeVisible({ timeout: 10000 });
+    const hintText = page.getByText('First match wins').first();
+    await hintText.scrollIntoViewIfNeeded();
+    await expect(hintText).toBeVisible({ timeout: 10000 });
   });
 
   test('should open create rule modal and fill form', async ({ page }) => {
@@ -318,9 +318,9 @@ test.describe('Rules Page', () => {
     await expect(page.getByText('Greeting Rule').first()).toBeVisible();
 
     // Arabic hint text
-    await expect(
-      page.getByText(tAr('rules.firstMatchHint'), { exact: false }).first()
-    ).toBeVisible({ timeout: 10000 });
+    const arHint = page.getByText(tAr('rules.firstMatchHint'), { exact: false }).first();
+    await arHint.scrollIntoViewIfNeeded();
+    await expect(arHint).toBeVisible({ timeout: 10000 });
 
     // Add Rule button in Arabic
     await expect(

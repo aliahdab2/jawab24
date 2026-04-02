@@ -319,9 +319,9 @@ test.describe('Dashboard Page', () => {
     await page.goto('/en/dashboard');
 
     // Within 15 seconds, actual stat values should appear
-    await expect(
-      page.locator('text=/\\d+/').first()
-    ).toBeVisible({ timeout: 15000 });
+    const statValue = page.locator('text=/\\d+/').first();
+    await statValue.scrollIntoViewIfNeeded();
+    await expect(statValue).toBeVisible({ timeout: 15000 });
 
     // The error boundary should NOT be showing
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();

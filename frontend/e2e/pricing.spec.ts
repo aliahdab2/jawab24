@@ -187,8 +187,8 @@ test.describe('Pricing Page', () => {
     ).toBeVisible({ timeout: 15000 });
 
     // Should show unavailable message instead of subscribe buttons
-    await expect(
-      page.getByText('payment processing is not available').first()
-    ).toBeVisible();
+    const unavailableMsg = page.getByText('payment processing is not available').first();
+    await unavailableMsg.scrollIntoViewIfNeeded();
+    await expect(unavailableMsg).toBeVisible();
   });
 });
