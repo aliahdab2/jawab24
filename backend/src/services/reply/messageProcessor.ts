@@ -145,11 +145,25 @@ export class MessageProcessor {
             const userId = page.userId;
             const workspaceId = page.workspaceId;
 
-            // 4a. Subscription gate — don't generate AI replies for expired subscriptions
+            // 4a. Subscription gate — send away message instead of AI reply for expired subscriptions
             const isActive = await subscriptionsService.isSubscriptionActive(userId);
             if (!isActive) {
                 pipelineMetrics.record(pipeline, 'subscription_inactive');
-                this.logger.info(`[${platform}] Subscription inactive — skipping AI reply`, { userId, pageId: page.id });
+                this.logger.info(`[${platform}] Subscription inactive — sending away message fallback`, { userId, pageId: page.id });
+
+                // Send away message so the customer isn't left hanging
+                const customerLang = detectLanguageCode(messageText);
+                const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
+                if (awayMessage) {
+                    try {
+                        await adapter.sendAwayMessage(page, senderId, awayMessage);
+                        await messagesService.storeOutgoingMessage(page.id, senderId, awayMessage, 'template');
+                        this.logger.info(`[${platform}] Sent away message for inactive subscription`, { senderId });
+                    } catch (error) {
+                        this.logger.error(`[${platform}] Failed to send away message for inactive subscription`, { error: String(error) });
+                    }
+                }
+
                 return { success: false, messageId: platformMessageId, error: 'Subscription inactive' };
             }
             lap('4a-subscriptionCheck');

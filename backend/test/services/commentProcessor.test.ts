@@ -1099,3 +1099,69 @@ describe('shouldUseFallback', () => {
         expect(shouldUseFallback('low_confidence,price_not_in_kb')).toBe(true);
     });
 });
+
+describe('CommentProcessor — subscription inactive fallback', () => {
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        await pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentsAutoReply: true,
+            replyDelay: 0,
+        } as any);
+    });
+
+    it('should send away message when subscription is inactive', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('شكراً لتواصلك، سنرد عليك قريباً');
+
+        const adapter = createMockAdapter();
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'بيشتغل بسوريا؟', 'user-1', 'Anas',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Subscription inactive');
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.objectContaining({ replyText: 'شكراً لتواصلك، سنرد عليك قريباً' }),
+        );
+        expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.subscription_inactive']).toBe(1);
+    });
+
+    it('should flag comment when subscription inactive and no away message configured', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue(null);
+
+        const adapter = createMockAdapter();
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Hello?', 'user-1', 'John',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Subscription inactive');
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'subscription_inactive');
+    });
+
+    it('should flag comment when away message send fails', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We will get back to you');
+
+        const adapter = createMockAdapter({
+            sendReply: vi.fn().mockRejectedValue(new Error('API error')),
+        });
+        const result = await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'Hello?', 'user-1', 'John',
+        );
+
+        expect(result.success).toBe(false);
+        expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'subscription_inactive');
+    });
+});

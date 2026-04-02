@@ -96,6 +96,10 @@ vi.mock('../../src/db/schema', () => ({
     rules: { userId: 'user_id', id: 'id' },
 }));
 
+vi.mock('../../src/lib/redis', () => ({
+    redis: { get: vi.fn().mockResolvedValue(null), set: vi.fn(), quit: vi.fn(), del: vi.fn() },
+}));
+
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...args) => ({ op: 'and', args })),
@@ -1250,6 +1254,79 @@ describe('checkSubscriptionStatus', () => {
             makeSub({ status: 'past_due', currentPeriodEnd: null }) as any
         );
         expect(result.allowed).toBe(true);
+    });
+});
+
+describe('isSubscriptionActive', () => {
+    let redisMock: { get: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn> };
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        // Get the mocked redis to force cache miss on each test
+        const { redis } = await import('../../src/lib/redis');
+        redisMock = redis as any;
+        redisMock.get.mockResolvedValue(null); // cache miss → hit DB
+    });
+
+    it('should return true when no subscription exists (free/trial user)', async () => {
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
+        const result = await subscriptionsService.isSubscriptionActive('user-no-sub');
+        expect(result).toBe(true);
+        spy.mockRestore();
+    });
+
+    it('should return true for active subscription', async () => {
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+            id: 'sub_1', userId: 'user_1', status: 'active',
+        } as any);
+        const result = await subscriptionsService.isSubscriptionActive('user_1');
+        expect(result).toBe(true);
+        spy.mockRestore();
+    });
+
+    it('should return true for trialing subscription', async () => {
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+            id: 'sub_1', userId: 'user_1', status: 'trialing',
+        } as any);
+        const result = await subscriptionsService.isSubscriptionActive('user_1');
+        expect(result).toBe(true);
+        spy.mockRestore();
+    });
+
+    it('should return false for canceled subscription', async () => {
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+            id: 'sub_1', userId: 'user_1', status: 'canceled',
+        } as any);
+        const result = await subscriptionsService.isSubscriptionActive('user_1');
+        expect(result).toBe(false);
+        spy.mockRestore();
+    });
+
+    it('should return false for paused subscription', async () => {
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+            id: 'sub_1', userId: 'user_1', status: 'paused',
+        } as any);
+        const result = await subscriptionsService.isSubscriptionActive('user_1');
+        expect(result).toBe(false);
+        spy.mockRestore();
+    });
+
+    it('should return false for past_due subscription', async () => {
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue({
+            id: 'sub_1', userId: 'user_1', status: 'past_due',
+        } as any);
+        const result = await subscriptionsService.isSubscriptionActive('user_1');
+        expect(result).toBe(false);
+        spy.mockRestore();
+    });
+
+    it('should use cached value from Redis when available', async () => {
+        redisMock.get.mockResolvedValue('0'); // cached as inactive
+        const spy = vi.spyOn(subscriptionsService, 'getUserSubscription');
+        const result = await subscriptionsService.isSubscriptionActive('user_cached');
+        expect(result).toBe(false);
+        expect(spy).not.toHaveBeenCalled(); // DB not hit
+        spy.mockRestore();
     });
 });
 

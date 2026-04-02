@@ -607,3 +607,72 @@ describe('MessageProcessor — Page OFF behavior', () => {
         );
     });
 });
+
+describe('MessageProcessor — subscription inactive fallback', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
+    });
+
+    it('should send away message when subscription is inactive', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('شكراً لتواصلك، سنرد عليك قريباً');
+
+        const adapter = createMockAdapter();
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'بيشتغل بسوريا؟', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Subscription inactive');
+        expect(adapter.sendAwayMessage).toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).toHaveBeenCalled();
+    });
+
+    it('should silently skip when subscription inactive and no away message', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue(null);
+
+        const adapter = createMockAdapter();
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello?', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Subscription inactive');
+        expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+    });
+
+    it('should not crash when away message send fails', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We will get back to you');
+
+        const adapter = createMockAdapter({
+            sendAwayMessage: vi.fn().mockRejectedValue(new Error('API error')),
+        });
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Hello?', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Subscription inactive');
+        // Should not throw — error is caught internally
+    });
+});

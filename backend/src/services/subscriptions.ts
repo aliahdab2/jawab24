@@ -111,7 +111,9 @@ export const subscriptionsService = {
         }
 
         const sub = await this.getUserSubscription(userId);
-        const active = sub !== null && ACTIVE_STATUSES.has(sub.status);
+        // No subscription row = free/trial user → allow replies
+        // Only block when an explicit subscription exists with inactive status
+        const active = sub === null || ACTIVE_STATUSES.has(sub.status);
 
         try {
             await redis.set(cacheKey, active ? '1' : '0', 'EX', STATUS_CACHE_TTL);
