@@ -1,4 +1,4 @@
-import fastify from 'fastify';
+import fastify, { type FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import routes from './routes';
@@ -20,7 +20,7 @@ export async function buildServer(opts?: { logger?: boolean }) {
         timeWindow: '1 minute',
         // Rate-limit per workspace (via X-Workspace-Id header from backend).
         // Falls back to IP if header is missing (e.g. direct calls, playground).
-        keyGenerator: (request) => {
+        keyGenerator: (request: FastifyRequest) => {
             const workspaceId = request.headers['x-workspace-id'];
             if (typeof workspaceId === 'string' && workspaceId.length > 0) {
                 return `ws:${workspaceId}`;
