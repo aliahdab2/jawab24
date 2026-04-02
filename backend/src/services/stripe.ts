@@ -119,19 +119,25 @@ export class StripeService {
         const subscription = await s.subscriptions.create(subscriptionParams);
 
         if (params.trialDays > 0) {
-            const setupIntent = subscription.pending_setup_intent as Stripe.SetupIntent;
+            const setupIntent = subscription.pending_setup_intent as Stripe.SetupIntent | null;
+            if (!setupIntent?.client_secret) {
+                throw new Error(`Stripe setup intent missing client_secret for subscription ${subscription.id}`);
+            }
             return {
                 subscriptionId: subscription.id,
-                clientSecret: setupIntent.client_secret!,
+                clientSecret: setupIntent.client_secret,
                 type: 'setup',
             };
         }
 
-        const invoice = subscription.latest_invoice as Stripe.Invoice;
-        const paymentIntent = invoice.payment_intent as Stripe.PaymentIntent;
+        const invoice = subscription.latest_invoice as Stripe.Invoice | null;
+        const paymentIntent = (invoice?.payment_intent as Stripe.PaymentIntent | null);
+        if (!paymentIntent?.client_secret) {
+            throw new Error(`Stripe payment intent missing client_secret for subscription ${subscription.id}`);
+        }
         return {
             subscriptionId: subscription.id,
-            clientSecret: paymentIntent.client_secret!,
+            clientSecret: paymentIntent.client_secret,
             type: 'payment',
         };
     }
