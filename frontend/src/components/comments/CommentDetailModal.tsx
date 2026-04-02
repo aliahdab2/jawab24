@@ -16,7 +16,7 @@ import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
 import {
-  MessageSquare,
+  Sparkles,
   Bot,
   Reply,
   AlertTriangle,
@@ -216,7 +216,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border">
           <div className="flex items-center gap-3">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'icon-bg-red' : 'icon-bg-brand'}`}>
-              <MessageSquare className="w-5 h-5" />
+              <Sparkles className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-foreground">
