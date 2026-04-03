@@ -1,12 +1,13 @@
 import React, { useRef, useState, useCallback } from 'react';
-import { FileUp, Loader2 } from 'lucide-react';
+import { Paperclip, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { kbApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 
-const ACCEPTED_TYPES = '.pdf,.docx,.doc,.jpg,.jpeg,.png,.webp';
+// image/* triggers camera option on mobile (iOS/Android)
+const ACCEPTED_TYPES = '.pdf,.docx,.doc,image/*';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const SUPPORTED_MIMES = new Set([
@@ -140,7 +141,7 @@ export function FileUploadButton({
         {extracting ? (
           <Loader2 className="w-5 h-5 animate-spin" />
         ) : (
-          <FileUp className="w-5 h-5" />
+          <Paperclip className="w-5 h-5" />
         )}
       </button>
 
