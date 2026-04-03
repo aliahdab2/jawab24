@@ -135,7 +135,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 203 total (163 original + 34 stress tests + 6 public comment regression)
+// Test cases — 205 total (163 original + 34 stress tests + 6 public comment regression + 2 context continuity)
 // ---------------------------------------------------------------------------
 
 const TEST_CASES: TestCase[] = [
@@ -410,6 +410,46 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['AirPods', 'سماعة', 'سماعات', 'Apple', 'آبل'],
         },
         notes: 'Vague follow-up after AirPods discussion — RAG has description with ANC, IPX4, H2 chip, etc.',
+    },
+
+    // 12.3 — Follow-up about a product the AI introduced (not in user's message)
+    // User asked about AirPods → AI answered AND mentioned MacBook Air M3.
+    // User asks about "اللابتوب" (the laptop) referencing what AI mentioned.
+    // Without assistant context in enrichment, RAG retrieves AirPods chunks (from user's
+    // previous question). With the fix, enrichment includes "MacBook Air M3" from
+    // assistant tail → RAG retrieves MacBook chunks with full specs.
+    {
+        id: 235, category: 12, categoryName: 'Context Continuity', channel: 'dm',
+        message: 'عطيني تفاصيل عن اللابتوب',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم AirPods؟' },
+            { role: 'assistant', content: 'أكيد! عندنا AirPods Pro الجيل الثاني بسعر 850 ريال. وإذا تبي لابتوب كمان، عندنا MacBook Air M3 جديد ومميز.' },
+        ],
+        expected: {
+            // Must reference MacBook specs/price — NOT AirPods
+            replyContainsAny: ['MacBook', 'ماك بوك', 'M3', 'Apple', '5200', '5,200', '6500', '6,500', 'شريحة'],
+            replyNotContains: ['850 ريال'],
+        },
+        notes: 'AI introduced MacBook — user asks about "the laptop". Without assistant tail in enrichment, RAG only has AirPods context.',
+    },
+
+    // 12.4 — Follow-up about Samsung Galaxy after asking about iPhone
+    // User asked about iPhone → AI answered AND mentioned Samsung Galaxy S24.
+    // User asks about "السامسونج" referencing what AI mentioned.
+    {
+        id: 236, category: 12, categoryName: 'Context Continuity', channel: 'dm',
+        message: 'وش مواصفات السامسونج',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم iPhone 15 Pro؟' },
+            { role: 'assistant', content: 'نعم عندنا iPhone 15 Pro. وكمان عندنا Samsung Galaxy S24 لو تبي تقارن بينهم.' },
+        ],
+        expected: {
+            // Must reference Samsung Galaxy specs — NOT iPhone
+            replyContainsAny: ['Samsung', 'سامسونج', 'Galaxy', 'S24', 'جالكسي', 'Snapdragon'],
+        },
+        notes: 'AI introduced Samsung — user asks about "the Samsung". Without assistant tail, RAG retrieves only iPhone chunks.',
     },
 
     // ---------------------------------------------------------------------------

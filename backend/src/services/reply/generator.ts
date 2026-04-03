@@ -172,7 +172,7 @@ export class ReplyGenerator {
 
             // Run RAG retrieval if enabled
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, gapSource,
+                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, gapSource, !!context.productCatalog,
             );
 
             const detectedLang = detectLanguageCode(text);
@@ -237,7 +237,7 @@ export class ReplyGenerator {
 
                 // Run RAG retrieval if enabled (pass history for context-aware search)
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory, gapSource,
+                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory, gapSource, !!context.productCatalog,
                 );
 
                 const msgLang = detectLanguageCode(text);
@@ -281,6 +281,7 @@ export class ReplyGenerator {
         channel: 'comment' | 'dm',
         conversationHistory?: { role: string; content: string }[],
         gapSource?: GapSource,
+        hasEcommerceChunks?: boolean,
     ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
         const retrieval = getRetrievalService();
 
@@ -292,10 +293,10 @@ export class ReplyGenerator {
         // Small KB optimization: if the entire KB fits comfortably in the context window,
         // send it as-is instead of using RAG chunking. This avoids semantic gaps where the
         // customer uses different terminology than the KB (e.g., "باقات" vs "خدمات").
-        // RAG only adds value for large KBs (e.g., large product catalogs) where we must
-        // selectively retrieve relevant chunks to stay within token limits.
+        // Exception: ecommerce pages have product chunks with detailed specs/prices that
+        // aren't in the static KB text — always use RAG for those.
         const KB_RAG_THRESHOLD_CHARS = 5000;
-        if (staticKB && staticKB.length < KB_RAG_THRESHOLD_CHARS) {
+        if (!hasEcommerceChunks && staticKB && staticKB.length < KB_RAG_THRESHOLD_CHARS) {
             this.logger.debug('[Generator] KB is small — skipping RAG, using full static KB', {
                 pageId, kbLength: staticKB.length, threshold: KB_RAG_THRESHOLD_CHARS,
             });
@@ -306,26 +307,41 @@ export class ReplyGenerator {
         // When a customer says "شو مميزاتها؟" after asking about AirPods, the RAG query
         // becomes "AirPods Pro شو مميزاتها؟" so it finds the right product chunk.
         //
-        // NOTE: We intentionally use the last USER message (not the last assistant reply)
-        // to avoid hallucination poisoning. If the AI invented a product name in its reply,
-        // using that reply as RAG context would retrieve chunks "confirming" the invented name,
-        // creating a self-reinforcing hallucination loop across turns.
-        // User messages are ground truth — they contain what the customer actually asked about.
+        // We use BOTH the last user message AND a short tail of the last assistant reply.
+        // The user message is ground truth (what the customer asked about).
+        // The assistant tail captures topics the AI introduced (e.g., product suggestions,
+        // discounts, store visits) that the customer might reference in a vague follow-up
+        // like "كم سعره" or "وين فيني شوفون".
+        //
+        // Hallucination poisoning mitigation: we only take the LAST 80 chars of the
+        // assistant reply (the tail). Hallucinated facts tend to appear mid-reply as
+        // elaborations, while new topics/offers appear at the end as addendums.
+        // The 80-char cap also limits how much any single hallucinated term can influence
+        // the embedding, keeping user message + current query as the dominant signal.
         let enrichedQuery = query;
         if (conversationHistory && conversationHistory.length > 0) {
-            const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
-            if (lastUserMessage) {
-                // Only enrich if current query is short/vague (likely a follow-up)
-                const isVague = query.trim().split(/\s+/).length <= 6;
-                if (isVague) {
-                    // Take first 100 chars of last user question as context.
-                    // Cap total length to 300 to keep embedding cost + quality sane.
-                    const context = lastUserMessage.content.slice(0, 100);
-                    enrichedQuery = `${context} ${query}`.slice(0, 300);
-                    this.logger.debug('[Generator] Enriched RAG query with prior user question', {
-                        original: query, enriched: enrichedQuery.slice(0, 120),
-                    });
+            const isVague = query.trim().split(/\s+/).length <= 6;
+            if (isVague) {
+                const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
+                const lastAssistantMessage = [...conversationHistory].reverse().find(m => m.role === 'assistant');
+
+                const parts: string[] = [];
+                if (lastUserMessage) {
+                    parts.push(lastUserMessage.content.slice(0, 100));
                 }
+                if (lastAssistantMessage) {
+                    // Take the TAIL of the assistant reply — new topics are typically
+                    // appended at the end ("وبالمناسبة عنا خصم...", "وكمان عندنا MacBook...").
+                    const tail = lastAssistantMessage.content.slice(-80);
+                    parts.push(tail);
+                }
+                parts.push(query);
+
+                enrichedQuery = parts.join(' ').slice(0, 400);
+                this.logger.debug('[Generator] Enriched RAG query with conversation context', {
+                    original: query, enriched: enrichedQuery.slice(0, 150),
+                    usedAssistantTail: !!lastAssistantMessage,
+                });
             }
         }
 

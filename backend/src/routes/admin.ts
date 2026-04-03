@@ -932,7 +932,24 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     });
                 }
 
-                // 3. RAG retrieval (capture chunks for display)
+                // 3. Enrich KB with e-commerce product/policy data BEFORE RAG check
+                // (same as production messageProcessor — enriched KB must be used for
+                // the small-KB threshold so ecommerce pages use RAG for product chunks)
+                let pageKB = page.knowledgeBase || undefined;
+                let storePolicies: string | undefined;
+                let productCatalog: string | undefined;
+                if (page.ecommerceStoreId) {
+                    try {
+                        pageKB = await getEnrichedKnowledgeBase(pageKB, page.ecommerceStoreId);
+                        const storeCtx = await getStoreContextForAI(page.ecommerceStoreId);
+                        storePolicies = storeCtx.storePolicies;
+                        productCatalog = storeCtx.productCatalog;
+                    } catch {
+                        // Non-critical — fall back to raw KB
+                    }
+                }
+
+                // 4. RAG retrieval (capture chunks for display)
                 let retrievedChunks: RetrievedChunkContext[] = [];
                 let queryEmbedding: number[] | undefined;
                 let gapRecorded = false;
@@ -941,10 +958,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
                 const activeVersion = page.kbActiveVersion;
                 // Small KB optimization: skip RAG for KBs under threshold — send full text to AI instead.
-                // This prevents semantic gaps where different terminology causes RAG to miss relevant chunks.
+                // Exception: if there are ecommerce product chunks (productCatalog), always use RAG
+                // since product details (specs, variants, prices) live in chunks, not in the static KB.
                 const KB_RAG_THRESHOLD_CHARS = 5000;
-                const kbTooSmallForRag = (page.knowledgeBase?.length ?? 0) < KB_RAG_THRESHOLD_CHARS && !!page.knowledgeBase;
-                request.log.debug({ ragMode, hasApiKey: !!config.openai?.apiKey, activeVersion, kbTooSmallForRag }, 'RAG check');
+                const hasEcommerceChunks = !!page.ecommerceStoreId && !!productCatalog;
+                const kbTooSmallForRag = !hasEcommerceChunks && (pageKB?.length ?? 0) < KB_RAG_THRESHOLD_CHARS && !!pageKB;
+                request.log.debug({ ragMode, hasApiKey: !!config.openai?.apiKey, activeVersion, kbTooSmallForRag, hasEcommerceChunks, kbLength: pageKB?.length }, 'RAG check');
                 if (ragMode !== 'off' && config.openai?.apiKey && activeVersion !== null && !kbTooSmallForRag) {
                     ragAttempted = true;
                     try {
@@ -952,15 +971,20 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         const retrievalService = new RetrievalService(embeddingProvider);
                         retrievalService.setLogger(request.log);
 
-                        // Enrich vague follow-up queries with prior user question for better RAG retrieval.
-                        // Using last USER message (not assistant reply) to avoid hallucination poisoning —
-                        // if the AI invented a name, using it as RAG context would reinforce the hallucination.
+                        // Enrich vague follow-up queries with conversation context for better RAG retrieval.
+                        // Uses both last user message (ground truth) and tail of last assistant reply
+                        // (captures topics the AI introduced, e.g., product suggestions).
+                        // Hallucination mitigation: only last 80 chars of assistant reply (tail),
+                        // where new topics are appended, not mid-reply elaborations.
                         let ragQuery = question;
-                        if (conversationHistory && conversationHistory.length > 0) {
+                        if (conversationHistory && conversationHistory.length > 0 && question.trim().split(/\s+/).length <= 6) {
                             const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
-                            if (lastUserMessage && question.trim().split(/\s+/).length <= 6) {
-                                ragQuery = `${lastUserMessage.content.slice(0, 100)} ${question}`;
-                            }
+                            const lastAssistantMessage = [...conversationHistory].reverse().find(m => m.role === 'assistant');
+                            const parts: string[] = [];
+                            if (lastUserMessage) parts.push(lastUserMessage.content.slice(0, 100));
+                            if (lastAssistantMessage) parts.push(lastAssistantMessage.content.slice(-80));
+                            parts.push(question);
+                            ragQuery = parts.join(' ').slice(0, 400);
                         }
 
                         const result = await retrievalService.retrieve(pageId, ragQuery, activeVersion);
@@ -985,27 +1009,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     }
                 }
 
-                // 4. Call AI service
+                // 5. Call AI service
                 // When comment reply mode is dual or private, the AI reply will be sent
                 // as a DM, so use 'dm' channel for a detailed answer (with prices, etc.)
                 const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
                     ? 'dm'
                     : channel;
-
-                // Enrich KB with e-commerce product/policy data (same as production processor)
-                let pageKB = page.knowledgeBase || undefined;
-                let storePolicies: string | undefined;
-                let productCatalog: string | undefined;
-                if (page.ecommerceStoreId) {
-                    try {
-                        pageKB = await getEnrichedKnowledgeBase(pageKB, page.ecommerceStoreId);
-                        const storeCtx = await getStoreContextForAI(page.ecommerceStoreId);
-                        storePolicies = storeCtx.storePolicies;
-                        productCatalog = storeCtx.productCatalog;
-                    } catch {
-                        // Non-critical — fall back to raw KB
-                    }
-                }
 
                 const effectiveKB = (ragMode === 'on' && retrievedChunks.length > 0)
                     ? undefined
