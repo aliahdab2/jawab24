@@ -147,8 +147,8 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
     describe('InstagramMessageAdapter.getInternalMessageId', () => {
         const adapter = new InstagramMessageAdapter();
 
-        it('prefixes Instagram message ID with ig_', () => {
-            expect(adapter.getInternalMessageId('abc123')).toBe('ig_abc123');
+        it('returns raw Instagram message ID without prefix', () => {
+            expect(adapter.getInternalMessageId('abc123')).toBe('abc123');
         });
     });
 
