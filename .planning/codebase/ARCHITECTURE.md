@@ -53,7 +53,7 @@ Each service is independently deployable but shares:
                                     │
                             ┌───────▼──────────┐
                             │  OpenAI API      │
-                            │  (GPT-4o)        │
+                            │  (gpt-4.1-mini)  │
                             └──────────────────┘
 ```
 
@@ -118,7 +118,7 @@ Each service is independently deployable but shares:
 
 7. **i18n** (Bilingual: Arabic + English):
    - **next-intl v4**: `useTranslations('namespace')`, `useLocale()`
-   - **39 namespaces** split across `src/i18n/en/` and `src/i18n/ar/` (one JSON per namespace)
+   - **44 namespaces** split across `src/i18n/en/` and `src/i18n/ar/` (one JSON per namespace)
    - **ICU pluralization**: Format strings like `{count, plural, one {# item} other {# items}}`
    - **Pages declare dependencies**: `makeGetStaticProps(['dashboard', 'common'])` loads only needed messages
 
@@ -259,7 +259,7 @@ Each service is independently deployable but shares:
      ↓
    Build context (conversation history, customer data, KB)
      ↓
-   Call OpenAI API (GPT-4o or Anthropic Claude)
+   Call OpenAI API (gpt-4.1-mini or Anthropic Claude)
      ↓
    Parse + validate response
      ↓
@@ -285,7 +285,7 @@ Each service is independently deployable but shares:
    - Handles job failures with Sentry capture
 
 5. **Services** (`src/services/`):
-   - `openai.ts` — GPT-4o reply generation
+   - `openai.ts` — gpt-4.1-mini reply generation
      - Prompt engineering (system role, user prompt)
      - Token counting, cost estimation
      - Retry logic for API failures

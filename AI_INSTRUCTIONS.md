@@ -9,7 +9,7 @@
 | **Node.js** | v22+ |
 | **Package Manager** | npm (workspaces monorepo) |
 | **Frontend** | Next.js 15 + Tailwind CSS + Capacitor 8 |
-| **Backend** | Express + Drizzle ORM + PostgreSQL |
+| **Backend** | Fastify 5 + Drizzle ORM + PostgreSQL |
 | **Languages** | Arabic (RTL) + English (LTR) |
 | **Dev Server** | Frontend: 3001, Backend: 3000 |
 
@@ -17,7 +17,7 @@
 
 ```
 frontend/src/{components,pages,styles,i18n,lib,hooks}  — Next.js + Capacitor
-backend/src/{routes,controllers,services,db}            — Express API
+backend/src/{routes,controllers,services,db}            — Fastify API
 ai-worker/src/                                          — OpenAI integration
 packages/shared/                                        — Shared TypeScript types
 ```
@@ -66,7 +66,7 @@ const tc = useTranslations('common');  // shared strings
 t('title');  tc('save');
 ```
 
-**File structure:** `frontend/src/i18n/{en,ar}/<namespace>.json` (39 namespaces). Flat or 1-level nested. Max 2 levels — validator enforces this.
+**File structure:** `frontend/src/i18n/{en,ar}/<namespace>.json` (44 namespaces). Flat or 1-level nested. Max 2 levels — validator enforces this.
 
 **Page loading:** `makeGetStaticProps(['settings', 'time'])` from `@/i18n/getMessages`
 

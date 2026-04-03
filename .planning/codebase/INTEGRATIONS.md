@@ -164,6 +164,29 @@
 
 ---
 
+### KB File Upload
+
+Text extraction from documents and images for KB content:
+
+- **Endpoint**: `POST /kb/extract-text` (`backend/src/routes/kb-upload.ts`)
+- **Extractor**: `backend/src/services/kb/file-extractor.ts`
+- **Formats**: PDF (pdf-parse v2), Word/docx (mammoth), images (GPT-4o-mini Vision)
+- **Limits**: 5MB file, 5 PDF pages, 16K char output
+- **Plan gating**: PDF/Word free for all; images/scanned PDFs require Business+ plan
+- **Daily quota**: Business 10/day, Pro 25/day (Redis counter `vision_extract:{userId}:{date}`)
+- **Frontend**: `FileUploadButton.tsx` (paperclip icon next to mic in KB sections + onboarding)
+
+### KB Voice Input
+
+Voice-to-text for KB content via microphone:
+
+- **Endpoint**: `POST /voice/transcribe` (`backend/src/routes/voice.ts`)
+- **Service**: `backend/src/services/transcription.ts`
+- **Model**: gpt-4o-mini-transcribe (89% fewer hallucinations vs whisper-1)
+- **Frontend**: `VoiceRecordButton.tsx` (mic icon in KB sections + onboarding)
+
+---
+
 ## AI/LLM Services
 
 ### OpenAI (Primary LLM)
