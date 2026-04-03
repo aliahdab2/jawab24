@@ -552,6 +552,14 @@ export const adminApi = {
   },
 };
 
+// KB File Upload API — extract text from PDF, Word, image
+export const kbApi = {
+  extractText: async (file: string, mimeType: string, fileName?: string) => {
+    const response = await api.post('/kb/extract-text', { file, mimeType, fileName });
+    return response.data;
+  },
+};
+
 // Voice API — KB voice input transcription
 export const voiceApi = {
   transcribe: async (audio: string, mimeType: string = 'audio/webm', languageHint?: string, quality: 'fast' | 'accurate' = 'accurate') => {

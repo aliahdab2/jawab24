@@ -43,5 +43,15 @@
     "reviewHint": "Review and edit if needed",
     "micDenied": "Microphone access denied. Check your browser settings.",
     "failed": "Voice transcription failed. Try again."
-  }
+  },
+  "uploadFile": "Upload file",
+  "extracting": "Extracting text...",
+  "extractSuccess": "Text extracted — review and edit before saving",
+  "extractTruncated": "Text was trimmed to fit the character limit. Review before saving.",
+  "extractError": "Could not extract text from this file",
+  "unsupportedFormat": "Use PDF, Word, or image files",
+  "fileTooLarge": "File too large (max 5 MB)",
+  "tooManyPages": "Only the first 5 pages were processed",
+  "imageUpgradeRequired": "Image extraction requires the Business plan",
+  "dailyLimitReached": "Daily image extraction limit reached. Try again tomorrow."
 }

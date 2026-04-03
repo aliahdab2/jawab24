@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { useLocale } from 'next-intl';
 import { VoiceRecordButton } from './VoiceRecordButton';
+import { FileUploadButton } from './FileUploadButton';
 
 interface SectionEditorProps {
   content: string;
@@ -12,7 +13,7 @@ interface SectionEditorProps {
 }
 
 /**
- * Shared textarea editor with voice input and auto-resize.
+ * Shared textarea editor with voice input, file upload, and auto-resize.
  * Used by KnowledgeBaseSection and KnowledgeBaseCustomSection.
  */
 export function SectionEditor({
@@ -34,7 +35,8 @@ export function SectionEditor({
     el.style.height = `${Math.max(80, el.scrollHeight)}px`;
   }, []);
 
-  const handleVoiceTranscribed = useCallback((text: string) => {
+  /** Shared handler for voice transcription and file extraction — append text + highlight */
+  const handleTextInsert = useCallback((text: string) => {
     const current = content.trim();
     const newContent = current ? `${current}\n${text}` : text;
     onChange(newContent);
@@ -56,12 +58,18 @@ export function SectionEditor({
         <p className="text-xs text-muted-foreground min-w-0">
           {description}
         </p>
-        <VoiceRecordButton
-          variant="inline"
-          onTranscribed={handleVoiceTranscribed}
-          languageHint={locale}
-          className="flex-shrink-0"
-        />
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <FileUploadButton
+            onExtracted={handleTextInsert}
+            className="flex-shrink-0"
+          />
+          <VoiceRecordButton
+            variant="inline"
+            onTranscribed={handleTextInsert}
+            languageHint={locale}
+            className="flex-shrink-0"
+          />
+        </div>
       </div>
       <textarea
         ref={textareaRef}
