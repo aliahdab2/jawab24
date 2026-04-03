@@ -79,9 +79,9 @@ export function SectionEditor({
       />
       {content.length > 0 && (
         <p className={`text-end text-xs mt-1 ${
-          content.length > 4500 ? 'text-amber-500' : 'text-muted-foreground'
+          content.length > 7200 ? 'text-amber-500' : 'text-muted-foreground'
         }`}>
-          {tKb('charCount', { count: content.length, max: 5000 })}
+          {tKb('charCount', { count: content.length, max: 8000 })}
         </p>
       )}
     </div>

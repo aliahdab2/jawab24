@@ -63,6 +63,6 @@ describe('SectionEditor', () => {
       />,
     );
 
-    expect(screen.getByText('11 / 5000')).toBeInTheDocument();
+    expect(screen.getByText('11 / 8000')).toBeInTheDocument();
   });
 });

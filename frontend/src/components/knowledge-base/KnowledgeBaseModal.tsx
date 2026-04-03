@@ -14,7 +14,7 @@ import { KnowledgeBaseSections } from './KnowledgeBaseSections';
 import { KnowledgeBaseRawEditor } from './KnowledgeBaseRawEditor';
 import { GapCard } from './GapCard';
 
-const MAX_LENGTH = 10000;
+const MAX_LENGTH = 16000;
 
 interface KnowledgeBaseModalProps {
   page: Page;
