@@ -10,7 +10,7 @@ export function LandingSocialProof() {
 
   return (
     <section className="py-10 sm:py-16 lg:py-24 bg-brand-600 relative overflow-hidden" ref={ref}>
-      <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+      <div className="absolute inset-0 bg-[url('/images/cubes-texture.png')] opacity-10"></div>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
         <motion.div
           className="inline-flex items-center gap-1 sm:gap-2 mb-4 sm:mb-8 bg-white/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/20"
