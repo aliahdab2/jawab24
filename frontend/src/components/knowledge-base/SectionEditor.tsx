@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { useTranslations, useLocale } from 'next-intl';
+import { useLocale } from 'next-intl';
 import { VoiceRecordButton } from './VoiceRecordButton';
 
 interface SectionEditorProps {
@@ -12,7 +12,7 @@ interface SectionEditorProps {
 }
 
 /**
- * Shared textarea editor with voice input, auto-resize, and char counter.
+ * Shared textarea editor with voice input and auto-resize.
  * Used by KnowledgeBaseSection and KnowledgeBaseCustomSection.
  */
 export function SectionEditor({
@@ -23,7 +23,6 @@ export function SectionEditor({
   ariaLabel,
   isExpanded,
 }: SectionEditorProps) {
-  const tKb = useTranslations('kb');
   const locale = useLocale();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [justTranscribed, setJustTranscribed] = useState(false);
