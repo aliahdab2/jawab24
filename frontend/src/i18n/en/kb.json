@@ -37,7 +37,7 @@
   },
   "defaultSectionTitle": "New Section",
   "voice": {
-    "startRecording": "Record voice",
+    "startRecording": "Voice to text",
     "stopRecording": "Stop recording",
     "transcribing": "Transcribing...",
     "reviewHint": "Review and edit if needed",

@@ -37,7 +37,7 @@
   },
   "defaultSectionTitle": "قسم جديد",
   "voice": {
-    "startRecording": "سجّل صوتك",
+    "startRecording": "تحويل صوت إلى نص",
     "stopRecording": "أوقف التسجيل",
     "transcribing": "جاري التحويل...",
     "reviewHint": "راجع النص وعدّل إذا لزم",
