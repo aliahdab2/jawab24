@@ -77,7 +77,7 @@ export function SectionEditor({
         dir="auto"
         rows={3}
       />
-      {content.length > 0 && (
+      {content.length > 6000 && (
         <p className={`text-end text-xs mt-1 ${
           content.length > 7200 ? 'text-amber-500' : 'text-muted-foreground'
         }`}>
