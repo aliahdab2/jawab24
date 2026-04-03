@@ -268,4 +268,100 @@ describe('PagesPage', () => {
       });
     });
   });
+
+  describe('Empty KB Indicator', () => {
+    it('should show "Add info" chip when page has no KB and no e-commerce', async () => {
+      mockPagesApiGetAll.mockResolvedValue({
+        data: [
+          {
+            id: 'page-1',
+            name: 'Test Page',
+            facebookPageId: '123',
+            autoReplyEnabled: true,
+            knowledgeBase: null,
+            ecommerceStoreId: null,
+          },
+        ],
+      });
+
+      renderPage(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Add info')).toBeInTheDocument();
+      });
+    });
+
+    it('should NOT show "Add info" chip when page has KB content', async () => {
+      mockPagesApiGetAll.mockResolvedValue({
+        data: [
+          {
+            id: 'page-1',
+            name: 'Test Page',
+            facebookPageId: '123',
+            autoReplyEnabled: true,
+            knowledgeBase: 'We sell electronics and accessories.',
+            ecommerceStoreId: null,
+          },
+        ],
+      });
+
+      renderPage(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Add info')).not.toBeInTheDocument();
+    });
+
+    it('should NOT show "Add info" chip when page has e-commerce connected', async () => {
+      mockPagesApiGetAll.mockResolvedValue({
+        data: [
+          {
+            id: 'page-1',
+            name: 'Test Page',
+            facebookPageId: '123',
+            autoReplyEnabled: true,
+            knowledgeBase: null,
+            ecommerceStoreId: 'store-1',
+          },
+        ],
+      });
+
+      renderPage(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Test Page')[0]).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Add info')).not.toBeInTheDocument();
+    });
+
+    it('should open KB modal when "Add info" chip is clicked', async () => {
+      mockPagesApiGetAll.mockResolvedValue({
+        data: [
+          {
+            id: 'page-1',
+            name: 'Test Page',
+            facebookPageId: '123',
+            autoReplyEnabled: true,
+            knowledgeBase: null,
+            ecommerceStoreId: null,
+          },
+        ],
+      });
+
+      renderPage(<PagesPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Add info')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText('Add info'));
+
+      await waitFor(() => {
+        expect(screen.getByText('Your Business Info')).toBeInTheDocument();
+      });
+    });
+  });
 });
