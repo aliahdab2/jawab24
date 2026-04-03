@@ -129,9 +129,14 @@ const DashboardPage: NextPageWithLayout = () => {
   const queryClient = useQueryClient();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [kbNudgeDismissed, setKbNudgeDismissed] = useState(() =>
-    typeof window !== 'undefined' && localStorage.getItem('kbNudgeDismissed') === 'true'
-  );
+  const [kbNudgeDismissed, setKbNudgeDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const dismissedAt = localStorage.getItem('kbNudgeDismissedAt');
+    if (!dismissedAt) return false;
+    // Re-show after 3 days
+    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
+    return Date.now() - Number(dismissedAt) < THREE_DAYS_MS;
+  });
 
   // Selected Comment State
   const [selectedCommentData, setSelectedCommentData] = useState<{ comment: Comment, mode: 'full' | 'quick' } | null>(null);
@@ -886,40 +891,64 @@ const DashboardPage: NextPageWithLayout = () => {
             </Card>
           )}
 
-          {/* KB Nudge Banner — after first reply + thin KB */}
+          {/* KB Nudge Banner — gentle, non-blocking */}
           {!kbNudgeDismissed && (() => {
-            const hasReplied = pages.some(p => (p.repliesCount ?? 0) >= 1);
-            const hasThinKb = pages.some(p => (p.repliesCount ?? 0) >= 1 && (p.knowledgeBase || '').length < 200);
+            const allKbFilled = pages.every(p => (p.knowledgeBase || '').length >= 100);
+            if (allKbFilled) return null;
 
-            if (hasReplied && hasThinKb) {
-              return (
-                <div className="flex items-start gap-3 p-4 rounded-2xl alert-warning border mb-0">
-                  <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5" aria-hidden="true" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold">{t('kbNudgeTitle')}</p>
-                    <p className="text-xs mt-0.5 opacity-80">{t('kbNudgeDesc')}</p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <Link href="/pages?openKb=true">
-                        <Button size="sm" variant="primary" className="text-xs">
-                          {t('kbNudgeCta')}
-                        </Button>
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          localStorage.setItem('kbNudgeDismissed', 'true');
-                          setKbNudgeDismissed(true);
-                        }}
-                        className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        {tc('dismiss')}
-                      </button>
-                    </div>
+            const hasEcommerce = pages.some(p => !!p.ecommerceStoreId);
+            const hasThinKb = pages.some(p => (p.knowledgeBase || '').length < 100);
+            if (!hasThinKb) return null;
+
+            const isEcomVariant = hasEcommerce;
+
+            const handleDismiss = () => {
+              localStorage.setItem('kbNudgeDismissedAt', String(Date.now()));
+              setKbNudgeDismissed(true);
+            };
+
+            return (
+              <div
+                className={clsx(
+                  'flex items-start gap-3 p-4 rounded-2xl border mb-0 transition-all',
+                  isEcomVariant
+                    ? 'bg-surface-50 dark:bg-surface-800/50 border-theme-border'
+                    : 'bg-brand-50/60 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800'
+                )}
+              >
+                {!isEcomVariant && (
+                  <Sparkles className="w-5 h-5 flex-shrink-0 mt-0.5 text-brand-600 dark:text-brand-400" aria-hidden="true" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className={clsx(
+                    'text-sm font-semibold',
+                    isEcomVariant ? 'text-foreground' : 'text-brand-900 dark:text-brand-200'
+                  )}>
+                    {isEcomVariant ? t('kbNudgeEcomTitle') : t('kbNudgeTitle')}
+                  </p>
+                  <p className={clsx(
+                    'text-xs mt-0.5',
+                    isEcomVariant ? 'text-muted-foreground' : 'text-brand-700/80 dark:text-brand-300/80'
+                  )}>
+                    {isEcomVariant ? t('kbNudgeEcomBody') : t('kbNudgeBody')}
+                  </p>
+                  <div className="flex items-center gap-3 mt-2">
+                    <Link href="/pages?openKb=true">
+                      <Button size="sm" variant="primary" className="text-xs">
+                        {t('kbNudgeCta')}
+                      </Button>
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={handleDismiss}
+                      className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {t('kbNudgeLater')}
+                    </button>
                   </div>
                 </div>
-              );
-            }
-            return null;
+              </div>
+            );
           })()}
 
           {/* Top Pages */}

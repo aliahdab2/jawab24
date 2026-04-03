@@ -61,5 +61,6 @@
   "platformInstagram": "Instagram",
   "sectionActive": "Active",
   "sectionInactive": "Inactive",
-  "sectionDisconnected": "Needs Attention"
+  "sectionDisconnected": "Needs Attention",
+  "addInfo": "Add info"
 }

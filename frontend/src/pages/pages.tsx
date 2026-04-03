@@ -326,6 +326,17 @@ const PagesPage: NextPageWithLayout = () => {
                 {/* Page info */}
                 <div className="min-w-0 flex-1 text-start">
                   <h3 className="text-lg font-bold text-foreground line-clamp-2" title={page.name}>{page.name}</h3>
+                  {/* Empty KB indicator — clickable chip for pages without business info and no e-commerce */}
+                  {!page.knowledgeBase && !page.ecommerceStoreId && (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); openKnowledgeBase(page); }}
+                      className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0" aria-hidden="true" />
+                      {t('addInfo')}
+                    </button>
+                  )}
                 </div>
 
                 {/* External link to Facebook page */}
