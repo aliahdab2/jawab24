@@ -18,7 +18,7 @@ echo "📸 Checking for schema drift using drizzle-kit generate..."
 FILES_BEFORE=$(ls migrations/*.sql 2>/dev/null | sort)
 
 # Run generate (it will use drizzle.config.ts)
-npx drizzle-kit generate:pg > /dev/null 2>&1
+timeout 30 npx drizzle-kit generate:pg > /dev/null 2>&1
 
 # Store list of files after
 FILES_AFTER=$(ls migrations/*.sql 2>/dev/null | sort)

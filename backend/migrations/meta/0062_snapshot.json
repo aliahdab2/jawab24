@@ -1870,18 +1870,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "facebook_message_id": {
-          "name": "facebook_message_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "instagram_message_id": {
-          "name": "instagram_message_id",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "platform": {
           "name": "platform",
           "type": "varchar(20)",
@@ -1996,6 +1984,12 @@
           "primaryKey": false,
           "notNull": false,
           "default": "now()"
+        },
+        "platform_message_id": {
+          "name": "platform_message_id",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true
         }
       },
       "indexes": {
@@ -2010,13 +2004,6 @@
           "name": "idx_messages_sender_id",
           "columns": [
             "sender_id"
-          ],
-          "isUnique": false
-        },
-        "idx_messages_facebook_message_id": {
-          "name": "idx_messages_facebook_message_id",
-          "columns": [
-            "facebook_message_id"
           ],
           "isUnique": false
         },
@@ -2101,6 +2088,13 @@
             "created_time"
           ],
           "isUnique": false
+        },
+        "idx_messages_platform_message_id": {
+          "name": "idx_messages_platform_message_id",
+          "columns": [
+            "platform_message_id"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -2119,15 +2113,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "messages_facebook_message_id_unique": {
-          "name": "messages_facebook_message_id_unique",
-          "columns": [
-            "facebook_message_id"
-          ],
-          "nullsNotDistinct": false
-        }
-      }
+      "uniqueConstraints": {}
     },
     "notifications": {
       "name": "notifications",
