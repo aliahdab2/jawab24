@@ -94,6 +94,62 @@ describe('GapCard', () => {
     expect(onSkip).toHaveBeenCalled();
   });
 
+  it('shows post context for comment-sourced gaps', () => {
+    const gapWithPost = {
+      ...mockGap,
+      sourceType: 'comment' as const,
+      sourceContext: 'Summer collection just arrived!',
+    };
+
+    render(
+      <GapCard
+        gap={gapWithPost}
+        isExpanded={false}
+        onToggle={vi.fn()}
+        onApprove={vi.fn()}
+        onSkip={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Post.*Summer collection/)).toBeInTheDocument();
+  });
+
+  it('shows previous message context for DM-sourced gaps', () => {
+    const gapWithDm = {
+      ...mockGap,
+      sourceType: 'dm' as const,
+      sourceContext: 'Do you have running shoes?',
+    };
+
+    render(
+      <GapCard
+        gap={gapWithDm}
+        isExpanded={false}
+        onToggle={vi.fn()}
+        onApprove={vi.fn()}
+        onSkip={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Do you have running shoes/)).toBeInTheDocument();
+  });
+
+  it('does not show context line when sourceContext is null', () => {
+    render(
+      <GapCard
+        gap={mockGap}
+        isExpanded={false}
+        onToggle={vi.fn()}
+        onApprove={vi.fn()}
+        onSkip={vi.fn()}
+      />
+    );
+
+    // No element with the ↩ arrow character
+    const contextLine = screen.queryByText(/↩/);
+    expect(contextLine).not.toBeInTheDocument();
+  });
+
   it('calls onToggle when header is clicked', () => {
     const onToggle = vi.fn();
     render(

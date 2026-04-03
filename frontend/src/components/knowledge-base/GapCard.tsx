@@ -45,11 +45,20 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center gap-2 p-3 text-start"
+        className="w-full flex items-start gap-2 p-3 text-start"
       >
-        <span className="flex-1 min-w-0 text-xs text-amber-900 dark:text-amber-200 leading-relaxed truncate">
-          {gap.queryText}
-        </span>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed truncate block">
+            {gap.queryText}
+          </span>
+          {gap.sourceContext && (
+            <span className="text-[11px] text-amber-600/70 dark:text-amber-400/50 leading-snug truncate block mt-0.5" dir="auto">
+              {gap.sourceType === 'comment'
+                ? `↩ ${tKb('gaps.fromPost')}: "${gap.sourceContext}"`
+                : `↩ "${gap.sourceContext}"`}
+            </span>
+          )}
+        </div>
         <span className="flex-shrink-0 text-xs font-medium text-amber-600">
           {tKb('gaps.times', { count: String(gap.occurrenceCount) })}
         </span>

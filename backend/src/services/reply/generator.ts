@@ -8,7 +8,7 @@ import { config } from '../../config';
 import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '../../types';
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
-import { gapDetectorService } from '../kb/gap-detector';
+import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
 import { isOffensiveContent } from '../offensive-filter';
 import { detectLanguageCode } from '../../utils/language';
@@ -167,9 +167,12 @@ export class ReplyGenerator {
             // instead of the brief "message us" comment-style reply.
             const effectiveChannel: 'comment' | 'dm' = (commentReplyMode === 'dual' || commentReplyMode === 'private') ? 'dm' : 'comment';
 
+            // Build gap source context for merchant insights
+            const gapSource: GapSource = { type: 'comment', context: postMessage };
+
             // Run RAG retrieval if enabled
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel,
+                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, gapSource,
             );
 
             const detectedLang = detectLanguageCode(text);
@@ -179,7 +182,7 @@ export class ReplyGenerator {
                 context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
             });
 
-            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text);
+            return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
         }
 
         // 3. Fallback
@@ -226,9 +229,15 @@ export class ReplyGenerator {
                 const namePart = context.senderName ? `Customer name: ${context.senderName}.` : '';
                 const customerContext = [namePart, customerSummary].filter(Boolean).join(' ') || undefined;
 
+                // Build gap source: last customer message before the current one
+                const prevUserMsg = conversationHistory
+                    .filter(m => m.role === 'user' && m.content !== text)
+                    .pop();
+                const gapSource: GapSource = { type: 'dm', context: prevUserMsg?.content };
+
                 // Run RAG retrieval if enabled (pass history for context-aware search)
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory,
+                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory, gapSource,
                 );
 
                 const msgLang = detectLanguageCode(text);
@@ -249,7 +258,7 @@ export class ReplyGenerator {
                     aiResponse = await aiService.generateReply(aiRequest);
                 }
 
-                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text);
+                return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
             }
         }
 
@@ -271,6 +280,7 @@ export class ReplyGenerator {
         kbActiveVersion: number | null | undefined,
         channel: 'comment' | 'dm',
         conversationHistory?: { role: string; content: string }[],
+        gapSource?: GapSource,
     ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
         const retrieval = getRetrievalService();
 
@@ -328,7 +338,7 @@ export class ReplyGenerator {
 
                 // Fire-and-forget: record KB gap for merchant insights
                 gapDetectorService.setLogger(this.logger);
-                gapDetectorService.recordGap(pageId, query).catch(err => {
+                gapDetectorService.recordGap(pageId, query, gapSource).catch(err => {
                     this.logger.error('[Generator] Gap detection error', {
                         error: err instanceof Error ? err.message : String(err),
                     });
@@ -420,6 +430,7 @@ export class ReplyGenerator {
         ragAttempted?: boolean,
         hasStaticKB?: boolean,
         queryText?: string,
+        gapSource?: GapSource,
     ): Promise<GenerateReplyResult> {
         // Normalize intent: GPT sometimes invents intents (PRICE, OTHER, LOCATION)
         // instead of using the 8 valid ones. Map them back to the standard taxonomy.
@@ -475,7 +486,7 @@ export class ReplyGenerator {
             flags.includes('info_not_in_kb')
         ) {
             gapDetectorService.setLogger(this.logger);
-            gapDetectorService.recordGap(pageId, queryText).catch(err => {
+            gapDetectorService.recordGap(pageId, queryText, gapSource).catch(err => {
                 this.logger.error('[Generator] Gap detection error (low-confidence)', {
                     error: err instanceof Error ? err.message : String(err),
                 });

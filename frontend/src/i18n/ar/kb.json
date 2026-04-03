@@ -9,7 +9,8 @@
     "answerPlaceholder": "اكتب إجابتك...",
     "addToKb": "إضافة للمعلومات",
     "skip": "تخطي",
-    "addedHint": "تمت الإضافة — اضغط حفظ لتحديث معلوماتك."
+    "addedHint": "تمت الإضافة — اضغط حفظ لتحديث معلوماتك.",
+    "fromPost": "بوست"
   },
   "progress": "{filled} من {total} مكتمل",
   "progressComplete": "كل الأقسام مكتملة!",

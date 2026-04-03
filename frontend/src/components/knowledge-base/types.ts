@@ -20,6 +20,8 @@ export interface KbGap {
   id: string;
   queryText: string;
   occurrenceCount: number;
+  sourceType?: 'comment' | 'dm' | null;
+  sourceContext?: string | null;
 }
 
 export interface KnowledgeSection {

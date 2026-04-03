@@ -794,6 +794,8 @@ export const kbGaps = pgTable('kb_gaps', {
     firstSeenAt: timestamp('first_seen_at').defaultNow(),
     lastSeenAt: timestamp('last_seen_at').defaultNow(),
     resolved: boolean('resolved').default(false),
+    sourceType: varchar('source_type', { length: 10 }),
+    sourceContext: text('source_context'),
 }, (table) => {
     return {
         pageIdIdx: index('idx_kb_gaps_page_id').on(table.pageId),

@@ -428,6 +428,13 @@
       "when": 1775153701294,
       "tag": "0060_romantic_iron_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "5",
+      "when": 1775207499159,
+      "tag": "0061_lean_quasar",
+      "breakpoints": true
     }
   ]
 }

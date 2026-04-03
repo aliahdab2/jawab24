@@ -9,7 +9,8 @@
     "answerPlaceholder": "Type your answer...",
     "addToKb": "Add to KB",
     "skip": "Skip",
-    "addedHint": "Answer added — click Save to update your KB."
+    "addedHint": "Answer added — click Save to update your KB.",
+    "fromPost": "Post"
   },
   "progress": "{filled} of {total} filled",
   "progressComplete": "All sections filled!",

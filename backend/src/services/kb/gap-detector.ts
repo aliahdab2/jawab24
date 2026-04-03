@@ -13,6 +13,13 @@ const NOTIFICATION_THRESHOLD = 3;
 /** Trigram similarity threshold for deduplicating similar gap queries */
 const DEDUP_SIMILARITY = 0.5;
 
+export type GapSourceType = 'comment' | 'dm';
+
+export interface GapSource {
+    type: GapSourceType;
+    context?: string;
+}
+
 export interface GapRecord {
     id: string;
     pageId: string;
@@ -23,6 +30,8 @@ export interface GapRecord {
     firstSeenAt: Date | null;
     lastSeenAt: Date | null;
     resolved: boolean;
+    sourceType: GapSourceType | null;
+    sourceContext: string | null;
 }
 
 /**
@@ -51,7 +60,7 @@ class GapDetectorService {
      * 5. If new: insert new gap record
      * 6. If threshold reached: send notification to merchant
      */
-    async recordGap(pageId: string, queryText: string): Promise<void> {
+    async recordGap(pageId: string, queryText: string, source?: GapSource): Promise<void> {
         try {
             const normalized = normalizeArabic(queryText).toLowerCase().trim();
             if (!normalized) return;
@@ -97,6 +106,8 @@ class GapDetectorService {
                     queryText,
                     queryNormalized: normalized,
                     detectedIntent: intent,
+                    sourceType: source?.type ?? null,
+                    sourceContext: source?.context?.slice(0, 200) ?? null,
                 });
 
                 this.logger.debug('New KB gap recorded', { pageId, intent });
@@ -147,6 +158,8 @@ class GapDetectorService {
             firstSeenAt: row.first_seen_at ? new Date(row.first_seen_at as string) : null,
             lastSeenAt: row.last_seen_at ? new Date(row.last_seen_at as string) : null,
             resolved: Boolean(row.resolved),
+            sourceType: (row.source_type as GapSourceType) || null,
+            sourceContext: (row.source_context as string) ?? null,
         };
     }
 
@@ -248,6 +261,8 @@ class GapDetectorService {
             firstSeenAt: row.firstSeenAt,
             lastSeenAt: row.lastSeenAt,
             resolved: row.resolved ?? false,
+            sourceType: (row.sourceType as GapSourceType) || null,
+            sourceContext: row.sourceContext ?? null,
         }));
     }
 }
