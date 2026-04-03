@@ -107,7 +107,7 @@ describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
         await generator.generateForComment(baseContext, true);
 
         expect(gapDetectorService.setLogger).toHaveBeenCalled();
-        expect(gapDetectorService.recordGap).toHaveBeenCalledWith('page-1', 'What is your return policy?');
+        expect(gapDetectorService.recordGap).toHaveBeenCalledWith('page-1', 'What is your return policy?', { type: 'comment', context: undefined });
     });
 
     it('does NOT call gapDetectorService.recordGap when RAG returns chunks', async () => {
@@ -149,7 +149,7 @@ describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
 
         await generator.generateForMessage(dmContext, true);
 
-        expect(gapDetectorService.recordGap).toHaveBeenCalledWith('page-1', 'What is your return policy?');
+        expect(gapDetectorService.recordGap).toHaveBeenCalledWith('page-1', 'What is your return policy?', { type: 'dm', context: undefined });
     });
 
     it('does NOT trigger gap detection when kbActiveVersion is null (RAG skipped)', async () => {
