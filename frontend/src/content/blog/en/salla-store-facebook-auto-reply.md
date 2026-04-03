@@ -68,3 +68,5 @@ AI checks Knowledge Base, shipping policy covers all Saudi cities
 Reply: "We deliver to all cities in the Kingdom. Delivery to Riyadh takes 2-3 business days."
 
 Jawab24 handles conversations in both English and Arabic — including 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA). So whether your customers write in English or in their local dialect, the AI replies naturally in the same language. Turkish, Swedish, and German support is coming soon.
+
+Not on Salla? Jawab24 also integrates with [Zid](/blog/zid-store-facebook-auto-reply) and [Shopify](/blog/shopify-facebook-auto-reply-arabic) — the same product sync and price verification works across all three platforms.

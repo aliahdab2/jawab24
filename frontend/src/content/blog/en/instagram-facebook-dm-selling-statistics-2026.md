@@ -100,7 +100,7 @@ DMs outperform email on every metric that matters. The shift from email-first to
 
 The data is clear: DMs are the highest-converting sales channel available to most e-commerce businesses today. But conversion depends on speed. A 1-minute response time produces nearly 4x more sales than a 30-minute delay.
 
-The problem is obvious — no human can reply to every DM in under a minute, around the clock. That's where AI auto-replies change the game. An AI that understands your products, connects to your Shopify or Salla catalog, and replies in your customer's language can deliver that sub-minute response time 24/7.
+The problem is obvious — no human can reply to every DM in under a minute, around the clock. That's where AI auto-replies change the game. An AI that understands your products, connects to your Shopify, Salla, or Zid catalog, and replies in your customer's language can deliver that sub-minute response time 24/7.
 
 The sellers who act on these numbers now will build a lead that's hard to catch.
 

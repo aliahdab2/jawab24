@@ -68,3 +68,5 @@ Jawab24 handles conversations in English and Arabic — including **6 Arabic dia
 **Monitor the confidence dashboard weekly.** Low-confidence replies show where your Knowledge Base has gaps. Each question the AI can't answer well is a signal to add more information.
 
 **Don't forget about greeting messages.** Set up a greeting for first-time customers who message you on Facebook/Instagram. A warm welcome in their language sets the tone for the entire relationship.
+
+Not on Shopify? Jawab24 also integrates with [Salla](/blog/salla-store-facebook-auto-reply) and [Zid](/blog/zid-store-facebook-auto-reply) — the same product sync and price verification works across all three platforms.

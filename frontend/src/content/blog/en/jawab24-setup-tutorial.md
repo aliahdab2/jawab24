@@ -17,7 +17,7 @@ What makes it different from generic chatbot tools:
 - **Multilingual with dialect awareness** — Jawab24 currently supports English and Arabic, with Arabic covering 6 dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, and MSA). Turkish, Swedish, and German are coming soon. If it can handle 6 Arabic dialects, it can handle any language
 - **Conversation context** — The AI loads the last 12 messages in each conversation, so it understands follow-ups. When a customer says "and how much is this one?", the AI knows what "this one" refers to from conversation history
 - **99.6% accuracy** — Tested across 125 real-world scenarios covering product questions, complaints, follow-ups, and edge cases. This is a published benchmark, not a vague "powered by AI" claim
-- **E-commerce integration** — Native Shopify and Salla support with automatic product sync, so the AI always has your latest prices and availability
+- **E-commerce integration** — Native Shopify, Salla, and Zid support with automatic product sync, so the AI always has your latest prices and availability
 - **Price hallucination prevention** — A two-tier verification system checks every price the AI mentions against your actual catalog before sending. If the price doesn't match, the reply is held with a safe fallback
 - **Angry customer detection** — The AI identifies frustrated customers and sends instant push notifications to your phone so you can intervene personally
 - **Confidence scoring** — When the AI is unsure about an answer, it flags the reply for your review instead of sending a potentially wrong response
@@ -136,9 +136,9 @@ Template replies are checked *before* the AI generates a response. If a keyword 
 
 ## Connecting Your Store and Going Live
 
-### Syncing Your Shopify or Salla Store
+### Syncing Your Shopify, Salla, or Zid Store
 
-If you sell on Shopify or Salla, connecting your store is the single most impactful thing you can do for reply accuracy.
+If you sell on Shopify, Salla, or Zid, connecting your store is the single most impactful thing you can do for reply accuracy.
 
 **To connect Shopify:**
 
@@ -154,6 +154,15 @@ If you sell on Shopify or Salla, connecting your store is the single most impact
 2. Click **Connect Salla**
 3. Authorize on Salla's OAuth page
 4. Products sync automatically within seconds
+
+**To connect Zid:**
+
+1. Go to **Settings**, then **Integrations**
+2. Click **Connect Zid**
+3. Authorize on Zid's OAuth page
+4. Your entire Zid catalog — products, prices, descriptions, and availability — syncs automatically
+
+For a detailed walkthrough of the Zid integration, see our [Zid store setup guide](/blog/zid-store-facebook-auto-reply).
 
 After the initial sync, updates happen in real-time through webhooks. When you change a price or mark something out of stock, the AI knows immediately.
 

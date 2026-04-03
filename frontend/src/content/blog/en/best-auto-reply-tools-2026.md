@@ -18,7 +18,7 @@ Before comparing specific tools, here's what matters most:
 
 **Conversation context** — Does the AI read conversation history or treat each message in isolation? When a customer says "and how much is this one?", the AI needs to know what "this one" refers to from previous messages. Without conversation context, every message is a guessing game.
 
-**E-commerce integration** — If you sell on Shopify or Salla, can the tool pull your product data? Without this, the AI can't answer "How much does product X cost?" accurately.
+**E-commerce integration** — If you sell on Shopify, Salla, or Zid, can the tool pull your product data? Without this, the AI can't answer "How much does product X cost?" accurately.
 
 **Comment support** — Many tools only handle Messenger/DMs. But most customer questions happen in post comments. Make sure the tool replies to both.
 
@@ -36,7 +36,7 @@ The most popular chatbot builder with millions of users. ManyChat's strength is 
 
 The downside? You need to build those flows. Setting up ManyChat properly takes hours or days of creating decision trees, mapping out conversation paths, and writing keyword rules. For a non-technical business owner, this is a significant barrier. You're essentially programming a chatbot, even if the interface is visual.
 
-Arabic support is limited to basic translations — no dialect awareness. The AI features (ManyChat AI) exist but are newer and less mature than dedicated AI platforms. Shopify integration is strong; Salla integration doesn't exist. Comment replies are basic compared to DM flows.
+Arabic support is limited to basic translations — no dialect awareness. The AI features (ManyChat AI) exist but are newer and less mature than dedicated AI platforms. Shopify integration is strong; Salla and Zid integration doesn't exist. Comment replies are basic compared to DM flows.
 
 Starts at $15/month. [See our full Jawab24 vs ManyChat comparison →](/compare/manychat)
 
@@ -44,7 +44,7 @@ Starts at $15/month. [See our full Jawab24 vs ManyChat comparison →](/compare/
 
 Simple, template-based chatbot builder. Chatfuel is the "easy entry point" — good for beginners who want basic keyword-triggered auto-replies without much setup.
 
-However, it's purely rule-based. No AI reply generation means every possible customer question needs a pre-written answer. If a customer asks something you didn't anticipate, the bot falls back to a generic "I don't understand" response. No Arabic dialect support, no conversation context (each message is treated independently), no Salla integration.
+However, it's purely rule-based. No AI reply generation means every possible customer question needs a pre-written answer. If a customer asks something you didn't anticipate, the bot falls back to a generic "I don't understand" response. No Arabic dialect support, no conversation context (each message is treated independently), no Salla or Zid integration.
 
 Free tier available, paid starts at $14.99/month.
 
@@ -52,7 +52,7 @@ Free tier available, paid starts at $14.99/month.
 
 Live chat + chatbot platform. Better known for website chat widgets than social media. Tidio has AI features (Lyro AI) but they're focused on website visitors, not Facebook/Instagram comments.
 
-If your primary need is a website chat widget with chatbot fallback, Tidio is solid. For social media auto-reply — especially in multiple languages — it's not the right fit. No Arabic dialect support, no Salla integration.
+If your primary need is a website chat widget with chatbot fallback, Tidio is solid. For social media auto-reply — especially in multiple languages — it's not the right fit. No Arabic dialect support, no Salla or Zid integration.
 
 Starts at $29/month. [See our full Jawab24 vs Tidio comparison →](/compare/tidio)
 
@@ -60,7 +60,7 @@ Starts at $29/month. [See our full Jawab24 vs Tidio comparison →](/compare/tid
 
 Developer-focused platform for building custom chatbots. Very flexible but requires technical skills to set up. Botpress is a platform, not a product — you build your own solution on top of it using their SDK and APIs.
 
-Can support Arabic through custom NLP training, but there's no out-of-the-box dialect detection. No direct Shopify/Salla integration without custom development. The conversation context capabilities are powerful but require configuration. No price verification system.
+Can support Arabic through custom NLP training, but there's no out-of-the-box dialect detection. No direct Shopify/Salla/Zid integration without custom development. The conversation context capabilities are powerful but require configuration. No price verification system.
 
 Free tier with usage limits.
 
@@ -76,7 +76,7 @@ The AI loads the **last 12 messages** in each conversation, so it understands co
 
 **Dual reply mode** for comments: the AI can post a short public reply on the comment and simultaneously send a detailed private DM with full product information. Nudge message variations rotate automatically to avoid spam detection by Facebook.
 
-Native Shopify and Salla integration with automatic product sync. Currently supports English and Arabic (with 6 dialect families) — Turkish, Swedish, and German are coming soon. Confidence scoring with human review queue.
+Native Shopify, Salla, and [Zid integration](/blog/zid-store-facebook-auto-reply) with automatic product sync. Currently supports English and Arabic (with 6 dialect families) — Turkish, Swedish, and German are coming soon. Confidence scoring with human review queue.
 
 Starts at $9/month.
 
@@ -93,6 +93,7 @@ Here's how the tools stack up across the features that matter most:
 | Comment replies | Basic | Basic | No | Custom | Full (public + DM) |
 | Shopify integration | Yes | No | Yes | Custom | Yes |
 | Salla integration | No | No | No | No | Yes |
+| Zid integration | No | No | No | No | Yes |
 | Price verification | No | No | No | No | 2-tier check |
 | Angry customer alerts | No | No | No | No | Push notification |
 | Confidence scoring | No | No | No | No | Yes |
@@ -103,7 +104,7 @@ Here's how the tools stack up across the features that matter most:
 
 ## Which Tool Is Right for You?
 
-**Choose ManyChat if:** You need complex conversation flows with branching logic, have the time (and patience) to build decision trees, sell primarily to English-speaking customers, and use Shopify. ManyChat's visual flow builder is genuinely the best in the market for creating sophisticated chatbot sequences — if you're willing to invest the setup time.
+**Choose ManyChat if:** You need complex conversation flows with branching logic, have the time (and patience) to build decision trees, sell primarily to English-speaking customers, and use Shopify (not Salla or Zid). ManyChat's visual flow builder is genuinely the best in the market for creating sophisticated chatbot sequences — if you're willing to invest the setup time.
 
 **Choose Chatfuel if:** You want the simplest possible setup, your use case is basic keyword matching, and you don't need AI. It's the easiest tool to get started with, though it hits a ceiling quickly.
 
@@ -111,4 +112,4 @@ Here's how the tools stack up across the features that matter most:
 
 **Choose Botpress if:** You have developers on your team and need maximum customization. Botpress is a platform, not a product — you build your own solution on top of it.
 
-**Choose Jawab24 if:** You want AI auto-reply that works immediately without building flows or decision trees — just add your business information and go live. It's especially strong if your customers speak Arabic (it handles 6 dialect families that no other tool matches), but it works just as well for English-only businesses. Native Shopify and Salla integration, price verification, angry customer push alerts, and conversation context that understands follow-up questions naturally. If you need a tool that understands your customers' language — whatever that language is — Jawab24 is built for that depth.
+**Choose Jawab24 if:** You want AI auto-reply that works immediately without building flows or decision trees — just add your business information and go live. It's especially strong if your customers speak Arabic (it handles 6 dialect families that no other tool matches), but it works just as well for English-only businesses. Native Shopify, Salla, and Zid integration, price verification, angry customer push alerts, and conversation context that understands follow-up questions naturally. If you need a tool that understands your customers' language — whatever that language is — Jawab24 is built for that depth.

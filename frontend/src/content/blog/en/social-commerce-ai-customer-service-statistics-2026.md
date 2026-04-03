@@ -100,7 +100,7 @@ AI customer service isn't experimental anymore — it's a $15 billion market wit
 
 - **$52.50** — Average order value for online purchases in Saudi Arabia in 2024 ($102 in the UAE). *(Crowd Analyzer, 2025)*
 
-The MENA e-commerce market is growing faster than almost any other region on Earth. Saudi Arabia alone is expanding at nearly 30% per year. Platforms like Salla are fueling this growth — and sellers who combine Salla or Shopify stores with AI-powered social responses are positioned to capture the largest share of this booming market.
+The MENA e-commerce market is growing faster than almost any other region on Earth. Saudi Arabia alone is expanding at nearly 30% per year. Platforms like Salla and Zid are fueling this growth — and sellers who combine Salla, Zid, or Shopify stores with AI-powered social responses are positioned to capture the largest share of this booming market.
 
 ## Consumer Behavior & Preferences
 
@@ -132,7 +132,7 @@ An AI interaction costs less than $1. A human interaction costs $6–$15. When y
 
 The data points in one direction: customers want to message businesses, they expect instant replies, and AI is the only way to deliver that at scale.
 
-If you sell on Facebook or Instagram using Shopify or Salla, the opportunity is massive — and the window is still open. Less than 1% of businesses are using Messenger for marketing. DMs convert at 70%. And AI-powered replies cost a fraction of human support.
+If you sell on Facebook or Instagram using Shopify, Salla, or Zid, the opportunity is massive — and the window is still open. Less than 1% of businesses are using Messenger for marketing. DMs convert at 70%. And AI-powered replies cost a fraction of human support.
 
 The sellers who act on these numbers now will build an unfixable lead over those who wait.
 

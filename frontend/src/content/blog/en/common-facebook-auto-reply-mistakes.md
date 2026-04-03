@@ -92,7 +92,7 @@ This is especially damaging because the customer doesn't know they're getting ou
 
 Schedule a monthly review of your auto-reply content. Check that product information is current, prices are accurate, policies reflect reality, and shipping times are up to date.
 
-If your auto-reply tool connects to your e-commerce store (Salla, Shopify), product information updates automatically. But policies, FAQ answers, and business information still need manual updates.
+If your auto-reply tool connects to your e-commerce store (Shopify, Salla, or [Zid](/blog/zid-store-facebook-auto-reply)), product information updates automatically. But policies, FAQ answers, and business information still need manual updates.
 
 **Use KB gap detection if your tool offers it.** The best auto-reply systems track what customers ask about that isn't covered in your Knowledge Base. Instead of guessing what information to add, you see exactly what real customers are asking that the AI can't answer well. This turns your Knowledge Base maintenance from guesswork into a data-driven process — you add the information that actually matters based on real customer demand.
 
