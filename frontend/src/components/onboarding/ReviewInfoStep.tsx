@@ -3,6 +3,7 @@ import { Button } from '@/components/ui';
 import { useLocale } from 'next-intl';
 import type { Page } from '@jawab24/shared';
 import { VoiceRecordButton } from '@/components/knowledge-base/VoiceRecordButton';
+import { FileUploadButton } from '@/components/knowledge-base/FileUploadButton';
 import { SUGGESTION_CHIPS, type ChipId, type TFunction } from './onboardingTypes';
 
 interface ReviewInfoStepProps {
@@ -78,7 +79,13 @@ export function ReviewInfoStep({
       {/* Imported info preview */}
       {isEditing ? (
         <div className="text-start mb-3">
-          <div className="flex items-center justify-end mb-1.5">
+          <div className="flex items-center justify-end gap-1 mb-1.5">
+            <FileUploadButton
+              onExtracted={(text) => {
+                const current = knowledgeBase.trim();
+                onKnowledgeBaseChange(current ? `${current}\n${text}` : text);
+              }}
+            />
             <VoiceRecordButton
               variant="inline"
               languageHint={locale}
@@ -198,14 +205,22 @@ export function ReviewInfoStep({
               <p className="text-xs text-muted-foreground">
                 {t(SUGGESTION_CHIPS.find(c => c.id === activeChip)!.labelKey)}
               </p>
-              <VoiceRecordButton
-                variant="inline"
-                languageHint={locale}
-                onTranscribed={(text) => {
-                  const current = (chipData[activeChip] || '').trim();
-                  onChipContentChange(activeChip, current ? `${current}\n${text}` : text);
-                }}
-              />
+              <div className="flex items-center gap-1">
+                <FileUploadButton
+                  onExtracted={(text) => {
+                    const current = (chipData[activeChip] || '').trim();
+                    onChipContentChange(activeChip, current ? `${current}\n${text}` : text);
+                  }}
+                />
+                <VoiceRecordButton
+                  variant="inline"
+                  languageHint={locale}
+                  onTranscribed={(text) => {
+                    const current = (chipData[activeChip] || '').trim();
+                    onChipContentChange(activeChip, current ? `${current}\n${text}` : text);
+                  }}
+                />
+              </div>
             </div>
             <textarea
               value={chipData[activeChip] || ''}
