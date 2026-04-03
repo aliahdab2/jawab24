@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **System Reference Document / وثيقة مرجعية للنظام**
-> Generated: 2026-02-28 | Updated: 2026-03-29 (v22 — added Zid e-commerce, phone OTP auth, voice KB input, GPT-4o transcription, Stripe Embedded Checkout, yearly billing, comments grouping, team phone invites, e-commerce notifications plan)
+> Generated: 2026-02-28 | Updated: 2026-04-03 (v26 — added file upload for KB, Zid e-commerce, phone OTP auth, voice KB input, GPT-4o transcription, Stripe Embedded Checkout, yearly billing, comments grouping, team phone invites, e-commerce notifications plan)
 
 ---
 
@@ -764,6 +764,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 | **v19** | 2026-03-05 | Structured `angry_customer` flag with explicit 5-point trigger list (strong words, refund demands, ignored complaints, exclamation marks, escalation threats). Added confidence rule: reply style changes TONE only, must NOT affect confidence. Added Arabic vague follow-up examples ("وش المدة؟"). | 99.6% |
 | **v20** | 2026-03-06 | Made `angry_customer` trigger list non-exhaustive — added catch-all point (6): "any expression of strong dissatisfaction — use your judgment". Added Arabic colloquial examples (زفت/فشل). Clarified: polite complaint alone ≠ angry_customer. | 99.6% |
 | **v21** | 2026-03-15 | Prompt tuning for eval accuracy and edge case handling. Workspace-scoped context. | 99.6% |
+| **v22–v26** | 2026-03-29 – 2026-04-03 | Iterative prompt refinements and edge case tuning. | 99.6% (last measured at v19) |
 
 ### Fallback Classifier (when AI Worker is down)
 
@@ -870,12 +871,30 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **defaultReplyLanguage** | enum | 'ar' | Default if auto-detect fails |
 | **autoDetectLanguage** | boolean | true | Detect customer language from message |
 | **supportedLanguages** | array | ['en','ar'] | Languages business supports |
-| **notificationsEnabled** | boolean | true | Push/in-app notifications. SSE badge/toast are skipped for disabled or disconnected pages |
+| **notificationsEnabled** | boolean | true | Push/in-app notifications. SSE badge/toast are skipped for disabled or disconnected pages. See Notification Channels below |
 | **dashboardLanguage** | enum | 'ar' | UI language preference for dashboard |
 | **aiModel** | string | gpt-4.1-mini | AI model selection (locked to DEFAULT_AI_MODEL) |
 | **dualReplyNudgeMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated nudge messages |
 | **dualReplyNudgeVariations** | JSONB | {} | `{ar: [...], en: [...]}` - anti-spam nudge variations per language |
 | **brandVoiceNotesMulti** | JSONB | {} | `{ar: "...", en: "..."}` - translated brand voice notes |
+
+### Notification Channels
+
+| Channel | Status | Details |
+|---------|--------|---------|
+| **In-app (polling)** | Implemented | `NotificationBell` component polls unread count every 60 seconds |
+| **SSE (Server-Sent Events)** | Implemented | Real-time dashboard updates — badge/toast for new messages, flagged replies |
+| **Push (Capacitor native)** | Implemented | Native push notifications on iOS/Android via `@capacitor/push-notifications` |
+| **E-commerce notifications** | Planned | Abandoned cart, order updates, review requests — see `.planning/ECOMMERCE_NOTIFICATIONS_PLAN.md` |
+
+### Mobile / Capacitor
+
+| Item | Details |
+|------|---------|
+| **Framework** | Capacitor 8 (native wrapper around Next.js) |
+| **Platforms** | iOS (`frontend/ios/`) + Android (`frontend/android/`) |
+| **Native features** | Push notifications, voice recording, biometric auth guards |
+| **Published** | Not yet — pending Facebook App Review + app store submissions |
 
 ### Comments UI
 
@@ -1149,6 +1168,25 @@ Merchants can add KB content via voice recording in addition to typing:
 - **UI**: `VoiceRecordButton.tsx` in the knowledge-base components
 - **Transcription**: `backend/src/services/transcription.ts` — audio sent to GPT-4o-mini-transcribe
 - **Flow**: Voice recording → upload → transcribe → transcription text inserted into KB text field → normal chunking/embedding pipeline
+
+### File Upload for KB
+
+Merchants can extract text from documents and images to populate KB content:
+
+| Feature | Details |
+|---------|---------|
+| **Component** | `FileUploadButton.tsx` in `frontend/src/components/knowledge-base/` |
+| **Backend** | `POST /kb/extract-text` — `backend/src/routes/kb-upload.ts` |
+| **Extractor** | `backend/src/services/kb/file-extractor.ts` |
+| **Formats** | PDF, Word (.docx), images (JPEG, PNG, WebP) |
+| **Size limit** | 5MB per file |
+| **PDF page limit** | First 5 pages only |
+| **Text output cap** | 16,000 chars (same as KB limit) |
+| **PDF/Word** | Free — `pdf-parse` v2 + `mammoth` (no API cost) |
+| **Images/scanned PDFs** | GPT-4o-mini Vision — Business+ plans only |
+| **Daily Vision quota** | Business: 10/day, Pro: 25/day (Redis counter) |
+| **UX** | Paperclip icon next to mic icon in each KB section + onboarding |
+| **Flow** | Upload → extract text → append to textarea → user reviews → save |
 
 ### Incoming Voice Messages (Customer Side)
 
@@ -1611,9 +1649,9 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Comment Reply Length | AI prompt: 40 words, flag: >50 words, hard truncate: >280 chars (public only) |
 | Worker Concurrency | 5 jobs |
 | Cache TTL | 30 days |
-| Prompt Version | v21 |
+| Prompt Version | v26 |
 | Pipeline Outcomes | 20 types x 4 pipelines |
-| Eval Accuracy | 99.6% (v21) |
+| Eval Accuracy | 99.6% (measured at v19; current prompt is v26) |
 | Scheduled Product Sync | Every 6 hours |
 | Queue Retries | 3 (exponential backoff) |
 | Handoff Pause | 15 minutes default |
@@ -2015,7 +2053,7 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | Parameter | Default | Source |
 |-----------|---------|--------|
 | **AI Model** | `gpt-4.1-mini` | `packages/shared` `DEFAULT_AI_MODEL` |
-| **Prompt Version** | `v21` | `packages/shared` `PROMPT_VERSION` |
+| **Prompt Version** | `v26` | `packages/shared` `PROMPT_VERSION` |
 | **Temperature** | `0.3` | `ai-worker/config.ts` |
 | **Max Output Tokens** | `300` | `ai-worker/config.ts` |
 | **Comments Auto-Reply** | `true` | `workspaceSettings.ts` |
@@ -2345,7 +2383,7 @@ Internal dashboard for monitoring system health and AI costs:
 ║  • Cache: 30-day TTL, version-scoped                             ║
 ║                                                                  ║
 ║  PORTS: Frontend=3001 | Backend=3000 | AI Worker=3002            ║
-║  MODEL: gpt-4.1-mini | PROMPT: v21 | TEMP: 0.3                  ║
+║  MODEL: gpt-4.1-mini | PROMPT: v26 | TEMP: 0.3                  ║
 ║                                                                  ║
 ║  RBAC ROLES: owner (full) | admin (manage) | member (read-only) ║
 ║  ENCRYPTION: Page tokens AES-256-GCM at rest                     ║
