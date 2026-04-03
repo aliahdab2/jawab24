@@ -278,6 +278,17 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           </button>
 
           <div className="flex items-center gap-3 landscape:gap-2">
+            {(() => {
+              const totalChars = rawMode ? rawText.length : getTotalCharCount(sections);
+              if (totalChars <= 0) return null;
+              return (
+                <span className={`text-xs font-medium ${
+                  totalChars > MAX_LENGTH * 0.9 ? 'text-amber-500' : 'text-muted-foreground'
+                }`}>
+                  {totalChars.toLocaleString()}/{MAX_LENGTH.toLocaleString()}
+                </span>
+              );
+            })()}
             <Button variant="secondary" size="sm" onClick={onClose}>
               {tc('cancel')}
             </Button>

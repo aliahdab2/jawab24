@@ -51,23 +51,8 @@ describe('SectionEditor', () => {
     expect(textarea).toHaveAttribute('dir', 'auto');
   });
 
-  it('hides char count for short content', () => {
-    render(
-      <SectionEditor
-        content="Hello world"
-        onChange={vi.fn()}
-        description="Test"
-        placeholder="Type..."
-        ariaLabel="Editor"
-        isExpanded={true}
-      />,
-    );
-
-    expect(screen.queryByText(/\/ 8000/)).not.toBeInTheDocument();
-  });
-
-  it('shows char count when content exceeds 6000 chars', () => {
-    const longContent = 'x'.repeat(6500);
+  it('does not show per-section char counter (total counter is in modal footer)', () => {
+    const longContent = 'x'.repeat(7000);
     render(
       <SectionEditor
         content={longContent}
@@ -79,6 +64,6 @@ describe('SectionEditor', () => {
       />,
     );
 
-    expect(screen.getByText('6500 / 8000')).toBeInTheDocument();
+    expect(screen.queryByText(/\/ 8000/)).not.toBeInTheDocument();
   });
 });
