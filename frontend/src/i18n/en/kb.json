@@ -45,7 +45,7 @@
     "failed": "Voice transcription failed. Try again."
   },
   "uploadFile": "Upload file",
-  "uploadTooltip": "Upload PDF, Word, or image",
+  "uploadTooltip": "Extract text from PDF, Word, or image",
   "extracting": "Extracting text...",
   "extractSuccess": "Text extracted — review and edit before saving",
   "extractTruncated": "Text was trimmed to fit the character limit. Review before saving.",
