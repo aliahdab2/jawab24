@@ -224,8 +224,11 @@ export class ReplyGenerator {
             }
 
             if (pageId && senderId) {
-                const conversationHistory = await messagesService.getConversationHistory(pageId, senderId, 12);
-                const customerSummary = await messagesService.getCustomerSummary(pageId, senderId);
+                // Fetch conversation history and customer summary in parallel (independent DB queries)
+                const [conversationHistory, customerSummary] = await Promise.all([
+                    messagesService.getConversationHistory(pageId, senderId, 12),
+                    messagesService.getCustomerSummary(pageId, senderId),
+                ]);
                 const namePart = context.senderName ? `Customer name: ${context.senderName}.` : '';
                 const customerContext = [namePart, customerSummary].filter(Boolean).join(' ') || undefined;
 
