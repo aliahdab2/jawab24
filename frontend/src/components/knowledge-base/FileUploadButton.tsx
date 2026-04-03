@@ -123,6 +123,7 @@ export function FileUploadButton({
         type="button"
         onClick={handleClick}
         disabled={disabled || extracting}
+        title={t('uploadTooltip')}
         aria-label={extracting ? t('extracting') : t('uploadFile')}
         aria-busy={extracting}
         className={clsx(

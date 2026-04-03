@@ -79,6 +79,7 @@ export function VoiceRecordButton({
         type="button"
         onClick={handleClick}
         disabled={disabled || isTranscribing}
+        title={!isBusy ? tKb('voice.startRecording') : undefined}
         aria-label={
           isRecording ? tKb('voice.stopRecording')
           : isTranscribing ? tKb('voice.transcribing')
