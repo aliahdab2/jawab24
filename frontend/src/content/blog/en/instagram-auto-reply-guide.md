@@ -68,6 +68,14 @@ AI tools that load conversation history handle this naturally. When the system r
 
 This is especially important on Instagram, where visual context (the product in the post photo) adds another layer of meaning that text-only tools miss.
 
+## Handling Voice Messages in DMs
+
+A growing number of Instagram users — especially in Arabic-speaking markets — prefer sending voice messages over typing. It's faster, more natural, and often how people communicate in their daily lives. But most auto-reply tools completely ignore voice messages, leaving the customer without a response.
+
+Smart auto-reply tools like Jawab24 solve this by automatically transcribing voice messages and processing them like regular text. When a customer sends a 10-second voice note asking "Do you have this in blue and how much is it?", the AI transcribes the audio, understands the question, and replies with a text message containing accurate product information — all within seconds. The customer doesn't need to type anything.
+
+This matters because every unanswered voice message is a potential lost sale. If your tool can't handle voice input, you're ignoring a significant portion of your customers' preferred communication method.
+
 ## Handling Rapid-Fire Messages
 
 Instagram customers — especially interested buyers — often send multiple quick messages:

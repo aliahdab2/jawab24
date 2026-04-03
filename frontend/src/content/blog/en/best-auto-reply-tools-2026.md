@@ -16,6 +16,8 @@ Before comparing specific tools, here's what matters most:
 
 **AI vs rule-based** — Rule-based tools match keywords to preset responses. AI tools understand context and generate unique replies. For simple use cases ("What are your hours?"), rules work fine. For complex product questions and follow-up conversations, you need AI.
 
+**Voice message support** — Many customers — especially in Arabic-speaking markets — prefer sending voice messages over typing. Can the tool transcribe voice messages and reply to them? Most tools simply ignore audio messages or send a generic "we can't read voice messages" response.
+
 **Conversation context** — Does the AI read conversation history or treat each message in isolation? When a customer says "and how much is this one?", the AI needs to know what "this one" refers to from previous messages. Without conversation context, every message is a guessing game.
 
 **E-commerce integration** — If you sell on Shopify, Salla, or Zid, can the tool pull your product data? Without this, the AI can't answer "How much does product X cost?" accurately.
@@ -70,6 +72,8 @@ AI auto-reply platform built for Facebook and Instagram business pages, with dee
 
 The AI loads the **last 12 messages** in each conversation, so it understands context. When a customer says "and the black one?" after asking about a product, the AI knows exactly what they're referring to. This contextual understanding is tested across **125 real-world scenarios with 99.6% accuracy** — a published, measurable benchmark, not a vague "powered by AI" claim.
 
+**Voice message transcription** — when a customer sends a voice message instead of typing, Jawab24 automatically transcribes the audio and processes it as a regular message. The AI understands the question and replies with a text response. Most competitors ignore voice messages entirely — Jawab24 treats them as first-class input.
+
 **2-tier price hallucination prevention** checks every price the AI mentions against the actual product catalog before sending. If the price doesn't match, the reply is held with a safe fallback instead of sending wrong information.
 
 **Angry customer detection** identifies frustrated customers (strong words, refund demands, escalation threats) and sends instant push notifications to the merchant's phone — not just an email or dashboard flag.
@@ -90,6 +94,7 @@ Here's how the tools stack up across the features that matter most:
 | Arabic dialect support | Basic | No | No | Custom | 6 dialects |
 | AI-powered replies | Limited | No | Yes | Yes | Yes (99.6% accuracy) |
 | Conversation context | Per flow | No | Limited | Configurable | Last 12 messages |
+| Voice message support | No | No | No | No | Yes (auto-transcribe) |
 | Comment replies | Basic | Basic | No | Custom | Full (public + DM) |
 | Shopify integration | Yes | No | Yes | Custom | Yes |
 | Salla integration | No | No | No | No | Yes |

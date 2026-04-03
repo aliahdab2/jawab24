@@ -194,6 +194,8 @@ Once you're live, here are Jawab24 features worth exploring:
 
 **Smart message consolidation** — When a customer sends multiple rapid messages ("How much is this?", "Is it available?", "Do you deliver?"), Jawab24 waits briefly and generates one comprehensive reply instead of three separate responses. This feels more natural and avoids overwhelming the customer.
 
+**Voice message understanding** — When a customer sends a voice message instead of typing, Jawab24 automatically transcribes the audio and processes it like any text message. The AI understands the question and replies with a text message. This is especially valuable in Arabic-speaking markets where voice messages are the preferred way to communicate on Messenger and Instagram.
+
 **Angry customer push notifications** — If a customer sends a frustrated message, you'll get an instant push notification on your phone. You can open the app, read the full conversation, and step in personally. The AI's empathetic auto-reply buys you time while you get there.
 
 **Auto-pause on manual reply** — When you reply to a customer manually, Jawab24 automatically pauses auto-reply for that conversation. You can have a human conversation without the AI jumping in. No toggle to flip — it detects your manual reply and stays out of the way.

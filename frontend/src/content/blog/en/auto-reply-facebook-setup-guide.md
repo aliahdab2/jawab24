@@ -80,6 +80,8 @@ Good auto-reply tools have safety nets:
 
 **Auto-pause on manual reply**: When you reply to a customer yourself, the AI stops replying in that conversation automatically. No collision between human and bot.
 
+**Voice message transcription**: When a customer sends a voice message instead of typing, Jawab24 automatically transcribes the audio and treats it as a regular text message. The AI understands the question and replies with a text message — no voice messages are left unanswered.
+
 **Message consolidation**: When a customer sends 3 rapid messages, the system waits and generates one comprehensive reply instead of 3 separate responses.
 
 ## Common Mistakes and Best Practices
