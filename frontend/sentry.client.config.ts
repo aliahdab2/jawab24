@@ -23,4 +23,5 @@ Sentry.init({
         'ChunkLoadError',
         'Session expired',
     ],
+
 });

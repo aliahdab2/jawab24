@@ -174,7 +174,8 @@ function isTokenExpiredError(error: unknown): boolean {
     if (!error || typeof error !== 'object') return false;
     const msg = String((error as { message?: string }).message || '').toLowerCase();
     return msg.includes('invalid') || msg.includes('expired')
-        || msg.includes('oauthexception') || msg.includes('error validating');
+        || msg.includes('oauthexception') || msg.includes('error validating')
+        || msg.includes('postcard and the payload');
 }
 
 /** Notify user that they need to reconnect their page(s). */

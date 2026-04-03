@@ -1,8 +1,21 @@
 import * as Sentry from '@sentry/nextjs';
 
+/** Errors that are expected during normal operation and should not be sent to Sentry. */
+const IGNORED_ERRORS = [
+  'Session expired',
+];
+
+function isIgnoredError(error: unknown): boolean {
+  if (error instanceof Error) {
+    return IGNORED_ERRORS.some((msg) => error.message.includes(msg));
+  }
+  return false;
+}
+
 /**
  * Capture an error to Sentry with consistent formatting.
  * Handles both Error objects and unknown throw types.
+ * Skips expected errors listed in IGNORED_ERRORS.
  */
 export function captureError(
   error: unknown,
@@ -13,6 +26,8 @@ export function captureError(
     level?: 'error' | 'warning' | 'fatal';
   }
 ) {
+  if (isIgnoredError(error)) return;
+
   const err = error instanceof Error ? error : new Error(fallbackMessage);
   Sentry.captureException(err, {
     level: context?.level,
