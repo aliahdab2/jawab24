@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui';
@@ -154,6 +154,13 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     pagesApi.dismissGap(page.id, gapId).catch(() => {});
   }, [page.id]);
 
+  const totalChars = useMemo(
+    () => rawMode ? rawText.length : getTotalCharCount(sections),
+    [rawMode, rawText, sections],
+  );
+  const isOverLimit = totalChars > MAX_LENGTH;
+  const isNearLimit = totalChars > MAX_LENGTH * 0.9;
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
       <div
@@ -226,7 +233,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           )}
 
           {/* Thin-KB tip — show when total content is under 100 chars */}
-          {!rawMode && getTotalCharCount(sections) < 100 && (
+          {!rawMode && totalChars < 100 && (
             <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border">
               <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
               <p className="text-xs leading-relaxed">
@@ -252,6 +259,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               onAddCustomSection={handleAddCustomSection}
               onDeleteCustomSection={handleDeleteCustomSection}
               onCustomTitleChange={handleCustomTitleChange}
+              remainingChars={MAX_LENGTH - totalChars}
             />
           )}
         </div>
@@ -278,17 +286,20 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           </button>
 
           <div className="flex items-center gap-3 landscape:gap-2">
-            {(() => {
-              const totalChars = rawMode ? rawText.length : getTotalCharCount(sections);
-              if (totalChars <= 0) return null;
-              return (
+            {totalChars > 0 && (
+              <div className="flex items-center gap-2">
+                {isOverLimit && (
+                  <span className="text-xs font-medium text-red-500" role="alert">
+                    {tKb('overLimit').replace('{excess}', (totalChars - MAX_LENGTH).toLocaleString())}
+                  </span>
+                )}
                 <span className={`text-xs font-medium ${
-                  totalChars > MAX_LENGTH * 0.9 ? 'text-amber-500' : 'text-muted-foreground'
+                  isOverLimit ? 'text-red-500' : isNearLimit ? 'text-amber-500' : 'text-muted-foreground'
                 }`}>
                   {totalChars.toLocaleString()}/{MAX_LENGTH.toLocaleString()}
                 </span>
-              );
-            })()}
+              </div>
+            )}
             <Button variant="secondary" size="sm" onClick={onClose}>
               {tc('cancel')}
             </Button>
@@ -296,6 +307,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               size="sm"
               onClick={handleSave}
               loading={saving}
+              disabled={isOverLimit}
               icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
               variant={saved ? 'secondary' : 'primary'}
             >

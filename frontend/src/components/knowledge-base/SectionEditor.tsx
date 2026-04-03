@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import { VoiceRecordButton } from './VoiceRecordButton';
 import { FileUploadButton } from './FileUploadButton';
 
@@ -10,6 +11,8 @@ interface SectionEditorProps {
   placeholder: string;
   ariaLabel: string;
   isExpanded: boolean;
+  /** Characters remaining in the total KB budget. Used to truncate file extractions. */
+  remainingChars?: number;
 }
 
 /**
@@ -23,8 +26,10 @@ export function SectionEditor({
   placeholder,
   ariaLabel,
   isExpanded,
+  remainingChars,
 }: SectionEditorProps) {
   const locale = useLocale();
+  const tKb = useTranslations('kb');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [justTranscribed, setJustTranscribed] = useState(false);
 
@@ -35,15 +40,34 @@ export function SectionEditor({
     el.style.height = `${Math.max(80, el.scrollHeight)}px`;
   }, []);
 
-  /** Shared handler for voice transcription and file extraction — append text + highlight */
+  /** Shared handler for voice transcription and file extraction — append text + highlight.
+   *  Truncates inserted text to fit the remaining KB budget when available. */
   const handleTextInsert = useCallback((text: string) => {
     const current = content.trim();
-    const newContent = current ? `${current}\n${text}` : text;
+    const separator = current ? '\n' : '';
+    let insertText = text;
+
+    // Truncate to fit remaining KB budget (remainingChars accounts for all other sections)
+    if (remainingChars !== undefined) {
+      const currentSectionChars = current.length + separator.length;
+      const budget = remainingChars + content.length - currentSectionChars;
+      if (insertText.length > budget && budget > 0) {
+        const originalLength = insertText.length;
+        insertText = insertText.slice(0, budget);
+        toast.info(
+          tKb('extractTrimmedToBudget')
+            .replace('{kept}', budget.toLocaleString())
+            .replace('{total}', originalLength.toLocaleString()),
+        );
+      }
+    }
+
+    const newContent = current ? `${current}${separator}${insertText}` : insertText;
     onChange(newContent);
     setJustTranscribed(true);
     setTimeout(() => setJustTranscribed(false), 2000);
     setTimeout(() => autoResize(), 50);
-  }, [content, onChange, autoResize]);
+  }, [content, onChange, autoResize, remainingChars, tKb]);
 
   useEffect(() => {
     if (isExpanded && textareaRef.current) {

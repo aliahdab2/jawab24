@@ -13,6 +13,7 @@ interface KnowledgeBaseCustomSectionProps {
   onChange: (content: string) => void;
   onTitleChange: (title: string) => void;
   onDelete: () => void;
+  remainingChars: number;
 }
 
 export function KnowledgeBaseCustomSection({
@@ -22,6 +23,7 @@ export function KnowledgeBaseCustomSection({
   onChange,
   onTitleChange,
   onDelete,
+  remainingChars,
 }: KnowledgeBaseCustomSectionProps) {
   const tKb = useTranslations('kb');
   const titleRef = useRef<HTMLInputElement>(null);
@@ -110,7 +112,12 @@ export function KnowledgeBaseCustomSection({
           <Trash2 className="w-3.5 h-3.5" />
         </button>
 
-        {/* Status dot */}
+        {/* Char count + Status dot */}
+        {!isExpanded && hasContent && (
+          <span className="text-[10px] tabular-nums text-muted-foreground flex-shrink-0">
+            {section.content.length.toLocaleString()}
+          </span>
+        )}
         <div
           className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${
             hasContent ? 'bg-brand-500' : 'bg-dot-muted'
@@ -134,6 +141,7 @@ export function KnowledgeBaseCustomSection({
           placeholder={tKb('customSection.placeholder')}
           ariaLabel={tKb('customSection.placeholder')}
           isExpanded={isExpanded}
+          remainingChars={remainingChars}
         />
       )}
 

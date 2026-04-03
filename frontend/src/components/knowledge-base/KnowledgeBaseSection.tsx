@@ -10,6 +10,7 @@ interface KnowledgeBaseSectionProps {
   isExpanded: boolean;
   onToggle: () => void;
   onChange: (content: string) => void;
+  remainingChars: number;
 }
 
 export function KnowledgeBaseSection({
@@ -18,6 +19,7 @@ export function KnowledgeBaseSection({
   isExpanded,
   onToggle,
   onChange,
+  remainingChars,
 }: KnowledgeBaseSectionProps) {
   const tKb = useTranslations('kb');
   const hasContent = section.content.trim().length > 0;
@@ -58,7 +60,12 @@ export function KnowledgeBaseSection({
           )}
         </div>
 
-        {/* Status dot */}
+        {/* Char count + Status dot */}
+        {!isExpanded && hasContent && (
+          <span className="text-[10px] tabular-nums text-muted-foreground flex-shrink-0">
+            {section.content.length.toLocaleString()}
+          </span>
+        )}
         <div
           className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${
             hasContent ? 'bg-brand-500' : 'bg-dot-muted'
@@ -82,6 +89,7 @@ export function KnowledgeBaseSection({
           placeholder={tKb(config.placeholderKey)}
           ariaLabel={tKb(config.titleKey)}
           isExpanded={isExpanded}
+          remainingChars={remainingChars}
         />
       )}
     </div>

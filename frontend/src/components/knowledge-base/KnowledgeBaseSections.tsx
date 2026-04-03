@@ -15,6 +15,7 @@ interface KnowledgeBaseSectionsProps {
   onAddCustomSection: () => void;
   onDeleteCustomSection: (sectionId: CustomSectionId) => void;
   onCustomTitleChange: (sectionId: CustomSectionId, title: string) => void;
+  remainingChars: number;
 }
 
 export function KnowledgeBaseSections({
@@ -25,6 +26,7 @@ export function KnowledgeBaseSections({
   onAddCustomSection,
   onDeleteCustomSection,
   onCustomTitleChange,
+  remainingChars,
 }: KnowledgeBaseSectionsProps) {
   const tKb = useTranslations('kb');
   const { filled, total } = calculateProgress(sections);
@@ -70,6 +72,7 @@ export function KnowledgeBaseSections({
               onChange={(content) => onSectionChange(section.id, content)}
               onTitleChange={(title) => onCustomTitleChange(section.id as CustomSectionId, title)}
               onDelete={() => onDeleteCustomSection(section.id as CustomSectionId)}
+              remainingChars={remainingChars}
             />
           );
         }
@@ -84,6 +87,7 @@ export function KnowledgeBaseSections({
             isExpanded={expandedId === section.id}
             onToggle={() => handleToggle(section.id)}
             onChange={(content) => onSectionChange(section.id, content)}
+            remainingChars={remainingChars}
           />
         );
       })}

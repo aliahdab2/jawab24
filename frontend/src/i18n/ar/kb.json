@@ -27,6 +27,8 @@
     "notesPlaceholder": "ماذا أيضاً يجب أن يعرف جواب؟ ساعات العمل، سياسة الإرجاع، مناطق التوصيل، الموقع — أي شيء يسأل عنه العملاء."
   },
   "charCount": "{count} / {max}",
+  "overLimit": "احذف {excess} حرف للحفظ",
+  "extractTrimmedToBudget": "تم اقتطاع النص — تم الاحتفاظ بـ {kept} من {total} حرف",
   "addCustomSection": "أضف قسم جديد",
   "customSection": {
     "titlePlaceholder": "اسم القسم (مثال: القائمة، الفريق، الفروع)",
