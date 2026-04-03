@@ -146,7 +146,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         const [row] = await testDb
             .select()
             .from(messages)
-            .where(eq(messages.facebookMessageId, 'fb-happy-001'));
+            .where(eq(messages.platformMessageId, 'fb-happy-001'));
         expect(row).toBeDefined();
         expect(row.senderId).toBe(senderId);
         expect(row.message).toBe('Hello!');
@@ -181,12 +181,12 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
     it('skips older message when a newer unreplied message exists (debounce)', async () => {
         // Pre-insert two messages: older (msg-1) and newer (msg-2)
         await insertMessage(pageId, senderId, {
-            facebookMessageId: 'fb-debounce-old',
+            platformMessageId: 'fb-debounce-old',
             message: 'First',
             createdAt: new Date('2026-02-01T10:00:00Z'),
         });
         await insertMessage(pageId, senderId, {
-            facebookMessageId: 'fb-debounce-new',
+            platformMessageId: 'fb-debounce-new',
             message: 'Second',
             createdAt: new Date('2026-02-01T10:00:01Z'),
         });
@@ -196,7 +196,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
             storeIncomingMessage: vi.fn(async () => {
                 // Return the already-existing older message
                 const existing = await testDb.select().from(messages)
-                    .where(eq(messages.facebookMessageId, 'fb-debounce-old'));
+                    .where(eq(messages.platformMessageId, 'fb-debounce-old'));
                 return {
                     message: { id: existing[0].id, replied: false },
                     isNew: false,
@@ -220,17 +220,17 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
     it('consolidates multiple unreplied messages into a single AI prompt', async () => {
         // Pre-insert 3 unreplied messages
         await insertMessage(pageId, senderId, {
-            facebookMessageId: 'fb-cons-1',
+            platformMessageId: 'fb-cons-1',
             message: 'Hello',
             createdAt: new Date('2026-02-01T10:00:00Z'),
         });
         await insertMessage(pageId, senderId, {
-            facebookMessageId: 'fb-cons-2',
+            platformMessageId: 'fb-cons-2',
             message: 'Are you there?',
             createdAt: new Date('2026-02-01T10:00:01Z'),
         });
         await insertMessage(pageId, senderId, {
-            facebookMessageId: 'fb-cons-3',
+            platformMessageId: 'fb-cons-3',
             message: 'Please reply!',
             createdAt: new Date('2026-02-01T10:00:02Z'),
         });
@@ -289,7 +289,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         const [row] = await testDb
             .select()
             .from(messages)
-            .where(eq(messages.facebookMessageId, 'fb-pause-001'));
+            .where(eq(messages.platformMessageId, 'fb-pause-001'));
         expect(row).toBeDefined();
         expect(row.replied).toBe(false);
     });
@@ -317,7 +317,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         const [row] = await testDb
             .select()
             .from(messages)
-            .where(eq(messages.facebookMessageId, 'fb-flag-001'));
+            .where(eq(messages.platformMessageId, 'fb-flag-001'));
         expect(row.needsAttention).toBe(true);
         expect(row.flagReason).toBe('angry_customer');
         expect(row.aiIntent).toBe('COMPLAINT');
@@ -349,7 +349,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         const [row] = await testDb
             .select()
             .from(messages)
-            .where(eq(messages.facebookMessageId, 'fb-offensive-001'));
+            .where(eq(messages.platformMessageId, 'fb-offensive-001'));
         expect(row).toBeDefined();
         expect(row.replied).toBe(false);
         expect(row.needsAttention).toBe(true);
@@ -400,7 +400,7 @@ describe('Message Pipeline — Integration (real Postgres)', () => {
         const [row] = await testDb
             .select()
             .from(messages)
-            .where(eq(messages.facebookMessageId, 'fb-price-001'));
+            .where(eq(messages.platformMessageId, 'fb-price-001'));
         expect(row.replied).toBe(true);
         expect(row.replyText).toContain('Thank you for your interest');
         expect(row.needsAttention).toBe(true);

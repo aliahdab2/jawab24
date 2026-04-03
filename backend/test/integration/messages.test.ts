@@ -22,17 +22,17 @@ describe('Messages Service — Integration (real Postgres)', () => {
         it('returns true when a newer unreplied message exists', async () => {
             // Insert 3 messages with increasing timestamps
             const msg1 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-oldest',
+                platformMessageId: 'dm-oldest',
                 message: 'Hello',
                 createdAt: new Date('2026-01-01T10:00:00Z'),
             });
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-middle',
+                platformMessageId: 'dm-middle',
                 message: 'Are you there?',
                 createdAt: new Date('2026-01-01T10:00:01Z'),
             });
             const msg3 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-newest',
+                platformMessageId: 'dm-newest',
                 message: 'Please reply',
                 createdAt: new Date('2026-01-01T10:00:02Z'),
             });
@@ -53,12 +53,12 @@ describe('Messages Service — Integration (real Postgres)', () => {
         it('ignores replied messages when checking for newer', async () => {
             // msg1 = unreplied, msg2 = replied (should be ignored)
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-first',
+                platformMessageId: 'dm-first',
                 message: 'Hello',
                 createdAt: new Date('2026-01-01T10:00:00Z'),
             });
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-second-replied',
+                platformMessageId: 'dm-second-replied',
                 message: 'Follow up',
                 replied: true,
                 createdAt: new Date('2026-01-01T10:00:01Z'),
@@ -79,24 +79,24 @@ describe('Messages Service — Integration (real Postgres)', () => {
         it('returns only unreplied messages ordered by createdAt ASC', async () => {
             // Insert 3 unreplied + 1 replied
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-a',
+                platformMessageId: 'dm-a',
                 message: 'First message',
                 createdAt: new Date('2026-01-01T10:00:00Z'),
             });
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-b',
+                platformMessageId: 'dm-b',
                 message: 'Second message',
                 createdAt: new Date('2026-01-01T10:00:01Z'),
             });
             // This one is replied — should be excluded
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-replied',
+                platformMessageId: 'dm-replied',
                 message: 'Already handled',
                 replied: true,
                 createdAt: new Date('2026-01-01T10:00:02Z'),
             });
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-c',
+                platformMessageId: 'dm-c',
                 message: 'Third message',
                 createdAt: new Date('2026-01-01T10:00:03Z'),
             });
@@ -111,7 +111,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
 
         it('returns empty array when all messages are replied', async () => {
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-done',
+                platformMessageId: 'dm-done',
                 message: 'Done',
                 replied: true,
             });
@@ -127,17 +127,17 @@ describe('Messages Service — Integration (real Postgres)', () => {
     describe('markOlderMessagesAsReplied', () => {
         it('marks all unreplied messages except the excluded one', async () => {
             const msg1 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-bulk-1',
+                platformMessageId: 'dm-bulk-1',
                 message: 'Msg 1',
                 createdAt: new Date('2026-01-01T10:00:00Z'),
             });
             const msg2 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-bulk-2',
+                platformMessageId: 'dm-bulk-2',
                 message: 'Msg 2',
                 createdAt: new Date('2026-01-01T10:00:01Z'),
             });
             const msg3 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-bulk-3',
+                platformMessageId: 'dm-bulk-3',
                 message: 'Msg 3',
                 createdAt: new Date('2026-01-01T10:00:02Z'),
             });
@@ -174,7 +174,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
 
         it('returns 0 when no other unreplied messages exist', async () => {
             const msg = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-only',
+                platformMessageId: 'dm-only',
                 message: 'Only message',
             });
 
@@ -209,7 +209,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
         it('returns true when a recent manual reply exists (implicit pause)', async () => {
             // Insert a manual outgoing reply from 5 minutes ago
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-manual-reply',
+                platformMessageId: 'dm-manual-reply',
                 message: 'I will handle this personally',
                 direction: 'outgoing',
                 replyMethod: 'manual',
@@ -224,7 +224,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
         it('returns false when manual reply is outside the pause window', async () => {
             // Insert a manual outgoing reply from 60 minutes ago
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-old-manual',
+                platformMessageId: 'dm-old-manual',
                 message: 'Old manual reply',
                 direction: 'outgoing',
                 replyMethod: 'manual',
@@ -239,7 +239,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
         it('does not trigger on non-manual outgoing messages', async () => {
             // AI-generated reply should NOT trigger implicit pause
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-ai-reply',
+                platformMessageId: 'dm-ai-reply',
                 message: 'Auto-generated reply',
                 direction: 'outgoing',
                 replyMethod: 'ai',
@@ -271,20 +271,20 @@ describe('Messages Service — Integration (real Postgres)', () => {
         it('resolves both replied and unreplied incoming messages', async () => {
             // Unreplied message
             const msg1 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-unreplied',
+                platformMessageId: 'dm-unreplied',
                 message: 'Need help',
                 replied: false,
             });
             // Replied message with needsAttention (e.g., "Information not in knowledge base")
             const msg2 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-flagged',
+                platformMessageId: 'dm-flagged',
                 message: 'How much does it cost?',
                 replied: true,
                 needsAttention: true,
             });
             // Outgoing reply (should NOT be resolved)
             const msg3 = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-outgoing',
+                platformMessageId: 'dm-outgoing',
                 message: 'Auto reply',
                 direction: 'outgoing',
                 replied: true,
@@ -308,7 +308,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
 
         it('returns 0 when all messages are already resolved', async () => {
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-already-resolved',
+                platformMessageId: 'dm-already-resolved',
                 message: 'Old message',
                 resolved: true,
             });
@@ -319,11 +319,11 @@ describe('Messages Service — Integration (real Postgres)', () => {
 
         it('does not resolve messages from a different sender', async () => {
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-target',
+                platformMessageId: 'dm-target',
                 message: 'Target sender',
             });
             await insertMessage(pageId, 'other-sender', {
-                facebookMessageId: 'dm-other',
+                platformMessageId: 'dm-other',
                 message: 'Other sender',
             });
 
@@ -340,7 +340,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
     describe('unresolveConversation', () => {
         it('unresolves all resolved incoming messages', async () => {
             const msg = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'dm-resolved',
+                platformMessageId: 'dm-resolved',
                 message: 'Was resolved',
                 resolved: true,
                 replied: true,

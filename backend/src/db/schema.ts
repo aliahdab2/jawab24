@@ -354,8 +354,7 @@ export const settings = pgTable('settings', {
 export const messages = pgTable('messages', {
     id: uuid('id').defaultRandom().primaryKey(),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }),
-    facebookMessageId: varchar('facebook_message_id', { length: 255 }).unique().notNull(),
-    instagramMessageId: varchar('instagram_message_id', { length: 255 }),
+    platformMessageId: varchar('platform_message_id', { length: 255 }).notNull(),
     platform: varchar('platform', { length: 20 }).default('facebook'), // 'facebook' or 'instagram'
     senderId: varchar('sender_id', { length: 255 }).notNull(),
     senderName: varchar('sender_name', { length: 255 }),
@@ -378,7 +377,7 @@ export const messages = pgTable('messages', {
     return {
         pageIdIdx: index('idx_messages_page_id').on(table.pageId),
         senderIdIdx: index('idx_messages_sender_id').on(table.senderId),
-        facebookMessageIdIdx: index('idx_messages_facebook_message_id').on(table.facebookMessageId),
+        platformMessageIdIdx: index('idx_messages_platform_message_id').on(table.platformMessageId),
         directionIdx: index('idx_messages_direction').on(table.direction),
         platformIdx: index('idx_messages_platform').on(table.platform),
         needsAttentionIdx: index('idx_messages_needs_attention').on(table.needsAttention),

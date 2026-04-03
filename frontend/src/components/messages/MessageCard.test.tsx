@@ -13,7 +13,7 @@ function makeMessage(overrides: Partial<Message>): Message {
   return {
     id: '1',
     pageId: 'page1',
-    facebookMessageId: 'fb1',
+    platformMessageId: 'fb1',
     senderId: 'sender1',
     senderName: 'Ali',
     message: 'Hello',

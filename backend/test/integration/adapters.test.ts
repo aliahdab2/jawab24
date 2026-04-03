@@ -38,7 +38,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
             expect(row.senderName).toBe('Ali');
             expect(row.message).toBe('Hello from Facebook');
             expect(row.direction).toBe('incoming');
-            expect(row.facebookMessageId).toBe('fb-msg-001');
+            expect(row.platformMessageId).toBe('fb-msg-001');
         });
 
         it('returns existing message on duplicate (isNew=false)', async () => {
@@ -69,7 +69,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
             const [row] = await testDb
                 .select()
                 .from(messages)
-                .where(eq(messages.facebookMessageId, 'fb-msg-name'));
+                .where(eq(messages.platformMessageId, 'fb-msg-name'));
             expect(row.senderName).toBe('Ali Ahdab');
         });
 
@@ -86,7 +86,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
             const [row] = await testDb
                 .select()
                 .from(messages)
-                .where(eq(messages.facebookMessageId, 'fb-msg-keep'));
+                .where(eq(messages.platformMessageId, 'fb-msg-keep'));
             // Should keep the original name (upsert only fills null)
             expect(row.senderName).toBe('Original Name');
         });
@@ -98,7 +98,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
         it('returns cached name from DB when available', async () => {
             // Pre-populate a message with a senderName
             await insertMessage(pageId, senderId, {
-                facebookMessageId: 'fb-cached-name',
+                platformMessageId: 'fb-cached-name',
                 senderName: 'Cached Ali',
             });
 
@@ -124,8 +124,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
             expect(message.replied).toBe(false);
 
             const [row] = await testDb.select().from(messages).where(eq(messages.id, message.id));
-            expect(row.instagramMessageId).toBe('ig-msg-001');
-            expect(row.facebookMessageId).toBe('ig_ig-msg-001');
+            expect(row.platformMessageId).toBe('ig-msg-001');
             expect(row.platform).toBe('instagram');
             expect(row.direction).toBe('incoming');
             expect(row.message).toBe('Hello from Instagram');
@@ -159,7 +158,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
     describe('markAsReplied state transition', () => {
         it('sets replied=true, replyText, replyMethod, and repliedAt', async () => {
             const msg = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'fb-mark-test',
+                platformMessageId: 'fb-mark-test',
                 message: 'Need help',
             });
 
@@ -178,7 +177,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
 
         it('stores needsAttention and flagReason when flagged', async () => {
             const msg = await insertMessage(pageId, senderId, {
-                facebookMessageId: 'fb-flag-test',
+                platformMessageId: 'fb-flag-test',
                 message: 'I am angry',
             });
 

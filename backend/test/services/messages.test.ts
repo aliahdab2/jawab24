@@ -22,7 +22,7 @@ function mockDbRow(overrides: Record<string, any> = {}) {
     return {
         id: 'msg-1',
         pageId: 'page-1',
-        facebookMessageId: 'fb-msg-1',
+        platformMessageId: 'fb-msg-1',
         senderId: 'sender-1',
         senderName: 'John',
         message: 'Hello',
@@ -157,7 +157,7 @@ describe('MessagesService', () => {
 
             const result = await messagesService.createMessage({
                 pageId: 'page-1',
-                facebookMessageId: 'fb-new',
+                platformMessageId: 'fb-new',
                 senderId: 'sender-1',
                 senderName: 'John',
                 message: 'Hi there',
@@ -180,7 +180,7 @@ describe('MessagesService', () => {
             );
 
             expect(result.isNew).toBe(false);
-            expect(result.message.facebookMessageId).toBe('fb-msg-1');
+            expect(result.message.platformMessageId).toBe('fb-msg-1');
             expect(db.insert).not.toHaveBeenCalled();
         });
 
@@ -214,7 +214,7 @@ describe('MessagesService', () => {
 
         it('should create new message when not found', async () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
-            const inserted = mockDbRow({ id: 'new-msg', facebookMessageId: 'fb-new' });
+            const inserted = mockDbRow({ id: 'new-msg', platformMessageId: 'fb-new' });
             vi.mocked(db.insert).mockReturnValue({
                 values: vi.fn().mockReturnValue({
                     returning: vi.fn().mockResolvedValue([inserted]),
@@ -414,7 +414,7 @@ describe('MessagesService', () => {
             // (484573μs > 484000μs), making every message skip itself as "newer pending".
             const currentMsg = mockDbRow({
                 id: 'msg-current',
-                facebookMessageId: 'fb-msg-1',
+                platformMessageId: 'fb-msg-1',
                 createdAt: new Date('2026-02-01T12:00:00.500Z'),
             });
 
@@ -436,12 +436,12 @@ describe('MessagesService', () => {
             // exclude legitimate newer messages.
             const currentMsg = mockDbRow({
                 id: 'msg-1',
-                facebookMessageId: 'fb-msg-1',
+                platformMessageId: 'fb-msg-1',
                 createdAt: new Date('2026-02-01T12:00:00.500Z'),
             });
             const newerMsg = mockDbRow({
                 id: 'msg-2',
-                facebookMessageId: 'fb-msg-2',
+                platformMessageId: 'fb-msg-2',
                 createdAt: new Date('2026-02-01T12:00:00.800Z'),
             });
 

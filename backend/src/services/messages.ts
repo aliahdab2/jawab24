@@ -10,11 +10,12 @@ type DbConn = typeof db;
 
 export interface CreateMessageDTO {
     pageId: string;
-    facebookMessageId: string;
+    platformMessageId: string;
     senderId: string;
     senderName?: string;
     message: string;
     direction?: 'incoming' | 'outgoing';
+    platform?: string;
     attachmentType?: string;
 }
 
@@ -146,11 +147,12 @@ export class MessagesService {
         const [newMessage] = await db.insert(messages)
             .values({
                 pageId: data.pageId,
-                facebookMessageId: data.facebookMessageId,
+                platformMessageId: data.platformMessageId,
                 senderId: data.senderId,
                 senderName: data.senderName,
                 message: data.message,
                 direction: data.direction || 'incoming',
+                ...(data.platform ? { platform: data.platform } : {}),
                 ...(data.attachmentType ? { attachmentType: data.attachmentType } : {}),
                 createdTime: new Date(),
             })
@@ -164,15 +166,16 @@ export class MessagesService {
      */
     async findOrCreateFromWebhook(
         pageId: string,
-        facebookMessageId: string,
+        platformMessageId: string,
         senderId: string,
         messageText: string,
         senderName?: string,
         attachmentType?: string,
+        platform?: string,
     ): Promise<{ message: Message; isNew: boolean }> {
         // Check if message already exists
         const existing = await db.query.messages.findFirst({
-            where: eq(messages.facebookMessageId, facebookMessageId),
+            where: eq(messages.platformMessageId, platformMessageId),
         });
 
         if (existing) {
@@ -180,7 +183,7 @@ export class MessagesService {
             if (senderName && !existing.senderName) {
                 await db.update(messages)
                     .set({ senderName })
-                    .where(eq(messages.facebookMessageId, facebookMessageId));
+                    .where(eq(messages.id, existing.id));
                 existing.senderName = senderName;
             }
             return { message: this.mapToMessage(existing), isNew: false };
@@ -189,11 +192,12 @@ export class MessagesService {
         // Create new message
         const newMessage = await this.createMessage({
             pageId,
-            facebookMessageId,
+            platformMessageId,
             senderId,
             senderName,
             message: messageText,
             direction: 'incoming',
+            platform,
             ...(attachmentType ? { attachmentType } : {}),
         });
 
@@ -317,7 +321,7 @@ export class MessagesService {
         const [newMessage] = await conn.insert(messages)
             .values({
                 pageId,
-                facebookMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 senderId,
                 message: replyText,
                 direction: 'outgoing',
@@ -488,7 +492,7 @@ export class MessagesService {
         currentMessageId: string
     ): Promise<boolean> {
         const currentMsg = await db.query.messages.findFirst({
-            where: eq(messages.facebookMessageId, currentMessageId),
+            where: eq(messages.platformMessageId, currentMessageId),
         });
         if (!currentMsg?.createdAt) return false;
 
@@ -703,7 +707,7 @@ export class MessagesService {
         return {
             id: record.id,
             pageId: record.pageId ?? '',
-            facebookMessageId: record.facebookMessageId,
+            platformMessageId: record.platformMessageId,
             senderId: record.senderId,
             senderName: record.senderName ?? null,
             message: record.message,

@@ -114,7 +114,7 @@ export async function insertMessage(
         .values({
             pageId,
             senderId,
-            facebookMessageId: overrides.facebookMessageId ?? `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+            platformMessageId: overrides.platformMessageId ?? `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             message: overrides.message ?? 'Test message',
             direction: overrides.direction ?? 'incoming',
             replied: overrides.replied ?? false,

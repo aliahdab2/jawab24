@@ -108,7 +108,7 @@ describe('MessageProcessor — Business Profile Enrichment', () => {
         ]);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
-            id: 'reply-uuid', pageId: 'page-uuid', facebookMessageId: 'reply_123',
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
             senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
             replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
             createdTime: new Date(), repliedAt: new Date(),
@@ -319,7 +319,7 @@ describe('MessageProcessor — Handoff Re-enqueue', () => {
         ]);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
-            id: 'reply-uuid', pageId: 'page-uuid', facebookMessageId: 'reply_123',
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
             senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
             replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
             createdTime: new Date(), repliedAt: new Date(),
@@ -397,7 +397,7 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
-            id: 'reply-uuid', pageId: 'page-uuid', facebookMessageId: 'reply_123',
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
             senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
             replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
             createdTime: new Date(), repliedAt: new Date(),

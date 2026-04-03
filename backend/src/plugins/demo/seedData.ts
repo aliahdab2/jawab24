@@ -478,7 +478,7 @@ const DEMO_COMMENTS: Array<{
 ];
 
 const DEMO_MESSAGES: Array<{
-    facebookMessageId: string;
+    platformMessageId: string;
     senderId: string;
     senderName: string;
     message: string;
@@ -494,7 +494,7 @@ const DEMO_MESSAGES: Array<{
 }> = [
     // ── Conversation 1: Course inquiry (Institute page, replied by AI) ──
     {
-        facebookMessageId: 'demo_msg_1a',
+        platformMessageId: 'demo_msg_1a',
         senderId: 'dm_user_1',
         senderName: 'عبدالرحمن الشمري',
         message: 'السلام عليكم، أبي أسأل عن دورة الإنجليزي',
@@ -506,7 +506,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 120,
     },
     {
-        facebookMessageId: 'demo_msg_1b',
+        platformMessageId: 'demo_msg_1b',
         senderId: 'dm_user_1',
         senderName: 'عبدالرحمن الشمري',
         message: 'وعليكم السلام عبدالرحمن! دورة اللغة الإنجليزية تبدأ الأسبوع القادم، 1500 ريال شهرياً مع خصم 20% للتسجيل المبكر ✨',
@@ -518,7 +518,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 119,
     },
     {
-        facebookMessageId: 'demo_msg_1c',
+        platformMessageId: 'demo_msg_1c',
         senderId: 'dm_user_1',
         senderName: 'عبدالرحمن الشمري',
         message: 'كم مدة الدورة؟ وهل فيه أيام محددة؟',
@@ -530,7 +530,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 90,
     },
     {
-        facebookMessageId: 'demo_msg_1d',
+        platformMessageId: 'demo_msg_1d',
         senderId: 'dm_user_1',
         senderName: 'عبدالرحمن الشمري',
         message: 'مدة الدورة 3 أشهر، الأيام: الأحد والثلاثاء والخميس من 6 مساءً حتى 8 مساءً 📚',
@@ -544,7 +544,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 2: Complaint — needs attention (Electronics page) ──
     {
-        facebookMessageId: 'demo_msg_2a',
+        platformMessageId: 'demo_msg_2a',
         senderId: 'dm_user_2',
         senderName: 'نوف الدوسري',
         message: 'مرحبا، طلبت لابتوب من عندكم وفيه مشكلة بالشاشة',
@@ -558,7 +558,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 200,
     },
     {
-        facebookMessageId: 'demo_msg_2b',
+        platformMessageId: 'demo_msg_2b',
         senderId: 'dm_user_2',
         senderName: 'نوف الدوسري',
         message: 'نعتذر عن الإزعاج نوف! يرجى إرسال رقم الطلب وسنتابع معك فوراً 🙏',
@@ -572,7 +572,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 199,
     },
     {
-        facebookMessageId: 'demo_msg_2c',
+        platformMessageId: 'demo_msg_2c',
         senderId: 'dm_user_2',
         senderName: 'نوف الدوسري',
         message: 'الرد الآلي ما يفيد، أبي أكلم مسؤول بشري',
@@ -588,7 +588,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 3: New unreplied inquiry (School page) ──
     {
-        facebookMessageId: 'demo_msg_3a',
+        platformMessageId: 'demo_msg_3a',
         senderId: 'dm_user_3',
         senderName: 'أم ريان',
         message: 'السلام عليكم، أبي أسجل ابني بالصف الأول، كم الرسوم؟',
@@ -602,7 +602,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 4: Resolved conversation (Institute page) ──
     {
-        facebookMessageId: 'demo_msg_4a',
+        platformMessageId: 'demo_msg_4a',
         senderId: 'dm_user_4',
         senderName: 'فيصل العنزي',
         message: 'هل عندكم دورة PMP؟',
@@ -615,7 +615,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 500,
     },
     {
-        facebookMessageId: 'demo_msg_4b',
+        platformMessageId: 'demo_msg_4b',
         senderId: 'dm_user_4',
         senderName: 'فيصل العنزي',
         message: 'نعم فيصل! دورة إدارة المشاريع PMP متاحة، مدتها 6 أسابيع بتكلفة 3500 ريال 🌟',
@@ -630,7 +630,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 5: Shipping question — unreplied (Electronics page) ──
     {
-        facebookMessageId: 'demo_msg_5a',
+        platformMessageId: 'demo_msg_5a',
         senderId: 'dm_user_5',
         senderName: 'سعد القرني',
         message: 'هل توصلون لأبها؟ وكم مدة التوصيل؟',
@@ -644,7 +644,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 6: Auto-replied successfully (School page) ──
     {
-        facebookMessageId: 'demo_msg_6a',
+        platformMessageId: 'demo_msg_6a',
         senderId: 'dm_user_6',
         senderName: 'هدى الزهراني',
         message: 'هل التسجيل مفتوح للمرحلة المتوسطة؟',
@@ -656,7 +656,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 300,
     },
     {
-        facebookMessageId: 'demo_msg_6b',
+        platformMessageId: 'demo_msg_6b',
         senderId: 'dm_user_6',
         senderName: 'هدى الزهراني',
         message: 'أهلاً هدى! نعم التسجيل مفتوح للمرحلة المتوسطة. الرسوم 20,000 ريال سنوياً ويمكن التقسيط 📚',
@@ -670,7 +670,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 7: English inquiry — AI replied (Electronics page) ──
     {
-        facebookMessageId: 'demo_msg_9a',
+        platformMessageId: 'demo_msg_9a',
         senderId: 'dm_user_9',
         senderName: 'James Wilson',
         message: 'Hi, do you have the Samsung Galaxy S24 in silver? What is the price?',
@@ -682,7 +682,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 170,
     },
     {
-        facebookMessageId: 'demo_msg_9b',
+        platformMessageId: 'demo_msg_9b',
         senderId: 'dm_user_9',
         senderName: 'James Wilson',
         message: 'Hi James! Yes, the Samsung Galaxy S24 in silver is available. The 256GB model is 2,900 SAR and the 512GB is 3,400 SAR. Both come with a 1-year warranty. Would you like to place an order?',
@@ -696,7 +696,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 8: English multi-turn (Institute page) ──
     {
-        facebookMessageId: 'demo_msg_10a',
+        platformMessageId: 'demo_msg_10a',
         senderId: 'dm_user_10',
         senderName: 'Emily Chen',
         message: 'Hello! I am interested in the PMP course. When does the next batch start?',
@@ -708,7 +708,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 350,
     },
     {
-        facebookMessageId: 'demo_msg_10b',
+        platformMessageId: 'demo_msg_10b',
         senderId: 'dm_user_10',
         senderName: 'Emily Chen',
         message: 'Hello Emily! The next PMP course starts in two weeks. It runs for 6 weeks (Sun, Tue, Thu evenings 6-9 PM). The fee is 3,500 SAR with early bird discount available.',
@@ -720,7 +720,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 349,
     },
     {
-        facebookMessageId: 'demo_msg_10c',
+        platformMessageId: 'demo_msg_10c',
         senderId: 'dm_user_10',
         senderName: 'Emily Chen',
         message: 'Great! Is there an online option? I live in Al Khobar.',
@@ -732,7 +732,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 330,
     },
     {
-        facebookMessageId: 'demo_msg_10d',
+        platformMessageId: 'demo_msg_10d',
         senderId: 'dm_user_10',
         senderName: 'Emily Chen',
         message: 'Yes Emily! We offer the PMP course online via Zoom with the same schedule. You will get recorded sessions too in case you miss any class.',
@@ -746,7 +746,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 9: Product inquiry — AI replied (Fashion page) ──
     {
-        facebookMessageId: 'demo_msg_11a',
+        platformMessageId: 'demo_msg_11a',
         senderId: 'dm_user_7',
         senderName: 'نورة الغامدي',
         message: 'السلام عليكم، أبي عباية للمناسبات، عندكم شي مميز؟',
@@ -758,7 +758,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 150,
     },
     {
-        facebookMessageId: 'demo_msg_11b',
+        platformMessageId: 'demo_msg_11b',
         senderId: 'dm_user_7',
         senderName: 'نورة الغامدي',
         message: 'وعليكم السلام نورة! عندنا تشكيلة عبايات مناسبات فخمة بأقمشة كريب وحرير. الأسعار من 750 لـ 1,500 ريال. أرسلك صور التشكيلة؟ 🖤✨',
@@ -770,7 +770,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 149,
     },
     {
-        facebookMessageId: 'demo_msg_11c',
+        platformMessageId: 'demo_msg_11c',
         senderId: 'dm_user_7',
         senderName: 'نورة الغامدي',
         message: 'إي أرسلي الصور، وهل فيه تفصيل؟',
@@ -784,7 +784,7 @@ const DEMO_MESSAGES: Array<{
 
     // ── Conversation 10: Exchange request — needs attention (Fashion page) ──
     {
-        facebookMessageId: 'demo_msg_12a',
+        platformMessageId: 'demo_msg_12a',
         senderId: 'dm_user_8',
         senderName: 'خلود المالكي',
         message: 'مرحبا، استلمت الطلب بس اللون مختلف عن الصورة، أبي أرجعه',
@@ -798,7 +798,7 @@ const DEMO_MESSAGES: Array<{
         minutesAgo: 240,
     },
     {
-        facebookMessageId: 'demo_msg_12b',
+        platformMessageId: 'demo_msg_12b',
         senderId: 'dm_user_8',
         senderName: 'خلود المالكي',
         message: 'نعتذر خلود! يمكنك الاسترجاع أو الاستبدال خلال 14 يوم. أرسلي رقم الطلب وسنرتب لك الاسترجاع فوراً 🙏',
@@ -1153,7 +1153,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
             const msgTime = new Date(Date.now() - msgData.minutesAgo * 60 * 1000);
             await db.insert(messages).values({
                 pageId: page.id,
-                facebookMessageId: msgData.facebookMessageId,
+                platformMessageId: msgData.platformMessageId,
                 senderId: msgData.senderId,
                 senderName: msgData.senderName,
                 message: msgData.message,
@@ -1371,7 +1371,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         const msgTime = new Date(Date.now() - msgData.minutesAgo * 60 * 1000);
         await db.insert(messages).values({
             pageId: page.id,
-            facebookMessageId: msgData.facebookMessageId,
+            platformMessageId: msgData.platformMessageId,
             senderId: msgData.senderId,
             senderName: msgData.senderName,
             message: msgData.message,

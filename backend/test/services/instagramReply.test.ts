@@ -25,7 +25,7 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/db/schema', () => ({
     instagramMedia: { id: 'id', instagramMediaId: 'instagramMediaId' },
     instagramComments: { id: 'id', instagramCommentId: 'instagramCommentId' },
-    messages: { id: 'id', instagramMessageId: 'instagramMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction', facebookMessageId: 'facebookMessageId', message: 'message' },
+    messages: { id: 'id', platformMessageId: 'platformMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction', message: 'message' },
 }));
 
 vi.mock('../../src/services/subscriptions', () => ({
@@ -100,6 +100,8 @@ vi.mock('../../src/services/instagram', () => ({
 
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
+        findOrCreateFromWebhook: vi.fn(),
+        getSenderNameBySenderId: vi.fn(),
         isPaused: vi.fn(),
         getRemainingPauseMs: vi.fn().mockResolvedValue(60000),
         hasNewerUnrepliedMessage: vi.fn(),
@@ -214,27 +216,11 @@ describe('InstagramReplyService', () => {
 
     function setupDbForMessage(opts: { existingMessage?: any } = {}) {
         const { existingMessage } = opts;
-
-        const mockSet = vi.fn();
-        const mockFrom = vi.fn().mockImplementation(() => {
-            return {
-                where: vi.fn().mockResolvedValue(
-                    existingMessage ? [existingMessage] : [],
-                ),
-            };
+        const message = existingMessage || { id: 'msg-uuid', replied: false, needsAttention: false };
+        vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValue({
+            message: { ...message, platformMessageId: 'test-msg', pageId: 'page-uuid', senderId: 'sender', senderName: null, message: 'hello', direction: 'incoming', replyText: null, replyMethod: null, createdAt: null },
+            isNew: !existingMessage,
         });
-
-        mockSet.mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) });
-        const mockValues = vi.fn().mockReturnValue({
-            returning: vi.fn().mockResolvedValue([existingMessage || {
-                id: 'msg-uuid',
-                replied: false,
-            }]),
-        });
-
-        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
-        vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
     }
 
     beforeEach(async () => {
@@ -277,6 +263,10 @@ describe('InstagramReplyService', () => {
         vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
         vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined);
         vi.mocked(messagesService.flagMessage).mockResolvedValue(undefined);
+        vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValue({
+            message: { id: 'msg-uuid', platformMessageId: 'test-msg', pageId: 'page-uuid', senderId: 'sender', senderName: null, message: 'hello', direction: 'incoming', replied: false, replyText: null, replyMethod: null, createdAt: null, needsAttention: false } as any,
+            isNew: true,
+        });
     });
 
     describe('setLogger', () => {

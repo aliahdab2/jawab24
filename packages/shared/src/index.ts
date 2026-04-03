@@ -18,7 +18,7 @@ export * from './ecommerce-tools';
 export interface Message {
   id: string;
   pageId: string;
-  facebookMessageId: string;
+  platformMessageId: string;
   senderId: string;
   senderName: string | null;
   message: string;

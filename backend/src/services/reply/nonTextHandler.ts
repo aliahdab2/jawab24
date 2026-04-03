@@ -7,15 +7,7 @@ import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
 import { detectLanguageCode } from '../../utils/language';
 import { getAttachmentPlaceholder, getTextOnlyNudge } from '../../utils/attachmentLabels';
-import { instagramMessageAdapter } from './adapters';
 import type { Logger } from '../../types';
-
-/** Get the platform-prefixed message ID for DB storage (must match adapter dedup keys) */
-function getPrefixedMessageId(messageId: string, platform: 'facebook' | 'instagram'): string {
-    return platform === 'instagram'
-        ? instagramMessageAdapter.getInternalMessageId(messageId)
-        : messageId;
-}
 
 /** Cooldown TTL: 1 hour. Prevents spamming the same customer with nudge replies. */
 const NUDGE_COOLDOWN_SECONDS = 3600;
@@ -70,7 +62,7 @@ export async function handleNonTextMessage(
 
                 // Store transcribed text in DB (not placeholder)
                 await messagesService.findOrCreateFromWebhook(
-                    page.id, getPrefixedMessageId(messageId, platform), senderId, result.text, undefined, 'audio',
+                    page.id, messageId, senderId, result.text, undefined, 'audio',
                 );
 
                 // Enqueue for the normal AI reply pipeline
@@ -96,7 +88,7 @@ export async function handleNonTextMessage(
         // 4. Non-audio or failed transcription: store placeholder + send nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
         await messagesService.findOrCreateFromWebhook(
-            page.id, getPrefixedMessageId(messageId, platform), senderId, placeholder, undefined, attachmentType,
+            page.id, messageId, senderId, placeholder, undefined, attachmentType,
         );
 
         // 5. Check cooldown — one nudge per sender per page per hour

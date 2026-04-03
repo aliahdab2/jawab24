@@ -118,7 +118,7 @@ export class MessageProcessor {
                 message: {
                     id: storedMessage.id,
                     pageId: page.id,
-                    facebookMessageId: platformMessageId,
+                    platformMessageId: platformMessageId,
                     senderId,
                     senderName: senderName ?? null,
                     message: messageText,
@@ -445,7 +445,7 @@ export class MessageProcessor {
                 outgoingMessage = {
                     id: stored.id,
                     pageId: stored.pageId,
-                    facebookMessageId: stored.facebookMessageId,
+                    platformMessageId: stored.platformMessageId,
                     senderId: stored.senderId,
                     senderName: stored.senderName,
                     message: stored.message,

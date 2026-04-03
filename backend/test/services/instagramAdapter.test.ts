@@ -26,11 +26,12 @@ vi.mock('../../src/services/instagram', () => ({
     },
 }));
 
-// Mock messages service (DB cache for sender name)
+// Mock messages service
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
         getSenderNameBySenderId: vi.fn(),
         markAsReplied: vi.fn(),
+        findOrCreateFromWebhook: vi.fn(),
     },
 }));
 
@@ -38,7 +39,6 @@ const mockedAxios = vi.mocked(axios, true);
 
 import { InstagramMessageAdapter } from '../../src/services/reply/adapters/instagramAdapter';
 import { messagesService } from '../../src/services/messages';
-import { db } from '../../src/db';
 
 describe('InstagramMessageAdapter', () => {
     let adapter: InstagramMessageAdapter;
@@ -124,24 +124,11 @@ describe('InstagramMessageAdapter', () => {
         const IG_MESSAGE_ID = 'ig-msg-abc';
         const MESSAGE_TEXT = 'Hello from Instagram';
 
-        it('creates a new message with senderName stored', async () => {
-            // No existing message
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([]),
-                }),
-            } as any);
-
-            const mockCreated = {
-                id: 'new-msg-id',
-                replied: false,
-                needsAttention: false,
-            };
-            vi.mocked(db.insert).mockReturnValue({
-                values: vi.fn().mockReturnValue({
-                    returning: vi.fn().mockResolvedValue([mockCreated]),
-                }),
-            } as any);
+        it('delegates to messagesService.findOrCreateFromWebhook with platform instagram', async () => {
+            vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValue({
+                message: { id: 'new-msg-id', platformMessageId: IG_MESSAGE_ID, pageId: PAGE_ID, senderId: SENDER_ID, senderName: 'instagram_user', message: MESSAGE_TEXT, direction: 'incoming', replied: false, replyText: null, replyMethod: null, createdAt: null } as any,
+                isNew: true,
+            });
 
             const result = await adapter.storeIncomingMessage(
                 PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'instagram_user',
@@ -149,31 +136,16 @@ describe('InstagramMessageAdapter', () => {
 
             expect(result.isNew).toBe(true);
             expect(result.message.id).toBe('new-msg-id');
-
-            // Verify insert was called with senderName
-            const insertCall = vi.mocked(db.insert).mock.results[0].value;
-            const valuesCall = insertCall.values;
-            expect(valuesCall).toHaveBeenCalledWith(expect.objectContaining({
-                senderName: 'instagram_user',
-                platform: 'instagram',
-                senderId: SENDER_ID,
-                instagramMessageId: IG_MESSAGE_ID,
-            }));
+            expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
+                PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'instagram_user', undefined, 'instagram',
+            );
         });
 
-        it('returns existing message without creating a new one', async () => {
-            const existingRow = {
-                id: 'existing-id',
-                replied: true,
-                needsAttention: false,
-                senderName: 'already_set',
-                instagramMessageId: IG_MESSAGE_ID, // already set
-            };
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([existingRow]),
-                }),
-            } as any);
+        it('returns existing message when findOrCreateFromWebhook finds one', async () => {
+            vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValue({
+                message: { id: 'existing-id', platformMessageId: IG_MESSAGE_ID, pageId: PAGE_ID, senderId: SENDER_ID, senderName: 'already_set', message: MESSAGE_TEXT, direction: 'incoming', replied: true, replyText: null, replyMethod: null, createdAt: null, needsAttention: false } as any,
+                isNew: false,
+            });
 
             const result = await adapter.storeIncomingMessage(
                 PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'new_name',
@@ -182,79 +154,12 @@ describe('InstagramMessageAdapter', () => {
             expect(result.isNew).toBe(false);
             expect(result.message.id).toBe('existing-id');
             expect(result.message.replied).toBe(true);
-            // No updates needed — both instagramMessageId and senderName already set
-            expect(db.update).not.toHaveBeenCalled();
-        });
-
-        it('backfills instagramMessageId and senderName on pre-created message', async () => {
-            const existingRow = {
-                id: 'existing-id',
-                replied: false,
-                needsAttention: false,
-                senderName: null,
-                instagramMessageId: null, // pre-created by nonTextHandler without this field
-            };
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([existingRow]),
-                }),
-            } as any);
-
-            vi.mocked(db.update).mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(undefined),
-                }),
-            } as any);
-
-            const result = await adapter.storeIncomingMessage(
-                PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'late_name',
-            );
-
-            expect(result.isNew).toBe(false);
-            expect(db.update).toHaveBeenCalled();
-            const updateCall = vi.mocked(db.update).mock.results[0].value;
-            expect(updateCall.set).toHaveBeenCalledWith({
-                instagramMessageId: IG_MESSAGE_ID,
-                senderName: 'late_name',
-            });
-        });
-
-        it('creates message without senderName when not provided', async () => {
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue([]),
-                }),
-            } as any);
-
-            const mockCreated = {
-                id: 'no-name-msg',
-                replied: false,
-                needsAttention: false,
-            };
-            vi.mocked(db.insert).mockReturnValue({
-                values: vi.fn().mockReturnValue({
-                    returning: vi.fn().mockResolvedValue([mockCreated]),
-                }),
-            } as any);
-
-            const result = await adapter.storeIncomingMessage(
-                PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT,
-            );
-
-            expect(result.isNew).toBe(true);
-            expect(result.message.id).toBe('no-name-msg');
-
-            const insertCall = vi.mocked(db.insert).mock.results[0].value;
-            expect(insertCall.values).toHaveBeenCalledWith(expect.objectContaining({
-                senderName: undefined,
-                platform: 'instagram',
-            }));
         });
     });
 
     describe('getInternalMessageId', () => {
-        it('prefixes Instagram message ID with ig_', () => {
-            expect(adapter.getInternalMessageId('abc123')).toBe('ig_abc123');
+        it('returns raw Instagram message ID without prefix', () => {
+            expect(adapter.getInternalMessageId('abc123')).toBe('abc123');
         });
     });
 

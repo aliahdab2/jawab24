@@ -1132,7 +1132,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'ig_msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video',
+                mockPage.id, 'msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video',
             );
 
             // Nudge sent via Instagram API

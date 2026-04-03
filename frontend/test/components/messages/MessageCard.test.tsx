@@ -11,7 +11,7 @@ function makeMessage(overrides: Partial<Message> = {}): Message {
   return {
     id: `msg-${Math.random().toString(36).slice(2, 8)}`,
     pageId: 'page-1',
-    facebookMessageId: `fb-${Math.random().toString(36).slice(2, 8)}`,
+    platformMessageId: `msg-${Math.random().toString(36).slice(2, 8)}`,
     senderId: 'sender-1',
     senderName: 'Ali',
     message: 'Hello',
