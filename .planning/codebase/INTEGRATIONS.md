@@ -56,6 +56,59 @@
 
 ---
 
+### WhatsApp Business (Meta Cloud API)
+- **Purpose**: Auto-reply automation for WhatsApp DMs
+- **Status**: Backend complete (2026-04-04); Meta Tech Provider Embedded Signup approval pending
+- **Business Model**: Tech Provider (ManyChat model) — merchant connects their own WhatsApp Business Account; Meta bills merchant directly for per-message costs
+
+- **Connection Flow (planned — Embedded Signup)**:
+  - Merchant clicks "Connect WhatsApp" → Facebook Embedded Signup popup
+  - Embedded Signup callback returns `phone_number_id` + `waba_id` + access token
+  - Backend stores WhatsApp fields on existing `pages` row (or creates new row for WhatsApp-only merchant)
+
+- **Access Token**:
+  - Merchant's page-level access token (same token as Facebook/Instagram)
+  - Encrypted at rest (AES-256-GCM, same key as Facebook tokens)
+
+- **Webhook Setup**:
+  - Same `/webhook` endpoint as Facebook/Instagram
+  - `object: "whatsapp_business_account"` distinguishes WhatsApp payloads
+  - Verification: X-Hub-Signature-256 HMAC-SHA256 (same as Facebook)
+  - Events: `messages` field on WABA object
+
+- **Key API Endpoints Used**:
+  - `POST /{version}/{phone_number_id}/messages` — send text message (with `messaging_product: "whatsapp"`)
+  - `POST /{version}/{phone_number_id}/messages` — mark as read (with `status: "read"`, `message_id: wamid`)
+
+- **Constraints**:
+  - 24h messaging window: free-form replies only allowed within 24h of last customer message
+  - Template messages required outside window (Phase 4 — not yet implemented)
+  - No sender profile API — display name comes from webhook `contacts[].profile.name` only (cached in DB)
+  - `sendTypingIndicator` is a no-op (markAsRead needs wamid, not senderId — Phase 6)
+
+- **Message ID Format**: `wamid.xxx` (e.g., `wamid.HBgLMTkxMzExMTExMTEVAgASGBI...`)
+
+- **Implementation Location**:
+  - Cloud API client: `backend/src/services/whatsapp.ts`
+  - Reply service: `backend/src/services/whatsappReply.ts`
+  - Platform adapter: `backend/src/services/reply/adapters/whatsappAdapter.ts`
+  - Webhook handler: `backend/src/controllers/webhook.ts` (WhatsApp branch)
+  - Page lookup: `backend/src/services/pages.ts` (`getPageByWhatsAppPhoneNumberId`)
+
+- **Schema**:
+  - `pages.whatsapp_phone_number_id` — Cloud API phone number ID
+  - `pages.whatsapp_business_account_id` — WABA ID
+  - `pages.whatsapp_display_phone_number` — human-readable "+966 55..."
+  - `pages.whatsapp_auto_reply_enabled` — per-channel toggle
+  - `messages.platform_message_id` — generic dedup column (wamid for WhatsApp, message ID for Facebook/Instagram)
+
+- **Meta Submission Status**:
+  - Must request Embedded Signup access (App Dashboard → WhatsApp → Embedded Signup) — ~3-5 business days
+  - No App Review needed — only business verification + Standard Access required
+  - Need Solution ID before building frontend Embedded Signup flow
+
+---
+
 ## E-Commerce Platforms
 
 ### Shopify

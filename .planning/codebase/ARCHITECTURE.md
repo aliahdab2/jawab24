@@ -2,7 +2,7 @@
 
 ## System Overview
 
-Jawab24 is a monorepo-based auto-reply platform that automatically generates intelligent responses to customer inquiries on Facebook, Instagram, and e-commerce platforms (Shopify, Salla). The system consists of three distributed services communicating via a shared queue (BullMQ/Redis) and HTTP APIs.
+Jawab24 is a monorepo-based auto-reply platform that automatically generates intelligent responses to customer inquiries on Facebook, Instagram, WhatsApp, and e-commerce platforms (Shopify, Salla, Zid). The system consists of three distributed services communicating via a shared queue (BullMQ/Redis) and HTTP APIs.
 
 **Core functionality**: When customers send messages or comments, webhooks trigger reply processing. Replies are either template-matched or AI-generated via the OpenAI API, then posted back to the customer. The system also supports knowledge base enrichment from e-commerce catalogs, customer context awareness, and smart routing between auto-reply and human handoff.
 
@@ -31,7 +31,8 @@ Each service is independently deployable but shares:
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                         External Systems                             │
-│  (Facebook Graph API, Instagram, Shopify, Salla, OpenAI, Stripe)   │
+│  (Facebook Graph API, Instagram, WhatsApp Cloud API,               │
+│   Shopify, Salla, Zid, OpenAI, Stripe)                            │
 └────────────────────────┬────────────────────────────────────────────┘
                          │ Webhooks
                          ▼
@@ -191,7 +192,7 @@ Each service is independently deployable but shares:
      - `replyService.processComment()` — template/AI reply logic
      - `instagramReplyService.sendReply()` — Instagram Graph API calls
      - `stripe.ts` — subscription management
-     - `ecommerce.ts` — Shopify/Salla product sync
+     - `ecommerce.ts` — Shopify/Salla/Zid product sync
    - Subdomain services:
      - `kb/` — Knowledge Base (embedding, retrieval, semantic cache)
      - `reply/` — Reply generation pipeline (context, formatting, quality checks)
@@ -205,8 +206,9 @@ Each service is independently deployable but shares:
 
 7. **Workers** (`src/workers/`):
    - **replyWorker.ts** — BullMQ worker consuming `REPLY_QUEUE`
-     - Processes Facebook comments, messages, Instagram comments
-     - Calls reply services, enqueues AI jobs if needed
+     - Processes Facebook comments, Facebook messages, Instagram comments, Instagram messages, WhatsApp messages
+     - `processMessageJob(job, label, service)` factory handles all DM platforms (FB/IG/WA)
+     - Calls reply services via `MessagePlatformAdapter` interface, enqueues AI jobs if needed
      - Retries and error recovery
    - **ecommerceSyncWorker.ts** — Syncs Shopify/Salla product catalogs
    - **shopifySyncWorker.ts** — Shopify-specific sync logic

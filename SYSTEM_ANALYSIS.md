@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **System Reference Document / وثيقة مرجعية للنظام**
-> Generated: 2026-02-28 | Updated: 2026-04-03 (v26 — added file upload for KB, Zid e-commerce, phone OTP auth, voice KB input, GPT-4o transcription, Stripe Embedded Checkout, yearly billing, comments grouping, team phone invites, e-commerce notifications plan)
+> Generated: 2026-02-28 | Updated: 2026-04-04 (v27 — WhatsApp Cloud API backend: `whatsapp_message` job type, WhatsApp adapter, `platformMessageId` column replacing `facebookMessageId`/`instagramMessageId`, Meta Tech Provider Embedded Signup plan)
 
 ---
 
@@ -64,10 +64,12 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 - **Shared Package**: TypeScript types, constants, sanitization utilities
 
 **External Integrations:**
-- Facebook Graph API (comments + DMs)
-- Instagram Graph API (comments + DMs) ⚠️ code path exists; permissions deferred — not yet live
+- Facebook Graph API (comments + DMs) — Live (App ID: 774211662298446)
+- Instagram Graph API (comments + DMs) — backend complete; Instagram permissions pending Meta App Review
+- WhatsApp Cloud API (DMs) — backend complete; Meta Tech Provider Embedded Signup approval pending
 - Shopify API (products + policies)
 - Salla API (products + policies)
+- Zid API (products + policies — Saudi Arabia)
 - OpenAI API (reply generation + embeddings + translation)
 - Stripe API (subscriptions + billing; Embedded Checkout with PaymentElement, monthly + yearly billing intervals, Billing Portal for plan changes)
 - Vonage SMS API (phone OTP authentication + team invites)
@@ -83,10 +85,12 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 - **الحزمة المشتركة**: أنواع TypeScript، ثوابت، أدوات تنظيف المدخلات
 
 **التكاملات الخارجية:**
-- Facebook Graph API (التعليقات + الرسائل المباشرة)
-- Instagram Graph API (التعليقات + الرسائل المباشرة) ⚠️ مسار الكود موجود؛ الصلاحيات مؤجلة — غير مفعّل بعد
+- Facebook Graph API (التعليقات + الرسائل المباشرة) — مباشر (App ID: 774211662298446)
+- Instagram Graph API (التعليقات + الرسائل المباشرة) — الكود مكتمل؛ صلاحيات Instagram قيد مراجعة Meta
+- WhatsApp Cloud API (الرسائل المباشرة) — الكود مكتمل؛ موافقة Meta Tech Provider Embedded Signup قيد الانتظار
 - Shopify API (المنتجات + السياسات)
 - Salla API (المنتجات + السياسات)
+- Zid API (المنتجات + السياسات — المملكة العربية السعودية)
 - OpenAI API (توليد الردود + التضمينات + الترجمة)
 - Stripe API (الاشتراكات + الفواتير؛ Embedded Checkout مع PaymentElement، دوري شهري وسنوي)
 - Vonage SMS API (رمز OTP عبر SMS + دعوة الفريق)
@@ -125,6 +129,7 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║  │    - facebook_message                   │                            ║
 ║  │    - instagram_comment                  │                            ║
 ║  │    - instagram_message                  │                            ║
+║  │    - whatsapp_message                   │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
 ║                   ▼                                                     ║
@@ -1752,7 +1757,7 @@ Jawab24 has a solid monitoring foundation across 5 layers:
 
 ### Pipeline Metrics: All 20 Outcomes
 
-These are tracked per pipeline (facebook_comment, instagram_comment, facebook_message, instagram_message):
+These are tracked per pipeline (facebook_comment, instagram_comment, facebook_message, instagram_message, whatsapp_message):
 
 | Outcome | What It Means | Severity |
 |---------|--------------|----------|

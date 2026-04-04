@@ -30,6 +30,11 @@
 - Updated `replyWorker.test.ts` (WhatsApp service mock)
 - All 3,814 existing tests pass
 
+### Documentation ✅
+- `SYSTEM_ANALYSIS.md` — WhatsApp added to integrations list, `whatsapp_message` in job types and pipeline metrics
+- `.planning/codebase/INTEGRATIONS.md` — full WhatsApp Cloud API section added (business model, webhook, schema, Meta submission steps)
+- `.planning/codebase/ARCHITECTURE.md` — overview and diagram updated to include WhatsApp
+
 ---
 
 ## Remaining Work
