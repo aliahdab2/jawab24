@@ -20,7 +20,7 @@ interface WebhookSubscription {
 const SUBSCRIPTIONS: WebhookSubscription[] = [
     { object: 'page', fields: 'feed,messages', label: 'Facebook Page' },
     { object: 'instagram', fields: 'messages,comments', label: 'Instagram' },
-    // Future: { object: 'whatsapp_business_account', fields: 'messages', label: 'WhatsApp' },
+    { object: 'whatsapp_business_account', fields: 'messages', label: 'WhatsApp' },
 ];
 
 /**

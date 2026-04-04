@@ -14,6 +14,7 @@ import { pipelineOutcomeCounter } from './metrics';
 export type Pipeline =
     | 'facebook_message'
     | 'instagram_message'
+    | 'whatsapp_message'
     | 'facebook_comment'
     | 'instagram_comment';
 

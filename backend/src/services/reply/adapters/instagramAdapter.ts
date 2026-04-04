@@ -3,6 +3,7 @@ import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { messagesService } from '../../messages';
 import { config } from '../../../config';
+import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
 
 const INSTAGRAM_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
@@ -19,19 +20,10 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
     async getPage(instagramAccountId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByInstagramId(instagramAccountId);
         if (!page) return null;
-        return {
-            id: page.id,
-            userId: page.userId,
-            workspaceId: page.workspaceId,
-            name: page.name,
-            accessToken: page.accessToken,
-            knowledgeBase: page.knowledgeBase,
-            kbActiveVersion: page.kbActiveVersion ?? null,
+        return mapToPlatformPage(page, {
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
             platformAccountId: page.instagramAccountId ?? undefined,
-            ecommerceStoreId: page.ecommerceStoreId,
-            businessProfile: page.businessProfile as Record<string, unknown> | null,
-        };
+        });
     }
 
     async fetchSenderName(senderId: string, accessToken: string, pageId?: string): Promise<string | undefined> {
@@ -59,13 +51,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         text: string,
         senderName?: string,
     ): Promise<{ message: StoredMessage; isNew: boolean }> {
-        const { message, isNew } = await messagesService.findOrCreateFromWebhook(
-            pageId, instagramMessageId, senderId, text, senderName, undefined, 'instagram',
-        );
-        return {
-            message: { id: message.id, replied: message.replied, needsAttention: message.needsAttention ?? false },
-            isNew,
-        };
+        return storeMessage(pageId, instagramMessageId, senderId, text, senderName, 'instagram');
     }
 
     getInternalMessageId(instagramMessageId: string): string {
@@ -103,17 +89,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         }
     }
 
-    async markAsReplied(
-        messageId: string,
-        replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual',
-        needsAttention?: boolean,
-        flagReason?: string,
-        aiIntent?: string,
-        aiOriginalReply?: string,
-    ): Promise<void> {
-        await messagesService.markAsReplied(messageId, replyText, replyMethod, needsAttention, flagReason, aiIntent, undefined, aiOriginalReply);
-    }
+    markAsReplied = sharedMarkAsReplied;
 }
 
 export const instagramMessageAdapter = new InstagramMessageAdapter();

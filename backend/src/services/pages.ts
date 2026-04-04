@@ -701,6 +701,20 @@ export class PagesService {
         if (page) page.accessToken = maybeDecryptToken(page.accessToken);
         return page;
     }
+
+    /**
+     * Get page by WhatsApp Phone Number ID
+     */
+    async getPageByWhatsAppPhoneNumberId(phoneNumberId: string) {
+        const result = await db
+            .select()
+            .from(pages)
+            .where(eq(pages.whatsappPhoneNumberId, phoneNumberId));
+
+        const page = result[0] || null;
+        if (page) page.accessToken = maybeDecryptToken(page.accessToken);
+        return page;
+    }
 }
 
 export const pagesService = new PagesService();

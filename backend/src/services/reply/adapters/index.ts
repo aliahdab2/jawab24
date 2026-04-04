@@ -2,3 +2,4 @@ export { facebookMessageAdapter, FacebookMessageAdapter } from './facebookAdapte
 export { instagramMessageAdapter, InstagramMessageAdapter } from './instagramAdapter';
 export { facebookCommentAdapter, FacebookCommentAdapter } from './facebookCommentAdapter';
 export { instagramCommentAdapter, InstagramCommentAdapter } from './instagramCommentAdapter';
+export { whatsappMessageAdapter, WhatsAppMessageAdapter } from './whatsappAdapter';

@@ -32,13 +32,13 @@ describe('Meta Webhook Subscriptions', () => {
         vi.clearAllMocks();
     });
 
-    it('should subscribe to both Page and Instagram webhook objects', async () => {
+    it('should subscribe to Page, Instagram, and WhatsApp webhook objects', async () => {
         vi.mocked(axios.post).mockResolvedValue({ data: { success: true } });
 
         const result = await ensureMetaWebhookSubscriptions(CALLBACK_URL, logger);
 
         expect(result).toBe(true);
-        expect(axios.post).toHaveBeenCalledTimes(2);
+        expect(axios.post).toHaveBeenCalledTimes(3);
 
         // Page subscription
         expect(axios.post).toHaveBeenCalledWith(
@@ -69,6 +69,21 @@ describe('Meta Webhook Subscriptions', () => {
                 },
             }
         );
+
+        // WhatsApp subscription
+        expect(axios.post).toHaveBeenCalledWith(
+            'https://graph.facebook.com/v18.0/test_app_id/subscriptions',
+            null,
+            {
+                params: {
+                    object: 'whatsapp_business_account',
+                    callback_url: CALLBACK_URL,
+                    verify_token: 'test_verify_token',
+                    fields: 'messages',
+                    access_token: APP_TOKEN,
+                },
+            }
+        );
     });
 
     it('should return true only when all subscriptions succeed', async () => {
@@ -88,6 +103,7 @@ describe('Meta Webhook Subscriptions', () => {
 
         vi.mocked(axios.post)
             .mockRejectedValueOnce(axiosError)
+            .mockResolvedValueOnce({ data: { success: true } })
             .mockResolvedValueOnce({ data: { success: true } });
 
         const result = await ensureMetaWebhookSubscriptions(CALLBACK_URL, logger);
@@ -104,7 +120,8 @@ describe('Meta Webhook Subscriptions', () => {
 
         vi.mocked(axios.post)
             .mockResolvedValueOnce({ data: { success: true } })
-            .mockRejectedValueOnce(axiosError);
+            .mockRejectedValueOnce(axiosError)
+            .mockResolvedValueOnce({ data: { success: true } });
 
         const result = await ensureMetaWebhookSubscriptions(CALLBACK_URL, logger);
 
@@ -120,12 +137,13 @@ describe('Meta Webhook Subscriptions', () => {
 
         vi.mocked(axios.post)
             .mockRejectedValueOnce(axiosError)
+            .mockResolvedValueOnce({ data: { success: true } })
             .mockResolvedValueOnce({ data: { success: true } });
 
         await ensureMetaWebhookSubscriptions(CALLBACK_URL, logger);
 
-        // Both calls should have been attempted
-        expect(axios.post).toHaveBeenCalledTimes(2);
+        // All 3 calls should have been attempted
+        expect(axios.post).toHaveBeenCalledTimes(3);
     });
 
     it('should log success for each platform', async () => {

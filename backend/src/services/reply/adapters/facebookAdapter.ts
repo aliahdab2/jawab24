@@ -2,6 +2,7 @@ import { pagesService } from '../../pages';
 import { facebookService } from '../../facebook';
 import { messagesService } from '../../messages';
 import { redis } from '../../../lib/redis';
+import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
 
 const SENDER_NAME_CACHE_TTL = 86400; // 24 hours
@@ -19,18 +20,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
     async getPage(facebookPageId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByFacebookId(facebookPageId);
         if (!page) return null;
-        return {
-            id: page.id,
-            userId: page.userId,
-            workspaceId: page.workspaceId,
-            name: page.name,
-            accessToken: page.accessToken,
-            knowledgeBase: page.knowledgeBase,
-            kbActiveVersion: page.kbActiveVersion ?? null,
-            autoReplyEnabled: page.autoReplyEnabled ?? true,
-            ecommerceStoreId: page.ecommerceStoreId,
-            businessProfile: page.businessProfile as Record<string, unknown> | null,
-        };
+        return mapToPlatformPage(page, { autoReplyEnabled: page.autoReplyEnabled ?? true });
     }
 
     async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined> {
@@ -68,13 +58,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         text: string,
         senderName?: string,
     ): Promise<{ message: StoredMessage; isNew: boolean }> {
-        const { message, isNew } = await messagesService.findOrCreateFromWebhook(
-            pageId, messageId, senderId, text, senderName,
-        );
-        return {
-            message: { id: message.id, replied: message.replied, needsAttention: message.needsAttention ?? false },
-            isNew,
-        };
+        return storeMessage(pageId, messageId, senderId, text, senderName);
     }
 
     getInternalMessageId(messageId: string): string {
@@ -93,17 +77,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         await facebookService.sendPrivateMessage(page.accessToken, senderId, text);
     }
 
-    async markAsReplied(
-        messageId: string,
-        replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual',
-        needsAttention?: boolean,
-        flagReason?: string,
-        aiIntent?: string,
-        aiOriginalReply?: string,
-    ): Promise<void> {
-        await messagesService.markAsReplied(messageId, replyText, replyMethod, needsAttention, flagReason, aiIntent, undefined, aiOriginalReply);
-    }
+    markAsReplied = sharedMarkAsReplied;
 }
 
 export const facebookMessageAdapter = new FacebookMessageAdapter();

@@ -3,6 +3,7 @@ import { config } from '../config';
 import { ReplyJobData, ReplyJobResult, REPLY_QUEUE_NAME } from '@jawab24/shared';
 import { replyService } from '../services/reply';
 import { instagramReplyService } from '../services/instagramReply';
+import { whatsappReplyService } from '../services/whatsappReply';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { pipelineMetrics, Pipeline } from '../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../types';
@@ -64,12 +65,17 @@ async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobR
 }
 
 /**
- * Process a Facebook message job
+ * Shared message job handler — used by Facebook, Instagram, and WhatsApp.
+ * All three follow the same flow: validate → delegate to service → map result.
  */
-async function processFacebookMessage(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
+async function processMessageJob(
+    job: Job<ReplyJobData>,
+    label: string,
+    service: { processMessage: (pageId: string, senderId: string, text: string, messageId: string) => Promise<import('../interfaces').MessageResult> },
+): Promise<ReplyJobResult> {
     const { pageId, messageId, senderId, text, requestId } = job.data;
 
-    logger.info('[ReplyWorker] Processing Facebook message', {
+    logger.info(`[ReplyWorker] Processing ${label} message`, {
         jobId: job.id,
         requestId,
         messageId,
@@ -77,15 +83,10 @@ async function processFacebookMessage(job: Job<ReplyJobData>): Promise<ReplyJobR
     });
 
     if (!messageId || !senderId) {
-        throw new UnrecoverableError('Missing messageId or senderId for Facebook message');
+        throw new UnrecoverableError(`Missing messageId or senderId for ${label} message`);
     }
 
-    const result = await replyService.processMessage(
-        pageId,
-        senderId,
-        text,
-        messageId
-    );
+    const result = await service.processMessage(pageId, senderId, text, messageId);
 
     return {
         success: result.success,
@@ -132,39 +133,6 @@ async function processInstagramComment(job: Job<ReplyJobData>): Promise<ReplyJob
 }
 
 /**
- * Process an Instagram message job
- */
-async function processInstagramMessage(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
-    const { pageId, messageId, senderId, text, requestId } = job.data;
-
-    logger.info('[ReplyWorker] Processing Instagram message', {
-        jobId: job.id,
-        requestId,
-        messageId,
-        pageId,
-    });
-
-    if (!messageId || !senderId) {
-        throw new UnrecoverableError('Missing messageId or senderId for Instagram message');
-    }
-
-    const result = await instagramReplyService.processMessage(
-        pageId, // This is the Instagram account ID
-        senderId,
-        text,
-        messageId
-    );
-
-    return {
-        success: result.success,
-        replyText: result.replyText,
-        replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
-        error: result.error,
-        handoffDelayMs: result.handoffDelayMs,
-    };
-}
-
-/**
  * Main job processor
  * Routes jobs to the appropriate handler based on jobType
  */
@@ -189,13 +157,16 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
                 result = await processFacebookComment(job);
                 break;
             case 'facebook_message':
-                result = await processFacebookMessage(job);
+                result = await processMessageJob(job, 'Facebook', replyService);
                 break;
             case 'instagram_comment':
                 result = await processInstagramComment(job);
                 break;
             case 'instagram_message':
-                result = await processInstagramMessage(job);
+                result = await processMessageJob(job, 'Instagram', instagramReplyService);
+                break;
+            case 'whatsapp_message':
+                result = await processMessageJob(job, 'WhatsApp', whatsappReplyService);
                 break;
             default:
                 throw new UnrecoverableError(`Unknown job type: ${jobType}`);
@@ -223,7 +194,7 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
                     });
                 } else if (!isComment && job.data.messageId && job.data.senderId) {
                     await enqueueMessage({
-                        jobType: jobType as 'facebook_message' | 'instagram_message',
+                        jobType: jobType as 'facebook_message' | 'instagram_message' | 'whatsapp_message',
                         pageId: job.data.pageId,
                         messageId: job.data.messageId,
                         senderId: job.data.senderId,
@@ -307,6 +278,7 @@ export function startWorker(workerLogger?: Logger): Worker<ReplyJobData, ReplyJo
         // Propagate logger to services so their internal logging (lap timing, etc.) works
         replyService.setLogger(workerLogger);
         instagramReplyService.setLogger(workerLogger);
+        whatsappReplyService.setLogger(workerLogger);
     }
 
     worker = new Worker<ReplyJobData, ReplyJobResult>(

@@ -74,7 +74,7 @@ export async function enqueueComment(data: {
  * Add a message processing job to the queue
  */
 export async function enqueueMessage(data: {
-    jobType: 'facebook_message' | 'instagram_message';
+    jobType: 'facebook_message' | 'instagram_message' | 'whatsapp_message';
     pageId: string;
     messageId: string;
     senderId: string;

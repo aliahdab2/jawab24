@@ -59,6 +59,26 @@ interface WebhookEntry {
     changes?: WebhookChange[];
 }
 
+interface WhatsAppWebhookEntry {
+    id: string;
+    changes: Array<{
+        field: string;
+        value: {
+            messaging_product: string;
+            metadata: { phone_number_id: string; display_phone_number: string };
+            contacts?: Array<{ profile: { name: string }; wa_id: string }>;
+            messages?: Array<{
+                id: string;
+                from: string;
+                timestamp: string;
+                type: string;
+                text?: { body: string };
+            }>;
+            statuses?: Array<unknown>;
+        };
+    }>;
+}
+
 interface WebhookChange {
     field: string;
     value: {
@@ -163,8 +183,15 @@ export class WebhookController {
             });
 
             return reply.status(200).send('EVENT_RECEIVED');
+        } else if (body.object === 'whatsapp_business_account') {
+            // Process WhatsApp webhooks asynchronously
+            this.processWhatsAppWebhookAsync(body.entry as unknown as WhatsAppWebhookEntry[]).catch(err => {
+                this.log().error('Error processing WhatsApp webhook', { error: String(err) });
+            });
+
+            return reply.status(200).send('EVENT_RECEIVED');
         } else {
-            // Return a '404 Not Found' if event is not from a page or instagram subscription
+            // Return a '404 Not Found' if event is not from a known subscription
             this.log().info('Unknown webhook object type', { objectType: body.object });
             return reply.status(404).send();
         }
@@ -483,6 +510,62 @@ export class WebhookController {
                 messageId, 
                 error: String(error) 
             });
+        }
+    }
+
+    // ================== WhatsApp Webhook Processing ==================
+
+    /**
+     * Process WhatsApp webhook entries asynchronously
+     */
+    private async processWhatsAppWebhookAsync(entries: WhatsAppWebhookEntry[]) {
+        for (const entry of entries) {
+            for (const change of entry.changes) {
+                if (change.field !== 'messages') continue;
+
+                const { metadata, messages: waMessages, contacts, statuses } = change.value;
+                const phoneNumberId = metadata.phone_number_id;
+
+                // Skip status callbacks (delivered/read receipts) — phase 1
+                if (statuses && !waMessages) continue;
+                if (!waMessages) continue;
+
+                // Build name lookup from contacts array
+                const contactNames = new Map<string, string>();
+                for (const c of contacts || []) {
+                    if (c.profile?.name) contactNames.set(c.wa_id, c.profile.name);
+                }
+
+                for (const msg of waMessages) {
+                    // Phase 1: only handle text messages
+                    if (msg.type !== 'text' || !msg.text?.body) {
+                        this.log().debug('[WhatsApp] Skipping non-text message', {
+                            messageId: msg.id, type: msg.type,
+                        });
+                        continue;
+                    }
+
+                    const senderName = contactNames.get(msg.from);
+
+                    try {
+                        const jobId = await enqueueMessage({
+                            jobType: 'whatsapp_message',
+                            pageId: phoneNumberId,
+                            messageId: msg.id,
+                            senderId: msg.from,
+                            text: msg.text.body,
+                            senderName,
+                            requestId: this.requestId,
+                        });
+
+                        this.log().info('[WhatsApp] Message enqueued', { messageId: msg.id, jobId });
+                    } catch (error) {
+                        this.log().error('[WhatsApp] Failed to enqueue message', {
+                            messageId: msg.id, error: String(error),
+                        });
+                    }
+                }
+            }
         }
     }
 

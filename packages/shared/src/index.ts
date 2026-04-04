@@ -34,7 +34,7 @@ export interface Message {
   aiIntent?: string | null;
   aiOriginalReply?: string | null;
   resolved?: boolean;
-  platform?: 'facebook' | 'instagram';
+  platform?: 'facebook' | 'instagram' | 'whatsapp';
   attachmentType?: string | null;
 }
 
@@ -93,6 +93,11 @@ export interface Page {
   instagramUsername?: string | null;
   instagramProfilePicUrl?: string | null;
   instagramAutoReplyEnabled?: boolean | null;
+  // WhatsApp fields
+  whatsappPhoneNumberId?: string | null;
+  whatsappBusinessAccountId?: string | null;
+  whatsappDisplayPhoneNumber?: string | null;
+  whatsappAutoReplyEnabled?: boolean | null;
   // E-commerce store linked to this page
   ecommerceStoreId?: string | null;
   // KB fields
@@ -299,7 +304,7 @@ export const AI_QUEUE_NAME = 'ai-generation-queue';
 // --- Reply Queue Types ---
 export interface ReplyJobData {
   // Job identification
-  jobType: 'facebook_comment' | 'facebook_message' | 'instagram_comment' | 'instagram_message';
+  jobType: 'facebook_comment' | 'facebook_message' | 'instagram_comment' | 'instagram_message' | 'whatsapp_message';
   requestId?: string; // Correlate with webhook request for tracing
 
   // Source identification

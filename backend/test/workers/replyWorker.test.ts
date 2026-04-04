@@ -31,6 +31,11 @@ const mockInstagramReplyService = {
     setLogger: vi.fn(),
 };
 
+const mockWhatsAppReplyService = {
+    processMessage: vi.fn(),
+    setLogger: vi.fn(),
+};
+
 const mockPagesService = {
     getPageByFacebookId: vi.fn(),
 };
@@ -41,6 +46,10 @@ vi.mock('../../src/services/reply', () => ({
 
 vi.mock('../../src/services/instagramReply', () => ({
     instagramReplyService: mockInstagramReplyService,
+}));
+
+vi.mock('../../src/services/whatsappReply', () => ({
+    whatsappReplyService: mockWhatsAppReplyService,
 }));
 
 vi.mock('../../src/services/pages', () => ({
