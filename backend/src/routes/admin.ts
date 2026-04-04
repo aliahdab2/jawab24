@@ -20,6 +20,7 @@ import { isOffensiveContent } from '../services/offensive-filter';
 import { normalizeAiIntent } from '@jawab24/shared';
 import { RetrievedChunkContext } from '../types';
 import { detectLanguageCode } from '../utils/language';
+import { countContentWords } from '../utils/text';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -869,7 +870,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
                 // 2. Try template match
                 let templateMatch: { name?: string; message?: string; id?: string } | null = null;
-                if (page.workspaceId) {
+                const wordCount = countContentWords(question);
+                const TEMPLATE_WORD_LIMIT = 6;
+
+                if (page.workspaceId && wordCount <= TEMPLATE_WORD_LIMIT) {
                     const matchingRule = await rulesService.findMatchingRule(page.workspaceId, question);
                     if (matchingRule?.templateId) {
                         const template = await templatesService.getTemplate(page.workspaceId, matchingRule.templateId);
@@ -877,6 +881,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             templateMatch = { name: template.name, message: template.message, id: template.id };
                         }
                     }
+                } else if (wordCount > TEMPLATE_WORD_LIMIT) {
+                    request.log.debug({ wordCount, limit: TEMPLATE_WORD_LIMIT }, 'Playground: skipping template due to word count');
                 }
 
                 if (templateMatch) {

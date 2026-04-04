@@ -12,6 +12,15 @@ import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
 import { isOffensiveContent } from '../offensive-filter';
 import { detectLanguageCode } from '../../utils/language';
+import { countContentWords } from '../../utils/text';
+
+// Messages longer than this many content words are assumed to have complex/
+// multi-intent context. Template keyword matching on them produces false positives
+// (e.g. "كلمة السر لنظام التسجيل" containing تسجيل keyword), so they go straight to AI.
+// Threshold of 6 covers the longest natural short-query pattern:
+//   "السلام عليكم كم سعر الدورة" (5 words) → correctly hits template
+//   "أنا ناسي كلمة السر لنظام التسجيل ممكن تساعدوني" (8 words) → correctly skips to AI
+const TEMPLATE_WORD_LIMIT = 6;
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
  *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
@@ -413,9 +422,19 @@ export class ReplyGenerator {
     }
 
     /**
-     * Try to match a template rule — shared across all platforms
+     * Try to match a template rule — shared across all platforms.
+     *
+     * Skips template matching entirely when the message exceeds TEMPLATE_WORD_LIMIT
+     * content words. Long messages almost always contain multiple intents or use
+     * a keyword incidentally — AI handles them far better than a keyword reply.
      */
     private async tryTemplateMatch(workspaceId: string, text: string): Promise<GenerateReplyResult | null> {
+        const wordCount = countContentWords(text);
+        if (wordCount > TEMPLATE_WORD_LIMIT) {
+            this.logger.debug('[Generator] Skipping template match — message too long', { wordCount, limit: TEMPLATE_WORD_LIMIT });
+            return null;
+        }
+
         const matchingRule = await rulesService.findMatchingRule(workspaceId, text);
 
         if (matchingRule?.templateId) {

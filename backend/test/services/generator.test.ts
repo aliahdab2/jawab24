@@ -937,6 +937,116 @@ describe('ReplyGenerator - Flagging System', () => {
         });
     });
 
+    // --- Template word-limit guard tests ---
+
+    describe('template word-limit guard', () => {
+        let generator: ReplyGenerator;
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            generator = new ReplyGenerator();
+        });
+
+        it('should use template for short Arabic query (≤ 6 words)', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1', templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1', name: 'Pricing', message: 'أسعارنا تبدأ من ١٠٠ ريال',
+            } as any);
+
+            // "كم سعر الدورة" = 3 words → should hit template
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'كم سعر الدورة', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyMethod).toBe('template');
+            expect(result.replyText).toBe('أسعارنا تبدأ من ١٠٠ ريال');
+        });
+
+        it('should skip template for long Arabic message (> 6 words) — the original bug', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+
+            // The rule WOULD match "تسجيل" keyword, but word count guard prevents it
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'يمكنك إعادة تعيين كلمة السر من صفحة الدخول.',
+                language: 'ar', cached: false, intent: 'QUESTION', confidence: 'high', flags: [],
+            });
+
+            // "أنا ناسي كلمة السر لنظام التسجيل ممكن تساعدوني" = 7 words → skip template
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'أنا ناسي كلمة السر لنظام التسجيل ممكن تساعدوني', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyMethod).toBe('ai');
+            // findMatchingRule should NOT have been called (word count check short-circuits)
+            expect(rulesService.findMatchingRule).not.toHaveBeenCalled();
+        });
+
+        it('should skip template for long English message (> 6 words)', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'I can help with both. For returns, please visit...',
+                language: 'en', cached: false, intent: 'QUESTION', confidence: 'high', flags: [],
+            });
+
+            // 10 words → skip template
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'I want to return the product and also know the price', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyMethod).toBe('ai');
+            expect(rulesService.findMatchingRule).not.toHaveBeenCalled();
+        });
+
+        it('should still use template at exactly 6 words (boundary)', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { templatesService } = await import('../../src/services/templates');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
+                id: 'rule-1', templateId: 'template-1',
+            } as any);
+            vi.mocked(templatesService.getTemplate).mockResolvedValue({
+                id: 'template-1', name: 'Registration', message: 'يمكنك التسجيل من الرابط التالي',
+            } as any);
+
+            // "كيف اسجل في منصتكم لو سمحت" = 6 words → still eligible for template
+            const result = await generator.generateForComment(
+                { userId: 'u', text: 'كيف اسجل في منصتكم لو سمحت', pageName: 'Test' }, true,
+            );
+
+            expect(result.replyMethod).toBe('template');
+            expect(rulesService.findMatchingRule).toHaveBeenCalled();
+        });
+
+        it('should skip template for long message in DMs too', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Let me help you with the password reset.',
+                language: 'en', cached: false, intent: 'QUESTION', confidence: 'high', flags: [],
+            });
+
+            // 9 words → skip template in DMs
+            const result = await generator.generateForMessage(
+                { userId: 'u', text: 'I forgot my password for the registration system help', pageName: 'Test', pageId: 'p1', senderId: 's1' }, true,
+            );
+
+            expect(result.replyMethod).toBe('ai');
+            expect(rulesService.findMatchingRule).not.toHaveBeenCalled();
+        });
+    });
+
     // --- Language-aware template selection tests ---
 
     describe('language-aware template selection', () => {
