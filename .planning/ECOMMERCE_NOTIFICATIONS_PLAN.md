@@ -3,7 +3,13 @@
 > Compete with LetsBot: abandoned cart recovery, order status notifications,
 > review requests, digital product delivery, and merchant-configurable templates.
 >
-> **Channel strategy:** SMS (Vonage) now → WhatsApp Cloud API when approved by Meta.
+> **Channel strategy:** SMS (Vonage) as default fallback → Facebook/Instagram DM for mapped customers (rich cards) → WhatsApp Cloud API when approved by Meta.
+>
+> **See also:** `ECOMMERCE_POWER_FEATURES_PLAN.md` — adds Facebook/Instagram DM delivery
+> with rich product cards, customer identity mapping, AI-powered messages,
+> product recommendations, stock/price alerts, and analytics.
+> The two plans are complementary: this plan covers SMS delivery (broad reach),
+> the other covers social DM delivery (rich experience for mapped customers).
 
 ---
 
