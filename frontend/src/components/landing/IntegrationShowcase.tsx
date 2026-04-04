@@ -126,26 +126,17 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
 
   return (
     <div ref={wrapperRef}>
-      {/* Anti-gravity float + breathing border glow */}
+      {/* Gentle float — transform-only for GPU compositing, no shadow animation */}
       <motion.div
-        animate={{
-          y: [0, -6, 0],
-          boxShadow: [
-            '0 0 20px rgba(16, 185, 129, 0.1), 0 8px 32px rgba(0,0,0,0.4)',
-            '0 0 40px rgba(16, 185, 129, 0.25), 0 8px 32px rgba(0,0,0,0.4)',
-            '0 0 20px rgba(16, 185, 129, 0.1), 0 8px 32px rgba(0,0,0,0.4)',
-          ],
-        }}
+        animate={{ y: [0, -6, 0] }}
         transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-        style={{ borderRadius: 24 }}
+        style={{ borderRadius: 24, boxShadow: '0 0 30px rgba(16, 185, 129, 0.15), 0 8px 32px rgba(0,0,0,0.4)', willChange: 'transform' }}
       >
         {/* Glassmorphism card — fixed height in portrait, capped in landscape */}
         <div
           className="w-[360px] h-[620px] origin-top scale-[0.82] sm:scale-100"
           style={{
-            background: 'rgba(255, 255, 255, 0.03)',
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
+            background: 'rgba(15, 23, 42, 0.85)',
             borderRadius: 24,
             maxWidth: '100%',
             border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -212,25 +203,18 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           <AnimatePresence mode="popLayout">
             {show(0) && (
               <motion.div key="cust1" layout="position" transition={layoutSpring} variants={fadeSlide} initial="enter" animate="visible" exit="exit">
-                <motion.div
+                <div
                   dir="auto"
-                  animate={{
-                    boxShadow: [
-                      '0 0 15px rgba(59, 130, 246, 0.1)',
-                      '0 0 25px rgba(59, 130, 246, 0.25)',
-                      '0 0 15px rgba(59, 130, 246, 0.1)',
-                    ],
-                  }}
-                  transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.08)', backdropFilter: 'blur(10px)',
+                    background: 'rgba(255, 255, 255, 0.1)',
                     padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
                     maxWidth: '85%', fontSize: 13, color: '#F9FAFB', lineHeight: 1.6,
                     border: '1px solid rgba(59, 130, 246, 0.3)',
+                    boxShadow: '0 0 15px rgba(59, 130, 246, 0.15)',
                   }}
                 >
                   {t('showcase.chatCustomer1')}
-                </motion.div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -248,21 +232,14 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 animate="visible"
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
-                <motion.div
+                <div
                   dir="auto"
-                  animate={{
-                    boxShadow: [
-                      '0 0 15px rgba(16, 185, 129, 0.15)',
-                      '0 0 30px rgba(16, 185, 129, 0.35)',
-                      '0 0 15px rgba(16, 185, 129, 0.15)',
-                    ],
-                  }}
-                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
                   style={{
                     background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
                     padding: '12px 14px',
                     borderRadius: '14px 14px 4px 14px', maxWidth: '88%',
                     border: '1px solid rgba(16, 185, 129, 0.4)',
+                    boxShadow: '0 0 20px rgba(16, 185, 129, 0.2)',
                   }}
                 >
                   <div style={{ fontSize: 13, color: '#fff', marginBottom: 8, lineHeight: 1.6 }}>
@@ -308,7 +285,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.9)', lineHeight: 1.6 }}>
                     {t('showcase.chatReply1Outro')}
                   </div>
-                </motion.div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -317,25 +294,18 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           <AnimatePresence mode="popLayout">
             {show(3) && (
               <motion.div key="cust2" layout="position" transition={layoutSpring} variants={fadeSlide} initial="enter" animate="visible" exit="exit">
-                <motion.div
+                <div
                   dir="auto"
-                  animate={{
-                    boxShadow: [
-                      '0 0 15px rgba(251, 191, 36, 0.1)',
-                      '0 0 25px rgba(251, 191, 36, 0.25)',
-                      '0 0 15px rgba(251, 191, 36, 0.1)',
-                    ],
-                  }}
-                  transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.08)', backdropFilter: 'blur(10px)',
+                    background: 'rgba(255, 255, 255, 0.1)',
                     padding: '10px 14px', borderRadius: '14px 14px 14px 4px',
                     maxWidth: '85%', fontSize: 13, color: '#F9FAFB', lineHeight: 1.6,
                     border: '1px solid rgba(251, 191, 36, 0.3)',
+                    boxShadow: '0 0 15px rgba(251, 191, 36, 0.15)',
                   }}
                 >
                   {t('showcase.chatCustomer2')}
-                </motion.div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -353,25 +323,18 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
                 animate="visible"
                 style={{ display: 'flex', justifyContent: 'flex-end' }}
               >
-                <motion.div
+                <div
                   dir="auto"
-                  animate={{
-                    boxShadow: [
-                      '0 0 15px rgba(16, 185, 129, 0.15)',
-                      '0 0 30px rgba(16, 185, 129, 0.35)',
-                      '0 0 15px rgba(16, 185, 129, 0.15)',
-                    ],
-                  }}
-                  transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
                   style={{
                     background: 'linear-gradient(135deg, #10B981 0%, #065f56 100%)',
                     padding: '12px 14px', borderRadius: '14px 14px 4px 14px',
                     maxWidth: '88%', fontSize: 13, color: '#fff', lineHeight: 1.6,
                     border: '1px solid rgba(16, 185, 129, 0.4)',
+                    boxShadow: '0 0 20px rgba(16, 185, 129, 0.2)',
                   }}
                 >
                   {t('showcase.chatReply2')}
-                </motion.div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -438,10 +401,9 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: 600,
-          height: 600,
-          background: 'radial-gradient(circle, rgba(16, 185, 129, 0.08) 0%, transparent 70%)',
-          filter: 'blur(80px)',
+          width: 800,
+          height: 800,
+          background: 'radial-gradient(circle, rgba(16, 185, 129, 0.06) 0%, transparent 60%)',
           zIndex: 0,
           pointerEvents: 'none',
         }}
@@ -520,8 +482,6 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.boxShadow = '0 0 20px rgba(150, 191, 71, 0.2)';
@@ -544,8 +504,6 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.boxShadow = '0 0 20px rgba(0, 73, 86, 0.3)';
@@ -568,8 +526,6 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
                 style={{
                   background: 'rgba(255, 255, 255, 0.04)',
                   border: '1px solid rgba(255, 255, 255, 0.1)',
-                  backdropFilter: 'blur(8px)',
-                  WebkitBackdropFilter: 'blur(8px)',
                 }}
                 onMouseEnter={e => {
                   e.currentTarget.style.boxShadow = '0 0 20px rgba(233, 79, 28, 0.25)';

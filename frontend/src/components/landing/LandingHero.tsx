@@ -236,12 +236,12 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
 
   return (
     <section className="relative pt-6 sm:pt-10 lg:pt-16 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
-      {/* Animated Background Elements */}
-      <div className="absolute top-20 left-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-brand-200/40 dark:bg-blue-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse" />
-      <div className="absolute bottom-0 right-1/4 w-[200px] sm:w-[400px] h-[200px] sm:h-[400px] bg-violet-200/40 dark:bg-indigo-700/25 rounded-full blur-[60px] sm:blur-[100px] animate-pulse delay-1000" />
+      {/* Static background gradients — no blur filter, no animation */}
+      <div className="absolute top-20 left-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-200/30 dark:bg-blue-700/15 rounded-full opacity-60" style={{ filter: 'blur(40px)' }} />
+      <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-violet-200/30 dark:bg-indigo-700/15 rounded-full opacity-60" style={{ filter: 'blur(40px)' }} />
       {/* Centered Glowing Background */}
       <div className="absolute top-1/2 inset-x-0 flex justify-center -translate-y-1/2 pointer-events-none">
-        <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-full blur-[80px] sm:blur-[150px]" />
+        <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/20 to-violet-100/20 dark:from-blue-900/10 dark:to-indigo-900/10 rounded-full opacity-70" />
       </div>
 
       <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
@@ -316,15 +316,15 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
           {/* Hero Illustration - Phone Mockup with Floating Icons */}
           <div className="relative animate-slide-up order-2 flex justify-center">
             <div className="relative mx-auto w-full max-w-[140px] min-[375px]:max-w-[160px] sm:max-w-[220px] lg:max-w-[280px]">
-              {/* Glowing Background */}
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-3xl scale-125 animate-pulse" />
+              {/* Glowing Background — static, no animation */}
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-400/20 via-brand-400/20 to-violet-400/20 rounded-[50px] blur-2xl scale-125 opacity-70" />
 
-              {/* Phone Mockup — floating with deeper shadow */}
+              {/* Phone Mockup — gentle float, transform-only */}
               <motion.div
                 animate={{ y: [0, -5, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
                 className="relative landing-phone-frame rounded-[36px] sm:rounded-[42px] p-2 sm:p-2.5"
-                style={{ boxShadow: '0 20px 60px -10px rgba(0, 128, 128, 0.25), 0 8px 24px -6px rgba(0, 0, 0, 0.15)' }}
+                style={{ boxShadow: '0 20px 60px -10px rgba(0, 128, 128, 0.25), 0 8px 24px -6px rgba(0, 0, 0, 0.15)', willChange: 'transform' }}
               >
                 <div className="absolute top-5 sm:top-7 left-1/2 -translate-x-1/2 w-12 sm:w-16 h-3 sm:h-4 landing-phone-notch rounded-full z-10" />
 

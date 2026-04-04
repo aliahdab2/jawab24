@@ -29,8 +29,7 @@ function StatsSection({ statsList }: { statsList: { value: string; label: string
       {/* Background cosmic glow */}
       <div
         aria-hidden="true"
-        className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[300px] rounded-full pointer-events-none landing-glow-emerald-soft"
-        style={{ filter: 'blur(60px)' }}
+        className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full pointer-events-none landing-glow-emerald-soft opacity-70"
       />
 
       <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
@@ -127,10 +126,10 @@ export default function LandingPageContent() {
       </div>
 
       {/* Navigation — fixed, extends into safe area via pt-safe + box-content.
-           Semi-transparent with blur so dark gradients show through. */}
+           Solid background — no backdrop-blur to avoid per-frame compositing on scroll. */}
       <nav
         dir={dir}
-        className="fixed top-0 w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe box-content"
+        className="fixed top-0 w-full z-50 bg-card/95 dark:bg-surface-50/95 border-b border-theme-border pt-safe box-content"
       >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 px-safe-landscape">
           <div className="flex items-center justify-between h-16 sm:h-20">

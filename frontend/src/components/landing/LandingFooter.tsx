@@ -10,7 +10,7 @@ export function LandingFooter() {
 
   return (
     <footer className="landing-section-dark dark:bg-surface-50 pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
-      <div className="absolute bottom-0 end-0 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-500/5 rounded-full blur-[80px] sm:blur-[120px] pointer-events-none"></div>
+      <div className="absolute bottom-0 end-0 w-[400px] sm:w-[700px] h-[400px] sm:h-[700px] bg-brand-500/5 rounded-full blur-[40px] pointer-events-none"></div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 sm:gap-16 mb-10 sm:mb-20">
@@ -100,12 +100,8 @@ export function LandingFooter() {
           <p className="text-center text-[10px] sm:text-xs leading-relaxed text-surface-500" dir="ltr">
             {t('footer.operatedBy')}{' '}
             <span className="text-surface-400 font-medium">{t('footer.operatorName')}</span>
-            {' · '}{t('footer.orgNumber')}
-            {' · '}{t('footer.businessInfo')}
-            <br className="sm:hidden" />
-            <span className="hidden sm:inline">{' · '}</span>
-            <span className="sm:hidden">{' '}</span>
-            © {new Date().getFullYear()} Jawab24. {t('footer.copyright')}
+            {' · '}{t('footer.country')}
+            {' · '}© {new Date().getFullYear()} Jawab24. {t('footer.copyright')}
           </p>
         </div>
       </div>
