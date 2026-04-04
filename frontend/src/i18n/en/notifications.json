@@ -38,7 +38,8 @@
     "trial_ending": "trial reminders",
     "subscription_renewed": "renewal confirmations",
     "page_disconnected": "disconnected pages",
-    "kb_gap": "knowledge gaps"
+    "kb_gap": "knowledge gaps",
+    "skipped_reply": "skipped replies"
   },
   "expand": "Expand group",
   "collapse": "Collapse group"

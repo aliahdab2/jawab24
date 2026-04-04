@@ -38,7 +38,8 @@
     "trial_ending": "تذكيرات تجريبية",
     "subscription_renewed": "تأكيدات تجديد",
     "page_disconnected": "صفحات غير متصلة",
-    "kb_gap": "فجوات معرفية"
+    "kb_gap": "فجوات معرفية",
+    "skipped_reply": "ردود تم تخطيها"
   },
   "expand": "توسيع المجموعة",
   "collapse": "طي المجموعة"
