@@ -114,24 +114,6 @@ export interface AiCacheEntry {
     lastUsedAt: Date | null;
 }
 
-// Page Types
-export interface Page {
-    id: string;
-    userId: string | null;
-    facebookPageId: string;
-    name: string | null;
-    accessToken: string;
-    autoReplyEnabled: boolean | null;
-    knowledgeBase: string | null;
-    kbVersion: number | null;
-    kbActiveVersion: number | null;
-    kbUpdatedAt: Date | null;
-    businessProfile: Record<string, unknown> | null;
-    businessProfileUpdatedAt: Date | null;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-}
-
 export interface CreatePageDTO {
     facebookPageId: string;
     name: string;

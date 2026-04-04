@@ -11,7 +11,17 @@ export function getPageExternalUrl(
   if (source === 'instagram' && page.instagramUsername) {
     return `https://instagram.com/${page.instagramUsername}`;
   }
-  return `https://facebook.com/${page.facebookPageId}`;
+  return page.facebookPageId ? `https://facebook.com/${page.facebookPageId}` : '';
+}
+
+/**
+ * Build the Facebook Graph API avatar URL for a page.
+ * Returns null for WhatsApp-only pages (no facebookPageId).
+ */
+export function getPageAvatarUrl(page: Pick<Page, 'facebookPageId'>): string | null {
+  return page.facebookPageId
+    ? `https://graph.facebook.com/${page.facebookPageId}/picture?type=large`
+    : null;
 }
 
 /**

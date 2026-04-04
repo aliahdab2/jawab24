@@ -33,6 +33,7 @@ import { useWorkspaceRole } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/formatConnectedDate';
 import { formatRelativeTime } from '@/utils/formatRelativeTime';
+import { getPageAvatarUrl, getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 
 const PagesPage: NextPageWithLayout = () => {
@@ -311,9 +312,9 @@ const PagesPage: NextPageWithLayout = () => {
               <div className="p-4 sm:p-6 bg-gradient-to-br from-background to-card border-b border-theme-border flex items-start gap-4">
                 {/* Page avatar */}
                 <div className="w-14 h-14 rounded-2xl flex-shrink-0 shadow-lg shadow-brand-100 overflow-hidden bg-brand-600 flex items-center justify-center">
-                  {!imgError[page.id] ? (
+                  {getPageAvatarUrl(page) && !imgError[page.id] ? (
                     <img
-                      src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
+                      src={getPageAvatarUrl(page)!}
                       alt={page.name}
                       className="w-full h-full object-cover"
                       onError={() => setImgError(prev => ({ ...prev, [page.id]: true }))}
@@ -339,16 +340,18 @@ const PagesPage: NextPageWithLayout = () => {
                   )}
                 </div>
 
-                {/* External link to Facebook page */}
-                <a
-                  href={`https://facebook.com/${page.facebookPageId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-muted-foreground transition-colors flex-shrink-0"
-                  aria-label={`${tc('openOn')} Facebook`}
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+                {/* External link to Facebook page — only for Facebook-connected pages */}
+                {getPageExternalUrl(page) && (
+                  <a
+                    href={getPageExternalUrl(page)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-9 h-9 rounded-xl bg-muted flex items-center justify-center text-muted-foreground hover:bg-surface-200 hover:text-muted-foreground transition-colors flex-shrink-0"
+                    aria-label={`${tc('openOn')} Facebook`}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                )}
               </div>
 
               {/* Disconnected Banner */}

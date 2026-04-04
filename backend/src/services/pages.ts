@@ -471,7 +471,7 @@ export class PagesService {
 
         // 1. Fetch all existing pages for this workspace upfront (optimizes DB reads)
         const existingPages = await this.getPages(workspaceId);
-        const existingPagesMap = new Map(existingPages.map(p => [p.facebookPageId, p]));
+        const existingPagesMap = new Map(existingPages.filter(p => p.facebookPageId).map(p => [p.facebookPageId!, p]));
 
         // 2. Process Facebook pages in parallel (optimizes external API calls)
         const processPromises = fbPages.data.map(async (fbPage) => {

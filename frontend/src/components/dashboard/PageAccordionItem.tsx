@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { formatConnectedDate } from '@/utils/formatConnectedDate';
+import { getPageAvatarUrl } from '@/utils/pageUrl';
 import type { Page } from '@jawab24/shared';
 
 interface PageAccordionItemProps {
@@ -78,9 +79,9 @@ export function PageAccordionItem({
       >
         {/* Avatar */}
         <div className="w-12 h-12 rounded-xl flex-shrink-0 overflow-hidden bg-brand-600 flex items-center justify-center transition-all group-hover:scale-105 shadow-sm">
-          {!imgError ? (
+          {getPageAvatarUrl(page) && !imgError ? (
             <img
-              src={`https://graph.facebook.com/${page.facebookPageId}/picture?type=large`}
+              src={getPageAvatarUrl(page)!}
               alt={page.name}
               className="w-full h-full object-cover"
               onError={onImgError}
