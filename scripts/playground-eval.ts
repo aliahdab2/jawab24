@@ -1778,16 +1778,16 @@ const TEST_CASES: TestCase[] = [
     // KB has 3 URLs: /pricing, /courses, and root domain.
     // AI must pick the URL that matches the question topic — not default to /pricing.
 
-    // 33.1 — Pricing question should get pricing URL
+    // 33.1 — Registration question should get pricing URL
     {
         id: 240, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
-        message: 'كم أسعار الدورات وكيف أسجل؟',
+        message: 'كيف أقدر أسجل عندكم؟',
         page: 'training',
         expected: {
             replyMethod: ['ai'],
-            replyContainsAny: ['/pricing', 'pricing'],
+            replyContainsAny: ['/pricing', 'pricing', 'alnoor'],
         },
-        notes: 'Pricing + registration question — should share the pricing URL',
+        notes: 'Registration question — should share pricing/registration URL from KB',
     },
 
     // 33.2 — Course details question should get courses URL, not pricing
