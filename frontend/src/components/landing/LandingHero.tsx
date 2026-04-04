@@ -151,7 +151,7 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
     <div className="landing-phone-screen rounded-[28px] sm:rounded-[34px] overflow-hidden aspect-[9/19] relative">
       <div className="relative p-2.5 sm:p-4 h-full flex flex-col">
         {/* Status Bar */}
-        <div className="flex items-center justify-between pt-7 sm:pt-9 pb-3 sm:pb-4 px-4">
+        <div className="flex items-center justify-between pt-5 sm:pt-9 pb-1.5 sm:pb-4 px-4">
           {/* Signal bars */}
           <div className="flex items-end gap-[1px] sm:gap-[1.5px]">
             <div className="w-[2px] sm:w-[3px] h-[3px] sm:h-[4px] bg-brand-900/30 dark:bg-brand-300/30 rounded-[0.5px]" />
@@ -170,9 +170,9 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
         </div>
 
         {/* Bot Icon */}
-        <div className="flex flex-col items-center justify-center mt-1 sm:mt-2 mb-2 sm:mb-3">
-          <div className="w-8 h-8 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-xl sm:rounded-3xl bg-white dark:bg-brand-900/60 shadow-xl shadow-brand-500/10 dark:shadow-brand-400/20 flex items-center justify-center animate-float-pulse border border-brand-50 dark:border-brand-400/30">
-            <Bot className="w-5 h-5 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500 dark:text-brand-300" aria-hidden="true" />
+        <div className="flex flex-col items-center justify-center mt-0.5 sm:mt-2 mb-1 sm:mb-3">
+          <div className="w-7 h-7 sm:w-16 sm:h-16 lg:w-20 lg:h-20 rounded-lg sm:rounded-3xl bg-white dark:bg-brand-900/60 shadow-xl shadow-brand-500/10 dark:shadow-brand-400/20 flex items-center justify-center animate-float-pulse border border-brand-50 dark:border-brand-400/30">
+            <Bot className="w-4 h-4 sm:w-10 sm:h-10 lg:w-12 lg:h-12 text-brand-500 dark:text-brand-300" aria-hidden="true" />
           </div>
         </div>
 
@@ -181,7 +181,7 @@ function HeroPhoneChat({ t }: { t: (key: string) => string }) {
           variants={heroConversationFade}
           initial="visible"
           animate={resetting ? 'resetting' : 'visible'}
-          className="flex-1 flex flex-col justify-start gap-2.5 sm:gap-3 lg:gap-4 px-1 sm:px-2 pt-2 sm:pt-3 overflow-hidden"
+          className="flex-1 min-h-0 flex flex-col justify-start gap-1.5 sm:gap-3 lg:gap-4 px-1 sm:px-2 pt-1 sm:pt-3 overflow-hidden"
         >
           {/* Phase 0: Customer message 1 */}
           <AnimatePresence>

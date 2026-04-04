@@ -105,13 +105,11 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
   useEffect(() => {
     if (phase < 0) return;
 
-    // Phase 7 = hold → fade out → reset
     if (phase >= TOTAL_PHASES) return;
     const delay = PHASE_DELAYS[phase];
     const timer = setTimeout(() => {
       const next = phase + 1;
       if (next >= TOTAL_PHASES) {
-        // Fade out conversation, then reset
         setResetting(true);
         setTimeout(() => {
           setResetting(false);
@@ -143,13 +141,12 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
       >
         {/* Glassmorphism card — fixed height in portrait, capped in landscape */}
         <div
-          className="h-[620px] landscape:h-[min(620px,70vh)]"
+          className="w-[360px] h-[620px] origin-top scale-[0.82] sm:scale-100"
           style={{
             background: 'rgba(255, 255, 255, 0.03)',
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
             borderRadius: 24,
-            width: 360,
             maxWidth: '100%',
             border: '1px solid rgba(255, 255, 255, 0.1)',
             display: 'flex',
@@ -197,12 +194,13 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
           </div>
         </div>
 
-        {/* Messages area — fills remaining space, overflow hidden clips long content */}
+        {/* Messages area — fills remaining space */}
         <motion.div
           variants={conversationFade}
           animate={resetting ? 'resetting' : 'visible'}
           style={{
             flex: 1,
+            minHeight: 0,
             display: 'flex',
             flexDirection: 'column',
             gap: 12,
@@ -342,7 +340,7 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             )}
           </AnimatePresence>
 
-          {/* Phase 4→5: Typing dots → AI reply 2 (mutually exclusive) */}
+          {/* Phase 4→5: Typing dots → AI reply 2 */}
           <AnimatePresence mode="wait">
             {phase === 4 && <TypingDots />}
             {show(5) && (
@@ -378,36 +376,35 @@ function ChatMockup({ t }: { t: (key: string) => string }) {
             )}
           </AnimatePresence>
 
-        </motion.div>
+          {/* Powered-by badge — inside scroll area so it doesn't steal space */}
+          <AnimatePresence>
+            {show(6) && (
+              <motion.div
+                key="footer"
+                initial={{ opacity: 1, x: 30 }}
+                animate={{ opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 18 } }}
+                style={{
+                  display: 'flex', justifyContent: 'flex-end',
+                  padding: '8px 0 16px',
+                }}
+              >
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                  background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)',
+                  borderRadius: 100, padding: '4px 12px 4px 8px',
+                }}>
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  <span style={{ fontSize: 10, color: '#10B981', fontWeight: 600, letterSpacing: '0.01em' }}>
+                    {t('showcase.chatPoweredBy')}
+                  </span>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        {/* Powered-by badge — slides in from end like a real widget watermark */}
-        <AnimatePresence>
-          {show(6) && (
-            <motion.div
-              key="footer"
-              initial={{ opacity: 1, x: 30 }}
-              animate={{ opacity: 1, x: 0, transition: { type: 'spring', stiffness: 120, damping: 18 } }}
-              style={{
-                display: 'flex', justifyContent: 'flex-end',
-                padding: '8px 22px 16px',
-                flexShrink: 0,
-              }}
-            >
-              <div style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5,
-                background: 'rgba(16, 185, 129, 0.12)', border: '1px solid rgba(16, 185, 129, 0.25)',
-                borderRadius: 100, padding: '4px 12px 4px 8px',
-              }}>
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                </svg>
-                <span style={{ fontSize: 10, color: '#10B981', fontWeight: 600, letterSpacing: '0.01em' }}>
-                  {t('showcase.chatPoweredBy')}
-                </span>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </motion.div>
       </div>
       </motion.div>
     </div>
@@ -592,8 +589,8 @@ export function IntegrationShowcase({ isAuthenticated }: IntegrationShowcaseProp
             </div>
           </div>
 
-          {/* Right column — chat mockup */}
-          <div className="w-full md:w-[45%] flex justify-center">
+          {/* Right column — chat mockup (hidden in landscape on small screens) */}
+          <div className="w-full md:w-[45%] flex justify-center max-md:landscape:hidden">
             <ChatMockup t={t} />
           </div>
         </div>
