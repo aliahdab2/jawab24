@@ -31,9 +31,12 @@ IMPORTANT:
 - NEVER ask for confirmation to start services — just start them
 - If demo auth returns empty token, check `/tmp/backend.log` — usually a missing DB column. Fix with psql against `postgres://aliahdab@localhost:5432/postgres`
 
-Then get the admin token and run the eval:
+Then get the admin token, clear the AI cache, and run the eval:
 ```bash
 ADMIN_TOKEN=$(curl -s -X POST http://localhost:3000/auth/demo | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+
+# Clear AI cache so eval reflects the current prompt, not stale cached responses
+curl -s -X DELETE http://localhost:3000/ai/cache -H "Authorization: Bearer $ADMIN_TOKEN" > /dev/null
 
 ADMIN_TOKEN="$ADMIN_TOKEN" VERBOSE=1 npm run eval
 ```
