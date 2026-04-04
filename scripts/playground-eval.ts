@@ -1781,13 +1781,13 @@ const TEST_CASES: TestCase[] = [
     // 33.1 — Registration question should get pricing URL
     {
         id: 240, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
-        message: 'كيف أقدر أسجل عندكم؟',
+        message: 'ابي أعرف طريقة الالتحاق بالدورات',
         page: 'training',
         expected: {
             replyMethod: ['ai'],
             replyContainsAny: ['/pricing', 'pricing', 'alnoor'],
         },
-        notes: 'Registration question — should share pricing/registration URL from KB',
+        notes: 'Enrollment question — should share pricing/registration URL from KB',
     },
 
     // 33.2 — Course details question should get courses URL, not pricing
@@ -1830,6 +1830,169 @@ const TEST_CASES: TestCase[] = [
             replyContainsAny: ['/courses', 'courses', 'alnoor'],
         },
         notes: 'Follow-up asking for more details after course question — should link to /courses not /pricing',
+    },
+
+    // =====================================================================
+    // NEW: Strengthened eval tests for v28 consolidation safety (244-255)
+    // =====================================================================
+
+    // --- Cat 32: Partial KB coverage (must flag missing parts) ---
+
+    // 32.6 — KB has course names but NOT the instructor/teacher
+    {
+        id: 244, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'dm',
+        message: 'مين يدرّس دورة PMP عندكم؟',
+        page: 'training',
+        expected: {
+            confidence: ['low'],
+            flags: ['info_not_in_kb'],
+        },
+        notes: 'KB lists PMP course and price, but NOT who teaches it — must flag as gap',
+    },
+
+    // 32.7 — KB has specific products but customer asks about a model NOT in catalog
+    {
+        id: 245, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'هل يتوفر عندكم Google Pixel 9؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['3500', '4000', '4500', '2999', '1999'],
+        },
+        notes: 'KB has NO Google Pixel — AI must not invent a price for it. May say "I will check" or list what IS available.',
+    },
+
+    // 32.8 — KB has annual fees but NOT payment installment options
+    {
+        id: 246, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'dm',
+        message: 'هل تقبلون الدفع على أقساط؟',
+        page: 'school',
+        expected: {
+            confidence: ['low'],
+            flags: ['info_not_in_kb'],
+        },
+        notes: 'KB has fee amounts but NO installment/payment plan info — must flag as gap',
+    },
+
+    // 32.9 — KB has return policy (14 days) — should answer confidently
+    {
+        id: 247, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'dm',
+        message: 'هل أقدر أرجع عباية اشتريتها من عندكم؟',
+        page: 'fashion',
+        expected: {
+            confidence: ['high', 'medium'],
+            flagsAbsent: ['info_not_in_kb'],
+            replyContainsAny: ['14', 'أربعة عشر', 'استبدال', 'استرجاع'],
+        },
+        notes: 'Fashion KB explicitly states 14-day return policy — must answer confidently',
+    },
+
+    // --- Cat 24: Name hallucination across business types ---
+
+    // 24.5 — Fashion KB has categories but NO brand names
+    {
+        id: 248, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'ايش الماركات اللي عندكم؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Gucci', 'Zara', 'H&M', 'Nike', 'Adidas', 'غوتشي', 'زارا', 'شانيل', 'Chanel', 'Louis Vuitton'],
+            flags: ['info_not_in_kb'],
+        },
+        notes: 'Fashion KB lists categories (thobes, abayas) but NO brand names — must not invent and must flag',
+    },
+
+    // 24.6 — Electronics KB has MacBook Air M3 but NO other laptop brands — must not invent
+    {
+        id: 249, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'عندكم لابتوبات Dell أو Lenovo؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Dell XPS', 'ThinkPad', 'IdeaPad', 'Inspiron', 'Latitude'],
+            flags: ['info_not_in_kb'],
+        },
+        notes: 'KB only has MacBook Air M3 — asking about Dell/Lenovo must flag, not invent model names',
+    },
+
+    // 24.7 — School KB has grade levels but NO specific teacher/principal names
+    {
+        id: 250, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'مين مدير المدرسة؟',
+        page: 'school',
+        expected: {
+            replyMethod: ['ai'],
+            confidence: ['low'],
+            flags: ['info_not_in_kb'],
+            replyNotContains: ['أحمد', 'محمد', 'عبدالله', 'خالد', 'سلطان', 'فهد'],
+        },
+        notes: 'School KB has no staff names — AI must not invent a principal name',
+    },
+
+    // 24.8 — Fashion KB has perfume price range but NO luxury brand names — must not invent
+    {
+        id: 251, category: 24, categoryName: 'Name Hallucination Guard', channel: 'dm',
+        message: 'عندكم عطور Dior أو Tom Ford؟',
+        page: 'fashion',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Miss Dior', 'Sauvage', 'Ombre Leather', 'Black Orchid', 'Tobacco Vanille'],
+        },
+        notes: 'Fashion KB has perfume category (150-600 SAR) but NO brand names — must not invent specific product lines. AI may answer from category without flagging, which is acceptable — the key check is no hallucinated names.',
+    },
+
+    // --- Cat 15: Angry customer with valid KB question ---
+
+    // 15.4 — Angry customer but asking something KB can answer
+    {
+        id: 252, category: 15, categoryName: 'Angry Customer', channel: 'dm',
+        message: 'والله خدمتكم وصخة! وين فرعكم بالرياض عشان أجي بنفسي؟',
+        page: 'training',
+        expected: {
+            intent: ['COMPLAINT'],
+            flags: ['angry_customer'],
+            replyContainsAny: ['الملز', 'الأمير سلطان', 'الرياض'],
+        },
+        notes: 'Angry customer but location IS in KB — should flag anger AND still share the address',
+    },
+
+    // 15.5 — Angry customer in English with KB-answerable question
+    {
+        id: 253, category: 15, categoryName: 'Angry Customer', channel: 'dm',
+        message: 'Your service is absolutely terrible! What is your phone number so I can file a complaint?',
+        page: 'electronics',
+        expected: {
+            intent: ['COMPLAINT'],
+            flags: ['angry_customer'],
+            replyContainsAny: ['0501234567', '050'],
+        },
+        notes: 'Angry English customer asking for phone (in KB) — should flag anger AND share the number',
+    },
+
+    // --- Cat 33: URL relevance with partial match ---
+
+    // 33.5 — Delivery question should NOT get any URL (no delivery URL in KB)
+    {
+        id: 254, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
+        message: 'هل عندكم توصيل لجدة؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['/pricing', '/courses', 'alnoor'],
+        },
+        notes: 'Delivery question — no pricing/course URL is relevant here, answer directly',
+    },
+
+    // 33.6 — School page has NO URLs at all — must not invent any
+    {
+        id: 255, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
+        message: 'Is there a website where I can see your curriculum?',
+        page: 'school',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['http://', 'https://', '.com', '.sa', 'www.'],
+        },
+        notes: 'School KB has no URLs at all — AI must not invent a website',
     },
 ];
 
