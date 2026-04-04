@@ -126,6 +126,26 @@ vi.mock('../../src/services/reply/generator', () => ({
     shouldSkipReply: vi.fn().mockReturnValue(false),
     shouldUseFallback: vi.fn().mockReturnValue(false),
     PRICE_FALLBACK: { ar: 'price fallback ar', en: 'price fallback en' },
+    replyGenerator: {
+        setLogger: vi.fn(),
+        generateForPlayground: vi.fn().mockResolvedValue({
+            reply: 'AI test reply',
+            replyMethod: 'ai',
+            templateName: null,
+            ragMode: 'off',
+            chunksRetrieved: 0,
+            chunks: [],
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+            needsAttention: false,
+            cached: false,
+            detectedLanguage: 'en',
+            tokensUsed: 100,
+            model: 'gpt-4.1-mini',
+            gapRecorded: false,
+        }),
+    },
 }));
 
 vi.mock('../../src/services/settings', () => ({
@@ -881,8 +901,7 @@ describe('Admin Routes', () => {
         /** Set up mocks so the AI path runs (page found, no template match). */
         async function setupAiPath(pageOverrides?: Partial<typeof TEST_PAGE>) {
             const { db } = await import('../../src/db');
-            const { aiService } = await import('../../src/services/ai');
-            const { rulesService } = await import('../../src/services/rules');
+            const { replyGenerator } = await import('../../src/services/reply/generator');
             const { settingsService } = await import('../../src/services/settings');
 
             const page = { ...TEST_PAGE, ...pageOverrides };
@@ -902,18 +921,7 @@ describe('Admin Routes', () => {
                 dualReplyNudge: null,
             } as any);
 
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
-
-            vi.mocked(aiService.generateReply).mockResolvedValue({
-                reply: 'AI test reply',
-                language: 'en',
-                cached: false,
-                intent: 'QUESTION',
-                confidence: 'high',
-                flags: [],
-            });
-
-            return { db, aiService, rulesService };
+            return { db, replyGenerator };
         }
 
         it('returns 400 when pageId or question is missing', async () => {
@@ -952,8 +960,8 @@ describe('Admin Routes', () => {
             expect(response.statusCode).toBe(404);
         });
 
-        it('passes postMessage to AI context when channel is comment', async () => {
-            const { aiService } = await setupAiPath();
+        it('passes postMessage to generateForPlayground when channel is comment', async () => {
+            const { replyGenerator } = await setupAiPath();
 
             await app.inject({
                 method: 'POST',
@@ -962,17 +970,15 @@ describe('Admin Routes', () => {
                 payload: { pageId: 'page-1', question: 'What is the price?', channel: 'comment', postMessage: 'New shoes on sale!' },
             });
 
-            expect(aiService.generateReply).toHaveBeenCalledWith(
+            expect(replyGenerator.generateForPlayground).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    context: expect.objectContaining({
-                        postMessage: 'New shoes on sale!',
-                    }),
+                    postMessage: 'New shoes on sale!',
                 }),
             );
         });
 
-        it('omits postMessage from AI context when channel is dm', async () => {
-            const { aiService } = await setupAiPath();
+        it('omits postMessage from generateForPlayground when channel is dm', async () => {
+            const { replyGenerator } = await setupAiPath();
 
             await app.inject({
                 method: 'POST',
@@ -981,16 +987,16 @@ describe('Admin Routes', () => {
                 payload: { pageId: 'page-1', question: 'Hello', channel: 'dm', postMessage: 'Should be ignored' },
             });
 
-            const callArg = vi.mocked(aiService.generateReply).mock.calls[0][0];
-            expect(callArg.context).toBeDefined();
-            expect(callArg.context).not.toHaveProperty('postMessage');
+            const callArg = vi.mocked(replyGenerator.generateForPlayground).mock.calls[0][0];
+            expect(callArg).toBeDefined();
+            expect(callArg.postMessage).toBeUndefined();
         });
 
-        it('passes conversationHistory to AI context when channel is dm', async () => {
-            const { aiService } = await setupAiPath();
+        it('passes conversationHistory to generateForPlayground when channel is dm', async () => {
+            const { replyGenerator } = await setupAiPath();
             const history = [
-                { role: 'user', content: 'Hi' },
-                { role: 'assistant', content: 'Hello!' },
+                { role: 'user' as const, content: 'Hi' },
+                { role: 'assistant' as const, content: 'Hello!' },
             ];
 
             await app.inject({
@@ -1000,18 +1006,16 @@ describe('Admin Routes', () => {
                 payload: { pageId: 'page-1', question: 'Follow up', channel: 'dm', conversationHistory: history },
             });
 
-            expect(aiService.generateReply).toHaveBeenCalledWith(
+            expect(replyGenerator.generateForPlayground).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    context: expect.objectContaining({
-                        conversationHistory: history,
-                    }),
+                    conversationHistory: history,
                 }),
             );
         });
 
-        it('omits conversationHistory from AI context when channel is comment', async () => {
-            const { aiService } = await setupAiPath();
-            const history = [{ role: 'user', content: 'Should be ignored' }];
+        it('omits conversationHistory from generateForPlayground when channel is comment', async () => {
+            const { replyGenerator } = await setupAiPath();
+            const history = [{ role: 'user' as const, content: 'Should be ignored' }];
 
             await app.inject({
                 method: 'POST',
@@ -1020,13 +1024,13 @@ describe('Admin Routes', () => {
                 payload: { pageId: 'page-1', question: 'Hello', channel: 'comment', conversationHistory: history },
             });
 
-            const callArg = vi.mocked(aiService.generateReply).mock.calls[0][0];
-            expect(callArg.context).toBeDefined();
-            expect(callArg.context).not.toHaveProperty('conversationHistory');
+            const callArg = vi.mocked(replyGenerator.generateForPlayground).mock.calls[0][0];
+            expect(callArg).toBeDefined();
+            expect(callArg.conversationHistory).toBeUndefined();
         });
 
-        it('passes kbActiveVersion from page record to AI context', async () => {
-            const { aiService } = await setupAiPath({ kbActiveVersion: 7 });
+        it('passes kbActiveVersion from page record to generateForPlayground', async () => {
+            const { replyGenerator } = await setupAiPath({ kbActiveVersion: 7 });
 
             await app.inject({
                 method: 'POST',
@@ -1035,11 +1039,9 @@ describe('Admin Routes', () => {
                 payload: { pageId: 'page-1', question: 'Hello', channel: 'comment' },
             });
 
-            expect(aiService.generateReply).toHaveBeenCalledWith(
+            expect(replyGenerator.generateForPlayground).toHaveBeenCalledWith(
                 expect.objectContaining({
-                    context: expect.objectContaining({
-                        kbActiveVersion: 7,
-                    }),
+                    kbActiveVersion: 7,
                 }),
             );
         });
