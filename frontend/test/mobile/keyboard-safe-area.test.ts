@@ -176,7 +176,7 @@ describe('capacitor config', () => {
     expect(configTs).not.toContain('KeyboardResize.Native');
   });
 
-  it('Android navigation bar is opaque (not transparent)', async () => {
+  it('Android navigation bar is transparent (edge-to-edge)', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
     const stylesXml = fs.readFileSync(
@@ -184,9 +184,7 @@ describe('capacitor config', () => {
       'utf-8'
     );
 
-    // Should NOT contain transparent navigation bar
-    expect(stylesXml).not.toContain('android:navigationBarColor">@android:color/transparent');
-    // Should contain opaque color
-    expect(stylesXml).toContain('android:navigationBarColor">#000000');
+    // Navigation bar is transparent for edge-to-edge display
+    expect(stylesXml).toContain('android:navigationBarColor">@android:color/transparent');
   });
 });

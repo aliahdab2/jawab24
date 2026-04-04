@@ -315,13 +315,13 @@ export default function LoginPage() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(13,148,136,0.02),transparent_50%)] pointer-events-none dark:hidden" />
 
           {/* Header - Sticky so it stays visible when content scrolls (safe area handled by app-shell) */}
-          <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm dark:bg-transparent dark:backdrop-blur-none flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 max-lg:landscape:h-10 border-b border-theme-border/50 dark:border-transparent">
+          <div className="sticky top-0 z-10 flex-shrink-0 bg-card/80 backdrop-blur-sm dark:bg-transparent dark:backdrop-blur-none flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20 border-b border-theme-border/50 dark:border-transparent">
             <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
                 variant="main"
-                className="w-9 h-9 sm:w-12 sm:h-12 max-lg:landscape:w-7 max-lg:landscape:h-7 group-hover:rotate-6 transition-transform"
+                className="w-10 h-10 sm:w-12 sm:h-12 group-hover:rotate-6 transition-transform flex-shrink-0"
               />
-              <span className="font-display font-bold text-lg sm:text-2xl max-lg:landscape:text-base text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
+              <span className="font-display font-bold text-xl sm:text-2xl text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
             <div className="flex items-center">
               <button
