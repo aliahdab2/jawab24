@@ -56,7 +56,7 @@ export function AnnouncementBanner({
   };
 
   return (
-    <div className={`fixed top-16 sm:top-20 w-full z-40 ${bgColor} text-white text-center py-3 sm:py-4 px-4 text-lg font-semibold shadow-lg mt-safe`}>
+    <div className={`w-full ${bgColor} text-white text-center py-3 sm:py-4 px-4 text-lg font-semibold shadow-lg`}>
       <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3">
         <div className="flex items-center gap-2">
           <Icon className="w-6 h-6 flex-shrink-0" aria-hidden="true" />

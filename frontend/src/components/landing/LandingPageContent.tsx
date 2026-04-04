@@ -130,9 +130,9 @@ export default function LandingPageContent() {
            Semi-transparent with blur so dark gradients show through. */}
       <nav
         dir={dir}
-        className="fixed top-0 w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe box-content px-safe-landscape"
+        className="fixed top-0 w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe box-content"
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 px-safe-landscape">
           <div className="flex items-center justify-between h-16 sm:h-20">
             <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
@@ -169,6 +169,9 @@ export default function LandingPageContent() {
           </div>
         </div>
       </nav>
+
+      {/* Spacer for fixed nav */}
+      <div className="h-16 sm:h-20" />
 
       <AnnouncementBanner
         title={t('banner.title')}
