@@ -422,7 +422,7 @@ const DashboardPage: NextPageWithLayout = () => {
     for (const page of pages) {
       if (page.name) {
         map.set(page.id, page.name);
-        map.set(page.facebookPageId, page.name);
+        if (page.facebookPageId) map.set(page.facebookPageId, page.name);
       }
     }
     return map;
