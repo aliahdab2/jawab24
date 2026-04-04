@@ -4,7 +4,6 @@ import {
   Instagram,
   Zap,
   Bot,
-  BotMessageSquare,
   Check,
   ShoppingBag,
 } from 'lucide-react';

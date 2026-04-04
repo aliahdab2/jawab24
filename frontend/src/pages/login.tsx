@@ -243,7 +243,7 @@ export default function LoginPage() {
         <meta key="og:description" property="og:description" content={t('ogDescription')} />
       </Head>
 
-      <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] max-lg:landscape:min-h-0 relative">
+      <div className="flex-1 overflow-y-auto bg-card dark:bg-background flex flex-col lg:flex-row min-h-[100dvh] max-lg:landscape:min-h-0 max-lg:landscape:max-h-[100dvh] relative">
         {/* Dark mode decorative overlays — span both panels seamlessly */}
         <div className="hidden dark:block absolute inset-0 pointer-events-none z-0" aria-hidden="true">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_10%,rgba(93,174,164,0.15),transparent_60%)]" />
@@ -323,12 +323,15 @@ export default function LoginPage() {
               />
               <span className="font-display font-bold text-lg sm:text-2xl max-lg:landscape:text-base text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
             </Link>
-            <button
-              onClick={toggleLanguage}
-              className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 dark:hover:text-brand-400 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-400/10 transition-all"
-            >
-              {tc('switchLanguage')}
-            </button>
+            <div className="flex items-center">
+              <button
+                onClick={toggleLanguage}
+                className="px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 dark:hover:text-brand-400 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-400/10 transition-all"
+              >
+                {tc('switchLanguage')}
+              </button>
+              <div className="native-landscape-spacer" aria-hidden="true" />
+            </div>
           </div>
 
           {/* Content:

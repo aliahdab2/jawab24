@@ -106,10 +106,10 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
     // Android fix: env(safe-area-inset-top) often returns 0 even with overlaysWebView.
     // Detect this and apply a JS-measured fallback so safe area CSS works correctly.
-    // Note: bottom safe area is not needed — Android nav bar is opaque (styles.xml).
+    // Side safe areas are not needed — viewport-fit=cover is iOS-only now, so the
+    // Android WebView does not extend behind the navigation bar.
     import("@capacitor/core").then(({ Capacitor }) => {
       if (Capacitor.getPlatform() !== 'android') return;
-      // Wait a frame for StatusBar overlay to take effect
       requestAnimationFrame(() => {
         const probe = document.createElement('div');
         probe.style.paddingTop = 'env(safe-area-inset-top, 0px)';
@@ -117,7 +117,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         const inset = parseFloat(getComputedStyle(probe).paddingTop) || 0;
         document.body.removeChild(probe);
         if (inset === 0) {
-          // env() returned 0 — set fallback (24px is standard Android status bar)
           document.documentElement.style.setProperty('--sai-top', '24px');
         }
       });

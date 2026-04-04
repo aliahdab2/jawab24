@@ -143,7 +143,7 @@ export default function LandingPageContent() {
             </Link>
 
             <div className="flex items-center gap-1 sm:gap-4">
-              <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all">
+              <Link href="/pricing" className="hidden md:block max-lg:landscape:hidden px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all">
                 {t('nav.pricing')}
               </Link>
               <button
@@ -160,11 +160,13 @@ export default function LandingPageContent() {
                 </Link>
               ) : (
                 <Link href="/login?redirect=%2Fdashboard">
-                  <Button variant="secondary" size="sm" className="font-bold border-none bg-muted">
+                  <Button variant="secondary" size="sm" className="font-bold border-none bg-muted whitespace-nowrap">
                     {t('nav.login')}
                   </Button>
                 </Link>
               )}
+              {/* Spacer to keep nav items clear of Android nav bar in landscape */}
+              <div className="native-landscape-spacer" aria-hidden="true" />
             </div>
           </div>
         </div>

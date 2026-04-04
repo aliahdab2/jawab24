@@ -11,7 +11,7 @@
         <item name="colorAccent">@color/colorAccent</item>
         <!-- Status bar: transparent (edge-to-edge for notch/status bar) -->
         <!-- Navigation bar: opaque (env(safe-area-inset-bottom) is unreliable in WebView) -->
-        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
@@ -21,7 +21,7 @@
         <item name="android:background">@null</item>
         <!-- Status bar: transparent (edge-to-edge for notch/status bar) -->
         <!-- Navigation bar: opaque (env(safe-area-inset-bottom) is unreliable in WebView) -->
-        <item name="android:navigationBarColor">#000000</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
     </style>
 
