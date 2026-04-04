@@ -1704,6 +1704,133 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Public comment — location in KB. Must answer directly.',
     },
+
+    // ===== Category 32: KB-Answerable Questions (No False Gaps) =====
+    // These questions CAN be answered from the KB. The AI must answer confidently
+    // without flagging info_not_in_kb — otherwise false KB gaps get recorded.
+
+    // 32.1 — Pricing question when prices are in KB
+    {
+        id: 235, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'dm',
+        message: 'كم سعر الدورة؟',
+        page: 'training',
+        expected: {
+            confidence: ['high', 'medium'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Course prices are in KB — must NOT flag as info_not_in_kb',
+    },
+
+    // 32.2 — English pricing question
+    {
+        id: 236, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'dm',
+        message: 'What are your prices?',
+        page: 'electronics',
+        expected: {
+            confidence: ['high', 'medium'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Product prices are in KB — must NOT flag as gap',
+    },
+
+    // 32.3 — Follow-up that rephrases an already-answered question
+    {
+        id: 237, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'dm',
+        message: 'Okay what plans do you have?',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'How much does the pro plan cost?' },
+            { role: 'assistant', content: 'The Pro plan costs 296 SAR per month.' },
+        ],
+        expected: {
+            confidence: ['high', 'medium'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Plans are in KB and were just discussed — rephrased follow-up must NOT be a gap',
+    },
+
+    // 32.4 — Location question when address is in KB
+    {
+        id: 238, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'dm',
+        message: 'وين موقعكم بالضبط؟',
+        page: 'training',
+        expected: {
+            confidence: ['high', 'medium'],
+            flagsAbsent: ['info_not_in_kb'],
+            replyContainsAny: ['الرياض', 'الملز', 'Riyadh'],
+        },
+        notes: 'Location is in KB — must answer and NOT flag as gap',
+    },
+
+    // 32.5 — Product availability question when products are in KB
+    {
+        id: 239, category: 32, categoryName: 'KB-Answerable No Gap', channel: 'comment',
+        message: 'Do you have iPhone cases?',
+        page: 'electronics',
+        expected: {
+            confidence: ['high', 'medium'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Product catalog is in KB — must NOT flag as gap',
+    },
+
+    // ===== Category 33: URL Relevance Guard =====
+    // KB has 3 URLs: /pricing, /courses, and root domain.
+    // AI must pick the URL that matches the question topic — not default to /pricing.
+
+    // 33.1 — Pricing question should get pricing URL
+    {
+        id: 240, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
+        message: 'كم أسعار الدورات وكيف أسجل؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['/pricing', 'pricing'],
+        },
+        notes: 'Pricing + registration question — should share the pricing URL',
+    },
+
+    // 33.2 — Course details question should get courses URL, not pricing
+    {
+        id: 241, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
+        message: 'ابي تفاصيل أكثر عن دورة PMP',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['/pricing'],
+        },
+        notes: 'Course details question — should answer or link to /courses, NOT /pricing',
+    },
+
+    // 33.3 — Location question should not include any URL
+    {
+        id: 242, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
+        message: 'وين موقعكم بالرياض؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['الملز', 'الأمير سلطان'],
+            replyNotContains: ['/pricing'],
+        },
+        notes: 'Location question — answer directly from KB, no pricing URL',
+    },
+
+    // 33.4 — General inquiry follow-up should not get pricing URL
+    {
+        id: 243, category: 33, categoryName: 'URL Relevance Guard', channel: 'dm',
+        message: 'وين أقدر أشوف تفاصيل أكثر؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'عندكم دورة انجليزي؟' },
+            { role: 'assistant', content: 'نعم! عندنا دورات لغة إنجليزية من مبتدئ لمتقدم بتكلفة 1500 ريال/شهر.' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['/pricing'],
+            replyContainsAny: ['/courses', 'courses', 'alnoor'],
+        },
+        notes: 'Follow-up asking for more details after course question — should link to /courses not /pricing',
+    },
 ];
 
 // ---------------------------------------------------------------------------

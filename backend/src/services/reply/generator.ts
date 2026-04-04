@@ -172,7 +172,7 @@ export class ReplyGenerator {
 
             // Run RAG retrieval if enabled
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, gapSource, !!context.productCatalog,
+                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
             );
 
             const detectedLang = detectLanguageCode(text);
@@ -240,7 +240,7 @@ export class ReplyGenerator {
 
                 // Run RAG retrieval if enabled (pass history for context-aware search)
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory, gapSource, !!context.productCatalog,
+                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory, !!context.productCatalog,
                 );
 
                 const msgLang = detectLanguageCode(text);
@@ -283,7 +283,6 @@ export class ReplyGenerator {
         kbActiveVersion: number | null | undefined,
         channel: 'comment' | 'dm',
         conversationHistory?: { role: string; content: string }[],
-        gapSource?: GapSource,
         hasEcommerceChunks?: boolean,
     ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
         const retrieval = getRetrievalService();
@@ -354,15 +353,9 @@ export class ReplyGenerator {
 
             if (chunks.length === 0) {
                 this.logger.debug('[Generator] RAG returned no chunks, using static KB', { pageId, channel });
-
-                // Fire-and-forget: record KB gap for merchant insights
-                gapDetectorService.setLogger(this.logger);
-                gapDetectorService.recordGap(pageId, query, gapSource).catch(err => {
-                    this.logger.error('[Generator] Gap detection error', {
-                        error: err instanceof Error ? err.message : String(err),
-                    });
-                });
-
+                // Don't record a KB gap here — the AI may still answer correctly
+                // using the static KB fallback. Gap detection is deferred to the
+                // post-AI check (low confidence + info_not_in_kb flag).
                 return { effectiveKB: staticKB, queryEmbedding, ragAttempted: true };
             }
 
@@ -495,13 +488,13 @@ export class ReplyGenerator {
             await subscriptionsService.logAiUsage(userId, pageId, aiResponse.tokensUsed, aiResponse.model || DEFAULT_AI_MODEL);
         }
 
-        // Record KB gap for low-confidence replies with info_not_in_kb flag.
-        // This extends gap detection beyond zero-chunk RAG misses: even partial
-        // matches that weren't useful enough get surfaced to merchants.
+        // Record KB gap when the AI explicitly flags the info as missing.
+        // The info_not_in_kb flag is the definitive signal — the AI checked
+        // the KB and couldn't find the answer. Confidence level doesn't matter:
+        // medium-confidence partial answers are still gaps worth surfacing.
         if (
             pageId &&
             queryText &&
-            aiResponse.confidence === 'low' &&
             flags.includes('info_not_in_kb')
         ) {
             gapDetectorService.setLogger(this.logger);

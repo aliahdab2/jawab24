@@ -80,6 +80,7 @@ vi.mock('../../src/services/kb/gap-detector', () => ({
 
 import { ReplyGenerator } from '../../src/services/reply/generator';
 import { gapDetectorService } from '../../src/services/kb/gap-detector';
+import { aiService } from '../../src/services/ai';
 
 describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
     let generator: ReplyGenerator;
@@ -99,15 +100,84 @@ describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         generator = new ReplyGenerator();
+        // Reset AI mock to default high-confidence response
+        (aiService.generateReply as ReturnType<typeof vi.fn>).mockResolvedValue({
+            reply: 'Fallback reply',
+            language: 'en',
+            cached: false,
+            intent: 'OTHER',
+            confidence: 'high',
+            flags: [],
+        });
     });
 
-    it('calls gapDetectorService.recordGap when RAG returns zero chunks', async () => {
+    it('does NOT record gap when RAG returns zero chunks but AI answers confidently', async () => {
         mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [0.1, 0.2] });
+
+        const result = await generator.generateForComment(baseContext, true);
+
+        // AI answered with high confidence using static KB — no gap should be recorded
+        expect(gapDetectorService.recordGap).not.toHaveBeenCalled();
+        expect(result.replyText).toBeTruthy();
+        expect(result.replyMethod).toBe('ai');
+    });
+
+    it('records gap when RAG returns zero chunks AND AI flags info_not_in_kb with low confidence', async () => {
+        mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [0.1, 0.2] });
+        (aiService.generateReply as ReturnType<typeof vi.fn>).mockResolvedValue({
+            reply: "I'm not sure about that, please contact us directly.",
+            language: 'en',
+            cached: false,
+            intent: 'QUESTION',
+            confidence: 'low',
+            flags: ['info_not_in_kb'],
+        });
 
         await generator.generateForComment(baseContext, true);
 
         expect(gapDetectorService.setLogger).toHaveBeenCalled();
-        expect(gapDetectorService.recordGap).toHaveBeenCalledWith('page-1', 'What is your return policy?', { type: 'comment', context: undefined });
+        expect(gapDetectorService.recordGap).toHaveBeenCalledWith(
+            'page-1',
+            'What is your return policy?',
+            { type: 'comment', context: undefined },
+        );
+    });
+
+    it('records gap when AI has medium confidence with info_not_in_kb flag', async () => {
+        mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [0.1, 0.2] });
+        (aiService.generateReply as ReturnType<typeof vi.fn>).mockResolvedValue({
+            reply: 'I have some info but not complete details.',
+            language: 'en',
+            cached: false,
+            intent: 'QUESTION',
+            confidence: 'medium',
+            flags: ['info_not_in_kb'],
+        });
+
+        await generator.generateForComment(baseContext, true);
+
+        // Medium confidence but AI says info not in KB — still a gap
+        expect(gapDetectorService.recordGap).toHaveBeenCalledWith(
+            'page-1',
+            'What is your return policy?',
+            { type: 'comment', context: undefined },
+        );
+    });
+
+    it('does NOT record gap when AI has low confidence but no info_not_in_kb flag', async () => {
+        mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [0.1, 0.2] });
+        (aiService.generateReply as ReturnType<typeof vi.fn>).mockResolvedValue({
+            reply: 'Some reply',
+            language: 'en',
+            cached: false,
+            intent: 'OTHER',
+            confidence: 'low',
+            flags: ['angry_customer'],
+        });
+
+        await generator.generateForComment(baseContext, true);
+
+        expect(gapDetectorService.recordGap).not.toHaveBeenCalled();
     });
 
     it('does NOT call gapDetectorService.recordGap when RAG returns chunks', async () => {
@@ -129,6 +199,14 @@ describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
 
     it('gap detection error does not block reply generation', async () => {
         mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [0.1, 0.2] });
+        (aiService.generateReply as ReturnType<typeof vi.fn>).mockResolvedValue({
+            reply: 'Not sure about that.',
+            language: 'en',
+            cached: false,
+            intent: 'OTHER',
+            confidence: 'low',
+            flags: ['info_not_in_kb'],
+        });
         (gapDetectorService.recordGap as ReturnType<typeof vi.fn>)
             .mockRejectedValue(new Error('DB down'));
 
@@ -139,7 +217,32 @@ describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
         expect(result.replyMethod).toBe('ai');
     });
 
-    it('gap detection is also triggered in DM channel when RAG returns zero chunks', async () => {
+    it('gap detection works in DM channel when AI flags info_not_in_kb', async () => {
+        mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [0.1, 0.2] });
+        (aiService.generateReply as ReturnType<typeof vi.fn>).mockResolvedValue({
+            reply: 'Not sure.',
+            language: 'en',
+            cached: false,
+            intent: 'OTHER',
+            confidence: 'low',
+            flags: ['info_not_in_kb'],
+        });
+
+        const dmContext = {
+            ...baseContext,
+            senderId: 'sender-1',
+        };
+
+        await generator.generateForMessage(dmContext, true);
+
+        expect(gapDetectorService.recordGap).toHaveBeenCalledWith(
+            'page-1',
+            'What is your return policy?',
+            { type: 'dm', context: undefined },
+        );
+    });
+
+    it('does NOT record gap in DM channel when AI answers confidently', async () => {
         mockRetrieve.mockResolvedValue({ chunks: [], queryEmbedding: [0.1, 0.2] });
 
         const dmContext = {
@@ -149,7 +252,7 @@ describe('ReplyGenerator - Gap detection wiring in resolveKnowledge', () => {
 
         await generator.generateForMessage(dmContext, true);
 
-        expect(gapDetectorService.recordGap).toHaveBeenCalledWith('page-1', 'What is your return policy?', { type: 'dm', context: undefined });
+        expect(gapDetectorService.recordGap).not.toHaveBeenCalled();
     });
 
     it('does NOT trigger gap detection when kbActiveVersion is null (RAG skipped)', async () => {

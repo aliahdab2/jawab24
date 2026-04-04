@@ -51,7 +51,11 @@ const DEMO_PAGES = [
 - دورات IELTS/TOEFL: 2500 ريال
 
 ✅ معتمد من المؤسسة العامة للتدريب التقني والمهني
-🎁 خصم 20% للتسجيل المبكر`,
+🎁 خصم 20% للتسجيل المبكر
+
+🌐 الموقع الإلكتروني: https://alnoor-institute.com
+💰 للتسجيل والأسعار: https://alnoor-institute.com/pricing
+📖 تفاصيل الدورات: https://alnoor-institute.com/courses`,
         autoReplyEnabled: true,
         instagramUsername: 'alnoor_institute',
     },
