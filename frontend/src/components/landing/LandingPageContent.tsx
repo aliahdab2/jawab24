@@ -29,7 +29,8 @@ function StatsSection({ statsList }: { statsList: { value: string; label: string
       {/* Background cosmic glow */}
       <div
         aria-hidden="true"
-        className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full pointer-events-none landing-glow-emerald-soft opacity-70"
+        className="absolute top-1/2 start-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] rounded-full pointer-events-none landing-glow-emerald-soft"
+        style={{ filter: 'blur(60px)' }}
       />
 
       <div className="flex items-center justify-center gap-8 sm:gap-20 lg:gap-32 relative z-10">
