@@ -97,10 +97,48 @@ export interface GenerateReplyResult {
     replyText: string | null;
     replyMethod: 'template' | 'ai';
     templateId?: string;
+    templateName?: string;
     needsAttention?: boolean;
     flagReason?: string;
     aiIntent?: string;
     confidence?: string;
+}
+
+export interface PlaygroundInput {
+    pageId: string;
+    workspaceId: string | null;
+    question: string;
+    /** Effective channel after applying commentReplyMode (dual/private → dm) */
+    channel: 'comment' | 'dm';
+    knowledgeBase?: string;
+    kbActiveVersion?: number | null;
+    pageName?: string;
+    productCatalog?: string;
+    storePolicies?: string;
+    postMessage?: string;
+    conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+    replyStyle?: string;
+    brandVoiceNotes?: string;
+    customerContext?: string;
+    model?: string;
+}
+
+export interface PlaygroundResult {
+    reply: string | null;
+    replyMethod: 'template' | 'ai' | 'skipped';
+    templateName: string | null;
+    ragMode: string;
+    chunksRetrieved: number;
+    chunks: RetrievedChunkContext[];
+    intent: string | null;
+    confidence: string | null;
+    flags: string[];
+    needsAttention: boolean;
+    cached: boolean;
+    detectedLanguage: string | null;
+    tokensUsed: number;
+    model: string | null;
+    gapRecorded: boolean;
 }
 
 /** Lazy-init retrieval service (only created when RAG_MODE != 'off' and OPENAI_API_KEY exists) */
@@ -397,6 +435,162 @@ export class ReplyGenerator {
     }
 
     /**
+     * Generate a reply for the admin playground.
+     * Mirrors the production pipeline (template → offensive filter → RAG → AI → flag processing)
+     * but skips billing checks and usage tracking. Returns rich debug data for the playground UI.
+     *
+     * The caller (admin route) is responsible for:
+     * - DB lookups (page, workspace settings, e-commerce KB enrichment)
+     * - Translating commentReplyMode (dual/private → pass channel='dm')
+     * - HTTP request/response handling
+     */
+    async generateForPlayground(input: PlaygroundInput): Promise<PlaygroundResult> {
+        const {
+            pageId, workspaceId, question, channel, knowledgeBase, kbActiveVersion,
+            pageName, productCatalog, storePolicies, postMessage, conversationHistory,
+            replyStyle, brandVoiceNotes, customerContext, model,
+        } = input;
+
+        const ragMode = config.ragMode || 'off';
+
+        // 1. Template match
+        if (workspaceId) {
+            const templateResult = await this.tryTemplateMatch(workspaceId, question);
+            if (templateResult) {
+                return {
+                    reply: templateResult.replyText,
+                    replyMethod: 'template',
+                    templateName: templateResult.templateName ?? null,
+                    ragMode,
+                    chunksRetrieved: 0,
+                    chunks: [],
+                    intent: null,
+                    confidence: null,
+                    flags: [],
+                    needsAttention: false,
+                    cached: false,
+                    detectedLanguage: null,
+                    tokensUsed: 0,
+                    model: null,
+                    gapRecorded: false,
+                };
+            }
+        }
+
+        // 2. Pre-AI offensive filter
+        if (isOffensiveContent(question)) {
+            return {
+                reply: null,
+                replyMethod: 'skipped',
+                templateName: null,
+                ragMode,
+                chunksRetrieved: 0,
+                chunks: [],
+                intent: 'OFFENSIVE',
+                confidence: 'high',
+                flags: ['offensive_or_abusive'],
+                needsAttention: true,
+                cached: false,
+                detectedLanguage: null,
+                tokensUsed: 0,
+                model: null,
+                gapRecorded: false,
+            };
+        }
+
+        // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production)
+        const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
+            pageId, question, knowledgeBase, kbActiveVersion, channel,
+            conversationHistory, !!productCatalog,
+        );
+
+        // 4. Call AI
+        const detectedLang = detectLanguageCode(question);
+        const aiResponse = await aiService.generateReply({
+            comment: question,
+            language: detectedLang !== 'unknown' ? detectedLang : undefined,
+            ...(model ? { model } : {}),
+            context: {
+                pageId,
+                pageName,
+                knowledgeBase: effectiveKB,
+                retrievedChunks: retrievedChunks?.length ? retrievedChunks : undefined,
+                storePolicies,
+                productCatalog,
+                channel,
+                kbActiveVersion,
+                queryEmbedding,
+                ...(channel === 'comment' && postMessage ? { postMessage } : {}),
+                ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
+                ...(replyStyle ? { replyStyle } : {}),
+                ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
+                ...(customerContext ? { customerContext } : {}),
+            },
+        });
+
+        // 5. Normalize intent + process flags (mirrors processAiResponse, minus billing)
+        const normalizedIntent = normalizeAiIntent(aiResponse.intent);
+        const flags = [...(aiResponse.flags || [])];
+        if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
+            flags.push('low_confidence');
+        }
+
+        // Post-validation hallucination guard (same logic as processAiResponse)
+        const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
+        if (
+            ragAttempted &&
+            (retrievedChunks?.length ?? 0) === 0 &&
+            !effectiveKB &&
+            aiResponse.confidence !== 'low' &&
+            !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
+            !flags.includes('info_not_in_kb')
+        ) {
+            flags.push('info_not_in_kb');
+            if (!flags.includes('low_confidence')) {
+                flags.push('low_confidence');
+            }
+        }
+
+        const needsAttention = computeNeedsAttention(flags, normalizedIntent);
+        const skipped = shouldSkipReply(flags.join(','), normalizedIntent);
+        const useFallback = shouldUseFallback(flags.join(','));
+
+        // Gap recording (fire-and-forget, same triggers as processAiResponse)
+        let gapRecorded = false;
+        if (pageId && flags.includes('info_not_in_kb')) {
+            gapDetectorService.setLogger(this.logger);
+            gapDetectorService.recordGap(pageId, question, { type: channel === 'dm' ? 'dm' : 'comment' }).catch(() => {});
+            gapRecorded = true;
+        }
+
+        let finalReply: string | null = aiResponse.reply;
+        if (skipped) {
+            finalReply = null;
+        } else if (useFallback) {
+            const lang = aiResponse.language === 'ar' ? 'ar' : 'en';
+            finalReply = PRICE_FALLBACK[lang] || PRICE_FALLBACK.en;
+        }
+
+        return {
+            reply: finalReply,
+            replyMethod: skipped ? 'skipped' : 'ai',
+            templateName: null,
+            ragMode,
+            chunksRetrieved: retrievedChunks?.length ?? 0,
+            chunks: retrievedChunks ?? [],
+            intent: normalizedIntent || null,
+            confidence: aiResponse.confidence || null,
+            flags,
+            needsAttention,
+            cached: aiResponse.cached,
+            detectedLanguage: aiResponse.language || null,
+            tokensUsed: aiResponse.tokensUsed || 0,
+            model: aiResponse.model || null,
+            gapRecorded,
+        };
+    }
+
+    /**
      * Check if the same template text was already sent to this sender in conversation history.
      * DM-only dedup: avoids sending the same canned reply twice when the customer
      * asks about the same topic again. When true, the pipeline skips the template
@@ -442,7 +636,7 @@ export class ReplyGenerator {
 
             if (template?.message && template.active !== false) {
                 this.logger.debug('[Generator] Using template', { templateName: template.name });
-                return { replyText: template.message, replyMethod: 'template', templateId: template.id, needsAttention: false };
+                return { replyText: template.message, replyMethod: 'template', templateId: template.id, templateName: template.name, needsAttention: false };
             }
         }
 

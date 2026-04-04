@@ -5,22 +5,12 @@ import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kb
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../services/ecommerce';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
-import { config } from '../config';
-import { aiService } from '../services/ai';
-import { rulesService } from '../services/rules';
-import { templatesService } from '../services/templates';
-import { RetrievalService } from '../services/kb/retrieval';
-import { OpenAIEmbeddingProvider } from '../services/kb/embedding';
-import { gapDetectorService } from '../services/kb/gap-detector';
-import { settingsService } from '../services/settings';
 import { getIngestionService } from '../services/pages';
-import { shouldSkipReply, shouldUseFallback, computeNeedsAttention, PRICE_FALLBACK } from '../services/reply/generator';
+import { replyGenerator } from '../services/reply/generator';
+import type { PlaygroundInput } from '../services/reply/generator';
 import { pickNudgeVariation } from '../services/reply/nudge';
-import { isOffensiveContent } from '../services/offensive-filter';
-import { normalizeAiIntent } from '@jawab24/shared';
-import { RetrievedChunkContext } from '../types';
+import { settingsService } from '../services/settings';
 import { detectLanguageCode } from '../utils/language';
-import { countContentWords } from '../utils/text';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -868,79 +858,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     }
                 }
 
-                // 2. Try template match
-                let templateMatch: { name?: string; message?: string; id?: string } | null = null;
-                const wordCount = countContentWords(question);
-                const TEMPLATE_WORD_LIMIT = 6;
-
-                if (page.workspaceId && wordCount <= TEMPLATE_WORD_LIMIT) {
-                    const matchingRule = await rulesService.findMatchingRule(page.workspaceId, question);
-                    if (matchingRule?.templateId) {
-                        const template = await templatesService.getTemplate(page.workspaceId, matchingRule.templateId);
-                        if (template?.message && template.active !== false) {
-                            templateMatch = { name: template.name, message: template.message, id: template.id };
-                        }
-                    }
-                } else if (wordCount > TEMPLATE_WORD_LIMIT) {
-                    request.log.debug({ wordCount, limit: TEMPLATE_WORD_LIMIT }, 'Playground: skipping template due to word count');
-                }
-
-                if (templateMatch) {
-                    return reply.send({
-                        success: true,
-                        data: {
-                            reply: templateMatch.message,
-                            replyMethod: 'template',
-                            templateName: templateMatch.name,
-                            ragMode: config.ragMode || 'off',
-                            chunksRetrieved: 0,
-                            chunks: [],
-                            intent: null,
-                            confidence: null,
-                            flags: [],
-                            needsAttention: false,
-                            cached: false,
-                            detectedLanguage: null,
-                            latencyMs: Date.now() - startTime,
-                            tokensUsed: 0,
-                            model: null,
-                            gapRecorded: false,
-                            commentReplyMode: channel === 'comment' ? commentReplyMode : null,
-                            nudgeText: channel === 'comment' ? nudgeText : null,
-                        },
-                    });
-                }
-
-                // 2b. Pre-AI offensive filter
-                if (isOffensiveContent(question)) {
-                    return reply.send({
-                        success: true,
-                        data: {
-                            reply: null,
-                            replyMethod: 'skipped',
-                            templateName: null,
-                            ragMode: config.ragMode || 'off',
-                            chunksRetrieved: 0,
-                            chunks: [],
-                            intent: 'OFFENSIVE',
-                            confidence: 'high',
-                            flags: ['offensive_or_abusive'],
-                            needsAttention: true,
-                            cached: false,
-                            detectedLanguage: null,
-                            latencyMs: Date.now() - startTime,
-                            tokensUsed: 0,
-                            model: null,
-                            gapRecorded: false,
-                            commentReplyMode: channel === 'comment' ? commentReplyMode : null,
-                            nudgeText: channel === 'comment' ? nudgeText : null,
-                        },
-                    });
-                }
-
-                // 3. Enrich KB with e-commerce product/policy data BEFORE RAG check
-                // (same as production messageProcessor — enriched KB must be used for
-                // the small-KB threshold so ecommerce pages use RAG for product chunks)
+                // 2. Enrich KB with e-commerce product/policy data
                 let pageKB = page.knowledgeBase || undefined;
                 let storePolicies: string | undefined;
                 let productCatalog: string | undefined;
@@ -955,158 +873,37 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     }
                 }
 
-                // 4. RAG retrieval (capture chunks for display)
-                let retrievedChunks: RetrievedChunkContext[] = [];
-                let queryEmbedding: number[] | undefined;
-                let gapRecorded = false;
-                let ragAttempted = false;
-                const ragMode = config.ragMode || 'off';
-
-                const activeVersion = page.kbActiveVersion;
-                // Small KB optimization: skip RAG for KBs under threshold — send full text to AI instead.
-                // Exception: if there are ecommerce product chunks (productCatalog), always use RAG
-                // since product details (specs, variants, prices) live in chunks, not in the static KB.
-                const KB_RAG_THRESHOLD_CHARS = 5000;
-                const hasEcommerceChunks = !!page.ecommerceStoreId && !!productCatalog;
-                const kbTooSmallForRag = !hasEcommerceChunks && (pageKB?.length ?? 0) < KB_RAG_THRESHOLD_CHARS && !!pageKB;
-                request.log.debug({ ragMode, hasApiKey: !!config.openai?.apiKey, activeVersion, kbTooSmallForRag, hasEcommerceChunks, kbLength: pageKB?.length }, 'RAG check');
-                if (ragMode !== 'off' && config.openai?.apiKey && activeVersion !== null && !kbTooSmallForRag) {
-                    ragAttempted = true;
-                    try {
-                        const embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
-                        const retrievalService = new RetrievalService(embeddingProvider);
-                        retrievalService.setLogger(request.log);
-
-                        // Enrich vague follow-up queries with conversation context for better RAG retrieval.
-                        // Uses both last user message (ground truth) and tail of last assistant reply
-                        // (captures topics the AI introduced, e.g., product suggestions).
-                        // Hallucination mitigation: only last 80 chars of assistant reply (tail),
-                        // where new topics are appended, not mid-reply elaborations.
-                        let ragQuery = question;
-                        if (conversationHistory && conversationHistory.length > 0 && question.trim().split(/\s+/).length <= 6) {
-                            const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
-                            const lastAssistantMessage = [...conversationHistory].reverse().find(m => m.role === 'assistant');
-                            const parts: string[] = [];
-                            if (lastUserMessage) parts.push(lastUserMessage.content.slice(0, 100));
-                            if (lastAssistantMessage) parts.push(lastAssistantMessage.content.slice(-80));
-                            parts.push(question);
-                            ragQuery = parts.join(' ').slice(0, 400);
-                        }
-
-                        const result = await retrievalService.retrieve(pageId, ragQuery, activeVersion);
-                        queryEmbedding = result.queryEmbedding;
-                        request.log.debug({ chunksFound: result.chunks.length, topScore: result.chunks[0]?.finalScore }, 'RAG retrieval result');
-
-                        if (result.chunks.length > 0) {
-                            retrievedChunks = result.chunks.map(c => ({
-                                type: c.type,
-                                title: c.title,
-                                content: c.content,
-                                score: c.finalScore,
-                            }));
-                        } else {
-                            // Record gap (fire-and-forget)
-                            gapDetectorService.recordGap(pageId, question).catch(() => {});
-                            gapRecorded = true;
-                        }
-                    } catch (ragError) {
-                        // Retrieval failed — fall back to static KB
-                        request.log.error(ragError, 'RAG retrieval failed in playground');
-                    }
-                }
-
-                // 5. Call AI service
-                // When comment reply mode is dual or private, the AI reply will be sent
-                // as a DM, so use 'dm' channel for a detailed answer (with prices, etc.)
+                // 3. When comment mode is dual or private, use DM channel for detailed AI reply
                 const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
                     ? 'dm'
                     : channel;
 
-                const effectiveKB = (ragMode === 'on' && retrievedChunks.length > 0)
-                    ? undefined
-                    : pageKB;
-
-                const questionLang = detectLanguageCode(question);
-                const aiResponse = await aiService.generateReply({
-                    comment: question,
-                    language: questionLang !== 'unknown' ? questionLang : undefined,
-                    ...(model ? { model } : {}),
-                    context: {
-                        pageId,
-                        pageName: page.name ?? undefined,
-                        knowledgeBase: effectiveKB,
-                        retrievedChunks: retrievedChunks.length > 0 ? retrievedChunks : undefined,
-                        storePolicies,
-                        productCatalog,
-                        channel: effectiveChannel,
-                        kbActiveVersion: page.kbActiveVersion,
-                        queryEmbedding,
-                        ...(channel === 'comment' && postMessage ? { postMessage } : {}),
-                        ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
-                        ...(replyStyle ? { replyStyle } : {}),
-                        ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
-                        ...(customerContext ? { customerContext } : {}),
-                    },
-                });
-
-                // 5. Normalize intent + process flags (same logic as generator.ts)
-                const normalizedIntent = normalizeAiIntent(aiResponse.intent);
-                const flags = [...(aiResponse.flags || [])];
-                if (aiResponse.confidence === 'low' && !flags.includes('low_confidence')) {
-                    flags.push('low_confidence');
-                }
-
-                // Post-validation: hallucination guard (mirrors generator.ts)
-                // Only fires when RAG retrieval was attempted but found 0 chunks
-                // AND static KB was not provided as fallback context.
-                // Static-KB pages (no RAG) always have 0 chunks — that's normal, not hallucination.
-                // When static KB was passed (effectiveKB truthy), the AI had the full KB text
-                // and can assess its own confidence — no need to override.
-                const HALLUCINATION_SAFE_INTENTS = new Set(['COMPLIMENT', 'COMPLAINT', 'GREETING', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
-                if (
-                    ragAttempted &&
-                    retrievedChunks.length === 0 &&
-                    !effectiveKB &&
-                    aiResponse.confidence !== 'low' &&
-                    !HALLUCINATION_SAFE_INTENTS.has(normalizedIntent || '') &&
-                    !flags.includes('info_not_in_kb')
-                ) {
-                    flags.push('info_not_in_kb');
-                    if (!flags.includes('low_confidence')) {
-                        flags.push('low_confidence');
-                    }
-                }
-                const needsAttention = computeNeedsAttention(flags, normalizedIntent);
-                const skipped = shouldSkipReply(flags.join(','), normalizedIntent);
-                const useFallback = shouldUseFallback(flags.join(','));
-
-                let finalReply = aiResponse.reply;
-                if (skipped) {
-                    finalReply = null as unknown as string;
-                } else if (useFallback) {
-                    const lang = aiResponse.language === 'ar' ? 'ar' : 'en';
-                    finalReply = PRICE_FALLBACK[lang] || PRICE_FALLBACK.en;
-                }
+                // 4. Delegate to replyGenerator — single source of truth for the pipeline
+                const playgroundInput: PlaygroundInput = {
+                    pageId,
+                    workspaceId: page.workspaceId,
+                    question,
+                    channel: effectiveChannel,
+                    knowledgeBase: pageKB,
+                    kbActiveVersion: page.kbActiveVersion,
+                    pageName: page.name ?? undefined,
+                    productCatalog,
+                    storePolicies,
+                    postMessage: channel === 'comment' ? postMessage : undefined,
+                    conversationHistory: channel === 'dm' ? conversationHistory : undefined,
+                    replyStyle,
+                    brandVoiceNotes,
+                    customerContext,
+                    model,
+                };
+                replyGenerator.setLogger(request.log);
+                const result = await replyGenerator.generateForPlayground(playgroundInput);
 
                 return reply.send({
                     success: true,
                     data: {
-                        reply: finalReply,
-                        replyMethod: skipped ? 'skipped' : 'ai',
-                        templateName: null,
-                        ragMode,
-                        chunksRetrieved: retrievedChunks.length,
-                        chunks: retrievedChunks,
-                        intent: normalizedIntent || null,
-                        confidence: aiResponse.confidence || null,
-                        flags,
-                        needsAttention,
-                        cached: aiResponse.cached,
-                        detectedLanguage: aiResponse.language || null,
+                        ...result,
                         latencyMs: Date.now() - startTime,
-                        tokensUsed: aiResponse.tokensUsed || 0,
-                        model: aiResponse.model || null,
-                        gapRecorded,
                         commentReplyMode: channel === 'comment' ? commentReplyMode : null,
                         nudgeText: channel === 'comment' ? nudgeText : null,
                     },
