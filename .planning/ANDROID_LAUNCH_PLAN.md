@@ -1,7 +1,7 @@
 # Android App Launch Plan
 
 > **Created:** 2026-04-04
-> **Status:** Phase 1 complete — release build verified (10MB AAB), store listing drafted
+> **Status:** Phase 5 in progress — Play Console account created, identity verification pending (submitted 2026-04-04)
 > **Goal:** Launch Jawab24 on Google Play Store while waiting for Meta FB/IG approval
 > **Companion plans:** `WHATSAPP_PLAN.md` (WhatsApp frontend), `ECOMMERCE_POWER_FEATURES_PLAN.md` (e-commerce features)
 
@@ -38,6 +38,9 @@ Meta approval for Facebook/Instagram is pending. WhatsApp backend is complete bu
 | Certificate pinning not enabled | MEDIUM | Config prepared in `network_security_config.xml` but commented out |
 | No Play Store listing assets | HIGH | Screenshots + feature graphic still needed. Descriptions drafted in `.planning/play-store-listing.md` |
 | ~~Version code is 2~~ | ~~LOW~~ | ✅ Bumped to versionCode 3, versionName 1.1.0 |
+| ~~Landscape nav bar overlap~~ | ~~HIGH~~ | ✅ Fixed — native-landscape-spacer pushes buttons clear of Android nav bar |
+| ~~Login page not scrollable in landscape~~ | ~~HIGH~~ | ✅ Fixed — max-h-[100dvh] constraint enables scroll |
+| ~~Android nav bar opaque~~ | ~~MEDIUM~~ | ✅ Fixed — now transparent for edge-to-edge display |
 | No CI/CD for Android builds | MEDIUM | Only local build via `npm run build:mobile:clean` |
 | StatusBar style not synced on theme change | LOW | Style determined by pathname — dark mode toggle doesn't update StatusBar |
 
@@ -45,38 +48,18 @@ Meta approval for Facebook/Instagram is pending. WhatsApp backend is complete bu
 
 ## Phase 1: Build & Signing Pipeline (Day 1-2)
 
-### 1a. Fix Machine-Specific Gradle Properties
+### 1a. Fix Machine-Specific Gradle Properties ✅
 
-**Problem**: `gradle.properties` hardcodes `/Library/Java/JavaVirtualMachines/zulu-21.jdk/Contents/Home` — fails on CI or any other dev machine.
+~~**Problem**: `gradle.properties` hardcodes Java path.~~
+**Done** — removed hardcoded path, uses `JAVA_HOME` env var.
 
-**File to modify**: `frontend/android/gradle.properties`
+### 1b. Version Strategy ✅
 
-**Fix**: Remove `org.gradle.java.home` line. Let Gradle use the system `JAVA_HOME` environment variable. Document the Java 21 requirement in the plan and `AI_INSTRUCTIONS.md`.
+**Done** — versionCode 3, versionName 1.1.0.
 
-### 1b. Version Strategy
+### 1c. Release Build Verification ✅
 
-**File to modify**: `frontend/android/app/build.gradle` (lines 38-39)
-
-Current: `versionCode 2`, `versionName "1.0.1"`
-
-**Strategy**:
-- `versionCode` — auto-increment on each release build. For now, set to `3` for first Play Store release.
-- `versionName` — follow semver: `1.1.0` for this launch (first public Android release with WhatsApp support)
-- Future: read from `package.json` version or env var in CI
-
-### 1c. Release Build Verification
-
-**Steps**:
-1. Run `npm run build:mobile` from `frontend/` — verify `out/` directory generated
-2. Run `npx cap sync android` — verify web assets copied to Android project
-3. Build release APK/AAB: `cd android && ./gradlew bundleRelease` (AAB required for Play Store)
-4. Verify APK size is reasonable (<50MB)
-5. Test release build on physical device (ProGuard can strip needed classes)
-
-**New script** to add to `frontend/package.json`:
-```json
-"build:android:release": "npm run build:mobile && npx cap sync android && cd android && ./gradlew bundleRelease"
-```
+**Done** — release AAB builds successfully (12MB). Tested on physical Samsung device.
 
 ### 1d. Keystore Backup & Documentation
 
@@ -200,23 +183,31 @@ Test on at minimum:
 
 ---
 
-## Phase 5: Google Play Console Setup (Day 5-6)
+## Phase 5: Google Play Console Setup (Day 5-6) — IN PROGRESS
 
-### 5a. App Creation
+### 5a. Developer Account ✅
+
+1. ✅ Play Console account created (Individual, aliahdab@gmail.com, Account ID: 911237902090522480)
+2. ✅ $25 registration fee paid
+3. ✅ Identity document uploaded (pending Google review, submitted 2026-04-04)
+4. ✅ Android device verified via Play Console mobile app
+5. ⏳ Phone number verification — unlocks after identity approval (2-7 days)
+
+### 5b. App Creation (after verification)
 
 1. Create app in Google Play Console
 2. Set: App name "Jawab24", Default language "Arabic", App type "App", Free/Paid "Free"
 3. Complete all declarations (content rating, target audience, data safety)
 
-### 5b. Internal Testing Track
+### 5c. Internal Testing Track
 
 **Before public launch**, use Internal Testing:
-1. Upload AAB to Internal Testing track
+1. Upload AAB (`frontend/android/app/build/outputs/bundle/release/app-release.aab`, 12MB)
 2. Add team members as testers (up to 100)
 3. Test the full install → use → update flow
 4. Verify in-app update mechanism works from Play Store
 
-### 5c. Closed Testing (Optional)
+### 5d. Closed Testing (Optional)
 
 If you want beta feedback before public launch:
 1. Create Closed Testing track
@@ -224,7 +215,7 @@ If you want beta feedback before public launch:
 3. Collect feedback for 3-5 days
 4. Fix critical issues
 
-### 5d. Production Release
+### 5e. Production Release
 
 1. Upload AAB to Production track
 2. Use **staged rollout** (start at 20% → 50% → 100%)
@@ -283,17 +274,19 @@ This is the highest-value feature to ship alongside the Android launch. See `WHA
 
 ## Timeline Summary
 
-| Day | Tasks |
-|-----|-------|
-| 1-2 | Fix gradle properties, version bump, release build verification, keystore backup |
-| 2-3 | Data safety form, privacy policy check, content rating |
-| 3-4 | Store listing assets (screenshots, descriptions, feature graphic) |
-| 4-5 | Device testing matrix, performance checks |
-| 5-6 | Play Console setup, internal testing upload |
-| 7+ | Staged production rollout, monitoring |
-| Parallel | WhatsApp frontend (4 days, independent track) |
+| Day | Tasks | Status |
+|-----|-------|--------|
+| 1-2 | Fix gradle properties, version bump, release build verification | ✅ Done |
+| 2-3 | Landscape layout fixes, edge-to-edge nav bar, login page scroll | ✅ Done |
+| 3-4 | Play Console account setup, identity verification | ✅ Submitted, awaiting approval |
+| 4-7 | ⏳ **BLOCKED** — waiting for Google identity verification (2-7 days) |  |
+| 7-8 | Create app, complete data safety + content rating, upload AAB to Internal Testing | Next |
+| 8-9 | Store listing assets (screenshots, descriptions, feature graphic) | Next |
+| 9-10 | Device testing via Internal Testing track | Next |
+| 10+ | Staged production rollout, monitoring | Future |
+| Parallel | WhatsApp frontend (4 days, independent track) | Not started |
 
-**Total: ~7 days to Play Store, with WhatsApp frontend ready in the same window.**
+**Current blocker: Google identity verification (submitted 2026-04-04, ETA 2-7 days).**
 
 ---
 
