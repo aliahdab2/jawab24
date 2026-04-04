@@ -86,7 +86,7 @@ export interface BusinessProfile {
 export interface Page {
   id: string;
   name: string;
-  facebookPageId: string;
+  facebookPageId?: string | null;
   autoReplyEnabled: boolean | null;
   // Instagram fields
   instagramAccountId?: string | null;

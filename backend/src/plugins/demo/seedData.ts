@@ -1124,7 +1124,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         .where(eq(pages.userId, userId));
 
     const demoPageIds = DEMO_PAGES.map(p => p.facebookPageId);
-    const hasExistingDemoPages = existingPages.some(p => demoPageIds.includes(p.facebookPageId));
+    const hasExistingDemoPages = existingPages.some(p => p.facebookPageId && demoPageIds.includes(p.facebookPageId));
 
     if (hasExistingDemoPages) {
         logger.info('[DemoData] Demo data already exists, refreshing all demo data');
@@ -1144,7 +1144,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         }
 
         // Get demo page IDs for refresh
-        const demoExistingPages = existingPages.filter(p => demoPageIds.includes(p.facebookPageId));
+        const demoExistingPages = existingPages.filter(p => p.facebookPageId && demoPageIds.includes(p.facebookPageId));
         const existingPageIds = demoExistingPages.map(p => p.id);
 
         // Refresh messages: delete old → re-seed with fresh timestamps
@@ -1304,7 +1304,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
     }
 
     // Create demo pages (with suggestedKnowledgeBase for demo - user can confirm in onboarding)
-    const createdPages: { id: string; facebookPageId: string }[] = [];
+    const createdPages: { id: string; facebookPageId: string | null }[] = [];
     for (const pageData of DEMO_PAGES) {
         const [created] = await db
             .insert(pages)

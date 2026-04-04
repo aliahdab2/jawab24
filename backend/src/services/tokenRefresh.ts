@@ -61,6 +61,7 @@ async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: 
             and(
                 ne(pages.accessToken, ''),
                 isNotNull(pages.userId),
+                isNotNull(pages.facebookPageId),
                 or(
                     isNull(pages.tokenLastVerifiedAt),
                     lt(pages.tokenLastVerifiedAt, staleThreshold),
@@ -119,7 +120,7 @@ async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: 
             const invalidPages: typeof userPages = [];
 
             for (const page of userPages) {
-                const freshToken = freshTokenMap.get(page.facebookPageId);
+                const freshToken = freshTokenMap.get(page.facebookPageId!);
                 if (freshToken) {
                     // Token is valid — update with fresh token and mark as verified
                     await db

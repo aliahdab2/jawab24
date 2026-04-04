@@ -143,7 +143,9 @@ export class PagesController {
             // Unsubscribe from webhooks before deleting
             const page = await pagesService.getPage(req.workspaceId, id);
             if (page) {
-                await facebookService.unsubscribePageFromWebhooks(page.facebookPageId, page.accessToken);
+                if (page.facebookPageId) {
+                    await facebookService.unsubscribePageFromWebhooks(page.facebookPageId, page.accessToken);
+                }
             }
 
             await pagesService.deletePage(req.workspaceId, id);

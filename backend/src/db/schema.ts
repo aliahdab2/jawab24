@@ -114,7 +114,7 @@ export const pages = pgTable('pages', {
     id: uuid('id').defaultRandom().primaryKey(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
     workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    facebookPageId: varchar('facebook_page_id', { length: 255 }).unique().notNull(),
+    facebookPageId: varchar('facebook_page_id', { length: 255 }).unique(),
     name: varchar('name', { length: 255 }),
     accessToken: text('access_token').notNull(),
     tokenLastVerifiedAt: timestamp('token_last_verified_at'),

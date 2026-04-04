@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ALTER COLUMN "facebook_page_id" DROP NOT NULL;
