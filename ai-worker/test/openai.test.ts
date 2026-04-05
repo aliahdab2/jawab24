@@ -1579,7 +1579,7 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(rf.type).toBe('json_schema');
         expect(rf.json_schema.name).toBe('ai_reply');
         expect(rf.json_schema.strict).toBe(true);
-        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags']);
+        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging']);
         expect(rf.json_schema.schema.properties.intent.enum).toEqual([
             'QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
             'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',
@@ -1614,11 +1614,12 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
         }));
     }
 
-    it('should downgrade confidence when Arabic reply contains hedge words', async () => {
+    it('should downgrade confidence when GPT signals hedging on Arabic reply', async () => {
         setupMock(JSON.stringify({
             reply: 'خليني أتحقق من هالمعلومة وأرجعلك',
             intent: 'QUESTION',
             confidence: 'high',
+            hedging: true,
             flags: [],
         }));
 
@@ -1630,11 +1631,12 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
         expect(result.flags).toContain('info_not_in_kb');
     });
 
-    it('should downgrade confidence when English reply contains hedge words', async () => {
+    it('should downgrade confidence when GPT signals hedging on English reply', async () => {
         setupMock(JSON.stringify({
             reply: 'Let me check with the team and get back to you!',
             intent: 'QUESTION',
             confidence: 'high',
+            hedging: true,
             flags: [],
         }));
 
@@ -1646,11 +1648,12 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
         expect(result.flags).toContain('info_not_in_kb');
     });
 
-    it('should NOT downgrade confidence for non-hedge replies', async () => {
+    it('should NOT downgrade confidence when GPT signals no hedging', async () => {
         setupMock(JSON.stringify({
             reply: 'السعر 1500 ريال شهرياً',
             intent: 'QUESTION',
             confidence: 'high',
+            hedging: false,
             flags: [],
         }));
 
@@ -1665,11 +1668,12 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
         expect(result.flags).not.toContain('info_not_in_kb');
     });
 
-    it('should downgrade medium confidence hedge replies too', async () => {
+    it('should downgrade medium confidence when GPT signals hedging', async () => {
         setupMock(JSON.stringify({
             reply: "I'll check on that and confirm with the team.",
             intent: 'QUESTION',
             confidence: 'medium',
+            hedging: true,
             flags: [],
         }));
 
@@ -1681,11 +1685,12 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
         expect(result.flags).toContain('info_not_in_kb');
     });
 
-    it('should NOT downgrade when reply contains standalone أرجعلك without hedge context', async () => {
+    it('should NOT downgrade when GPT signals no hedging even if reply contains أرجعلك', async () => {
         setupMock(JSON.stringify({
             reply: 'العنوان هو البرامكة سانا، أرجعلك التفاصيل الكاملة هنا 😊',
             intent: 'QUESTION',
             confidence: 'high',
+            hedging: false,
             flags: [],
         }));
 
@@ -1705,6 +1710,7 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
             reply: 'خليني أتحقق من الفريق',
             intent: 'QUESTION',
             confidence: 'low',
+            hedging: true,
             flags: ['info_not_in_kb'],
         }));
 
@@ -1716,11 +1722,12 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
         expect(result.flags).toContain('info_not_in_kb');
     });
 
-    it('should NOT flag hedge words in GREETING replies (e.g., reply to "ok")', async () => {
+    it('should NOT flag hedging on GREETING intents even when hedging field is true', async () => {
         setupMock(JSON.stringify({
             reply: 'How can I assist you today? Feel free to reach out!',
             intent: 'GREETING',
             confidence: 'high',
+            hedging: true,
             flags: [],
         }));
 
@@ -1732,11 +1739,12 @@ describe('OpenAI Service - Hedge-Word Detection', () => {
         expect(result.flags).not.toContain('info_not_in_kb');
     });
 
-    it('should NOT flag hedge words in COMPLIMENT replies (e.g., reply to "thanks")', async () => {
+    it('should NOT flag hedging on COMPLIMENT intents even when hedging field is true', async () => {
         setupMock(JSON.stringify({
             reply: "You're welcome! Don't hesitate to reach out if you need anything.",
             intent: 'COMPLIMENT',
             confidence: 'high',
+            hedging: true,
             flags: [],
         }));
 

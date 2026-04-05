@@ -11,7 +11,7 @@ import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, wo
 import { encrypt, decrypt } from './ecommerceCrypto';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
-import { redis } from '../lib/redis';
+import { redisScanDelete } from '../lib/redis';
 
 // --- Constants & Types ---
 
@@ -339,19 +339,7 @@ export async function invalidateCachesForStore(storeId: string): Promise<number>
 
         // 2. Flush Redis exact AI cache entries
         try {
-            let cursor = '0';
-            const keysToDelete: string[] = [];
-            do {
-                const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', 'cache:ai_reply:*', 'COUNT', 200);
-                cursor = nextCursor;
-                keysToDelete.push(...keys);
-            } while (cursor !== '0');
-
-            if (keysToDelete.length > 0) {
-                for (let i = 0; i < keysToDelete.length; i += 100) {
-                    await redis.del(...keysToDelete.slice(i, i + 100));
-                }
-            }
+            await redisScanDelete('cache:ai_reply:*');
         } catch {
             // Redis unavailable — semantic cache version bump is sufficient
         }

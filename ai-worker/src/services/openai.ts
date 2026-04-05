@@ -153,8 +153,9 @@ export class OpenAIService {
                                             type: 'array',
                                             items: { type: 'string' },
                                         },
+                                        hedging: { type: 'boolean' },
                                     },
-                                    required: ['reply', 'intent', 'confidence', 'flags'] as const,
+                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging'] as const,
                                     additionalProperties: false,
                                 },
                             },
@@ -169,7 +170,7 @@ export class OpenAIService {
             const detectedLanguage = this.detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
+            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean };
             try {
                 parsed = JSON.parse(content);
             } catch {
@@ -489,6 +490,7 @@ IMPORTANT: Output a JSON object with these fields:
 - "reply": your reply text (string, no prefixes like "Reply:" or "Assistant:")
 - "intent": MUST be exactly one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT. No other values are accepted. Do NOT use "OTHER", "PRICE", "LOCATION", "HOURS", "PRODUCT", "INFO", or any custom intent.
 - "confidence": how confident you are in your reply ("high", "medium", or "low")
+- "hedging": true if your reply uses any hedge or deflection phrase — e.g. "I'll check", "let me confirm", "سأتحقق", "خليني أتحقق", "تواصل معنا", "contact us", or anything that signals you're redirecting rather than answering. false otherwise. This field MUST be present.
 - "flags": an array of flag strings if applicable (empty array [] if none):
   - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
   - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in <business_knowledge>
@@ -506,43 +508,43 @@ EXAMPLES (follow this exact format):
 
 Example 1 — Answer found in KB:
 Customer: "كم سعر الباقة؟" | KB has: "باقة الورد - 150 ريال"
-{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","flags":[]}
+{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}
 
 Example 2 — Answer NOT in KB:
 Customer: "Do you deliver to Jeddah?" | KB has no delivery info
-{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","hedging":true,"flags":["info_not_in_kb"]}
 
 Example 3 — Offensive message:
 Customer: "يا حمير"
-{"reply":"","intent":"OFFENSIVE","confidence":"high","flags":["offensive_or_abusive"]}
+{"reply":"","intent":"OFFENSIVE","confidence":"high","hedging":false,"flags":["offensive_or_abusive"]}
 
 Example 4 — WHO question not in KB:
 Customer: "مين صاحب المعهد؟" | KB has courses & prices but NO owner info
-{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","hedging":true,"flags":["info_not_in_kb"]}
 
 Example 5 — Sarcasm (CRITICAL — positive words + negative meaning):
 Customer: "واو شو هالخدمة الرائعة 🙄"
-{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","flags":[]}
+{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"flags":[]}
 
 Example 6 — Angry customer:
 Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً"
-{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","flags":["angry_customer","refund_request"]}
+{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"flags":["angry_customer","refund_request"]}
 
 Example 6b — Cancellation request (calm tone):
 Customer: "ابي الغي طلبي رقم 5678"
-{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","flags":["cancellation_request"]}
+{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","hedging":false,"flags":["cancellation_request"]}
 
 Example 7 — Geographic specificity (partial KB match):
 Customer: "هل التوصيل مجاني لجدة؟" | KB says "توصيل مجاني لمناطق الرياض"
-{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","flags":["info_not_in_kb"]}
+{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","hedging":true,"flags":["info_not_in_kb"]}
 
 Example 8 — Related but DIFFERENT concept (certificate vs accreditation):
 Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation) but NOT certificates
-{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","hedging":true,"flags":["info_not_in_kb"]}
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[]}`;
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}`;
 
         return prompt;
     }
@@ -711,42 +713,18 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
             }
         }
 
-        // Check 4: Hedge-word inconsistency — reply uses "I'll check" / "contact us" language but confidence is high/medium
-        // Uses PHRASE matching (not substring) to avoid false positives on words like "أرجعلك" in valid replies
-        // Only applies to question-type intents — hedging on a GREETING/COMPLIMENT reply is normal (e.g., "How can I help?" to "ok")
+        // Check 4: GPT-reported hedging — model signals its reply is a deflection ("I'll check", "contact us", etc.)
+        // Language-agnostic: GPT evaluates its own reply in context, no regex maintenance needed.
+        // Only applies to question-type intents — hedging on GREETING/COMPLIMENT replies is not meaningful.
         const HEDGE_CHECK_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
-        if (reply && HEDGE_CHECK_INTENTS.has(parsed.intent || '') && parsed.confidence !== 'low') {
-            const hedgePatterns = [
-                /خليني أتحقق|خلني أتحقق|سأتحقق|سأتأكد|راح أتحقق|راح أتأكد|نتأكد ونرجعلك|أتحقق.*وأرجعلك|أرجعلك.*بعد/,  // Arabic hedge phrases
-                /تواصل معنا|تواصلوا معنا|راسلنا|أرسلنا رسالة|اتصل بنا|اتصلوا بنا|خلنا نتواصل على الخاص/,  // Arabic deflection phrases
-                /let me check|i'?ll check|get back to you|confirm with the team/i, // English hedge phrases
-                /reach out|contact us|send us a message|message us directly|we'?ll get back|will follow up/i, // English deflection phrases
-                /i don'?t have.*information|i'?m not sure about/i, // Explicit uncertainty
-            ];
-            const hasHedge = hedgePatterns.some(p => p.test(reply));
-            if (hasHedge) {
-                parsed = { ...parsed, confidence: 'low' };
-                if (!flags.includes('info_not_in_kb')) {
-                    flags.push('info_not_in_kb');
-                }
-            }
-        }
-
-        // Check 5: DM deflection — saying "contact us" / "message us" IN a DM means the AI doesn't have the answer
-        if (channel === 'dm' && reply) {
-            const dmDeflectionPatterns = [
-                /تواصل معنا|راسلنا|اتصل بنا/,
-                /contact us|reach out to us|send us a message|message us/i,
-            ];
-            if (dmDeflectionPatterns.some(p => p.test(reply)) && !flags.includes('info_not_in_kb')) {
+        if (parsed.hedging && HEDGE_CHECK_INTENTS.has(parsed.intent || '')) {
+            parsed = { ...parsed, confidence: 'low' };
+            if (!flags.includes('info_not_in_kb')) {
                 flags.push('info_not_in_kb');
-                if (parsed.confidence === 'high') {
-                    parsed = { ...parsed, confidence: 'medium' };
-                }
             }
         }
 
-        // Check 6: Low confidence without info_not_in_kb flag
+        // Check 5: Low confidence without info_not_in_kb flag
         // Per prompt rules: confidence=low means KB didn't answer the question → flag is mandatory.
         // Only for question-type intents — complaints, greetings, etc. can be low for other reasons.
         const QUESTION_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);

@@ -8,7 +8,7 @@
  * blocks the Redis event loop, which also serves rate limiting, AI
  * cache, and BullMQ queues in production.
  */
-import { redis } from './redis';
+import { redis, redisScanDelete } from './redis';
 import { pipelineOutcomeCounter } from './metrics';
 
 export type Pipeline =
@@ -115,20 +115,7 @@ export class PipelineMetrics {
         try {
             const newSince = new Date().toISOString();
 
-            // Collect all counter keys via SCAN
-            const keysToDelete: string[] = [];
-            let cursor = '0';
-            do {
-                const [nextCursor, keys] = await redis.scan(cursor, 'MATCH', `${PREFIX}*`, 'COUNT', 100);
-                cursor = nextCursor;
-                for (const k of keys) {
-                    if (k !== SINCE_KEY) keysToDelete.push(k);
-                }
-            } while (cursor !== '0');
-
-            if (keysToDelete.length > 0) {
-                await redis.del(...keysToDelete);
-            }
+            await redisScanDelete(`${PREFIX}*`, k => k !== SINCE_KEY);
 
             // Update since timestamp last so it reflects a clean reset
             await redis.set(SINCE_KEY, newSince);

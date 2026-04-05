@@ -6,7 +6,7 @@ import { aiCache, aiUsageLog, semanticCache } from '../db/schema';
 import { eq, sql, count } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
-import { redis } from '../lib/redis';
+import { redis, redisScanDelete } from '../lib/redis';
 import { normalizeArabic, DEFAULT_AI_MODEL, PROMPT_VERSION } from '@jawab24/shared';
 import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
@@ -590,19 +590,7 @@ export class AiService {
             db.delete(semanticCache),
         ]);
         // Also flush Redis keys — Postgres-only delete leaves Redis stale.
-        // Use SCAN (non-blocking) instead of KEYS to avoid blocking Redis in production.
-        let cursor = '0';
-        const keysToDelete: string[] = [];
-        do {
-            const [nextCursor, found] = await redis.scan(cursor, 'MATCH', 'cache:ai_reply:*', 'COUNT', 100);
-            cursor = nextCursor;
-            keysToDelete.push(...found);
-        } while (cursor !== '0');
-        // Delete in batches of 100 to avoid oversized DEL commands
-        for (let i = 0; i < keysToDelete.length; i += 100) {
-            const batch = keysToDelete.slice(i, i + 100);
-            if (batch.length > 0) await redis.del(...batch);
-        }
+        await redisScanDelete('cache:ai_reply:*');
     }
     async enqueueReply(request: AiGenerateRequest): Promise<{ jobId: string; status: string }> {
         const { aiQueue } = await import('../lib/queue');
