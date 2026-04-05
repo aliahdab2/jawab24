@@ -1143,3 +1143,116 @@ describe('CommentProcessor — subscription inactive', () => {
         expect(adapter.sendReply).toHaveBeenCalled();
     });
 });
+
+// ---------------------------------------------------------------------------
+// CommentProcessor — template reply mode behavior
+// Verifies that the correct reply text reaches sendReply in each of the
+// 3 comment reply modes (public / private / dual).
+// ---------------------------------------------------------------------------
+
+describe('CommentProcessor — template reply mode behavior', () => {
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        await pipelineMetrics.reset();
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+
+        // Template match returns the price redirect text (old-style template)
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: 'للاطلاع على الرسوم يرجى مراسلتنا على الخاص 💰',
+            replyMethod: 'template',
+            templateId: 'tpl-price',
+            needsAttention: false,
+        });
+    });
+
+    function settingsWithMode(mode: 'public' | 'private' | 'dual') {
+        return {
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            commentsAutoReply: true,
+            replyDelay: 0,
+            commentReplyMode: mode,
+            dualReplyNudge: 'تم إرسال التفاصيل 📩',
+            dualReplyNudgeVariations: null,
+        } as any;
+    }
+
+    it('public mode — sendReply receives the template text directly', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('public'));
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+        );
+
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                replyText: 'للاطلاع على الرسوم يرجى مراسلتنا على الخاص 💰',
+                userSettings: expect.objectContaining({ commentReplyMode: 'public' }),
+            }),
+        );
+    });
+
+    it('private mode — sendReply receives the template text (sent as DM by sender)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('private'));
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+        );
+
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                replyText: 'للاطلاع على الرسوم يرجى مراسلتنا على الخاص 💰',
+                userSettings: expect.objectContaining({ commentReplyMode: 'private' }),
+            }),
+        );
+    });
+
+    it('dual mode — sendReply receives template text as DM body; sender posts nudge publicly', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم سعر الدورة؟', 'user-1',
+        );
+
+        // Processor passes full template text to sendReply — sender handles splitting
+        // (DM gets full text, public comment gets dualReplyNudge — tested in sender.test.ts)
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.objectContaining({
+                replyText: 'للاطلاع على الرسوم يرجى مراسلتنا على الخاص 💰',
+                userSettings: expect.objectContaining({ commentReplyMode: 'dual' }),
+            }),
+        );
+    });
+
+    it('all 3 modes — generateForComment is called with the correct commentReplyMode', async () => {
+        for (const mode of ['public', 'private', 'dual'] as const) {
+            vi.clearAllMocks();
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode(mode));
+            vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+            vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: 'reply text',
+                replyMethod: 'ai',
+                needsAttention: false,
+            });
+
+            const adapter = createMockAdapter();
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سؤال؟', 'user-1',
+            );
+
+            expect(replyGenerator.generateForComment).toHaveBeenCalledWith(
+                expect.anything(),
+                true,
+                mode,
+            );
+        }
+    });
+});

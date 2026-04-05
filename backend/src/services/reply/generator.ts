@@ -105,6 +105,7 @@ export interface GenerateReplyResult {
 
 export interface PlaygroundInput {
     pageId: string;
+    userId?: string;
     workspaceId: string | null;
     question: string;
     /** Effective channel after applying commentReplyMode (dual/private → dm) */
@@ -444,7 +445,7 @@ export class ReplyGenerator {
      */
     async generateForPlayground(input: PlaygroundInput): Promise<PlaygroundResult> {
         const {
-            pageId, workspaceId, question, channel, knowledgeBase, kbActiveVersion,
+            pageId, userId, workspaceId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
             replyStyle, brandVoiceNotes, customerContext, model,
         } = input;
@@ -489,6 +490,7 @@ export class ReplyGenerator {
             ...(model ? { model } : {}),
             context: {
                 pageId,
+                ...(userId ? { userId } : {}),
                 pageName,
                 knowledgeBase: effectiveKB,
                 retrievedChunks: retrievedChunks?.length ? retrievedChunks : undefined,

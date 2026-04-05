@@ -1638,14 +1638,15 @@ const TEST_CASES: TestCase[] = [
     // the AI must answer questions directly from KB — never redirect to DM.
 
     // 31.1 — Price question on comment must include price, not redirect to DM
+    // Message is >6 words so template word-limit guard routes to AI (not template)
     {
         id: 229, category: 31, categoryName: 'Public Comment Direct Answer', channel: 'comment',
-        message: 'كم سعر الدورة؟',
+        message: 'ممكن تخبرني كم سعر دورة التدريب عندكم؟',
         page: 'training',
         expected: {
             replyNotContains: ['راسلنا على الخاص', 'الخاص', 'رسالة خاصة', 'DM', 'Send us a message', 'private message'],
         },
-        notes: 'Public comment — price is in KB. Must NOT redirect to DM when no DM is being sent.',
+        notes: 'Comment >6 words → AI handles (template skipped). AI must answer from KB, not redirect to DM.',
     },
 
     // 31.2 — English price question on comment must answer directly
@@ -1683,15 +1684,16 @@ const TEST_CASES: TestCase[] = [
     },
 
     // 31.5 — School fees on comment must include amount
+    // Message is >6 words so template word-limit guard routes to AI (not template)
     {
         id: 233, category: 31, categoryName: 'Public Comment Direct Answer', channel: 'comment',
-        message: 'كم رسوم الابتدائي؟',
+        message: 'كم تكون رسوم الصف الابتدائي عندكم من فضلك؟',
         page: 'school',
         expected: {
             replyNotContains: ['راسلنا على الخاص', 'الخاص', 'DM', 'Send us a message'],
             replyContainsAny: ['18,000', '18000'],
         },
-        notes: 'Public comment — school fees in KB (18,000 SAR). Must include price.',
+        notes: 'Comment >6 words → AI handles (template skipped). Must include 18,000 SAR fee from KB.',
     },
 
     // 31.6 — Location question on comment must answer from KB

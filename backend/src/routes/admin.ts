@@ -881,6 +881,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 // 4. Delegate to replyGenerator — single source of truth for the pipeline
                 const playgroundInput: PlaygroundInput = {
                     pageId,
+                    userId: page.userId ?? undefined,
                     workspaceId: page.workspaceId,
                     question,
                     channel: effectiveChannel,
