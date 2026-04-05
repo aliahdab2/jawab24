@@ -220,6 +220,17 @@ export function detectLanguage(text: string): LanguageDetectionResult {
         };
     }
 
+    // No alphabetic Latin characters — pure emoji, numbers, or punctuation
+    // Cannot determine language; return unknown so callers can fall back to context (e.g. conversation history)
+    if (!/[a-zA-Z]/.test(cleanText)) {
+        return {
+            language: 'unknown',
+            confidence: 0,
+            script: 'unknown',
+            isRTL: false,
+        };
+    }
+
     // Default to English for Latin script
     const englishMatches = words.filter(w => ENGLISH_COMMON.includes(w)).length;
     const confidence = Math.min(0.5 + (englishMatches * 0.1), 0.9);

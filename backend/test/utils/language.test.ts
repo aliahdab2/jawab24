@@ -151,8 +151,8 @@ describe('Language Detection Utility', () => {
 
         it('should handle numbers and symbols', () => {
             const result = detectLanguage('123 456 789 !@#$%');
-            // Should default to English for pure numbers/symbols
-            expect(result.language).toBe('en');
+            // No alphabetic characters — language is indeterminate
+            expect(result.language).toBe('unknown');
         });
 
         it('should handle emojis with text', () => {

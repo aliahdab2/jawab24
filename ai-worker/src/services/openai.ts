@@ -284,7 +284,17 @@ export class OpenAIService {
         const rawPageName = request.context?.pageName || 'our page';
         // Sanitize to prevent prompt injection via page name
         const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
-        const language = request.language || this.detectLanguage(request.comment) || 'en';
+        // When the message has no detectable language (e.g. emoji-only), infer from
+        // conversation history so the AI doesn't default to English mid-Arabic conversation.
+        // The || chain is lazy — history is only scanned when request.language is not set.
+        const language = request.language
+            || request.context?.conversationHistory
+                ?.filter(m => m.role === 'user' && /[a-zA-Z\u0600-\u06FF]/.test(m.content))
+                .reverse()
+                .map(m => this.detectLanguage(m.content))
+                .find(Boolean)
+            || this.detectLanguage(request.comment)
+            || 'en';
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
         const languageName = languageNames[language] || 'English';
         const retrievedChunks = request.context?.retrievedChunks;
