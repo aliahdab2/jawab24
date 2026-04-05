@@ -772,6 +772,21 @@ Customer: "مين يدرّس دورة PMP؟" | KB has PMP course with price and 
             flags.push('info_not_in_kb');
         }
 
+        // Check 7: Empty reply on non-skip intents — model returned "" when it should have replied
+        const SKIP_INTENTS = new Set(['OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
+        if (!parsed.reply && !SKIP_INTENTS.has(parsed.intent || '')) {
+            flags.push('empty_reply_fallback');
+            // Return parsed as-is; caller will substitute getFallbackReply
+        }
+
+        // Check 8: Invalid intent — json_schema strict mode should prevent this, but guard anyway
+        const VALID_INTENTS = new Set(['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
+            'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
+        if (parsed.intent && !VALID_INTENTS.has(parsed.intent)) {
+            flags.push('invalid_intent');
+            parsed = { ...parsed, intent: 'QUESTION' };
+        }
+
         return { ...parsed, flags };
     }
 
