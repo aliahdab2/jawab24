@@ -1127,7 +1127,7 @@ describe('OpenAI Service - Prompt Injection Sanitization', () => {
         await service.generateReply({ comment: 'Is the jacket in stock?' });
 
         const systemPrompt = capturedMessages[0].content;
-        expect(systemPrompt).toContain('reflects the last sync');
+        expect(systemPrompt).toContain('cached data');
         expect(systemPrompt).toContain('verify availability before ordering');
     });
 
