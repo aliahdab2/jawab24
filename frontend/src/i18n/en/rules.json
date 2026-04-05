@@ -52,5 +52,6 @@
   "priorityTooltip": "Execution priority",
   "searchPlaceholder": "Search rules...",
   "filterActive": "Active only",
-  "disabledBadge": "Disabled"
+  "disabledBadge": "Disabled",
+  "channelNote": "Rules match keywords in post comments."
 }

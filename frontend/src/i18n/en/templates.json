@@ -30,5 +30,6 @@
   "showLess": "Show less",
   "searchPlaceholder": "Search templates...",
   "disabledBadge": "Disabled",
-  "charCount": "{count} chars"
+  "charCount": "{count} chars",
+  "channelNote": "Templates match keywords in post comments."
 }

@@ -30,5 +30,6 @@
   "showLess": "عرض أقل",
   "searchPlaceholder": "ابحث في القوالب...",
   "disabledBadge": "معطّل",
-  "charCount": "{count} حرف"
+  "charCount": "{count} حرف",
+  "channelNote": "تُطابق القوالب الكلمات المفتاحية في تعليقات المنشورات."
 }

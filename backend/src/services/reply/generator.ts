@@ -247,12 +247,15 @@ export class ReplyGenerator {
     ): Promise<GenerateReplyResult> {
         const { workspaceId, userId, text, pageName, knowledgeBase, pageId, senderId } = context;
 
-        // 1. Try to find a matching rule with template
-        // Use templateMatchText (latest message) for keyword matching to avoid
-        // stale consolidated messages hijacking the user's current intent.
-        const templateResult = await this.tryTemplateMatch(workspaceId, context.templateMatchText || text);
-        if (templateResult && !await this.isRepeatTemplate(templateResult, aiEnabled, pageId, senderId)) {
-            return templateResult;
+        // 1. Templates are for comment-triggered replies. DMs belong to AI.
+        // When AI is on, skip template matching entirely — AI answers with full context
+        // (conversation history, product catalog, KB). Templates only fire as a fallback
+        // when AI is deliberately disabled, so DMs still get some auto-reply.
+        if (!aiEnabled) {
+            const templateResult = await this.tryTemplateMatch(workspaceId, context.templateMatchText || text);
+            if (templateResult && !await this.isRepeatTemplate(templateResult, aiEnabled, pageId, senderId)) {
+                return templateResult;
+            }
         }
 
         // 2. Pre-AI offensive filter — catches profanity GPT might misclassify
@@ -461,8 +464,8 @@ export class ReplyGenerator {
 
         const ragMode = config.ragMode || 'off';
 
-        // 1. Template match
-        if (workspaceId) {
+        // 1. Template match — comments only. Playground always runs AI, so skip templates for DM.
+        if (workspaceId && channel !== 'dm') {
             const templateResult = await this.tryTemplateMatch(workspaceId, question);
             if (templateResult) {
                 return {

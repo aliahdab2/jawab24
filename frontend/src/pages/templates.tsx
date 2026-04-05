@@ -157,7 +157,12 @@ const TemplatesPage: NextPageWithLayout = () => {
       {/* Header */}
       <PageHeader
         title={t('title')}
-        description={t('description')}
+        description={
+          <>
+            {t('description')}
+            <span className="block text-xs text-muted-foreground mt-1">{t('channelNote')}</span>
+          </>
+        }
         action={canEdit
           ? <Button onClick={() => handleOpenModal()} icon={<Plus className="w-4 h-4" />}>
               {t('addTemplate')}

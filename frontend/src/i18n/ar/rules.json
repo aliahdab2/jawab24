@@ -52,5 +52,6 @@
   "priorityTooltip": "أولوية التنفيذ",
   "searchPlaceholder": "ابحث في القواعد...",
   "filterActive": "النشطة فقط",
-  "disabledBadge": "معطّل"
+  "disabledBadge": "معطّل",
+  "channelNote": "تُطابق القواعد الكلمات المفتاحية في تعليقات المنشورات."
 }

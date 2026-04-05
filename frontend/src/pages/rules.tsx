@@ -355,6 +355,7 @@ const RulesPage: NextPageWithLayout = () => {
           <>
             {t('description')}
             <span className="block text-xs text-muted-foreground mt-1">{t('firstMatchHint')}</span>
+            <span className="block text-xs text-muted-foreground mt-0.5">{t('channelNote')}</span>
           </>
         }
         action={canEdit
