@@ -285,16 +285,24 @@ export class ReplyGenerator {
                     .pop();
                 const gapSource: GapSource = { type: 'dm', context: prevUserMsg?.content };
 
-                // Run RAG retrieval if enabled (pass history for context-aware search)
+                // Run RAG retrieval if enabled (pass full history for context-aware search)
                 const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
                     pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory, !!context.productCatalog,
+                );
+
+                // Exclude the current message from history sent to GPT — it is already
+                // included as the final user prompt in buildUserPrompt. Without this filter,
+                // GPT sees the current message twice (once in history, once as the prompt)
+                // because the incoming message is stored to DB before getConversationHistory runs.
+                const historyForAI = conversationHistory.filter(
+                    m => !(m.role === 'user' && m.content === text)
                 );
 
                 const msgLang = detectLanguageCode(text);
                 const aiRequest = {
                     comment: text,
                     language: msgLang !== 'unknown' ? msgLang : undefined,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext, ecommerceStoreId: context.ecommerceStoreId },
+                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext, ecommerceStoreId: context.ecommerceStoreId },
                 };
 
                 // When an e-commerce store is linked, use the tool loop

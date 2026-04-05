@@ -227,8 +227,13 @@ export class AiService {
         // Non-default model (playground A/B) → skip all caches (different models produce different replies)
         const isNonDefaultModel = !!request.model && request.model !== DEFAULT_AI_MODEL;
 
+        // DM conversations with history → skip all caches.
+        // The right answer depends on what was said earlier; a cached reply generated
+        // without conversation context would ignore prior exchanges and cause hallucinations.
+        const hasConversationHistory = (request.context?.conversationHistory?.length ?? 0) > 0;
+
         // Layer 1: Exact cache (scoped per page + KB version + post context)
-        if (!isNonDefaultModel) {
+        if (!isNonDefaultModel && !hasConversationHistory) {
             const cachedData = await this.checkCache(request.comment, cacheCtx);
             if (cachedData) {
                 // Fire-and-forget: log zero-cost cache hit
@@ -286,6 +291,8 @@ export class AiService {
                     this.logger.debug('Skipping semantic cache for OTHER intent', { pageId });
                 } else if (request.context?.customerContext) {
                     this.logger.debug('Skipping semantic cache for personalized customer context', { pageId });
+                } else if (hasConversationHistory) {
+                    this.logger.debug('Skipping semantic cache for DM conversation with history', { pageId });
                 } else {
                     semanticCacheService.setLogger(this.logger);
                     const semanticHit = await Sentry.startSpan(
