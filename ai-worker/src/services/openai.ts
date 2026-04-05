@@ -638,7 +638,7 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
      */
     /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
     validateReply(
-        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] },
+        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean },
         request: GenerateRequest,
     ): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
         const flags = [...(parsed.flags || [])];
