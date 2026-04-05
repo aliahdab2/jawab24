@@ -916,7 +916,7 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.flagReason).toBeUndefined();
         });
 
-        it('should use template for messages when rule matches', async () => {
+        it('should use template for DM messages when AI is disabled', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { templatesService } = await import('../../src/services/templates');
 
@@ -930,7 +930,8 @@ describe('ReplyGenerator - Flagging System', () => {
                 message: 'Our prices start at $10.',
             } as any);
 
-            const result = await generator.generateForMessage(baseContext, true);
+            // Templates only fire for DMs when AI is disabled — AI handles DMs when enabled
+            const result = await generator.generateForMessage(baseContext, false);
 
             expect(result.replyText).toBe('Our prices start at $10.');
             expect(result.replyMethod).toBe('template');
@@ -1386,10 +1387,13 @@ describe('ReplyGenerator - Template Priority Guard', () => {
         expect(rulesService.findMatchingRule).toHaveBeenCalledWith('ws-123', 'ممكن سعر');
     });
 
-    it('should match template for DM (generateForMessage) the same way as comments', async () => {
+    it('should skip template for DM and use AI when AI is enabled', async () => {
+        // DMs belong to AI — templates only fire for DMs when AI is disabled.
+        // Comments and DMs no longer share the same template-first behavior.
         const { rulesService } = await import('../../src/services/rules');
         const { templatesService } = await import('../../src/services/templates');
         const { aiService } = await import('../../src/services/ai');
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
 
         vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
             id: 'rule-1',
@@ -1402,15 +1406,23 @@ describe('ReplyGenerator - Template Priority Guard', () => {
             message: 'أسعارنا تبدأ من ٩ دولار',
             active: true,
         } as any);
+        vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+            allowed: true, limit: 1500, used: 0, remaining: 1500,
+        } as any);
+        vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+        vi.mocked(aiService.generateReply).mockResolvedValue({
+            reply: 'أسعارنا تبدأ من ٩ دولار شهرياً',
+            language: 'ar', cached: false, intent: 'QUESTION', confidence: 'high', flags: [],
+        });
 
         const result = await generator.generateForMessage({
             ...contextWithWorkspace,
             senderId: 'sender-1',
         }, true);
 
-        expect(result.replyMethod).toBe('template');
-        expect(result.replyText).toBe('أسعارنا تبدأ من ٩ دولار');
-        expect(aiService.generateReply).not.toHaveBeenCalled();
+        // AI is on → template skipped → AI handles the DM
+        expect(result.replyMethod).toBe('ai');
+        expect(aiService.generateReply).toHaveBeenCalled();
     });
 });
 
@@ -1437,10 +1449,10 @@ describe('ReplyGenerator - Template Dedup for DMs', () => {
         generator = new ReplyGenerator();
     });
 
-    it('first DM: template fires when no conversation history', async () => {
+    it('DM with AI disabled: template fires as fallback', async () => {
+        // When AI is off, templates fire for DMs regardless of conversation history.
         const { rulesService } = await import('../../src/services/rules');
         const { templatesService } = await import('../../src/services/templates');
-        const { messagesService } = await import('../../src/services/messages');
         const { aiService } = await import('../../src/services/ai');
 
         vi.mocked(rulesService.findMatchingRule).mockResolvedValue({
@@ -1449,9 +1461,8 @@ describe('ReplyGenerator - Template Dedup for DMs', () => {
         vi.mocked(templatesService.getTemplate).mockResolvedValue({
             id: 'template-1', name: 'Price', message: templateReplyText, active: true,
         } as any);
-        vi.mocked(messagesService.getConversationHistory).mockResolvedValue([]);
 
-        const result = await generator.generateForMessage(dmContext, true);
+        const result = await generator.generateForMessage(dmContext, false);
 
         expect(result.replyMethod).toBe('template');
         expect(result.replyText).toBe(templateReplyText);
@@ -1513,10 +1524,10 @@ describe('ReplyGenerator - Template Dedup for DMs', () => {
         ] as any);
 
         const result = await generator.generateForMessage(
-            { ...dmContext, text: 'شو ساعات العمل' }, true,
+            { ...dmContext, text: 'شو ساعات العمل' }, false,
         );
 
-        // Different template text → not a repeat → template fires
+        // AI disabled → template fires regardless of history
         expect(result.replyMethod).toBe('template');
         expect(result.replyText).toBe(differentTemplateText);
         expect(aiService.generateReply).not.toHaveBeenCalled();
@@ -1557,9 +1568,9 @@ describe('ReplyGenerator - Template Dedup for DMs', () => {
             id: 'template-1', name: 'Price', message: templateReplyText, active: true,
         } as any);
 
-        // No senderId → can't check conversation history → dedup skipped
+        // No senderId, AI disabled → template fires as fallback
         const contextNoSender = { ...dmContext, senderId: undefined };
-        const result = await generator.generateForMessage(contextNoSender, true);
+        const result = await generator.generateForMessage(contextNoSender, false);
 
         expect(result.replyMethod).toBe('template');
         expect(result.replyText).toBe(templateReplyText);
