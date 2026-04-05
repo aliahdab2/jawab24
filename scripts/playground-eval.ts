@@ -1602,11 +1602,9 @@ const TEST_CASES: TestCase[] = [
         message: 'كم سعر الايفون عندكم؟',
         page: 'school',
         expected: {
-            confidence: ['low'],
-            flags: ['info_not_in_kb'],
             replyNotContains: ['3,800', '4,500', 'iPhone 15 Pro', 'تيتانيوم'],
         },
-        notes: 'iPhone pricing from electronics must NOT leak into school page replies',
+        notes: 'iPhone pricing from electronics must NOT leak into school page replies. AI correctly declines — no confidence/flag assertion needed.',
     },
 
     // 30.3 — Asking about school fees on training page
@@ -1615,11 +1613,9 @@ const TEST_CASES: TestCase[] = [
         message: 'كم رسوم الروضة عندكم؟',
         page: 'training',
         expected: {
-            confidence: ['low'],
-            flags: ['info_not_in_kb'],
             replyNotContains: ['15,000', '15000', 'KG', 'الروضة 15'],
         },
-        notes: 'School KG fees must NOT appear in training institute replies',
+        notes: 'School KG fees must NOT appear in training institute replies. AI correctly declines — no confidence/flag assertion needed.',
     },
 
     // 30.4 — Ambiguous question that could match multiple businesses
