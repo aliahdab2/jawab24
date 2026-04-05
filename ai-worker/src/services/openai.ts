@@ -153,8 +153,9 @@ export class OpenAIService {
                                             type: 'array',
                                             items: { type: 'string' },
                                         },
+                                        hedging: { type: 'boolean' },
                                     },
-                                    required: ['reply', 'intent', 'confidence', 'flags'] as const,
+                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging'] as const,
                                     additionalProperties: false,
                                 },
                             },
@@ -169,7 +170,7 @@ export class OpenAIService {
             const detectedLanguage = this.detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
+            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean };
             try {
                 parsed = JSON.parse(content);
             } catch {
@@ -495,63 +496,64 @@ IMPORTANT: Output a JSON object with these fields:
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
+- "hedging": true if your reply redirects, hedges, or defers because you lack the answer (e.g., "let me check", "I'll get back to you", "contact us for info", "خليني أتحقق", "راسلونا", or any equivalent). false if you answered directly or routed to a human for a valid action (cancellation, refund, escalation). Set confidence to "low" whenever hedging is true.
 Output ONLY the JSON object, nothing else.
 
 EXAMPLES (follow this exact format):
 
 Example 1 — Answer found in KB:
 Customer: "كم سعر الباقة؟" | KB has: "باقة الورد - 150 ريال"
-{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","flags":[]}
+{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","flags":[],"hedging":false}
 
 Example 2 — Answer NOT in KB:
 Customer: "Do you deliver to Jeddah?" | KB has no delivery info
-{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
 
 Example 3 — Offensive message:
 Customer: "يا حمير"
-{"reply":"","intent":"OFFENSIVE","confidence":"high","flags":["offensive_or_abusive"]}
+{"reply":"","intent":"OFFENSIVE","confidence":"high","flags":["offensive_or_abusive"],"hedging":false}
 
 Example 4 — WHO question not in KB:
 Customer: "مين صاحب المعهد؟" | KB has courses & prices but NO owner info
-{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
 
 Example 5 — Sarcasm (CRITICAL — positive words + negative meaning):
 Customer: "واو شو هالخدمة الرائعة 🙄"
-{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","flags":[]}
+{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","flags":[],"hedging":false}
 
 Example 6 — Angry customer:
 Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً"
-{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","flags":["angry_customer","refund_request"]}
+{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","flags":["angry_customer","refund_request"],"hedging":false}
 
-Example 6b — Cancellation request (calm tone):
+Example 6b — Cancellation request (calm tone, routed to team for action — not missing info):
 Customer: "ابي الغي طلبي رقم 5678"
-{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","flags":["cancellation_request"]}
+{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","flags":["cancellation_request"],"hedging":false}
 
 Example 7 — Geographic specificity (partial KB match):
 Customer: "هل التوصيل مجاني لجدة؟" | KB says "توصيل مجاني لمناطق الرياض"
-{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","flags":["info_not_in_kb"]}
+{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","flags":["info_not_in_kb"],"hedging":true}
 
 Example 8 — Related but DIFFERENT concept (certificate vs accreditation):
 Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation) but NOT certificates
-{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[]}
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[],"hedging":false}
 
 Example 10 — Category mentioned in KB but names are NOT listed:
 Customer: "شو عندكم باقات اشتراك؟" | KB says "نقدم باقات اشتراك متعددة" but lists NO package names
-{"reply":"عنا باقات اشتراك، خليني أتحقق من التفاصيل وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"عنا باقات اشتراك، خليني أتحقق من التفاصيل وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
 [CRITICAL: Do NOT write باقة الذهب, باقة الفضة, Basic, Pro, or any invented names — only real KB names are allowed]
 
 Example 11 — Policy question NOT in KB:
 Customer: "شو سياسة الاسترجاع؟" | KB has courses, prices, hours — but NO return/refund policy
-{"reply":"خليني أتحقق من سياسة الاسترجاع وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"خليني أتحقق من سياسة الاسترجاع وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
 [CRITICAL: Never assume or infer a return policy — it must be explicitly stated in KB]
 
 Example 12 — WHO question not in KB:
 Customer: "مين يدرّس دورة PMP؟" | KB has PMP course with price and schedule but NO instructor name
-{"reply":"خليني أسأل عن المدرب المسؤول وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
+{"reply":"خليني أسأل عن المدرب المسؤول وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
 [CRITICAL: Knowing the course exists ≠ knowing who teaches it]`;
 
         return prompt;
@@ -778,7 +780,7 @@ Customer: "مين يدرّس دورة PMP؟" | KB has PMP course with price and 
         // Check 8: Invalid intent — json_schema strict mode should prevent this, but guard anyway
         const VALID_INTENTS = new Set(['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
             'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
-        if (parsed.intent && !VALID_INTENTS.has(parsed.intent)) {
+        if (parsed.intent && !VALID_INTENTS.has(parsed.intent) && !flags.includes('invalid_json')) {
             flags.push('invalid_intent');
             parsed = { ...parsed, intent: 'QUESTION' };
         }
