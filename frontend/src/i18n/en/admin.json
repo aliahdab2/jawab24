@@ -234,6 +234,16 @@
     "method": "Method",
     "status": "Status",
     "count": "Count",
-    "refreshHealth": "Refresh"
+    "refreshHealth": "Refresh",
+    "cacheManagement": "Cache Management",
+    "exactCache": "Exact Cache",
+    "semanticCache": "Semantic Cache",
+    "cacheEntries": "Entries",
+    "cacheTotalHits": "Total Hits",
+    "clearAiCache": "Clear All Caches",
+    "clearCacheConfirm": "This will clear the exact cache and semantic cache for all pages. New AI replies will be generated fresh until the cache warms up again.",
+    "clearingCache": "Clearing...",
+    "cacheCleared": "Cache cleared",
+    "cacheClearError": "Failed to clear cache"
   }
 }

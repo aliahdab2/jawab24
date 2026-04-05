@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { Card } from '@/components/ui';
+import { Card, ConfirmationModal } from '@/components/ui';
 import { analyticsApi } from '@/lib/api';
-import type { AiUsageReport, AnalyticsOverview, SystemHealthReport } from '@/lib/api';
+import type { AiUsageReport, AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
@@ -20,6 +21,7 @@ import {
   Cpu,
   RefreshCw,
   Globe,
+  Trash2,
 } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, sub }: {
@@ -88,8 +90,10 @@ function ServiceBadge({ status }: { status: string }) {
 
 export default function AdminObservabilityPage() {
   const t = useTranslations('admin');
+  const tc = useTranslations('common');
   const queryClient = useQueryClient();
   const [days, setDays] = useState(30);
+  const [confirmClearCache, setConfirmClearCache] = useState(false);
 
   const { data: health, isLoading: healthLoading, isFetching: healthFetching } = useQuery<SystemHealthReport>({
     queryKey: ['admin', 'system-health'],
@@ -126,6 +130,29 @@ export default function AdminObservabilityPage() {
   });
 
   const isLoading = aiLoading || overviewLoading;
+
+  const { data: cacheStats, refetch: refetchCache } = useQuery<CacheStats>({
+    queryKey: ['admin', 'cache-stats'],
+    queryFn: async () => {
+      const res = await analyticsApi.getCacheStats();
+      return res.data;
+    },
+    staleTime: 30_000,
+    retry: false,
+    meta: { onError: (err: unknown) => captureError(err, 'Failed to load cache stats', { tags: { page: 'observability' } }) },
+  });
+
+  const { mutate: clearCache, isPending: clearingCache } = useMutation({
+    mutationFn: () => analyticsApi.clearCache(),
+    onSuccess: () => {
+      refetchCache();
+      toast.success(t('observability.cacheCleared'));
+    },
+    onError: (err) => {
+      captureError(err, 'Failed to clear cache', { tags: { page: 'observability' } });
+      toast.error(t('observability.cacheClearError'));
+    },
+  });
 
   const formatCost = (usd: number) => `$${usd.toFixed(4)}`;
   const formatPct = (n: number) => `${Math.round(n)}%`;
@@ -307,6 +334,52 @@ export default function AdminObservabilityPage() {
               </section>
             )}
 
+            {/* Cache Management Section */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                  {t('observability.cacheManagement')}
+                </h2>
+                <button
+                  onClick={() => setConfirmClearCache(true)}
+                  disabled={clearingCache}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-destructive border border-destructive/30 rounded-md hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                  aria-label={t('observability.clearAiCache')}
+                >
+                  <Trash2 className="w-3 h-3" aria-hidden="true" />
+                  {clearingCache ? t('observability.clearingCache') : t('observability.clearAiCache')}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <Card className="p-4">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">{t('observability.exactCache')}</p>
+                  <div className="flex gap-6">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('observability.cacheEntries')}</p>
+                      <p className="text-lg font-bold text-foreground">{cacheStats?.exactCache.totalEntries.toLocaleString() ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('observability.cacheTotalHits')}</p>
+                      <p className="text-lg font-bold text-foreground">{cacheStats?.exactCache.totalHits.toLocaleString() ?? '—'}</p>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="p-4">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">{t('observability.semanticCache')}</p>
+                  <div className="flex gap-6">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('observability.cacheEntries')}</p>
+                      <p className="text-lg font-bold text-foreground">{cacheStats?.semanticCache.totalEntries.toLocaleString() ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('observability.cacheTotalHits')}</p>
+                      <p className="text-lg font-bold text-foreground">{cacheStats?.semanticCache.totalHits.toLocaleString() ?? '—'}</p>
+                    </div>
+                  </div>
+                </Card>
+              </div>
+            </section>
+
             {/* System Health Section */}
             <section>
               <div className="flex items-center justify-between mb-3">
@@ -423,6 +496,16 @@ export default function AdminObservabilityPage() {
           </>
         )}
       </div>
+      <ConfirmationModal
+        isOpen={confirmClearCache}
+        onClose={() => setConfirmClearCache(false)}
+        onConfirm={() => { setConfirmClearCache(false); clearCache(); }}
+        title={t('observability.clearAiCache')}
+        message={t('observability.clearCacheConfirm')}
+        confirmText={t('observability.clearAiCache')}
+        cancelText={tc('cancel')}
+        variant="danger"
+      />
     </AdminLayout>
   );
 }

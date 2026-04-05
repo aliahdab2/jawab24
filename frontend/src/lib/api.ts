@@ -321,6 +321,11 @@ export interface SystemHealthReport {
   }>;
 }
 
+export interface CacheStats {
+  exactCache: { totalEntries: number; totalHits: number };
+  semanticCache: { totalEntries: number; totalHits: number };
+}
+
 export const analyticsApi = {
   getOverview: (days?: number) =>
     api.get<AnalyticsOverview>('/analytics/overview', { params: days ? { days } : undefined }),
@@ -328,6 +333,10 @@ export const analyticsApi = {
     api.get<AiUsageReport>('/analytics/ai-usage', { params: days ? { days } : undefined }),
   getSystemHealth: () =>
     api.get<SystemHealthReport>('/analytics/system-health'),
+  getCacheStats: () =>
+    api.get<CacheStats>('/ai/cache/stats'),
+  clearCache: () =>
+    api.delete('/ai/cache'),
 };
 
 // Plans API (Public - uses publicApi to avoid auth redirect issues)

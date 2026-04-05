@@ -4,117 +4,59 @@
  */
 
 import { db } from '../db';
-import { aiCache, logs, usageLogs, refreshTokens, otpCodes } from '../db/schema';
-import { lt, sql } from 'drizzle-orm';
+import { aiCache, logs, usageLogs, refreshTokens, otpCodes, semanticCache } from '../db/schema';
+import { lt, sql, SQL } from 'drizzle-orm';
+import type { PgTable, PgColumn } from 'drizzle-orm/pg-core';
 import { Logger, noopLogger, CleanupResult } from '../types';
 
 /**
- * Clean up old AI cache entries
- * Removes entries not used in the specified number of days
- * Uses batch deletion to avoid locking issues
+ * Delete rows matching a condition in batches to avoid long-running transactions.
+ * Returns total rows deleted.
  */
+async function batchDelete(
+    tableName: string,
+    table: PgTable,
+    idCol: PgColumn,
+    condition: SQL,
+    batchSize: number,
+): Promise<CleanupResult> {
+    let totalDeleted = 0;
+    try {
+        let deletedInBatch: number;
+        do {
+            const result = await db
+                .delete(table)
+                .where(condition)
+                .returning({ id: idCol });
+            deletedInBatch = result.length;
+            totalDeleted += deletedInBatch;
+        } while (deletedInBatch >= batchSize);
+        return { table: tableName, deletedCount: totalDeleted };
+    } catch (error) {
+        return {
+            table: tableName,
+            deletedCount: totalDeleted,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        };
+    }
+}
+
+function daysAgo(n: number): Date {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d;
+}
+
 export async function cleanupAiCache(daysOld: number = 30, batchSize: number = 1000): Promise<CleanupResult> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-    
-    let totalDeleted = 0;
-    
-    try {
-        // Delete in batches to avoid long-running transactions
-        let deletedInBatch: number;
-        do {
-            const result = await db
-                .delete(aiCache)
-                .where(lt(aiCache.lastUsedAt, cutoffDate))
-                .returning({ id: aiCache.id });
-            
-            deletedInBatch = result.length;
-            totalDeleted += deletedInBatch;
-            
-            // If we deleted a full batch, there might be more
-        } while (deletedInBatch >= batchSize);
-        
-        return {
-            table: 'ai_cache',
-            deletedCount: totalDeleted,
-        };
-    } catch (error) {
-        return {
-            table: 'ai_cache',
-            deletedCount: totalDeleted,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        };
-    }
+    return batchDelete('ai_cache', aiCache, aiCache.id, lt(aiCache.lastUsedAt, daysAgo(daysOld)), batchSize);
 }
 
-/**
- * Clean up old logs
- * Removes log entries older than the specified number of days
- */
 export async function cleanupLogs(daysOld: number = 90, batchSize: number = 1000): Promise<CleanupResult> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-    
-    let totalDeleted = 0;
-    
-    try {
-        let deletedInBatch: number;
-        do {
-            const result = await db
-                .delete(logs)
-                .where(lt(logs.createdAt, cutoffDate))
-                .returning({ id: logs.id });
-            
-            deletedInBatch = result.length;
-            totalDeleted += deletedInBatch;
-        } while (deletedInBatch >= batchSize);
-        
-        return {
-            table: 'logs',
-            deletedCount: totalDeleted,
-        };
-    } catch (error) {
-        return {
-            table: 'logs',
-            deletedCount: totalDeleted,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        };
-    }
+    return batchDelete('logs', logs, logs.id, lt(logs.createdAt, daysAgo(daysOld)), batchSize);
 }
 
-/**
- * Clean up old usage logs
- * Removes usage log entries older than the specified number of days
- */
 export async function cleanupUsageLogs(daysOld: number = 180, batchSize: number = 1000): Promise<CleanupResult> {
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-    
-    let totalDeleted = 0;
-    
-    try {
-        let deletedInBatch: number;
-        do {
-            const result = await db
-                .delete(usageLogs)
-                .where(lt(usageLogs.createdAt, cutoffDate))
-                .returning({ id: usageLogs.id });
-            
-            deletedInBatch = result.length;
-            totalDeleted += deletedInBatch;
-        } while (deletedInBatch >= batchSize);
-        
-        return {
-            table: 'usage_logs',
-            deletedCount: totalDeleted,
-        };
-    } catch (error) {
-        return {
-            table: 'usage_logs',
-            deletedCount: totalDeleted,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        };
-    }
+    return batchDelete('usage_logs', usageLogs, usageLogs.id, lt(usageLogs.createdAt, daysAgo(daysOld)), batchSize);
 }
 
 /**
@@ -122,31 +64,64 @@ export async function cleanupUsageLogs(daysOld: number = 180, batchSize: number 
  * Removes tokens that are expired or were revoked more than 7 days ago
  */
 export async function cleanupRefreshTokens(): Promise<CleanupResult> {
-    const now = new Date();
+    // Two passes: expired tokens + revoked tokens older than 7 days
+    const [expired, revoked] = await Promise.all([
+        batchDelete('refresh_tokens', refreshTokens, refreshTokens.id, lt(refreshTokens.expiresAt, new Date()), 1000),
+        batchDelete('refresh_tokens', refreshTokens, refreshTokens.id, lt(refreshTokens.revokedAt, daysAgo(7)), 1000),
+    ]);
+    const error = expired.error || revoked.error;
+    return {
+        table: 'refresh_tokens',
+        deletedCount: expired.deletedCount + revoked.deletedCount,
+        ...(error ? { error } : {}),
+    };
+}
+
+/**
+ * Clean up stale semantic cache entries using two criteria:
+ *
+ * 1. Version-outdated: entries whose kb_active_version_at_creation no longer matches
+ *    the page's current kbActiveVersion. These will never be served again — the query
+ *    in semantic-cache.ts filters them out. Cleaning them promptly frees space after
+ *    every KB update without waiting for age-based expiry.
+ *
+ * 2. Age-expired: entries older than 7 days, matching the TTL enforced at query time.
+ *    Catches orphaned entries for deleted pages or other edge cases.
+ */
+export async function cleanupSemanticCache(batchSize: number = 1000): Promise<CleanupResult> {
     let totalDeleted = 0;
 
     try {
-        // Delete expired tokens
-        const expired = await db
-            .delete(refreshTokens)
-            .where(lt(refreshTokens.expiresAt, now))
-            .returning({ id: refreshTokens.id });
-        totalDeleted += expired.length;
+        // 1. Version-outdated entries: join pages to find entries whose version is stale.
+        //    Uses a subquery to identify IDs in batches, avoiding a full-table scan.
+        let deletedInBatch: number;
+        do {
+            const result = await db.execute(sql`
+                DELETE FROM semantic_cache
+                WHERE id IN (
+                    SELECT sc.id FROM semantic_cache sc
+                    JOIN pages p ON p.id = sc.page_id
+                    WHERE sc.kb_active_version_at_creation != p.kb_active_version
+                    LIMIT ${batchSize}
+                )
+                RETURNING id
+            `);
+            deletedInBatch = (result as unknown[]).length;
+            totalDeleted += deletedInBatch;
+        } while (deletedInBatch >= batchSize);
 
-        // Delete tokens revoked more than 7 days ago
-        // revokedAt is non-null when revoked (no boolean column)
-        const cutoff = new Date();
-        cutoff.setDate(cutoff.getDate() - 7);
-        const revoked = await db
-            .delete(refreshTokens)
-            .where(lt(refreshTokens.revokedAt, cutoff))
-            .returning({ id: refreshTokens.id });
-        totalDeleted += revoked.length;
+        // 2. Age-expired entries: catch orphans for deleted pages or other edge cases.
+        const aged = await batchDelete(
+            'semantic_cache', semanticCache, semanticCache.id,
+            lt(semanticCache.createdAt, daysAgo(7)), batchSize,
+        );
+        totalDeleted += aged.deletedCount;
+        if (aged.error) throw new Error(aged.error);
 
-        return { table: 'refresh_tokens', deletedCount: totalDeleted };
+        return { table: 'semantic_cache', deletedCount: totalDeleted };
     } catch (error) {
         return {
-            table: 'refresh_tokens',
+            table: 'semantic_cache',
             deletedCount: totalDeleted,
             error: error instanceof Error ? error.message : 'Unknown error',
         };
@@ -154,19 +129,7 @@ export async function cleanupRefreshTokens(): Promise<CleanupResult> {
 }
 
 export async function cleanupOtpCodes(): Promise<CleanupResult> {
-    try {
-        const deleted = await db
-            .delete(otpCodes)
-            .where(lt(otpCodes.expiresAt, new Date()))
-            .returning({ id: otpCodes.id });
-        return { table: 'otp_codes', deletedCount: deleted.length };
-    } catch (error) {
-        return {
-            table: 'otp_codes',
-            deletedCount: 0,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        };
-    }
+    return batchDelete('otp_codes', otpCodes, otpCodes.id, lt(otpCodes.expiresAt, new Date()), 1000);
 }
 
 /**
@@ -192,6 +155,7 @@ export async function runAllCleanupTasks(
     
     const results = await Promise.all([
         cleanupAiCache(aiCacheDays),
+        cleanupSemanticCache(),
         cleanupLogs(logsDays),
         cleanupUsageLogs(usageLogsDays),
         cleanupRefreshTokens(),

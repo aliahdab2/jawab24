@@ -234,6 +234,16 @@
     "method": "الطريقة",
     "status": "الحالة",
     "count": "العدد",
-    "refreshHealth": "تحديث"
+    "refreshHealth": "تحديث",
+    "cacheManagement": "إدارة الذاكرة المؤقتة",
+    "exactCache": "الذاكرة الدقيقة",
+    "semanticCache": "الذاكرة الدلالية",
+    "cacheEntries": "المدخلات",
+    "cacheTotalHits": "إجمالي الاستخدام",
+    "clearAiCache": "مسح كل الذاكرة المؤقتة",
+    "clearCacheConfirm": "سيتم مسح الذاكرة المؤقتة الدقيقة والدلالية لجميع الصفحات. ستُولَّد ردود الذكاء الاصطناعي من جديد حتى يعود التخزين للعمل.",
+    "clearingCache": "جارٍ المسح...",
+    "cacheCleared": "تم مسح الذاكرة المؤقتة",
+    "cacheClearError": "فشل مسح الذاكرة المؤقتة"
   }
 }

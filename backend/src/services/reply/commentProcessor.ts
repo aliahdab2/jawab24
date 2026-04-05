@@ -5,14 +5,12 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
-import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
-import { formatBusinessProfile } from '../../utils/businessProfile';
 import { truncateAtSentence } from '../../utils/text';
-import { getStoreContextForAI } from '../ecommerce';
+import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
@@ -190,39 +188,18 @@ export class CommentProcessor {
             // 8. Generate reply (enrich KB with e-commerce data if linked)
             const generatorContext = adapter.buildGeneratorContext(page, content, contentId);
             generatorContext.text = commentMessage;
-            for (const integration of integrationRegistry.getEnabled()) {
-                try {
-                    const enriched = await integration.enrichKnowledgeBase(generatorContext.knowledgeBase, page as unknown as Record<string, unknown>);
-                    if (enriched !== null) { generatorContext.knowledgeBase = enriched; break; }
-                } catch { /* non-critical — continue with original KB */ }
-            }
-
-            // Fetch store policies + product catalog so they survive RAG mode (RAG drops static KB)
-            const ecommerceStoreId = (page as unknown as Record<string, unknown>).ecommerceStoreId;
-            if (ecommerceStoreId && typeof ecommerceStoreId === 'string') {
-                try {
-                    const storeCtx = await getStoreContextForAI(ecommerceStoreId);
-                    generatorContext.storePolicies = storeCtx.storePolicies;
-                    generatorContext.productCatalog = storeCtx.productCatalog;
-                } catch { /* non-critical */ }
-            }
-
-            // Append business profile (hours, location, phone) to KB context
-            const profileText = formatBusinessProfile(page.businessProfile);
-            if (profileText) {
-                generatorContext.knowledgeBase = generatorContext.knowledgeBase
-                    ? `${generatorContext.knowledgeBase}\n\n--- Business Info ---\n${profileText}`
-                    : profileText;
-            }
+            const enriched = await enrichPageContext(
+                page as unknown as Record<string, unknown>,
+                userSettings,
+                commentMessage,
+                generatorContext.knowledgeBase,
+            );
+            generatorContext.knowledgeBase = enriched.knowledgeBase;
+            generatorContext.storePolicies = enriched.storePolicies;
+            generatorContext.productCatalog = enriched.productCatalog;
+            generatorContext.brandVoiceNotes = enriched.brandVoiceNotes;
             // Pass reply style settings to generator context
             generatorContext.replyStyle = userSettings.replyStyle;
-            // Pick language-appropriate brand voice notes
-            const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
-            const commentLang = detectLanguageCode(commentMessage);
-            const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
-            generatorContext.brandVoiceNotes = bvMulti[commentLang]
-                || supportedLangs.map(l => bvMulti[l]).find(Boolean)
-                || userSettings.brandVoiceNotes || undefined;
 
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent, confidence } =

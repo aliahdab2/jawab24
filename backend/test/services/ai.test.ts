@@ -40,11 +40,13 @@ vi.mock('../../src/db', () => ({
 
 vi.mock('../../src/db/schema', () => ({
     aiCache: {},
+    semanticCache: {},
 }));
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn(),
     sql: vi.fn().mockReturnValue('sql-mock'),
+    count: vi.fn().mockReturnValue('count-mock'),
 }));
 
 // Mock Redis
@@ -53,6 +55,8 @@ vi.mock('../../src/lib/redis', () => ({
         get: vi.fn(),
         set: vi.fn(),
         quit: vi.fn(),
+        scan: vi.fn().mockResolvedValue(['0', []]),
+        del: vi.fn().mockResolvedValue(0),
     },
 }));
 
@@ -321,42 +325,40 @@ describe('AI Service', () => {
     });
 
     describe('getCacheStats', () => {
-        it('should return cache statistics', async () => {
+        it('should return cache statistics for both caches', async () => {
             const { db } = await import('../../src/db');
             vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockResolvedValue([
-                    { hitCount: 10 },
-                    { hitCount: 5 },
-                    { hitCount: 3 },
-                ]),
+                from: vi.fn().mockResolvedValue([{ totalEntries: 3, totalHits: 18 }]),
             } as any);
 
             const stats = await service.getCacheStats();
 
-            expect(stats.totalEntries).toBe(3);
-            expect(stats.totalHits).toBe(18);
+            expect(stats.exactCache.totalEntries).toBe(3);
+            expect(stats.exactCache.totalHits).toBe(18);
+            expect(stats.semanticCache.totalEntries).toBe(3);
+            expect(stats.semanticCache.totalHits).toBe(18);
         });
 
         it('should handle empty cache', async () => {
             const { db } = await import('../../src/db');
             vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockResolvedValue([]),
+                from: vi.fn().mockResolvedValue([{ totalEntries: 0, totalHits: 0 }]),
             } as any);
 
             const stats = await service.getCacheStats();
 
-            expect(stats.totalEntries).toBe(0);
-            expect(stats.totalHits).toBe(0);
+            expect(stats.exactCache.totalEntries).toBe(0);
+            expect(stats.semanticCache.totalEntries).toBe(0);
         });
     });
 
     describe('clearCache', () => {
-        it('should clear all cache entries', async () => {
+        it('should clear exact cache and semantic cache', async () => {
             const { db } = await import('../../src/db');
 
             await service.clearCache();
 
-            expect(db.delete).toHaveBeenCalled();
+            expect(db.delete).toHaveBeenCalledTimes(2);
         });
     });
 

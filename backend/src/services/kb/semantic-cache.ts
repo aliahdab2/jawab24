@@ -175,7 +175,7 @@ export class SemanticCacheService {
                     ${vectorStr}::vector,
                     ${params.intent},
                     ${params.replyText},
-                    ${JSON.stringify(metadata)}::jsonb,
+                    ${metadata}::jsonb,
                     ${params.kbActiveVersion},
                     ${PROMPT_VERSION}
                 )

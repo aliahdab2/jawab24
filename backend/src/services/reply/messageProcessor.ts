@@ -4,14 +4,12 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
-import { integrationRegistry } from '../../integrations';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
-import { formatBusinessProfile } from '../../utils/businessProfile';
-import { getStoreContextForAI } from '../ecommerce';
+import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
@@ -288,40 +286,13 @@ export class MessageProcessor {
             }
 
             // 12. Generate reply (enrich KB with e-commerce data if linked)
-            let knowledgeBase = page.knowledgeBase || undefined;
-            let storePolicies: string | undefined;
-            let productCatalog: string | undefined;
-            for (const integration of integrationRegistry.getEnabled()) {
-                try {
-                    const enriched = await integration.enrichKnowledgeBase(knowledgeBase, page as unknown as Record<string, unknown>);
-                    if (enriched !== null) { knowledgeBase = enriched; break; }
-                } catch { /* non-critical — continue with original KB */ }
-            }
-
-            // Fetch store policies + product catalog so they survive RAG mode (RAG drops static KB)
-            const ecommerceStoreId = (page as unknown as Record<string, unknown>).ecommerceStoreId;
-            if (ecommerceStoreId && typeof ecommerceStoreId === 'string') {
-                try {
-                    const storeCtx = await getStoreContextForAI(ecommerceStoreId);
-                    storePolicies = storeCtx.storePolicies;
-                    productCatalog = storeCtx.productCatalog;
-                } catch { /* non-critical */ }
-            }
-
-            // Append business profile (hours, location, phone) to KB context
-            const profileText = formatBusinessProfile(page.businessProfile);
-            if (profileText) {
-                knowledgeBase = knowledgeBase
-                    ? `${knowledgeBase}\n\n--- Business Info ---\n${profileText}`
-                    : profileText;
-            }
-            // Pick language-appropriate brand voice notes
-            const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
-            const msgLang = detectLanguageCode(messageText);
-            const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
-            const brandVoiceNotes = bvMulti[msgLang]
-                || supportedLangs.map(l => bvMulti[l]).find(Boolean)
-                || userSettings.brandVoiceNotes || undefined;
+            const enriched = await enrichPageContext(
+                page as unknown as Record<string, unknown>,
+                userSettings,
+                messageText,
+                page.knowledgeBase || undefined,
+            );
+            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId } = enriched;
 
             let { replyText, replyMethod, needsAttention, flagReason, aiIntent, confidence } =
                 await replyGenerator.generateForMessage(

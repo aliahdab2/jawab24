@@ -13,6 +13,8 @@ vi.mock('../../src/db/schema', () => ({
     logs: { id: 'logs.id', createdAt: 'logs.created_at' },
     usageLogs: { id: 'usage_logs.id', createdAt: 'usage_logs.created_at' },
     refreshTokens: { id: 'refresh_tokens.id', expiresAt: 'refresh_tokens.expires_at', revokedAt: 'refresh_tokens.revoked_at' },
+    otpCodes: { id: 'otp_codes.id', expiresAt: 'otp_codes.expires_at' },
+    semanticCache: { id: 'semantic_cache.id', createdAt: 'semantic_cache.created_at' },
 }));
 
 vi.mock('drizzle-orm', () => ({
@@ -117,7 +119,7 @@ describe('cleanup utilities', () => {
 
             const results = await runAllCleanupTasks(undefined, logger);
 
-            expect(results).toHaveLength(5); // aiCache, logs, usageLogs, refreshTokens, otpCodes
+            expect(results).toHaveLength(6); // aiCache, semanticCache, logs, usageLogs, refreshTokens, otpCodes
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting'));
         });
 

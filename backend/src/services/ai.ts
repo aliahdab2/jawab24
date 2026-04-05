@@ -2,8 +2,8 @@ import axios from 'axios';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
 import { db } from '../db';
-import { aiCache, aiUsageLog } from '../db/schema';
-import { eq, sql } from 'drizzle-orm';
+import { aiCache, aiUsageLog, semanticCache } from '../db/schema';
+import { eq, sql, count } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis } from '../lib/redis';
@@ -551,14 +551,33 @@ export class AiService {
     /**
      * Get cache statistics
      */
-    async getCacheStats(): Promise<{ totalEntries: number; totalHits: number }> {
-        const entries = await db.select().from(aiCache);
+    async getCacheStats(): Promise<{
+        exactCache: { totalEntries: number; totalHits: number };
+        semanticCache: { totalEntries: number; totalHits: number };
+    }> {
+        const [exactStats] = await db
+            .select({
+                totalEntries: count(),
+                totalHits: sql<number>`coalesce(sum(hit_count), 0)`,
+            })
+            .from(aiCache);
 
-        const totalHits = entries.reduce((sum, entry) => sum + (entry.hitCount || 0), 0);
+        const [semanticStats] = await db
+            .select({
+                totalEntries: count(),
+                totalHits: sql<number>`coalesce(sum(hit_count), 0)`,
+            })
+            .from(semanticCache);
 
         return {
-            totalEntries: entries.length,
-            totalHits,
+            exactCache: {
+                totalEntries: Number(exactStats?.totalEntries ?? 0),
+                totalHits: Number(exactStats?.totalHits ?? 0),
+            },
+            semanticCache: {
+                totalEntries: Number(semanticStats?.totalEntries ?? 0),
+                totalHits: Number(semanticStats?.totalHits ?? 0),
+            },
         };
     }
 
@@ -566,7 +585,24 @@ export class AiService {
      * Clear cache (admin function)
      */
     async clearCache(): Promise<void> {
-        await db.delete(aiCache);
+        await Promise.all([
+            db.delete(aiCache),
+            db.delete(semanticCache),
+        ]);
+        // Also flush Redis keys — Postgres-only delete leaves Redis stale.
+        // Use SCAN (non-blocking) instead of KEYS to avoid blocking Redis in production.
+        let cursor = '0';
+        const keysToDelete: string[] = [];
+        do {
+            const [nextCursor, found] = await redis.scan(cursor, 'MATCH', 'cache:ai_reply:*', 'COUNT', 100);
+            cursor = nextCursor;
+            keysToDelete.push(...found);
+        } while (cursor !== '0');
+        // Delete in batches of 100 to avoid oversized DEL commands
+        for (let i = 0; i < keysToDelete.length; i += 100) {
+            const batch = keysToDelete.slice(i, i + 100);
+            if (batch.length > 0) await redis.del(...batch);
+        }
     }
     async enqueueReply(request: AiGenerateRequest): Promise<{ jobId: string; status: string }> {
         const { aiQueue } = await import('../lib/queue');
