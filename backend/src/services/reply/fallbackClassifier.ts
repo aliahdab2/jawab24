@@ -12,7 +12,7 @@ import { detectIntent } from '../kb/intent-detector';
 const EMOJI_ONLY = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u;
 const MENTION_PATTERN = /@\w+/;
 // English spam uses \b word boundaries; Arabic spam uses a separate pattern (no \b for Arabic)
-const SPAM_KEYWORDS_EN = /\b(follow\s+me|check\s+(my|out)\s+(profile|page|bio)|check\s+this\s+out|subscribe|giveaway|link\s+in\s+bio)\b/i;
+const SPAM_KEYWORDS_EN = /\b(follow\s+me|follow\s+@|check\s+(my|out)\s+(profile|page|bio)|check\s+this\s+out|subscribe|giveaway|link\s+in\s+bio)\b/i;
 const SPAM_KEYWORDS_AR = /(منشن|تاق|فولو|فولومي)/i;
 const SPAM_FRANCO = /\b(folo|folomi|ta2ni|ta3ni)\b/i;
 const PUNCTUATION_ONLY = /^[.…?!؟\s]+$/;
@@ -39,7 +39,9 @@ const PURCHASE_ENGLISH = /\b(want\s+to\s+buy|i('d|\s+would)\s+like\s+to\s+(buy|o
 // ── Business inquiry patterns ───────────────────────────────────────────────
 
 const BUSINESS_ARABIC = /(نبي\s?نتعاون|تعاون|شراكة|وكيل|موزع|توزيع|مؤثر)/i;
-const BUSINESS_ENGLISH = /\b(partnership|collaborate|collaboration|distributor|wholesale|B2B|influencer|sponsor)\b/i;
+// Note: "influencer" is intentionally excluded — standalone mention is often spam self-promotion
+// (e.g. "follow @influencer"). Legitimate influencer outreach uses "collaborate", "partnership", etc.
+const BUSINESS_ENGLISH = /\b(partnership|collaborate|collaboration|distributor|wholesale|B2B|sponsor)\b/i;
 
 // ── Angry customer patterns ─────────────────────────────────────────────────
 
