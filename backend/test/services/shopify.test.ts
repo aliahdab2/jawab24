@@ -99,6 +99,21 @@ vi.mock('../../src/lib/redis', () => ({
         set: vi.fn().mockResolvedValue('OK'),
         quit: vi.fn(),
     },
+    async redisScanDelete(pattern: string, filter?: (k: string) => boolean) {
+        let cursor = '0';
+        const toDelete: string[] = [];
+        do {
+            const [nextCursor, keys] = await mockRedisScan(cursor, 'MATCH', pattern, 'COUNT', 100);
+            cursor = nextCursor;
+            for (const k of keys as string[]) {
+                if (!filter || filter(k)) toDelete.push(k);
+            }
+        } while (cursor !== '0');
+        for (let i = 0; i < toDelete.length; i += 100) {
+            const batch = toDelete.slice(i, i + 100);
+            if (batch.length > 0) await mockRedisDel(...batch);
+        }
+    },
 }));
 
 // Mock pages service (getIngestionService used by invalidateCachesForStore)
@@ -642,7 +657,7 @@ describe('Shopify Service', () => {
             await invalidateCachesForStore('store-1');
 
             // Should have called scan with the right pattern
-            expect(mockRedisScan).toHaveBeenCalledWith('0', 'MATCH', 'cache:ai_reply:*', 'COUNT', 200);
+            expect(mockRedisScan).toHaveBeenCalledWith('0', 'MATCH', 'cache:ai_reply:*', 'COUNT', 100);
             // Should have deleted all found keys
             expect(mockRedisDel).toHaveBeenCalledWith('cache:ai_reply:abc123', 'cache:ai_reply:def456', 'cache:ai_reply:ghi789');
         });

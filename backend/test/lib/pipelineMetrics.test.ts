@@ -10,7 +10,21 @@ const redisMock = vi.hoisted(() => ({
     mget: vi.fn(),
     del: vi.fn(),
 }));
-vi.mock('../../src/lib/redis', () => ({ redis: redisMock }));
+vi.mock('../../src/lib/redis', () => ({
+    redis: redisMock,
+    async redisScanDelete(pattern: string, filter?: (k: string) => boolean) {
+        let cursor = '0';
+        const toDelete: string[] = [];
+        do {
+            const [nextCursor, keys] = await redisMock.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+            cursor = nextCursor;
+            for (const k of keys as string[]) {
+                if (!filter || filter(k)) toDelete.push(k);
+            }
+        } while (cursor !== '0');
+        if (toDelete.length > 0) await redisMock.del(...toDelete);
+    },
+}));
 
 import { pipelineMetrics, PipelineMetrics } from '../../src/lib/pipelineMetrics';
 

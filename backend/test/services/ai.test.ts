@@ -58,6 +58,7 @@ vi.mock('../../src/lib/redis', () => ({
         scan: vi.fn().mockResolvedValue(['0', []]),
         del: vi.fn().mockResolvedValue(0),
     },
+    redisScanDelete: vi.fn().mockResolvedValue(0),
 }));
 
 // Mock circuit breaker — pass-through so existing tests are unaffected
