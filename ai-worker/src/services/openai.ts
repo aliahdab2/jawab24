@@ -716,7 +716,7 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
         if (reply && HEDGE_CHECK_INTENTS.has(parsed.intent || '') && (parsed.confidence === 'high' || parsed.confidence === 'medium')) {
             const hedgePatterns = [
                 /خليني أتحقق|خلني أتحقق|سأتحقق|سأتأكد|راح أتحقق|راح أتأكد|نتأكد ونرجعلك|أتحقق.*وأرجعلك|أرجعلك.*بعد/,  // Arabic hedge phrases
-                /تواصل معنا|تواصلوا معنا|راسلنا|أرسلنا رسالة|اتصل بنا|اتصلوا بنا|خلنا نتواصل على الخاص/,  // Arabic deflection phrases
+                /تواصل\s+مع|تواصلوا\s+مع|راسلنا|أرسلنا رسالة|اتصل بنا|اتصلوا بنا|خلنا نتواصل على الخاص/,  // Arabic deflection phrases (تواصل مع X catches معنا/الإدارة/الفريق etc.)
                 /let me check|i'?ll check|get back to you|confirm with the team/i, // English hedge phrases
                 /reach out|contact us|send us a message|message us directly|we'?ll get back|will follow up/i, // English deflection phrases
                 /i don'?t have.*information|i'?m not sure about/i, // Explicit uncertainty
@@ -733,7 +733,7 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
         // Check 5: DM deflection — saying "contact us" / "message us" IN a DM means the AI doesn't have the answer
         if (channel === 'dm' && reply) {
             const dmDeflectionPatterns = [
-                /تواصل معنا|راسلنا|اتصل بنا/,
+                /تواصل\s+مع|راسلنا|اتصل بنا/,
                 /contact us|reach out to us|send us a message|message us/i,
             ];
             if (dmDeflectionPatterns.some(p => p.test(reply)) && !flags.includes('info_not_in_kb')) {

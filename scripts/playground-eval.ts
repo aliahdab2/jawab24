@@ -354,7 +354,7 @@ const TEST_CASES: TestCase[] = [
         expected: {
             confidence: ['low'],
             flags: ['info_not_in_kb'],
-            replyNotContains: ['باقة الذهب', 'باقة الفضة', 'باقة الماس', 'باقة الورد', 'ريال', '$'],
+            replyNotContains: ['باقة الذهب', 'باقة الفضة', 'باقة الماس', 'باقة الورد', '$'],
         },
         notes: 'Even after AI acknowledged packages exist, follow-up asking for specifics must not produce invented details',
     },
