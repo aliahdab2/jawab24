@@ -66,9 +66,12 @@ const SECTION_PATTERNS: { pattern: RegExp; type: KbChunk['type'] }[] = [
 /**
  * Known KB section header markers from the frontend serialization format.
  * Preset sections use specific emojis (💰, 📝), custom sections use ✦.
+ * Common content emojis (🚚, 📍, 📞, ⏰, etc.) are also recognized so that
+ * delivery, location, hours, and contact lines split into their own typed chunks
+ * instead of being merged into adjacent pricing/offering sections.
  * The pattern matches: marker + space + label (1-50 chars) + colon
  */
-const KB_SECTION_HEADER_RE = /^(?:💰|📝|✦)[\u{FE0E}\u{FE0F}]?\s+[^:\n]{1,50}:/u;
+const KB_SECTION_HEADER_RE = /^(?:💰|📝|✦|🚚|📍|📞|⏰|🏪|📋|📌|🛡️|🔖|💳|🎁|⭐|🌐)[\u{FE0E}\u{FE0F}]?\s+[^:\n]{1,50}:/u;
 
 /** Strip leading emoji and variation selectors from text */
 function stripLeadingEmoji(text: string): string {

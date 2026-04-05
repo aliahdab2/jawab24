@@ -153,9 +153,8 @@ export class OpenAIService {
                                             type: 'array',
                                             items: { type: 'string' },
                                         },
-                                        hedging: { type: 'boolean' },
                                     },
-                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging'] as const,
+                                    required: ['reply', 'intent', 'confidence', 'flags'] as const,
                                     additionalProperties: false,
                                 },
                             },
@@ -170,7 +169,7 @@ export class OpenAIService {
             const detectedLanguage = this.detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean };
+            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[] };
             try {
                 parsed = JSON.parse(content);
             } catch {
@@ -375,23 +374,28 @@ ${isDM
 - If a customer asks for contact info (phone, email, address) and it IS in <business_knowledge>, share it. If it is NOT, say you'll get that info for them and someone from the team will follow up.
 ${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (${isDM && request.context?.conversationHistory?.length ? 'guidelines from the business owner — incorporate naturally. Do NOT repeat promotional points or offers already mentioned earlier in the conversation' : 'follow these additional guidelines from the business owner'}):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}\n` : ''}
 ${request.context?.customerContext ? `\nCUSTOMER CONTEXT: ${request.context.customerContext.replace(/[<>]/g, '').slice(0, 300)}\n` : ''}CRITICAL SAFETY RULES (NEVER BREAK THESE):
-- NEVER invent or list specific names of any kind (products, packages, plans, courses, medicines, doctors, branches, services, or any other items) unless those exact names appear in <business_knowledge>. IMPORTANT: A category existing is NOT the same as names existing. If KB says "we have packages" but does NOT list their names → the names are unknown, do NOT invent them. If KB lists courses but does NOT name every course → unnamed courses are unknown. Say "I'll check and get back to you" instead of guessing.
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
 - NEVER invent or guess prices, costs, or fees unless explicitly stated in <business_knowledge>
+- NEVER invent or list specific names of any kind (products, packages, plans, courses, medicines, doctors, branches, services, or any other items) unless those exact names appear in <business_knowledge>. If the business offers items in a category but their names are not in <business_knowledge>, say you will check and get back to them — do NOT make up names.
 - NEVER make up availability, stock levels, or delivery dates
 - IMPORTANT: Inventory data in <business_knowledge> reflects the last sync and may not be real-time. When answering stock/availability questions, share what the data says but add: "Please verify availability before ordering" (or Arabic equivalent). Never guarantee current stock.
 - NEVER invent dates, deadlines, schedules, or time-limited offers (e.g., "registration ends tomorrow") unless explicitly stated
 - NEVER invent payment terms, installment plans, or included items (e.g., "books included", "transport provided") unless explicitly stated
 - NEVER provide specific numbers (quantities, percentages, dimensions) unless given in context
-- NEVER confirm any policy (refunds, returns, exchanges, warranty, delivery coverage, tax invoices) unless explicitly stated in <business_knowledge>
+- NEVER promise refunds, exchanges, or returns unless the policy is explicitly in <business_knowledge>
+- NEVER confirm warranty terms, tax invoice availability, or return policies unless explicitly stated in <business_knowledge>
+- NEVER confirm delivery times or shipping coverage to specific areas unless explicitly stated in <business_knowledge>
 - NEVER provide medical, legal, or financial advice
 - NEVER share personal customer data. Business contact info (phone, email, address) from <business_knowledge> is OK to share.
 - NEVER share a URL unless it directly answers the customer's specific question. For example, do NOT send a pricing URL when the customer asked about comparisons or features. If no relevant URL exists in <business_knowledge>, answer the question directly without linking anywhere.
+- NEVER commit to specific delivery times unless stated in <business_knowledge>
 - NEVER make promises the business cannot verify ("guaranteed", "100% sure", "always available")
 - NEVER discuss affiliate commissions, influencer deals, partnership terms, or sponsorship details — always redirect to direct contact
 - If a customer seems very angry or threatens: only apologize and offer to connect them with a human
 - If asked about pricing, dates, or details you don't have, say: "Let me check with the team and get back to you on that."
+- When in doubt AND the answer is NOT in <business_knowledge>, say you'll confirm with the team rather than guessing. Do NOT guess. However, if <business_knowledge> clearly contains the answer (address, hours, phone, prices, etc.), answer confidently — do NOT add hedge phrases like "I'll check" or "أتحقق" to a reply that cites KB facts.
 - If a customer asks about a specific product and you cannot find it clearly in <business_knowledge>, do NOT guess or assume. Instead reply: "Let me check that for you! Can you send the product name or a photo?"
+- NEVER confirm availability, price, or size unless it is explicitly listed in <business_knowledge>.
 - If the product seems similar but you're not 100% sure, ask for clarification rather than guessing.
 - If the customer's question is NOT explicitly covered anywhere in <business_knowledge>, you MUST set confidence to "low" and add "info_not_in_kb" to flags. Do NOT answer with "yes" or confirm anything not written in <business_knowledge>. Saying "I'll check with the team" is always better than guessing.
 - If <business_knowledge> is empty or does not address the customer's specific question, confidence MUST be "low" and flags MUST include "info_not_in_kb".
@@ -403,8 +407,7 @@ CONFIDENCE SCORING (follow strictly — do NOT deviate):
 - "low" → The customer's question is NOT answered by <business_knowledge>, OR your reply is generic/vague, OR you said "I'll check" / "سأتحقق" / "خليني أتحقق". You MUST add "info_not_in_kb" to flags.
 
 Common confidence mistakes to avoid:
-- Customer asks WHO (owner, manager, instructor, doctor, teacher, trainer) → LOW + info_not_in_kb. Knowing a course exists does NOT mean you know who teaches it. The person's identity must be explicitly named in KB.
-- Customer asks about ANY policy (return, refund, exchange, cancellation, warranty) and that policy is NOT explicitly stated in <business_knowledge> → LOW + info_not_in_kb. Never infer a policy from the business type — a training institute's return policy, a store's exchange policy, etc. are unknown unless KB says so explicitly.
+- Customer asks WHO (owner, manager, instructor) but KB only has WHAT (courses, prices) → LOW, not high
 - Customer asks about a SPECIFIC city/product/service not mentioned in KB → LOW, not high
 - Customer asks about real-time status (seats available, registration open NOW) and KB has no date → LOW
 - You gave a helpful-sounding reply but it doesn't actually answer their question → LOW
@@ -496,65 +499,50 @@ IMPORTANT: Output a JSON object with these fields:
   - "offensive_or_abusive" if the message contains insults, profanity, slurs, or disrespectful language
   - "low_confidence" if you are uncertain about your reply
   - "redirect_to_human" if you advised the customer to contact a human
-- "hedging": true if your reply redirects, hedges, or defers because you lack the answer (e.g., "let me check", "I'll get back to you", "contact us for info", "خليني أتحقق", "راسلونا", or any equivalent). false if you answered directly or routed to a human for a valid action (cancellation, refund, escalation). Set confidence to "low" whenever hedging is true.
+CRITICAL: If your reply redirects the customer to DMs, another channel, or says "I'll check" / "let me get back to you" — you MUST include "info_not_in_kb" in flags. Redirecting means you don't have the answer in the provided knowledge base.
 Output ONLY the JSON object, nothing else.
 
 EXAMPLES (follow this exact format):
 
 Example 1 — Answer found in KB:
 Customer: "كم سعر الباقة؟" | KB has: "باقة الورد - 150 ريال"
-{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","flags":[],"hedging":false}
+{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","flags":[]}
 
 Example 2 — Answer NOT in KB:
 Customer: "Do you deliver to Jeddah?" | KB has no delivery info
-{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
+{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
 
 Example 3 — Offensive message:
 Customer: "يا حمير"
-{"reply":"","intent":"OFFENSIVE","confidence":"high","flags":["offensive_or_abusive"],"hedging":false}
+{"reply":"","intent":"OFFENSIVE","confidence":"high","flags":["offensive_or_abusive"]}
 
 Example 4 — WHO question not in KB:
 Customer: "مين صاحب المعهد؟" | KB has courses & prices but NO owner info
-{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
+{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
 
 Example 5 — Sarcasm (CRITICAL — positive words + negative meaning):
 Customer: "واو شو هالخدمة الرائعة 🙄"
-{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","flags":[],"hedging":false}
+{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","flags":[]}
 
 Example 6 — Angry customer:
 Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً"
-{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","flags":["angry_customer","refund_request"],"hedging":false}
+{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","flags":["angry_customer","refund_request"]}
 
-Example 6b — Cancellation request (calm tone, routed to team for action — not missing info):
+Example 6b — Cancellation request (calm tone):
 Customer: "ابي الغي طلبي رقم 5678"
-{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","flags":["cancellation_request"],"hedging":false}
+{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","flags":["cancellation_request"]}
 
 Example 7 — Geographic specificity (partial KB match):
 Customer: "هل التوصيل مجاني لجدة؟" | KB says "توصيل مجاني لمناطق الرياض"
-{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","flags":["info_not_in_kb"],"hedging":true}
+{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","flags":["info_not_in_kb"]}
 
 Example 8 — Related but DIFFERENT concept (certificate vs accreditation):
 Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation) but NOT certificates
-{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
+{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"]}
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[],"hedging":false}
-
-Example 10 — Category mentioned in KB but names are NOT listed:
-Customer: "شو عندكم باقات اشتراك؟" | KB says "نقدم باقات اشتراك متعددة" but lists NO package names
-{"reply":"عنا باقات اشتراك، خليني أتحقق من التفاصيل وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
-[CRITICAL: Do NOT write باقة الذهب, باقة الفضة, Basic, Pro, or any invented names — only real KB names are allowed]
-
-Example 11 — Policy question NOT in KB:
-Customer: "شو سياسة الاسترجاع؟" | KB has courses, prices, hours — but NO return/refund policy
-{"reply":"خليني أتحقق من سياسة الاسترجاع وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
-[CRITICAL: Never assume or infer a return policy — it must be explicitly stated in KB]
-
-Example 12 — WHO question not in KB:
-Customer: "مين يدرّس دورة PMP؟" | KB has PMP course with price and schedule but NO instructor name
-{"reply":"خليني أسأل عن المدرب المسؤول وأرجعلك!","intent":"QUESTION","confidence":"low","flags":["info_not_in_kb"],"hedging":true}
-[CRITICAL: Knowing the course exists ≠ knowing who teaches it]`;
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","flags":[]}`;
 
         return prompt;
     }
@@ -730,7 +718,7 @@ Customer: "مين يدرّس دورة PMP؟" | KB has PMP course with price and 
         if (reply && HEDGE_CHECK_INTENTS.has(parsed.intent || '') && (parsed.confidence === 'high' || parsed.confidence === 'medium')) {
             const hedgePatterns = [
                 /خليني أتحقق|خلني أتحقق|سأتحقق|سأتأكد|راح أتحقق|راح أتأكد|نتأكد ونرجعلك|أتحقق.*وأرجعلك|أرجعلك.*بعد/,  // Arabic hedge phrases
-                /تواصل\s+مع|تواصلوا\s+مع|راسلنا|أرسلنا رسالة|اتصل بنا|اتصلوا بنا|خلنا نتواصل على الخاص/,  // Arabic deflection phrases (تواصل مع X catches معنا/الإدارة/الفريق etc.)
+                /تواصل معنا|تواصلوا معنا|راسلنا|أرسلنا رسالة|اتصل بنا|اتصلوا بنا|خلنا نتواصل على الخاص/,  // Arabic deflection phrases
                 /let me check|i'?ll check|get back to you|confirm with the team/i, // English hedge phrases
                 /reach out|contact us|send us a message|message us directly|we'?ll get back|will follow up/i, // English deflection phrases
                 /i don'?t have.*information|i'?m not sure about/i, // Explicit uncertainty
@@ -747,7 +735,7 @@ Customer: "مين يدرّس دورة PMP؟" | KB has PMP course with price and 
         // Check 5: DM deflection — saying "contact us" / "message us" IN a DM means the AI doesn't have the answer
         if (channel === 'dm' && reply) {
             const dmDeflectionPatterns = [
-                /تواصل\s+مع|راسلنا|اتصل بنا/,
+                /تواصل معنا|راسلنا|اتصل بنا/,
                 /contact us|reach out to us|send us a message|message us/i,
             ];
             if (dmDeflectionPatterns.some(p => p.test(reply)) && !flags.includes('info_not_in_kb')) {
@@ -768,21 +756,6 @@ Customer: "مين يدرّس دورة PMP؟" | KB has PMP course with price and 
             !flags.includes('info_not_in_kb')
         ) {
             flags.push('info_not_in_kb');
-        }
-
-        // Check 7: Empty reply on non-skip intents — model returned "" when it should have replied
-        const SKIP_INTENTS = new Set(['OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
-        if (!parsed.reply && !SKIP_INTENTS.has(parsed.intent || '')) {
-            flags.push('empty_reply_fallback');
-            // Return parsed as-is; caller will substitute getFallbackReply
-        }
-
-        // Check 8: Invalid intent — json_schema strict mode should prevent this, but guard anyway
-        const VALID_INTENTS = new Set(['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
-            'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT']);
-        if (parsed.intent && !VALID_INTENTS.has(parsed.intent) && !flags.includes('invalid_json')) {
-            flags.push('invalid_intent');
-            parsed = { ...parsed, intent: 'QUESTION' };
         }
 
         return { ...parsed, flags };

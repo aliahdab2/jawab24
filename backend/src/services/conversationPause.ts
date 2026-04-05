@@ -3,8 +3,6 @@ import { db } from '../db';
 import { messages, conversationPauses } from '../db/schema';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES } from '@jawab24/shared';
 
-/** DB connection or transaction — methods accepting this can participate in a transaction. */
-type DbConn = typeof db;
 
 /**
  * Manages conversation pause state: explicit UI-triggered pauses and implicit

@@ -120,7 +120,7 @@ async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: 
             const invalidPages: typeof userPages = [];
 
             for (const page of userPages) {
-                const freshToken = freshTokenMap.get(page.facebookPageId!);
+                const freshToken = page.facebookPageId ? freshTokenMap.get(page.facebookPageId) : undefined;
                 if (freshToken) {
                     // Token is valid — update with fresh token and mark as verified
                     await db
