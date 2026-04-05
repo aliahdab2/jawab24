@@ -10,7 +10,6 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
-import { isOffensiveContent } from '../offensive-filter';
 import { detectLanguageCode } from '../../utils/language';
 import { countContentWords } from '../../utils/text';
 
@@ -184,12 +183,6 @@ export class ReplyGenerator {
         const templateResult = await this.tryTemplateMatch(workspaceId, text);
         if (templateResult) return templateResult;
 
-        // 2. Pre-AI offensive filter — catches profanity GPT might misclassify
-        if (isOffensiveContent(text)) {
-            this.logger.debug('[Generator] Offensive content detected by pre-AI filter');
-            return { replyText: null, replyMethod: 'ai', needsAttention: true, flagReason: 'offensive_or_abusive', aiIntent: 'OFFENSIVE' };
-        }
-
         // 3. If no template, use AI if enabled
         if (aiEnabled) {
             const limitCheck = await subscriptionsService.canUseAiReplies(userId);
@@ -226,7 +219,7 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: text,
                 language: detectedLang !== 'unknown' ? detectedLang : undefined,
-                context: { pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -256,12 +249,6 @@ export class ReplyGenerator {
             if (templateResult && !await this.isRepeatTemplate(templateResult, aiEnabled, pageId, senderId)) {
                 return templateResult;
             }
-        }
-
-        // 2. Pre-AI offensive filter — catches profanity GPT might misclassify
-        if (isOffensiveContent(text)) {
-            this.logger.debug('[Generator] Offensive content detected by pre-AI filter');
-            return { replyText: null, replyMethod: 'ai', needsAttention: true, flagReason: 'offensive_or_abusive', aiIntent: 'OFFENSIVE' };
         }
 
         // 3. If no template, use AI with conversation context
@@ -305,7 +292,7 @@ export class ReplyGenerator {
                 const aiRequest = {
                     comment: text,
                     language: msgLang !== 'unknown' ? msgLang : undefined,
-                    context: { pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext, ecommerceStoreId: context.ecommerceStoreId },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext, ecommerceStoreId: context.ecommerceStoreId },
                 };
 
                 // When an e-commerce store is linked, use the tool loop
@@ -488,28 +475,7 @@ export class ReplyGenerator {
             }
         }
 
-        // 2. Pre-AI offensive filter
-        if (isOffensiveContent(question)) {
-            return {
-                reply: null,
-                replyMethod: 'skipped',
-                templateName: null,
-                ragMode,
-                chunksRetrieved: 0,
-                chunks: [],
-                intent: 'OFFENSIVE',
-                confidence: 'high',
-                flags: ['offensive_or_abusive'],
-                needsAttention: true,
-                cached: false,
-                detectedLanguage: null,
-                tokensUsed: 0,
-                model: null,
-                gapRecorded: false,
-            };
-        }
-
-        // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production)
+        // 2. RAG retrieval (uses shared resolveKnowledge — same logic as production)
         const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
             pageId, question, knowledgeBase, kbActiveVersion, channel,
             conversationHistory, !!productCatalog,

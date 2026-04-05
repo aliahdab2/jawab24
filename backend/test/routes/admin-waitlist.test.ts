@@ -79,7 +79,6 @@ vi.mock('../../src/services/settings', () => ({ settingsService: {} }));
 vi.mock('../../src/services/pages', () => ({ getIngestionService: vi.fn() }));
 vi.mock('../../src/services/ecommerce', () => ({ getEnrichedKnowledgeBase: vi.fn(), getStoreContextForAI: vi.fn() }));
 vi.mock('../../src/services/reply/generator', () => ({ shouldSkipReply: vi.fn(), shouldUseFallback: vi.fn(), PRICE_FALLBACK: 'price_fallback' }));
-vi.mock('../../src/services/offensive-filter', () => ({ isOffensiveContent: vi.fn() }));
 vi.mock('@jawab24/shared', () => ({ normalizeAiIntent: vi.fn() }));
 vi.mock('../../src/utils/language', () => ({ detectLanguageCode: vi.fn() }));
 vi.mock('../../src/utils/swagger', () => ({ auth: [] }));
