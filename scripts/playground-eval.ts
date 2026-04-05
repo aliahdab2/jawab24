@@ -20,6 +20,7 @@
  *   CONCURRENCY  — Max parallel requests. Default: 3
  *   CATEGORY     — Run only this category number (1-21). Default: all
  *   VERBOSE      — Set to "1" for detailed output per test. Default: summary only
+ *   EVAL_MODEL   — Override AI model (e.g. claude-haiku-4-5-20251001, gpt-4.1-mini). Default: server default
  */
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,7 @@ const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const CONCURRENCY = parseInt(process.env.CONCURRENCY || '3', 10);
 const CATEGORY_FILTER = process.env.CATEGORY ? parseInt(process.env.CATEGORY, 10) : null;
 const VERBOSE = process.env.VERBOSE === '1';
+const EVAL_MODEL = process.env.EVAL_MODEL || null;
 
 // Page name patterns to match demo pages to aliases
 const PAGE_NAME_PATTERNS: Record<string, RegExp> = {
@@ -2128,6 +2130,7 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
     if (test.replyStyle) body.replyStyle = test.replyStyle;
     if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;
     if (test.customerContext) body.customerContext = test.customerContext;
+    if (EVAL_MODEL) body.model = EVAL_MODEL;
 
     const start = Date.now();
     try {
@@ -2237,6 +2240,7 @@ async function main() {
 
     console.log(`\nPlayground Eval — ${cases.length} tests`);
     console.log(`Backend: ${BASE_URL}`);
+    console.log(`Model: ${EVAL_MODEL || 'server default'}`);
     console.log(`Concurrency: ${CONCURRENCY}`);
     if (CATEGORY_FILTER) console.log(`Category filter: ${CATEGORY_FILTER}`);
     console.log('─'.repeat(60));
