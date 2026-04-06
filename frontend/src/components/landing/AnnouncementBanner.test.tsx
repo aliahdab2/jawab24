@@ -48,7 +48,7 @@ describe('AnnouncementBanner', () => {
     });
 
     expect(mockPost).toHaveBeenCalledWith('/waitlist', {
-      email: 'test@example.com',
+      contact: 'test@example.com',
       feature: 'launch',
     });
   });
@@ -128,11 +128,11 @@ describe('AnnouncementBanner', () => {
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 
-  it('uses email input with dir="ltr" for consistent email display', () => {
+  it('uses text input with dir="auto" for email or phone entry', () => {
     render(<AnnouncementBanner {...defaultProps} />);
     const input = screen.getByPlaceholderText('Enter your email');
-    expect(input).toHaveAttribute('dir', 'ltr');
-    expect(input).toHaveAttribute('type', 'email');
+    expect(input).toHaveAttribute('dir', 'auto');
+    expect(input).toHaveAttribute('type', 'text');
     expect(input).toBeRequired();
   });
 });
