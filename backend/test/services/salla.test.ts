@@ -830,12 +830,12 @@ describe('Salla Service', () => {
     // ============================================================
 
     describe('registerWebhooks', () => {
-        it('should register all 6 webhook events', async () => {
+        it('should register all 11 webhook events', async () => {
             mockFetch.mockResolvedValue({ ok: true });
 
             await registerWebhooks('access_token');
 
-            expect(mockFetch).toHaveBeenCalledTimes(6);
+            expect(mockFetch).toHaveBeenCalledTimes(11);
 
             const events = mockFetch.mock.calls.map(
                 (call: [string, { body: string }]) => JSON.parse(call[1].body).event,
@@ -847,6 +847,11 @@ describe('Salla Service', () => {
                 'product.status.updated',
                 'product.quantity.low',
                 'app.uninstalled',
+                'order.created',
+                'order.updated',
+                'order.shipping.update',
+                'order.completed',
+                'abandoned.cart',
             ]);
         });
 

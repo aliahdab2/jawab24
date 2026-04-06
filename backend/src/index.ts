@@ -39,6 +39,7 @@ import { translationRoutes } from "./routes/translation";
 import integrationsRoutes from "./routes/integrations";
 import waitlistRoutes from "./routes/waitlist";
 import sseRoutes from "./routes/sse";
+import customerNotificationRoutes from "./routes/customerNotifications";
 import { sseManager } from "./lib/sseManager";
 import { shutdownEventBus } from "./lib/eventBus";
 import { integrationRegistry } from "./integrations";
@@ -48,6 +49,8 @@ import { csrfProtection } from "./middleware/auth";
 import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
+import { startCustomerNotificationWorker, stopCustomerNotificationWorker, setCustomerNotificationWorkerLogger } from "./workers/customerNotificationWorker";
+import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { smsService } from "./services/sms";
@@ -232,6 +235,9 @@ const start = async () => {
     // Waitlist (public - no auth required)
     await server.register(waitlistRoutes, { prefix: "/waitlist" });
 
+    // Customer notification templates + log (authenticated)
+    await server.register(customerNotificationRoutes, { prefix: "/api" });
+
     // SSE real-time events (authenticated inside the route handler)
     await server.register(sseRoutes, { prefix: "/sse" });
     sseManager.start();
@@ -256,6 +262,11 @@ const start = async () => {
     const workerLogger = createRequestLogger(server.log);
     startWorker(workerLogger);
     console.log(`⚙️  Reply processing worker started`);
+
+    setCustomerNotificationWorkerLogger(workerLogger);
+    customerNotificationService.setLogger(workerLogger);
+    startCustomerNotificationWorker();
+    console.log(`⚙️  Customer notification worker started`);
 
     // Start e-commerce integration workers (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {
@@ -335,6 +346,7 @@ const gracefulShutdown = async (signal: string) => {
     console.log("⏳ Stopping workers...");
     await Promise.all([
       stopWorker(),
+      stopCustomerNotificationWorker(),
       ...integrationRegistry.getEnabled().map(i => i.onShutdown()),
     ]);
     console.log("✅ Workers stopped");

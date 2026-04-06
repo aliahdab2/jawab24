@@ -191,12 +191,21 @@ export const ZID_WEBHOOK_EVENTS = [
     'product.updated',
     'product.deleted',
     'app.uninstalled',
+    // Order lifecycle — for customer notifications
+    'order.created',
+    'order.updated',
+    'order.shipped',
+    'order.delivered',
 ] as const;
 
 export type ZidWebhookEvent = typeof ZID_WEBHOOK_EVENTS[number];
 
 export function isProductEvent(event: string): boolean {
     return event.startsWith('product.');
+}
+
+export function isOrderEvent(event: string): boolean {
+    return event.startsWith('order.');
 }
 
 export async function registerWebhooks(accessToken: string): Promise<void> {

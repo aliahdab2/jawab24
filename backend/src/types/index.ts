@@ -115,7 +115,7 @@ export interface AiCacheEntry {
 }
 
 export interface CreatePageDTO {
-    facebookPageId: string;
+    facebookPageId: string | null;
     name: string;
     accessToken: string;
     autoReplyEnabled?: boolean;

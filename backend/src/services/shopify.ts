@@ -106,6 +106,11 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
         { topic: 'products/create', address: `${webhookUrl}/products-update` },
         { topic: 'products/update', address: `${webhookUrl}/products-update` },
         { topic: 'products/delete', address: `${webhookUrl}/products-update` },
+        // Order lifecycle — for customer notifications
+        { topic: 'orders/create', address: `${webhookUrl}/orders` },
+        { topic: 'orders/updated', address: `${webhookUrl}/orders` },
+        { topic: 'orders/fulfilled', address: `${webhookUrl}/orders` },
+        { topic: 'orders/cancelled', address: `${webhookUrl}/orders` },
     ];
 
     const registered: string[] = [];

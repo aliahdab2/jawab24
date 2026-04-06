@@ -1,0 +1,1 @@
+ALTER TABLE "customer_notification_templates" ALTER COLUMN "is_enabled" SET DEFAULT false;

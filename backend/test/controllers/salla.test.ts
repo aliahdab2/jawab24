@@ -27,6 +27,11 @@ vi.mock('../../src/services/salla', () => ({
     fetchStoreInfo: (...args: any[]) => mockFetchStoreInfo(...args),
     fullSync: (...args: any[]) => mockFullSync(...args),
     isProductEvent: (...args: any[]) => mockIsProductEvent(...args),
+    isOrderEvent: vi.fn(() => false),
+}));
+
+vi.mock('../../src/services/customerNotifications', () => ({
+    customerNotificationService: { schedule: vi.fn().mockResolvedValue(undefined) },
 }));
 
 // --- Mocked shared ecommerce service ---

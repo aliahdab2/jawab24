@@ -863,6 +863,53 @@ export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
     processedAt: timestamp('processed_at').defaultNow().notNull(),
 });
 
+// 19. Customer Notification Templates — merchant-configurable per-store templates
+export const customerNotificationTemplates = pgTable('customer_notification_templates', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ecommerceStoreId: uuid('ecommerce_store_id').notNull().references(() => ecommerceStores.id, { onDelete: 'cascade' }),
+    notificationType: varchar('notification_type', { length: 50 }).notNull(),
+    // Types: 'abandoned_cart' | 'order_confirmed' | 'order_shipped' | 'order_delivered' | 'review_request' | 'digital_delivery'
+    channel: varchar('channel', { length: 20 }).notNull().default('sms'),
+    messageAr: text('message_ar').notNull(),
+    messageEn: text('message_en').notNull(),
+    isEnabled: boolean('is_enabled').default(false),
+    delayMinutes: integer('delay_minutes').default(0),
+    includeCoupon: boolean('include_coupon').default(false),
+    couponCode: varchar('coupon_code', { length: 50 }),
+    couponDiscount: varchar('coupon_discount', { length: 20 }),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => ({
+    storeTypeUnique: uniqueIndex('idx_cust_notif_tmpl_store_type').on(table.ecommerceStoreId, table.notificationType),
+    storeIdx: index('idx_cust_notif_tmpl_store').on(table.ecommerceStoreId),
+}));
+
+// 20. Customer Notifications Log — audit trail + deduplication for every sent notification
+export const customerNotificationsLog = pgTable('customer_notifications_log', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    ecommerceStoreId: uuid('ecommerce_store_id').notNull().references(() => ecommerceStores.id, { onDelete: 'cascade' }),
+    notificationType: varchar('notification_type', { length: 50 }).notNull(),
+    platformEventId: varchar('platform_event_id', { length: 255 }), // platform order/cart ID for dedup
+    customerPhone: varchar('customer_phone', { length: 20 }).notNull(),
+    customerName: varchar('customer_name', { length: 255 }),
+    channel: varchar('channel', { length: 20 }).notNull(),
+    messageSent: text('message_sent').notNull(),
+    status: varchar('status', { length: 20 }).default('pending'), // 'pending' | 'sent' | 'failed' | 'cancelled'
+    providerMessageId: varchar('provider_message_id', { length: 255 }),
+    errorMessage: text('error_message'),
+    orderNumber: varchar('order_number', { length: 50 }),
+    cartTotal: varchar('cart_total', { length: 50 }),
+    scheduledAt: timestamp('scheduled_at'),
+    sentAt: timestamp('sent_at'),
+    createdAt: timestamp('created_at').defaultNow(),
+}, (table) => ({
+    storeIdx: index('idx_cust_notif_log_store').on(table.ecommerceStoreId),
+    phoneIdx: index('idx_cust_notif_log_phone').on(table.customerPhone),
+    statusIdx: index('idx_cust_notif_log_status').on(table.status),
+    typeEventIdx: index('idx_cust_notif_log_type_event').on(table.notificationType, table.platformEventId),
+    pendingScheduledIdx: index('idx_cust_notif_log_pending_scheduled').on(table.status, table.scheduledAt),
+}));
+
 // Waitlist - collects emails for upcoming features
 export const waitlistEmails = pgTable('waitlist_emails', {
     id: uuid('id').defaultRandom().primaryKey(),

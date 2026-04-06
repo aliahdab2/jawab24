@@ -231,22 +231,24 @@ describe('Shopify Service', () => {
     // --- registerWebhooks ---
 
     describe('registerWebhooks', () => {
-        it('should register all 4 webhooks including create and delete', async () => {
+        it('should register all 8 webhooks including product and order events', async () => {
             mockFetch.mockResolvedValue({ ok: true });
 
             await registerWebhooks('test-store.myshopify.com', 'token123');
 
-            expect(mockFetch).toHaveBeenCalledTimes(4);
+            expect(mockFetch).toHaveBeenCalledTimes(8);
             const url = 'https://test-store.myshopify.com/admin/api/2025-01/webhooks.json';
             const opts = { method: 'POST' };
-            // app/uninstalled
+            // Product events
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('app/uninstalled') }));
-            // products/create — catches new products added by merchant
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/create') }));
-            // products/update
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/update') }));
-            // products/delete — catches products removed by merchant
             expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('products/delete') }));
+            // Order events — for customer notifications
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/create') }));
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/updated') }));
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/fulfilled') }));
+            expect(mockFetch).toHaveBeenCalledWith(url, expect.objectContaining({ ...opts, body: expect.stringContaining('orders/cancelled') }));
         });
 
         it('should not throw on 422 (already exists)', async () => {

@@ -203,12 +203,22 @@ export const SALLA_WEBHOOK_EVENTS = [
     'product.status.updated',
     'product.quantity.low',
     'app.uninstalled',
+    // Order lifecycle — for customer notifications
+    'order.created',
+    'order.updated',
+    'order.shipping.update',
+    'order.completed',
+    'abandoned.cart',
 ] as const;
 
 export type SallaWebhookEvent = typeof SALLA_WEBHOOK_EVENTS[number];
 
 export function isProductEvent(event: string): boolean {
     return event.startsWith('product.');
+}
+
+export function isOrderEvent(event: string): boolean {
+    return event.startsWith('order.') || event === 'abandoned.cart';
 }
 
 export async function registerWebhooks(accessToken: string): Promise<void> {

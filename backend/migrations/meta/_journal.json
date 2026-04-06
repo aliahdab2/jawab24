@@ -456,6 +456,20 @@
       "when": 1775344271756,
       "tag": "0064_worthless_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "5",
+      "when": 1775431017168,
+      "tag": "0065_blushing_shard",
+      "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1775455281668,
+      "tag": "0066_confused_mathemanic",
+      "breakpoints": true
     }
   ]
 }

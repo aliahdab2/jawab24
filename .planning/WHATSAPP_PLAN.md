@@ -39,24 +39,23 @@
 
 ## Remaining Work
 
-### Phase 1.5: Schema prep for WhatsApp-only merchants
+### Phase 1.5: Schema prep for WhatsApp-only merchants ✅
 Make `facebookPageId` nullable so merchants can connect WhatsApp without a Facebook Page.
 
-- [ ] `backend/src/db/schema.ts` — change `facebookPageId` from NOT NULL to nullable
-- [ ] `backend/src/services/pages.ts` — update `syncFromFacebook` and page creation to handle null `facebookPageId`
-- [ ] `backend/src/services/tokenRefresh.ts` — skip pages with null `facebookPageId`
-- [ ] `backend/src/controllers/pages.ts` — handle WhatsApp-only page creation from Embedded Signup callback
-- [ ] `packages/shared/src/index.ts` — make `facebookPageId` optional in `Page` interface
-- [ ] Generate migration, run tests
+- [x] `backend/migrations/0064_worthless_klaw.sql` — `ALTER TABLE pages ALTER COLUMN facebook_page_id DROP NOT NULL`
+- [x] `packages/shared/src/index.ts` — `facebookPageId: string | null` in `Page` interface
+- [x] `backend/src/types/index.ts` — `facebookPageId: string | null` in `CreatePageDTO`
+- [x] `backend/src/services/tokenRefresh.ts` — already filtered with `isNotNull(pages.facebookPageId)` (no change needed)
+- [x] `backend/src/controllers/pages.ts` — already guards with `if (page.facebookPageId)` (no change needed)
 
 **Why:** A WhatsApp-only merchant (phone login, no Facebook) has no Facebook Page. Without this change, we can't create a `pages` row for them because `facebookPageId` is NOT NULL. Making it nullable lets:
 - Facebook merchant: `facebookPageId = '123'`, `whatsappPhoneNumberId = null`
 - WhatsApp-only merchant: `facebookPageId = null`, `whatsappPhoneNumberId = '789'`
 - Both: `facebookPageId = '123'`, `whatsappPhoneNumberId = '789'`
 
-### Phase D: Dedicated WhatsApp tests
-- [ ] `backend/test/services/whatsappAdapter.test.ts` — adapter unit tests
-- [ ] `backend/test/controllers/webhook-whatsapp.test.ts` — webhook routing, non-text skip, status skip
+### Phase D: Dedicated WhatsApp tests ✅
+- [x] `backend/test/services/whatsappAdapter.test.ts` — getPage, fetchSenderName, sendReply, sendAwayMessage, sendTypingIndicator no-op, getInternalMessageId
+- [x] `backend/test/controllers/webhook-whatsapp.test.ts` — routing, text enqueue, sender name, non-text skip, status skip, field filter
 
 ### Phase 2: Meta Setup (Tech Provider)
 Jawab24 is a Tech Provider — merchants connect their own WhatsApp Business Account via Embedded Signup.

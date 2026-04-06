@@ -12,6 +12,7 @@ vi.mock('../../src/controllers/shopify', () => ({
     authCallback: vi.fn(),
     webhookUninstall: vi.fn(),
     webhookProductsUpdate: vi.fn(),
+    webhookOrders: vi.fn(),
     gdprCustomerDataRequest: vi.fn(),
     gdprCustomerRedact: vi.fn(),
     gdprShopRedact: vi.fn(),

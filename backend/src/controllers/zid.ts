@@ -8,6 +8,8 @@ import {
     deactivateStore,
     createPendingInstall,
 } from '../services/ecommerce';
+import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
+import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { workspaceService } from '../services/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
@@ -162,7 +164,48 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
         }
     }
 
+    if (event && zidService.isOrderEvent(event)) {
+        const store = await resolveStore();
+        if (store) {
+            const orderEvent = buildZidOrderEvent(store.id, event, request.body);
+            if (orderEvent) dispatchOrderNotification(orderEvent, request.log);
+        }
+    }
+
     return reply.status(200).send({ ok: true });
+}
+
+interface ZidOrderData {
+    id?: string;
+    number?: string;
+    customer?: { name?: string; mobile?: string };
+    tracking_number?: string;
+}
+
+function buildZidOrderEvent(storeId: string, event: string, body: unknown): OrderEvent | null {
+    const { data } = body as { data?: ZidOrderData };
+    if (!data) return null;
+
+    const phone = data.customer?.mobile;
+    if (!phone) return null;
+
+    const orderId = data.id ?? '';
+    const orderNumber = data.number ?? orderId;
+    const trackingNumber = data.tracking_number;
+    const customerName = data.customer?.name;
+
+    if (event === 'order.created') {
+        return { platform: 'zid', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
+    } else if (event === 'order.shipped') {
+        return { platform: 'zid', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
+    } else if (event === 'order.delivered') {
+        return {
+            platform: 'zid', storeId, type: 'order_delivered',
+            customerPhone: phone, customerName, orderId, orderNumber,
+            also: [{ type: 'review_request', variables: { review_url: '' } }],
+        };
+    }
+    return null;
 }
 
 // --- Protected API (Jawab24 JWT required) ---

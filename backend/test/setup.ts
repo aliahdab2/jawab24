@@ -54,6 +54,15 @@ vi.mock('../src/db', () => ({
   },
 }));
 
+// Mock BullMQ customer notification queue to avoid Redis config dependency in unit tests
+vi.mock('../src/lib/customerNotificationQueue', () => ({
+  CUSTOMER_NOTIFICATION_QUEUE: 'customer-notifications',
+  customerNotificationQueue: {
+    add: vi.fn().mockResolvedValue({ id: 'mock-job-id' }),
+    close: vi.fn().mockResolvedValue(undefined),
+  },
+}));
+
 // Set test environment variables
 process.env.DATABASE_URL = 'postgres://postgres:postgres@localhost:5432/autoreply_test';
 process.env.JWT_SECRET = 'test-jwt-secret';

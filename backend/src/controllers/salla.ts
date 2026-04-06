@@ -7,6 +7,8 @@ import {
     deactivateStore,
     createPendingInstall,
 } from '../services/ecommerce';
+import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
+import type { OrderEvent } from '../services/orderNotificationScheduler';
 import { workspaceService } from '../services/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
@@ -164,7 +166,63 @@ export async function webhookHandler(request: FastifyRequest, reply: FastifyRepl
         }
     }
 
+    // Order lifecycle and abandoned cart — schedule customer notifications
+    if (event && sallaService.isOrderEvent(event)) {
+        const store = await getStoreByDomain('salla', String(merchant));
+        if (store) {
+            const orderEvent = buildSallaOrderEvent(store.id, event, request.body);
+            if (orderEvent) dispatchOrderNotification(orderEvent, request.log);
+        }
+    }
+
     return reply.status(200).send({ ok: true });
+}
+
+interface SallaOrderData {
+    id?: number;
+    reference?: string;
+    customer?: { first_name?: string; mobile?: string };
+    total?: { amount?: number; currency?: string };
+    status?: { name?: string };
+    shipments?: Array<{ tracking_number?: string }>;
+}
+
+function buildSallaOrderEvent(storeId: string, event: string, body: unknown): OrderEvent | null {
+    const { data } = body as { data?: SallaOrderData };
+    if (!data) return null;
+
+    if (event === 'abandoned.cart') {
+        const phone = data.customer?.mobile;
+        if (!phone) return null;
+        const cartTotal = data.total ? `${data.total.amount} ${data.total.currency ?? ''}`.trim() : undefined;
+        return {
+            platform: 'salla', storeId, type: 'abandoned_cart',
+            customerPhone: phone, customerName: data.customer?.first_name,
+            orderId: String(data.id ?? ''), orderNumber: String(data.id ?? ''),
+            cartTotal,
+        };
+    }
+
+    const phone = data.customer?.mobile;
+    if (!phone) return null;
+
+    const orderId = String(data.id ?? '');
+    const orderNumber = data.reference ?? orderId;
+    const trackingNumber = data.shipments?.[0]?.tracking_number;
+    const customerName = data.customer?.first_name;
+
+    if (event === 'order.created') {
+        return { platform: 'salla', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
+    } else if (event === 'order.shipping.update' || (event === 'order.updated' && data.status?.name === 'in_transit')) {
+        return { platform: 'salla', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
+    } else if (event === 'order.completed') {
+        return {
+            platform: 'salla', storeId, type: 'order_delivered',
+            customerPhone: phone, customerName, orderId, orderNumber,
+            also: [{ type: 'review_request', variables: { review_url: '' } }],
+        };
+    }
+    return null;
 }
 
 // --- Protected API (Jawab24 JWT required) ---

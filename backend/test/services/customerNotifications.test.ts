@@ -1,0 +1,430 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mocks must be declared before imports
+vi.mock('../../src/db', () => ({
+    db: {
+        insert: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        select: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/sms', () => ({
+    smsService: {
+        send: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+vi.mock('../../src/lib/customerNotificationQueue', () => ({
+    customerNotificationQueue: {
+        add: vi.fn().mockResolvedValue({ id: 'job-1' }),
+    },
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
+}));
+
+import { CustomerNotificationService } from '../../src/services/customerNotifications';
+import { db } from '../../src/db';
+import { smsService } from '../../src/services/sms';
+import { customerNotificationQueue } from '../../src/lib/customerNotificationQueue';
+import { captureError } from '../../src/utils/sentryHelpers';
+
+/** Chainable mock helpers */
+function mockSelectChain(returnValue: unknown) {
+    return {
+        from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue(returnValue),
+            }),
+        }),
+    };
+}
+
+function mockInsertChain(returnValue: unknown) {
+    return {
+        values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([returnValue]),
+        }),
+    };
+}
+
+function mockUpdateChain() {
+    return {
+        set: vi.fn().mockReturnValue({
+            where: vi.fn().mockResolvedValue(undefined),
+        }),
+    };
+}
+
+function mockDeleteChain() {
+    return { where: vi.fn().mockResolvedValue(undefined) };
+}
+
+const enabledTemplate = {
+    id: 'tpl-1',
+    ecommerceStoreId: 'store-1',
+    notificationType: 'order_confirmed' as const,
+    channel: 'sms',
+    messageAr: 'مرحباً {customer_name}، طلبك #{order_number} تم تأكيده',
+    messageEn: 'Hi {customer_name}, order #{order_number} confirmed',
+    isEnabled: true,
+    delayMinutes: 0,
+    includeCoupon: false,
+    couponCode: null,
+    couponDiscount: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+};
+
+describe('CustomerNotificationService', () => {
+    let service: CustomerNotificationService;
+
+    beforeEach(() => {
+        vi.resetAllMocks();
+        service = new CustomerNotificationService();
+    });
+
+    // ─── renderTemplate ──────────────────────────────────────────
+
+    describe('renderTemplate', () => {
+        it('replaces {customer_name} placeholder', () => {
+            const result = service.renderTemplate('Hello {customer_name}!', { customer_name: 'Ahmed' });
+            expect(result).toBe('Hello Ahmed!');
+        });
+
+        it('replaces multiple placeholders', () => {
+            const result = service.renderTemplate('Hi {customer_name}, order #{order_number}', {
+                customer_name: 'Sara',
+                order_number: '123',
+            });
+            expect(result).toBe('Hi Sara, order #123');
+        });
+
+        it('leaves unknown placeholders as empty string', () => {
+            const result = service.renderTemplate('Hi {customer_name}, ref: {unknown_key}', {
+                customer_name: 'Ali',
+            });
+            expect(result).toBe('Hi Ali, ref: ');
+        });
+    });
+
+    // ─── detectLanguage ──────────────────────────────────────────
+
+    describe('detectLanguage', () => {
+        it('returns ar for Saudi number +966501234567', () => {
+            expect(service.detectLanguage('+966501234567')).toBe('ar');
+        });
+
+        it('returns ar for UAE number +971501234567', () => {
+            expect(service.detectLanguage('+971501234567')).toBe('ar');
+        });
+
+        it('returns en for US number +12025551234', () => {
+            expect(service.detectLanguage('+12025551234')).toBe('en');
+        });
+
+        it('returns en for UK number +447700900123', () => {
+            expect(service.detectLanguage('+447700900123')).toBe('en');
+        });
+    });
+
+    // ─── schedule ────────────────────────────────────────────────
+
+    describe('schedule', () => {
+        it('skips if template not found', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([]) as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_confirmed',
+                customerPhone: '+966501234567',
+                variables: {},
+            });
+
+            expect(db.insert).not.toHaveBeenCalled();
+            expect(customerNotificationQueue.add).not.toHaveBeenCalled();
+        });
+
+        it('skips if template is disabled', async () => {
+            const disabledTemplate = { ...enabledTemplate, isEnabled: false };
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([disabledTemplate]) as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_confirmed',
+                customerPhone: '+966501234567',
+                variables: {},
+            });
+
+            expect(db.insert).not.toHaveBeenCalled();
+        });
+
+        it('skips if platformEventId already exists in log', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([enabledTemplate]) as never)
+                .mockReturnValueOnce(mockSelectChain([{ id: 'existing-log' }]) as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_confirmed',
+                customerPhone: '+966501234567',
+                variables: {},
+                platformEventId: 'salla:order_confirmed:999',
+            });
+
+            expect(db.insert).not.toHaveBeenCalled();
+        });
+
+        it('creates log entry and enqueues job when template enabled and no duplicate', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([enabledTemplate]) as never)
+                .mockReturnValueOnce(mockSelectChain([]) as never);
+
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain({ id: 'log-1' }) as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_confirmed',
+                customerPhone: '+966501234567',
+                variables: { order_number: '42' },
+                platformEventId: 'salla:order_confirmed:42',
+            });
+
+            expect(db.insert).toHaveBeenCalledTimes(1);
+            expect(customerNotificationQueue.add).toHaveBeenCalledWith(
+                'order_confirmed',
+                { notificationLogId: 'log-1' },
+                { delay: undefined },
+            );
+        });
+
+        it('applies delay from template.delayMinutes when > 0', async () => {
+            const delayedTemplate = { ...enabledTemplate, delayMinutes: 60 };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([delayedTemplate]) as never)
+                .mockReturnValueOnce(mockSelectChain([]) as never);
+
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain({ id: 'log-2' }) as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_confirmed',
+                customerPhone: '+966501234567',
+                variables: {},
+                platformEventId: 'salla:order_confirmed:100',
+            });
+
+            expect(customerNotificationQueue.add).toHaveBeenCalledWith(
+                'order_confirmed',
+                { notificationLogId: 'log-2' },
+                { delay: 60 * 60 * 1000 },
+            );
+        });
+
+        it('uses Arabic message when phone is Saudi number', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([enabledTemplate]) as never)
+                .mockReturnValueOnce(mockSelectChain([]) as never);
+
+            const insertMock = mockInsertChain({ id: 'log-3' });
+            vi.mocked(db.insert).mockReturnValue(insertMock as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_confirmed',
+                customerPhone: '+966501234567',
+                customerName: 'Ahmed',
+                variables: { order_number: '5' },
+            });
+
+            expect(insertMock.values).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    messageSent: expect.stringContaining('Ahmed'),
+                }),
+            );
+            // Arabic template was used — verify message contains Arabic content
+            const call = insertMock.values.mock.calls[0][0] as { messageSent: string };
+            expect(call.messageSent).toMatch(/تم تأكيده/);
+        });
+
+        it('uses English message when phone is US number', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([enabledTemplate]) as never);
+
+            const insertMock = mockInsertChain({ id: 'log-4' });
+            vi.mocked(db.insert).mockReturnValue(insertMock as never);
+
+            await service.schedule({
+                storeId: 'store-1',
+                type: 'order_confirmed',
+                customerPhone: '+12025551234',
+                customerName: 'John',
+                variables: { order_number: '7' },
+            });
+
+            expect(db.insert).toHaveBeenCalledTimes(1);
+            const returnedChain = vi.mocked(db.insert).mock.results[0].value as ReturnType<typeof mockInsertChain>;
+            const call = returnedChain.values.mock.calls[0][0] as { messageSent: string };
+            expect(call.messageSent).toMatch(/confirmed/);
+        });
+
+        it('cleans up log entry and re-throws if enqueue fails', async () => {
+            vi.mocked(db.select)
+                .mockReturnValueOnce(mockSelectChain([enabledTemplate]) as never)
+                .mockReturnValueOnce(mockSelectChain([]) as never);
+
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain({ id: 'log-5' }) as never);
+            vi.mocked(customerNotificationQueue.add).mockRejectedValueOnce(new Error('Redis down'));
+            vi.mocked(db.delete).mockReturnValue(mockDeleteChain() as never);
+
+            await expect(
+                service.schedule({
+                    storeId: 'store-1',
+                    type: 'order_confirmed',
+                    customerPhone: '+966501234567',
+                    variables: {},
+                    platformEventId: 'salla:order_confirmed:88',
+                }),
+            ).rejects.toThrow('Redis down');
+
+            expect(db.delete).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    // ─── send ────────────────────────────────────────────────────
+
+    describe('send', () => {
+        const logEntry = {
+            id: 'log-1',
+            customerPhone: '+966501234567',
+            messageSent: 'Hello Ahmed',
+            notificationType: 'order_confirmed',
+            status: 'pending',
+        };
+
+        it('sends SMS and updates status to sent', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([logEntry]) as never);
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain() as never);
+
+            await service.send('log-1');
+
+            expect(smsService.send).toHaveBeenCalledWith('+966501234567', 'Hello Ahmed');
+            expect(db.update).toHaveBeenCalledTimes(1);
+            const updateMock = vi.mocked(db.update).mock.results[0].value as ReturnType<typeof mockUpdateChain>;
+            expect(updateMock.set).toHaveBeenCalledWith(
+                expect.objectContaining({ status: 'sent' }),
+            );
+        });
+
+        it('skips (returns early) if log entry has status cancelled', async () => {
+            const cancelledEntry = { ...logEntry, status: 'cancelled' };
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([cancelledEntry]) as never);
+
+            await service.send('log-1');
+
+            expect(smsService.send).not.toHaveBeenCalled();
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
+        it('marks entry as failed and re-throws if smsService throws', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectChain([logEntry]) as never);
+            vi.mocked(smsService.send).mockRejectedValueOnce(new Error('Network error'));
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain() as never);
+
+            await expect(service.send('log-1')).rejects.toThrow('Network error');
+
+            const updateMock = vi.mocked(db.update).mock.results[0].value as ReturnType<typeof mockUpdateChain>;
+            expect(updateMock.set).toHaveBeenCalledWith(
+                expect.objectContaining({ status: 'failed' }),
+            );
+            expect(captureError).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    // ─── cancel ──────────────────────────────────────────────────
+
+    describe('cancel', () => {
+        it('calls db.update with correct conditions', async () => {
+            vi.mocked(db.update).mockReturnValue(mockUpdateChain() as never);
+
+            await service.cancel('store-1', 'abandoned_cart', '+966501234567');
+
+            expect(db.update).toHaveBeenCalledTimes(1);
+            const updateMock = vi.mocked(db.update).mock.results[0].value as ReturnType<typeof mockUpdateChain>;
+            expect(updateMock.set).toHaveBeenCalledWith(
+                expect.objectContaining({ status: 'cancelled' }),
+            );
+        });
+    });
+
+    // ─── seedDefaults ────────────────────────────────────────────
+
+    describe('seedDefaults', () => {
+        it('inserts all 6 defaults when store has no existing templates', async () => {
+            // seedDefaults uses select without .limit() — it resolves directly from .where()
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as never);
+
+            const insertMock = {
+                values: vi.fn().mockResolvedValue(undefined),
+            };
+            vi.mocked(db.insert).mockReturnValue(insertMock as never);
+
+            await service.seedDefaults('store-new');
+
+            expect(insertMock.values).toHaveBeenCalledTimes(1);
+            const inserted = insertMock.values.mock.calls[0][0] as Array<{ notificationType: string }>;
+            expect(inserted).toHaveLength(6);
+        });
+
+        it('skips types that already exist, only inserts missing ones', async () => {
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { notificationType: 'abandoned_cart' },
+                        { notificationType: 'order_confirmed' },
+                    ]),
+                }),
+            } as never);
+
+            const insertMock = {
+                values: vi.fn().mockResolvedValue(undefined),
+            };
+            vi.mocked(db.insert).mockReturnValue(insertMock as never);
+
+            await service.seedDefaults('store-partial');
+
+            expect(insertMock.values).toHaveBeenCalledTimes(1);
+            const inserted = insertMock.values.mock.calls[0][0] as Array<{ notificationType: string }>;
+            expect(inserted).toHaveLength(4);
+            const types = inserted.map(r => r.notificationType);
+            expect(types).not.toContain('abandoned_cart');
+            expect(types).not.toContain('order_confirmed');
+        });
+
+        it('does nothing if all 6 already exist', async () => {
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { notificationType: 'abandoned_cart' },
+                        { notificationType: 'order_confirmed' },
+                        { notificationType: 'order_shipped' },
+                        { notificationType: 'order_delivered' },
+                        { notificationType: 'review_request' },
+                        { notificationType: 'digital_delivery' },
+                    ]),
+                }),
+            } as never);
+
+            await service.seedDefaults('store-full');
+
+            expect(db.insert).not.toHaveBeenCalled();
+        });
+    });
+});

@@ -104,6 +104,12 @@ vi.mock('../../src/lib/ecommerceSyncQueue', () => ({
     enqueueSyncJob: (...args: any[]) => mockEnqueueSyncJob(...args),
 }));
 
+// Mock order notification dispatcher
+const mockDispatchOrderNotification = vi.fn();
+vi.mock('../../src/services/orderNotificationScheduler', () => ({
+    dispatchOrderNotification: (...args: any[]) => mockDispatchOrderNotification(...args),
+}));
+
 import {
     authRedirect,
     authCallback,

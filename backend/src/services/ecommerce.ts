@@ -12,6 +12,7 @@ import { encrypt, decrypt } from './ecommerceCrypto';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redisScanDelete } from '../lib/redis';
+import { customerNotificationService } from './customerNotifications';
 
 // --- Constants & Types ---
 
@@ -578,6 +579,14 @@ export async function claimPendingInstall(
         storeDomain: pending.storeDomain,
         accessToken,
         workspaceId,
+    });
+
+    // Seed default notification templates for the new store (non-blocking, safe to retry)
+    customerNotificationService.seedDefaults(store.id).catch(err => {
+        captureError(err, 'Failed to seed customer notification templates', {
+            tags: { service: 'ecommerce' },
+            extra: { storeId: store.id, platform },
+        });
     });
 
     // Mark pending as claimed

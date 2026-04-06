@@ -5,6 +5,8 @@ import { workspaceService } from '../services/workspace';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
+import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
+import type { OrderEvent } from '../services/orderNotificationScheduler';
 import {
     PENDING_SHOPIFY_COOKIE_OPTIONS,
     SHOPIFY_NONCE_COOKIE_OPTIONS,
@@ -192,6 +194,55 @@ export async function webhookProductsUpdate(request: FastifyRequest, reply: Fast
     }
 
     return reply.status(200).send({ ok: true });
+}
+
+export async function webhookOrders(request: FastifyRequest, reply: FastifyReply) {
+    if (!verifyShopifyWebhookHmac(request, reply)) return;
+
+    const shopDomain = request.headers['x-shopify-shop-domain'] as string;
+    const topic = request.headers['x-shopify-topic'] as string;
+
+    if (shopDomain) {
+        const store = await shopifyService.getStoreByDomain(shopDomain);
+        if (store) {
+            const orderEvent = buildShopifyOrderEvent(store.id, topic, request.body);
+            if (orderEvent) dispatchOrderNotification(orderEvent, request.log);
+        }
+    }
+
+    return reply.status(200).send({ ok: true });
+}
+
+interface ShopifyOrderBody {
+    id?: number;
+    order_number?: number;
+    customer?: { phone?: string; first_name?: string };
+    fulfillment_status?: string | null;
+    fulfillments?: Array<{ tracking_number?: string }>;
+}
+
+function buildShopifyOrderEvent(storeId: string, topic: string, body: unknown): OrderEvent | null {
+    const order = body as ShopifyOrderBody;
+    const phone = order.customer?.phone;
+    if (!phone) return null;
+
+    const orderId = String(order.id ?? '');
+    const orderNumber = String(order.order_number ?? order.id ?? '');
+    const trackingNumber = order.fulfillments?.[0]?.tracking_number;
+    const customerName = order.customer?.first_name;
+
+    if (topic === 'orders/create') {
+        return { platform: 'shopify', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
+    } else if (topic === 'orders/fulfilled') {
+        return { platform: 'shopify', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
+    } else if (topic === 'orders/updated' && order.fulfillment_status === 'delivered') {
+        return {
+            platform: 'shopify', storeId, type: 'order_delivered',
+            customerPhone: phone, customerName, orderId, orderNumber,
+            also: [{ type: 'review_request', variables: { review_url: '' } }],
+        };
+    }
+    return null;
 }
 
 // --- GDPR Mandatory Endpoints (HMAC-verified) ---
