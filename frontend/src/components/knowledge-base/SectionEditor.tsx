@@ -71,7 +71,7 @@ export function SectionEditor({
 
   useEffect(() => {
     if (isExpanded && textareaRef.current) {
-      textareaRef.current.focus();
+      textareaRef.current.focus({ preventScroll: true });
       autoResize();
     }
   }, [isExpanded, autoResize]);
