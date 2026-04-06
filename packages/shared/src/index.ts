@@ -1,5 +1,9 @@
 // Shared Types for Jawab24
 
+// --- Flag Reason Translations ---
+export { default as flagReasonEn } from './i18n/en/flagReason.json';
+export { default as flagReasonAr } from './i18n/ar/flagReason.json';
+
 // --- Utilities ---
 export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
@@ -86,7 +90,7 @@ export interface BusinessProfile {
 export interface Page {
   id: string;
   name: string;
-  facebookPageId: string;
+  facebookPageId: string | null;
   autoReplyEnabled: boolean | null;
   // Instagram fields
   instagramAccountId?: string | null;

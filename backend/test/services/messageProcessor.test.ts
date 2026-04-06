@@ -434,7 +434,7 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
             'user-uuid',
             'flagged_reply',
             expect.objectContaining({
-                reason: expect.stringContaining('Cancellation Request'),
+                reason: expect.stringContaining('cancellation_request'),
             }),
             expect.objectContaining({
                 urgent: true,
@@ -503,7 +503,7 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
             'user-uuid',
             'flagged_reply',
             expect.objectContaining({
-                reason: 'Refund Request',
+                reason: 'refund_request',
             }),
             expect.objectContaining({
                 urgent: true,

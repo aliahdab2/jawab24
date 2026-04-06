@@ -1,21 +1,24 @@
 /**
- * Single source of truth for high-stakes flags.
- * Maps snake_case flag → { en: English label, ar: Arabic translation }.
+ * Registry of high-stakes flags that warrant urgent push notifications.
+ * Translations live in packages/shared/src/i18n/{en,ar}/flagReason.json.
  *
  * Extracted into its own file to avoid circular imports between
  * messageProcessor.ts (which imports notificationService) and
- * notifications.ts (which needs these flag mappings).
+ * notifications.ts (which needs these flag keys).
  */
-export const URGENT_FLAG_MAP: Record<string, { en: string; ar: string }> = {
-    cancellation_request: { en: 'Cancellation Request', ar: 'طلب إلغاء' },
-    refund_request:       { en: 'Refund Request',       ar: 'طلب استرجاع' },
-    exchange_request:     { en: 'Exchange Request',     ar: 'طلب استبدال' },
-    angry_customer:       { en: 'Angry Customer',       ar: 'عميل غاضب' },
-};
+export const URGENT_FLAGS = new Set([
+    'cancellation_request',
+    'refund_request',
+    'exchange_request',
+    'angry_customer',
+]);
 
-const URGENT_FLAGS = new Set(Object.keys(URGENT_FLAG_MAP));
+/** @deprecated Use URGENT_FLAGS set directly. Kept for any external consumers. */
+export const URGENT_FLAG_MAP: Record<string, true> = Object.fromEntries(
+    [...URGENT_FLAGS].map(k => [k, true as const]),
+);
 
-/** Check if any flag in the comma-separated reason is urgent */
+/** Check if any flag in the comma-separated reason string is urgent */
 export function isUrgentFlag(flagReason: string | undefined): boolean {
     if (!flagReason) return false;
     return flagReason.split(',').some(f => URGENT_FLAGS.has(f.trim()));
@@ -37,5 +40,7 @@ export function buildNotificationReason(flagReason: string | undefined, messageT
     const orderMatch = messageText.match(/#?\b\d{3,10}\b/);
     const orderSuffix = orderMatch ? ` — order ${orderMatch[0]}` : '';
 
-    return (URGENT_FLAG_MAP[urgentFlag]?.en || urgentFlag) + orderSuffix;
+    // Return snake_case key so translateFlagReason can look it up in the
+    // shared JSON and translate into the user's language.
+    return urgentFlag + orderSuffix;
 }

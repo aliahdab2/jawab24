@@ -2,7 +2,7 @@ import { db } from '../db';
 import { deviceTokens, notifications, settings } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
-import { URGENT_FLAG_MAP } from './reply/urgentFlags';
+import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
 
 // Notification types
 export type NotificationType =
@@ -111,53 +111,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
     },
 };
 
-/** English human-readable labels for flag reason strings used in notifications.
- *  Values must match frontend/src/i18n/en/flagReason.json — keep in sync. */
-const FLAG_REASON_EN: Record<string, string> = {
-    'offensive_or_abusive': 'Offensive or abusive',
-    'low_confidence': 'Low confidence reply',
-    'held_low_confidence': 'Low confidence reply',
-    'price_not_in_kb': 'Price not in knowledge base',
-    'info_not_in_kb': 'Information not in knowledge base',
-    'redirect_to_human': 'Redirect to human',
-    'complaint': 'Complaint',
-    'offensive': 'Offensive',
-    'invalid_json': 'Reply processing error',
-    'fallback_reply': 'Fallback reply',
-    'negative_sentiment': 'Negative sentiment',
-    'human_requested': 'Human requested',
-    'AI flagged this reply': 'AI flagged this reply',
-    // Derived from URGENT_FLAG_MAP (same pattern as FLAG_REASON_AR)
-    ...Object.fromEntries(
-        Object.entries(URGENT_FLAG_MAP).flatMap(([key, { en }]) => [
-            [key, en],  // e.g. 'cancellation_request' → 'Cancellation Request'
-        ]),
-    ),
-};
+/** Internal-only flag fragments that carry metadata, not user-facing reasons.
+ *  These are stripped before the reason string is shown to the user. */
+const METADATA_FLAG_PREFIXES = ['expected_lang:', 'reply_lang:'];
 
-/** Arabic translations for flag reason strings used in notifications.
- *  High-stakes flags (cancellation, refund, etc.) are derived from URGENT_FLAG_MAP
- *  to avoid duplication — see messageProcessor.ts for the single source of truth. */
-const FLAG_REASON_AR: Record<string, string> = {
-    'offensive_or_abusive': 'محتوى مسيء',
-    'low_confidence': 'ثقة منخفضة في الرد',
-    'held_low_confidence': 'ثقة منخفضة في الرد',
-    'price_not_in_kb': 'سعر غير موجود في قاعدة المعرفة',
-    'info_not_in_kb': 'معلومات غير موجودة في قاعدة المعرفة',
-    'redirect_to_human': 'تحويل إلى موظف',
-    'complaint': 'شكوى',
-    'offensive': 'محتوى مسيء',
-    'invalid_json': 'خطأ في معالجة الرد',
-    'fallback_reply': 'رد احتياطي',
-    'AI flagged this reply': 'تم تمييز هذا الرد بواسطة الذكاء الاصطناعي',
-    // Derived from URGENT_FLAG_MAP: snake_case keys + English label keys → Arabic
-    ...Object.fromEntries(
-        Object.entries(URGENT_FLAG_MAP).flatMap(([key, { en, ar }]) => [
-            [key, ar],   // e.g. 'cancellation_request' → 'طلب إلغاء'
-            [en, ar],    // e.g. 'Cancellation Request' → 'طلب إلغاء'
-        ]),
-    ),
-};
+// Single source of truth: packages/shared/src/i18n/{en,ar}/flagReason.json
+const FLAG_REASON_EN: Record<string, string> = flagReasonEn;
+const FLAG_REASON_AR: Record<string, string> = flagReasonAr;
 
 /** Arabic fallback for 'Unknown' sender name */
 const UNKNOWN_SENDER_AR = 'مجهول';
@@ -177,10 +137,13 @@ function translateFlagReason(reason: string, lang: string): string {
         }
     }
 
-    // Comma-separated fallback (e.g., "info_not_in_kb,low_confidence")
-    return reason.split(',')
-        .map(f => map[f.trim()] || f.trim())
-        .join(separator);
+    // Comma-separated flags (e.g., "language_mismatch,expected_lang:en,reply_lang:ar")
+    // Strip internal metadata flags (expected_lang:*, reply_lang:*) before translating.
+    const parts = reason.split(',')
+        .map(f => f.trim())
+        .filter(f => !METADATA_FLAG_PREFIXES.some(prefix => f.startsWith(prefix)));
+
+    return parts.map(f => map[f] || f).join(separator);
 }
 
 /**

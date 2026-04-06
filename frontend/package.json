@@ -31,6 +31,7 @@
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
+    "@jawab24/shared": "*",
     "@capacitor-community/facebook-login": "^8.0.0",
     "@capacitor/android": "^8.0.0",
     "@capacitor/app": "^8.0.0",

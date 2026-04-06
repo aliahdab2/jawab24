@@ -48,55 +48,55 @@ describe('buildNotificationReason', () => {
         expect(buildNotificationReason('info_not_in_kb', 'some text')).toBe('info_not_in_kb');
     });
 
-    it('returns label for cancellation_request', () => {
-        expect(buildNotificationReason('cancellation_request', 'الغي الطلب')).toBe('Cancellation Request');
+    it('returns snake_case key for cancellation_request', () => {
+        expect(buildNotificationReason('cancellation_request', 'الغي الطلب')).toBe('cancellation_request');
     });
 
-    it('returns label for refund_request', () => {
-        expect(buildNotificationReason('refund_request', 'ارجعوا فلوسي')).toBe('Refund Request');
+    it('returns snake_case key for refund_request', () => {
+        expect(buildNotificationReason('refund_request', 'ارجعوا فلوسي')).toBe('refund_request');
     });
 
-    it('returns label for exchange_request', () => {
-        expect(buildNotificationReason('exchange_request', 'ابي ابدل')).toBe('Exchange Request');
+    it('returns snake_case key for exchange_request', () => {
+        expect(buildNotificationReason('exchange_request', 'ابي ابدل')).toBe('exchange_request');
     });
 
-    it('returns label for angry_customer', () => {
-        expect(buildNotificationReason('angry_customer', 'اسوأ خدمة')).toBe('Angry Customer');
+    it('returns snake_case key for angry_customer', () => {
+        expect(buildNotificationReason('angry_customer', 'اسوأ خدمة')).toBe('angry_customer');
     });
 
     it('extracts order number from message text', () => {
         expect(buildNotificationReason('cancellation_request', 'ابي الغي طلبي رقم 5678'))
-            .toBe('Cancellation Request — order 5678');
+            .toBe('cancellation_request — order 5678');
     });
 
     it('extracts order number with # prefix', () => {
         expect(buildNotificationReason('refund_request', 'refund for #1234 please'))
-            .toBe('Refund Request — order #1234');
+            .toBe('refund_request — order #1234');
     });
 
     it('handles message without order number', () => {
         expect(buildNotificationReason('cancellation_request', 'I want to cancel'))
-            .toBe('Cancellation Request');
+            .toBe('cancellation_request');
     });
 
     it('picks first urgent flag from comma-separated list', () => {
         expect(buildNotificationReason('info_not_in_kb,refund_request', 'refund please'))
-            .toBe('Refund Request');
+            .toBe('refund_request');
     });
 
-    it('picks angry_customer when mixed with cancellation', () => {
-        // angry_customer comes first in URGENT_FLAGS iteration, but the first match in the flags string wins
+    it('picks first urgent flag when mixed', () => {
+        // First urgent flag found in the flags string wins
         expect(buildNotificationReason('cancellation_request,angry_customer', 'الغي طلبي 999'))
-            .toBe('Cancellation Request — order 999');
+            .toBe('cancellation_request — order 999');
     });
 
     it('does not match short numbers (less than 3 digits)', () => {
         expect(buildNotificationReason('cancellation_request', 'cancel order 12'))
-            .toBe('Cancellation Request');
+            .toBe('cancellation_request');
     });
 
     it('does not match long numbers (more than 10 digits)', () => {
         expect(buildNotificationReason('cancellation_request', 'order 12345678901'))
-            .toBe('Cancellation Request');
+            .toBe('cancellation_request');
     });
 });

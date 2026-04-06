@@ -228,7 +228,7 @@ describe('NotificationService', () => {
             expect(sendNotificationSpy).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 type: 'flagged_reply',
                 bodies: expect.objectContaining({
-                    en: expect.stringContaining('Angry Customer'),
+                    en: expect.stringContaining('Angry customer'),
                 }),
                 data: expect.objectContaining({
                     commentId: 'c-123',
@@ -261,7 +261,7 @@ describe('NotificationService', () => {
             const payload = sendNotificationSpy.mock.calls[0][1];
             expect(payload.bodies.ar).toContain('عميل غاضب');
             expect(payload.bodies.ar).not.toContain('angry_customer');
-            expect(payload.bodies.en).toContain('Angry Customer');
+            expect(payload.bodies.en).toContain('Angry customer');
             expect(payload.bodies.en).not.toContain('angry_customer');
         });
 
@@ -335,13 +335,13 @@ describe('NotificationService', () => {
             await notificationService.sendTemplateNotification(
                 'user-123',
                 'flagged_reply',
-                { senderName: 'Customer', reason: 'Cancellation Request — order #5678' },
+                { senderName: 'Customer', reason: 'cancellation_request — order #5678' },
             );
 
             const payload = sendNotificationSpy.mock.calls[0][1];
             expect(payload.bodies.ar).toContain('طلب إلغاء');
             expect(payload.bodies.ar).toContain('5678');
-            expect(payload.bodies.en).toContain('Cancellation Request — order #5678');
+            expect(payload.bodies.en).toContain('Cancellation request — order #5678');
         });
 
         it('should translate new high-stakes flags (cancellation, refund, exchange)', async () => {
@@ -360,9 +360,9 @@ describe('NotificationService', () => {
             const sendNotificationSpy = vi.spyOn(notificationService, 'sendNotification');
 
             for (const [flag, arTranslation] of [
-                ['Cancellation Request', 'طلب إلغاء'],
-                ['Refund Request', 'طلب استرجاع'],
-                ['Exchange Request', 'طلب استبدال'],
+                ['cancellation_request', 'طلب إلغاء'],
+                ['refund_request', 'طلب استرجاع'],
+                ['exchange_request', 'طلب استبدال'],
             ] as const) {
                 sendNotificationSpy.mockClear();
 

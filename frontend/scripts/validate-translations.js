@@ -18,21 +18,30 @@ const path = require('path');
 
 // ── Load files ──────────────────────────────────────────────────────────────
 
-const I18N_DIR = path.join(__dirname, '..', 'src', 'i18n');
+// Directories that contain i18n JSON files.
+// Shared namespaces (e.g. flagReason) live in packages/shared — include them
+// so the validator catches key-sync and language issues there too.
+const I18N_DIRS = [
+  path.join(__dirname, '..', 'src', 'i18n'),
+  path.join(__dirname, '..', '..', '..', 'packages', 'shared', 'src', 'i18n'),
+];
 
 function loadJSON(filePath) {
   const raw = fs.readFileSync(filePath, 'utf-8');
   return JSON.parse(raw);
 }
 
-/** Merge all namespace JSON files in a locale directory into one flat object */
+/** Merge all namespace JSON files for a locale across all i18n directories */
 function loadNamespaceDir(locale) {
-  const dir = path.join(I18N_DIR, locale);
   const merged = {};
-  const files = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort();
-  for (const file of files) {
-    const ns = file.replace('.json', '');
-    merged[ns] = loadJSON(path.join(dir, file));
+  for (const baseDir of I18N_DIRS) {
+    const dir = path.join(baseDir, locale);
+    if (!fs.existsSync(dir)) continue;
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json')).sort();
+    for (const file of files) {
+      const ns = file.replace('.json', '');
+      merged[ns] = loadJSON(path.join(dir, file));
+    }
   }
   return merged;
 }
