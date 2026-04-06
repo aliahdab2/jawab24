@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
-import { ZidIcon } from '@/components/landing';
+import { ZidIcon, ShopifyIcon, SallaIcon } from '@/components/landing';
 import { OrderNotificationsCard } from '@/components/settings';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
@@ -7,11 +7,9 @@ import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal } from '@/com
 import { ecommerceApi, sallaApi, zidApi, pagesApi } from '@/lib/api';
 import { toast } from 'sonner';
 import {
-  ShoppingBag,
   RefreshCw,
   Unlink,
   CheckCircle2,
-  Store,
   PlugZap,
   Sparkles,
   ArrowRight,
@@ -49,7 +47,7 @@ interface PlatformConfig {
 const PLATFORMS: PlatformConfig[] = [
   {
     id: 'shopify',
-    icon: <ShoppingBag className="w-8 h-8" />,
+    icon: <ShopifyIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-emerald',
     storeMetaClass: 'alert-success border',
     getReconnectPath: (domain) => `/shopify/auth?shop=${encodeURIComponent(domain)}`,
@@ -63,7 +61,7 @@ const PLATFORMS: PlatformConfig[] = [
   },
   {
     id: 'salla',
-    icon: <Store className="w-8 h-8" />,
+    icon: <SallaIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-brand',
     storeMetaClass: 'status-brand border',
     getReconnectPath: () => '/salla/auth',
@@ -415,12 +413,14 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             disabled={!canEdit || connecting || (platform.requiresDomain && !shopDomain.trim())}
             className="w-full sm:w-auto"
           >
-            {connecting ? (
-              <RefreshCw className="w-4 h-4 me-1.5 animate-spin" aria-hidden="true" />
-            ) : (
-              <ArrowRight className="w-4 h-4 me-1.5" aria-hidden="true" />
-            )}
-            {tInt('notConnected.connectBtn')}
+            <span className="flex items-center gap-1.5">
+              {connecting ? (
+                <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <ArrowRight className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
+              )}
+              {tInt('notConnected.connectBtn')}
+            </span>
           </Button>
           {!platform.requiresDomain && (
             <p className="text-[11px] text-muted-foreground">
