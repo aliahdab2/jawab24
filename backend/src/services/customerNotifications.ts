@@ -6,14 +6,8 @@ import { customerNotificationQueue } from '../lib/customerNotificationQueue';
 import { captureError } from '../utils/sentryHelpers';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
-
-export type OrderNotificationType =
-    | 'abandoned_cart'
-    | 'order_confirmed'
-    | 'order_shipped'
-    | 'order_delivered'
-    | 'review_request'
-    | 'digital_delivery';
+import type { OrderNotificationType } from '@jawab24/shared';
+export type { OrderNotificationType };
 
 export interface ScheduleParams {
     storeId: string;

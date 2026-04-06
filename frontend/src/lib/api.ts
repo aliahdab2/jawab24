@@ -15,6 +15,8 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats } from '@jawab24/shared';
+export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -686,37 +688,6 @@ export const zidApi = {
 };
 
 // Order Notifications API
-export type OrderNotificationType =
-  | 'abandoned_cart'
-  | 'order_confirmed'
-  | 'order_shipped'
-  | 'order_delivered'
-  | 'review_request'
-  | 'digital_delivery';
-
-export interface NotificationTemplate {
-  id: string;
-  ecommerceStoreId: string;
-  notificationType: OrderNotificationType;
-  messageAr: string;
-  messageEn: string;
-  isEnabled: boolean;
-  delayMinutes: number;
-  channel: string;
-  includeCoupon: boolean;
-  couponCode: string | null;
-  couponDiscount: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface NotificationStats {
-  total: number;
-  sent: number;
-  failed: number;
-  byType: Record<string, number>;
-}
-
 export const orderNotificationsApi = {
   getTemplates: (storeId: string) =>
     api.get<NotificationTemplate[]>(`/notification-templates/${storeId}`),

@@ -23,75 +23,32 @@ import type { Page, EcommerceStore } from '@jawab24/shared';
 import { useWorkspaceRole } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 
-/** Routes namespace-prefixed keys (e.g. 'shopify.title') to the correct scoped translator. */
-function usePlatformT() {
-  const tShopify = useTranslations('shopify');
-  const tSalla = useTranslations('salla');
-  const tZid = useTranslations('zid');
-  const tInt = useTranslations('integrations');
-  const tCommon = useTranslations('common');
-  return (key: string, params?: Record<string, string | number>): string => {
-    const dot = key.indexOf('.');
-    if (dot < 0) return key;
-    const ns = key.slice(0, dot);
-    const k = key.slice(dot + 1);
-    if (ns === 'shopify') return params ? tShopify(k, params) : tShopify(k);
-    if (ns === 'salla') return params ? tSalla(k, params) : tSalla(k);
-    if (ns === 'zid') return params ? tZid(k, params) : tZid(k);
-    if (ns === 'common') return params ? tCommon(k, params) : tCommon(k);
-    return params ? tInt(k, params) : tInt(k);
-  };
-}
-
 /* ------------------------------------------------------------------ */
 /*  Platform config — add new entries here to support more platforms   */
 /* ------------------------------------------------------------------ */
 
+type PlatformId = 'shopify' | 'salla' | 'zid';
+
 interface PlatformConfig {
-  id: string;
-  nameKey: string;
-  descKey: string;
+  id: PlatformId;
   icon: React.ReactNode;
   iconClass: string;
   storeMetaClass: string;
-  /**
-   * Returns the backend path to initiate reconnect OAuth.
-   * Shopify needs ?shop=domain; Salla needs no param.
-   */
+  /** Returns the backend path to initiate reconnect OAuth. */
   getReconnectPath: (storeDomain: string) => string;
   getStore: () => Promise<EcommerceStore>;
   syncProducts: () => Promise<unknown>;
   disconnectStore: () => Promise<unknown>;
   linkPage: (pageId: string) => Promise<unknown>;
   unlinkPage: (pageId: string) => Promise<unknown>;
-  disconnectConfirmKey: string;
-  syncSuccessKey: string;
-  syncErrorKey: string;
-  disconnectedKey: string;
-  disconnectErrorKey: string;
-  pageLinkedKey: string;
-  pageLinkErrorKey: string;
-  pageUnlinkedKey: string;
-  pageUnlinkErrorKey: string;
-  productsKey: string;
-  lastSyncKey: string;
-  syncNowKey: string;
-  syncingKey: string;
-  disconnectKey: string;
-  neverKey: string;
-  linkPageKey: string;
-  linkPageDescKey: string;
-  /** Whether connect flow requires a shop domain input (Shopify = true, Salla = false) */
+  /** Whether connect flow requires a shop domain input (Shopify only) */
   requiresDomain: boolean;
-  /** Initiate the connect flow. Returns { authUrl } for redirect. */
   connectStore: (shopDomain?: string) => Promise<{ authUrl: string }>;
 }
 
 const PLATFORMS: PlatformConfig[] = [
   {
     id: 'shopify',
-    nameKey: 'shopify.title',
-    descKey: 'integrations.shopifyDesc',
     icon: <ShoppingBag className="w-8 h-8" />,
     iconClass: 'icon-bg-emerald',
     storeMetaClass: 'alert-success border',
@@ -101,30 +58,11 @@ const PLATFORMS: PlatformConfig[] = [
     disconnectStore: ecommerceApi.disconnectStore,
     linkPage: ecommerceApi.linkPage,
     unlinkPage: ecommerceApi.unlinkPage,
-    disconnectConfirmKey: 'shopify.disconnectConfirm',
-    syncSuccessKey: 'shopify.syncSuccess',
-    syncErrorKey: 'shopify.syncError',
-    disconnectedKey: 'shopify.disconnected',
-    disconnectErrorKey: 'shopify.disconnectError',
-    pageLinkedKey: 'shopify.pageLinked',
-    pageLinkErrorKey: 'shopify.pageLinkError',
-    pageUnlinkedKey: 'shopify.pageUnlinked',
-    pageUnlinkErrorKey: 'shopify.pageUnlinkError',
-    productsKey: 'shopify.products',
-    lastSyncKey: 'shopify.lastSync',
-    syncNowKey: 'shopify.syncNow',
-    syncingKey: 'shopify.syncing',
-    disconnectKey: 'shopify.disconnect',
-    neverKey: 'shopify.never',
-    linkPageKey: 'shopify.linkPage',
-    linkPageDescKey: 'shopify.linkPageDesc',
     requiresDomain: true,
     connectStore: (shopDomain) => ecommerceApi.connectStore(shopDomain!),
   },
   {
     id: 'salla',
-    nameKey: 'salla.title',
-    descKey: 'integrations.sallaDesc',
     icon: <Store className="w-8 h-8" />,
     iconClass: 'icon-bg-brand',
     storeMetaClass: 'status-brand border',
@@ -134,30 +72,11 @@ const PLATFORMS: PlatformConfig[] = [
     disconnectStore: sallaApi.disconnectStore,
     linkPage: sallaApi.linkPage,
     unlinkPage: sallaApi.unlinkPage,
-    disconnectConfirmKey: 'salla.disconnectConfirm',
-    syncSuccessKey: 'salla.syncSuccess',
-    syncErrorKey: 'salla.syncError',
-    disconnectedKey: 'salla.disconnected',
-    disconnectErrorKey: 'salla.disconnectError',
-    pageLinkedKey: 'salla.pageLinked',
-    pageLinkErrorKey: 'salla.pageLinkError',
-    pageUnlinkedKey: 'salla.pageUnlinked',
-    pageUnlinkErrorKey: 'salla.pageUnlinkError',
-    productsKey: 'salla.products',
-    lastSyncKey: 'salla.lastSync',
-    syncNowKey: 'salla.syncNow',
-    syncingKey: 'salla.syncing',
-    disconnectKey: 'salla.disconnect',
-    neverKey: 'salla.never',
-    linkPageKey: 'salla.linkPage',
-    linkPageDescKey: 'salla.linkPageDesc',
     requiresDomain: false,
     connectStore: () => sallaApi.connectStore(),
   },
   {
     id: 'zid',
-    nameKey: 'zid.title',
-    descKey: 'integrations.zidDesc',
     icon: <ZidIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-orange',
     storeMetaClass: 'status-orange border',
@@ -167,27 +86,24 @@ const PLATFORMS: PlatformConfig[] = [
     disconnectStore: zidApi.disconnectStore,
     linkPage: zidApi.linkPage,
     unlinkPage: zidApi.unlinkPage,
-    disconnectConfirmKey: 'zid.disconnectConfirm',
-    syncSuccessKey: 'zid.syncSuccess',
-    syncErrorKey: 'zid.syncError',
-    disconnectedKey: 'zid.disconnected',
-    disconnectErrorKey: 'zid.disconnectError',
-    pageLinkedKey: 'zid.pageLinked',
-    pageLinkErrorKey: 'zid.pageLinkError',
-    pageUnlinkedKey: 'zid.pageUnlinked',
-    pageUnlinkErrorKey: 'zid.pageUnlinkError',
-    productsKey: 'zid.products',
-    lastSyncKey: 'zid.lastSync',
-    syncNowKey: 'zid.syncNow',
-    syncingKey: 'zid.syncing',
-    disconnectKey: 'zid.disconnect',
-    neverKey: 'zid.never',
-    linkPageKey: 'zid.linkPage',
-    linkPageDescKey: 'zid.linkPageDesc',
     requiresDomain: false,
     connectStore: () => zidApi.connectStore(),
   },
 ];
+
+/**
+ * Returns the scoped translator for a platform's own namespace.
+ * All three platform JSON files share identical key names (title, desc,
+ * syncSuccess, etc.) so components just call t('title') — no compound keys.
+ */
+function usePlatformT(id: PlatformId) {
+  const tShopify = useTranslations('shopify');
+  const tSalla = useTranslations('salla');
+  const tZid = useTranslations('zid');
+  if (id === 'salla') return tSalla;
+  if (id === 'zid') return tZid;
+  return tShopify;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Connected store card                                               */
@@ -208,7 +124,8 @@ function ConnectedStoreCard({
   onDisconnect: () => void;
   onLinkPage: (pageId: string) => void;
 }) {
-  const t = usePlatformT();
+  const t = usePlatformT(platform.id);
+  const tInt = useTranslations('integrations');
   const { canEdit } = useWorkspaceRole();
   const [syncing, setSyncing] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
@@ -218,10 +135,10 @@ function ConnectedStoreCard({
     setSyncing(true);
     try {
       await platform.syncProducts();
-      toast.success(t(platform.syncSuccessKey));
+      toast.success(t('syncSuccess'));
       onSync();
     } catch {
-      toast.error(t(platform.syncErrorKey));
+      toast.error(t('syncError'));
     } finally {
       setSyncing(false);
     }
@@ -231,11 +148,11 @@ function ConnectedStoreCard({
     setDisconnecting(true);
     try {
       await platform.disconnectStore();
-      toast.warning(t(platform.disconnectedKey));
+      toast.warning(t('disconnected'));
       setShowDisconnectModal(false);
       onDisconnect();
     } catch {
-      toast.error(t(platform.disconnectErrorKey));
+      toast.error(t('disconnectError'));
     } finally {
       setDisconnecting(false);
     }
@@ -243,18 +160,17 @@ function ConnectedStoreCard({
 
   const handleLinkPage = async (pageId: string) => {
     const alreadyLinked = pages.find((p) => p.id === pageId)?.ecommerceStoreId === store.id;
-
     try {
       if (alreadyLinked) {
         await platform.unlinkPage(pageId);
-        toast.warning(t(platform.pageUnlinkedKey));
+        toast.warning(t('pageUnlinked'));
       } else {
         await platform.linkPage(pageId);
-        toast.success(t(platform.pageLinkedKey));
+        toast.success(t('pageLinked'));
       }
       onLinkPage(pageId);
     } catch {
-      toast.error(t(alreadyLinked ? platform.pageUnlinkErrorKey : platform.pageLinkErrorKey));
+      toast.error(t(alreadyLinked ? 'pageUnlinkError' : 'pageLinkError'));
     }
   };
 
@@ -265,8 +181,8 @@ function ConnectedStoreCard({
           {platform.icon}
         </div>
         <div className="text-start">
-          <h3 className="font-bold text-lg landscape:text-base">{t(platform.nameKey)}</h3>
-          <p className="text-sm text-muted-foreground landscape:text-xs">{t(platform.descKey)}</p>
+          <h3 className="font-bold text-lg landscape:text-base">{t('title')}</h3>
+          <p className="text-sm text-muted-foreground landscape:text-xs">{tInt(`${platform.id}Desc`)}</p>
         </div>
       </div>
 
@@ -275,19 +191,19 @@ function ConnectedStoreCard({
           <div>
             <p className="font-semibold text-foreground">{store.storeName || store.storeDomain}</p>
             <p className="text-xs text-muted-foreground">
-              {t(platform.productsKey)}: {store.productCount} &middot;{' '}
-              {t(platform.lastSyncKey)}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : t(platform.neverKey)}
+              {t('products')}: {store.productCount} &middot;{' '}
+              {t('lastSync')}: {store.lastSyncAt ? new Date(store.lastSyncAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : t('never')}
             </p>
           </div>
           <div className="flex gap-2">
             {canEdit && <>
               <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
                 <RefreshCw className={clsx('w-4 h-4 me-1', syncing && 'animate-spin')} />
-                {syncing ? t(platform.syncingKey) : t(platform.syncNowKey)}
+                {syncing ? t('syncing') : t('syncNow')}
               </Button>
               <Button variant="danger" size="sm" onClick={() => setShowDisconnectModal(true)}>
                 <Unlink className="w-4 h-4 me-1" />
-                {t(platform.disconnectKey)}
+                {t('disconnect')}
               </Button>
             </>}
           </div>
@@ -295,8 +211,8 @@ function ConnectedStoreCard({
 
         {pages.length > 0 && (
           <div>
-            <p className="text-sm font-medium mb-2">{t(platform.linkPageKey)}</p>
-            <p className="text-xs text-muted-foreground mb-2">{t(platform.linkPageDescKey)}</p>
+            <p className="text-sm font-medium mb-2">{t('linkPage')}</p>
+            <p className="text-xs text-muted-foreground mb-2">{t('linkPageDesc')}</p>
             <div className="flex flex-wrap gap-2">
               {pages.map((page) => (
                 <button
@@ -323,9 +239,9 @@ function ConnectedStoreCard({
         isOpen={showDisconnectModal}
         onClose={() => setShowDisconnectModal(false)}
         onConfirm={handleConfirmDisconnect}
-        title={t(platform.nameKey)}
-        message={t(platform.disconnectConfirmKey)}
-        confirmText={t(platform.disconnectKey)}
+        title={t('title')}
+        message={t('disconnectConfirm')}
+        confirmText={t('disconnect')}
         variant="warning"
         loading={disconnecting}
       />
@@ -338,7 +254,8 @@ function ConnectedStoreCard({
 /* ------------------------------------------------------------------ */
 
 function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store: EcommerceStore }) {
-  const t = usePlatformT();
+  const t = usePlatformT(platform.id);
+  const tInt = useTranslations('integrations');
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
   const handleReconnect = () => {
@@ -352,16 +269,16 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
           {platform.icon}
         </div>
         <div className="text-start">
-          <h3 className="font-bold text-lg landscape:text-base text-muted-foreground">{t(platform.nameKey)}</h3>
+          <h3 className="font-bold text-lg landscape:text-base text-muted-foreground">{t('title')}</h3>
           <p className="text-sm text-muted-foreground landscape:text-xs">{store.storeName || store.storeDomain}</p>
         </div>
       </div>
 
       <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-theme-border">
-        <p className="text-sm text-muted-foreground">{t('integrations.disconnectedState')}</p>
+        <p className="text-sm text-muted-foreground">{tInt('disconnectedState')}</p>
         <Button variant="primary" size="sm" onClick={handleReconnect}>
           <PlugZap className="w-4 h-4 me-1" aria-hidden="true" />
-          {t('integrations.reconnect')}
+          {tInt('reconnect')}
         </Button>
       </div>
     </Card>
@@ -373,22 +290,24 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
 /* ------------------------------------------------------------------ */
 
 function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
-  const t = usePlatformT();
+  const t = usePlatformT(platform.id);
+  const tInt = useTranslations('integrations');
+  const tCommon = useTranslations('common');
   const { canEdit } = useWorkspaceRole();
   const [shopDomain, setShopDomain] = useState('');
   const [connecting, setConnecting] = useState(false);
 
-  const pid = platform.id; // 'shopify' | 'salla'
+  const pid = platform.id;
   const benefits = [
-    t(`integrations.notConnected.${pid}Benefit1`),
-    t(`integrations.notConnected.${pid}Benefit2`),
-    t(`integrations.notConnected.${pid}Benefit3`),
+    tInt(`notConnected.${pid}Benefit1`),
+    tInt(`notConnected.${pid}Benefit2`),
+    tInt(`notConnected.${pid}Benefit3`),
   ];
 
   const steps = [
-    t('integrations.notConnected.step1'),
-    t('integrations.notConnected.step2'),
-    t('integrations.notConnected.step3'),
+    tInt('notConnected.step1'),
+    tInt('notConnected.step2'),
+    tInt('notConnected.step3'),
   ];
 
   const handleConnect = async () => {
@@ -400,7 +319,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
       );
       window.location.href = authUrl;
     } catch {
-      toast.error(t('common.error'));
+      toast.error(tCommon('error'));
       setConnecting(false);
     }
   };
@@ -417,17 +336,17 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             {platform.icon}
           </div>
           <div className="text-start">
-            <h3 className="font-bold text-lg landscape:text-base">{t(platform.nameKey)}</h3>
+            <h3 className="font-bold text-lg landscape:text-base">{t('title')}</h3>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
               <Sparkles className="w-3 h-3" aria-hidden="true" />
-              {t('integrations.notConnected.freeLabel')}
+              {tInt('notConnected.freeLabel')}
             </span>
           </div>
         </div>
 
         {/* Headline */}
         <p className="text-sm font-semibold text-foreground mb-3">
-          {t(`integrations.notConnected.${pid}Headline`)}
+          {tInt(`notConnected.${pid}Headline`)}
         </p>
 
         {/* Benefits */}
@@ -440,10 +359,10 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
           ))}
         </ul>
 
-        {/* How it works — 3 simple steps */}
+        {/* How it works */}
         <div className="mb-5 p-3 rounded-xl bg-muted/50">
           <p className="text-xs font-semibold text-muted-foreground mb-2">
-            {t('integrations.notConnected.howItWorks')}
+            {tInt('notConnected.howItWorks')}
           </p>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {steps.map((step, i) => (
@@ -468,7 +387,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
           {platform.requiresDomain && (
             <div>
               <label htmlFor={`domain-${pid}`} className="block text-xs font-medium text-muted-foreground mb-1">
-                {t(`integrations.notConnected.${pid}DomainLabel`)}
+                {tInt(`notConnected.${pid}DomainLabel`)}
               </label>
               <input
                 id={`domain-${pid}`}
@@ -477,7 +396,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
                 value={shopDomain}
                 onChange={(e) => setShopDomain(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
-                placeholder={t(`integrations.notConnected.${pid}DomainPlaceholder`)}
+                placeholder={tInt(`notConnected.${pid}DomainPlaceholder`)}
                 className={clsx(
                   'w-full px-3 py-2 rounded-lg text-sm border border-theme-border',
                   'bg-background text-foreground placeholder:text-muted-foreground',
@@ -485,7 +404,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
                 )}
               />
               <p className="text-[11px] text-muted-foreground mt-1">
-                {t(`integrations.notConnected.${pid}DomainHint`)}
+                {tInt(`notConnected.${pid}DomainHint`)}
               </p>
             </div>
           )}
@@ -501,11 +420,11 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             ) : (
               <ArrowRight className="w-4 h-4 me-1.5" aria-hidden="true" />
             )}
-            {t('integrations.notConnected.connectBtn')}
+            {tInt('notConnected.connectBtn')}
           </Button>
           {!platform.requiresDomain && (
             <p className="text-[11px] text-muted-foreground">
-              {t(`integrations.notConnected.${pid}ConnectHint`)}
+              {tInt(`notConnected.${pid}ConnectHint`)}
             </p>
           )}
         </div>
@@ -519,7 +438,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
 /* ------------------------------------------------------------------ */
 
 const IntegrationsPage: NextPageWithLayout = () => {
-  const t = usePlatformT();
+  const tInt = useTranslations('integrations');
   const { isAuthenticated } = useAuthStore();
 
   const [stores, setStores] = useState<Record<string, EcommerceStore | null>>({});
@@ -560,7 +479,6 @@ const IntegrationsPage: NextPageWithLayout = () => {
     }
   }, [isAuthenticated, fetchData]);
 
-  // After disconnect, flip isActive locally — no extra API call needed
   const handleStoreDisconnect = (platformId: string) => {
     setStores((prev) => {
       const existing = prev[platformId];
@@ -576,8 +494,8 @@ const IntegrationsPage: NextPageWithLayout = () => {
   return (
     <>
       <PageHeader
-        title={t('integrations.title')}
-        description={t('integrations.subtitle')}
+        title={tInt('title')}
+        description={tInt('subtitle')}
       />
 
       <div className="space-y-6 landscape:space-y-4">

@@ -417,6 +417,38 @@ export function normalizeAiIntent(rawIntent?: string): string | undefined {
     return INTENT_NORMALIZATION_MAP[upper] || upper;
 }
 
+// --- Order Notification Types ---
+export type OrderNotificationType =
+  | 'abandoned_cart'
+  | 'order_confirmed'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'review_request'
+  | 'digital_delivery';
+
+export interface NotificationTemplate {
+  id: string;
+  ecommerceStoreId: string;
+  notificationType: OrderNotificationType;
+  messageAr: string;
+  messageEn: string;
+  isEnabled: boolean;
+  delayMinutes: number;
+  channel: string;
+  includeCoupon: boolean;
+  couponCode: string | null;
+  couponDiscount: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationStats {
+  total: number;
+  sent: number;
+  failed: number;
+  byType: Record<string, number>;
+}
+
 // --- E-commerce Types (Shopify, Salla, Zid) ---
 export interface EcommerceStore {
   id: string;
