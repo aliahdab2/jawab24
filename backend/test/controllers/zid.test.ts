@@ -630,14 +630,6 @@ describe('Zid Controller', () => {
     // --- Protected API ---
 
     describe('getStore', () => {
-        it('should return 401 when no workspaceId', async () => {
-            const req = mockRequest({ workspaceId: undefined });
-            const rep = mockReply();
-
-            await getStore(req, rep);
-
-            expect(rep.status).toHaveBeenCalledWith(401);
-        });
 
         it('should return 404 when no store found', async () => {
             mockGetStoreByWorkspaceAny.mockResolvedValue(null);
@@ -679,14 +671,6 @@ describe('Zid Controller', () => {
     });
 
     describe('disconnectStoreHandler', () => {
-        it('should return 401 when no workspaceId', async () => {
-            const req = mockRequest({ workspaceId: undefined });
-            const rep = mockReply();
-
-            await disconnectStoreHandler(req, rep);
-
-            expect(rep.status).toHaveBeenCalledWith(401);
-        });
 
         it('should return 404 when no store', async () => {
             mockGetStoreByWorkspace.mockResolvedValue(null);

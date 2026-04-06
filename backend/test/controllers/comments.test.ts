@@ -66,15 +66,6 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith(mockResult);
         });
 
-        it('should return 401 when workspace is not set', async () => {
-            (mockRequest as any).workspaceId = undefined;
-
-            await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
-
-            expect(mockReply.status).toHaveBeenCalledWith(401);
-            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
-        });
-
         it('should clamp limit to max 100', async () => {
             mockRequest.query = { limit: '999' };
             vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 100 } });
@@ -99,13 +90,6 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith(mockComments);
         });
 
-        it('should return 401 when workspace is not set', async () => {
-            (mockRequest as any).workspaceId = undefined;
-
-            await commentsController.getInbox(mockRequest as FastifyRequest, mockReply as FastifyReply);
-
-            expect(mockReply.status).toHaveBeenCalledWith(401);
-        });
     });
 
     // ─── getByPost() ─────────────────────────────────────────────
@@ -235,13 +219,6 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith(mockStats);
         });
 
-        it('should return 401 when workspace is not set', async () => {
-            (mockRequest as any).workspaceId = undefined;
-
-            await commentsController.getStats(mockRequest as FastifyRequest, mockReply as FastifyReply);
-
-            expect(mockReply.status).toHaveBeenCalledWith(401);
-        });
     });
 
     // ─── delete() ────────────────────────────────────────────────
@@ -364,15 +341,6 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith({ error: 'Comment not found' });
         });
 
-        it('should return 401 when workspace is not set', async () => {
-            (mockRequest as any).workspaceId = undefined;
-            mockRequest.params = { id: 'c-1' };
-
-            await commentsController.resolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
-
-            expect(mockReply.status).toHaveBeenCalledWith(401);
-        });
-
         it('should return 500 when service throws', async () => {
             mockRequest.params = { id: 'c-1' };
             vi.mocked(commentsService.getCommentForWorkspace).mockResolvedValue({ id: 'c-1' } as any);
@@ -409,13 +377,5 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith({ error: 'Comment not found' });
         });
 
-        it('should return 401 when workspace is not set', async () => {
-            (mockRequest as any).workspaceId = undefined;
-            mockRequest.params = { id: 'c-1' };
-
-            await commentsController.unresolve(mockRequest as FastifyRequest, mockReply as FastifyReply);
-
-            expect(mockReply.status).toHaveBeenCalledWith(401);
-        });
     });
 });

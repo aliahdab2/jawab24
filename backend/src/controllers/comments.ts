@@ -34,9 +34,6 @@ export class CommentsController {
         }
     }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const { cursor, limit, replied, replyMethod, needsAttention, resolved, actionRequired } = request.query;
 
         try {
@@ -47,7 +44,7 @@ export class CommentsController {
                 ...parseInboxFilters({ replied, resolved, needsAttention, actionRequired }),
             };
 
-            const result = await commentsService.getCommentsByWorkspace(req.workspaceId, options);
+            const result = await commentsService.getCommentsByWorkspace(req.workspaceId!, options);
             return reply.send(result);
         } catch (error) {
             request.log.error(error);
@@ -61,13 +58,10 @@ export class CommentsController {
      */
     async getInbox(request: FastifyRequest<{ Querystring: { limit?: string } }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const limit = request.query.limit ? parseInt(request.query.limit, 10) : 50;
 
         try {
-            const comments = await commentsService.getUnrepliedComments(req.workspaceId, limit);
+            const comments = await commentsService.getUnrepliedComments(req.workspaceId!, limit);
             return reply.send(comments);
         } catch (error) {
             request.log.error(error);
@@ -97,13 +91,10 @@ export class CommentsController {
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const { id } = request.params;
 
         try {
-            const comment = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            const comment = await commentsService.getCommentForWorkspace(id, req.workspaceId!);
             if (!comment) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
@@ -120,13 +111,10 @@ export class CommentsController {
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdateCommentDTO }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const { id } = request.params;
 
         try {
-            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId!);
             if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
@@ -144,9 +132,6 @@ export class CommentsController {
      */
     async reply(request: FastifyRequest<{ Params: { id: string }; Body: { replyText: string; language?: string } }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const { id } = request.params;
         const { replyText, language } = request.body;
 
@@ -155,7 +140,7 @@ export class CommentsController {
         }
 
         try {
-            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId!);
             if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
@@ -173,12 +158,9 @@ export class CommentsController {
      */
     async getStats(request: FastifyRequest, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
 
         try {
-            const stats = await commentsService.getStats(req.workspaceId);
+            const stats = await commentsService.getStats(req.workspaceId!);
             return reply.send(stats);
         } catch (error) {
             request.log.error(error);
@@ -192,13 +174,10 @@ export class CommentsController {
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const { id } = request.params;
 
         try {
-            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId!);
             if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
@@ -216,13 +195,10 @@ export class CommentsController {
      */
     async resolve(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const { id } = request.params;
 
         try {
-            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId!);
             if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
@@ -240,13 +216,10 @@ export class CommentsController {
      */
     async unresolve(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
         const { id } = request.params;
 
         try {
-            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId);
+            const owned = await commentsService.getCommentForWorkspace(id, req.workspaceId!);
             if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }

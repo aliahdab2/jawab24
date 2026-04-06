@@ -29,13 +29,10 @@ export class AnalyticsController {
         }
     }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) {
-            return reply.status(401).send({ error: 'Unauthorized' });
-        }
 
         try {
             const days = Math.min(Math.max(Number(request.query.days) || 30, 1), 365);
-            const overview = await analyticsService.getOverview(req.workspaceId, days, request.query.pageId);
+            const overview = await analyticsService.getOverview(req.workspaceId!, days, request.query.pageId);
             return reply.send(overview);
         } catch (error) {
             request.log.error(error);

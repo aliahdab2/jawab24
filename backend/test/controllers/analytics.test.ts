@@ -44,15 +44,6 @@ describe('AnalyticsController', () => {
     });
 
     describe('getOverview', () => {
-        it('should return 401 when workspace is not set', async () => {
-            (mockRequest as any).workspaceId = undefined;
-
-            await controller.getOverview(mockRequest as any, mockReply as any);
-
-            expect(mockReply.status).toHaveBeenCalledWith(401);
-            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
-        });
-
         it('should call service with default days=30 when no query param', async () => {
             vi.mocked(analyticsService.getOverview).mockResolvedValue(mockOverview as any);
 

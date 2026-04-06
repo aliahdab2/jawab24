@@ -103,16 +103,6 @@ describe('getTemplates', () => {
         vi.clearAllMocks();
     });
 
-    it('returns 401 if no workspaceId', async () => {
-        const req = makeReq({ storeId: 'store-1' }, { workspaceId: undefined });
-        const reply = makeReply();
-
-        await getTemplates(req, reply);
-
-        expect(reply.status).toHaveBeenCalledWith(401);
-        expect(reply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
-    });
-
     it('fetches and returns templates for storeId', async () => {
         vi.mocked(db.select).mockReturnValue(mockOrderByChain([sampleTemplate]) as never);
 
@@ -131,16 +121,6 @@ describe('getTemplates', () => {
 describe('updateTemplate', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-    });
-
-    it('returns 401 if no workspaceId', async () => {
-        const req = makeReq({ storeId: 'store-1', type: 'order_confirmed' }, { workspaceId: undefined });
-        const reply = makeReply();
-
-        await updateTemplate(req, reply);
-
-        expect(reply.status).toHaveBeenCalledWith(401);
-        expect(reply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
     });
 
     it('updates template and returns it', async () => {
@@ -182,16 +162,6 @@ describe('resetTemplates', () => {
         vi.clearAllMocks();
     });
 
-    it('returns 401 if no workspaceId', async () => {
-        const req = makeReq({ storeId: 'store-1' }, { workspaceId: undefined });
-        const reply = makeReply();
-
-        await resetTemplates(req, reply);
-
-        expect(reply.status).toHaveBeenCalledWith(401);
-        expect(reply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
-    });
-
     it('deletes all templates and seeds defaults, returns { ok: true }', async () => {
         vi.mocked(db.delete).mockReturnValue(mockDeleteWhereChain() as never);
 
@@ -211,16 +181,6 @@ describe('resetTemplates', () => {
 describe('getLog', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-    });
-
-    it('returns 401 if no workspaceId', async () => {
-        const req = makeReq({ storeId: 'store-1' }, { workspaceId: undefined });
-        const reply = makeReply();
-
-        await getLog(req, reply);
-
-        expect(reply.status).toHaveBeenCalledWith(401);
-        expect(reply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
     });
 
     it('fetches log with default limit 50', async () => {
@@ -254,16 +214,6 @@ describe('getLog', () => {
 describe('getStats', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-    });
-
-    it('returns 401 if no workspaceId', async () => {
-        const req = makeReq({ storeId: 'store-1' }, { workspaceId: undefined });
-        const reply = makeReply();
-
-        await getStats(req, reply);
-
-        expect(reply.status).toHaveBeenCalledWith(401);
-        expect(reply.send).toHaveBeenCalledWith({ error: 'Unauthorized' });
     });
 
     it('returns { total, sent, failed, byType } computed from two GROUP BY queries', async () => {

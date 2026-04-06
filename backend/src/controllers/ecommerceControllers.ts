@@ -37,8 +37,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
     async function getStore(request: FastifyRequest, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-        const store = await getStoreByWorkspaceAny(platform, req.workspaceId);
+        const store = await getStoreByWorkspaceAny(platform, req.workspaceId!);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         return reply.send(mapToEcommerceStore(store));
     }
@@ -52,8 +51,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
     async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-        const store = await getStoreByWorkspace(platform, req.workspaceId);
+        const store = await getStoreByWorkspace(platform, req.workspaceId!);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         await disconnectStore(store.id);
         return reply.send({ ok: true });
@@ -61,8 +59,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
     async function syncStore(request: FastifyRequest, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-        const store = await getStoreByWorkspace(platform, req.workspaceId);
+        const store = await getStoreByWorkspace(platform, req.workspaceId!);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         const result = await adapter.fullSync(store.id);
         return reply.send(result);
@@ -70,8 +67,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
     async function getStoreProducts(request: FastifyRequest, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-        const store = await getStoreByWorkspace(platform, req.workspaceId);
+        const store = await getStoreByWorkspace(platform, req.workspaceId!);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         const products = await getProducts(store.id);
         return reply.send({ products, total: products.length });
@@ -79,13 +75,12 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
     async function linkPage(request: FastifyRequest, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { pageId } = request.body as { pageId?: string };
         if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
-        const store = await getStoreByWorkspace(platform, req.workspaceId);
+        const store = await getStoreByWorkspace(platform, req.workspaceId!);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         try {
-            await linkStoreToPage(store.id, pageId, req.workspaceId);
+            await linkStoreToPage(store.id, pageId, req.workspaceId!);
             return reply.send({ ok: true });
         } catch (error) {
             if (error instanceof Error && error.message?.includes('does not belong to workspace')) {
@@ -97,11 +92,10 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
 
     async function unlinkPage(request: FastifyRequest, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
-        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { pageId } = request.body as { pageId?: string };
         if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
         try {
-            await unlinkStoreFromPage(pageId, req.workspaceId);
+            await unlinkStoreFromPage(pageId, req.workspaceId!);
             return reply.send({ ok: true });
         } catch (error) {
             if (error instanceof Error && error.message?.includes('does not belong to workspace')) {

@@ -126,12 +126,6 @@ describe('WorkspaceController', () => {
 
             expect(reply.status).toHaveBeenCalledWith(404);
         });
-
-        it('returns 400 when workspaceId not resolved', async () => {
-            const reply = makeReply();
-            await workspaceController.getOne(makeRequest({ workspaceId: undefined }), reply);
-            expect(reply.status).toHaveBeenCalledWith(400);
-        });
     });
 
     // ── update ────────────────────────────────────────────────────────────
