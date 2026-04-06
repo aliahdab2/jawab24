@@ -42,13 +42,12 @@ export class ReplySender {
      * - dual: Send DM + short public nudge
      */
     async sendCommentReply(options: SendCommentReplyOptions): Promise<SendReplyResult> {
-        const { 
-            facebookCommentId, 
-            replyText, 
-            commentMessage,
-            accessToken, 
-            fromId, 
-            replyMode, 
+        const {
+            facebookCommentId,
+            replyText,
+            accessToken,
+            fromId,
+            replyMode,
             dualReplyNudge,
             isDemo = false
         } = options;
@@ -151,26 +150,6 @@ export class ReplySender {
         } catch (error) {
             this.logger.error('Failed to post reply to Facebook', {
                 commentId,
-                error: error instanceof Error ? error.message : String(error)
-            });
-            return false;
-        }
-    }
-
-    /**
-     * Send a private message reply
-     */
-    async sendPrivateMessage(
-        accessToken: string,
-        recipientId: string,
-        message: string
-    ): Promise<boolean> {
-        try {
-            await facebookService.sendPrivateMessage(accessToken, recipientId, message);
-            return true;
-        } catch (error) {
-            this.logger.error('Failed to send private message', {
-                recipientId,
                 error: error instanceof Error ? error.message : String(error)
             });
             return false;
