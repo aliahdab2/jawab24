@@ -44,6 +44,8 @@ import enTeam          from './en/team.json';
 import enTemplates     from './en/templates.json';
 import enTerms         from './en/terms.json';
 import enTime          from './en/time.json';
+import enZid           from './en/zid.json';
+import enOrderNotifications from './en/orderNotifications.json';
 
 // ── Arabic namespace imports ──────────────────────────────────────────────────
 import arAbout         from './ar/about.json';
@@ -89,6 +91,8 @@ import arTeam          from './ar/team.json';
 import arTemplates     from './ar/templates.json';
 import arTerms         from './ar/terms.json';
 import arTime          from './ar/time.json';
+import arZid           from './ar/zid.json';
+import arOrderNotifications from './ar/orderNotifications.json';
 
 // Global namespaces loaded on every page
 const GLOBAL_NAMESPACES = ['common', 'nav', 'notifications', 'errors', 'errorBoundary', 'meta', 'sse'];
@@ -138,6 +142,8 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/templates': enTemplates,   'ar/templates': arTemplates,
   'en/terms': enTerms,           'ar/terms': arTerms,
   'en/time': enTime,             'ar/time': arTime,
+  'en/zid': enZid,               'ar/zid': arZid,
+  'en/orderNotifications': enOrderNotifications, 'ar/orderNotifications': arOrderNotifications,
 };
 
 // All namespace names (derived from lookup table keys)
