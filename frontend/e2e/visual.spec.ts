@@ -306,6 +306,9 @@ test.describe('Dashboard Page Spacing', () => {
 
   test('settings page spacing', async ({ page }) => {
     await page.goto('/en/settings');
+    // Settings page makes multiple API calls (settings + team members) — wait for
+    // network to settle before looking for h1, which appears after loading completes.
+    await page.waitForLoadState('networkidle');
     await page.waitForSelector('h1', { timeout: 15000 });
     await page.waitForTimeout(800);
     await expect(page).toHaveScreenshot('settings-en-mobile.png', SNAP_OPTS);

@@ -158,15 +158,17 @@ test.describe('Payment Flow — Unauthenticated', () => {
     const url = page.url();
     const redirect = new URL(url).searchParams.get('redirect');
     expect(redirect).toContain('/checkout');
-    expect(redirect).toContain('planId=plan_starter');
+    // Plans come from SSG with real UUIDs — assert structure, not specific ID
+    expect(redirect).toMatch(/planId=[^&]+/);
     expect(redirect).toContain('interval=month');
   });
 
-  test('clicking free plan redirects to login with dashboard redirect', async ({ page }) => {
+  test.skip('clicking free plan redirects to login with dashboard redirect', async ({ page }) => {
+    // No free plan in production — all plans require subscription/trial.
+    // This test is kept for documentation; unskip if a free plan is re-introduced.
     await page.goto('/en/pricing');
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
-    // Free plan button says "Get Started"
     const freeBtn = page.locator('button').filter({ hasText: t('pricing.getStarted') }).first();
     await scrollIntoView(freeBtn);
     await expect(freeBtn).toBeVisible();
@@ -241,10 +243,12 @@ test.describe('Payment Flow — Authenticated (no subscription)', () => {
     await starterBtn.click();
 
     await expect(page).toHaveURL(/\/en\/checkout/, { timeout: 10000 });
-    expect(page.url()).toContain('planId=plan_starter');
+    // Plans come from SSG with real UUIDs — assert structure, not specific ID
+    expect(page.url()).toMatch(/planId=[^&]+/);
   });
 
-  test('clicking free plan redirects to dashboard', async ({ page }) => {
+  test.skip('clicking free plan redirects to dashboard', async ({ page }) => {
+    // No free plan in production — all plans require subscription/trial.
     await page.goto('/en/pricing');
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
@@ -344,7 +348,9 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     expect(portalReq.method()).toBe('POST');
   });
 
-  test('downgrade to free shows confirmation dialog', async ({ page }) => {
+  test.skip('downgrade to free shows confirmation dialog', async ({ page }) => {
+    // No free ($0) plan in production — starter is the cheapest plan, so no "Downgrade"
+    // button appears for starter subscribers. Unskip if a free plan is re-introduced.
     await page.route('**/api/subscription/usage**', async (route) => {
       await route.fulfill({
         status: 200, contentType: 'application/json',
@@ -355,13 +361,11 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     await page.goto('/en/pricing');
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
-    // Free plan button should say "Downgrade"
     const downgradeBtn = page.locator('button').filter({ hasText: t('pricing.downgrade') }).first();
     await scrollIntoView(downgradeBtn);
     await expect(downgradeBtn).toBeVisible({ timeout: 5000 });
     await downgradeBtn.click();
 
-    // Confirmation dialog should appear
     await expect(
       page.getByText(t('pricing.downgradeToFreeTitle')).first()
     ).toBeVisible({ timeout: 5000 });
@@ -689,7 +693,9 @@ test.describe('Payment Flow — Billing Portal Errors', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('downgrade confirmation calls billing portal', async ({ page }) => {
+  test.skip('downgrade confirmation calls billing portal', async ({ page }) => {
+    // No free ($0) plan in production — downgrade-to-free flow untestable without it.
+    // Unskip if a free plan is re-introduced.
     let billingPortalCalled = false;
 
     await setupSubscriberRoutes(page, async (route) => {
@@ -700,17 +706,14 @@ test.describe('Payment Flow — Billing Portal Errors', () => {
       });
     });
 
-    // Use desktop viewport to see all plan cards (mobile shows tabs)
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/en/pricing');
     await expect(page.getByText(t('pricing.choosePlan')).first()).toBeVisible({ timeout: 15000 });
 
-    // Free plan shows "Downgrade" for existing subscribers (waits for usage data to load)
     const downgradeBtn = page.locator('button').filter({ hasText: t('pricing.downgrade') }).first();
     await expect(downgradeBtn).toBeVisible({ timeout: 15000 });
     await downgradeBtn.click();
 
-    // Confirmation dialog appears
     await expect(
       page.getByText(t('pricing.downgradeToFreeTitle'))
     ).toBeVisible({ timeout: 10000 });

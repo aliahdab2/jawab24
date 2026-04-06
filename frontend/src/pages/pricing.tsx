@@ -485,13 +485,15 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   // Filter out inactive plans (keep only plans where isActive is true)
   const activePlans = useMemo(() => plans.filter(p => p.isActive !== false), [plans]);
 
-  const currentPlanId = usage?.subscription?.plan?.id;
-  const hasActiveSubscription = Boolean(currentPlanId);
+  // Use slug for plan matching — slugs are stable ('starter', 'business', 'pro'),
+  // whereas plan.id is a UUID that differs between environments and after re-seeding.
+  const currentPlanSlug = usage?.subscription?.plan?.slug;
+  const hasActiveSubscription = Boolean(currentPlanSlug);
 
   // Current plan price for upgrade/downgrade comparison — O(1) lookup per render
   const currentPlanPrice = useMemo(
-    () => activePlans.find(p => p.id === currentPlanId)?.price ?? 0,
-    [activePlans, currentPlanId]
+    () => activePlans.find(p => p.slug === currentPlanSlug)?.price ?? 0,
+    [activePlans, currentPlanSlug]
   );
 
   // --- Mobile tab state ---
@@ -711,7 +713,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             >
               <PlanCard
                 plan={plan}
-                isCurrentPlan={plan.id === currentPlanId}
+                isCurrentPlan={plan.slug === currentPlanSlug}
                 hasActiveSubscription={hasActiveSubscription}
                 onSelect={() => handleSelectPlan(plan.id)}
                 loading={changingPlan === plan.id}
