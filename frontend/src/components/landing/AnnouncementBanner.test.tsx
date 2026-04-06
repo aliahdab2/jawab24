@@ -128,10 +128,10 @@ describe('AnnouncementBanner', () => {
     expect(mockPost).toHaveBeenCalledTimes(1);
   });
 
-  it('uses text input with dir="auto" for email or phone entry', () => {
+  it('uses text input with dir="ltr" in English locale', () => {
     render(<AnnouncementBanner {...defaultProps} />);
     const input = screen.getByPlaceholderText('Enter your email');
-    expect(input).toHaveAttribute('dir', 'auto');
+    expect(input).toHaveAttribute('dir', 'ltr');
     expect(input).toHaveAttribute('type', 'text');
     expect(input).toBeRequired();
   });

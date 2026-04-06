@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Rocket, CheckCircle } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useLocale } from 'next-intl';
 import { publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { isRTLLocale } from '@/utils/locale';
 
 interface AnnouncementBannerProps {
   title: string;
@@ -34,6 +36,9 @@ export function AnnouncementBanner({
   bgColor = 'bg-accent-500',
   icon: Icon = Rocket,
 }: AnnouncementBannerProps) {
+  const locale = useLocale();
+  const inputDir = isRTLLocale(locale) ? 'rtl' : 'ltr';
+
   const [contact, setContact] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -76,7 +81,7 @@ export function AnnouncementBanner({
             <input
               type="text"
               required
-              dir="auto"
+              dir={inputDir}
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               placeholder={placeholder}
