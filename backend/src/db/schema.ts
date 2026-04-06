@@ -907,6 +907,7 @@ export const customerNotificationsLog = pgTable('customer_notifications_log', {
     phoneIdx: index('idx_cust_notif_log_phone').on(table.customerPhone),
     statusIdx: index('idx_cust_notif_log_status').on(table.status),
     typeEventIdx: index('idx_cust_notif_log_type_event').on(table.notificationType, table.platformEventId),
+    storeTypeEventIdx: index('idx_cust_notif_log_store_type_event').on(table.ecommerceStoreId, table.notificationType, table.platformEventId),
     pendingScheduledIdx: index('idx_cust_notif_log_pending_scheduled').on(table.status, table.scheduledAt),
 }));
 

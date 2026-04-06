@@ -470,6 +470,13 @@
       "when": 1775455281668,
       "tag": "0066_confused_mathemanic",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1775461890559,
+      "tag": "0067_fixed_psynapse",
+      "breakpoints": true
     }
   ]
 }

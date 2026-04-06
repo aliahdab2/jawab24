@@ -1,4 +1,5 @@
 export { SimpleToggle } from './SimpleToggle';
+export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { EcommerceSection } from './EcommerceSection';
 export { LanguageSelector } from './LanguageSelector';
 export { ThemeSelector } from './ThemeSelector';

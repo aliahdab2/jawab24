@@ -20,25 +20,57 @@ export async function getTemplates(request: FastifyRequest, reply: FastifyReply)
     return reply.send(templates);
 }
 
+const VALID_NOTIFICATION_TYPES = new Set([
+    'abandoned_cart', 'order_confirmed', 'order_shipped',
+    'order_delivered', 'review_request', 'digital_delivery',
+]);
+const MAX_MESSAGE_LENGTH = 1600; // 10 SMS segments
+
 /** PUT /api/notification-templates/:storeId/:type */
 export async function updateTemplate(request: FastifyRequest, reply: FastifyReply) {
     const req = request as WorkspaceRequest;
     if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
 
     const { storeId, type } = request.params as { storeId: string; type: string };
-    const body = request.body as {
-        isEnabled?: boolean;
-        messageAr?: string;
-        messageEn?: string;
-        delayMinutes?: number;
-        includeCoupon?: boolean;
-        couponCode?: string;
-        couponDiscount?: string;
-    };
+
+    if (!VALID_NOTIFICATION_TYPES.has(type)) {
+        return reply.status(400).send({ error: 'Invalid notification type' });
+    }
+
+    const body = request.body as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+
+    if ('isEnabled' in body) {
+        if (typeof body.isEnabled !== 'boolean') return reply.status(400).send({ error: 'isEnabled must be a boolean' });
+        patch.isEnabled = body.isEnabled;
+    }
+    if ('messageAr' in body) {
+        if (typeof body.messageAr !== 'string' || body.messageAr.length > MAX_MESSAGE_LENGTH) {
+            return reply.status(400).send({ error: `messageAr must be a string under ${MAX_MESSAGE_LENGTH} characters` });
+        }
+        patch.messageAr = body.messageAr;
+    }
+    if ('messageEn' in body) {
+        if (typeof body.messageEn !== 'string' || body.messageEn.length > MAX_MESSAGE_LENGTH) {
+            return reply.status(400).send({ error: `messageEn must be a string under ${MAX_MESSAGE_LENGTH} characters` });
+        }
+        patch.messageEn = body.messageEn;
+    }
+    if ('delayMinutes' in body) {
+        const delay = Number(body.delayMinutes);
+        if (!Number.isInteger(delay) || delay < 0 || delay > 10080) { // max 1 week
+            return reply.status(400).send({ error: 'delayMinutes must be an integer between 0 and 10080' });
+        }
+        patch.delayMinutes = delay;
+    }
+
+    if (Object.keys(patch).length === 0) {
+        return reply.status(400).send({ error: 'No valid fields provided' });
+    }
 
     const [updated] = await db
         .update(customerNotificationTemplates)
-        .set({ ...body, updatedAt: new Date() })
+        .set({ ...patch, updatedAt: new Date() })
         .where(and(
             eq(customerNotificationTemplates.ecommerceStoreId, storeId),
             eq(customerNotificationTemplates.notificationType, type),

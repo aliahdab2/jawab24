@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import { ZidIcon } from '@/components/landing';
+import { OrderNotificationsCard } from '@/components/settings';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
@@ -588,15 +589,17 @@ const IntegrationsPage: NextPageWithLayout = () => {
           }
 
           return store.isActive ? (
-            <ConnectedStoreCard
-              key={platform.id}
-              platform={platform}
-              store={store}
-              pages={pages}
-              onSync={fetchData}
-              onDisconnect={() => handleStoreDisconnect(platform.id)}
-              onLinkPage={() => fetchData()}
-            />
+            <div key={platform.id} className="space-y-4">
+              <ConnectedStoreCard
+                platform={platform}
+                store={store}
+                pages={pages}
+                onSync={fetchData}
+                onDisconnect={() => handleStoreDisconnect(platform.id)}
+                onLinkPage={() => fetchData()}
+              />
+              <OrderNotificationsCard storeId={store.id} />
+            </div>
           ) : (
             <DisconnectedCard key={platform.id} platform={platform} store={store} />
           );

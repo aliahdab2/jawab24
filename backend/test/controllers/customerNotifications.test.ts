@@ -162,7 +162,10 @@ describe('updateTemplate', () => {
     it('returns 404 if template not found (db returns empty array)', async () => {
         vi.mocked(db.update).mockReturnValue(mockUpdateReturningChain([]) as never);
 
-        const req = makeReq({ storeId: 'store-1', type: 'order_confirmed' });
+        const req = makeReq(
+            { storeId: 'store-1', type: 'order_confirmed' },
+            { body: { isEnabled: true } },
+        );
         const reply = makeReply();
 
         await updateTemplate(req, reply);

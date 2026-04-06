@@ -685,6 +685,49 @@ export const zidApi = {
   },
 };
 
+// Order Notifications API
+export type OrderNotificationType =
+  | 'abandoned_cart'
+  | 'order_confirmed'
+  | 'order_shipped'
+  | 'order_delivered'
+  | 'review_request'
+  | 'digital_delivery';
+
+export interface NotificationTemplate {
+  id: string;
+  ecommerceStoreId: string;
+  notificationType: OrderNotificationType;
+  messageAr: string;
+  messageEn: string;
+  isEnabled: boolean;
+  delayMinutes: number;
+  channel: string;
+  includeCoupon: boolean;
+  couponCode: string | null;
+  couponDiscount: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NotificationStats {
+  total: number;
+  sent: number;
+  failed: number;
+  byType: Record<string, number>;
+}
+
+export const orderNotificationsApi = {
+  getTemplates: (storeId: string) =>
+    api.get<NotificationTemplate[]>(`/notification-templates/${storeId}`),
+  updateTemplate: (storeId: string, type: OrderNotificationType, data: Partial<Pick<NotificationTemplate, 'isEnabled' | 'messageAr' | 'messageEn' | 'delayMinutes'>>) =>
+    api.put<NotificationTemplate>(`/notification-templates/${storeId}/${type}`, data),
+  resetTemplates: (storeId: string) =>
+    api.post<{ ok: boolean }>(`/notification-templates/${storeId}/reset`),
+  getStats: (storeId: string) =>
+    api.get<NotificationStats>(`/notification-log/${storeId}/stats`),
+};
+
 // Workspace API
 export const workspaceApi = {
   list: () => api.get('/workspaces'),

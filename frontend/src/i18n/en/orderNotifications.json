@@ -1,0 +1,42 @@
+{
+  "title": "Order Notifications",
+  "desc": "Send automated SMS messages to customers at key moments in their order journey",
+  "sent": "Sent",
+  "failed": "Failed",
+  "total": "Total",
+  "thisMonth": "This month",
+  "templateAr": "Arabic message",
+  "templateEn": "English message",
+  "delayLabel": "Send after",
+  "immediately": "Immediately",
+  "delayMin": "{n} min",
+  "delayHr": "{n} hr",
+  "delayHrs": "{n} hrs",
+  "variables": "Available variables",
+  "resetDefaults": "Reset to defaults",
+  "resetConfirm": "Reset all templates to default messages? Your custom messages will be lost.",
+  "saving": "Saving...",
+  "save": "Save changes",
+  "savedSuccess": "Changes saved",
+  "noChanges": "No changes",
+  "loadError": "Failed to load notification settings",
+  "saveError": "Failed to save changes",
+  "resetSuccess": "Templates reset to defaults",
+  "resetError": "Failed to reset templates",
+  "types": {
+    "abandoned_cart": "Abandoned Cart",
+    "order_confirmed": "Order Confirmed",
+    "order_shipped": "Order Shipped",
+    "order_delivered": "Order Delivered",
+    "review_request": "Review Request",
+    "digital_delivery": "Digital Delivery"
+  },
+  "typeDesc": {
+    "abandoned_cart": "Remind customers who left items in their cart",
+    "order_confirmed": "Notify customers when their order is placed",
+    "order_shipped": "Alert customers when their order ships",
+    "order_delivered": "Congratulate customers on delivery",
+    "review_request": "Ask customers to leave a review after delivery",
+    "digital_delivery": "Send download instructions for digital products"
+  }
+}

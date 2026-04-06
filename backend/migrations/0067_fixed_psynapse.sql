@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "idx_cust_notif_log_store_type_event" ON "customer_notifications_log" ("ecommerce_store_id","notification_type","platform_event_id");
