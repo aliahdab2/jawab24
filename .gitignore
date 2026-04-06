@@ -45,3 +45,4 @@ marketing/
 android-release-keys/
 *.keystore
 *.jks
+seo-indexing-report-*.md
