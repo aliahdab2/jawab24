@@ -17,7 +17,7 @@ import errorBoundary from './en/errorBoundary.json';
 import errors from './en/errors.json';
 import exportNs from './en/export.json';
 import feedback from './en/feedback.json';
-import flagReason from './en/flagReason.json';
+import { flagReasonEn as flagReason } from '@jawab24/shared';
 import integrations from './en/integrations.json';
 import kb from './en/kb.json';
 import landing from './en/landing.json';

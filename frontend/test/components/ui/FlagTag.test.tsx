@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { FlagTag } from '../../../src/components/ui/FlagTag';
-import enFlagReason from '../../../src/i18n/en/flagReason.json';
+import { flagReasonEn as enFlagReason } from '@jawab24/shared';
 
 describe('FlagTag', () => {
   it('renders nothing when flagReason is null', () => {
