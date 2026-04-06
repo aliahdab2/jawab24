@@ -210,8 +210,8 @@ Each service is independently deployable but shares:
      - `processMessageJob(job, label, service)` factory handles all DM platforms (FB/IG/WA)
      - Calls reply services via `MessagePlatformAdapter` interface, enqueues AI jobs if needed
      - Retries and error recovery
-   - **ecommerceSyncWorker.ts** — Syncs Shopify/Salla product catalogs
-   - **shopifySyncWorker.ts** — Shopify-specific sync logic
+   - **ecommerceSyncWorker.ts** — Syncs Shopify/Salla/Zid product catalogs
+   - **customerNotificationWorker.ts** — BullMQ worker consuming `customer-notifications` queue; sends SMS for order lifecycle events (confirmed, shipped, delivered, abandoned cart, review request); concurrency 10, rate limit 50/min
 
 8. **Integrations** (`src/integrations/`):
    - **Plugin architecture** via `EcommerceIntegration` interface

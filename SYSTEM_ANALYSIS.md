@@ -890,7 +890,7 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **In-app (polling)** | Implemented | `NotificationBell` component polls unread count every 60 seconds |
 | **SSE (Server-Sent Events)** | Implemented | Real-time dashboard updates — badge/toast for new messages, flagged replies |
 | **Push (Capacitor native)** | Implemented | Native push notifications on iOS/Android via `@capacitor/push-notifications` |
-| **E-commerce notifications** | Planned | Abandoned cart, order updates, review requests — see `.planning/ECOMMERCE_NOTIFICATIONS_PLAN.md` |
+| **E-commerce SMS notifications** | Implemented | Abandoned cart, order confirmed/shipped/delivered, review request — SMS via Vonage, BullMQ queue, per-store templates, Arabic/English auto-detected from phone prefix |
 
 ### Mobile / Capacitor
 
@@ -1623,7 +1623,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | 7 | One store per workspace | Low | Multi-store needs workaround |
 | ~~8~~ | ~~No pluralization in i18n~~ | ~~RESOLVED~~ | Migrated to next-intl v4 with ICU Message Format support. Arabic uses all 6 CLDR plural forms (zero/one/two/few/many/other) |
 | 9 | Inventory is point-in-time | Info | AI adds "verify before ordering" caveat |
-| 10 | E-commerce customer notifications (abandoned cart, order updates, review requests) | PLANNED | See .planning/ECOMMERCE_NOTIFICATIONS_PLAN.md — SMS via Vonage → WhatsApp when Meta approves |
+| ~~10~~ | ~~E-commerce customer notifications (abandoned cart, order updates, review requests)~~ | ~~RESOLVED~~ | Shipped — SMS via Vonage, BullMQ worker, dedup by platformEventId, opt-in per template (is_enabled=false default) |
 
 ### System Resilience
 
@@ -1685,7 +1685,7 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | 7 | متجر واحد لكل مساحة عمل | منخفض | يتطلب حلاً بديلاً للمتعدد |
 | ~~8~~ | ~~لا صيغ جمع في الترجمة~~ | ~~تم الحل~~ | تم الترحيل إلى next-intl v4 مع دعم ICU Message Format. العربية تستخدم جميع صيغ CLDR الستة |
 | 9 | المخزون نقطة زمنية | معلوماتي | AI يضيف "تأكد قبل الطلب" |
-| 10 | إشعارات العملاء للتجارة الإلكترونية (سلة مهجورة، تحديثات الطلب، طلبات المراجعة) | مخطط | انظر .planning/ECOMMERCE_NOTIFICATIONS_PLAN.md — SMS عبر Vonage ← WhatsApp عند موافقة Meta |
+| ~~10~~ | ~~إشعارات العملاء للتجارة الإلكترونية (سلة مهجورة، تحديثات الطلب، طلبات المراجعة)~~ | ~~تم الحل~~ | تم الشحن — SMS عبر Vonage، BullMQ worker، مكافحة التكرار بـ platformEventId، اشتراك اختياري لكل قالب |
 
 ### مرونة النظام
 

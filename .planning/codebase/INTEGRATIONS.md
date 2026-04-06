@@ -530,19 +530,33 @@ Voice-to-text for KB content via microphone:
 ---
 
 ### Vonage SMS
-- **Purpose**: OTP delivery for phone authentication
+- **Purpose**: OTP delivery for phone authentication + e-commerce order notifications
 - **API**: Vonage SMS REST API (`https://rest.nexmo.com/sms/json`)
 - **Credentials**: `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_SENDER_ID`
 - **Coverage**: 200+ countries including Syria (+963), Saudi Arabia (+966), Turkey (+90), Sweden (+46)
 - **Development**: console.log only (no real SMS sent)
 - **Production**: live Vonage delivery — keys required
-- **Phase 3**: WhatsApp Cloud API as primary delivery, Vonage SMS as fallback (after Meta WABA approval)
 
 - **Implementation Location**: `/backend/src/services/sms.ts`
 - **Env vars**:
   - `VONAGE_API_KEY` — from Vonage API Settings
   - `VONAGE_API_SECRET` — from Vonage API Settings
   - `VONAGE_SENDER_ID` — alphanumeric sender name (default: `Jawab24`)
+
+### E-commerce Order Notifications
+- **Purpose**: Automated SMS to customers for order lifecycle events (confirmed, shipped, delivered, abandoned cart, review request)
+- **Platforms**: Salla, Shopify, Zid — driven by existing webhook handlers
+- **Queue**: BullMQ `customer-notifications` queue, concurrency 10, rate limit 50/min, exponential backoff (3 retries)
+- **Deduplication**: `platformEventId` = `${platform}:${type}:${orderId}` — prevents double-sends on webhook retries
+- **Language detection**: Arabic country prefixes (+966 SA, +971 AE, +965 KW, etc.) → Arabic template; otherwise English
+- **Templates**: Per-store, per-type, opt-in (`is_enabled=false` default) — seeded on store connect
+- **Schema**: `customer_notification_templates`, `customer_notifications_log`
+- **Implementation**:
+  - `/backend/src/services/customerNotifications.ts` — core service
+  - `/backend/src/services/orderNotificationScheduler.ts` — shared dispatcher across platforms
+  - `/backend/src/workers/customerNotificationWorker.ts` — BullMQ worker
+  - `/backend/src/lib/customerNotificationQueue.ts` — queue definition
+  - `/backend/src/controllers/customerNotifications.ts` + `/backend/src/routes/customerNotifications.ts` — REST API
 
 ---
 
