@@ -390,7 +390,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
               <input
                 id={`domain-${pid}`}
                 type="text"
-                dir="ltr"
+                dir="auto"
                 value={shopDomain}
                 onChange={(e) => setShopDomain(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleConnect()}
@@ -414,12 +414,12 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             className="w-full sm:w-auto"
           >
             <span className="flex items-center gap-1.5">
+              {tInt('notConnected.connectBtn')}
               {connecting ? (
                 <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
               ) : (
-                <ArrowRight className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
+                <ArrowRight className="w-4 h-4 transition-transform rtl:rotate-180" aria-hidden="true" />
               )}
-              {tInt('notConnected.connectBtn')}
             </span>
           </Button>
           {!platform.requiresDomain && (
