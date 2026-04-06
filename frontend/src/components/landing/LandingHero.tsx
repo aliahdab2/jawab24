@@ -236,9 +236,9 @@ export function LandingHero({ isAuthenticated }: LandingHeroProps) {
 
   return (
     <section className="relative pt-6 sm:pt-10 lg:pt-16 pb-12 sm:pb-16 lg:pb-24 overflow-hidden bg-gradient-to-br from-sky-50 via-white to-violet-50 dark:from-surface-50 dark:via-surface-100 dark:to-surface-200">
-      {/* Background gradients — static blur (rasterised once, no animation) */}
-      <div className="absolute top-20 left-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-200/40 dark:bg-blue-700/25 rounded-full" style={{ filter: 'blur(40px)' }} />
-      <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-violet-200/40 dark:bg-indigo-700/25 rounded-full" style={{ filter: 'blur(40px)' }} />
+      {/* Background gradients — static blur (rasterised once), opacity-only pulse (compositor-safe) */}
+      <div className="absolute top-20 left-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-brand-200/40 dark:bg-blue-700/25 rounded-full animate-pulse" style={{ filter: 'blur(40px)' }} />
+      <div className="absolute bottom-0 right-1/4 w-[300px] sm:w-[600px] h-[300px] sm:h-[600px] bg-violet-200/40 dark:bg-indigo-700/25 rounded-full animate-pulse delay-1000" style={{ filter: 'blur(40px)' }} />
       {/* Centered Glowing Background */}
       <div className="absolute top-1/2 inset-x-0 flex justify-center -translate-y-1/2 pointer-events-none">
         <div className="w-[600px] sm:w-[1000px] h-[600px] sm:h-[1000px] bg-gradient-to-br from-cyan-100/30 to-violet-100/30 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-full" style={{ filter: 'blur(80px)' }} />
