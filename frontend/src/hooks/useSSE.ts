@@ -11,6 +11,18 @@ import type { Message } from '@/lib/api';
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
 /**
+ * Returns true if the given pageId belongs to a page with auto-reply active.
+ * Falls back to true when pages haven't loaded yet (avoids false-negatives on
+ * first render) and false when the page is known but toggled off.
+ */
+function isActivePageId(pages: Page[] | undefined, pageId: string): boolean {
+    if (!pages) return true;
+    return pages.some(
+        p => p.id === pageId && p.isConnected !== false && (p.autoReplyEnabled || p.instagramAutoReplyEnabled),
+    );
+}
+
+/**
  * Optimistically append a message to the conversation cache.
  * Falls back to invalidation when the SSE event doesn't carry the full message
  * (backward compat with older backend versions).
@@ -112,25 +124,29 @@ export function useSSE(): void {
 
         // --- Comment events ---
         es.addEventListener('comment:received', (e) => {
-            const event: SSEEvent<'comment:received'> = JSON.parse(e.data);
-            queryClient.invalidateQueries({ queryKey: ['comments'] });
-            queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-            if (!isOnPage('/comments')) {
-                incrementUnreadComments();
-                showToast(
-                    t('newComment', { name: event.data.fromName || '' }),
-                    { label: t('view'), onClick: () => routerRef.current.push('/comments') },
-                );
-            }
+            try {
+                const event: SSEEvent<'comment:received'> = JSON.parse(e.data);
+                queryClient.invalidateQueries({ queryKey: ['comments'] });
+                queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+                if (!isOnPage('/comments') && isActivePageId(queryClient.getQueryData<Page[]>(['pages']), event.data.pageId)) {
+                    incrementUnreadComments();
+                    showToast(
+                        t('newComment', { name: event.data.fromName || '' }),
+                        { label: t('view'), onClick: () => routerRef.current.push('/comments') },
+                    );
+                }
+            } catch { /* malformed event — ignore */ }
         });
 
         es.addEventListener('comment:reply_sent', (e) => {
-            const event: SSEEvent<'comment:reply_sent'> = JSON.parse(e.data);
-            queryClient.invalidateQueries({ queryKey: ['comments'] });
-            queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-            if (!isOnPage('/comments') && event.data.replyMethod === 'ai') {
-                showToast(t('aiRepliedComment'));
-            }
+            try {
+                const event: SSEEvent<'comment:reply_sent'> = JSON.parse(e.data);
+                queryClient.invalidateQueries({ queryKey: ['comments'] });
+                queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+                if (!isOnPage('/comments') && event.data.replyMethod === 'ai') {
+                    showToast(t('aiRepliedComment'));
+                }
+            } catch { /* malformed event — ignore */ }
         });
 
         es.addEventListener('comment:reply_failed', () => {
@@ -140,30 +156,32 @@ export function useSSE(): void {
 
         // --- Message events ---
         es.addEventListener('message:received', (e) => {
-            const event: SSEEvent<'message:received'> = JSON.parse(e.data);
-            queryClient.invalidateQueries({ queryKey: ['messages'] });
-            queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-            appendToConversationCache(queryClient, event.data.message as Message | undefined, event.data.senderId);
-            const pages = queryClient.getQueryData<Page[]>(['pages']);
-            const fromActivePage = !pages || pages.some(p => p.id === event.data.pageId && p.isConnected !== false && (p.autoReplyEnabled || p.instagramAutoReplyEnabled));
-            if (!isOnPage('/messages') && fromActivePage) {
-                incrementUnreadMessages();
-                showToast(
-                    t('newMessage', { name: event.data.senderName || '' }),
-                    { label: t('view'), onClick: () => routerRef.current.push('/messages') },
-                );
-            }
+            try {
+                const event: SSEEvent<'message:received'> = JSON.parse(e.data);
+                queryClient.invalidateQueries({ queryKey: ['messages'] });
+                queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+                appendToConversationCache(queryClient, event.data.message as Message | undefined, event.data.senderId);
+                if (!isOnPage('/messages') && isActivePageId(queryClient.getQueryData<Page[]>(['pages']), event.data.pageId)) {
+                    incrementUnreadMessages();
+                    showToast(
+                        t('newMessage', { name: event.data.senderName || '' }),
+                        { label: t('view'), onClick: () => routerRef.current.push('/messages') },
+                    );
+                }
+            } catch { /* malformed event — ignore */ }
         });
 
         es.addEventListener('message:reply_sent', (e) => {
-            const event: SSEEvent<'message:reply_sent'> = JSON.parse(e.data);
-            queryClient.invalidateQueries({ queryKey: ['messages'] });
-            queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-            const replyMsg = event.data.message as Message | undefined;
-            appendToConversationCache(queryClient, replyMsg, replyMsg?.senderId ?? '');
-            if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
-                showToast(t('aiRepliedMessage'));
-            }
+            try {
+                const event: SSEEvent<'message:reply_sent'> = JSON.parse(e.data);
+                queryClient.invalidateQueries({ queryKey: ['messages'] });
+                queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+                const replyMsg = event.data.message as Message | undefined;
+                appendToConversationCache(queryClient, replyMsg, replyMsg?.senderId ?? '');
+                if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
+                    showToast(t('aiRepliedMessage'));
+                }
+            } catch { /* malformed event — ignore */ }
         });
 
         es.addEventListener('message:reply_failed', () => {

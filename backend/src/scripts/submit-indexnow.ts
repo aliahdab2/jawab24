@@ -62,22 +62,24 @@ const ALL_PUBLIC_URLS = [
   'https://jawab24.com/blog/common-facebook-auto-reply-mistakes',
 ];
 
+const print = (msg: string) => process.stdout.write(msg + '\n');
+
 async function main() {
   const customUrls = process.argv.slice(2);
   const urls = customUrls.length > 0 ? customUrls : ALL_PUBLIC_URLS;
 
-  console.log('=== IndexNow URL Submission ===');
-  console.log(`Key: ${INDEXNOW_KEY}`);
-  console.log(`Key location: ${INDEXNOW_KEY_LOCATION}`);
-  console.log(`URLs to submit: ${urls.length}`);
-  console.log('');
+  print('=== IndexNow URL Submission ===');
+  print(`Key: ${INDEXNOW_KEY}`);
+  print(`Key location: ${INDEXNOW_KEY_LOCATION}`);
+  print(`URLs to submit: ${urls.length}`);
+  print('');
 
   const result = await submitToIndexNow(urls);
 
   if (result.success) {
-    console.log(`✅ ${result.message}`);
-    console.log(`   Status: ${result.status}`);
-    console.log(`   URLs submitted: ${result.urlCount}`);
+    print(`✅ ${result.message}`);
+    print(`   Status: ${result.status}`);
+    print(`   URLs submitted: ${result.urlCount}`);
   } else {
     console.error(`❌ ${result.message}`);
     console.error(`   Status: ${result.status}`);
@@ -89,9 +91,9 @@ async function main() {
     }
   }
 
-  console.log('');
-  console.log('Submitted URLs:');
-  urls.forEach((url, i) => console.log(`  ${i + 1}. ${url}`));
+  print('');
+  print('Submitted URLs:');
+  urls.forEach((url, i) => print(`  ${i + 1}. ${url}`));
 }
 
 main().catch((err) => {
