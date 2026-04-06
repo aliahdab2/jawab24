@@ -443,6 +443,9 @@ export const Sidebar = memo(function Sidebar() {
 
       {/* User & Logout */}
       <div className="flex-shrink-0 p-4 border-t border-white/5 bg-black/20">
+        {/* Theme toggle — standalone icon when collapsed, inside profile card when expanded */}
+        {!sidebarOpen && <ThemeToggleButton variant="sidebar" sidebarOpen={false} />}
+
         {user && (
           <div className={clsx(
             "px-3 py-3 mb-4 rounded-2xl bg-white/5 border border-white/5 flex items-center gap-3",
@@ -451,19 +454,20 @@ export const Sidebar = memo(function Sidebar() {
             {/* Profile Picture with smooth loading - prevents flicker on navigation */}
             <ProfileAvatar picture={userPicture} name={userName} onError={handlePictureRefresh} />
             {sidebarOpen && (
-              <div className="min-w-0 text-start">
-                <p
-                  className="text-sm font-bold text-white truncate leading-tight"
-                  dir={isPhoneOnly ? 'ltr' : undefined}
-                >
-                  {userName}
-                </p>
-              </div>
+              <>
+                <div className="min-w-0 text-start flex-1">
+                  <p
+                    className="text-sm font-bold text-white truncate leading-tight"
+                    dir={isPhoneOnly ? 'ltr' : undefined}
+                  >
+                    {userName}
+                  </p>
+                </div>
+                <ThemeToggleButton variant="compact" />
+              </>
             )}
           </div>
         )}
-
-        <ThemeToggleButton variant="sidebar" sidebarOpen={sidebarOpen} />
 
         <button
           onClick={handleLogout}

@@ -4,7 +4,7 @@ import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 
 interface ThemeToggleButtonProps {
-  variant?: 'nav' | 'sidebar';
+  variant?: 'nav' | 'sidebar' | 'compact';
   sidebarOpen?: boolean;
 }
 
@@ -22,6 +22,18 @@ export function ThemeToggleButton({ variant = 'nav', sidebarOpen = true }: Theme
   // Show the icon for what you'll switch TO — the GitHub/Vercel standard
   const Icon = isDark ? Sun : Moon;
   const label = tNav('theme');
+
+  if (variant === 'compact') {
+    return (
+      <button
+        onClick={handleToggle}
+        aria-label={label}
+        className="ms-auto p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-all flex-shrink-0"
+      >
+        <Icon className="w-4 h-4" aria-hidden="true" />
+      </button>
+    );
+  }
 
   if (variant === 'sidebar') {
     return (
