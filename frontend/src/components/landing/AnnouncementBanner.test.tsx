@@ -16,7 +16,7 @@ const defaultProps = {
   title: 'Launching Soon',
   description: 'Join the waitlist!',
   feature: 'launch',
-  placeholder: 'Enter your email',
+  placeholder: 'Enter your email or phone number',
   buttonLabel: 'Notify Me',
   successMessage: "You're on the list!",
   errorMessage: 'Something went wrong.',
@@ -30,7 +30,7 @@ describe('AnnouncementBanner', () => {
   it('renders title, description, and form', () => {
     render(<AnnouncementBanner {...defaultProps} />);
     expect(screen.getByText('Launching Soon')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Enter your email')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter your email or phone number')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Notify Me' })).toBeInTheDocument();
   });
 
@@ -38,7 +38,7 @@ describe('AnnouncementBanner', () => {
     mockPost.mockResolvedValueOnce({ data: { success: true } });
     render(<AnnouncementBanner {...defaultProps} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter your email or phone number'), {
       target: { value: 'test@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Notify Me' }));
@@ -57,7 +57,7 @@ describe('AnnouncementBanner', () => {
     mockPost.mockRejectedValueOnce(new Error('Network error'));
     render(<AnnouncementBanner {...defaultProps} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter your email or phone number'), {
       target: { value: 'test@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Notify Me' }));
@@ -67,14 +67,14 @@ describe('AnnouncementBanner', () => {
     });
 
     // Form should still be visible (not replaced by success)
-    expect(screen.getByPlaceholderText('Enter your email')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Enter your email or phone number')).toBeInTheDocument();
   });
 
   it('clears error on retry', async () => {
     mockPost.mockRejectedValueOnce(new Error('fail'));
     render(<AnnouncementBanner {...defaultProps} />);
 
-    const input = screen.getByPlaceholderText('Enter your email');
+    const input = screen.getByPlaceholderText('Enter your email or phone number');
     fireEvent.change(input, { target: { value: 'test@example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Notify Me' }));
 
@@ -96,7 +96,7 @@ describe('AnnouncementBanner', () => {
     mockPost.mockImplementationOnce(() => new Promise((res) => { resolvePost = res; }));
     render(<AnnouncementBanner {...defaultProps} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter your email or phone number'), {
       target: { value: 'test@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Notify Me' }));
@@ -114,7 +114,7 @@ describe('AnnouncementBanner', () => {
     mockPost.mockResolvedValueOnce({ data: { success: true } });
     render(<AnnouncementBanner {...defaultProps} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Enter your email'), {
+    fireEvent.change(screen.getByPlaceholderText('Enter your email or phone number'), {
       target: { value: 'test@example.com' },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Notify Me' }));
@@ -130,7 +130,7 @@ describe('AnnouncementBanner', () => {
 
   it('uses text input with dir="ltr" in English locale', () => {
     render(<AnnouncementBanner {...defaultProps} />);
-    const input = screen.getByPlaceholderText('Enter your email');
+    const input = screen.getByPlaceholderText('Enter your email or phone number');
     expect(input).toHaveAttribute('dir', 'ltr');
     expect(input).toHaveAttribute('type', 'text');
     expect(input).toBeRequired();
