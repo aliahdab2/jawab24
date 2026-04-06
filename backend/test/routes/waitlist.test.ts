@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import waitlistRoutes from '../../src/routes/waitlist';
 
-const mockInsert = vi.fn();
 const mockValues = vi.fn().mockReturnValue({ onConflictDoNothing: vi.fn() });
 
 // Mock the database
@@ -32,7 +31,7 @@ describe('Waitlist Routes', () => {
                 method: 'POST',
                 url: '/api/waitlist',
                 payload: {
-                    email: 'test@example.com',
+                    contact: 'test@example.com',
                     feature: 'early_access',
                 },
             });
@@ -42,12 +41,27 @@ describe('Waitlist Routes', () => {
             expect(body.success).toBe(true);
         });
 
-        it('should reject invalid email', async () => {
+        it('should accept a valid phone number and feature', async () => {
             const response = await app.inject({
                 method: 'POST',
                 url: '/api/waitlist',
                 payload: {
-                    email: 'not-an-email',
+                    contact: '+966501234567',
+                    feature: 'launch',
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.payload);
+            expect(body.success).toBe(true);
+        });
+
+        it('should reject invalid contact (not email or phone)', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/api/waitlist',
+                payload: {
+                    contact: 'not-valid',
                     feature: 'early_access',
                 },
             });
@@ -62,7 +76,7 @@ describe('Waitlist Routes', () => {
                 method: 'POST',
                 url: '/api/waitlist',
                 payload: {
-                    email: 'test@example.com',
+                    contact: 'test@example.com',
                 },
             });
 
