@@ -70,11 +70,10 @@ vi.mock('@/lib/store', () => ({
         const store = { setAuth: mockSetAuth, ...mockAuthState };
         return selector ? selector(store) : store;
     },
-    useUIStore: {
-        getState: () => ({
-            setLanguage: mockSetLanguage
-        })
-    }
+    useUIStore: vi.fn((selector?: any) => {
+        const store = { theme: 'light', setTheme: vi.fn(), setLanguage: mockSetLanguage };
+        return selector ? selector(store) : store;
+    })
 }));
 
 // Mock sonner
