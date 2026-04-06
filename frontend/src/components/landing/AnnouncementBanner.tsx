@@ -34,7 +34,7 @@ export function AnnouncementBanner({
   bgColor = 'bg-accent-500',
   icon: Icon = Rocket,
 }: AnnouncementBannerProps) {
-  const [email, setEmail] = useState('');
+  const [contact, setContact] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
@@ -45,7 +45,7 @@ export function AnnouncementBanner({
     setSubmitting(true);
     setError(false);
     try {
-      await publicApi.post('/waitlist', { email, feature });
+      await publicApi.post('/waitlist', { contact, feature });
       setSubmitted(true);
     } catch (err) {
       setError(true);
@@ -74,14 +74,14 @@ export function AnnouncementBanner({
         ) : (
           <form onSubmit={handleSubmit} className="flex items-center gap-2">
             <input
-              type="email"
+              type="text"
               required
-              dir="ltr"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              dir="auto"
+              value={contact}
+              onChange={(e) => setContact(e.target.value)}
               placeholder={placeholder}
               aria-label={placeholder}
-              className="rounded-full px-4 py-1.5 text-sm text-surface-900 placeholder:text-surface-500 rtl:placeholder:text-right focus:outline-none focus:ring-2 focus:ring-white/50 w-48 sm:w-56"
+              className="rounded-full px-4 py-1.5 text-sm text-surface-900 placeholder:text-surface-500 focus:outline-none focus:ring-2 focus:ring-white/50 w-48 sm:w-56"
             />
             <button
               type="submit"

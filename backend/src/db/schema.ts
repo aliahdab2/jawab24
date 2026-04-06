@@ -911,12 +911,14 @@ export const customerNotificationsLog = pgTable('customer_notifications_log', {
     pendingScheduledIdx: index('idx_cust_notif_log_pending_scheduled').on(table.status, table.scheduledAt),
 }));
 
-// Waitlist - collects emails for upcoming features
+// Waitlist - collects emails or phone numbers for upcoming features
 export const waitlistEmails = pgTable('waitlist_emails', {
     id: uuid('id').defaultRandom().primaryKey(),
-    email: varchar('email', { length: 255 }).notNull(),
+    email: varchar('email', { length: 255 }),
+    phone: varchar('phone', { length: 30 }),
     feature: varchar('feature', { length: 50 }).notNull(),
     createdAt: timestamp('created_at').defaultNow(),
 }, (table) => ({
     emailFeatureUnique: uniqueIndex('idx_waitlist_email_feature').on(table.email, table.feature),
+    phoneFeatureUnique: uniqueIndex('idx_waitlist_phone_feature').on(table.phone, table.feature),
 }));
