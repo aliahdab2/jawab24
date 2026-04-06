@@ -62,6 +62,9 @@ for (const [path, mod] of Object.entries(enModules)) {
   const ns = path.replace('../src/i18n/en/', '').replace('.json', '');
   EN_MESSAGES[ns] = (mod as { default: Record<string, unknown> }).default;
 }
+// flagReason translations live in @jawab24/shared (not a local JSON file)
+import { flagReasonEn } from '@jawab24/shared';
+EN_MESSAGES['flagReason'] = flagReasonEn as Record<string, unknown>;
 
 function resolveNestedKey(obj: Record<string, unknown>, key: string): string | undefined {
   const parts = key.split('.');
