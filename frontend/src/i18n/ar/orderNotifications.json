@@ -10,7 +10,7 @@
   "delayLabel": "الإرسال بعد",
   "immediately": "فوراً",
   "delayMin": "{n} دقيقة",
-  "delayHr": "ساعة",
+  "delayHr": "{n} ساعة",
   "delayHrs": "{n} ساعات",
   "variables": "المتغيرات المتاحة",
   "resetDefaults": "إعادة الضبط الافتراضي",
