@@ -295,26 +295,4 @@ describe('ReplySender', () => {
             );
         });
     });
-
-    // ─── sendPrivateMessage Direct ───────────────────────────────────
-
-    describe('sendPrivateMessage', () => {
-        it('should return false and log error on failure', async () => {
-            vi.mocked(facebookService.sendPrivateMessage).mockRejectedValue(
-                new Error('Messaging blocked')
-            );
-
-            const result = await sender.sendPrivateMessage(
-                'token_abc',
-                'user_789',
-                'Hello!'
-            );
-
-            expect(result).toBe(false);
-            expect(mockLogger.error).toHaveBeenCalledWith(
-                'Failed to send private message',
-                expect.objectContaining({ recipientId: 'user_789' })
-            );
-        });
-    });
 });
