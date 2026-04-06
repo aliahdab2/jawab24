@@ -22,7 +22,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { BrandLogo, NotificationBell } from '@/components/ui';
+import { BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 
@@ -462,6 +462,8 @@ export const Sidebar = memo(function Sidebar() {
             )}
           </div>
         )}
+
+        <ThemeToggleButton variant="sidebar" sidebarOpen={sidebarOpen} />
 
         <button
           onClick={handleLogout}

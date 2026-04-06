@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { Button, BrandLogo } from '@/components/ui';
+import { Button, BrandLogo, ThemeToggleButton } from '@/components/ui';
 import { useAuthStore } from '@/lib/store';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
@@ -56,6 +57,8 @@ export default function LandingPageContent() {
   const tc = useTranslations('common');
   const tNav = useTranslations('nav');
   const locale = useLocale();
+  const router = useRouter();
+  const isPricingPage = router.pathname === '/pricing';
   const { setLanguage } = useLanguage();
   // SSR renders with isAuthenticated=false (shows login button).
   // After hydration, swaps to dashboard button if authenticated.
@@ -143,15 +146,18 @@ export default function LandingPageContent() {
             </Link>
 
             <div className="flex items-center gap-1 sm:gap-4">
-              <Link href="/pricing" className="hidden md:block max-lg:landscape:hidden px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all">
-                {t('nav.pricing')}
-              </Link>
+              {!isPricingPage && (
+                <Link href="/pricing" className="hidden md:block max-lg:landscape:hidden px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all">
+                  {t('nav.pricing')}
+                </Link>
+              )}
               <button
                 onClick={toggleLanguage}
                 className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-all"
               >
                 {tc('switchLanguage')}
               </button>
+              <ThemeToggleButton />
               {isAuthenticated ? (
                 <Link href="/dashboard">
                   <Button size="sm" className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5">

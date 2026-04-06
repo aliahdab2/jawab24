@@ -7,7 +7,7 @@ import { Sidebar } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell } from '@/components/ui';
+import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
 import { OfflineBanner } from '@/components/ui/OfflineBanner';
 import { addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { DemoBanner } from '@/features/demo';
@@ -155,18 +155,20 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
                 {/* Actions - matches landing page */}
                 <div className="flex items-center gap-1 sm:gap-4">
-                  {/* Pricing link - hidden on mobile */}
-                  {isNativePlatform() ? (
-                    <button
-                      onClick={() => openExternalUrl(`https://jawab24.com${locale === 'en' ? '/en' : ''}/pricing`)}
-                      className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
-                    >
-                      {tLanding('nav.pricing')}
-                    </button>
-                  ) : (
-                    <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
-                      {tLanding('nav.pricing')}
-                    </Link>
+                  {/* Pricing link - hidden on mobile and on the pricing page itself */}
+                  {router.pathname !== '/pricing' && (
+                    isNativePlatform() ? (
+                      <button
+                        onClick={() => openExternalUrl(`https://jawab24.com${locale === 'en' ? '/en' : ''}/pricing`)}
+                        className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
+                      >
+                        {tLanding('nav.pricing')}
+                      </button>
+                    ) : (
+                      <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
+                        {tLanding('nav.pricing')}
+                      </Link>
+                    )
                   )}
                   <button
                     onClick={toggleLanguage}
@@ -174,6 +176,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                   >
                     {tc('switchLanguage')}
                   </button>
+                  <ThemeToggleButton />
                   {isAuthenticated ? (
                     <Link href="/dashboard">
                       <button className="font-bold shadow-xl shadow-brand-500/20 px-3 sm:px-6 text-xs sm:text-sm py-2 sm:py-2.5 bg-brand-500 text-white rounded-xl hover:bg-brand-600 transition-all">

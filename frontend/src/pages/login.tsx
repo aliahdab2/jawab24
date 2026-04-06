@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { Button, BrandLogo, FacebookIcon } from '@/components/ui';
+import { Button, BrandLogo, FacebookIcon, ThemeToggleButton } from '@/components/ui';
 import Link from 'next/link';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
@@ -330,6 +330,7 @@ export default function LoginPage() {
               >
                 {tc('switchLanguage')}
               </button>
+              <ThemeToggleButton />
               <div className="native-landscape-spacer" aria-hidden="true" />
             </div>
           </div>

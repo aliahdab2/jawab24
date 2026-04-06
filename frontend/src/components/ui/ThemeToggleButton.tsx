@@ -1,0 +1,58 @@
+import { Sun, Moon } from 'lucide-react';
+import { useTheme } from '@/hooks';
+import { useTranslations } from 'next-intl';
+import clsx from 'clsx';
+
+interface ThemeToggleButtonProps {
+  variant?: 'nav' | 'sidebar';
+  sidebarOpen?: boolean;
+}
+
+export function ThemeToggleButton({ variant = 'nav', sidebarOpen = true }: ThemeToggleButtonProps) {
+  const { theme, setTheme } = useTheme();
+  const tNav = useTranslations('nav');
+
+  // When system, resolve against OS preference
+  const isDark =
+    theme === 'dark' ||
+    (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+  const handleToggle = () => setTheme(isDark ? 'light' : 'dark');
+
+  // Show the icon for what you'll switch TO — the GitHub/Vercel standard
+  const Icon = isDark ? Sun : Moon;
+  const label = tNav('theme');
+
+  if (variant === 'sidebar') {
+    return (
+      <button
+        onClick={handleToggle}
+        aria-label={label}
+        className={clsx(
+          'w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-zinc-400 hover:bg-white/5 hover:text-white transition-all duration-300 group/nav relative',
+          !sidebarOpen && 'justify-center'
+        )}
+      >
+        <Icon className="w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110" />
+        {sidebarOpen && (
+          <span className="font-bold text-sm tracking-tight">{label}</span>
+        )}
+        {!sidebarOpen && (
+          <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+            {label}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  return (
+    <button
+      onClick={handleToggle}
+      aria-label={label}
+      className="p-2 text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
+    >
+      <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
+    </button>
+  );
+}

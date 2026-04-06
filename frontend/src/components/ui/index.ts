@@ -21,3 +21,4 @@ export { ConfirmationModal } from './ConfirmationModal';
 export { CharCounter } from './CharCounter';
 export { FlagTag } from './FlagTag';
 export { PauseToggle } from './PauseToggle';
+export { ThemeToggleButton } from './ThemeToggleButton';
