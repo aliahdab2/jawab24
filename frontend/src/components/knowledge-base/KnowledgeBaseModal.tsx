@@ -264,8 +264,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-theme-border flex-shrink-0 bg-surface-50">
+        {/* Footer — sticky to ensure save button always visible on mobile */}
+        <div className="flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-theme-border flex-shrink-0 bg-surface-50 sticky bottom-0 z-10">
           {/* Raw mode toggle */}
           <button
             type="button"
