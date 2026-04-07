@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Zap } from 'lucide-react';
+import { Hash } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
@@ -99,7 +99,7 @@ export function PostTriggerModal({
         {/* Active trigger badge */}
         {hasActiveTrigger && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-sm font-medium">
-            <Zap className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            <Hash className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
             {t('postTriggerActive')}
           </div>
         )}

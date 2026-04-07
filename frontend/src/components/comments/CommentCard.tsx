@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   Sparkles,
   Zap,
+  Hash,
   CheckCircle,
   CheckCheck,
   Undo2,
@@ -214,9 +215,9 @@ export const CommentCard = React.memo(function CommentCard({
              {/* Post Context + Trigger Button */}
              {comment.postId && (
                <div className="flex flex-col gap-1 w-full">
-                 <div className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground max-w-full">
-                   <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />
-                   <span className="truncate max-w-[220px]">{comment.postMessage || t('postContext')}</span>
+                 <div className="flex items-start gap-1 px-2 py-1 text-[11px] text-muted-foreground w-full">
+                   <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted mt-0.5" aria-hidden="true" />
+                   <span className="line-clamp-2 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
                  </div>
                  {onTriggerClick && (
                    <button
@@ -229,7 +230,7 @@ export const CommentCard = React.memo(function CommentCard({
                          : 'border-dashed border-theme-border text-muted-foreground hover:border-brand-400 hover:text-brand-500'
                      )}
                    >
-                     <Zap className="w-3 h-3" aria-hidden="true" />
+                     <Hash className="w-3 h-3" aria-hidden="true" />
                      {triggerActive ? t('postTriggerActive') : t('postTrigger')}
                    </button>
                  )}
