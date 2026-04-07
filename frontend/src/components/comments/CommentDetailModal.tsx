@@ -279,9 +279,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
           {/* Post Context */}
           {comment.postMessage && (
-            <div className="flex items-start gap-2 px-3 py-2 bg-muted rounded-lg text-sm text-muted-foreground">
+            <div className="flex items-start gap-2 px-3 py-2.5 bg-muted rounded-lg text-sm text-muted-foreground">
               <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span className="line-clamp-2">{comment.postMessage}</span>
+              <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
             </div>
           )}
 
