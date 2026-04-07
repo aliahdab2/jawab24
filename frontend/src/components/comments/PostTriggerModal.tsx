@@ -88,9 +88,11 @@ export function PostTriggerModal({
       <div className="flex flex-col gap-4">
         {/* Post preview */}
         {postMessage && (
-          <p className="text-sm text-muted-foreground line-clamp-2 bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2">
-            {postMessage}
-          </p>
+          <div className="bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2.5 max-h-32 overflow-y-auto">
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed" dir="auto">
+              {postMessage}
+            </p>
+          </div>
         )}
 
         {/* Active trigger badge */}
