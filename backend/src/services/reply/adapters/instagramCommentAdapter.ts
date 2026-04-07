@@ -52,6 +52,8 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 id: existing[0].id,
                 autoReplyEnabled: existing[0].autoReplyEnabled ?? true,
                 message: existing[0].caption,
+                triggerKeyword: existing[0].triggerKeyword ?? null,
+                triggerReply: existing[0].triggerReply ?? null,
             };
         }
 
@@ -68,6 +70,8 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             id: created.id,
             autoReplyEnabled: true,
             message: created.caption,
+            triggerKeyword: null,
+            triggerReply: null,
         };
     }
 

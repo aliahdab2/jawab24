@@ -55,10 +55,12 @@ export class PostsController {
      * GET /posts/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
 
         try {
-            const post = await postsService.getPost(id);
+            const post = await postsService.getPost(id, req.workspaceId);
             if (!post) {
                 return reply.status(404).send({ error: 'Post not found' });
             }
@@ -74,10 +76,12 @@ export class PostsController {
      * PUT /posts/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdatePostDTO }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
 
         try {
-            const post = await postsService.updatePost(id, request.body);
+            const post = await postsService.updatePostByWorkspace(id, request.body, req.workspaceId);
             if (!post) {
                 return reply.status(404).send({ error: 'Post not found' });
             }
@@ -93,10 +97,13 @@ export class PostsController {
      * DELETE /posts/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
 
         try {
-            await postsService.deletePost(id);
+            const deleted = await postsService.deletePost(id, req.workspaceId);
+            if (!deleted) return reply.status(404).send({ error: 'Post not found' });
             return reply.status(204).send();
         } catch (error) {
             request.log.error(error);
@@ -109,11 +116,13 @@ export class PostsController {
      * PATCH /posts/:id/auto-reply
      */
     async toggleAutoReply(request: FastifyRequest<{ Params: { id: string }; Body: { enabled: boolean } }>, reply: FastifyReply) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
         const { enabled } = request.body;
 
         try {
-            const post = await postsService.toggleAutoReply(id, enabled);
+            const post = await postsService.toggleAutoReply(id, enabled, req.workspaceId);
             if (!post) {
                 return reply.status(404).send({ error: 'Post not found' });
             }
@@ -121,6 +130,33 @@ export class PostsController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to toggle auto-reply' });
+        }
+    }
+
+    /**
+     * Update trigger keyword + reply for a post or Instagram media
+     * PATCH /posts/:id/trigger
+     */
+    async updateTrigger(
+        request: FastifyRequest<{ Params: { id: string }; Body: { source: 'facebook' | 'instagram'; triggerKeyword: string | null; triggerReply: string | null } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+        const { id } = request.params;
+        const { source, triggerKeyword, triggerReply } = request.body;
+
+        if (!['facebook', 'instagram'].includes(source)) {
+            return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
+        }
+
+        try {
+            const found = await postsService.updateTrigger(id, source, triggerKeyword ?? null, triggerReply ?? null, req.workspaceId);
+            if (!found) return reply.status(404).send({ error: 'Post not found' });
+            return reply.send({ success: true });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to update trigger' });
         }
     }
 }

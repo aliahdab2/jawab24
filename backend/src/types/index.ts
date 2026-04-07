@@ -137,6 +137,8 @@ export interface Post {
     facebookPostId: string;
     message: string | null;
     autoReplyEnabled: boolean | null;
+    triggerKeyword: string | null;
+    triggerReply: string | null;
     createdTime: Date | null;
     createdAt: Date | null;
     updatedAt: Date | null;
@@ -153,6 +155,8 @@ export interface CreatePostDTO {
 export interface UpdatePostDTO {
     message?: string;
     autoReplyEnabled?: boolean;
+    triggerKeyword?: string | null;
+    triggerReply?: string | null;
 }
 
 // Comment Types

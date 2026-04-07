@@ -14,6 +14,7 @@ import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
+import { matchesKeyword, normalizeArabic } from '@jawab24/shared';
 
 /**
  * Unified Comment Processor
@@ -92,6 +93,40 @@ export class CommentProcessor {
                 // Store comment even if content is disabled (preserves Instagram behavior)
                 await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
                 return { success: false, commentId: platformCommentId, error: 'Auto-reply disabled for this content' };
+            }
+
+            // 3b. Per-post trigger check — fires before template/AI pipeline.
+            // When a post has a triggerKeyword set, ONLY comments matching that keyword
+            // get a reply (using triggerReply). Non-matching comments are silently skipped.
+            // This mirrors the "comment X to get details" engagement tactic (ManyChat-style).
+            // Respects isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
+            if (content.triggerKeyword && content.triggerReply && isCommentsEnabled) {
+                const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
+                const normalizedKeyword = normalizeArabic(content.triggerKeyword.toLowerCase());
+                const isMatch = matchesKeyword(normalizedComment, normalizedKeyword);
+
+                if (!isMatch) {
+                    // Comment doesn't match the trigger — store it but skip auto-reply
+                    await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
+                    pipelineMetrics.record(pipeline, 'trigger_no_match');
+                    this.logger.info(`[${platform}] Trigger keyword set but comment did not match — skipping`, {
+                        platformCommentId, triggerKeyword: content.triggerKeyword,
+                    });
+                    return { success: false, commentId: platformCommentId, error: 'Comment did not match post trigger keyword' };
+                }
+
+                // Comment matches trigger — send triggerReply immediately, skip template/AI
+                const { comment } = await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
+                invalidateWorkspaceStatsCache(workspaceId);
+                return this.sendAndFinalize({
+                    adapter, platform, pipeline,
+                    pageId: page.id, userId,
+                    comment, replyText: content.triggerReply, replyMethod: 'template',
+                    commentMessage, platformCommentId, platformPageId,
+                    accessToken: page.accessToken, fromId,
+                    userSettings: userSettings as unknown as Record<string, unknown>,
+                    triggerKeyword: content.triggerKeyword,
+                });
             }
 
             // 4. Store the comment
@@ -286,43 +321,7 @@ export class CommentProcessor {
                 }
             }
 
-            // 10. Send reply
-            const sendResult = await adapter.sendReply({
-                platformCommentId,
-                platformPageId,
-                replyText,
-                commentMessage,
-                accessToken: page.accessToken,
-                fromId,
-                userSettings: userSettings as unknown as Record<string, unknown>,
-            });
-
-            if (!sendResult.success) {
-                pipelineMetrics.record(pipeline, 'send_failed');
-                // SSE: notify merchant of failed reply
-                publishSSEEvent(userId, 'comment:reply_failed', {
-                    commentId: comment.id,
-                    pageId: page.id,
-                    error: sendResult.error || 'Failed to send reply',
-                });
-                return { success: false, commentId: comment.id, error: sendResult.error };
-            }
-
-            // 11. Mark as replied
-            const detectedLanguage = detectLanguageCode(commentMessage);
-            await adapter.markAsReplied(
-                comment.id,
-                replyText,
-                replyMethod,
-                detectedLanguage === 'unknown' ? 'en' : detectedLanguage,
-                templateId,
-                needsAttention,
-                flagReason,
-                aiIntent,
-                aiOriginalReply,
-            );
-
-            // 12. Notify if flagged
+            // 10-12. Send reply, mark as replied, fire SSE events + metrics
             if (needsAttention && page.userId) {
                 notificationService.sendTemplateNotification(
                     page.userId,
@@ -332,36 +331,16 @@ export class CommentProcessor {
                 ).catch(err => this.logger.error('Flagged notification failed', { err }));
             }
 
-            // SSE: notify merchant that a reply was sent
-            publishSSEEvent(userId, 'comment:reply_sent', {
-                commentId: comment.id,
-                pageId: page.id,
-                replyMethod: replyMethod as 'template' | 'ai',
-                replyText,
-            });
-            // SSE: update usage counter if AI reply
-            if (replyMethod === 'ai') {
-                publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });
-            }
-
-            pipelineMetrics.record(pipeline, 'success');
-
-            // Structured per-reply log — single line with all reply metadata
-            this.logger.info(`[${platform}] reply_sent`, {
-                event: 'reply_sent',
-                pipeline,
-                platform,
-                pageId: page.id,
-                commentId: comment.id,
-                replyMethod,
-                aiIntent,
+            return this.sendAndFinalize({
+                adapter, platform, pipeline,
+                pageId: page.id, userId,
+                comment, replyText, replyMethod, commentMessage,
+                platformCommentId, platformPageId,
+                accessToken: page.accessToken, fromId,
+                userSettings: userSettings as unknown as Record<string, unknown>,
+                templateId, needsAttention, flagReason, aiIntent, aiOriginalReply,
                 confidence,
-                flagReason: flagReason || null,
-                needsAttention,
-                replyLength: replyText.length,
             });
-
-            return { success: true, commentId: comment.id, replyText, replyMethod };
 
             } finally {
                 await releaseReplyLock(`comment:${page.id}`, platformCommentId, lockToken).catch(() => { /* TTL will auto-expire */ });
@@ -379,6 +358,103 @@ export class CommentProcessor {
                 error: error instanceof Error ? error.message : 'Unknown error',
             };
         }
+    }
+
+    /**
+     * Send a reply and record all side-effects: mark-as-replied, SSE events,
+     * pipeline metrics, and structured log. Shared by the trigger path and
+     * the main template/AI path to avoid duplicating these ~20 lines.
+     */
+    private async sendAndFinalize(opts: {
+        adapter: CommentPlatformAdapter;
+        platform: string;
+        pipeline: Pipeline;
+        pageId: string;
+        userId: string;
+        comment: { id: string };
+        replyText: string;
+        replyMethod: 'template' | 'ai';
+        commentMessage: string;
+        platformCommentId: string;
+        platformPageId: string;
+        accessToken: string;
+        fromId?: string;
+        userSettings: Record<string, unknown>;
+        // Optional — only used by the main template/AI path
+        templateId?: string;
+        needsAttention?: boolean;
+        flagReason?: string;
+        aiIntent?: string;
+        aiOriginalReply?: string;
+        confidence?: string;
+        triggerKeyword?: string;
+    }): Promise<CommentResult> {
+        const {
+            adapter, platform, pipeline, pageId, userId,
+            comment, replyText, replyMethod, commentMessage,
+            platformCommentId, platformPageId, accessToken, fromId, userSettings,
+            templateId, needsAttention, flagReason, aiIntent, aiOriginalReply,
+            confidence, triggerKeyword,
+        } = opts;
+
+        const sendResult = await adapter.sendReply({
+            platformCommentId,
+            platformPageId,
+            replyText,
+            commentMessage,
+            accessToken,
+            fromId,
+            userSettings,
+        });
+
+        if (!sendResult.success) {
+            pipelineMetrics.record(pipeline, 'send_failed');
+            publishSSEEvent(userId, 'comment:reply_failed', {
+                commentId: comment.id,
+                pageId,
+                error: sendResult.error || 'Failed to send reply',
+            });
+            return { success: false, commentId: comment.id, error: sendResult.error };
+        }
+
+        const detectedLanguage = detectLanguageCode(commentMessage);
+        await adapter.markAsReplied(
+            comment.id,
+            replyText,
+            replyMethod,
+            detectedLanguage === 'unknown' ? 'en' : detectedLanguage,
+            templateId,
+            needsAttention,
+            flagReason,
+            aiIntent,
+            aiOriginalReply,
+        );
+
+        publishSSEEvent(userId, 'comment:reply_sent', {
+            commentId: comment.id,
+            pageId,
+            replyMethod: replyMethod as 'template' | 'ai',
+            replyText,
+        });
+
+        if (replyMethod === 'ai') {
+            publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });
+        }
+
+        pipelineMetrics.record(pipeline, 'success');
+
+        this.logger.info(`[${platform}] reply_sent`, {
+            event: 'reply_sent',
+            pipeline,
+            platform,
+            pageId,
+            commentId: comment.id,
+            replyMethod,
+            ...(triggerKeyword ? { triggerKeyword } : { aiIntent, confidence, flagReason: flagReason || null, needsAttention }),
+            replyLength: replyText.length,
+        });
+
+        return { success: true, commentId: comment.id, replyText, replyMethod };
     }
 
     private delay(ms: number): Promise<void> {

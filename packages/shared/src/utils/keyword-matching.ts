@@ -52,6 +52,15 @@ export function matchesKeyword(normalizedText: string, normalizedKeyword: string
         return false;
     }
 
+    // Non-word keywords (punctuation, symbols, emoji like ".", "...", "❤️"):
+    // \b doesn't apply to non-word characters so use a whole-message check —
+    // the entire trimmed comment must consist only of repetitions of the keyword.
+    // This handles "write a dot" engagement tactics where followers comment "." or "..."
+    if (!/\w/.test(normalizedKeyword)) {
+        const trimmed = normalizedText.trim();
+        return new RegExp(`^${escapeRegex(normalizedKeyword)}+$`).test(trimmed);
+    }
+
     // English/Latin keywords: word-boundary matching
     const pattern = new RegExp(`\\b${escapeRegex(normalizedKeyword)}\\b`, 'i');
     return pattern.test(normalizedText);

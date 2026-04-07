@@ -484,6 +484,13 @@
       "when": 1775499177097,
       "tag": "0068_reflective_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "5",
+      "when": 1775556697229,
+      "tag": "0069_abnormal_jane_foster",
+      "breakpoints": true
     }
   ]
 }

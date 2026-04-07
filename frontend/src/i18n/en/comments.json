@@ -78,5 +78,17 @@
   "commentCount": "{count, plural, one {# comment} other {# comments}}",
   "showEarlier": "Show earlier comments",
   "hideEarlier": "Hide earlier comments",
-  "followUpReply": "Add a follow-up reply"
+  "followUpReply": "Add a follow-up reply",
+  "postTrigger": "Comment Trigger",
+  "postTriggerKeyword": "Trigger keyword",
+  "postTriggerReply": "Auto-reply message",
+  "postTriggerKeywordPlaceholder": "e.g. . or ❤️ or YES",
+  "postTriggerReplyPlaceholder": "Message sent when someone comments the keyword...",
+  "postTriggerSave": "Save trigger",
+  "postTriggerClear": "Remove trigger",
+  "postTriggerActive": "Trigger active",
+  "postTriggerSaved": "Trigger saved",
+  "postTriggerCleared": "Trigger removed",
+  "postTriggerKeywordRequired": "Keyword is required",
+  "postTriggerReplyRequired": "Reply message is required"
 }

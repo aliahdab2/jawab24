@@ -144,10 +144,13 @@ export const pagesApi = {
 
 // Posts API
 export const postsApi = {
+  getAll: () => api.get('/posts'),
   getByPage: (pageId: string) => api.get(`/pages/${pageId}/posts`),
   getById: (id: string) => api.get(`/posts/${id}`),
   toggle: (id: string, enabled: boolean) =>
     api.patch(`/posts/${id}/auto-reply`, { enabled }),
+  updateTrigger: (id: string, source: 'facebook' | 'instagram', triggerKeyword: string | null, triggerReply: string | null) =>
+    api.patch(`/posts/${id}/trigger`, { source, triggerKeyword, triggerReply }),
 };
 
 // Comments API Types

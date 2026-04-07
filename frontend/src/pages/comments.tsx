@@ -10,9 +10,10 @@ import dynamic from 'next/dynamic';
 import { CommentCard } from '@/components/comments';
 
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
+const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useDebounce } from '@/hooks';
-import { commentsApi, pagesApi, type CommentsQueryParams } from '@/lib/api';
+import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import {
   MessageSquare,
   Search,
@@ -66,6 +67,29 @@ const CommentsPage: NextPageWithLayout = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
+
+  // Per-post trigger state
+  const [triggerModalComment, setTriggerModalComment] = useState<Comment | null>(null);
+
+  // Fetch all posts so we can show active trigger state (⚡ green) on page load
+  const { data: postsData = [] } = useQuery({
+    queryKey: ['posts'],
+    queryFn: async () => {
+      const { data } = await postsApi.getAll();
+      return Array.isArray(data) ? data : (data?.data ?? []);
+    },
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+  });
+  const triggersByPostId = useMemo(() => {
+    const map: Record<string, { keyword: string; reply: string } | null> = {};
+    for (const post of postsData as Array<{ id: string; triggerKeyword?: string | null; triggerReply?: string | null }>) {
+      map[post.id] = post.triggerKeyword && post.triggerReply
+        ? { keyword: post.triggerKeyword, reply: post.triggerReply }
+        : null;
+    }
+    return map;
+  }, [postsData]);
   const pendingDeepLinkRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -516,6 +540,8 @@ const CommentsPage: NextPageWithLayout = () => {
                   earlierComments={earlierComments}
                   isExpanded={expandedGroups.has(group.groupKey)}
                   onToggleExpand={() => toggleExpand(group.groupKey)}
+                  onTriggerClick={comment.postId ? () => setTriggerModalComment(comment) : undefined}
+                  triggerActive={comment.postId ? !!triggersByPostId[comment.postId] : false}
                 />
               );
             })}
@@ -576,6 +602,22 @@ const CommentsPage: NextPageWithLayout = () => {
           onUnresolve={selectedComment.resolved ? () => handleUnresolve(selectedComment.id) : undefined}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
+        />
+      )}
+
+      {triggerModalComment?.postId && (
+        <PostTriggerModal
+          key={triggerModalComment.postId}
+          postId={triggerModalComment.postId}
+          source={triggerModalComment.source ?? 'facebook'}
+          postMessage={triggerModalComment.postMessage}
+          triggerKeyword={triggersByPostId[triggerModalComment.postId]?.keyword ?? null}
+          triggerReply={triggersByPostId[triggerModalComment.postId]?.reply ?? null}
+          isOpen={!!triggerModalComment}
+          onClose={() => setTriggerModalComment(null)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['posts'] });
+          }}
         />
       )}
     </>

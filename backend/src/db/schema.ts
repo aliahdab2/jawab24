@@ -162,6 +162,10 @@ export const posts = pgTable('posts', {
     facebookPostId: varchar('facebook_post_id', { length: 255 }).unique().notNull(),
     message: text('message'),
     autoReplyEnabled: boolean('auto_reply_enabled').default(true),
+    /** Per-post engagement trigger: keyword the merchant asks followers to comment */
+    triggerKeyword: varchar('trigger_keyword', { length: 100 }),
+    /** Per-post engagement trigger: reply sent when triggerKeyword is matched */
+    triggerReply: text('trigger_reply'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -182,6 +186,10 @@ export const instagramMedia = pgTable('instagram_media', {
     permalink: text('permalink'),
     thumbnailUrl: text('thumbnail_url'),
     autoReplyEnabled: boolean('auto_reply_enabled').default(true),
+    /** Per-post engagement trigger: keyword the merchant asks followers to comment */
+    triggerKeyword: varchar('trigger_keyword', { length: 100 }),
+    /** Per-post engagement trigger: reply sent when triggerKeyword is matched */
+    triggerReply: text('trigger_reply'),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

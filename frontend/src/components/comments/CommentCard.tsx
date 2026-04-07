@@ -38,6 +38,10 @@ export interface CommentCardProps {
   isExpanded?: boolean;
   /** Toggle expand/collapse of earlier comments */
   onToggleExpand?: () => void;
+  /** Called when the trigger ⚡ button on the post context line is clicked */
+  onTriggerClick?: (e: React.MouseEvent) => void;
+  /** Whether this post has an active trigger keyword set */
+  triggerActive?: boolean;
 }
 
 // Keywords that indicate a comment needs human attention
@@ -76,6 +80,8 @@ export const CommentCard = React.memo(function CommentCard({
   earlierComments,
   isExpanded = false,
   onToggleExpand,
+  onTriggerClick,
+  triggerActive = false,
 }: CommentCardProps) {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
@@ -207,9 +213,24 @@ export const CommentCard = React.memo(function CommentCard({
 
              {/* Post Context */}
              {comment.postMessage && (
-               <div className="flex items-center gap-1.5 px-2 py-1 text-[11px] text-muted-foreground max-w-full">
-                 <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted" />
-                 <span className="truncate max-w-[250px]">{comment.postMessage}</span>
+               <div className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground max-w-full">
+                 <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />
+                 <span className="truncate max-w-[220px]">{comment.postMessage}</span>
+                 {onTriggerClick && (
+                   <button
+                     type="button"
+                     onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
+                     aria-label={t('postTrigger')}
+                     className={clsx(
+                       'ms-auto flex-shrink-0 p-0.5 rounded transition-colors',
+                       triggerActive
+                         ? 'text-brand-500 hover:text-brand-600'
+                         : 'text-icon-muted hover:text-muted-foreground'
+                     )}
+                   >
+                     <Zap className="w-3.5 h-3.5" aria-hidden="true" />
+                   </button>
+                 )}
                </div>
              )}
 

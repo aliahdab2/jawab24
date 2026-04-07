@@ -20,6 +20,10 @@ export interface ContentEntity {
     autoReplyEnabled: boolean;
     /** Post message or media caption — passed to reply generator for context */
     message?: string | null;
+    /** Per-post engagement trigger: keyword the merchant asks followers to comment */
+    triggerKeyword?: string | null;
+    /** Per-post engagement trigger: reply sent when triggerKeyword is matched */
+    triggerReply?: string | null;
 }
 
 /** Context passed to replyGenerator.generateForComment */

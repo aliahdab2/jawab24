@@ -51,6 +51,14 @@ export default async function postsRoutes(fastify: FastifyInstance) {
             },
         }, postsController.toggleAutoReply);
 
+        protectedRoutes.patch('/posts/:id/trigger', {
+            schema: {
+                tags: ['Posts'],
+                summary: 'Set or clear trigger keyword + reply for a post or Instagram media',
+                security: auth,
+            },
+        }, postsController.updateTrigger);
+
         // Posts by page
         protectedRoutes.get('/pages/:pageId/posts', {
             schema: {

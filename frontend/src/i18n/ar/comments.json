@@ -78,5 +78,17 @@
   "commentCount": "{count, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}}",
   "showEarlier": "عرض التعليقات السابقة",
   "hideEarlier": "إخفاء التعليقات السابقة",
-  "followUpReply": "إضافة رد متابعة"
+  "followUpReply": "إضافة رد متابعة",
+  "postTrigger": "محفز التعليقات",
+  "postTriggerKeyword": "الكلمة المحفزة",
+  "postTriggerReply": "رسالة الرد التلقائي",
+  "postTriggerKeywordPlaceholder": "مثال: . أو ❤️ أو اهتم",
+  "postTriggerReplyPlaceholder": "الرسالة التي تُرسل عند التعليق بالكلمة المحفزة...",
+  "postTriggerSave": "حفظ المحفز",
+  "postTriggerClear": "إزالة المحفز",
+  "postTriggerActive": "المحفز نشط",
+  "postTriggerSaved": "تم حفظ المحفز",
+  "postTriggerCleared": "تم إزالة المحفز",
+  "postTriggerKeywordRequired": "الكلمة المحفزة مطلوبة",
+  "postTriggerReplyRequired": "رسالة الرد مطلوبة"
 }
