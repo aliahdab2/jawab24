@@ -14,7 +14,7 @@ import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
-import { matchesKeyword, normalizeArabic } from '@jawab24/shared';
+import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
 
 /**
  * Unified Comment Processor
@@ -102,20 +102,22 @@ export class CommentProcessor {
             // Respects isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
             if (content.triggerKeyword && content.triggerReply && isCommentsEnabled) {
                 const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
-                const normalizedKeyword = normalizeArabic(content.triggerKeyword.toLowerCase());
-                const isMatch = matchesKeyword(normalizedComment, normalizedKeyword);
+                const triggerKeywords = parseKeywords(content.triggerKeyword);
+                const matchedKeyword = triggerKeywords.find(kw =>
+                    matchesKeyword(normalizedComment, normalizeArabic(kw.toLowerCase())),
+                );
 
-                if (!isMatch) {
-                    // Comment doesn't match the trigger — store it but skip auto-reply
+                if (!matchedKeyword) {
+                    // Comment doesn't match any trigger keyword — store it but skip auto-reply
                     await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
                     pipelineMetrics.record(pipeline, 'trigger_no_match');
-                    this.logger.info(`[${platform}] Trigger keyword set but comment did not match — skipping`, {
-                        platformCommentId, triggerKeyword: content.triggerKeyword,
+                    this.logger.info(`[${platform}] Trigger keywords set but comment did not match any — skipping`, {
+                        platformCommentId, triggerKeywords,
                     });
                     return { success: false, commentId: platformCommentId, error: 'Comment did not match post trigger keyword' };
                 }
 
-                // Comment matches trigger — send triggerReply immediately, skip template/AI
+                // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
                 const { comment } = await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
                 invalidateWorkspaceStatsCache(workspaceId);
                 return this.sendAndFinalize({
@@ -125,7 +127,7 @@ export class CommentProcessor {
                     commentMessage, platformCommentId, platformPageId,
                     accessToken: page.accessToken, fromId,
                     userSettings: userSettings as unknown as Record<string, unknown>,
-                    triggerKeyword: content.triggerKeyword,
+                    triggerKeyword: matchedKeyword,
                 });
             }
 

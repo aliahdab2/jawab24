@@ -1,4 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { parseKeywords } from '@jawab24/shared';
 import { postsService } from '../services/posts';
 import { pagesService } from '../services/pages';
 import { UpdatePostDTO } from '../types';
@@ -157,8 +158,17 @@ export class PostsController {
         if ((keyword === null) !== (replyText === null)) {
             return reply.status(400).send({ error: 'triggerKeyword and triggerReply must both be set or both be null' });
         }
-        if (keyword && keyword.length > 100) {
-            return reply.status(400).send({ error: 'triggerKeyword must be 100 characters or fewer' });
+        if (keyword) {
+            const parts = parseKeywords(keyword);
+            if (parts.length === 0) {
+                return reply.status(400).send({ error: 'triggerKeyword must contain at least one keyword' });
+            }
+            if (parts.length > 10) {
+                return reply.status(400).send({ error: 'triggerKeyword must not exceed 10 keywords' });
+            }
+            if (parts.some(k => k.length > 100)) {
+                return reply.status(400).send({ error: 'Each keyword must be 100 characters or fewer' });
+            }
         }
         if (replyText && replyText.length > 1000) {
             return reply.status(400).send({ error: 'triggerReply must be 1000 characters or fewer' });

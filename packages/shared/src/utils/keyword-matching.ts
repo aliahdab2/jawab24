@@ -67,6 +67,15 @@ export function matchesKeyword(normalizedText: string, normalizedKeyword: string
 }
 
 /**
+ * Parse a comma-separated trigger keyword string into a cleaned array.
+ * Used consistently across backend (controller, commentProcessor) and frontend.
+ */
+export function parseKeywords(raw: string | null | undefined): string[] {
+    if (!raw) return [];
+    return raw.split(',').map(k => k.trim()).filter(Boolean);
+}
+
+/**
  * Test a list of keywords against a text and return the match result.
  * Convenience wrapper for use in the frontend "Test your rule" feature.
  */

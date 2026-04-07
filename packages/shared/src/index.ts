@@ -9,7 +9,7 @@ export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
-export { matchesKeyword, testKeywordsMatch } from './utils/keyword-matching';
+export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
 export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType } from './utils/validation';
 
 // --- SSE Event Types ---

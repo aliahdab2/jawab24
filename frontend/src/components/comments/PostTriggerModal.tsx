@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
-import { Modal, Button, Input, Textarea } from '@/components/ui';
+import { parseKeywords } from '@jawab24/shared';
+import { Modal, Button, Textarea, KeywordChipInput } from '@/components/ui';
 import { postsApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 
@@ -30,20 +31,20 @@ export function PostTriggerModal({
   const t = useTranslations('comments');
   const tc = useTranslations('common');
 
-  const [keyword, setKeyword] = useState(initialKeyword ?? '');
+  const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
   const [saving, setSaving] = useState(false);
 
   // Sync when modal opens with fresh values
   useEffect(() => {
     if (isOpen) {
-      setKeyword(initialKeyword ?? '');
+      setKeywords(parseKeywords(initialKeyword));
       setReply(initialReply ?? '');
     }
   }, [isOpen, initialKeyword, initialReply]);
 
   async function handleSave() {
-    if (!keyword.trim()) {
+    if (keywords.length === 0) {
       toast.error(t('postTriggerKeywordRequired'));
       return;
     }
@@ -54,7 +55,7 @@ export function PostTriggerModal({
 
     setSaving(true);
     try {
-      await postsApi.updateTrigger(postId, source, keyword.trim(), reply.trim());
+      await postsApi.updateTrigger(postId, source, keywords.join(', '), reply.trim());
       toast.success(t('postTriggerSaved'));
       onSaved();
       onClose();
@@ -103,19 +104,20 @@ export function PostTriggerModal({
           </div>
         )}
 
-        {/* Keyword input */}
+        {/* Keyword chip input */}
         <div className="flex flex-col gap-1.5">
           <label className="text-sm font-medium text-foreground" htmlFor="trigger-keyword">
             {t('postTriggerKeyword')}
           </label>
-          <Input
+          <KeywordChipInput
             id="trigger-keyword"
-            value={keyword}
-            onChange={e => setKeyword(e.target.value)}
+            value={keywords}
+            onChange={setKeywords}
             placeholder={t('postTriggerKeywordPlaceholder')}
-            dir="auto"
+            maxKeywords={10}
             maxLength={100}
           />
+          <p className="text-xs text-muted-foreground">{t('postTriggerKeywordHelp')}</p>
         </div>
 
         {/* Reply textarea */}
