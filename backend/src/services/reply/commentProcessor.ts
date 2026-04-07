@@ -8,13 +8,14 @@ import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
-import type { CommentPlatformAdapter } from '../../interfaces';
+import type { CommentPlatformAdapter, SendCommentResult } from '../../interfaces';
 import { truncateAtSentence } from '../../utils/text';
 import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
+import { facebookService } from '../facebook';
 
 /**
  * Unified Comment Processor
@@ -399,15 +400,31 @@ export class CommentProcessor {
             confidence, triggerKeyword,
         } = opts;
 
-        const sendResult = await adapter.sendReply({
-            platformCommentId,
-            platformPageId,
-            replyText,
-            commentMessage,
-            accessToken,
-            fromId,
-            userSettings,
-        });
+        // Trigger replies use /{comment-id}/private_replies (Facebook) — this API
+        // works for any commenter without requiring prior Messenger interaction.
+        // Regular template/AI replies use the adapter (respects workspace replyMode).
+        let sendResult: SendCommentResult;
+        if (triggerKeyword && platform === 'facebook') {
+            try {
+                await facebookService.sendPrivateReplyToComment(accessToken, platformCommentId, replyText);
+                sendResult = { success: true };
+            } catch (error) {
+                sendResult = {
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Failed to send private reply',
+                };
+            }
+        } else {
+            sendResult = await adapter.sendReply({
+                platformCommentId,
+                platformPageId,
+                replyText,
+                commentMessage,
+                accessToken,
+                fromId,
+                userSettings,
+            });
+        }
 
         if (!sendResult.success) {
             pipelineMetrics.record(pipeline, 'send_failed');

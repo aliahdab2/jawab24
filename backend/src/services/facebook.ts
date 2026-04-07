@@ -191,6 +191,31 @@ export class FacebookService {
     }
 
     /**
+     * Send a private reply to a Facebook comment.
+     * Uses the /{comment-id}/private_replies endpoint which works for any commenter
+     * without requiring prior Messenger interaction (unlike /me/messages).
+     * This is the correct API for comment-trigger DMs (ManyChat-style).
+     */
+    async sendPrivateReplyToComment(pageAccessToken: string, commentId: string, text: string): Promise<void> {
+        try {
+            await traced('sendPrivateReplyToComment', () =>
+                axios.post(`${FACEBOOK_GRAPH_API}/${commentId}/private_replies`, {
+                    message: text,
+                }, {
+                    params: {
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
+            }
+            throw error;
+        }
+    }
+
+    /**
      * Send a private message to a user
      */
     async sendPrivateMessage(pageAccessToken: string, recipientId: string, text: string): Promise<void> {
