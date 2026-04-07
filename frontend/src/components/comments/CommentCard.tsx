@@ -211,24 +211,26 @@ export const CommentCard = React.memo(function CommentCard({
                 <FlagTag flagReason={comment.flagReason} className="mt-0.5" />
              </div>
 
-             {/* Post Context — show whenever postId exists so the ⚡ trigger button is always accessible */}
+             {/* Post Context + Trigger Button */}
              {comment.postId && (
-               <div className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground max-w-full">
-                 <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />
-                 <span className="truncate max-w-[220px]">{comment.postMessage || t('postContext')}</span>
+               <div className="flex flex-col gap-1 w-full">
+                 <div className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground max-w-full">
+                   <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />
+                   <span className="truncate max-w-[220px]">{comment.postMessage || t('postContext')}</span>
+                 </div>
                  {onTriggerClick && (
                    <button
                      type="button"
                      onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
-                     aria-label={t('postTrigger')}
                      className={clsx(
-                       'ms-auto flex-shrink-0 p-0.5 rounded transition-colors',
+                       'self-start flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors',
                        triggerActive
-                         ? 'text-brand-500 hover:text-brand-600'
-                         : 'text-icon-muted hover:text-muted-foreground'
+                         ? 'border-brand-400 text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20'
+                         : 'border-dashed border-theme-border text-muted-foreground hover:border-brand-400 hover:text-brand-500'
                      )}
                    >
-                     <Zap className="w-3.5 h-3.5" aria-hidden="true" />
+                     <Zap className="w-3 h-3" aria-hidden="true" />
+                     {triggerActive ? t('postTriggerActive') : t('postTrigger')}
                    </button>
                  )}
                </div>
