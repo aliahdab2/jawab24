@@ -264,13 +264,13 @@ rm -rf frontend/.next frontend/node_modules/.cache
 # using '**/api/**' patterns match the actual request URLs.
 # This only affects the local pre-deploy build — production builds on the server
 # use their own .env with the real API URL.
-if NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
+if CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
 else
     echo -e "${RED}   ❌ Frontend build failed!${NC}"
     # Clean cache and show full error output for debugging
     rm -rf frontend/.next
-    NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend
+    CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend
     exit 1
 fi
 
@@ -484,9 +484,9 @@ rm -rf frontend/test-results frontend/playwright-report frontend/blob-report
 # rebuild with standalone output now.
 if [ ! -d "frontend/.next" ] || [ ! -d "frontend/.next/standalone" ]; then
     echo "   ⚠️  No standalone .next build found, building for E2E..."
-    if ! (cd frontend && NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build) > /dev/null 2>&1; then
+    if ! (cd frontend && CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build) > /dev/null 2>&1; then
         echo -e "${RED}   ❌ E2E build failed!${NC}"
-        (cd frontend && NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build)
+        (cd frontend && CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build)
         exit 1
     fi
 fi
