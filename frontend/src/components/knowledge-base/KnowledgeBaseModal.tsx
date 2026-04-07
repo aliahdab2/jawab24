@@ -187,8 +187,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 flex flex-col min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto">
+        {/* Body — flex-1 + min-h-0 + overflow-y-auto ensures this scrolls while header/footer stay fixed */}
+        <div className="flex-1 min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto">
           {/* Description */}
           <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
             {tKb('description')}
@@ -264,8 +264,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           )}
         </div>
 
-        {/* Footer — sticky to ensure save button always visible on mobile */}
-        <div className="flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-theme-border flex-shrink-0 bg-surface-50 sticky bottom-0 z-10">
+        {/* Footer */}
+        <div className="flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-theme-border flex-shrink-0 bg-surface-50">
           {/* Raw mode toggle */}
           <button
             type="button"
