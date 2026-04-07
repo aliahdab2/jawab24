@@ -28,6 +28,7 @@ export function PostTriggerModal({
   onSaved,
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
+  const tc = useTranslations('common');
 
   const [keyword, setKeyword] = useState(initialKeyword ?? '');
   const [reply, setReply] = useState(initialReply ?? '');
@@ -59,7 +60,7 @@ export function PostTriggerModal({
       onClose();
     } catch (err) {
       captureError(err, 'PostTriggerModal.handleSave');
-      toast.error(t('postTriggerKeywordRequired'));
+      toast.error(tc('error'));
     } finally {
       setSaving(false);
     }
@@ -74,6 +75,7 @@ export function PostTriggerModal({
       onClose();
     } catch (err) {
       captureError(err, 'PostTriggerModal.handleClear');
+      toast.error(tc('error'));
     } finally {
       setSaving(false);
     }
@@ -126,6 +128,7 @@ export function PostTriggerModal({
             placeholder={t('postTriggerReplyPlaceholder')}
             dir="auto"
             rows={4}
+            maxLength={1000}
           />
         </div>
 

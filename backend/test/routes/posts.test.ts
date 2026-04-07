@@ -131,5 +131,65 @@ describe('Posts Routes', () => {
             expect(postsService.toggleAutoReply).toHaveBeenCalledWith('post_1', false, 'test_workspace_id');
         });
     });
+
+    describe('PATCH /posts/:id/trigger', () => {
+        it('should set trigger keyword and reply', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Here are the details!' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'facebook', '.', 'Here are the details!', 'test_workspace_id');
+        });
+
+        it('should clear trigger when both values are null', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue(true);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'instagram', triggerKeyword: null, triggerReply: null },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(postsService.updateTrigger).toHaveBeenCalledWith('post_1', 'instagram', null, null, 'test_workspace_id');
+        });
+
+        it('should return 400 for invalid source', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'twitter', triggerKeyword: '.', triggerReply: 'Details' },
+            });
+
+            expect(response.statusCode).toBe(400);
+        });
+
+        it('should return 400 when keyword is set but reply is null (partial trigger)', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/post_1/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: null },
+            });
+
+            expect(response.statusCode).toBe(400);
+        });
+
+        it('should return 404 when post not found or not owned', async () => {
+            vi.mocked(postsService.updateTrigger).mockResolvedValue(false);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: '/posts/unknown/trigger',
+                payload: { source: 'facebook', triggerKeyword: '.', triggerReply: 'Details' },
+            });
+
+            expect(response.statusCode).toBe(404);
+        });
+    });
 });
 

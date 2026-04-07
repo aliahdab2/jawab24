@@ -150,8 +150,22 @@ export class PostsController {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
         }
 
+        // Trigger must be either fully set (both keyword + reply) or fully cleared (both null).
+        // A keyword without a reply (or vice versa) is an inconsistent state.
+        const keyword = triggerKeyword?.trim() || null;
+        const replyText = triggerReply?.trim() || null;
+        if ((keyword === null) !== (replyText === null)) {
+            return reply.status(400).send({ error: 'triggerKeyword and triggerReply must both be set or both be null' });
+        }
+        if (keyword && keyword.length > 100) {
+            return reply.status(400).send({ error: 'triggerKeyword must be 100 characters or fewer' });
+        }
+        if (replyText && replyText.length > 1000) {
+            return reply.status(400).send({ error: 'triggerReply must be 1000 characters or fewer' });
+        }
+
         try {
-            const found = await postsService.updateTrigger(id, source, triggerKeyword ?? null, triggerReply ?? null, req.workspaceId);
+            const found = await postsService.updateTrigger(id, source, keyword, replyText, req.workspaceId);
             if (!found) return reply.status(404).send({ error: 'Post not found' });
             return reply.send({ success: true });
         } catch (error) {
