@@ -9,6 +9,7 @@ vi.mock('../../src/services/posts', () => ({
         getPostsByPage: vi.fn(),
         getPost: vi.fn(),
         updatePost: vi.fn(),
+        updatePostByWorkspace: vi.fn(),
         deletePost: vi.fn(),
         toggleAutoReply: vi.fn(),
     },
@@ -95,7 +96,7 @@ describe('Posts Controller', () => {
 
             await postsController.getOne(mockRequest as any, mockReply as FastifyReply);
 
-            expect(postsService.getPost).toHaveBeenCalledWith('post-1');
+            expect(postsService.getPost).toHaveBeenCalledWith('post-1', 'test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(post);
         });
 
@@ -114,18 +115,18 @@ describe('Posts Controller', () => {
     describe('update', () => {
         it('should update a post successfully', async () => {
             const updated = { id: 'post-1', message: 'Updated' };
-            vi.mocked(postsService.updatePost).mockResolvedValue(updated as any);
+            vi.mocked(postsService.updatePostByWorkspace).mockResolvedValue(updated as any);
             mockRequest.params = { id: 'post-1' };
             mockRequest.body = { message: 'Updated' };
 
             await postsController.update(mockRequest as any, mockReply as FastifyReply);
 
-            expect(postsService.updatePost).toHaveBeenCalledWith('post-1', { message: 'Updated' });
+            expect(postsService.updatePostByWorkspace).toHaveBeenCalledWith('post-1', { message: 'Updated' }, 'test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(updated);
         });
 
         it('should return 404 when updating a non-existent post', async () => {
-            vi.mocked(postsService.updatePost).mockResolvedValue(null as any);
+            vi.mocked(postsService.updatePostByWorkspace).mockResolvedValue(null as any);
             mockRequest.params = { id: 'nonexistent' };
             mockRequest.body = { message: 'Updated' };
 
@@ -139,12 +140,12 @@ describe('Posts Controller', () => {
     // ---- delete ----
     describe('delete', () => {
         it('should delete a post and return 204', async () => {
-            vi.mocked(postsService.deletePost).mockResolvedValue(undefined as any);
+            vi.mocked(postsService.deletePost).mockResolvedValue(true as any);
             mockRequest.params = { id: 'post-1' };
 
             await postsController.delete(mockRequest as any, mockReply as FastifyReply);
 
-            expect(postsService.deletePost).toHaveBeenCalledWith('post-1');
+            expect(postsService.deletePost).toHaveBeenCalledWith('post-1', 'test_workspace_id');
             expect(mockReply.status).toHaveBeenCalledWith(204);
         });
     });
@@ -159,7 +160,7 @@ describe('Posts Controller', () => {
 
             await postsController.toggleAutoReply(mockRequest as any, mockReply as FastifyReply);
 
-            expect(postsService.toggleAutoReply).toHaveBeenCalledWith('post-1', false);
+            expect(postsService.toggleAutoReply).toHaveBeenCalledWith('post-1', false, 'test_workspace_id');
             expect(mockReply.send).toHaveBeenCalledWith(toggled);
         });
 

@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { posts, pages, instagramMedia } from '../db/schema';
-import { eq, desc, and, inArray } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { CreatePostDTO, UpdatePostDTO, Logger, noopLogger } from '../types';
 import { facebookService } from './facebook';
 
@@ -111,46 +111,61 @@ export class PostsService {
     }
 
     /**
-     * Update a post (workspace-scoped). Single query — ownership verified via subquery.
+     * Update a post (workspace-scoped). Verifies ownership before updating.
      */
     async updatePostByWorkspace(postId: string, data: UpdatePostDTO, workspaceId: string) {
-        const workspacePageIds = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
+        const owned = await db
+            .select({ id: posts.id })
+            .from(posts)
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(eq(posts.id, postId), eq(pages.workspaceId, workspaceId)));
+        if (!owned[0]) return null;
+
         const [updatedPost] = await db
             .update(posts)
             .set({ ...data, updatedAt: new Date() })
-            .where(and(eq(posts.id, postId), inArray(posts.pageId, workspacePageIds)))
+            .where(eq(posts.id, postId))
             .returning();
         return updatedPost || null;
     }
 
     /**
-     * Delete a post (workspace-scoped). Single query — ownership verified via subquery.
+     * Delete a post (workspace-scoped). Verifies ownership before deleting.
      */
     async deletePost(postId: string, workspaceId: string) {
-        const workspacePageIds = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
-        const [deleted] = await db
-            .delete(posts)
-            .where(and(eq(posts.id, postId), inArray(posts.pageId, workspacePageIds)))
-            .returning({ id: posts.id });
-        return !!deleted;
+        const owned = await db
+            .select({ id: posts.id })
+            .from(posts)
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(eq(posts.id, postId), eq(pages.workspaceId, workspaceId)));
+        if (!owned[0]) return false;
+
+        await db.delete(posts).where(eq(posts.id, postId));
+        return true;
     }
 
     /**
-     * Toggle auto-reply for a post (workspace-scoped). Single query.
+     * Toggle auto-reply for a post (workspace-scoped). Verifies ownership before updating.
      */
     async toggleAutoReply(postId: string, enabled: boolean, workspaceId: string) {
-        const workspacePageIds = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
+        const owned = await db
+            .select({ id: posts.id })
+            .from(posts)
+            .innerJoin(pages, eq(posts.pageId, pages.id))
+            .where(and(eq(posts.id, postId), eq(pages.workspaceId, workspaceId)));
+        if (!owned[0]) return null;
+
         const [updatedPost] = await db
             .update(posts)
             .set({ autoReplyEnabled: enabled, updatedAt: new Date() })
-            .where(and(eq(posts.id, postId), inArray(posts.pageId, workspacePageIds)))
+            .where(eq(posts.id, postId))
             .returning();
         return updatedPost || null;
     }
 
     /**
      * Update trigger keyword + reply for a post or Instagram media (workspace-scoped).
-     * source determines which table to target. Single query per table.
+     * source determines which table to target. Verifies ownership before updating.
      * Returns false if the record is not found or not owned by this workspace.
      */
     async updateTrigger(
@@ -160,23 +175,33 @@ export class PostsService {
         triggerReply: string | null,
         workspaceId: string,
     ): Promise<boolean> {
-        const workspacePageIds = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
-
         if (source === 'instagram') {
-            const [updated] = await db
+            const owned = await db
+                .select({ id: instagramMedia.id })
+                .from(instagramMedia)
+                .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
+                .where(and(eq(instagramMedia.id, contentId), eq(pages.workspaceId, workspaceId)));
+            if (!owned[0]) return false;
+
+            await db
                 .update(instagramMedia)
                 .set({ triggerKeyword, triggerReply, updatedAt: new Date() })
-                .where(and(eq(instagramMedia.id, contentId), inArray(instagramMedia.pageId, workspacePageIds)))
-                .returning({ id: instagramMedia.id });
-            return !!updated;
+                .where(eq(instagramMedia.id, contentId));
+        } else {
+            const owned = await db
+                .select({ id: posts.id })
+                .from(posts)
+                .innerJoin(pages, eq(posts.pageId, pages.id))
+                .where(and(eq(posts.id, contentId), eq(pages.workspaceId, workspaceId)));
+            if (!owned[0]) return false;
+
+            await db
+                .update(posts)
+                .set({ triggerKeyword, triggerReply, updatedAt: new Date() })
+                .where(eq(posts.id, contentId));
         }
 
-        const [updated] = await db
-            .update(posts)
-            .set({ triggerKeyword, triggerReply, updatedAt: new Date() })
-            .where(and(eq(posts.id, contentId), inArray(posts.pageId, workspacePageIds)))
-            .returning({ id: posts.id });
-        return !!updated;
+        return true;
     }
 
     /**

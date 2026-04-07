@@ -45,6 +45,18 @@ function mockDeleteChain() {
     };
 }
 
+/** Ownership check: SELECT ... FROM posts INNER JOIN pages WHERE ... */
+function mockOwnershipSelectChain(found: boolean) {
+    const row = found ? [{ id: 'post-1' }] : [];
+    return {
+        from: vi.fn().mockReturnValue({
+            innerJoin: vi.fn().mockReturnValue({
+                where: vi.fn().mockResolvedValue(row),
+            }),
+        }),
+    };
+}
+
 function mockSelectChain(returnValue: any) {
     return {
         from: vi.fn().mockReturnValue({
@@ -194,23 +206,44 @@ describe('PostsService', () => {
     });
 
     describe('deletePost', () => {
-        it('should delete the post', async () => {
+        it('should delete the post when workspace owns it', async () => {
+            vi.mocked(db.select).mockReturnValue(mockOwnershipSelectChain(true) as any);
             vi.mocked(db.delete).mockReturnValue(mockDeleteChain() as any);
 
-            await postsService.deletePost('post-1');
+            const result = await postsService.deletePost('post-1', 'workspace-1');
 
+            expect(result).toBe(true);
             expect(db.delete).toHaveBeenCalledTimes(1);
+        });
+
+        it('should return false when post not owned by workspace', async () => {
+            vi.mocked(db.select).mockReturnValue(mockOwnershipSelectChain(false) as any);
+
+            const result = await postsService.deletePost('post-1', 'other-workspace');
+
+            expect(result).toBe(false);
+            expect(db.delete).not.toHaveBeenCalled();
         });
     });
 
     describe('toggleAutoReply', () => {
         it('should toggle auto-reply and return the post', async () => {
             const toggled = { ...samplePost, autoReplyEnabled: false };
+            vi.mocked(db.select).mockReturnValue(mockOwnershipSelectChain(true) as any);
             vi.mocked(db.update).mockReturnValue(mockUpdateChain(toggled) as any);
 
-            const result = await postsService.toggleAutoReply('post-1', false);
+            const result = await postsService.toggleAutoReply('post-1', false, 'workspace-1');
 
             expect(result).toEqual(toggled);
+        });
+
+        it('should return null when post not owned by workspace', async () => {
+            vi.mocked(db.select).mockReturnValue(mockOwnershipSelectChain(false) as any);
+
+            const result = await postsService.toggleAutoReply('post-1', false, 'other-workspace');
+
+            expect(result).toBeNull();
+            expect(db.update).not.toHaveBeenCalled();
         });
     });
 

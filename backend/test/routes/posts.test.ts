@@ -104,7 +104,7 @@ describe('Posts Routes', () => {
 
     describe('DELETE /posts/:id', () => {
         it('should delete a post', async () => {
-            vi.mocked(postsService.deletePost).mockResolvedValue(undefined);
+            vi.mocked(postsService.deletePost).mockResolvedValue(true as any);
 
             const response = await app.inject({
                 method: 'DELETE',
@@ -112,7 +112,7 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(204);
-            expect(postsService.deletePost).toHaveBeenCalledWith('post_1');
+            expect(postsService.deletePost).toHaveBeenCalledWith('post_1', 'test_workspace_id');
         });
     });
 
@@ -128,7 +128,7 @@ describe('Posts Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(postsService.toggleAutoReply).toHaveBeenCalledWith('post_1', false);
+            expect(postsService.toggleAutoReply).toHaveBeenCalledWith('post_1', false, 'test_workspace_id');
         });
     });
 });
