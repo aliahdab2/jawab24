@@ -3,11 +3,9 @@ import { db } from '../db';
 import { customerNotificationTemplates, customerNotificationsLog } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { customerNotificationService } from '../services/customerNotifications';
-import type { WorkspaceRequest } from '../middleware/workspace';
 
 /** GET /api/notification-templates/:storeId */
 export async function getTemplates(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
     const { storeId } = request.params as { storeId: string };
 
     const templates = await db
@@ -27,7 +25,6 @@ const MAX_MESSAGE_LENGTH = 1600; // 10 SMS segments
 
 /** PUT /api/notification-templates/:storeId/:type */
 export async function updateTemplate(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
 
     const { storeId, type } = request.params as { storeId: string; type: string };
 
@@ -81,7 +78,6 @@ export async function updateTemplate(request: FastifyRequest, reply: FastifyRepl
 
 /** POST /api/notification-templates/:storeId/reset */
 export async function resetTemplates(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
     const { storeId } = request.params as { storeId: string };
 
     await db
@@ -94,7 +90,6 @@ export async function resetTemplates(request: FastifyRequest, reply: FastifyRepl
 
 /** GET /api/notification-log/:storeId */
 export async function getLog(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
 
     const { storeId } = request.params as { storeId: string };
     const { limit: limitStr } = request.query as { limit?: string };
@@ -112,7 +107,6 @@ export async function getLog(request: FastifyRequest, reply: FastifyReply) {
 
 /** GET /api/notification-log/:storeId/stats */
 export async function getStats(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
     const { storeId } = request.params as { storeId: string };
 
     const [statusCounts, typeCounts] = await Promise.all([

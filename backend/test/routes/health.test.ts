@@ -28,6 +28,7 @@ vi.mock('../../src/lib/redis', () => ({
     redis: {
         ping: vi.fn().mockResolvedValue('PONG'),
     },
+    isRedisAuthFailed: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock('../../src/lib/pipelineMetrics', () => ({

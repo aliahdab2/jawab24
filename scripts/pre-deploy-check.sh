@@ -190,6 +190,29 @@ if [ "$AUDIT_FAILED" = true ]; then
 fi
 
 # =============================================
+# 1.0. Check REDIS_PASSWORD is set and not the placeholder
+# =============================================
+echo ""
+echo "🔑 Checking REDIS_PASSWORD configuration..."
+
+ENV_FILE="env/backend.env"
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${YELLOW}   ⚠️  $ENV_FILE not found — skipping Redis password check (CI environment)${NC}"
+else
+    REDIS_PW=$(grep -E '^REDIS_PASSWORD=' "$ENV_FILE" | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ -z "$REDIS_PW" ]; then
+        echo -e "${RED}   ❌ REDIS_PASSWORD is not set in $ENV_FILE!${NC}"
+        echo -e "${RED}   A missing password will cause Redis auth failures on every backend restart.${NC}"
+        exit 1
+    elif [ "$REDIS_PW" = "changeme_in_production" ]; then
+        echo -e "${RED}   ❌ REDIS_PASSWORD is still the default placeholder in $ENV_FILE!${NC}"
+        echo -e "${RED}   Set a real password before deploying to production.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}   ✅ REDIS_PASSWORD is set${NC}"
+fi
+
+# =============================================
 # 1. Check for ESM-only packages
 # =============================================
 echo ""

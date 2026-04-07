@@ -36,8 +36,17 @@ export function SectionEditor({
   const autoResize = useCallback(() => {
     const el = textareaRef.current;
     if (!el) return;
+    // Find the nearest scrollable ancestor and save its position.
+    // Setting height='auto' momentarily collapses the textarea, which can cause
+    // the scroll container to jump. Restoring scrollTop after prevents that.
+    let scrollEl: HTMLElement | null = el.parentElement;
+    while (scrollEl && !['auto', 'scroll'].includes(getComputedStyle(scrollEl).overflowY)) {
+      scrollEl = scrollEl.parentElement as HTMLElement | null;
+    }
+    const savedTop = scrollEl?.scrollTop ?? 0;
     el.style.height = 'auto';
     el.style.height = `${Math.max(80, el.scrollHeight)}px`;
+    if (scrollEl) scrollEl.scrollTop = savedTop;
   }, []);
 
   /** Shared handler for voice transcription and file extraction — append text + highlight.

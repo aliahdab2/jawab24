@@ -3,7 +3,7 @@
  */
 import { db } from '../db';
 import { sql } from 'drizzle-orm';
-import { redis } from '../lib/redis';
+import { redis, isRedisAuthFailed } from '../lib/redis';
 import { aiWorkerCircuit } from '../lib/circuitBreaker';
 
 export interface ServiceProbe {
@@ -23,6 +23,9 @@ export async function probeDatabase(): Promise<ServiceProbe> {
 }
 
 export async function probeRedis(): Promise<ServiceProbe> {
+    if (isRedisAuthFailed()) {
+        return { status: 'down', latencyMs: -1, message: 'Redis auth failed — check REDIS_PASSWORD' };
+    }
     const start = Date.now();
     try {
         await redis.ping();

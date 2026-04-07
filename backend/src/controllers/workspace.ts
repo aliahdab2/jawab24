@@ -2,7 +2,7 @@ import { FastifyReply } from 'fastify';
 import { workspaceService } from '../services/workspace';
 import { workspaceInviteService } from '../services/workspaceInvite';
 import { workspaceSettingsService } from '../services/workspaceSettings';
-import type { WorkspaceRequest } from '../middleware/workspace';
+import type { WorkspaceRequest, ResolvedWorkspaceRequest } from '../middleware/workspace';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import type { WorkspaceRole } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
@@ -43,7 +43,7 @@ async function create(request: AuthenticatedRequest, reply: FastifyReply) {
 
 async function getOne(request: WorkspaceRequest, reply: FastifyReply) {
     try {
-        const workspace = await workspaceService.getWorkspace(request.workspaceId!);
+        const workspace = await workspaceService.getWorkspace((request as ResolvedWorkspaceRequest).workspaceId);
         if (!workspace) {
             return reply.status(404).send({ error: true, message: 'Workspace not found' });
         }
@@ -57,7 +57,7 @@ async function getOne(request: WorkspaceRequest, reply: FastifyReply) {
 async function update(request: WorkspaceRequest, reply: FastifyReply) {
     try {
         const { name, logoUrl } = request.body as { name?: string; logoUrl?: string };
-        const updated = await workspaceService.updateWorkspace(request.workspaceId!, { name, logoUrl });
+        const updated = await workspaceService.updateWorkspace((request as ResolvedWorkspaceRequest).workspaceId, { name, logoUrl });
         return reply.send(updated);
     } catch (error) {
         captureError(error, 'Failed to update workspace', { tags: { context: 'workspace' } });
@@ -67,7 +67,7 @@ async function update(request: WorkspaceRequest, reply: FastifyReply) {
 
 async function remove(request: WorkspaceRequest, reply: FastifyReply) {
     try {
-        await workspaceService.deleteWorkspace(request.workspaceId!);
+        await workspaceService.deleteWorkspace((request as ResolvedWorkspaceRequest).workspaceId);
         return reply.status(204).send();
     } catch (error) {
         captureError(error, 'Failed to delete workspace', { tags: { context: 'workspace' } });
@@ -79,7 +79,7 @@ async function remove(request: WorkspaceRequest, reply: FastifyReply) {
 
 async function getMembers(request: WorkspaceRequest, reply: FastifyReply) {
     try {
-        const members = await workspaceService.getMembers(request.workspaceId!);
+        const members = await workspaceService.getMembers((request as ResolvedWorkspaceRequest).workspaceId);
         return reply.send(members);
     } catch (error) {
         captureError(error, 'Failed to list members', { tags: { context: 'workspace' } });
@@ -90,7 +90,7 @@ async function getMembers(request: WorkspaceRequest, reply: FastifyReply) {
 async function removeMember(request: WorkspaceRequest, reply: FastifyReply) {
     try {
         const { userId } = request.params as { userId: string };
-        await workspaceService.removeMember(request.workspaceId!, userId);
+        await workspaceService.removeMember((request as ResolvedWorkspaceRequest).workspaceId, userId);
         return reply.status(204).send();
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Failed to remove member';
@@ -111,7 +111,7 @@ async function updateMemberRole(request: WorkspaceRequest, reply: FastifyReply) 
             return reply.status(400).send({ error: true, message: 'Invalid role' });
         }
 
-        await workspaceService.updateMemberRole(request.workspaceId!, userId, role);
+        await workspaceService.updateMemberRole((request as ResolvedWorkspaceRequest).workspaceId, userId, role);
         return reply.status(204).send();
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Failed to update role';
@@ -127,7 +127,7 @@ async function updateMemberRole(request: WorkspaceRequest, reply: FastifyReply) 
 
 async function createInvite(request: WorkspaceRequest, reply: FastifyReply) {
     try {
-        if (!request.workspaceId! || !request.user) {
+        if (!(request as ResolvedWorkspaceRequest).workspaceId || !request.user) {
             return reply.status(400).send({ error: true, message: 'Workspace not resolved' });
         }
         // Accept `contact` (email or phone). Fall back to `email` for backwards compatibility.
@@ -139,7 +139,7 @@ async function createInvite(request: WorkspaceRequest, reply: FastifyReply) {
         }
 
         const { invite, rawToken } = await workspaceInviteService.createInvite(
-            request.workspaceId!,
+            (request as ResolvedWorkspaceRequest).workspaceId,
             contact.toLowerCase(),
             body.role || 'member',
             request.user.userId,
@@ -154,7 +154,7 @@ async function createInvite(request: WorkspaceRequest, reply: FastifyReply) {
 
 async function listInvites(request: WorkspaceRequest, reply: FastifyReply) {
     try {
-        const invites = await workspaceInviteService.getActiveInvites(request.workspaceId!);
+        const invites = await workspaceInviteService.getActiveInvites((request as ResolvedWorkspaceRequest).workspaceId);
         return reply.send(invites);
     } catch (error) {
         captureError(error, 'Failed to list invites', { tags: { context: 'workspace' } });
@@ -165,7 +165,7 @@ async function listInvites(request: WorkspaceRequest, reply: FastifyReply) {
 async function revokeInvite(request: WorkspaceRequest, reply: FastifyReply) {
     try {
         const { inviteId } = request.params as { inviteId: string };
-        await workspaceInviteService.revokeInvite(inviteId, request.workspaceId!);
+        await workspaceInviteService.revokeInvite(inviteId, (request as ResolvedWorkspaceRequest).workspaceId);
         return reply.status(204).send();
     } catch (error) {
         captureError(error, 'Failed to revoke invite', { tags: { context: 'workspace' } });
@@ -203,7 +203,7 @@ async function acceptInvite(request: AuthenticatedRequest, reply: FastifyReply) 
 
 async function getSettings(request: WorkspaceRequest, reply: FastifyReply) {
     try {
-        const settings = await workspaceSettingsService.getSettings(request.workspaceId!);
+        const settings = await workspaceSettingsService.getSettings((request as ResolvedWorkspaceRequest).workspaceId);
         return reply.send(settings);
     } catch (error) {
         captureError(error, 'Failed to get workspace settings', { tags: { context: 'workspace' } });
@@ -214,7 +214,7 @@ async function getSettings(request: WorkspaceRequest, reply: FastifyReply) {
 async function updateSettings(request: WorkspaceRequest, reply: FastifyReply) {
     try {
         const updates = request.body as Record<string, unknown>;
-        const settings = await workspaceSettingsService.updateSettings(request.workspaceId!, updates);
+        const settings = await workspaceSettingsService.updateSettings((request as ResolvedWorkspaceRequest).workspaceId, updates);
         return reply.send(settings);
     } catch (error) {
         captureError(error, 'Failed to update workspace settings', { tags: { context: 'workspace' } });

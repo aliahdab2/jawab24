@@ -17,6 +17,7 @@ const EnvSchema = z.object({
     REDIS_HOST: z.string().default('localhost'),
     REDIS_PORT: z.string().default('6379').transform(Number),
     REDIS_PASSWORD: z.string().optional(),
+    // Validated below: required + non-default in production
 
     // Facebook
     FACEBOOK_APP_ID: z.string().min(1, 'FACEBOOK_APP_ID is required'),
@@ -82,7 +83,13 @@ const EnvSchema = z.object({
 
     // Cleanup endpoint secret token
     CLEANUP_SECRET_TOKEN: z.string().optional(),
-});
+}).refine(
+    data => data.NODE_ENV !== 'production' || (!!data.REDIS_PASSWORD && data.REDIS_PASSWORD !== 'changeme_in_production'),
+    {
+        message: 'REDIS_PASSWORD must be set to a non-default value in production',
+        path: ['REDIS_PASSWORD'],
+    },
+);
 
 export type Env = z.infer<typeof EnvSchema>;
 

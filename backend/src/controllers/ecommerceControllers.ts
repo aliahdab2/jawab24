@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { FastifyRequest, FastifyReply } from 'fastify';
-import type { WorkspaceRequest } from '../middleware/workspace';
+import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import {
     getStoreByWorkspace,
     getStoreByWorkspaceAny,
@@ -36,8 +36,8 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
     const platformLabel = platform.charAt(0).toUpperCase() + platform.slice(1);
 
     async function getStore(request: FastifyRequest, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
-        const store = await getStoreByWorkspaceAny(platform, req.workspaceId!);
+        const req = request as ResolvedWorkspaceRequest;
+        const store = await getStoreByWorkspaceAny(platform, req.workspaceId);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         return reply.send(mapToEcommerceStore(store));
     }
@@ -50,37 +50,37 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
     }
 
     async function disconnectStoreHandler(request: FastifyRequest, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
-        const store = await getStoreByWorkspace(platform, req.workspaceId!);
+        const req = request as ResolvedWorkspaceRequest;
+        const store = await getStoreByWorkspace(platform, req.workspaceId);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         await disconnectStore(store.id);
         return reply.send({ ok: true });
     }
 
     async function syncStore(request: FastifyRequest, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
-        const store = await getStoreByWorkspace(platform, req.workspaceId!);
+        const req = request as ResolvedWorkspaceRequest;
+        const store = await getStoreByWorkspace(platform, req.workspaceId);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         const result = await adapter.fullSync(store.id);
         return reply.send(result);
     }
 
     async function getStoreProducts(request: FastifyRequest, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
-        const store = await getStoreByWorkspace(platform, req.workspaceId!);
+        const req = request as ResolvedWorkspaceRequest;
+        const store = await getStoreByWorkspace(platform, req.workspaceId);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         const products = await getProducts(store.id);
         return reply.send({ products, total: products.length });
     }
 
     async function linkPage(request: FastifyRequest, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         const { pageId } = request.body as { pageId?: string };
         if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
-        const store = await getStoreByWorkspace(platform, req.workspaceId!);
+        const store = await getStoreByWorkspace(platform, req.workspaceId);
         if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
         try {
-            await linkStoreToPage(store.id, pageId, req.workspaceId!);
+            await linkStoreToPage(store.id, pageId, req.workspaceId);
             return reply.send({ ok: true });
         } catch (error) {
             if (error instanceof Error && error.message?.includes('does not belong to workspace')) {
@@ -91,11 +91,11 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
     }
 
     async function unlinkPage(request: FastifyRequest, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         const { pageId } = request.body as { pageId?: string };
         if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
         try {
-            await unlinkStoreFromPage(pageId, req.workspaceId!);
+            await unlinkStoreFromPage(pageId, req.workspaceId);
             return reply.send({ ok: true });
         } catch (error) {
             if (error instanceof Error && error.message?.includes('does not belong to workspace')) {

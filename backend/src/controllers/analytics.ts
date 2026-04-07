@@ -1,12 +1,12 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { analyticsService } from '../services/analytics';
-import type { WorkspaceRequest } from '../middleware/workspace';
+import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 
 export class AnalyticsController {
     async getAiUsage(request: FastifyRequest<{
         Querystring: { days?: string }
     }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.user) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -28,11 +28,11 @@ export class AnalyticsController {
             pageId?: string;
         }
     }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
 
         try {
             const days = Math.min(Math.max(Number(request.query.days) || 30, 1), 365);
-            const overview = await analyticsService.getOverview(req.workspaceId!, days, request.query.pageId);
+            const overview = await analyticsService.getOverview(req.workspaceId, days, request.query.pageId);
             return reply.send(overview);
         } catch (error) {
             request.log.error(error);

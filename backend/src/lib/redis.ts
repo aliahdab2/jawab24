@@ -2,6 +2,12 @@ import Redis from 'ioredis';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
 
+// Track whether Redis has failed due to an auth error.
+// Auth errors (WRONGPASS / NOAUTH) are permanent until config is fixed —
+// retrying them generates noise and never recovers.
+let redisAuthFailed = false;
+export const isRedisAuthFailed = () => redisAuthFailed;
+
 // Create a shared Redis instance.
 // Redis command tracing is handled automatically by @sentry/node v10+
 // which instruments ioredis out of the box (spans for every command).
@@ -11,12 +17,22 @@ export const redis = new Redis({
     password: config.redis.password,
     lazyConnect: true, // Don't connect immediately on import
     retryStrategy(times) {
-        const delay = Math.min(times * 50, 2000);
-        return delay;
+        // Stop retrying immediately on auth failures — they won't resolve
+        // without a config change, and retrying every 2s just floods Sentry.
+        if (redisAuthFailed) return null;
+        return Math.min(times * 50, 2000);
     },
 });
 
 redis.on('error', (err) => {
+    if (err.message?.includes('WRONGPASS') || err.message?.includes('NOAUTH')) {
+        if (!redisAuthFailed) {
+            redisAuthFailed = true;
+            console.error('Redis auth failed — check REDIS_PASSWORD in env. Retries stopped.');
+            Sentry.captureException(err, { tags: { service: 'redis', type: 'auth_failure' }, level: 'fatal' });
+        }
+        return;
+    }
     console.error('Redis Client Error:', err);
     Sentry.captureException(err, { tags: { service: 'redis' } });
 });
@@ -24,6 +40,11 @@ redis.on('error', (err) => {
 redis.on('connect', () => {
     // eslint-disable-next-line no-console
     console.log('✅ Redis Client Connected');
+});
+
+redis.on('ready', () => {
+    // 'ready' fires after AUTH + SELECT succeed — safe to reset auth failure flag here
+    redisAuthFailed = false;
 });
 
 /**
