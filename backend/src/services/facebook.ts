@@ -209,7 +209,11 @@ export class FacebookService {
             );
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
+                const fbError = error.response?.data?.error;
+                const detail = fbError
+                    ? `${fbError.message} (code=${fbError.code}, subcode=${fbError.error_subcode ?? 'n/a'}, type=${fbError.type})`
+                    : error.message;
+                throw new Error(`Facebook API error: ${detail}`);
             }
             throw error;
         }
