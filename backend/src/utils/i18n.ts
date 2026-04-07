@@ -48,6 +48,15 @@ const messages = {
         ar: 'شكراً لتعليقك! 🙏',
         en: 'Thank you for your comment! 🙏',
     },
+
+    // ─── Shared post nudge (when customer shares a post with no text) ───────────
+    sharedPostNudge: {
+        ar: 'شفنا المنشور! كيف نقدر نساعدك؟ اكتب لنا استفسارك 🙏',
+        en: 'We saw the post you shared! How can we help? Send us your question 🙏',
+    },
+
+    // ─── Shared post placeholder (stored in DB) ────────────────────────────────
+    attachmentPost: { ar: '[منشور مُشارَك]', en: '[Shared Post]' },
 } as const satisfies Record<string, Messages>;
 
 export type MessageKey = keyof typeof messages;

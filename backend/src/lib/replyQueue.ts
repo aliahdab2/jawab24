@@ -81,6 +81,7 @@ export async function enqueueMessage(data: {
     messageId: string;
     senderId: string;
     text: string;
+    sharedPostUrl?: string;
     senderName?: string;
     requestId?: string;
     replyDelay?: number;
@@ -92,6 +93,7 @@ export async function enqueueMessage(data: {
         messageId: data.messageId,
         senderId: data.senderId,
         text: data.text,
+        sharedPostUrl: data.sharedPostUrl,
         senderName: data.senderName,
         requestId: data.requestId,
         receivedAt: new Date().toISOString(),

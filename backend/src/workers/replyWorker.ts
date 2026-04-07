@@ -72,9 +72,9 @@ async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobR
 async function processMessageJob(
     job: Job<ReplyJobData>,
     label: string,
-    service: { processMessage: (pageId: string, senderId: string, text: string, messageId: string) => Promise<import('../interfaces').MessageResult> },
+    service: { processMessage: (pageId: string, senderId: string, text: string, messageId: string, sharedPostUrl?: string) => Promise<import('../interfaces').MessageResult> },
 ): Promise<ReplyJobResult> {
-    const { pageId, messageId, senderId, text, requestId } = job.data;
+    const { pageId, messageId, senderId, text, sharedPostUrl, requestId } = job.data;
 
     logger.info(`[ReplyWorker] Processing ${label} message`, {
         jobId: job.id,
@@ -87,7 +87,7 @@ async function processMessageJob(
         throw new UnrecoverableError(`Missing messageId or senderId for ${label} message`);
     }
 
-    const result = await service.processMessage(pageId, senderId, text, messageId);
+    const result = await service.processMessage(pageId, senderId, text, messageId, sharedPostUrl);
 
     return {
         success: result.success,

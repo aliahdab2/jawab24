@@ -47,8 +47,8 @@ interface MessagingEvent {
         text?: string;
         is_echo?: boolean;
         attachments?: Array<{
-            type: 'audio' | 'image' | 'video' | 'file' | 'fallback';
-            payload?: { url?: string };
+            type: 'audio' | 'image' | 'video' | 'file' | 'fallback' | 'post' | 'ig_post';
+            payload?: { url?: string; title?: string };
         }>;
     };
 }
@@ -258,7 +258,11 @@ export class WebhookController {
                     if (messageEvent.message?.is_echo) continue;
                     // Handle text messages through the normal pipeline
                     if (messageEvent.message && messageEvent.message.text) {
-                        await this.processMessage(pageId, messageEvent, page);
+                        // Check for attached shared post (text + post combo)
+                        const postAtt = messageEvent.message.attachments?.find(
+                            a => a.type === 'post' || a.type === 'ig_post',
+                        );
+                        await this.processMessage(pageId, messageEvent, page, postAtt?.payload?.url);
                     } else if (messageEvent.message?.attachments?.length) {
                         const att = messageEvent.message.attachments[0];
                         if (messageEvent.sender?.id && messageEvent.message.mid) {
@@ -278,7 +282,7 @@ export class WebhookController {
     /**
      * Process a messaging event - store immediately and enqueue for async reply
      */
-    private async processMessage(pageId: string, event: MessagingEvent, page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>) {
+    private async processMessage(pageId: string, event: MessagingEvent, page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>, sharedPostUrl?: string) {
         const senderId = event.sender?.id;
         const messageText = event.message?.text;
         const messageId = event.message?.mid;
@@ -310,6 +314,7 @@ export class WebhookController {
                 messageId,
                 senderId,
                 text: messageText,
+                sharedPostUrl,
                 requestId: this.requestId,
             });
 

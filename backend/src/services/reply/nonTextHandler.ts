@@ -7,6 +7,7 @@ import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
 import { detectLanguageCode } from '../../utils/language';
 import { getAttachmentPlaceholder, getTextOnlyNudge } from '../../utils/attachmentLabels';
+import { t } from '../../utils/i18n';
 import type { Logger } from '../../types';
 
 /** Cooldown TTL: 1 hour. Prevents spamming the same customer with nudge replies. */
@@ -85,50 +86,64 @@ export async function handleNonTextMessage(
             });
         }
 
-        // 4. Non-audio or failed transcription: store placeholder + send nudge
+        // 4. Shared post: send smart nudge that acknowledges the post
+        if (attachmentType === 'post' || attachmentType === 'ig_post') {
+            const placeholder = getAttachmentPlaceholder(attachmentType, lang);
+            await messagesService.findOrCreateFromWebhook(
+                page.id, messageId, senderId, placeholder, undefined, attachmentType,
+            );
+            await sendNudge(page, senderId, t('sharedPostNudge', lang), platform, logger);
+            return;
+        }
+
+        // 5. Non-audio or failed transcription: store placeholder + send generic nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
         await messagesService.findOrCreateFromWebhook(
             page.id, messageId, senderId, placeholder, undefined, attachmentType,
         );
-
-        // 5. Check cooldown — one nudge per sender per page per hour
-        const cooldownKey = `nontext_nudge:${page.id}:${senderId}`;
-        let alreadySent = false;
-        try {
-            const result = await redis.set(
-                cooldownKey, '1', 'EX', NUDGE_COOLDOWN_SECONDS, 'NX',
-            );
-            alreadySent = result === null;
-        } catch {
-            // Redis unavailable — send nudge anyway (better than silence)
-        }
-
-        if (alreadySent) {
-            logger.debug(`[${platform}] Non-text nudge cooldown active`, { senderId });
-            return;
-        }
-
-        // 6. Send the nudge reply
-        const nudgeText = getTextOnlyNudge(lang);
-
-        if (platform === 'facebook') {
-            await facebookService.sendPrivateMessage(page.accessToken, senderId, nudgeText);
-        } else {
-            const igAccountId = page.instagramAccountId;
-            if (igAccountId) {
-                await instagramService.sendDirectMessage(
-                    igAccountId, senderId, nudgeText, page.accessToken,
-                );
-            }
-        }
-
-        // 7. Store the outgoing nudge
-        await messagesService.storeOutgoingMessage(page.id, senderId, nudgeText, 'template');
-
-        logger.info(`[${platform}] Non-text nudge sent`, { senderId, attachmentType });
+        await sendNudge(page, senderId, getTextOnlyNudge(lang), platform, logger);
     } catch (error) {
         logger.error(`[${platform}] Failed to handle non-text message`, {
             messageId, error: String(error),
         });
     }
+}
+
+/**
+ * Send a nudge reply with cooldown (1 per sender per page per hour).
+ * Shared by all non-text handlers to avoid duplicating cooldown + send + store logic.
+ */
+async function sendNudge(
+    page: { id: string; accessToken: string; instagramAccountId?: string | null },
+    senderId: string,
+    nudgeText: string,
+    platform: 'facebook' | 'instagram',
+    logger: Logger,
+): Promise<void> {
+    const cooldownKey = `nontext_nudge:${page.id}:${senderId}`;
+    let alreadySent = false;
+    try {
+        const result = await redis.set(cooldownKey, '1', 'EX', NUDGE_COOLDOWN_SECONDS, 'NX');
+        alreadySent = result === null;
+    } catch {
+        // Redis unavailable — send nudge anyway (better than silence)
+    }
+
+    if (alreadySent) {
+        logger.debug(`[${platform}] Non-text nudge cooldown active`, { senderId });
+        return;
+    }
+
+    if (platform === 'facebook') {
+        await facebookService.sendPrivateMessage(page.accessToken, senderId, nudgeText);
+    } else {
+        if (page.instagramAccountId) {
+            await instagramService.sendDirectMessage(
+                page.instagramAccountId, senderId, nudgeText, page.accessToken,
+            );
+        }
+    }
+
+    await messagesService.storeOutgoingMessage(page.id, senderId, nudgeText, 'template');
+    logger.info(`[${platform}] Nudge sent`, { senderId });
 }

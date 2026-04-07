@@ -13,6 +13,7 @@ import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
+import { facebookService } from '../facebook';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
@@ -62,6 +63,7 @@ export class MessageProcessor {
         senderId: string,
         messageText: string,
         platformMessageId: string,
+        sharedPostUrl?: string,
     ): Promise<MessageResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_message` as Pipeline;
@@ -132,6 +134,25 @@ export class MessageProcessor {
 
             // Invalidate dashboard stats so next load reflects the new message
             invalidateWorkspaceStatsCache(page.workspaceId);
+
+            // 3.5. Enrich with shared post context (if customer attached a post to their message)
+            if (sharedPostUrl) {
+                try {
+                    const postIdMatch = sharedPostUrl.match(/\/(\d+)\/?(?:\?|$)/);
+                    if (postIdMatch) {
+                        const postContent = await facebookService.getPostContent(postIdMatch[1], page.accessToken);
+                        if (postContent) {
+                            messageText = `[Shared post: "${postContent.slice(0, 200)}"] ${messageText}`;
+                            this.logger.info(`[${platform}] Enriched message with shared post context`, {
+                                platformMessageId, postContentLength: postContent.length,
+                            });
+                        }
+                    }
+                } catch {
+                    // Non-critical — continue with original message text
+                }
+                lap('3.5-sharedPostEnrich');
+            }
 
             // 4. Check auto-reply enabled — after storing so dashboard has the message with name
             // Page OFF = Jawab24 is invisible. No reply, no flag, no notification.
