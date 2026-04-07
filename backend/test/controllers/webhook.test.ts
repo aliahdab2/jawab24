@@ -1,8 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import crypto from 'crypto';
 import fastify from 'fastify';
 import webhookRoutes from '../../src/routes/webhook';
-import { enqueueComment, enqueueMessage } from '../../src/lib/replyQueue';
 
 /** Generate a valid X-Hub-Signature-256 header for a given payload */
 function generateSignature(payload: object): string {
@@ -29,8 +28,8 @@ const {
 } = vi.hoisted(() => ({
     mockEnqueueComment: vi.fn().mockResolvedValue('mock-job-id'),
     mockEnqueueMessage: vi.fn().mockResolvedValue('mock-job-id'),
-    mockGetPageByFacebookId: vi.fn().mockResolvedValue(null),
-    mockGetPageByInstagramId: vi.fn().mockResolvedValue(null),
+    mockGetPageByFacebookId: vi.fn().mockResolvedValue({ id: 'internal-page-123', accessToken: 'token-abc', name: 'Test Page', userId: 'user-1', workspaceId: 'ws-1' }),
+    mockGetPageByInstagramId: vi.fn().mockResolvedValue({ id: 'internal-ig-123', accessToken: 'token-ig', name: 'IG Page', userId: 'user-1', workspaceId: 'ws-1' }),
     mockFindOrCreateFromWebhook: vi.fn().mockResolvedValue({ message: { id: 'msg-1' }, isNew: true }),
     mockStoreOutgoingMessage: vi.fn().mockResolvedValue({}),
     mockGetLastIncomingTextFromSender: vi.fn().mockResolvedValue(null),
@@ -1172,6 +1171,142 @@ describe('Webhook Controller', () => {
             // processNonTextMessage exits early — no storage or reply
             expect(mockFindOrCreateFromWebhook).not.toHaveBeenCalled();
             expect(mockSendPrivateMessage).not.toHaveBeenCalled();
+        });
+    });
+
+    // ── Concurrency guard ────────────────────────────────────────────────────────
+    // Connecting a busy page floods the server with webhook requests. The guard
+    // caps concurrent processWebhookAsync calls at MAX_CONCURRENT (10) so the
+    // DB connection pool is not exhausted.
+
+    describe('webhook concurrency guard', () => {
+        const MAX_CONCURRENT = 10;
+
+        // Resolve fns collected during each test — resolved in afterEach so
+        // activeWebhookProcessors decrements back to 0 before the next test runs.
+        let resolveFns: Array<(v: null) => void> = [];
+
+        afterEach(async () => {
+            for (const fn of resolveFns) fn(null);
+            resolveFns = [];
+            // Wait for all .finally() callbacks to fire
+            await new Promise(r => setTimeout(r, 20));
+        });
+
+        it('should return 503 when concurrency limit is reached so Facebook retries', async () => {
+            // Make page lookup hang so activeWebhookProcessors is never decremented during the test
+            mockGetPageByFacebookId.mockImplementation(
+                () => new Promise<null>(r => resolveFns.push(r)),
+            );
+
+            const makePayload = (pageId: string) => ({
+                object: 'page',
+                entry: [{ id: pageId, time: Date.now(), messaging: [] }],
+            });
+
+            // Fill up all slots
+            for (let i = 0; i < MAX_CONCURRENT; i++) {
+                const payload = makePayload(`page_flood_${i}`);
+                await app.inject({
+                    method: 'POST',
+                    url: '/webhook',
+                    headers: { 'x-hub-signature-256': generateSignature(payload) },
+                    payload,
+                });
+            }
+
+            // This one exceeds the limit
+            const overLimitPayload = makePayload('page_over_limit');
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(overLimitPayload) },
+                payload: overLimitPayload,
+            });
+
+            // 503 tells Facebook to retry with backoff — no permanent message loss
+            expect(response.statusCode).toBe(503);
+            expect(response.payload).toBe('OVERLOADED');
+        });
+
+        it('should not call getPageByFacebookId for dropped requests', async () => {
+            mockGetPageByFacebookId.mockImplementation(
+                () => new Promise<null>(r => resolveFns.push(r)),
+            );
+
+            const makePayload = (pageId: string) => ({
+                object: 'page',
+                entry: [{ id: pageId, time: Date.now(), messaging: [] }],
+            });
+
+            // Fill all slots
+            for (let i = 0; i < MAX_CONCURRENT; i++) {
+                const payload = makePayload(`page_flood_${i}`);
+                await app.inject({
+                    method: 'POST',
+                    url: '/webhook',
+                    headers: { 'x-hub-signature-256': generateSignature(payload) },
+                    payload,
+                });
+            }
+
+            // Give the async processors a chance to call getPageByFacebookId
+            await new Promise(resolve => setImmediate(resolve));
+            const callsBeforeDrop = mockGetPageByFacebookId.mock.calls.length;
+
+            // Send the over-limit request
+            const overLimitPayload = makePayload('page_should_be_dropped');
+            await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(overLimitPayload) },
+                payload: overLimitPayload,
+            });
+
+            await new Promise(resolve => setImmediate(resolve));
+
+            // No additional DB calls from the dropped request
+            expect(mockGetPageByFacebookId.mock.calls.length).toBe(callsBeforeDrop);
+        });
+    });
+
+    // ── Single page lookup per entry ─────────────────────────────────────────────
+    // Prevents the double DB hit that occurred when processMessage re-fetched the
+    // page that processWebhookAsync had already loaded.
+
+    describe('page lookup efficiency', () => {
+        it('should call getPageByFacebookId once per entry even with multiple messages', async () => {
+            const mockPage = { id: 'internal-page-1', accessToken: 'token', name: 'Test Page', userId: 'user-1', workspaceId: 'ws-1' };
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [
+                        { sender: { id: 'user_1' }, message: { mid: 'msg_1', text: 'Hello' } },
+                        { sender: { id: 'user_2' }, message: { mid: 'msg_2', text: 'Hi there' } },
+                        { sender: { id: 'user_3' }, message: { mid: 'msg_3', text: 'Question?' } },
+                    ],
+                }],
+            };
+
+            await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // One entry → one DB lookup, shared across all 3 messages
+            expect(mockGetPageByFacebookId).toHaveBeenCalledTimes(1);
+            expect(mockGetPageByFacebookId).toHaveBeenCalledWith('page_123');
+
+            // All 3 messages still enqueued
+            expect(mockEnqueueMessage).toHaveBeenCalledTimes(3);
         });
     });
 });

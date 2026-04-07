@@ -107,25 +107,36 @@ export async function enqueueMessage(data: {
  * Promote all delayed handoff jobs for a specific page + sender.
  * Called when the user clicks "Resume Smart Reply" so messages
  * are processed immediately instead of waiting for the timer.
+ *
+ * Uses paginated fetching (100 jobs at a time) to avoid loading the entire
+ * delayed queue into memory, which caused OOM crashes on large queues.
  */
 export async function promoteDelayedJobs(pageId: string, senderId: string): Promise<number> {
-    const delayed = await replyQueue.getDelayed();
+    const BATCH_SIZE = 100;
     let promoted = 0;
+    let start = 0;
 
-    for (const job of delayed) {
-        if (
-            job.data.pageId === pageId &&
-            job.data.senderId === senderId &&
-            job.data.handoffRetries !== undefined &&
-            job.data.handoffRetries > 0
-        ) {
-            try {
-                await job.promote();
-                promoted++;
-            } catch {
-                // Job may have already been processed or removed — skip it
+    while (true) {
+        const batch = await replyQueue.getDelayed(start, start + BATCH_SIZE - 1);
+        if (batch.length === 0) break;
+
+        for (const job of batch) {
+            if (
+                job.data.pageId === pageId &&
+                job.data.senderId === senderId &&
+                job.data.handoffRetries !== undefined &&
+                job.data.handoffRetries > 0
+            ) {
+                try {
+                    await job.promote();
+                    promoted++;
+                } catch {
+                    // Job may have already been processed or removed — skip it
+                }
             }
         }
+
+        start += BATCH_SIZE;
     }
 
     return promoted;

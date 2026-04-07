@@ -3,6 +3,7 @@ import { deviceTokens, notifications, settings } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
+import { redis } from '../lib/redis';
 
 // Notification types
 export type NotificationType =
@@ -28,6 +29,23 @@ export interface NotificationPayload {
 
 /** Default fallback language when the requested locale has no translation */
 const FALLBACK_LANG = 'en';
+
+/**
+ * Push notification cooldown (seconds) per type, per user.
+ * Prevents phone spam when hundreds of messages are processed at once
+ * (e.g. on first page connection). Notifications are still stored in DB;
+ * only the FCM push is suppressed during the cooldown window.
+ * Types not listed here are always pushed (payment, subscription, etc.).
+ */
+const PUSH_COOLDOWN_SECONDS: Partial<Record<NotificationType, number>> = {
+    flagged_reply:    300,  // 5 min
+    skipped_reply:   300,  // 5 min
+    new_comment:     300,  // 5 min
+    stale_comment:   300,  // 5 min
+    stale_message:   300,  // 5 min
+    kb_gap:         3600,  // 1 hour
+    provider_failover: 600, // 10 min
+};
 
 // Notification templates — keyed by locale for easy multi-language expansion
 export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationPayload, 'titles' | 'bodies'>> = {
@@ -264,8 +282,25 @@ class NotificationService {
         ]);
 
         // 3. Send push notification via FCM (if tokens exist and FCM is configured)
+        // Rate-limit noisy notification types to prevent phone spam on bulk processing
         if (tokens.length > 0) {
-            await this.sendPushNotification(tokens, payload, userLanguage);
+            const cooldown = PUSH_COOLDOWN_SECONDS[payload.type];
+            let pushAllowed = true;
+
+            if (cooldown) {
+                try {
+                    const key = `notif:push:rl:${userId}:${payload.type}`;
+                    const set = await redis.set(key, '1', 'EX', cooldown, 'NX');
+                    pushAllowed = set === 'OK'; // null means key already existed → rate limited
+                } catch {
+                    // Redis unavailable — allow push rather than silently suppressing it
+                    pushAllowed = true;
+                }
+            }
+
+            if (pushAllowed) {
+                await this.sendPushNotification(tokens, payload, userLanguage);
+            }
         }
 
         return notification.id;

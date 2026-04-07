@@ -7,6 +7,7 @@ import { pagesService, isPageDisconnected } from '../services/pages';
 import { authService } from '../services/auth';
 import { auditLog } from '../services/auditLog';
 import { captureError } from '../utils/sentryHelpers';
+import * as Sentry from '@sentry/node';
 import { handleNonTextMessage } from '../services/reply/nonTextHandler';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
@@ -108,6 +109,14 @@ interface WebhookBody {
     entry: WebhookEntry[];
 }
 
+/**
+ * Limits how many processWebhookAsync / processInstagramWebhookAsync calls
+ * run concurrently. Without this, a burst of webhook requests from a newly
+ * connected page can spawn dozens of goroutines that exhaust the DB connection pool.
+ */
+const MAX_CONCURRENT_WEBHOOK_PROCESSING = 10;
+let activeWebhookProcessors = 0;
+
 export class WebhookController {
     private logger: Logger = noopLogger;
     private requestId: string | undefined;
@@ -122,6 +131,29 @@ export class WebhookController {
     /** Get logger */
     private log(): Logger {
         return this.logger;
+    }
+
+    /**
+     * Try to acquire a concurrency slot for async webhook processing.
+     * Returns true and increments the counter on success.
+     * Returns false and sends 503 on failure — Facebook will retry with backoff,
+     * so no messages are permanently lost (unlike returning 200 for dropped batches).
+     */
+    private acquireWebhookSlot(reply: FastifyReply): boolean {
+        if (activeWebhookProcessors >= MAX_CONCURRENT_WEBHOOK_PROCESSING) {
+            this.log().warn('Webhook concurrency limit reached — asking Facebook to retry', {
+                active: activeWebhookProcessors,
+                limit: MAX_CONCURRENT_WEBHOOK_PROCESSING,
+            });
+            Sentry.captureMessage('Webhook concurrency limit reached', {
+                level: 'warning',
+                extra: { active: activeWebhookProcessors, limit: MAX_CONCURRENT_WEBHOOK_PROCESSING },
+            });
+            reply.status(503).send('OVERLOADED');
+            return false;
+        }
+        activeWebhookProcessors++;
+        return true;
     }
 
     /**
@@ -170,25 +202,22 @@ export class WebhookController {
         this.log().debug('Received webhook', { object: body.object, entryCount: body.entry?.length });
 
         if (body.object === 'page') {
-            // Process Facebook webhooks asynchronously
-            this.processWebhookAsync(body.entry).catch(err => {
-                this.log().error('Error processing Facebook webhook', { error: String(err) });
-            });
-
+            if (!this.acquireWebhookSlot(reply)) return;
+            this.processWebhookAsync(body.entry)
+                .catch(err => this.log().error('Error processing Facebook webhook', { error: String(err) }))
+                .finally(() => { activeWebhookProcessors--; });
             return reply.status(200).send('EVENT_RECEIVED');
         } else if (body.object === 'instagram') {
-            // Process Instagram webhooks asynchronously
-            this.processInstagramWebhookAsync(body.entry).catch(err => {
-                this.log().error('Error processing Instagram webhook', { error: String(err) });
-            });
-
+            if (!this.acquireWebhookSlot(reply)) return;
+            this.processInstagramWebhookAsync(body.entry)
+                .catch(err => this.log().error('Error processing Instagram webhook', { error: String(err) }))
+                .finally(() => { activeWebhookProcessors--; });
             return reply.status(200).send('EVENT_RECEIVED');
         } else if (body.object === 'whatsapp_business_account') {
-            // Process WhatsApp webhooks asynchronously
-            this.processWhatsAppWebhookAsync(body.entry as unknown as WhatsAppWebhookEntry[]).catch(err => {
-                this.log().error('Error processing WhatsApp webhook', { error: String(err) });
-            });
-
+            if (!this.acquireWebhookSlot(reply)) return;
+            this.processWhatsAppWebhookAsync(body.entry as unknown as WhatsAppWebhookEntry[])
+                .catch(err => this.log().error('Error processing WhatsApp webhook', { error: String(err) }))
+                .finally(() => { activeWebhookProcessors--; });
             return reply.status(200).send('EVENT_RECEIVED');
         } else {
             // Return a '404 Not Found' if event is not from a known subscription
@@ -204,8 +233,12 @@ export class WebhookController {
         for (const entry of entries) {
             const pageId = entry.id;
 
-            // Skip if page access was revoked (empty accessToken)
+            // Fetch page once per entry — reused for all messages/changes in this batch
             const page = await pagesService.getPageByFacebookId(pageId);
+            if (!page) {
+                this.log().debug('Skipping webhook for unknown page', { pageId });
+                continue;
+            }
             if (isPageDisconnected(page)) {
                 this.log().warn('Skipping webhook for disconnected page', { pageId, pageName: page.name });
                 continue;
@@ -225,7 +258,7 @@ export class WebhookController {
                     if (messageEvent.message?.is_echo) continue;
                     // Handle text messages through the normal pipeline
                     if (messageEvent.message && messageEvent.message.text) {
-                        await this.processMessage(pageId, messageEvent);
+                        await this.processMessage(pageId, messageEvent, page);
                     } else if (messageEvent.message?.attachments?.length) {
                         const att = messageEvent.message.attachments[0];
                         if (messageEvent.sender?.id && messageEvent.message.mid) {
@@ -245,7 +278,7 @@ export class WebhookController {
     /**
      * Process a messaging event - store immediately and enqueue for async reply
      */
-    private async processMessage(pageId: string, event: MessagingEvent) {
+    private async processMessage(pageId: string, event: MessagingEvent, page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>) {
         const senderId = event.sender?.id;
         const messageText = event.message?.text;
         const messageId = event.message?.mid;
@@ -262,15 +295,13 @@ export class WebhookController {
 
         try {
             // Store message immediately so rapid follow-ups build conversation context
-            const page = await pagesService.getPageByFacebookId(pageId);
-            if (page) {
-                await messagesService.findOrCreateFromWebhook(
-                    page.id,
-                    messageId,
-                    senderId,
-                    messageText
-                );
-            }
+            // page is guaranteed non-null — caller checks !page before calling this method
+            await messagesService.findOrCreateFromWebhook(
+                page.id,
+                messageId,
+                senderId,
+                messageText
+            );
 
             // Enqueue reply job immediately — debounce is handled by hasNewerUnrepliedMessage
             const jobId = await enqueueMessage({

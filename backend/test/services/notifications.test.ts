@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
+// Mock Redis before importing the service (notifications.ts uses redis.set for push rate-limiting)
+// vi.hoisted ensures the variable is initialized before vi.mock's factory runs
+const { mockRedisSet } = vi.hoisted(() => ({
+    mockRedisSet: vi.fn().mockResolvedValue('OK'),
+}));
+vi.mock('../../src/lib/redis', () => ({
+    redis: { set: mockRedisSet },
+}));
+
 // Mock the database before importing the service
 vi.mock('../../src/db', () => ({
     db: {
@@ -604,6 +613,129 @@ describe('NotificationService', () => {
                 const bodyWithoutBrand = payload.bodies.ar.replace(/Jawab24/g, '');
                 expect(bodyWithoutBrand).not.toMatch(/[a-zA-Z]{3,}/);
             }
+        });
+    });
+
+    // ── Push notification rate limiting ──────────────────────────────────────────
+    // When hundreds of messages arrive at once (e.g. on first page connection),
+    // only the first push per user+type is sent within the cooldown window.
+    // Notifications are still stored in DB every time.
+
+    describe('push rate limiting', () => {
+        /** Sets up DB mocks so sendNotification reaches the Redis rate-limit check */
+        function setupWithDeviceTokens() {
+            // insert notification → returning [{ id }]
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'notif-123' }]),
+                }),
+            });
+            // getUserDeviceTokens → one token
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ token: 'fcm-token-1' }]),
+                }),
+            });
+            // getUserLanguage → 'en'
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ dashboardLanguage: 'en' }]),
+                    }),
+                }),
+            });
+        }
+
+        beforeEach(() => {
+            mockRedisSet.mockReset();
+            mockRedisSet.mockResolvedValue('OK');
+        });
+
+        it('should call redis.set with NX for rate-limited notification types', async () => {
+            setupWithDeviceTokens();
+
+            await notificationService.sendNotification('user-1', {
+                type: 'flagged_reply',
+                titles: { en: 'Test', ar: 'اختبار' },
+                bodies: { en: 'Body', ar: 'نص' },
+            });
+
+            expect(mockRedisSet).toHaveBeenCalledWith(
+                'notif:push:rl:user-1:flagged_reply',
+                '1',
+                'EX',
+                300,
+                'NX',
+            );
+        });
+
+        it('should NOT call redis.set for non-rate-limited types (payment_failed)', async () => {
+            setupWithDeviceTokens();
+
+            await notificationService.sendNotification('user-1', {
+                type: 'payment_failed',
+                titles: { en: 'Payment Failed', ar: 'فشل الدفع' },
+                bodies: { en: 'Please update', ar: 'يرجى التحديث' },
+            });
+
+            expect(mockRedisSet).not.toHaveBeenCalled();
+        });
+
+        it('should skip push when redis.set returns null (rate limited)', async () => {
+            // null means the key already existed — cooldown active
+            mockRedisSet.mockResolvedValue(null);
+            setupWithDeviceTokens();
+
+            // We verify FCM is not attempted by checking firebase-admin is never required.
+            // Since FIREBASE_SERVICE_ACCOUNT_KEY is not set in tests, sendPushNotification
+            // would log a warning and return. The key assertion is that redis.set was called
+            // and returned null, which is what prevents the push.
+            const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+            await notificationService.sendNotification('user-1', {
+                type: 'skipped_reply',
+                titles: { en: 'Skipped', ar: 'تم التخطي' },
+                bodies: { en: 'Body', ar: 'نص' },
+            });
+
+            // redis.set was called and returned null (rate limited) — no FCM warning
+            expect(mockRedisSet).toHaveBeenCalledTimes(1);
+            expect(consoleSpy).not.toHaveBeenCalledWith(
+                expect.stringContaining('FCM not configured'),
+            );
+
+            consoleSpy.mockRestore();
+        });
+
+        it('should still insert the notification in DB even when push is rate-limited', async () => {
+            mockRedisSet.mockResolvedValue(null); // rate limited
+            setupWithDeviceTokens();
+
+            await notificationService.sendNotification('user-1', {
+                type: 'flagged_reply',
+                titles: { en: 'Test', ar: 'اختبار' },
+                bodies: { en: 'Body', ar: 'نص' },
+            });
+
+            // DB insert must always happen regardless of push rate limit
+            expect(db.insert).toHaveBeenCalled();
+        });
+
+        it('should use separate rate-limit keys per user', async () => {
+            setupWithDeviceTokens();
+            await notificationService.sendNotification('user-A', {
+                type: 'flagged_reply',
+                titles: { en: 'T', ar: 'ت' },
+                bodies: { en: 'B', ar: 'ب' },
+            });
+
+            expect(mockRedisSet).toHaveBeenCalledWith(
+                'notif:push:rl:user-A:flagged_reply',
+                expect.any(String),
+                expect.any(String),
+                expect.any(Number),
+                'NX',
+            );
         });
     });
 });

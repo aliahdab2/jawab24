@@ -210,42 +210,48 @@ describe('Reply Queue', () => {
     });
 
     describe('promoteDelayedJobs', () => {
+        // Helper: build a fake delayed job
+        function makeJob(pageId: string, senderId: string, handoffRetries: number, promote = vi.fn().mockResolvedValue(undefined)) {
+            return { data: { pageId, senderId, handoffRetries }, promote };
+        }
+
         it('should promote delayed handoff jobs matching page + sender', async () => {
-            const mockPromote = vi.fn().mockResolvedValue(undefined);
-            replyQueue.getDelayed.mockResolvedValue([
-                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 1 }, promote: mockPromote },
-                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 2 }, promote: mockPromote },
-            ]);
+            const promote = vi.fn().mockResolvedValue(undefined);
+            replyQueue.getDelayed
+                .mockResolvedValueOnce([makeJob('page-1', 'sender-1', 1, promote), makeJob('page-1', 'sender-1', 2, promote)])
+                .mockResolvedValue([]); // terminal empty batch
 
             const count = await promoteDelayedJobs('page-1', 'sender-1');
 
             expect(count).toBe(2);
-            expect(mockPromote).toHaveBeenCalledTimes(2);
+            expect(promote).toHaveBeenCalledTimes(2);
         });
 
         it('should NOT promote jobs for a different sender', async () => {
-            const mockPromote = vi.fn();
-            replyQueue.getDelayed.mockResolvedValue([
-                { data: { pageId: 'page-1', senderId: 'sender-other', handoffRetries: 1 }, promote: mockPromote },
-            ]);
+            const promote = vi.fn();
+            replyQueue.getDelayed
+                .mockResolvedValueOnce([makeJob('page-1', 'sender-other', 1, promote)])
+                .mockResolvedValue([]);
 
             const count = await promoteDelayedJobs('page-1', 'sender-1');
 
             expect(count).toBe(0);
-            expect(mockPromote).not.toHaveBeenCalled();
+            expect(promote).not.toHaveBeenCalled();
         });
 
         it('should NOT promote non-handoff delayed jobs (handoffRetries=0 or missing)', async () => {
-            const mockPromote = vi.fn();
-            replyQueue.getDelayed.mockResolvedValue([
-                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 0 }, promote: mockPromote },
-                { data: { pageId: 'page-1', senderId: 'sender-1' }, promote: mockPromote },
-            ]);
+            const promote = vi.fn();
+            replyQueue.getDelayed
+                .mockResolvedValueOnce([
+                    makeJob('page-1', 'sender-1', 0, promote),
+                    { data: { pageId: 'page-1', senderId: 'sender-1' }, promote }, // no handoffRetries field
+                ])
+                .mockResolvedValue([]);
 
             const count = await promoteDelayedJobs('page-1', 'sender-1');
 
             expect(count).toBe(0);
-            expect(mockPromote).not.toHaveBeenCalled();
+            expect(promote).not.toHaveBeenCalled();
         });
 
         it('should return 0 when no delayed jobs exist', async () => {
@@ -259,17 +265,59 @@ describe('Reply Queue', () => {
         it('should skip jobs where promote() throws and continue with remaining', async () => {
             const failingPromote = vi.fn().mockRejectedValue(new Error('Job already processed'));
             const successPromote = vi.fn().mockResolvedValue(undefined);
-            replyQueue.getDelayed.mockResolvedValue([
-                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 1 }, promote: failingPromote },
-                { data: { pageId: 'page-1', senderId: 'sender-1', handoffRetries: 2 }, promote: successPromote },
-            ]);
+            replyQueue.getDelayed
+                .mockResolvedValueOnce([makeJob('page-1', 'sender-1', 1, failingPromote), makeJob('page-1', 'sender-1', 2, successPromote)])
+                .mockResolvedValue([]);
 
             const count = await promoteDelayedJobs('page-1', 'sender-1');
 
-            // Only the second job succeeded
             expect(count).toBe(1);
             expect(failingPromote).toHaveBeenCalledTimes(1);
             expect(successPromote).toHaveBeenCalledTimes(1);
+        });
+
+        // ── pagination regression tests (fix: getDelayed now uses start/end) ────────
+
+        it('should call getDelayed with (0, 99) for the first batch', async () => {
+            replyQueue.getDelayed.mockResolvedValue([]);
+
+            await promoteDelayedJobs('page-1', 'sender-1');
+
+            expect(replyQueue.getDelayed).toHaveBeenCalledWith(0, 99);
+        });
+
+        it('should paginate across multiple batches until an empty batch is returned', async () => {
+            const promote = vi.fn().mockResolvedValue(undefined);
+            // Simulate 150 matching jobs: first batch 100, second batch 50, then empty
+            replyQueue.getDelayed.mockImplementation(async (start: number) => {
+                const all = Array.from({ length: 150 }, () =>
+                    makeJob('page-1', 'sender-1', 1, promote)
+                );
+                const batch = all.slice(start, start + 100);
+                return batch;
+            });
+
+            const count = await promoteDelayedJobs('page-1', 'sender-1');
+
+            expect(count).toBe(150);
+            // getDelayed called with (0,99), (100,199), (200,299 → empty)
+            expect(replyQueue.getDelayed).toHaveBeenCalledTimes(3);
+            expect(replyQueue.getDelayed).toHaveBeenNthCalledWith(1, 0, 99);
+            expect(replyQueue.getDelayed).toHaveBeenNthCalledWith(2, 100, 199);
+            expect(replyQueue.getDelayed).toHaveBeenNthCalledWith(3, 200, 299);
+        });
+
+        it('should not cause OOM by never loading the full queue at once', async () => {
+            // getDelayed must always be called with explicit start/end bounds (never 0 args)
+            replyQueue.getDelayed.mockResolvedValue([]);
+
+            await promoteDelayedJobs('page-1', 'sender-1');
+
+            for (const call of replyQueue.getDelayed.mock.calls) {
+                expect(call.length).toBe(2); // always called with (start, end)
+                expect(typeof call[0]).toBe('number');
+                expect(typeof call[1]).toBe('number');
+            }
         });
     });
 });
