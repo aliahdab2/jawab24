@@ -12,7 +12,7 @@ const PIPELINE_FIELDS = [
     'commentsAutoReply', 'messagesAutoReply', 'businessHoursOnly',
     'businessHoursStart', 'businessHoursEnd', 'timezone',
     'aiEnabled', 'aiModel', 'commentReplyMode',
-    'dualReplyNudge', 'dualReplyNudgeMulti',
+    'dualReplyNudge', 'dualReplyNudgeMulti', 'dualReplyNudgeVariations',
     'replyDelay', 'greetingMessageMulti', 'awayMessageMulti',
     'handoffPauseDurationMinutes', 'commentEscalationMinutes',
     'messageEscalationMinutes', 'defaultReplyLanguage',
@@ -28,6 +28,7 @@ const cacheKey = (userId: string) => `settings:v1:${userId}`;
 export type { UserSettings, UpdateSettingsDTO };
 
 import { t } from '../utils/i18n';
+import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 
 /** Default messages used as send-time fallback when all stored values are empty */
 const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
@@ -245,44 +246,15 @@ export class SettingsService {
      * Check if current time is within business hours in the user's timezone
      */
     private isWithinBusinessHours(start: string, end: string, timezone: string): boolean {
-        let currentTime: string;
-        try {
-            const parts = new Intl.DateTimeFormat('en-US', {
-                timeZone: timezone,
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-            }).formatToParts(new Date());
-            const hour = parts.find(p => p.type === 'hour')?.value || '00';
-            const minute = parts.find(p => p.type === 'minute')?.value || '00';
-            currentTime = `${hour}:${minute}`;
-        } catch {
-            // Fallback to server time if timezone is invalid
-            const now = new Date();
-            currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-        }
-
-        // Simple string comparison works for HH:MM format
-        return currentTime >= start && currentTime <= end;
+        return isWithinBusinessHoursShared(start, end, timezone);
     }
 
-    /**
-     * Resolves which stored language version to use.
-     *
-     * - If autoDetectLanguage is ON and the detected language is supported: use it
-     * - Otherwise: use dashboardLanguage (or the first supported language as last resort)
-     */
     private resolveLanguage(userSettings: UserSettings, detectedLanguage?: string): string {
-        const supported = userSettings.supportedLanguages ?? ['en', 'ar'];
-        const fallback = supported.includes(userSettings.dashboardLanguage)
-            ? userSettings.dashboardLanguage
-            : (supported[0] ?? 'en');
-
-        if (!userSettings.autoDetectLanguage || !detectedLanguage || detectedLanguage === 'unknown') {
-            return fallback;
-        }
-
-        return supported.includes(detectedLanguage) ? detectedLanguage : fallback;
+        return resolveLanguageShared({
+            autoDetectLanguage: userSettings.autoDetectLanguage,
+            supportedLanguages: userSettings.supportedLanguages,
+            defaultLanguage: userSettings.dashboardLanguage,
+        }, detectedLanguage);
     }
 
     /**

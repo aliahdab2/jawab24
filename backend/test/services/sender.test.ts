@@ -220,9 +220,9 @@ describe('ReplySender', () => {
         });
     });
 
-    // ─── getDualModeNudge (tested via dual mode) ─────────────────────
+    // ─── Nudge text (tested via dual mode) ─────────────────────────
 
-    describe('getDualModeNudge logic', () => {
+    describe('Nudge text in dual mode', () => {
         const dualBase = {
             ...baseOptions,
             replyMode: 'dual' as const,
@@ -238,7 +238,7 @@ describe('ReplySender', () => {
             expect(axiosCall[1]).toEqual({ message: 'راجع الرسائل' });
         });
 
-        it('should use hardcoded default when no nudge provided', async () => {
+        it('should use i18n default when no nudge provided', async () => {
             await sender.sendCommentReply(dualBase);
 
             const axiosCall = vi.mocked(axios.post).mock.calls[0];
@@ -247,17 +247,7 @@ describe('ReplySender', () => {
             });
         });
 
-        it('should truncate nudge text to 80 characters', async () => {
-            const longNudge = 'A'.repeat(100);
-
-            await sender.sendCommentReply({
-                ...dualBase,
-                dualReplyNudge: longNudge,
-            });
-
-            const axiosCall = vi.mocked(axios.post).mock.calls[0];
-            expect((axiosCall[1] as { message: string }).message).toHaveLength(80);
-        });
+        // Note: truncation is handled by pickNudgeVariation() in nudge.ts, not sender
     });
 
     // ─── postPublicReply Direct ──────────────────────────────────────

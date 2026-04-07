@@ -92,9 +92,9 @@ export class ReplySender {
         if (replyMode === 'public' || replyMode === 'dual') {
             let publicText = replyText;
 
-            // For dual mode with successful DM, use a short "nudge" instead of the full reply
+            // For dual mode with successful DM, use the pre-picked nudge (already truncated by pickNudgeVariation)
             if (replyMode === 'dual' && !errorMsg) {
-                publicText = this.getDualModeNudge(dualReplyNudge);
+                publicText = dualReplyNudge || t('dualNudgeDefault', 'ar');
             }
 
             const pubSuccess = await this.postPublicReply(
@@ -116,14 +116,6 @@ export class ReplySender {
         }
 
         return { success, error: errorMsg || undefined };
-    }
-
-    /**
-     * Get the public "nudge" text for dual mode (already picked by caller).
-     */
-    private getDualModeNudge(nudge?: string): string {
-        const text = nudge || t('dualNudgeDefault', 'ar');
-        return text.slice(0, 80);
     }
 
     /**

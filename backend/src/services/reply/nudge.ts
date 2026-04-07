@@ -11,6 +11,9 @@
  * 3. At send time, pickNudgeVariation() randomly selects one
  */
 
+/** Maximum nudge length — Facebook comment character limit for short messages */
+export const NUDGE_MAX_LENGTH = 80;
+
 /** Default nudge variations (fallback when no custom variations exist) */
 export const DEFAULT_NUDGE_VARIATIONS: Record<string, string[]> = {
     ar: [
@@ -43,5 +46,5 @@ export function pickNudgeVariation(
         || Object.values(custom).find(v => Array.isArray(v) && v.length > 0)
         || DEFAULT_NUDGE_VARIATIONS[language]
         || DEFAULT_NUDGE_VARIATIONS['ar'];
-    return variations[Math.floor(Math.random() * variations.length)].slice(0, 80);
+    return variations[Math.floor(Math.random() * variations.length)].slice(0, NUDGE_MAX_LENGTH);
 }

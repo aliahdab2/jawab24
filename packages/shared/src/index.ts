@@ -556,6 +556,7 @@ export interface WorkspaceSettings {
   greetingMessageMulti: Record<string, string>;
   awayMessageMulti: Record<string, string>;
   dualReplyNudgeMulti: Record<string, string>;
+  dualReplyNudgeVariations?: Record<string, string[]>;
   replyDelay: number;
   commentEscalationMinutes: number;
   messageEscalationMinutes: number;

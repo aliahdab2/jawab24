@@ -463,14 +463,16 @@ describe('InstagramCommentAdapter', () => {
             expect(result.error).toContain('commenter ID not available');
         });
 
-        it('dual mode: falls back to public when DM fails', async () => {
+        it('dual mode: falls back to full public reply when DM fails', async () => {
             mockSendDirectMessage.mockRejectedValue(new Error('DM blocked'));
             const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
             const result = await adapter.sendReply(opts);
 
-            // DM failed but public reply should NOT proceed (errorMsg is set)
-            // This matches Facebook behavior: if DM fails in dual mode, don't post public nudge
-            expect(result.success).toBe(false);
+            // DM failed — dual mode posts full reply as public comment (not the nudge)
+            expect(result.success).toBe(true);
+            expect(mockReplyToComment).toHaveBeenCalledWith(
+                opts.platformCommentId, opts.replyText, opts.accessToken,
+            );
         });
 
         it('defaults to public mode when commentReplyMode not set', async () => {
@@ -484,11 +486,18 @@ describe('InstagramCommentAdapter', () => {
     });
 
     describe('getFallbackReply', () => {
-        it('should return a thank you message with emoji', () => {
+        it('should return English fallback by default', () => {
             const fallback = adapter.getFallbackReply();
 
             expect(fallback).not.toBeNull();
             expect(fallback).toContain('Thank you');
+        });
+
+        it('should return Arabic fallback when lang is ar', () => {
+            const fallback = adapter.getFallbackReply('ar');
+
+            expect(fallback).not.toBeNull();
+            expect(fallback).toContain('شكراً');
         });
     });
 });

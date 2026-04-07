@@ -27,6 +27,7 @@ const DEFAULTS: WorkspaceSettings = {
     greetingMessageMulti: {},
     awayMessageMulti: {},
     dualReplyNudgeMulti: {},
+    dualReplyNudgeVariations: {},
     replyDelay: 0,
     commentEscalationMinutes: 60,
     messageEscalationMinutes: 30,
@@ -38,6 +39,7 @@ const DEFAULTS: WorkspaceSettings = {
 };
 
 import { t } from '../utils/i18n';
+import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 
 /** Default away message as send-time fallback when all stored values are empty */
 const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
@@ -214,39 +216,15 @@ export class WorkspaceSettingsService {
      * Check if current time is within business hours.
      */
     private isWithinBusinessHours(start: string, end: string, timezone: string): boolean {
-        let currentTime: string;
-        try {
-            const parts = new Intl.DateTimeFormat('en-US', {
-                timeZone: timezone,
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false,
-            }).formatToParts(new Date());
-            const hour = parts.find(p => p.type === 'hour')?.value || '00';
-            const minute = parts.find(p => p.type === 'minute')?.value || '00';
-            currentTime = `${hour}:${minute}`;
-        } catch {
-            const now = new Date();
-            currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-        }
-
-        return currentTime >= start && currentTime <= end;
+        return isWithinBusinessHoursShared(start, end, timezone);
     }
 
-    /**
-     * Resolve which language version to use.
-     */
     private resolveLanguage(settings: WorkspaceSettings, detectedLanguage?: string): string {
-        const supported = settings.supportedLanguages ?? ['en', 'ar'];
-        const fallback = supported.includes(settings.defaultReplyLanguage)
-            ? settings.defaultReplyLanguage
-            : (supported[0] ?? 'en');
-
-        if (!settings.autoDetectLanguage || !detectedLanguage || detectedLanguage === 'unknown') {
-            return fallback;
-        }
-
-        return supported.includes(detectedLanguage) ? detectedLanguage : fallback;
+        return resolveLanguageShared({
+            autoDetectLanguage: settings.autoDetectLanguage,
+            supportedLanguages: settings.supportedLanguages,
+            defaultLanguage: settings.defaultReplyLanguage,
+        }, detectedLanguage);
     }
 }
 

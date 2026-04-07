@@ -151,11 +151,14 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             }
         }
 
-        // Public or Dual: post public comment reply
-        if (replyMode === 'public' || (replyMode === 'dual' && !errorMsg)) {
-            const publicText = replyMode === 'dual'
-                ? (dualReplyNudge || t('dualNudgeDefault', 'ar')).slice(0, 80)
-                : opts.replyText;
+        // Public mode: post full reply
+        // Dual mode: post nudge if DM succeeded, or full reply if DM failed
+        if (replyMode === 'public' || replyMode === 'dual') {
+            let publicText = opts.replyText;
+            if (replyMode === 'dual' && !errorMsg) {
+                // Nudge already truncated by pickNudgeVariation
+                publicText = dualReplyNudge || t('dualNudgeDefault', commentLang);
+            }
             try {
                 await instagramService.replyToComment(
                     opts.platformCommentId, publicText, opts.accessToken,
