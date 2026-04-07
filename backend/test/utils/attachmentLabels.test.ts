@@ -39,12 +39,12 @@ describe('attachmentLabels', () => {
 
         it('returns Arabic nudge explicitly', () => {
             const nudge = getTextOnlyNudge('ar');
-            expect(nudge).toContain('نستطيع الرد على الرسائل النصية فقط');
+            expect(nudge).toContain('الرسائل النصية والصوتية');
         });
 
         it('returns English nudge', () => {
             const nudge = getTextOnlyNudge('en');
-            expect(nudge).toContain('text messages');
+            expect(nudge).toContain('text and voice messages');
         });
     });
 });

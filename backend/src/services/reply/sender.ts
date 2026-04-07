@@ -2,6 +2,7 @@ import axios from 'axios';
 import { facebookService } from '../facebook';
 import { Logger, noopLogger } from '../../types';
 import { config } from '../../config';
+import { t } from '../../utils/i18n';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
@@ -121,7 +122,7 @@ export class ReplySender {
      * Get the public "nudge" text for dual mode (already picked by caller).
      */
     private getDualModeNudge(nudge?: string): string {
-        const text = nudge || 'أرسلنا لك التفاصيل برسالة خاصة 📩';
+        const text = nudge || t('dualNudgeDefault', 'ar');
         return text.slice(0, 80);
     }
 

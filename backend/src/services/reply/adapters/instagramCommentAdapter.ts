@@ -2,6 +2,7 @@ import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode } from '../../../utils/language';
+import { t } from '../../../utils/i18n';
 import { db } from '../../../db';
 import { instagramMedia, instagramComments } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
@@ -153,7 +154,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         // Public or Dual: post public comment reply
         if (replyMode === 'public' || (replyMode === 'dual' && !errorMsg)) {
             const publicText = replyMode === 'dual'
-                ? (dualReplyNudge || 'أرسلنا لك التفاصيل برسالة خاصة 📩').slice(0, 80)
+                ? (dualReplyNudge || t('dualNudgeDefault', 'ar')).slice(0, 80)
                 : opts.replyText;
             try {
                 await instagramService.replyToComment(
@@ -230,8 +231,8 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         };
     }
 
-    getFallbackReply(): string | null {
-        return 'Thank you for your comment! \u{1F64F}';
+    getFallbackReply(lang = 'en'): string | null {
+        return t('instagramFallback', lang);
     }
 }
 

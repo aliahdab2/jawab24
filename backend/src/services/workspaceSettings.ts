@@ -37,10 +37,12 @@ const DEFAULTS: WorkspaceSettings = {
     holdLowConfidence: false,
 };
 
+import { t } from '../utils/i18n';
+
 /** Default away message as send-time fallback when all stored values are empty */
 const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
-    ar: 'شكراً لتواصلك معنا! نحن حالياً خارج أوقات العمل، وسنرد عليك في أقرب وقت ممكن.',
-    en: 'Thanks for your message! We\'re currently away and will get back to you as soon as possible.',
+    ar: t('defaultAway', 'ar'),
+    en: t('defaultAway', 'en'),
 };
 
 export class WorkspaceSettingsService {

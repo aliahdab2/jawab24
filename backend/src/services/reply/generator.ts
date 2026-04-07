@@ -57,10 +57,12 @@ export function computeNeedsAttention(flags: string[], normalizedIntent: string 
         intent === 'OFFENSIVE';
 }
 
+import { t } from '../../utils/i18n';
+
 /** Safe fallback replies when AI hallucinates pricing */
 export const PRICE_FALLBACK: Record<string, string> = {
-    ar: 'شكراً لاهتمامك! خليني أتأكد من تفاصيل الأسعار وبرجعلك بأقرب وقت.',
-    en: 'Thank you for your interest! Let me confirm the pricing details and get back to you shortly.',
+    ar: t('priceFallback', 'ar'),
+    en: t('priceFallback', 'en'),
 };
 
 export interface GenerateReplyContext {

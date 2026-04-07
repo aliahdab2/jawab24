@@ -1063,7 +1063,7 @@ describe('Webhook Controller', () => {
 
             // English nudge
             expect(mockSendPrivateMessage).toHaveBeenCalledWith(
-                mockPage.accessToken, 'user_en', expect.stringContaining('text messages'),
+                mockPage.accessToken, 'user_en', expect.stringContaining('text and voice messages'),
             );
         });
 
