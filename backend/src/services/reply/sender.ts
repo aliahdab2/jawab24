@@ -46,7 +46,6 @@ export class ReplySender {
             facebookCommentId,
             replyText,
             accessToken,
-            fromId,
             replyMode,
             dualReplyNudge,
             isDemo = false
@@ -61,45 +60,39 @@ export class ReplySender {
         let success = false;
         let errorMsg = '';
 
-        // Private or Dual mode: Send DM first
+        // Private or Dual mode: Send DM via /{comment-id}/private_replies
+        // This works for any commenter without prior Messenger interaction.
         if (replyMode === 'private' || replyMode === 'dual') {
-            if (!fromId) {
-                return {
-                    success: false,
-                    error: 'Cannot send private message: commenter ID not available'
-                };
-            }
-
             try {
-                await facebookService.sendPrivateMessage(accessToken, fromId, replyText);
-
-                // DM sent — mark success for both private and dual modes.
-                // In dual mode the public nudge is nice-to-have; the customer already got their answer.
+                await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
                 success = true;
-                this.logger.debug('[Sender] Sent private message', { fromId });
+                this.logger.debug('[Sender] Sent private reply', { facebookCommentId });
             } catch (error) {
-                this.logger.error('Failed to send private message', {
-                    fromId,
+                this.logger.error('Failed to send private reply', {
+                    facebookCommentId,
                     error: error instanceof Error ? error.message : String(error)
                 });
 
                 if (replyMode === 'private') {
-                    return {
-                        success: false,
-                        error: 'Failed to send private message to commenter'
-                    };
+                    // Private-only: fall back to public comment so user always gets a response
+                    this.logger.warn('[Sender] Private mode failed — falling back to public comment', { facebookCommentId });
+                    const pubSuccess = await this.postPublicReply(facebookCommentId, replyText, accessToken);
+                    return pubSuccess
+                        ? { success: true }
+                        : { success: false, error: 'Failed to send private and public reply' };
                 }
-                // For dual mode, we continue to try public
+                // Dual mode: DM failed, continue to public reply with full text (not just nudge)
                 errorMsg = 'Private message failed';
             }
         }
 
-        // Public or Dual mode: Post public comment
-        if (replyMode === 'public' || (replyMode === 'dual' && !errorMsg)) {
+        // Public mode: post public comment
+        // Dual mode: post nudge if DM succeeded, or full reply if DM failed
+        if (replyMode === 'public' || replyMode === 'dual') {
             let publicText = replyText;
 
-            // For dual mode, use a short "nudge" instead of the full reply
-            if (replyMode === 'dual') {
+            // For dual mode with successful DM, use a short "nudge" instead of the full reply
+            if (replyMode === 'dual' && !errorMsg) {
                 publicText = this.getDualModeNudge(dualReplyNudge);
             }
 

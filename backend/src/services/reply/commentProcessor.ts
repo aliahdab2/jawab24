@@ -8,15 +8,13 @@ import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
-import type { CommentPlatformAdapter, SendCommentResult } from '../../interfaces';
+import type { CommentPlatformAdapter } from '../../interfaces';
 import { truncateAtSentence } from '../../utils/text';
 import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
-import { facebookService } from '../facebook';
-import { replySender } from './sender';
 
 /**
  * Unified Comment Processor
@@ -403,37 +401,15 @@ export class CommentProcessor {
             confidence, triggerKeyword,
         } = opts;
 
-        // Trigger replies use /{comment-id}/private_replies (Facebook) — this API
-        // works for any commenter without requiring prior Messenger interaction.
-        // If private_replies fails (missing permissions, unsupported post type), fall back
-        // to a public comment reply so the user always gets a response.
-        // Regular template/AI replies use the adapter (respects workspace replyMode).
-        let sendResult: SendCommentResult;
-        if (triggerKeyword && platform === 'facebook') {
-            try {
-                await facebookService.sendPrivateReplyToComment(accessToken, platformCommentId, replyText);
-                sendResult = { success: true };
-            } catch (privateReplyError) {
-                this.logger.warn('[facebook] private_replies failed — falling back to public comment', {
-                    platformCommentId,
-                    error: privateReplyError instanceof Error ? privateReplyError.message : String(privateReplyError),
-                });
-                const publicSuccess = await replySender.postPublicReply(platformCommentId, replyText, accessToken);
-                sendResult = publicSuccess
-                    ? { success: true }
-                    : { success: false, error: privateReplyError instanceof Error ? privateReplyError.message : 'Failed to send trigger reply' };
-            }
-        } else {
-            sendResult = await adapter.sendReply({
-                platformCommentId,
-                platformPageId,
-                replyText,
-                commentMessage,
-                accessToken,
-                fromId,
-                userSettings,
-            });
-        }
+        const sendResult = await adapter.sendReply({
+            platformCommentId,
+            platformPageId,
+            replyText,
+            commentMessage,
+            accessToken,
+            fromId,
+            userSettings,
+        });
 
         if (!sendResult.success) {
             pipelineMetrics.record(pipeline, 'send_failed');
