@@ -10,6 +10,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
+import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useAiGeneration } from '@/hooks/useAiGeneration';
@@ -27,6 +28,7 @@ import {
   PauseCircle,
   FileText,
   ChevronRight,
+  Hash,
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -39,6 +41,7 @@ interface CommentDetailModalProps {
   mode?: 'full' | 'quick';
   pageName?: string;
   pageUrl?: string;
+  postTriggerKeyword?: string | null;
 }
 
 export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
@@ -50,6 +53,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   mode = 'full',
   pageName,
   pageUrl,
+  postTriggerKeyword,
 }) => {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
@@ -279,11 +283,23 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
           {/* Post Context */}
           {comment.postMessage && (
-            <div className="flex items-start gap-2 px-3 py-2.5 bg-muted rounded-lg text-sm text-muted-foreground">
-              <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <div className="max-h-28 overflow-y-auto min-w-0">
-                <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start gap-2 px-3 py-2.5 bg-muted rounded-lg text-sm text-muted-foreground">
+                <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <div className="max-h-28 overflow-y-auto min-w-0">
+                  <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
+                </div>
               </div>
+              {postTriggerKeyword && (
+                <div className="flex items-center gap-1.5 flex-wrap px-1">
+                  <Hash className="w-3.5 h-3.5 flex-shrink-0 text-brand-500" aria-hidden="true" />
+                  {parseKeywords(postTriggerKeyword).map((kw, i) => (
+                    <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-700" dir="auto">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

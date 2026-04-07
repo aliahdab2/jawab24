@@ -602,6 +602,7 @@ const CommentsPage: NextPageWithLayout = () => {
           onUnresolve={selectedComment.resolved ? () => handleUnresolve(selectedComment.id) : undefined}
           pageName={selectedComment.pageId ? pageById.get(selectedComment.pageId)?.name : undefined}
           pageUrl={selectedCommentPageUrl}
+          postTriggerKeyword={selectedComment.postId ? triggersByPostId[selectedComment.postId]?.keyword ?? null : null}
         />
       )}
 
