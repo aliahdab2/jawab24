@@ -97,13 +97,13 @@ describe('CommentCard', () => {
     expect(screen.getByText('عرض خاص على الدورات')).toBeInTheDocument();
   });
 
-  it('renders long post message with truncate class', () => {
+  it('renders long post message with line-clamp class', () => {
     const longMessage = 'هذا منشور طويل جداً يحتوي على نص كثير ويجب أن يتم اقتطاعه عند الخمسين حرف تقريباً';
     render(<CommentCard {...defaultProps} comment={{ ...baseComment, postMessage: longMessage }} />);
-    // Full text is in the DOM; CSS truncate handles visual truncation
+    // Full text is in the DOM; CSS line-clamp handles visual truncation
     const span = screen.getByText(longMessage);
     expect(span).toBeInTheDocument();
-    expect(span.className).toContain('truncate');
+    expect(span.className).toContain('line-clamp-2');
   });
 
   it('shows resolve button when onResolve is provided', () => {
