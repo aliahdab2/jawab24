@@ -41,7 +41,7 @@ describe('ReplySender', () => {
         sender.setLogger(mockLogger);
         vi.mocked(detectLanguageCode).mockReturnValue('ar');
         vi.mocked(axios.post).mockResolvedValue({ data: { id: 'reply_id' } });
-        vi.mocked(facebookService.sendPrivateMessage).mockResolvedValue(undefined);
+        vi.mocked(facebookService.sendPrivateReplyToComment).mockResolvedValue(undefined);
     });
 
     // ─── Demo Mode ───────────────────────────────────────────────────
@@ -63,7 +63,7 @@ describe('ReplySender', () => {
             });
 
             expect(axios.post).not.toHaveBeenCalled();
-            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+            expect(facebookService.sendPrivateReplyToComment).not.toHaveBeenCalled();
         });
     });
 
@@ -100,7 +100,7 @@ describe('ReplySender', () => {
         it('should not call sendPrivateMessage in public mode', async () => {
             await sender.sendCommentReply(baseOptions);
 
-            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+            expect(facebookService.sendPrivateReplyToComment).not.toHaveBeenCalled();
         });
     });
 
@@ -109,12 +109,12 @@ describe('ReplySender', () => {
     describe('Private Mode', () => {
         const privateOptions = { ...baseOptions, replyMode: 'private' as const };
 
-        it('should call facebookService.sendPrivateMessage with correct args', async () => {
+        it('should call sendPrivateReplyToComment with comment ID and text', async () => {
             await sender.sendCommentReply(privateOptions);
 
-            expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith(
+            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
                 'access_token_abc',
-                'user_456',
+                'fb_comment_123',
                 'Thank you for your feedback!'
             );
         });
@@ -125,29 +125,25 @@ describe('ReplySender', () => {
             expect(result).toEqual({ success: true });
         });
 
-        it('should return failure when fromId is missing', async () => {
+        it('should fall back to public reply when fromId is missing', async () => {
             const result = await sender.sendCommentReply({
                 ...privateOptions,
                 fromId: undefined,
             });
 
-            expect(result).toEqual({
-                success: false,
-                error: 'Cannot send private message: commenter ID not available',
-            });
+            // private_replies uses comment ID not fromId, so it still works
+            expect(result).toEqual({ success: true });
         });
 
-        it('should return failure when DM throws', async () => {
-            vi.mocked(facebookService.sendPrivateMessage).mockRejectedValue(
+        it('should fall back to public reply when DM throws', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(
                 new Error('DM blocked')
             );
 
             const result = await sender.sendCommentReply(privateOptions);
 
-            expect(result).toEqual({
-                success: false,
-                error: 'Failed to send private message to commenter',
-            });
+            // Falls back to public reply which succeeds (axios.post is mocked to succeed)
+            expect(result).toEqual({ success: true });
         });
     });
 
@@ -163,9 +159,9 @@ describe('ReplySender', () => {
         it('should send DM first, then post public nudge', async () => {
             await sender.sendCommentReply(dualOptions);
 
-            expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith(
+            expect(facebookService.sendPrivateReplyToComment).toHaveBeenCalledWith(
                 'access_token_abc',
-                'user_456',
+                'fb_comment_123',
                 'Thank you for your feedback!'
             );
             expect(axios.post).toHaveBeenCalledWith(
@@ -188,30 +184,28 @@ describe('ReplySender', () => {
             expect(result).toEqual({ success: true });
         });
 
-        it('should return failure when fromId is missing', async () => {
+        it('should still work when fromId is missing (uses comment ID)', async () => {
             const result = await sender.sendCommentReply({
                 ...dualOptions,
                 fromId: undefined,
             });
 
-            expect(result).toEqual({
-                success: false,
-                error: 'Cannot send private message: commenter ID not available',
-            });
+            // private_replies uses comment ID not fromId, so it still works
+            expect(result).toEqual({ success: true });
         });
 
-        it('should fall back to public when DM fails', async () => {
-            vi.mocked(facebookService.sendPrivateMessage).mockRejectedValue(
+        it('should fall back to full public reply when DM fails', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(
                 new Error('DM blocked')
             );
 
             const result = await sender.sendCommentReply(dualOptions);
 
-            // DM failed, but dual mode doesn't post public nudge when errorMsg is set
-            // Looking at the code: if (replyMode === 'dual' && !errorMsg) — public is skipped
-            // But success comes from the DM part being set only for private mode
-            // For dual: success remains false, error is 'Private message failed'
-            expect(result.error).toBe('Private message failed');
+            // DM failed, dual mode falls back to public reply with full text (not nudge)
+            expect(result.success).toBe(true);
+            // Public reply was posted with full reply text, not the nudge
+            const axiosCall = vi.mocked(axios.post).mock.calls[0];
+            expect(axiosCall[1]).toEqual({ message: 'Thank you for your feedback!' });
         });
 
         it('should log warning when public reply fails in dual mode', async () => {
