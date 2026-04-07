@@ -315,6 +315,7 @@ export interface ReplyJobData {
   pageId: string;           // Facebook/Instagram page ID (from webhook)
   postId?: string;          // For comments only (Facebook post ID or Instagram media ID)
   commentId?: string;       // Facebook/Instagram comment ID
+  parentId?: string;        // Set when comment is a reply to another comment (sub-comment)
   messageId?: string;       // Facebook/Instagram message ID (for DMs)
   senderId?: string;        // User who sent the comment/message
   senderName?: string;      // Display name of sender

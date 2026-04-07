@@ -33,7 +33,7 @@ export function setWorkerLogger(newLogger: Logger): void {
  * Process a Facebook comment job
  */
 async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
-    const { pageId, postId, commentId, text, senderId, senderName, requestId } = job.data;
+    const { pageId, postId, commentId, parentId, text, senderId, senderName, requestId } = job.data;
 
     logger.info('[ReplyWorker] Processing Facebook comment', {
         jobId: job.id,
@@ -52,7 +52,8 @@ async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobR
         commentId,
         text,
         senderId,
-        senderName
+        senderName,
+        parentId
     );
 
     return {

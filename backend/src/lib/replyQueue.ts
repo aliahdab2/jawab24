@@ -43,6 +43,7 @@ export async function enqueueComment(data: {
     pageId: string;
     postId: string;
     commentId: string;
+    parentId?: string;
     text: string;
     senderId?: string;
     senderName?: string;
@@ -55,6 +56,7 @@ export async function enqueueComment(data: {
         pageId: data.pageId,
         postId: data.postId,
         commentId: data.commentId,
+        parentId: data.parentId,
         text: data.text,
         senderId: data.senderId,
         senderName: data.senderName,

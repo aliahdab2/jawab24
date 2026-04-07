@@ -58,6 +58,7 @@ export class CommentProcessor {
         commentMessage: string,
         fromId?: string,
         fromName?: string,
+        parentId?: string,
     ): Promise<CommentResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_comment` as Pipeline;
@@ -102,7 +103,8 @@ export class CommentProcessor {
             // get a reply (using triggerReply). Non-matching comments are silently skipped.
             // This mirrors the "comment X to get details" engagement tactic (ManyChat-style).
             // Respects isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
-            if (content.triggerKeyword && content.triggerReply && isCommentsEnabled) {
+            // parentId means this is a sub-comment (reply to another comment) — triggers only fire on top-level comments
+            if (content.triggerKeyword && content.triggerReply && isCommentsEnabled && !parentId) {
                 const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
                 const triggerKeywords = parseKeywords(content.triggerKeyword);
                 const matchedKeyword = triggerKeywords.find(kw =>

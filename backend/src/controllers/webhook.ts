@@ -356,7 +356,7 @@ export class WebhookController {
      * Process a new comment - enqueue for async processing
      */
     private async processNewComment(pageId: string, value: WebhookChange['value']) {
-        const { comment_id, post_id, message, from } = value;
+        const { comment_id, post_id, message, from, parent_id } = value;
 
         if (!comment_id || !post_id || !message) {
             this.log().info('Missing required fields for comment processing', {
@@ -382,6 +382,7 @@ export class WebhookController {
                 pageId,
                 postId: post_id,
                 commentId: comment_id,
+                parentId: parent_id,
                 text: message,
                 senderId: from?.id,
                 senderName: from?.name,

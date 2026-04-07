@@ -48,11 +48,12 @@ export class ReplyService {
         facebookCommentId: string,
         commentMessage: string,
         fromId?: string,
-        fromName?: string
+        fromName?: string,
+        parentId?: string
     ): Promise<CommentResult> {
         return commentProcessor.processComment(
             facebookCommentAdapter, pageId, postId, facebookCommentId,
-            commentMessage, fromId, fromName,
+            commentMessage, fromId, fromName, parentId,
         );
     }
 
