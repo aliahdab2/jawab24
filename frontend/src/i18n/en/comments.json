@@ -1,6 +1,6 @@
 {
   "title": "Comments",
-  "description": "Track and manage all comments from your connected pages.",
+  "description": "Track and manage all comments from your connected pages. Use ⚡ on any comment to set a keyword trigger for that specific post.",
   "allComments": "Show all",
   "replied": "Replied",
   "repliedDesc": "Already responded to.",

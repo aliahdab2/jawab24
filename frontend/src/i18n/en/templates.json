@@ -1,6 +1,6 @@
 {
   "title": "Reply Templates",
-  "description": "Create and manage reply templates",
+  "description": "Saved replies you can reuse manually or attach to a reply rule. Write once, use anywhere.",
   "addTemplate": "Add Template",
   "templateName": "Template Name",
   "templateNameRequired": "Template name is required",

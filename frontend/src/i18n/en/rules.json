@@ -1,6 +1,6 @@
 {
   "title": "Reply Rules",
-  "description": "Create rules to automatically reply based on keywords",
+  "description": "Keyword-based auto-replies that apply across all your posts. Use this for recurring questions like pricing, location, or hours.",
   "firstMatchHint": "Rules are checked top to bottom. First match wins.",
   "addRule": "Add Rule",
   "ruleName": "Rule Name",
