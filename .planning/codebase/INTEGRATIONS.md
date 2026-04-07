@@ -37,9 +37,26 @@
 - **Key Endpoints Used**:
   - `/me/pages` - list connected pages
   - `/me/instagram_accounts` - list connected Instagram accounts
-  - `/{page_id}/messages` - send replies
-  - `/{page_id}/feed` - comment on posts
-  - `/{comment_id}` - reply to comments
+  - `/me/messages` with `recipient.comment_id` - send private reply to a comment (DM linked to the comment)
+  - `/me/messages` with `recipient.id` - send DM to a user (requires prior conversation)
+  - `/{comment_id}/comments` - post a public reply to a comment
+  - `/{post_id}?fields=message,story` - fetch post content (used for shared post context enrichment)
+
+- **Reply Modes (Comments)**:
+  - `public` - reply as a public comment
+  - `private` - send DM via `recipient.comment_id` (fallback: public comment if DM fails)
+  - `dual` - DM with full reply + public comment with short nudge. If DM fails, full reply posted as public comment
+
+- **Per-Post Keyword Triggers** (ManyChat-style):
+  - Merchants set trigger keywords + reply text per post (e.g. "comment . to get details")
+  - When a comment matches a keyword, the trigger reply is sent immediately via `recipient.comment_id`, bypassing the AI pipeline
+  - Keywords stored as comma-separated text in `posts.trigger_keyword` / `instagram_media.trigger_keyword`
+  - Matching uses `matchesKeyword()` from `@jawab24/shared` with Arabic normalization
+  - Sub-comments (`parent_id` set) skip the trigger path
+
+- **Shared Post Handling (Messages)**:
+  - When a customer DMs a shared post with no text → smart nudge acknowledging the post
+  - When a customer DMs a shared post + text → post content fetched via Graph API and prepended to message for AI context
 
 - **Configuration**:
   - `FACEBOOK_APP_ID` - App identifier (public)

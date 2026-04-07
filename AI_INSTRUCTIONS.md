@@ -85,6 +85,7 @@ t('title');  tc('save');
 | **Auto Reply** | Template Replies + Smart Replies |
 | **Smart Reply** | AI-powered reply (never say "AI reply" in UI) |
 | **Template Reply** | Keyword-matched from user-created templates |
+| **Reply Keyword** | Per-post keyword trigger (ManyChat-style). Comment matches keyword → sends configured reply via DM. UI label: "كلمة مفتاحية للرد" |
 | **Away Message** | Sent when auto-reply is off / outside business hours |
 | **Greeting Message** | First message to a new customer |
 
@@ -141,6 +142,16 @@ Public pages must render full HTML on the server. Never wrap content in hydratio
 ### 13. Multi-Language Translation Service
 
 Away/greeting messages auto-translated on save via `backend/src/services/translation.ts`. Both `*_ar` and `*_en` stored; system picks by customer language.
+
+### 13b. Backend i18n — Customer-Facing Strings
+
+System-level strings sent to customers (nudges, fallbacks, placeholders) live in `backend/src/utils/i18n.ts`. Use `t(key, lang)` — never hardcode AR/EN strings in service files.
+
+- **Frontend i18n**: `next-intl` with namespace JSON files (`frontend/src/i18n/{en,ar}/`)
+- **Backend i18n**: centralized `utils/i18n.ts` with `t()` function
+- **DB-stored**: merchant-customizable messages (away, greeting, nudge variations)
+
+To add a new language: extend the `Locale` type in `i18n.ts` — TypeScript will flag every missing translation.
 
 ### 14. Documentation — Keep In Sync
 

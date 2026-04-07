@@ -196,7 +196,14 @@ Each service is independently deployable but shares:
    - Subdomain services:
      - `kb/` — Knowledge Base (embedding, retrieval, semantic cache)
      - `reply/` — Reply generation pipeline (context, formatting, quality checks)
+       - `commentProcessor.ts` — unified comment pipeline: trigger check → template match → AI generation → send
+       - `messageProcessor.ts` — unified DM pipeline: shared post enrichment → template match → AI generation → send
+       - `nonTextHandler.ts` — handles non-text DMs (voice → Whisper transcription, shared posts → smart nudge, photos/videos → nudge)
+       - `sender.ts` — Facebook comment reply logic (public/private/dual modes with fallback)
+       - `nudge.ts` — dual mode nudge variation picker (avoids Facebook spam detection)
+       - `adapters/` — platform-specific adapters (Facebook, Instagram) implementing `CommentPlatformAdapter`
      - `protection/` — Safety rules (price hallucination detection, angry customer alerts)
+   - Backend i18n: `utils/i18n.ts` — centralized customer-facing strings (nudges, fallbacks, placeholders). Add new languages by extending the `Locale` type.
 
 6. **Database Layer** (`src/db/`):
    - `schema.ts` — Drizzle ORM table definitions (users, pages, messages, subscriptions, etc.)
