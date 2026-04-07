@@ -7,10 +7,10 @@ const ATTACHMENT_PLACEHOLDERS: Record<string, { en: string; ar: string }> = {
     fallback: { en: '[Attachment]',     ar: '[مرفق]' },
 };
 
-/** Polite nudge reply asking the customer to resend as text */
+/** Polite nudge reply asking the customer to resend as text or voice */
 const TEXT_ONLY_NUDGE: Record<string, string> = {
-    ar: 'شكراً لتواصلك! حالياً نستطيع الرد على الرسائل النصية فقط. يرجى إعادة إرسال استفسارك كرسالة نصية وسنسعد بمساعدتك 🙏',
-    en: 'Thanks for reaching out! We can currently only process text messages. Please resend your question as a text message and we\'ll be happy to help 🙏',
+    ar: 'شكراً لتواصلك! حالياً نستطيع الرد على الرسائل النصية والصوتية. يرجى إعادة إرسال استفسارك كرسالة نصية أو صوتية وسنسعد بمساعدتك 🙏',
+    en: 'Thanks for reaching out! We can currently process text and voice messages. Please resend your question as a text or voice message and we\'ll be happy to help 🙏',
 };
 
 export function getAttachmentPlaceholder(
