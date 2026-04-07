@@ -23,8 +23,7 @@ const PUBLIC_PAGES = [
   { path: '/en/pricing', arPath: '/pricing' },
   { path: '/en/login', arPath: '/login' },
   { path: '/en/what-is-jawab24', arPath: '/what-is-jawab24' },
-  { path: '/en/contact', arPath: '/contact' },
-  { path: '/en/blog', arPath: '/blog' },
+  // TODO: add /en/contact and /en/blog when those pages are built
 ];
 
 // --- Protected pages (must have noindex) ---
@@ -42,7 +41,7 @@ const PAGES_WITH_JSON_LD = [
   '/en',
   '/en/pricing',
   '/en/what-is-jawab24',
-  '/en/blog',
+  // TODO: add /en/blog when the blog is built
 ];
 
 // Known blog slug for article-specific tests
