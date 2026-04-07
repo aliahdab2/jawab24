@@ -211,11 +211,11 @@ export const CommentCard = React.memo(function CommentCard({
                 <FlagTag flagReason={comment.flagReason} className="mt-0.5" />
              </div>
 
-             {/* Post Context */}
-             {comment.postMessage && (
+             {/* Post Context — show whenever postId exists so the ⚡ trigger button is always accessible */}
+             {comment.postId && (
                <div className="flex items-center gap-1 px-2 py-1 text-[11px] text-muted-foreground max-w-full">
                  <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted" aria-hidden="true" />
-                 <span className="truncate max-w-[220px]">{comment.postMessage}</span>
+                 <span className="truncate max-w-[220px]">{comment.postMessage || t('postContext')}</span>
                  {onTriggerClick && (
                    <button
                      type="button"
