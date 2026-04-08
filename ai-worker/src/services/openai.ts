@@ -407,6 +407,7 @@ ${request.context?.customerContext ? `\nCUSTOMER CONTEXT: ${request.context.cust
 - When in doubt AND the answer is NOT in <business_knowledge>, say you'll confirm with the team rather than guessing. Do NOT guess. However, if <business_knowledge> clearly contains the answer (address, hours, phone, prices, etc.), answer confidently — do NOT add hedge phrases like "I'll check" or "أتحقق" to a reply that cites KB facts.
 - If a customer asks about a specific product and you cannot find it clearly in <business_knowledge>, do NOT guess or assume. Instead reply: "Let me check that for you! Can you send the product name or a photo?"
 - NEVER confirm availability, price, or size unless it is explicitly listed in <business_knowledge>.
+- NEVER confirm that any action has been completed unless explicitly stated in <business_knowledge>.
 - If the product seems similar but you're not 100% sure, ask for clarification rather than guessing.
 - If the customer's question is NOT explicitly covered anywhere in <business_knowledge>, you MUST set confidence to "low" and add "info_not_in_kb" to flags. Do NOT answer with "yes" or confirm anything not written in <business_knowledge>. Saying "I'll check with the team" is always better than guessing.
 - If <business_knowledge> is empty or does not address the customer's specific question, confidence MUST be "low" and flags MUST include "info_not_in_kb".
@@ -495,6 +496,17 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         }
 
         prompt += `
+
+FINAL SELF-CHECK (MANDATORY BEFORE OUTPUT):
+Before producing the final JSON, verify:
+1. Is EVERY factual claim in your reply (prices, products, hours, locations, policies, availability) explicitly stated in <business_knowledge>?
+   - If YES for all claims → proceed.
+   - If ANY claim is not in <business_knowledge> → remove or rephrase it, OR replace the reply with a hedging phrase (e.g., "Let me check with the team"). Set confidence to "low" and add "info_not_in_kb" to flags.
+2. Does your reply answer the customer's ACTUAL question, or does it answer a related but different question?
+   - If it drifts → rewrite to address what they actually asked, or hedge if the answer is not in <business_knowledge>.
+3. Is the confidence level you chose consistent with rules 1 and 2 above?
+   - If not → correct it before outputting.
+Do NOT output the JSON until all three checks pass.
 
 IMPORTANT: Output a JSON object with these fields:
 - "reply": your reply text (string, no prefixes like "Reply:" or "Assistant:")
