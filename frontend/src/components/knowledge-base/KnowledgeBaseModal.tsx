@@ -162,10 +162,10 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const isNearLimit = totalChars > MAX_LENGTH * 0.9;
 
   return (
-    <div className="fixed inset-x-0 top-0 bottom-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2 pb-dash-mobile lg:pb-4">
+    <div className="fixed inset-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2">
 
       <div
-        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-full lg:max-h-[85dvh] flex flex-col overflow-hidden pt-safe lg:pt-0 landscape:pb-2"
+        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-[80%] lg:max-h-[85dvh] flex flex-col pt-safe lg:pt-0 landscape:pb-2"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-theme-border flex-shrink-0 z-10 bg-card">
@@ -265,8 +265,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           )}
         </div>
 
-        {/* Footer — outside scrollable body */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 lg:px-5 lg:py-4 border-t border-theme-border bg-card">
+        {/* Footer — outside scrollable body, pb-dash-mobile reserves space for bottom nav */}
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 pt-3 pb-dash-mobile lg:pb-4 landscape:py-2 lg:px-5 border-t border-theme-border bg-card">
           {/* Raw mode toggle */}
           <button
             type="button"
