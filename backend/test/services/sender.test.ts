@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import axios from 'axios';
 import { facebookService } from '../../src/services/facebook';
+import { fbAxios } from '../../src/lib/fbAxios';
 import { detectLanguageCode } from '../../src/utils/language';
 
-vi.mock('axios');
+vi.mock('../../src/lib/fbAxios');
 vi.mock('../../src/services/facebook');
 vi.mock('../../src/utils/language');
 vi.mock('../../src/config', () => ({
@@ -40,7 +40,7 @@ describe('ReplySender', () => {
         sender = new ReplySender();
         sender.setLogger(mockLogger);
         vi.mocked(detectLanguageCode).mockReturnValue('ar');
-        vi.mocked(axios.post).mockResolvedValue({ data: { id: 'reply_id' } });
+        vi.mocked(fbAxios.post).mockResolvedValue({ data: { id: 'reply_id' } });
         vi.mocked(facebookService.sendPrivateReplyToComment).mockResolvedValue(undefined);
     });
 
@@ -62,7 +62,7 @@ describe('ReplySender', () => {
                 isDemo: true,
             });
 
-            expect(axios.post).not.toHaveBeenCalled();
+            expect(fbAxios.post).not.toHaveBeenCalled();
             expect(facebookService.sendPrivateReplyToComment).not.toHaveBeenCalled();
         });
     });
@@ -70,10 +70,10 @@ describe('ReplySender', () => {
     // ─── Public Mode ─────────────────────────────────────────────────
 
     describe('Public Mode', () => {
-        it('should call axios.post with correct Graph API URL', async () => {
+        it('should call fbAxios.post with correct Graph API URL', async () => {
             await sender.sendCommentReply(baseOptions);
 
-            expect(axios.post).toHaveBeenCalledWith(
+            expect(fbAxios.post).toHaveBeenCalledWith(
                 `${GRAPH_API}/fb_comment_123/comments`,
                 { message: 'Thank you for your feedback!' },
                 { params: { access_token: 'access_token_abc' } }
@@ -87,7 +87,7 @@ describe('ReplySender', () => {
         });
 
         it('should return failure when API call throws', async () => {
-            vi.mocked(axios.post).mockRejectedValue(new Error('Network error'));
+            vi.mocked(fbAxios.post).mockRejectedValue(new Error('Network error'));
 
             const result = await sender.sendCommentReply(baseOptions);
 
@@ -142,7 +142,7 @@ describe('ReplySender', () => {
 
             const result = await sender.sendCommentReply(privateOptions);
 
-            // Falls back to public reply which succeeds (axios.post is mocked to succeed)
+            // Falls back to public reply which succeeds (fbAxios.post is mocked to succeed)
             expect(result).toEqual({ success: true });
         });
     });
@@ -164,7 +164,7 @@ describe('ReplySender', () => {
                 'fb_comment_123',
                 'Thank you for your feedback!'
             );
-            expect(axios.post).toHaveBeenCalledWith(
+            expect(fbAxios.post).toHaveBeenCalledWith(
                 `${GRAPH_API}/fb_comment_123/comments`,
                 { message: 'تحقق من رسائلك!' },
                 { params: { access_token: 'access_token_abc' } }
@@ -174,7 +174,7 @@ describe('ReplySender', () => {
         it('should use nudge text (not full reply) for public comment', async () => {
             await sender.sendCommentReply(dualOptions);
 
-            const axiosCall = vi.mocked(axios.post).mock.calls[0];
+            const axiosCall = vi.mocked(fbAxios.post).mock.calls[0];
             expect(axiosCall[1]).toEqual({ message: 'تحقق من رسائلك!' });
         });
 
@@ -204,12 +204,12 @@ describe('ReplySender', () => {
             // DM failed, dual mode falls back to public reply with full text (not nudge)
             expect(result.success).toBe(true);
             // Public reply was posted with full reply text, not the nudge
-            const axiosCall = vi.mocked(axios.post).mock.calls[0];
+            const axiosCall = vi.mocked(fbAxios.post).mock.calls[0];
             expect(axiosCall[1]).toEqual({ message: 'Thank you for your feedback!' });
         });
 
         it('should log warning when public reply fails in dual mode', async () => {
-            vi.mocked(axios.post).mockRejectedValue(new Error('API error'));
+            vi.mocked(fbAxios.post).mockRejectedValue(new Error('API error'));
 
             await sender.sendCommentReply(dualOptions);
 
@@ -234,14 +234,14 @@ describe('ReplySender', () => {
                 dualReplyNudge: 'راجع الرسائل',
             });
 
-            const axiosCall = vi.mocked(axios.post).mock.calls[0];
+            const axiosCall = vi.mocked(fbAxios.post).mock.calls[0];
             expect(axiosCall[1]).toEqual({ message: 'راجع الرسائل' });
         });
 
         it('should use i18n default when no nudge provided', async () => {
             await sender.sendCommentReply(dualBase);
 
-            const axiosCall = vi.mocked(axios.post).mock.calls[0];
+            const axiosCall = vi.mocked(fbAxios.post).mock.calls[0];
             expect(axiosCall[1]).toEqual({
                 message: 'أرسلنا لك التفاصيل برسالة خاصة 📩',
             });
@@ -264,7 +264,7 @@ describe('ReplySender', () => {
         });
 
         it('should return false and log error on failure', async () => {
-            vi.mocked(axios.post).mockRejectedValue(new Error('API down'));
+            vi.mocked(fbAxios.post).mockRejectedValue(new Error('API down'));
 
             const result = await sender.postPublicReply(
                 'comment_123',

@@ -1,5 +1,5 @@
-import axios from 'axios';
 import { facebookService } from '../facebook';
+import { fbAxios } from '../../lib/fbAxios';
 import { Logger, noopLogger } from '../../types';
 import { config } from '../../config';
 import { t } from '../../utils/i18n';
@@ -127,7 +127,7 @@ export class ReplySender {
         accessToken: string
     ): Promise<boolean> {
         try {
-            await axios.post(
+            await fbAxios.post(
                 `${FACEBOOK_GRAPH_API}/${commentId}/comments`,
                 { message },
                 { params: { access_token: accessToken } }

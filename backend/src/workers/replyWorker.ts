@@ -18,7 +18,7 @@ const connection = {
 };
 
 // Worker concurrency - how many jobs to process simultaneously
-const WORKER_CONCURRENCY = parseInt(process.env.REPLY_WORKER_CONCURRENCY || '5');
+const WORKER_CONCURRENCY = parseInt(process.env.REPLY_WORKER_CONCURRENCY || '8');
 
 let logger: Logger = noopLogger;
 

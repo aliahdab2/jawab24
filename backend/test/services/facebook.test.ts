@@ -1,9 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import axios from 'axios';
+import { fbAxios } from '../../src/lib/fbAxios';
 import { FacebookService } from '../../src/services/facebook';
 
-// Mock axios
+// Mock axios, fbAxios, and tracing
 vi.mock('axios');
+vi.mock('../../src/lib/fbAxios', () => ({
+    fbAxios: {
+        get: vi.fn(),
+        post: vi.fn(),
+        delete: vi.fn(),
+    },
+}));
+vi.mock('../../src/utils/tracing', () => ({
+    tracedExternalCall: (_service: string, _method: string, fn: () => unknown) => fn(),
+}));
 
 // Mock config
 vi.mock('../../src/config', () => ({
@@ -36,12 +47,12 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
+            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
 
             const token = await service.getAccessToken('auth_code_123');
 
             expect(token).toBe('test_access_token');
-            expect(axios.get).toHaveBeenCalledWith(
+            expect(fbAxios.get).toHaveBeenCalledWith(
                 'https://graph.facebook.com/v18.0/oauth/access_token',
                 expect.objectContaining({
                     params: expect.objectContaining({
@@ -66,7 +77,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockRejectedValue(mockError);
+            vi.mocked(fbAxios.get).mockRejectedValue(mockError);
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getAccessToken('invalid_code')).rejects.toThrow('Facebook API error');
@@ -88,7 +99,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
+            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
 
             const profile = await service.getUserProfile('access_token_123');
 
@@ -98,7 +109,7 @@ describe('Facebook Service', () => {
                 email: 'john@example.com',
                 picture: 'https://graph.facebook.com/123456789/picture?type=large',
             });
-            expect(axios.get).toHaveBeenCalledWith(
+            expect(fbAxios.get).toHaveBeenCalledWith(
                 'https://graph.facebook.com/v18.0/me',
                 expect.objectContaining({
                     params: expect.objectContaining({
@@ -122,7 +133,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
+            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
 
             const profile = await service.getUserProfile('access_token_123');
 
@@ -139,7 +150,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
+            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
 
             const profile = await service.getUserProfile('access_token_123');
 
@@ -160,7 +171,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockRejectedValue(mockError);
+            vi.mocked(fbAxios.get).mockRejectedValue(mockError);
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getUserProfile('invalid_token')).rejects.toThrow('Facebook API error');
@@ -194,7 +205,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
+            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
 
             const pages = await service.getUserPages('access_token_123');
 
@@ -210,7 +221,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
+            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
 
             const pages = await service.getUserPages('access_token_123');
 
@@ -229,7 +240,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockRejectedValue(mockError);
+            vi.mocked(fbAxios.get).mockRejectedValue(mockError);
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getUserPages('invalid_token')).rejects.toThrow('Facebook API error');
@@ -242,19 +253,19 @@ describe('Facebook Service', () => {
         const PAGE_ID = 'page_999';
 
         it('returns name from User Profile API when available', async () => {
-            vi.mocked(axios.get).mockResolvedValue({ data: { name: 'Ali Ahdab', id: SENDER_ID } });
+            vi.mocked(fbAxios.get).mockResolvedValue({ data: { name: 'Ali Ahdab', id: SENDER_ID } });
 
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN);
 
             expect(result).toEqual({ name: 'Ali Ahdab' });
-            expect(axios.get).toHaveBeenCalledWith(
+            expect(fbAxios.get).toHaveBeenCalledWith(
                 expect.stringContaining(SENDER_ID),
                 expect.objectContaining({ params: expect.objectContaining({ fields: 'name' }) })
             );
         });
 
         it('returns null when User Profile API returns no name and no pageId provided', async () => {
-            vi.mocked(axios.get).mockResolvedValue({ data: { id: SENDER_ID } });
+            vi.mocked(fbAxios.get).mockResolvedValue({ data: { id: SENDER_ID } });
 
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN);
 
@@ -267,7 +278,7 @@ describe('Facebook Service', () => {
                 response: { data: { error: { message: 'Permission denied' } } },
             });
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
-            vi.mocked(axios.get)
+            vi.mocked(fbAxios.get)
                 .mockRejectedValueOnce(axiosError)
                 .mockResolvedValueOnce({
                     data: {
@@ -288,7 +299,7 @@ describe('Facebook Service', () => {
         });
 
         it('falls back to Conversations API when User Profile API returns no name', async () => {
-            vi.mocked(axios.get)
+            vi.mocked(fbAxios.get)
                 .mockResolvedValueOnce({ data: { id: SENDER_ID } })
                 .mockResolvedValueOnce({
                     data: {
@@ -308,7 +319,7 @@ describe('Facebook Service', () => {
         it('returns null when both APIs fail', async () => {
             const axiosError = Object.assign(new Error('Forbidden'), { isAxiosError: true });
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
-            vi.mocked(axios.get)
+            vi.mocked(fbAxios.get)
                 .mockRejectedValueOnce(axiosError)
                 .mockRejectedValueOnce(new Error('Network error'));
 
@@ -318,7 +329,7 @@ describe('Facebook Service', () => {
         });
 
         it('returns null when Conversations API returns no matching participant', async () => {
-            vi.mocked(axios.get)
+            vi.mocked(fbAxios.get)
                 .mockResolvedValueOnce({ data: { id: SENDER_ID } })
                 .mockResolvedValueOnce({
                     data: {
@@ -334,7 +345,7 @@ describe('Facebook Service', () => {
         });
 
         it('returns null when Conversations API returns empty conversations list', async () => {
-            vi.mocked(axios.get)
+            vi.mocked(fbAxios.get)
                 .mockResolvedValueOnce({ data: { id: SENDER_ID } })
                 .mockResolvedValueOnce({ data: { data: [] } });
 
@@ -346,12 +357,12 @@ describe('Facebook Service', () => {
 
     describe('subscribePageToWebhooks', () => {
         it('should subscribe a page to feed + messages', async () => {
-            vi.mocked(axios.post).mockResolvedValue({ data: { success: true } });
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: { success: true } });
 
             const result = await service.subscribePageToWebhooks('page_123', 'page_token_abc');
 
             expect(result).toBe(true);
-            expect(axios.post).toHaveBeenCalledWith(
+            expect(fbAxios.post).toHaveBeenCalledWith(
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
                 {
@@ -368,7 +379,7 @@ describe('Facebook Service', () => {
                 isAxiosError: true,
                 response: { data: { error: { message: 'Permission denied' } } },
             });
-            vi.mocked(axios.post).mockRejectedValue(axiosError);
+            vi.mocked(fbAxios.post).mockRejectedValue(axiosError);
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             const result = await service.subscribePageToWebhooks('page_123', 'bad_token');
@@ -382,20 +393,20 @@ describe('Facebook Service', () => {
                 response: { data: { error: { message: 'To subscribe to the feed field, one of these permissions is needed: pages_manage_metadata', code: 200 } } },
             });
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
-            vi.mocked(axios.post)
+            vi.mocked(fbAxios.post)
                 .mockRejectedValueOnce(metadataError)   // first call: feed+messages fails
                 .mockResolvedValueOnce({ data: { success: true } }); // retry: messages-only succeeds
 
             const result = await service.subscribePageToWebhooks('page_123', 'page_token');
 
             expect(result).toBe(true);
-            expect(axios.post).toHaveBeenCalledTimes(2);
-            expect(axios.post).toHaveBeenNthCalledWith(1,
+            expect(fbAxios.post).toHaveBeenCalledTimes(2);
+            expect(fbAxios.post).toHaveBeenNthCalledWith(1,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
                 { params: { subscribed_fields: 'feed,messages', access_token: 'page_token' } },
             );
-            expect(axios.post).toHaveBeenNthCalledWith(2,
+            expect(fbAxios.post).toHaveBeenNthCalledWith(2,
                 'https://graph.facebook.com/v18.0/page_123/subscribed_apps',
                 null,
                 { params: { subscribed_fields: 'messages', access_token: 'page_token' } },
@@ -412,14 +423,14 @@ describe('Facebook Service', () => {
                 response: { data: { error: { message: 'pages_messaging permission required' } } },
             });
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
-            vi.mocked(axios.post)
+            vi.mocked(fbAxios.post)
                 .mockRejectedValueOnce(metadataError)
                 .mockRejectedValueOnce(messagingError);
 
             const result = await service.subscribePageToWebhooks('page_123', 'bad_token');
 
             expect(result).toBe(false);
-            expect(axios.post).toHaveBeenCalledTimes(2);
+            expect(fbAxios.post).toHaveBeenCalledTimes(2);
         });
     });
 
@@ -433,13 +444,13 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockResolvedValue(mockResponse);
+            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
 
             const result = await service.getLongLivedToken('short_lived_token');
 
             expect(result.token).toBe('long_lived_token');
             expect(result.expiresAt).toBeInstanceOf(Date);
-            expect(axios.get).toHaveBeenCalledWith(
+            expect(fbAxios.get).toHaveBeenCalledWith(
                 'https://graph.facebook.com/v18.0/oauth/access_token',
                 expect.objectContaining({
                     params: expect.objectContaining({
@@ -464,7 +475,7 @@ describe('Facebook Service', () => {
                 },
             };
 
-            vi.mocked(axios.get).mockRejectedValue(mockError);
+            vi.mocked(fbAxios.get).mockRejectedValue(mockError);
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getLongLivedToken('invalid_token')).rejects.toThrow('Facebook API error');

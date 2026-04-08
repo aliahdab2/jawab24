@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { config } from '../config';
 import { tracedExternalCall } from '../utils/tracing';
+import { fbAxios } from '../lib/fbAxios';
 import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, Logger } from '../types';
 import { noopLogger } from '../types';
 
@@ -24,7 +25,7 @@ export class FacebookService {
     async getAccessToken(code: string, redirectUri?: string): Promise<string> {
         try {
             const response = await traced('getAccessToken', () =>
-                axios.get<FacebookTokenResponse>(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
+                fbAxios.get<FacebookTokenResponse>(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
                     params: {
                         client_id: config.facebook.appId,
                         client_secret: config.facebook.appSecret,
@@ -50,7 +51,7 @@ export class FacebookService {
         try {
             const appAccessToken = `${config.facebook.appId}|${config.facebook.appSecret}`;
             const response = await traced('verifyAccessToken', () =>
-                axios.get(`${FACEBOOK_GRAPH_API}/debug_token`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/debug_token`, {
                     params: {
                         input_token: accessToken,
                         access_token: appAccessToken,
@@ -85,7 +86,7 @@ export class FacebookService {
     async getUserProfile(accessToken: string): Promise<FacebookUserProfile> {
         try {
             const response = await traced('getUserProfile', () =>
-                axios.get(`${FACEBOOK_GRAPH_API}/me`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/me`, {
                     params: {
                         fields: 'id,name,email,picture.type(large)',
                         access_token: accessToken,
@@ -118,7 +119,7 @@ export class FacebookService {
         try {
             this.logger.debug('[Facebook] Fetching user pages');
             const response = await traced('getUserPages', () =>
-                axios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
+                fbAxios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
                     params: {
                         access_token: accessToken,
                         fields: 'id,name,access_token,category,tasks,about,phone,single_line_address,hours,website',
@@ -150,7 +151,7 @@ export class FacebookService {
     async getLongLivedToken(shortLivedToken: string): Promise<{ token: string; expiresAt: Date }> {
         try {
             const response = await traced('getLongLivedToken', () =>
-                axios.get(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/oauth/access_token`, {
                     params: {
                         grant_type: 'fb_exchange_token',
                         client_id: config.facebook.appId,
@@ -198,7 +199,7 @@ export class FacebookService {
     async sendPrivateReplyToComment(pageAccessToken: string, commentId: string, text: string): Promise<void> {
         try {
             await traced('sendPrivateReplyToComment', () =>
-                axios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
+                fbAxios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
                     recipient: { comment_id: commentId },
                     message: { text },
                 }, {
@@ -225,7 +226,7 @@ export class FacebookService {
     async sendPrivateMessage(pageAccessToken: string, recipientId: string, text: string): Promise<void> {
         try {
             await traced('sendPrivateMessage', () =>
-                axios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
+                fbAxios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
                     recipient: { id: recipientId },
                     message: { text },
                 }, {
@@ -250,7 +251,7 @@ export class FacebookService {
         try {
             this.logger.debug('[Facebook] Fetching post content', { postId });
             const response = await traced('getPostContent', () =>
-                axios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${postId}`, {
                     params: {
                         fields: 'message,story,created_time',
                         access_token: pageAccessToken,
@@ -287,7 +288,7 @@ export class FacebookService {
     } | null> {
         try {
             const response = await traced('getCommentDetails', () =>
-                axios.get(`${FACEBOOK_GRAPH_API}/${commentId}`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${commentId}`, {
                     params: {
                         fields: 'message,from',
                         access_token: pageAccessToken,
@@ -316,7 +317,7 @@ export class FacebookService {
         // Try User Profile API first
         try {
             const response = await traced('getSenderProfile', () =>
-                axios.get(`${FACEBOOK_GRAPH_API}/${senderId}`, {
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${senderId}`, {
                     params: {
                         fields: 'name',
                         access_token: pageAccessToken,
@@ -338,7 +339,7 @@ export class FacebookService {
         if (pageId) {
             try {
                 const convResponse = await traced('getSenderProfile.conversations', () =>
-                    axios.get(`${FACEBOOK_GRAPH_API}/${pageId}/conversations`, {
+                    fbAxios.get(`${FACEBOOK_GRAPH_API}/${pageId}/conversations`, {
                         params: {
                             user_id: senderId,
                             fields: 'participants',
@@ -368,7 +369,7 @@ export class FacebookService {
         try {
             this.logger.info('[Facebook] Subscribing page to webhooks', { pageId });
             await traced('subscribePageToWebhooks', () =>
-                axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                fbAxios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
                     params: {
                         subscribed_fields: 'feed,messages',
                         access_token: pageAccessToken,
@@ -384,7 +385,7 @@ export class FacebookService {
                 this.logger.warn('[Facebook] pages_manage_metadata missing, subscribing to messages only', { pageId });
                 try {
                     await traced('subscribePageToWebhooks.messagesOnly', () =>
-                        axios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
+                        fbAxios.post(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, null, {
                             params: {
                                 subscribed_fields: 'messages',
                                 access_token: pageAccessToken,
@@ -420,7 +421,7 @@ export class FacebookService {
         try {
             this.logger.info('[Facebook] Unsubscribing page from webhooks', { pageId });
             await traced('unsubscribePageFromWebhooks', () =>
-                axios.delete(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, {
+                fbAxios.delete(`${FACEBOOK_GRAPH_API}/${pageId}/subscribed_apps`, {
                     params: {
                         access_token: pageAccessToken,
                     },
