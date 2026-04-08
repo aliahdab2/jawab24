@@ -151,7 +151,11 @@ AUDIT_FAILED=false
 
 # GHSA-3ppc-4f35-3m26 — minimatch ReDoS inside @sentry/node's bundler tooling.
 # Patterns are developer-supplied (not user input); no upstream fix yet.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26"
+# GHSA-gpj5-g38j-94v9 — drizzle-orm SQL injection via dynamic identifiers.
+# We use static schema only (no dynamic table/column names). Fix requires major upgrade (0.29→0.45).
+# GHSA-vpq2-c234-7xj6 — teeny-request via @google-cloud/firestore (optional dep of firebase-admin).
+# Transitive, no direct fix available until firebase-admin ships patched version.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
@@ -167,7 +171,7 @@ run_audit() {
     else
         # Check if any unignored GHSA advisories remain
         local unignored
-        unignored=$(echo "$output" | grep -oE "GHSA-[A-Za-z0-9-]+" | grep -v "$IGNORED_GHSA" | sort -u)
+        unignored=$(echo "$output" | grep -oE "GHSA-[A-Za-z0-9-]+" | grep -vE "$IGNORED_GHSA" | sort -u)
         if [ -z "$unignored" ]; then
             echo -e "${GREEN}   ✅ ${workspace_label}: no actionable vulnerabilities (${IGNORED_GHSA} acknowledged)${NC}"
         else
