@@ -24,3 +24,17 @@ export function detectContactType(contact: string): { email: string | null; phon
   }
   return { email: contact, phone: null };
 }
+
+/** Arabic-speaking country calling codes (E.164 prefixes without the +). */
+const ARABIC_CALLING_CODES = [
+  '966', '971', '970', '962', '961', '963', '964', '965',
+  '968', '967', '974', '973', '218', '216', '213', '212', '20',
+  '249', '253',
+];
+
+const ARABIC_PREFIX_RE = new RegExp(`^\\+(?:${ARABIC_CALLING_CODES.join('|')})`);
+
+/** Returns true if the E.164 phone number belongs to an Arabic-speaking country. */
+export function isArabicPhone(phone: string): boolean {
+  return ARABIC_PREFIX_RE.test(phone);
+}

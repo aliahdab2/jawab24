@@ -16,7 +16,24 @@ vi.mock('../../src/services/workspace', () => ({
     },
 }));
 
+vi.mock('../../src/services/sms', () => ({
+    smsService: {
+        send: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+vi.mock('../../src/config', () => ({
+    config: {
+        frontendUrl: 'https://jawab24.com',
+    },
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
+}));
+
 const { workspaceService } = await import('../../src/services/workspace');
+const { smsService } = await import('../../src/services/sms');
 
 function mockSelectLimitChain(returnValue: any) {
     return {
@@ -92,7 +109,35 @@ describe('WorkspaceInviteService', () => {
             expect(result.rawToken).toBeDefined();
             expect(typeof result.rawToken).toBe('string');
             expect(result.rawToken.length).toBe(64); // 32 bytes hex
+            expect(result.smsSent).toBe(false);
+            expect(smsService.send).not.toHaveBeenCalled();
             expect(db.insert).toHaveBeenCalledTimes(1);
+        });
+
+        it('should send SMS when inviting a phone number', async () => {
+            const phoneInvite = { ...sampleInvite, email: null, phone: '+966501234567' };
+            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([]) as any);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(phoneInvite) as any);
+
+            const result = await workspaceInviteService.createInvite('ws-1', '+966501234567', 'member', 'user-1');
+
+            expect(result.smsSent).toBe(true);
+            expect(smsService.send).toHaveBeenCalledTimes(1);
+            expect(vi.mocked(smsService.send).mock.calls[0][0]).toBe('+966501234567');
+            expect(vi.mocked(smsService.send).mock.calls[0][1]).toContain('Jawab24');
+        });
+
+        it('should still create invite if SMS fails', async () => {
+            const phoneInvite = { ...sampleInvite, email: null, phone: '+966501234567' };
+            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([]) as any);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(phoneInvite) as any);
+            vi.mocked(smsService.send).mockRejectedValueOnce(new Error('Vonage error'));
+
+            const result = await workspaceInviteService.createInvite('ws-1', '+966501234567', 'member', 'user-1');
+
+            expect(result.invite).toEqual(phoneInvite);
+            expect(result.rawToken).toBeDefined();
+            expect(result.smsSent).toBe(false);
         });
 
         it('should update existing invite on re-invite', async () => {

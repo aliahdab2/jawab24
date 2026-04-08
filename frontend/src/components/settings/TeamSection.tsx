@@ -100,6 +100,16 @@ export function TeamSection() {
     setLinkCopied(false);
   };
 
+  const processInviteResponse = (res: { data?: { token?: string; smsSent?: boolean } }, contactValue: string, isResend: boolean) => {
+    const token = res.data?.token;
+    const smsSent = res.data?.smsSent;
+    if (token && !smsSent) showInviteLink(token, contactValue);
+    const key = isResend
+      ? (smsSent ? 'inviteResentSms' : 'inviteResent')
+      : (smsSent ? 'inviteSentSms' : 'inviteSent');
+    toast.success(t(key as Parameters<typeof t>[0], { contact: contactValue }));
+  };
+
   const handleInvite = async () => {
     const trimmed = contact.trim().toLowerCase();
     if (!trimmed || !isValidContact(trimmed)) {
@@ -113,10 +123,8 @@ export function TeamSection() {
     setSending(true);
     try {
       const res = await workspaceApi.createInvite(trimmed);
-      const token = res.data?.token;
       setContact('');
-      if (token) showInviteLink(token, trimmed);
-      toast.success(t('inviteSent', { contact: trimmed }));
+      processInviteResponse(res, trimmed, false);
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to send invite', { tags: { page: 'settings', action: 'invite' } });
@@ -131,9 +139,7 @@ export function TeamSection() {
     setResendingId(invite.id);
     try {
       const res = await workspaceApi.createInvite(contactValue);
-      const token = res.data?.token;
-      if (token) showInviteLink(token, contactValue);
-      toast.success(t('inviteResent', { contact: contactValue }));
+      processInviteResponse(res, contactValue, true);
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to resend invite', { tags: { page: 'settings', action: 'resendInvite' } });

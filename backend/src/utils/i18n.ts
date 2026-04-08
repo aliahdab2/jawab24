@@ -57,6 +57,12 @@ const messages = {
 
     // ─── Shared post placeholder (stored in DB) ────────────────────────────────
     attachmentPost: { ar: '[منشور مُشارَك]', en: '[Shared Post]' },
+
+    // ─── Team invite SMS ───────────────────────────────────────────────────────
+    inviteSms: {
+        ar: 'لديك دعوة للانضمام إلى فريق على Jawab24. اقبل الدعوة من هنا: {link}',
+        en: 'You\'ve been invited to join a team on Jawab24. Accept here: {link}',
+    },
 } as const satisfies Record<string, Messages>;
 
 export type MessageKey = keyof typeof messages;
@@ -64,8 +70,14 @@ export type MessageKey = keyof typeof messages;
 /**
  * Get a customer-facing string by key and locale.
  * Falls back to English if the locale is not found.
+ * Optional `vars` replaces `{key}` placeholders in the string.
  */
-export function t(key: MessageKey, lang: string): string {
-    const m = messages[key];
-    return m[lang as Locale] ?? m.en;
+export function t(key: MessageKey, lang: string, vars?: Record<string, string>): string {
+    let text: string = messages[key][lang as Locale] ?? messages[key].en;
+    if (vars) {
+        for (const [k, v] of Object.entries(vars)) {
+            text = text.replaceAll(`{${k}}`, v);
+        }
+    }
+    return text;
 }

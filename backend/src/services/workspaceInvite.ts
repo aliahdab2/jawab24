@@ -3,8 +3,12 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaceInvites } from '../db/schema';
 import { workspaceService } from './workspace';
-import { detectContactType } from '@jawab24/shared';
+import { smsService } from './sms';
+import { detectContactType, isArabicPhone } from '@jawab24/shared';
 import type { WorkspaceRole } from '@jawab24/shared';
+import { config } from '../config';
+import { t } from '../utils/i18n';
+import { captureError } from '../utils/sentryHelpers';
 
 /** Invite expiry: 48 hours */
 const INVITE_EXPIRY_MS = 48 * 60 * 60 * 1000;
@@ -14,8 +18,7 @@ export class WorkspaceInviteService {
      * Create an invite for a workspace.
      * `contact` can be an email address or an E.164 phone number (+966xxxxxxxxx).
      * Returns the raw token (for the invite URL) and the invite record.
-     *
-     * TODO Phase 2: when phone invite is created, send invite link via WhatsApp Business API
+     * For phone invites, sends the invite link via SMS.
      */
     async createInvite(
         workspaceId: string,
@@ -73,7 +76,24 @@ export class WorkspaceInviteService {
                 .returning();
         }
 
-        return { invite, rawToken };
+        // Send SMS for phone invites — awaited so we can report delivery status
+        let smsSent = false;
+        if (phone) {
+            const inviteUrl = new URL('/invites/accept', config.frontendUrl);
+            inviteUrl.searchParams.set('token', rawToken);
+            const lang = isArabicPhone(phone) ? 'ar' : 'en';
+            const message = t('inviteSms', lang, { link: inviteUrl.toString() });
+            try {
+                await smsService.send(phone, message);
+                smsSent = true;
+            } catch (err) {
+                captureError(err, 'Failed to send invite SMS', {
+                    tags: { context: 'workspace' },
+                });
+            }
+        }
+
+        return { invite, rawToken, smsSent };
     }
 
     /**
