@@ -216,6 +216,11 @@ function PlanCard({
         />
 
         <FeatureRow
+          included={true}
+          text={t('pricing.featureCommentToDm')}
+        />
+
+        <FeatureRow
           included={plan.showBranding === false}
           text={t('pricing.brandingHidden')}
         />

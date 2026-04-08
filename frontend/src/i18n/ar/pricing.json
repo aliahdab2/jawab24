@@ -75,6 +75,7 @@
   "featureTemplatesUnlimited": "قوالب رد غير محدودة",
   "featureRules": "{count, plural, zero {لا قواعد رد} one {قاعدة رد واحدة} two {قاعدتا رد} few {# قواعد رد} many {# قاعدة رد} other {# قاعدة رد}}",
   "featureRulesUnlimited": "قواعد رد غير محدودة",
+  "featureCommentToDm": "أتمتة التعليقات للرسائل الخاصة",
   "featureShopify": "ربط شوبيفاي وسلة وزد",
   "shopifyBadge": "يشمل ربط شوبيفاي وسلة وزد",
   "ecommerceBadgeTitle": "ربط المتاجر الإلكترونية",
