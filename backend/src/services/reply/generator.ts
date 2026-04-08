@@ -219,9 +219,12 @@ export class ReplyGenerator {
             );
 
             const detectedLang = detectLanguageCode(text);
+            // For punctuation-only comments (e.g. ".", ".."), detect language from the post content
+            const effectiveLang = detectedLang !== 'unknown' ? detectedLang
+                : (postMessage ? detectLanguageCode(postMessage) : 'unknown');
             const aiResponse = await aiService.generateReply({
                 comment: text,
-                language: detectedLang !== 'unknown' ? detectedLang : undefined,
+                language: effectiveLang !== 'unknown' ? effectiveLang : undefined,
                 context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
             });
 

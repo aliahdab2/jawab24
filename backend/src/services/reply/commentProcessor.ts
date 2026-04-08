@@ -101,8 +101,9 @@ export class CommentProcessor {
             // get a reply (using triggerReply). Non-matching comments are silently skipped.
             // This mirrors the "comment X to get details" engagement tactic (ManyChat-style).
             // Respects isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
-            // parentId means this is a sub-comment (reply to another comment) — triggers only fire on top-level comments
-            if (content.triggerKeyword && content.triggerReply && isCommentsEnabled && !parentId) {
+            // Triggers fire on both top-level comments AND sub-comments (replies to pinned comments
+            // are common in engagement posts like "comment . to get details").
+            if (content.triggerKeyword && content.triggerReply && isCommentsEnabled) {
                 const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
                 const triggerKeywords = parseKeywords(content.triggerKeyword);
                 const matchedKeyword = triggerKeywords.find(kw =>
@@ -130,6 +131,13 @@ export class CommentProcessor {
                     accessToken: page.accessToken, fromId,
                     userSettings: userSettings as unknown as Record<string, unknown>,
                     triggerKeyword: matchedKeyword,
+                });
+            } else if (content.triggerKeyword) {
+                // Trigger keywords exist but conditions not met — log for diagnostics
+                this.logger.info(`[${platform}] Trigger keywords exist but trigger block skipped`, {
+                    platformCommentId,
+                    hasTriggerReply: !!content.triggerReply,
+                    isCommentsEnabled,
                 });
             }
 
