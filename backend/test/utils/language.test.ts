@@ -238,4 +238,65 @@ describe('Language Detection Utility', () => {
             expect(detectLanguage('Thanks').language).toBe('en');
         });
     });
+
+    describe('Punctuation-only comments (trigger keyword scenarios)', () => {
+        // These comments are common in engagement posts ("comment . to get details")
+        // Language detection returns "unknown" — callers should fall back to post language
+
+        it('should return unknown for single dot', () => {
+            expect(detectLanguageCode('.')).toBe('unknown');
+        });
+
+        it('should return unknown for multiple dots', () => {
+            expect(detectLanguageCode('..')).toBe('unknown');
+            expect(detectLanguageCode('...')).toBe('unknown');
+            expect(detectLanguageCode('....')).toBe('unknown');
+        });
+
+        it('should return unknown for other punctuation', () => {
+            expect(detectLanguageCode('!!!')).toBe('unknown');
+            expect(detectLanguageCode('???')).toBe('unknown');
+            expect(detectLanguageCode('#')).toBe('unknown');
+        });
+
+        it('should return unknown for emoji-only', () => {
+            expect(detectLanguageCode('👍')).toBe('unknown');
+            expect(detectLanguageCode('🔥🔥')).toBe('unknown');
+            expect(detectLanguageCode('❤️')).toBe('unknown');
+        });
+
+        it('post language fallback: Arabic post detectable from content', () => {
+            // This simulates the generator fallback logic
+            const commentLang = detectLanguageCode('.');
+            const postMessage = 'يعلن الفريق الدمشقي عن استمرار التسجيل على كورس المكياج';
+            const effectiveLang = commentLang !== 'unknown' ? commentLang
+                : detectLanguageCode(postMessage);
+            expect(effectiveLang).toBe('ar');
+        });
+
+        it('post language fallback: Turkish post detectable from content', () => {
+            const commentLang = detectLanguageCode('.');
+            const postMessage = 'Makyaj kursuna kayıt için lütfen iletişime geçin';
+            const effectiveLang = commentLang !== 'unknown' ? commentLang
+                : detectLanguageCode(postMessage);
+            expect(effectiveLang).toBe('tr');
+        });
+
+        it('post language fallback: English post detectable from content', () => {
+            const commentLang = detectLanguageCode('..');
+            const postMessage = 'Register for our makeup course now and get a discount';
+            const effectiveLang = commentLang !== 'unknown' ? commentLang
+                : detectLanguageCode(postMessage);
+            expect(effectiveLang).toBe('en');
+        });
+
+        it('post language fallback: comment with real text ignores post', () => {
+            // When the comment has detectable language, post language is not used
+            const commentLang = detectLanguageCode('كم السعر؟');
+            const postMessage = 'Register for our makeup course';
+            const effectiveLang = commentLang !== 'unknown' ? commentLang
+                : detectLanguageCode(postMessage);
+            expect(effectiveLang).toBe('ar');
+        });
+    });
 });
