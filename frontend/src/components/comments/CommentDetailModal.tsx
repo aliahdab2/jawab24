@@ -286,7 +286,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             <div className="flex flex-col gap-2">
               <div className="flex items-start gap-2 px-3 py-2.5 bg-muted rounded-lg text-sm text-muted-foreground">
                 <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <div className="max-h-28 overflow-y-auto min-w-0">
+                <div className="max-h-28 overflow-y-auto min-w-0 flex-1">
                   <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
                 </div>
               </div>
