@@ -266,7 +266,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
         </div>
 
         {/* Footer — outside scrollable body */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 pb-safe lg:pb-4 landscape:py-2 lg:px-5 border-t border-theme-border bg-surface-50 z-10">
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 lg:px-5 lg:py-4 border-t border-theme-border bg-card">
           {/* Raw mode toggle */}
           <button
             type="button"
