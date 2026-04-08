@@ -1673,6 +1673,25 @@ body.is-native .pt-hero {
   }
 }
 
+/* Modal bottom padding — positions modal above the bottom nav on mobile */
+/* Uses same values as BottomNav: h-16 (64px) + safe area + 8px clearance */
+.pb-modal-above-nav {
+  padding-bottom: calc(4rem + var(--sai-bottom, 0px) + 8px);
+}
+
+@media (orientation: landscape) and (max-width: 1023px) {
+  .pb-modal-above-nav {
+    padding-bottom: calc(3rem + 8px); /* 48px compact nav + clearance */
+  }
+}
+
+/* Hide on desktop (no bottom nav) */
+@media (min-width: 1024px) {
+  .pb-modal-above-nav {
+    padding-bottom: 1rem;
+  }
+}
+
 /* Dashboard mobile bottom padding — accounts for bottom nav + clearance */
 .pb-dash-mobile {
   padding-bottom: 80px; /* 64px nav + 16px clearance */

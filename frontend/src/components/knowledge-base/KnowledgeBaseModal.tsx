@@ -162,12 +162,13 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const isNearLimit = totalChars > MAX_LENGTH * 0.9;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 landscape:items-center sm:p-4 landscape:p-2">
+    <div className="fixed inset-x-0 top-0 bottom-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2 pb-dash-mobile lg:pb-4">
+
       <div
-        className="bg-card rounded-t-3xl sm:rounded-2xl landscape:rounded-2xl shadow-xl w-full sm:max-w-2xl landscape:max-w-3xl h-[85dvh] landscape:h-[90dvh] sm:h-auto sm:max-h-[85dvh] flex flex-col overflow-hidden pt-safe sm:pt-0 pb-safe-modal landscape:pb-2"
+        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-full lg:max-h-[85dvh] flex flex-col overflow-hidden pt-safe lg:pt-0 landscape:pb-2"
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-theme-border flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-theme-border flex-shrink-0 z-10 bg-card">
           <div className="flex items-center gap-3 landscape:gap-2">
             <div className="w-9 h-9 landscape:w-8 landscape:h-8 sm:w-10 sm:h-10 rounded-xl icon-bg-brand flex items-center justify-center">
               <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -188,7 +189,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
         </div>
 
         {/* Body — flex-1 + min-h-0 + overflow-y-auto ensures this scrolls while header/footer stay fixed */}
-        <div className="flex-1 min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto">
+        <div className="flex-1 min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto relative">
           {/* Description */}
           <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
             {tKb('description')}
@@ -264,8 +265,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 landscape:py-2 sm:p-5 border-t border-theme-border flex-shrink-0 bg-surface-50">
+        {/* Footer — outside scrollable body */}
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 pb-safe lg:pb-4 landscape:py-2 lg:px-5 border-t border-theme-border bg-surface-50 z-10">
           {/* Raw mode toggle */}
           <button
             type="button"
@@ -287,7 +288,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
 
           <div className="flex items-center gap-3 landscape:gap-2">
             {totalChars > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 max-sm:hidden">
                 {isOverLimit && (
                   <span className="text-xs font-medium text-red-500" role="alert">
                     {tKb('overLimit').replace('{excess}', (totalChars - MAX_LENGTH).toLocaleString())}
@@ -300,7 +301,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
                 </span>
               </div>
             )}
-            <Button variant="secondary" size="sm" onClick={onClose}>
+            <Button variant="secondary" size="sm" onClick={onClose} className="max-sm:hidden">
               {tc('cancel')}
             </Button>
             <Button
@@ -310,6 +311,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               disabled={isOverLimit}
               icon={saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
               variant={saved ? 'secondary' : 'primary'}
+              className="max-sm:h-10 max-sm:px-6"
             >
               {saved ? tPages('savedStatus') : tc('save')}
             </Button>
