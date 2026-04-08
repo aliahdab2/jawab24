@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { BookOpen, X, Save, Check, FileText, Eye, MessageCircleQuestion, Lightbulb } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui';
@@ -161,7 +162,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const isOverLimit = totalChars > MAX_LENGTH;
   const isNearLimit = totalChars > MAX_LENGTH * 0.9;
 
-  return (
+  const modal = (
     <div className="fixed inset-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2">
 
       <div
@@ -320,4 +321,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(modal, document.body)
+    : null;
 }

@@ -23,7 +23,10 @@ vi.mock('@/lib/store', () => ({
 }));
 
 vi.mock('@/constants/brand', () => ({
-  BRAND_ASSETS: { meta: { appName: 'Jawab24' } },
+  BRAND_ASSETS: {
+    meta: { appName: 'Jawab24' },
+    urls: { base: 'https://jawab24.com', canonical: (p = '') => `https://jawab24.com${p}` },
+  },
 }));
 
 vi.mock('@/components/ui', () => ({
