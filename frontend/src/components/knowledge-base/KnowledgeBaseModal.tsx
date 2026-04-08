@@ -265,8 +265,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           )}
         </div>
 
-        {/* Footer — outside scrollable body, pb-dash-mobile reserves space for bottom nav */}
-        <div className="flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 pt-3 pb-dash-mobile lg:pb-4 landscape:py-2 lg:px-5 border-t border-theme-border bg-card">
+        {/* Footer — outside scrollable body; modal is z-50 above bottom nav, only needs safe area padding */}
+        <div className="flex-shrink-0 flex items-center justify-between gap-3 landscape:gap-2 px-4 py-3 pb-safe-modal lg:pb-4 landscape:py-2 lg:px-5 border-t border-theme-border bg-card">
           {/* Raw mode toggle */}
           <button
             type="button"
