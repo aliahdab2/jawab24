@@ -130,6 +130,7 @@ export class CommentProcessor {
                     commentMessage, platformCommentId, platformPageId,
                     accessToken: page.accessToken, fromId,
                     userSettings: userSettings as unknown as Record<string, unknown>,
+                    postMessage: content.message || undefined,
                     triggerKeyword: matchedKeyword,
                 });
             } else if (content.triggerKeyword) {
@@ -350,6 +351,7 @@ export class CommentProcessor {
                 platformCommentId, platformPageId,
                 accessToken: page.accessToken, fromId,
                 userSettings: userSettings as unknown as Record<string, unknown>,
+                postMessage: content.message || undefined,
                 templateId, needsAttention, flagReason, aiIntent, aiOriginalReply,
                 confidence,
             });
@@ -392,6 +394,7 @@ export class CommentProcessor {
         accessToken: string;
         fromId?: string;
         userSettings: Record<string, unknown>;
+        postMessage?: string;
         // Optional — only used by the main template/AI path
         templateId?: string;
         needsAttention?: boolean;
@@ -417,6 +420,7 @@ export class CommentProcessor {
             accessToken,
             fromId,
             userSettings,
+            postMessage: opts.postMessage,
         });
 
         if (!sendResult.success) {
@@ -429,7 +433,10 @@ export class CommentProcessor {
             return { success: false, commentId: comment.id, error: sendResult.error };
         }
 
-        const detectedLanguage = detectLanguageCode(commentMessage);
+        // Detect language from comment, falling back to post language for punctuation-only comments
+        const commentLang = detectLanguageCode(commentMessage);
+        const detectedLanguage = commentLang !== 'unknown' ? commentLang
+            : (opts.postMessage ? detectLanguageCode(opts.postMessage) : 'unknown');
         await adapter.markAsReplied(
             comment.id,
             replyText,

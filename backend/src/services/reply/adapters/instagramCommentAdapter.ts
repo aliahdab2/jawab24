@@ -123,11 +123,14 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         accessToken: string;
         fromId?: string;
         userSettings: Record<string, unknown>;
+        postMessage?: string;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         const commentLang = detectLanguageCode(opts.commentMessage);
+        const effectiveLang = commentLang !== 'unknown' ? commentLang
+            : (opts.postMessage ? detectLanguageCode(opts.postMessage) : 'unknown');
         const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
-        const dualReplyNudge = pickNudgeVariation(variationsMulti, commentLang);
+        const dualReplyNudge = pickNudgeVariation(variationsMulti, effectiveLang);
 
         let success = false;
         let errorMsg = '';

@@ -76,6 +76,8 @@ export interface CommentPlatformAdapter {
         accessToken: string;
         fromId?: string;
         userSettings: Record<string, unknown>;
+        /** Post/media text — used to detect language when comment is punctuation-only */
+        postMessage?: string;
     }): Promise<SendCommentResult>;
 
     /** Mark a stored comment as replied in the database */

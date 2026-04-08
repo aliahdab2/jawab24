@@ -74,14 +74,18 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         accessToken: string;
         fromId?: string;
         userSettings: Record<string, unknown>;
+        postMessage?: string;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
         const isDemo = opts.platformPageId.startsWith('demo_');
 
-        // Pick a random nudge variation for this comment's language
+        // Pick a random nudge variation for this comment's language,
+        // falling back to post language for punctuation-only comments (e.g. ".", "..")
         const commentLang = detectLanguageCode(opts.commentMessage);
+        const effectiveLang = commentLang !== 'unknown' ? commentLang
+            : (opts.postMessage ? detectLanguageCode(opts.postMessage) : 'unknown');
         const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
-        const dualReplyNudge = pickNudgeVariation(variationsMulti, commentLang);
+        const dualReplyNudge = pickNudgeVariation(variationsMulti, effectiveLang);
 
         return replySender.sendCommentReply({
             facebookCommentId: opts.platformCommentId,
