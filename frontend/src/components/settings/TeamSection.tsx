@@ -8,6 +8,7 @@ import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import { isValidContact } from '@jawab24/shared';
+import { BRAND_ASSETS } from '@/constants/brand';
 import type { WorkspaceRole } from '@jawab24/shared';
 
 interface MemberRow {
@@ -95,7 +96,7 @@ export function TeamSection() {
   }, [fetchData]);
 
   const showInviteLink = (token: string, contactValue: string) => {
-    const url = `${window.location.origin}/invites/accept?token=${token}`;
+    const url = `${BRAND_ASSETS.urls.base}/invites/accept?token=${token}`;
     setInviteLink({ url, contact: contactValue });
     setLinkCopied(false);
   };
@@ -249,7 +250,7 @@ export function TeamSection() {
           <div className="mb-4 p-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
             <div className="flex items-center gap-2 mb-2">
               <Link className="w-4 h-4 text-brand-600 dark:text-brand-400 flex-shrink-0" aria-hidden="true" />
-              <p className="text-sm font-bold text-brand-700 dark:text-brand-300">
+              <p className="text-sm font-bold text-brand-700 dark:text-brand-300 min-w-0 truncate">
                 {t('shareLinkDesc', { contact: inviteLink.contact })}
               </p>
             </div>
@@ -259,14 +260,14 @@ export function TeamSection() {
                 readOnly
                 dir="ltr"
                 value={inviteLink.url}
-                className="flex-1 text-xs bg-white dark:bg-surface-900 border border-brand-200 dark:border-brand-700 rounded-lg px-3 py-2 text-foreground font-mono truncate"
+                className="flex-1 min-w-0 text-xs bg-white dark:bg-surface-200 border border-brand-200 dark:border-brand-700 rounded-lg px-3 py-2 text-foreground font-mono truncate"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
                 aria-label={t('copyLink')}
               />
               <Button
                 size="sm"
                 variant={linkCopied ? 'secondary' : 'primary'}
-                className="px-3 flex-shrink-0"
+                className="flex-shrink-0 px-3 sm:px-4"
                 onClick={async () => {
                   await navigator.clipboard.writeText(inviteLink.url);
                   setLinkCopied(true);
@@ -274,10 +275,17 @@ export function TeamSection() {
                   setTimeout(() => setLinkCopied(false), 3000);
                 }}
               >
-                {linkCopied
-                  ? <><Check className="w-4 h-4 me-1" aria-hidden="true" />{t('linkCopied')}</>
-                  : <><Copy className="w-4 h-4 me-1" aria-hidden="true" />{t('copyLink')}</>
-                }
+                {linkCopied ? (
+                  <>
+                    <Check className="w-4 h-4 sm:me-1.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">{t('linkCopied')}</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-4 h-4 sm:me-1.5" aria-hidden="true" />
+                    <span className="hidden sm:inline">{t('copyLink')}</span>
+                  </>
+                )}
               </Button>
             </div>
             <p className="text-xs text-brand-600 dark:text-brand-400 mt-2">{t('linkExpires')}</p>
@@ -396,50 +404,50 @@ export function TeamSection() {
             const ContactIcon = isPhone ? Phone : Mail;
 
             return (
-              <div key={invite.id} className="flex items-center gap-3 py-3 opacity-70">
+              <div key={invite.id} className="flex items-start gap-3 py-3 opacity-70">
                 {/* Icon avatar */}
-                <div className="w-9 h-9 rounded-full bg-surface-100 dark:bg-surface-800 text-icon-muted flex items-center justify-center flex-shrink-0">
+                <div className="w-9 h-9 rounded-full bg-surface-100 dark:bg-surface-800 text-icon-muted flex items-center justify-center flex-shrink-0 mt-0.5">
                   <ContactIcon className="w-4 h-4" aria-hidden="true" />
                 </div>
 
-                {/* Contact + expiry */}
+                {/* Contact + expiry + resend — 2-line layout */}
                 <div className="flex-1 min-w-0 text-start">
                   <p className="font-bold text-sm text-foreground truncate">{displayContact}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {isExpired ? t('expired') : t('expiresIn', { hours })}
-                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                    <p className="text-xs text-muted-foreground">
+                      {isExpired ? t('expired') : t('expiresIn', { hours })}
+                    </p>
+                    {isAdmin && (
+                      <button
+                        onClick={() => handleResend(invite)}
+                        disabled={resendingId === invite.id}
+                        className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors disabled:opacity-50"
+                        aria-label={t('resendInvite')}
+                      >
+                        {resendingId === invite.id
+                          ? <RefreshCw className="w-3 h-3 animate-spin" aria-hidden="true" />
+                          : t('resendInvite')
+                        }
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Pending badge */}
-                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-surface-100 text-surface-500 dark:bg-surface-800 dark:text-surface-400 flex-shrink-0">
-                  {t('pending')}
-                </span>
-
-                {/* Resend */}
-                {isAdmin && (
-                  <button
-                    onClick={() => handleResend(invite)}
-                    disabled={resendingId === invite.id}
-                    className="text-xs text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors flex-shrink-0 disabled:opacity-50"
-                    aria-label={t('resendInvite')}
-                  >
-                    {resendingId === invite.id
-                      ? <RefreshCw className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
-                      : t('resendInvite')
-                    }
-                  </button>
-                )}
-
-                {/* Revoke */}
-                {isAdmin && (
-                  <button
-                    onClick={() => handleRevoke(invite.id)}
-                    className="text-muted-foreground hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0"
-                    aria-label={t('revokeInvite')}
-                  >
-                    <X className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                )}
+                {/* Pending badge + revoke */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800/60">
+                    {t('pending')}
+                  </span>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleRevoke(invite.id)}
+                      className="p-1 text-muted-foreground hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      aria-label={t('revokeInvite')}
+                    >
+                      <X className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}

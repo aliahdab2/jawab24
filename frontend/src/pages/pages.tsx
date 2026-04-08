@@ -9,6 +9,7 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
+import { BRAND_ASSETS } from '@/constants/brand';
 import {
   FileText,
   RefreshCw,
@@ -136,8 +137,7 @@ const PagesPage: NextPageWithLayout = () => {
     // The native Facebook SDK (@capacitor-community/facebook-login) is unreliable
     // for reconnect — system browser works consistently on Android + iOS + web.
     try {
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const normalizedOrigin = BRAND_ASSETS.urls.base;
       const localePath = getLocalePath(language);
       // Mobile: always use canonical origin (Capacitor serves from http://localhost)
       // Web dev: use window.location.origin for localhost

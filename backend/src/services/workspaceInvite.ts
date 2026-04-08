@@ -142,10 +142,13 @@ export class WorkspaceInviteService {
             })
             .where(eq(workspaceInvites.id, invite.id));
 
+        const workspaces = await workspaceService.getUserWorkspaces(userId);
+
         return {
             workspaceId: invite.workspaceId,
             role: invite.role,
             member,
+            workspaces,
         };
     }
 

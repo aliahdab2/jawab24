@@ -167,8 +167,7 @@ export default function LoginPage() {
       try {
         const { Browser } = await import('@capacitor/browser');
 
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-        const normalizedOrigin = siteUrl.replace(/\/$/, '');
+        const normalizedOrigin = BRAND_ASSETS.urls.base;
         const localePath = getLocalePath(locale);
         const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
         const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
@@ -187,8 +186,7 @@ export default function LoginPage() {
 
     } else {
       // --- WEB BROWSER LOGIN FLOW ---
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const normalizedOrigin = siteUrl.replace(/\/$/, '');
+      const normalizedOrigin = BRAND_ASSETS.urls.base;
       const localePath = getLocalePath(locale);
       const origin = window.location.hostname === 'localhost' ? window.location.origin : normalizedOrigin;
       const redirectUri = encodeURIComponent(`${origin}${localePath}${FB_CALLBACK_PATH}`);

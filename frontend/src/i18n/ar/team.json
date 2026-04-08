@@ -7,7 +7,7 @@
   "roleAdmin": "مشرف",
   "roleMember": "عضو",
   "you": "أنت",
-  "pending": "بانتظار القبول",
+  "pending": "قيد الانتظار",
   "memberCount": "{count, plural, zero {لا أعضاء} one {عضو واحد} two {عضوان} few {# أعضاء} many {# عضو} other {# عضو}}",
   "limitHint": "{remaining, plural, one {يمكنك دعوة شخص واحد إضافي} two {يمكنك دعوة شخصين إضافيين} few {يمكنك دعوة # أشخاص إضافيين} many {يمكنك دعوة # شخص إضافي} other {يمكنك دعوة # شخص إضافي}}",
   "limitReached": "تم الوصول للحد الأقصى (5 أعضاء)",

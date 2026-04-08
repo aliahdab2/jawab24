@@ -4,6 +4,7 @@ import Head from 'next/head';
 import { useAuthStore, useUIStore, type Language } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
+import { BRAND_ASSETS } from '@/constants/brand';
 import { AppSkeleton } from '@/components/ui';
 import { captureError } from '@/lib/sentryHelpers';
 import { getLocalePath } from '@/utils/locale';
@@ -66,8 +67,7 @@ export default function AuthCallback() {
       // creating a second user.
       if (isReconnect && useAuthStore.getState().isAuthenticated) {
         const existingToken = useAuthStore.getState().token;
-        const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-        const canonicalOrigin = siteUrl.replace(/\/+$/, '');
+        const canonicalOrigin = BRAND_ASSETS.urls.base;
         const origin = platform === 'mobile' ? canonicalOrigin : (window.location.hostname === 'localhost' ? window.location.origin.replace(/\/+$/, '') : canonicalOrigin);
         const localePath = getLocalePath(preferredLocale);
         const redirectUri = `${origin}${localePath}${FB_CALLBACK_PATH}`;
@@ -111,9 +111,7 @@ export default function AuthCallback() {
 
       // Determine appropriate origin based on platform
       // INDUSTRY STANDARD: Force Canonical Origin from environment variables
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-      const canonicalOrigin = siteUrl.replace(/\/+$/, ''); // Strip all trailing slashes
-      
+      const canonicalOrigin = BRAND_ASSETS.urls.base;
       // For mobile: ALWAYS use the canonical production origin
       // For web: Still use canonical for production, fallback to window.location.origin only for dev
       const origin = platform === 'mobile' ? canonicalOrigin : (window.location.hostname === 'localhost' ? window.location.origin.replace(/\/+$/, '') : canonicalOrigin);

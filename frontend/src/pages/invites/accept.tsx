@@ -16,7 +16,7 @@ type AcceptState = 'loading' | 'success' | 'expired' | 'invalid' | 'already_memb
 const AcceptInvitePage: NextPageWithLayout = () => {
   const router = useRouter();
   const t = useTranslations('team');
-  const { isAuthenticated, setWorkspaces } = useAuthStore();
+  const { isAuthenticated, setWorkspaces, setActiveWorkspace } = useAuthStore();
   const [state, setState] = useState<AcceptState>('loading');
   const attemptedRef = useRef(false);
 
@@ -28,9 +28,12 @@ const AcceptInvitePage: NextPageWithLayout = () => {
 
     try {
       const res = await workspaceApi.acceptInvite(token);
-      // Refresh workspace list in store
+      // Refresh workspace list and activate the newly joined workspace
       if (res.data?.workspaces) {
         setWorkspaces(res.data.workspaces);
+      }
+      if (res.data?.workspaceId) {
+        setActiveWorkspace(res.data.workspaceId);
       }
       setState('success');
     } catch (error: unknown) {
@@ -51,7 +54,7 @@ const AcceptInvitePage: NextPageWithLayout = () => {
         setState('error');
       }
     }
-  }, [token, setWorkspaces]);
+  }, [token, setWorkspaces, setActiveWorkspace]);
 
   useEffect(() => {
     if (!router.isReady) return;

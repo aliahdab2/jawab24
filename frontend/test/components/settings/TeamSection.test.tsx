@@ -29,6 +29,12 @@ vi.mock('@/lib/sentryHelpers', () => ({
   captureError: vi.fn(),
 }));
 
+vi.mock('@/constants/brand', () => ({
+  BRAND_ASSETS: {
+    urls: { base: 'https://jawab24.com' },
+  },
+}));
+
 const mockUser = { id: 'user-1', name: 'Ahmad', email: 'ahmad@test.com', picture: null };
 
 vi.mock('@/lib/store', () => ({
@@ -260,6 +266,23 @@ describe('TeamSection', () => {
 
     // Header shows "2 / 5"
     expect(await screen.findByText('2 / 5')).toBeInTheDocument();
+  });
+
+  it('invite link uses canonical domain not window.location.origin', async () => {
+    const token = 'abc123token';
+    mockCreateInvite.mockResolvedValue({ data: { token } });
+    renderTeamSection();
+
+    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    fireEvent.change(input, { target: { value: 'new@test.com' } });
+    fireEvent.click(screen.getByText('Invite'));
+
+    await waitFor(() => {
+      const linkInput = document.querySelector('input[readonly]') as HTMLInputElement;
+      expect(linkInput?.value).toContain('https://jawab24.com/invites/accept?token=');
+      expect(linkInput?.value).not.toContain('localhost');
+      expect(linkInput?.value).not.toContain('app.jawab24.com');
+    });
   });
 
   it('shows email below name when both exist', async () => {

@@ -13,6 +13,9 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         addMember: vi.fn().mockResolvedValue({ id: 'member-1', role: 'member' }),
+        getUserWorkspaces: vi.fn().mockResolvedValue([
+            { id: 'ws-1', name: 'My Workspace', role: 'member' },
+        ]),
     },
 }));
 
@@ -163,6 +166,17 @@ describe('WorkspaceInviteService', () => {
             expect(result.workspaceId).toBe('ws-1');
             expect(result.role).toBe('member');
             expect(workspaceService.addMember).toHaveBeenCalledWith('ws-1', 'user-2', 'member', 'user-1');
+        });
+
+        it('should return updated workspaces list after accepting', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([sampleInvite]) as any);
+            vi.mocked(db.update).mockReturnValue(mockUpdateNoReturn() as any);
+
+            const result = await workspaceInviteService.acceptInvite('raw-token', 'user-2');
+
+            expect(result.workspaces).toBeDefined();
+            expect(result.workspaces).toEqual([{ id: 'ws-1', name: 'My Workspace', role: 'member' }]);
+            expect(workspaceService.getUserWorkspaces).toHaveBeenCalledWith('user-2');
         });
 
         it('should throw for invalid token', async () => {

@@ -32,12 +32,14 @@ vi.mock('@/lib/sentryHelpers', () => ({
 
 let mockIsAuthenticated = true;
 const mockSetWorkspaces = vi.fn();
+const mockSetActiveWorkspace = vi.fn();
 
 vi.mock('@/lib/store', () => ({
   useAuthStore: vi.fn((selector?: (state: Record<string, unknown>) => unknown) => {
     const state = {
       isAuthenticated: mockIsAuthenticated,
       setWorkspaces: mockSetWorkspaces,
+      setActiveWorkspace: mockSetActiveWorkspace,
     };
     return selector ? selector(state) : state;
   }),
@@ -124,6 +126,26 @@ describe('AcceptInvitePage', () => {
     renderAcceptPage();
 
     expect(await screen.findByText('This workspace has reached its member limit.')).toBeInTheDocument();
+  });
+
+  it('calls setWorkspaces and setActiveWorkspace with response data on success', async () => {
+    const workspaces = [{ id: 'ws-owner', name: 'Owner WS', role: 'admin' }];
+    mockAcceptInvite.mockResolvedValue({ data: { workspaceId: 'ws-owner', workspaces } });
+    renderAcceptPage();
+
+    await waitFor(() => {
+      expect(mockSetWorkspaces).toHaveBeenCalledWith(workspaces);
+      expect(mockSetActiveWorkspace).toHaveBeenCalledWith('ws-owner');
+    });
+  });
+
+  it('does not crash when response has no workspaces or workspaceId', async () => {
+    mockAcceptInvite.mockResolvedValue({ data: {} });
+    renderAcceptPage();
+
+    expect(await screen.findByText("You've joined the workspace!")).toBeInTheDocument();
+    expect(mockSetWorkspaces).not.toHaveBeenCalled();
+    expect(mockSetActiveWorkspace).not.toHaveBeenCalled();
   });
 
   it('redirects to login when not authenticated', async () => {

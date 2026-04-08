@@ -116,8 +116,7 @@ function PaymentForm({
   const [errorMessage, setErrorMessage] = useState('');
   const t = useTranslations('checkout');
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://jawab24.com';
-  const returnUrl = `${siteUrl.replace(/\/$/, '')}/payment/return`;
+  const returnUrl = `${BRAND_ASSETS.urls.base}/payment/return`;
 
   const hasTrial = plan.trialDays > 0 && type === 'setup';
 
