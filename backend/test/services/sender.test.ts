@@ -194,18 +194,17 @@ describe('ReplySender', () => {
             expect(result).toEqual({ success: true });
         });
 
-        it('should fall back to full public reply when DM fails', async () => {
+        it('should still post nudge (not full reply) when DM fails', async () => {
             vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(
                 new Error('DM blocked')
             );
 
             const result = await sender.sendCommentReply(dualOptions);
 
-            // DM failed, dual mode falls back to public reply with full text (not nudge)
+            // DM failed, but dual mode still posts the nudge — never the full AI reply
             expect(result.success).toBe(true);
-            // Public reply was posted with full reply text, not the nudge
             const axiosCall = vi.mocked(fbAxios.post).mock.calls[0];
-            expect(axiosCall[1]).toEqual({ message: 'Thank you for your feedback!' });
+            expect(axiosCall[1]).toEqual({ message: 'تحقق من رسائلك!' });
         });
 
         it('should log warning when public reply fails in dual mode', async () => {

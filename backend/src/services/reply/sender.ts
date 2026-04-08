@@ -61,16 +61,16 @@ export class ReplySender {
         let success = false;
         let errorMsg = '';
 
-        // Private or Dual mode: Send DM via /{comment-id}/private_replies
-        // This works for any commenter without prior Messenger interaction.
+        // Private or Dual mode: Send DM via /me/messages with comment_id
         if (replyMode === 'private' || replyMode === 'dual') {
             try {
                 await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
                 success = true;
-                this.logger.debug('[Sender] Sent private reply', { facebookCommentId });
+                this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode });
             } catch (error) {
-                this.logger.error('Failed to send private reply', {
+                this.logger.error('[Sender] Failed to send private reply', {
                     facebookCommentId,
+                    replyMode,
                     error: error instanceof Error ? error.message : String(error)
                 });
 
@@ -82,18 +82,18 @@ export class ReplySender {
                         ? { success: true }
                         : { success: false, error: 'Failed to send private and public reply' };
                 }
-                // Dual mode: DM failed, continue to public reply with full text (not just nudge)
+                // Dual mode: DM failed — still post nudge, not the full reply.
+                // The user chose dual mode specifically to avoid full replies in public.
                 errorMsg = 'Private message failed';
             }
         }
 
-        // Public mode: post public comment
-        // Dual mode: post nudge if DM succeeded, or full reply if DM failed
+        // Public mode: post full reply as comment
+        // Dual mode: always post nudge (respects user's setting regardless of DM outcome)
         if (replyMode === 'public' || replyMode === 'dual') {
             let publicText = replyText;
 
-            // For dual mode with successful DM, use the pre-picked nudge (already truncated by pickNudgeVariation)
-            if (replyMode === 'dual' && !errorMsg) {
+            if (replyMode === 'dual') {
                 publicText = dualReplyNudge || t('dualNudgeDefault', 'ar');
             }
 
