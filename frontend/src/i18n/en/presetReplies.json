@@ -10,7 +10,7 @@
   "deleteReply": "Delete Reply",
   "keywords": "Keywords",
   "keywordsPlaceholder": "address, phone number, business hours",
-  "keywordsHelper": "Separate keywords with commas",
+  "keywordsHelper": "Press Enter or comma to add a keyword",
   "reply": "Reply",
   "replyPlaceholder": "Type your reply...",
   "noReplies": "No preset replies yet",
