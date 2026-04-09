@@ -331,7 +331,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('Template Reply')).toBeInTheDocument();
+      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
     });
 
     it('shows SMART REPLY badge for AI replies', () => {
