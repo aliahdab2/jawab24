@@ -278,6 +278,11 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       });
       listenersRef.current.push(() => networkListener.remove());
 
+      // Register notification tap handler BEFORE hiding splash — cold-start taps
+      // navigate while splash is still showing, so user never sees an intermediate page.
+      const { registerNotificationTapListener } = await import('@/lib/notifications');
+      await registerNotificationTapListener();
+
       // ALWAYS hide splash - this is critical
       await SplashScreen.hide();
     };

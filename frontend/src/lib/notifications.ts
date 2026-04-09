@@ -151,7 +151,25 @@ export async function initPushNotifications(token: string): Promise<void> {
 }
 
 /**
- * Internal: register for push and set up all listeners.
+ * Register the notification tap handler early — before auth, before splash hides.
+ * Capacitor queues tap events from cold starts and delivers them when the listener
+ * is added, so registering this ASAP ensures the app navigates to the correct
+ * screen before the user sees any intermediate page.
+ *
+ * Safe to call multiple times — guards against double-registration.
+ */
+let tapListenerRegistered = false;
+export async function registerNotificationTapListener(): Promise<void> {
+    if (!Capacitor.isNativePlatform() || tapListenerRegistered) return;
+    tapListenerRegistered = true;
+
+    await PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
+        handleNotificationTap(action);
+    });
+}
+
+/**
+ * Internal: register for push and set up all listeners (except tap — handled early).
  */
 async function registerPushListeners(authToken: string): Promise<void> {
     await PushNotifications.register();
@@ -168,9 +186,9 @@ async function registerPushListeners(authToken: string): Promise<void> {
         handleForegroundNotification(notification);
     });
 
-    PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
-        handleNotificationTap(action);
-    });
+    // Tap listener is registered early via registerNotificationTapListener()
+    // to avoid cold-start flash. Ensure it's registered here too as a safety net.
+    await registerNotificationTapListener();
 }
 
 /**
