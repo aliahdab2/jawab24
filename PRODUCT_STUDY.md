@@ -43,8 +43,8 @@ Customer Comment/Message
         │
         ▼
   ┌─────────────────┐
-  │ Layer 1: Rules   │  Keyword matching → template reply
-  │ (Templates)      │  Fastest, cheapest, deterministic
+  │ Layer 1: Preset  │  Keyword matching → preset reply
+  │ Replies          │  Fastest, cheapest, deterministic
   └────────┬─────────┘
            │ No match
            ▼

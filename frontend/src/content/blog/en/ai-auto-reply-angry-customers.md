@@ -108,13 +108,13 @@ This is especially important for angry customers, where the tone and coherence o
 
 If you're using an auto-reply tool, here's how to configure it to handle angry customers well:
 
-### Build Complaint-Specific Templates
+### Build Complaint-Specific Preset Replies
 
-Create template replies specifically for common complaints: late delivery, wrong item, quality issues, refund requests. These templates should be empathetic in tone and always include a clear next step.
+Create preset replies specifically for common complaints: late delivery, wrong item, quality issues, refund requests. These replies should be empathetic in tone and always include a clear next step.
 
-Example template for late delivery: "We sincerely apologize for the delay in your order. This is not the experience we want for you. We're looking into this right now and will update you within [timeframe]. Thank you for your patience."
+Example preset reply for late delivery: "We sincerely apologize for the delay in your order. This is not the experience we want for you. We're looking into this right now and will update you within [timeframe]. Thank you for your patience."
 
-One important detail: if a complaint template was already sent earlier in the conversation, good tools won't repeat it robotically. Instead, the AI takes over and generates a fresh, contextual reply — so the customer doesn't feel like they're stuck in a loop.
+One important detail: if a preset reply was already sent earlier in the conversation, good tools won't repeat it robotically. Instead, the AI takes over and generates a fresh, contextual reply — so the customer doesn't feel like they're stuck in a loop.
 
 ### Train Your Knowledge Base on Escalation
 

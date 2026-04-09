@@ -49,8 +49,8 @@ The most effective strategy for sales-oriented Instagram pages combines both: a 
 
 This dual approach is available in some AI tools (like Jawab24's dual reply mode). The public nudge messages automatically rotate with different wording — "Check your DMs!", "Sent you a message with all the details!", "Just DM'd you the info!" — so your comment section doesn't look like a spam bot repeating the same phrase.
 
-**Template vs Smart Replies:**
-Template replies match keywords ("price" then send pricing info). They're fast but rigid.
+**Preset vs Smart Replies:**
+Preset replies match keywords ("address" then send location info). They're fast, free, and predictable.
 Smart (AI) replies understand context and generate unique responses. They handle follow-up questions, mixed languages, and unexpected queries.
 
 ## How Conversation Context Works on Instagram

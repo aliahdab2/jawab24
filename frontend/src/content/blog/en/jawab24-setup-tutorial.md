@@ -123,16 +123,16 @@ The greeting message goes to first-time customers who message your page. It sets
 
 Like the away message, it's automatically translated for bilingual support.
 
-### Template Replies
+### Preset Replies
 
-For common questions that always have the same answer, you can create **template replies** with keyword triggers. For example:
+For common questions that always have the same answer, you can create **preset replies** with keyword triggers. For example:
 
 - Trigger: "hours", "working hours", "open" — Reply: "We're open Saturday to Thursday, 9 AM to 9 PM."
 - Trigger: "location", "address", "where" — Reply: "Our store is at [address]. Here's the Google Maps link: [link]"
 
-Template replies are checked *before* the AI generates a response. If a keyword matches, the template reply is sent instantly — faster and cheaper than an AI-generated reply.
+Preset replies are checked *before* the AI generates a response. If a keyword matches, the preset reply is sent instantly — faster and cheaper than an AI-generated reply. They also save your Smart Reply credits.
 
-**Template deduplication**: If a template was already sent earlier in the same conversation, Jawab24 won't send it again. Instead, the AI generates a fresh contextual reply for the follow-up. This prevents the robotic experience of receiving the same canned response twice.
+**Deduplication**: If a preset reply was already sent earlier in the same conversation, Jawab24 won't send it again. Instead, the AI generates a fresh contextual reply for the follow-up. This prevents the robotic experience of receiving the same canned response twice.
 
 ## Connecting Your Store and Going Live
 

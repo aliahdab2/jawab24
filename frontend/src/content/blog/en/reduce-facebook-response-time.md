@@ -24,19 +24,19 @@ A good instant reply acknowledges the customer, sets expectations, and reassures
 
 The limitation: instant replies only trigger once per conversation and don't answer the customer's actual question. They're a starting point, not a solution.
 
-## Strategy 2: Create Template Replies for Common Questions
+## Strategy 2: Create Preset Replies for Common Questions
 
 If you've been running your page for a while, you already know the top 10 questions customers ask. "How much?", "Do you deliver to [city]?", "Is this available?", "What's the return policy?"
 
-Instead of typing the same answers hundreds of times, create saved replies. Facebook lets you save responses that you can quickly insert. Tools like Jawab24 take this further — you create keyword-triggered templates that fire automatically. When someone asks "delivery?", the template with your shipping information sends instantly without you lifting a finger.
+Instead of typing the same answers hundreds of times, create saved replies. Facebook lets you save responses that you can quickly insert. Tools like Jawab24 take this further — you create keyword-triggered preset replies that fire automatically. When someone asks "delivery?", the preset reply with your shipping information sends instantly without you lifting a finger.
 
-**Smart deduplication matters here.** If a customer asks a delivery question, gets your shipping template, and then asks a follow-up delivery question ("How long to my specific city?"), a good tool won't send the same template again. Instead, the AI handles the follow-up with a specific, contextual reply. This prevents the robotic experience of receiving identical responses.
+**Smart deduplication matters here.** If a customer asks a delivery question, gets your preset reply, and then asks a follow-up delivery question ("How long to my specific city?"), a good tool won't send the same reply again. Instead, the AI handles the follow-up with a specific, contextual reply. This prevents the robotic experience of receiving identical responses.
 
-The key is identifying your most common questions. Go through your last 100 messages and group them by topic. You'll likely find that 5-10 templates cover 70-80% of all incoming messages.
+The key is identifying your most common questions. Go through your last 100 messages and group them by topic. You'll likely find that 5-10 preset replies cover 70-80% of all incoming messages.
 
 ## Strategy 3: Use AI-Powered Smart Replies
 
-Template replies work great for exact matches, but customers don't always ask questions the same way. "How much is this?", "What's the price?", "Price?" — these are all the same question phrased differently. And if your customers speak multiple languages, the variations multiply.
+Preset replies work great for exact matches, but customers don't always ask questions the same way. "How much is this?", "What's the price?", "Price?" — these are all the same question phrased differently. And if your customers speak multiple languages, the variations multiply.
 
 AI-powered auto-reply tools understand intent, not just keywords. You build a Knowledge Base with your business information — products, prices, policies, FAQs — and the AI generates natural responses based on what the customer is actually asking. No flow building or decision trees required — the AI figures out the right response from your business information.
 
@@ -71,7 +71,7 @@ This level of specificity turns inquiries into sales. The customer gets exactly 
 The fastest path to reducing your Facebook response time:
 
 1. **Today**: Enable Facebook's built-in instant replies (5 minutes)
-2. **This week**: Identify your top 10 questions and create template replies (30 minutes)
+2. **This week**: Identify your top 10 questions and create preset replies (30 minutes)
 3. **This week**: Set up an auto-reply tool with AI smart replies and your Knowledge Base (1 hour — no flow building needed)
 4. **Ongoing**: Configure business hours and away messages (10 minutes)
 5. **When ready**: Connect your e-commerce store for product-specific answers (15 minutes)

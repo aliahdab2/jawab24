@@ -24,7 +24,7 @@ This reply says nothing. It doesn't answer the customer's question. It doesn't s
 
 Your auto-reply should be contextual. If someone asks about pricing, they should get pricing information. If they ask about delivery, they should get shipping details. If they ask about a specific product, they should get product information.
 
-This means moving beyond a single generic reply and setting up either template replies (keyword-triggered) or AI smart replies (context-aware). At minimum, create templates for your 5-10 most common questions and use a keyword trigger for each one.
+This means moving beyond a single generic reply and setting up either preset replies (keyword-triggered) or AI smart replies (context-aware). At minimum, create preset replies for your 5-10 most common questions and use a keyword trigger for each one.
 
 The best AI tools go further — they load the conversation history (not just the latest message) so they understand context. When a customer asks "how much?" on a post showing a leather bag, the AI knows they're asking about *that* bag and replies with the correct price. No keyword rules needed. No flow building. Just business information in a Knowledge Base and AI that understands what customers mean.
 
@@ -42,7 +42,7 @@ Use an auto-reply tool that detects your customers' language and responds accord
 
 Tools with deep language support (like Jawab24, which handles English and Arabic with 6 dialect families) do this natively. They detect the customer's language and dialect and respond appropriately.
 
-If you're using a general-purpose chatbot, at minimum customize your template replies in the language and tone your customers use. Don't write templates in formal language if your customers write casually.
+If you're using a general-purpose chatbot, at minimum customize your preset replies in the language and tone your customers use. Don't write replies in formal language if your customers write casually.
 
 Also important: if a customer writes in English, reply in English. Bilingual auto-detection ensures each customer gets a response in their own language.
 
@@ -98,15 +98,15 @@ If your auto-reply tool connects to your e-commerce store (Shopify, Salla, or [Z
 
 Create a simple checklist:
 
-First of every month: review and update product info if not synced from your store. Review template replies for accuracy. Check that business hours are correct (especially around holidays). Update any seasonal information like holiday hours or special promotions. Check the KB gap report to see what customers asked about that wasn't covered. Test a few conversations to make sure the AI gives correct answers.
+First of every month: review and update product info if not synced from your store. Review preset replies for accuracy. Check that business hours are correct (especially around holidays). Update any seasonal information like holiday hours or special promotions. Check the KB gap report to see what customers asked about that wasn't covered. Test a few conversations to make sure the AI gives correct answers.
 
 ## Bonus: The Meta-Mistake — Sending Duplicate Replies
 
-Here's a mistake that's less obvious but equally annoying to customers: the AI sends the same template reply twice in the same conversation.
+Here's a mistake that's less obvious but equally annoying to customers: the system sends the same preset reply twice in the same conversation.
 
-A customer asks "Do you deliver to my city?" and gets a shipping template reply. Great. Then they ask "How long does delivery take?" and get the *exact same template* again — because it matched the same "delivery" keyword.
+A customer asks "Do you deliver to my city?" and gets a shipping preset reply. Great. Then they ask "How long does delivery take?" and get the *exact same reply* again — because it matched the same "delivery" keyword.
 
-Good auto-reply tools have **template deduplication** built in. If a template was already sent in a conversation, the AI handles the follow-up instead of repeating itself. The customer gets a fresh, contextual response that builds on the previous answer rather than a robotic repetition.
+Good auto-reply tools have **reply deduplication** built in. If a preset reply was already sent in a conversation, the AI handles the follow-up instead of repeating itself. The customer gets a fresh, contextual response that builds on the previous answer rather than a robotic repetition.
 
 Similarly, when customers send rapid-fire messages ("How much is this?", "Is it available in black?", "Do you deliver?"), the system should use **message consolidation** — wait a moment, group the messages, and generate one comprehensive reply instead of three separate responses that might arrive out of order.
 
