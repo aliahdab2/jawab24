@@ -1174,6 +1174,167 @@ describe('Webhook Controller', () => {
         });
     });
 
+    describe('POST /webhook (Shared Post Handling)', () => {
+        beforeEach(() => {
+            mockGetPageByFacebookId.mockReset().mockResolvedValue({
+                id: 'internal-page-id', accessToken: 'test-token', name: 'Test Page',
+                userId: 'user-1', workspaceId: 'ws-1',
+            });
+            mockGetPageByInstagramId.mockReset().mockResolvedValue({
+                id: 'internal-ig-id', accessToken: 'test-token', name: 'IG Page',
+                userId: 'user-1', workspaceId: 'ws-1',
+            });
+            mockEnqueueMessage.mockReset().mockResolvedValue('mock-job-id');
+            mockFindOrCreateFromWebhook.mockReset().mockResolvedValue({ message: { id: 'msg-1' }, isNew: true });
+        });
+
+        it('should pass sharedPostUrl and sharedPostId for Facebook text + shared post', async () => {
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_with_post',
+                            text: 'Is this available?',
+                            attachments: [{
+                                type: 'post' as const,
+                                payload: { url: 'https://facebook.com/posts/99999', id: '99999' },
+                            }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            expect(mockEnqueueMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'facebook_message',
+                    text: 'Is this available?',
+                    sharedPostUrl: 'https://facebook.com/posts/99999',
+                    sharedPostId: '99999',
+                }),
+            );
+        });
+
+        it('should pass sharedPostUrl and sharedPostId for Instagram text + shared post', async () => {
+            const webhookPayload = {
+                object: 'instagram',
+                entry: [{
+                    id: 'ig_account_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'ig_user_789' },
+                        message: {
+                            mid: 'ig_msg_with_post',
+                            text: 'How much is this?',
+                            attachments: [{
+                                type: 'ig_post' as const,
+                                payload: { url: 'https://instagram.com/p/ABC123/', id: '12345678' },
+                            }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            expect(mockEnqueueMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    jobType: 'instagram_message',
+                    text: 'How much is this?',
+                    sharedPostUrl: 'https://instagram.com/p/ABC123/',
+                    sharedPostId: '12345678',
+                }),
+            );
+        });
+
+        it('should handle reel attachments same as posts', async () => {
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_with_reel',
+                            text: 'Love this!',
+                            attachments: [{
+                                type: 'ig_reel' as const,
+                                payload: { url: 'https://instagram.com/reel/XYZ789/', id: '55555' },
+                            }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            expect(mockEnqueueMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    sharedPostUrl: 'https://instagram.com/reel/XYZ789/',
+                    sharedPostId: '55555',
+                }),
+            );
+        });
+
+        it('should enqueue without sharedPostUrl when text has no attachment', async () => {
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: { mid: 'msg_plain', text: 'Just a question' },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            const call = mockEnqueueMessage.mock.calls[0][0];
+            expect(call.sharedPostUrl).toBeUndefined();
+            expect(call.sharedPostId).toBeUndefined();
+        });
+    });
+
     // ── Concurrency guard ────────────────────────────────────────────────────────
     // Connecting a busy page floods the server with webhook requests. The guard
     // caps concurrent processWebhookAsync calls at MAX_CONCURRENT (10) so the
