@@ -33,6 +33,14 @@ vi.mock('../../src/services/subscriptions', () => ({
     }
 }));
 
+vi.mock('../../src/lib/redis', () => ({
+    redis: {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        del: vi.fn().mockResolvedValue(1),
+    }
+}));
+
 describe('PR2: KB Versioning + Business Profile', () => {
     beforeEach(() => {
         vi.clearAllMocks();

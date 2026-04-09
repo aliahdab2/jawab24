@@ -255,6 +255,7 @@ describe('InstagramReplyService', () => {
         vi.mocked(instagramService.replyToComment).mockResolvedValue('reply-id');
         vi.mocked(instagramService.sendDirectMessage).mockResolvedValue('msg-id');
         vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue(null);
+        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue('Test Sender');
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
         vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
