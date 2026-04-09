@@ -76,15 +76,24 @@ t('title');  tc('save');
 // Arabic (all 6 forms): "{count, plural, zero {لا عناصر} one {عنصر واحد} two {عنصران} few {# عناصر} many {# عنصر} other {# عنصر}}"
 ```
 
+**Adding a new namespace — all 4 steps required:**
+1. Create `frontend/src/i18n/en/<namespace>.json` and `ar/<namespace>.json`
+2. In `frontend/src/i18n/getMessages.ts` — add EN import, AR import, and both entries in the `NS` lookup table
+3. In `frontend/src/i18n/namespaces.ts` — add to `PAGE_NAMESPACES`
+4. Grep an existing namespace (e.g. `orderNotifications`) across all files to verify you didn't miss a registration point
+
+> Step 2 is easy to forget because tests use `import.meta.glob` (auto-discovers files) but production uses static imports. Missing it causes raw keys to show instead of translated text — and tests won't catch it.
+
 **Before committing:** run `npm run translation:validate`. See `frontend/docs/TRANSLATION_GUIDE.md` for full rules.
 
 ### 6. Product Terminology
 
 | Term | Meaning |
 |------|---------|
-| **Auto Reply** | Template Replies + Smart Replies |
+| **Auto Reply** | Preset Replies + Smart Replies |
 | **Smart Reply** | AI-powered reply (never say "AI reply" in UI) |
-| **Template Reply** | Keyword-matched from user-created templates |
+| **Preset Reply** | Keyword-triggered reply for short comments (< 6 words). Skipped on pages with a connected store. UI: "ردود جاهزة". Backend: creates template + rule atomically via `/preset-replies` endpoint |
+| **Template Reply** | Legacy name for Preset Reply — old `/templates` + `/rules` pages now redirect to `/preset-replies` |
 | **Reply Keyword** | Per-post keyword trigger (ManyChat-style). Comment matches keyword → sends configured reply via DM. UI label: "كلمة مفتاحية للرد" |
 | **Away Message** | Sent when auto-reply is off / outside business hours |
 | **Greeting Message** | First message to a new customer |
