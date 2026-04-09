@@ -290,18 +290,11 @@ test.describe('Dashboard Page Spacing', () => {
     await expect(page).toHaveScreenshot('messages-en-mobile.png', SNAP_OPTS);
   });
 
-  test('templates page spacing', async ({ page }) => {
-    await page.goto('/en/templates');
+  test('preset replies page spacing', async ({ page }) => {
+    await page.goto('/en/preset-replies');
     await page.waitForSelector('h1', { timeout: 15000 });
     await page.waitForTimeout(800);
-    await expect(page).toHaveScreenshot('templates-en-mobile.png', SNAP_OPTS);
-  });
-
-  test('rules page spacing', async ({ page }) => {
-    await page.goto('/en/rules');
-    await page.waitForSelector('h1', { timeout: 15000 });
-    await page.waitForTimeout(800);
-    await expect(page).toHaveScreenshot('rules-en-mobile.png', SNAP_OPTS);
+    await expect(page).toHaveScreenshot('preset-replies-en-mobile.png', SNAP_OPTS);
   });
 
   test('settings page spacing', async ({ page }) => {
