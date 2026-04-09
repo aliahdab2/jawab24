@@ -3,6 +3,7 @@ import clsx from 'clsx';
 import { Button, FlagTag, PlatformIcon } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
+import { renderMessageText } from '@/utils/renderMessageText';
 import {
   Clock,
   AlertTriangle,
@@ -243,8 +244,8 @@ export const CommentCard = React.memo(function CommentCard({
                   "px-4 py-2.5 bg-muted/70 dark:bg-muted/50 rounded-2xl rounded-ss-sm text-foreground text-sm leading-relaxed",
                   "transition-colors"
                )}>
-                 <p className={clsx(variant === 'compact' ? "line-clamp-3" : "whitespace-pre-wrap")}>
-                    {comment.message}
+                 <p className={clsx(variant === 'compact' ? "line-clamp-3" : "whitespace-pre-wrap")} dir="auto">
+                    {renderMessageText(comment.message)}
                  </p>
                </div>
              </div>
@@ -275,7 +276,7 @@ export const CommentCard = React.memo(function CommentCard({
                          key={ec.id}
                          className="px-3 py-2 bg-muted/40 dark:bg-muted/25 rounded-xl text-xs text-muted-foreground"
                        >
-                         <p className="line-clamp-2 text-foreground/75 dark:text-foreground/80">{ec.message}</p>
+                         <p className="line-clamp-2 text-foreground/75 dark:text-foreground/80" dir="auto">{renderMessageText(ec.message)}</p>
                          <span className="text-[10px] text-subtle mt-1 block">{formatTime(ec.createdAt)}</span>
                        </div>
                      ))}

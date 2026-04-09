@@ -208,10 +208,10 @@ export default function AdminCustomerDetailPage() {
                     </Link>
                     <div>
                         <h1 className="text-2xl font-display font-bold text-foreground">
-                            {customer.name || customer.phone || t('customer.noName')}
+                            {customer.name || (customer.phone ? <span dir="ltr">{customer.phone}</span> : t('customer.noName'))}
                         </h1>
                         <p className="text-muted-foreground">
-                            {customer.email || customer.phone || t('customer.noEmail')}
+                            {customer.email || (customer.phone ? <span dir="ltr">{customer.phone}</span> : t('customer.noEmail'))}
                         </p>
                     </div>
                 </div>

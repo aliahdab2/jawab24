@@ -188,11 +188,17 @@ async function acceptInvite(request: AuthenticatedRequest, reply: FastifyReply) 
         return reply.send(result);
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Failed to accept invite';
-        if (message.includes('Invalid') || message.includes('expired') || message.includes('already been')) {
-            return reply.status(400).send({ error: true, message });
+        if (message.includes('Invalid')) {
+            return reply.status(400).send({ error: true, code: 'invite_not_found', message });
+        }
+        if (message.includes('expired')) {
+            return reply.status(400).send({ error: true, code: 'invite_expired', message });
+        }
+        if (message.includes('already been')) {
+            return reply.status(400).send({ error: true, code: 'already_member', message });
         }
         if (message.includes('limit reached')) {
-            return reply.status(400).send({ error: true, message });
+            return reply.status(400).send({ error: true, code: 'member_limit_reached', message });
         }
         captureError(error, 'Failed to accept invite', { tags: { context: 'workspace' } });
         return reply.status(500).send({ error: true, message: 'Failed to accept invite' });

@@ -15,6 +15,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
 import {
   Sparkles,
@@ -305,7 +306,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
           {/* Original Comment */}
           <div className="bg-muted rounded-xl p-4">
-            <p className="text-foreground whitespace-pre-wrap">{comment.message}</p>
+            <p className="text-foreground whitespace-pre-wrap" dir="auto">{renderMessageText(comment.message)}</p>
             <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
               <span title={formatFullTime(comment.createdAt)}>{formatMessageTime(comment.createdAt)}</span>
             </div>
@@ -318,7 +319,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 {t('reply')}
               </h3>
               <div className="bg-brand-50 dark:bg-brand-950/30 rounded-xl p-4 border-s-4 border-brand-500">
-                <p className="text-foreground whitespace-pre-wrap">{comment.replyText}</p>
+                <p className="text-foreground whitespace-pre-wrap" dir="auto">{renderMessageText(comment.replyText)}</p>
                 <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
                   <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>
                   <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>

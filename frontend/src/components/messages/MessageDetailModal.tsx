@@ -8,6 +8,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { renderMessageText } from '@/utils/renderMessageText';
 import { messagesApi } from '@/lib/api';
 import type { Conversation } from './MessageCard';
 import {
@@ -368,7 +369,7 @@ export function MessageDetailModal({
                       <span>{t('voiceMessage')}</span>
                     </div>
                   )}
-                  <p className="text-sm leading-relaxed italic-arabic">{msg.message}</p>
+                  <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(msg.message)}</p>
                 </div>
                 <div className={clsx(
                   "flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter",

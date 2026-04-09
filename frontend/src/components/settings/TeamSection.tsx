@@ -412,7 +412,7 @@ export function TeamSection() {
 
                 {/* Contact + expiry + resend — 2-line layout */}
                 <div className="flex-1 min-w-0 text-start">
-                  <p className="font-bold text-sm text-foreground truncate">{displayContact}</p>
+                  <p className="font-bold text-sm text-foreground truncate" dir={isPhone ? 'ltr' : undefined}>{displayContact}</p>
                   <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                     <p className="text-xs text-muted-foreground">
                       {isExpired ? t('expired') : t('expiresIn', { hours })}

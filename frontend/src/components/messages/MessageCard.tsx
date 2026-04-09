@@ -15,6 +15,7 @@ import {
   PauseCircle,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { renderMessageText } from '@/utils/renderMessageText';
 import type { Message } from '@/lib/api';
 
 export interface Conversation {
@@ -137,8 +138,8 @@ export const MessageCard = React.memo(function MessageCard({
 
         {/* Row 2: Last customer message */}
         {lastIncoming && (
-          <p className="text-[13px] text-foreground/75 dark:text-foreground/85 truncate leading-relaxed mt-0.5">
-            {lastIncoming.message}
+          <p className="text-[13px] text-foreground/75 dark:text-foreground/85 truncate leading-relaxed mt-0.5" dir="auto">
+            {renderMessageText(lastIncoming.message)}
           </p>
         )}
 
@@ -146,8 +147,8 @@ export const MessageCard = React.memo(function MessageCard({
         {lastOutgoing && (
           <div className="flex items-center gap-2 mt-1">
             <span className="flex-shrink-0 w-3.5 h-px bg-surface-200 dark:bg-surface-700 rounded-full" aria-hidden="true" />
-            <p className="flex-1 min-w-0 text-xs text-muted-foreground truncate leading-snug">
-              {lastOutgoing.message}
+            <p className="flex-1 min-w-0 text-xs text-muted-foreground truncate leading-snug" dir="auto">
+              {renderMessageText(lastOutgoing.message)}
             </p>
             {lastOutgoing.replyMethod && (
               <span className={clsx(
