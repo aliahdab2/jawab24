@@ -1,6 +1,6 @@
 {
   "title": "Preset Replies",
-  "description": "Keyword-triggered replies for short comments.",
+  "description": "Keyword-triggered replies for short comments. Applies to all pages.",
   "infoBanner": "For common repeated questions like address, phone number, or business hours. Saves your Smart Reply credits.",
   "infoBannerNote1": "Only fires on short comments (under 6 words)",
   "infoBannerNote2": "Does not apply to DMs — Smart Reply handles those",

@@ -87,7 +87,7 @@ export function KeywordChipInput({
           onKeyDown={handleKeyDown}
           onBlur={() => addKeyword(inputValue)}
           placeholder={value.length === 0 ? placeholder : undefined}
-          dir="auto"
+          dir={inputValue ? 'auto' : undefined}
           maxLength={maxLength}
           className="flex-1 min-w-[120px] bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none border-none p-0"
         />
