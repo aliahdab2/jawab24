@@ -94,7 +94,7 @@ t('title');  tc('save');
 | **Smart Reply** | AI-powered reply (never say "AI reply" in UI) |
 | **Preset Reply** | Keyword-triggered reply for short comments (< 6 words). Skipped on pages with a connected store. UI: "ردود جاهزة". Backend: creates template + rule atomically via `/preset-replies` endpoint |
 | **Template Reply** | Legacy name for Preset Reply — old `/templates` + `/rules` pages now redirect to `/preset-replies` |
-| **Reply Keyword** | Per-post keyword trigger (ManyChat-style). Comment matches keyword → sends configured reply via DM. UI label: "كلمة مفتاحية للرد" |
+| **Post Reply** | Per-post keyword trigger (ManyChat-style). Comment matches keyword → sends configured reply via DM. UI: "رد البوست". Configured per-post from the comments page, not workspace-level |
 | **Away Message** | Sent when auto-reply is off / outside business hours |
 | **Greeting Message** | First message to a new customer |
 

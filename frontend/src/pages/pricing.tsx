@@ -207,12 +207,7 @@ function PlanCard({
 
         <FeatureRow
           included={true}
-          text={plan.maxTemplates === null ? t('pricing.featureTemplatesUnlimited') : t('pricing.featureTemplates', { count: plan.maxTemplates })}
-        />
-
-        <FeatureRow
-          included={true}
-          text={plan.maxRules === null ? t('pricing.featureRulesUnlimited') : t('pricing.featureRules', { count: plan.maxRules })}
+          text={plan.maxTemplates === null ? t('pricing.featurePresetRepliesUnlimited') : t('pricing.featurePresetReplies', { count: plan.maxTemplates })}
         />
 
         <FeatureRow

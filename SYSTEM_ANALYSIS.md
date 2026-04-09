@@ -1,7 +1,9 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **System Reference Document / وثيقة مرجعية للنظام**
-> Generated: 2026-02-28 | Updated: 2026-04-04 (v27 — WhatsApp Cloud API backend: `whatsapp_message` job type, WhatsApp adapter, `platformMessageId` column replacing `facebookMessageId`/`instagramMessageId`, Meta Tech Provider Embedded Signup plan)
+> Generated: 2026-02-28 | Updated: 2026-04-09 (v27 — Preset Replies: merged Templates+Rules into unified `/preset-replies` endpoint with transactional CRUD; store routing skips preset replies for pages with connected stores; WhatsApp Cloud API backend)
+>
+> **Terminology note:** The UI now calls Templates+Rules "Preset Replies" (ردود جاهزة). The backend still uses `templates` and `rules` tables/services internally. This doc uses backend terminology.
 
 ---
 

@@ -13,10 +13,10 @@
   "howItWorks": {
     "title": "How Jawab24 Works",
     "text": "When a customer writes a comment on your Facebook post or sends a message to your page, Jawab24 processes it through a 3-layer reply system:",
-    "layer1Title": "Layer 1 — Template Replies",
-    "layer1Text": "You create reply rules with keywords. When a customer's message matches a keyword, the system sends your pre-written template reply. Fast, predictable, and free of AI cost.",
+    "layer1Title": "Layer 1 — Preset Replies",
+    "layer1Text": "You create preset replies with keywords. When a short comment matches a keyword, the system sends your pre-written reply instantly. Fast, predictable, and free of AI cost.",
     "layer2Title": "Layer 2 — Smart Replies (AI)",
-    "layer2Text": "If no template matches, the AI generates a custom reply based on your Knowledge Base, product catalog, store policies, and conversation history. It uses advanced large language models to understand the customer's intent — whether they're asking about a product, filing a complaint, or just saying hello — and crafts a natural, on-brand response in the same language and dialect the customer used.",
+    "layer2Text": "If no preset reply matches, the AI generates a custom reply based on your Knowledge Base, product catalog, store policies, and conversation history. It uses advanced large language models to understand the customer's intent — whether they're asking about a product, filing a complaint, or just saying hello — and crafts a natural, on-brand response in the same language and dialect the customer used.",
     "layer3Title": "Layer 3 — Away Messages",
     "layer3Text": "Outside your business hours — or when auto-reply is turned off — the system sends a friendly away message so your customers know you're not ignoring them."
   },
@@ -56,12 +56,12 @@
     "feature6": "Customer awareness — recognizes returning customers by name, remembers past conversation topics, and adjusts its greeting accordingly"
   },
   "templateReply": {
-    "title": "Template Replies & Rules",
-    "text": "For common questions, you can create keyword-based reply rules:",
-    "feature1": "Set keywords that trigger automatic replies (e.g., \"price\", \"shipping\")",
-    "feature2": "Multiple reply variations per rule — the system rotates them for natural responses",
+    "title": "Preset Replies",
+    "text": "For common short questions, you can create keyword-triggered preset replies:",
+    "feature1": "Set keywords that trigger automatic replies (e.g., \"address\", \"phone number\", \"hours\")",
+    "feature2": "Instant response with zero AI cost — saves your smart reply credits",
     "feature3": "Choose whether to reply as a comment or a private message",
-    "feature4": "Apply rules to specific pages or all pages at once"
+    "feature4": "Applies to short comments across all your connected pages"
   },
   "bilingual": {
     "title": "Bilingual Support",
@@ -83,7 +83,7 @@
     "title": "Dashboard & Analytics",
     "text": "Monitor your auto-reply performance from a unified dashboard:",
     "feature1": "See all comments and messages across all connected pages",
-    "feature2": "Track which replies are AI-generated vs template-based vs manual",
+    "feature2": "Track which replies are AI-generated vs preset vs manual",
     "feature3": "View conversation threads with full context",
     "feature4": "Filter by page, date, reply type, and read/unread status"
   },
@@ -110,7 +110,7 @@
   },
   "pricing": {
     "title": "Pricing Overview",
-    "text": "Jawab24 offers a free trial with no credit card required. Paid plans start with a Starter tier for small pages and scale up to Business and Enterprise tiers for high-volume businesses. All plans include AI smart replies, template replies, the Knowledge Base with RAG search, and e-commerce integration. Template replies (keyword-based) are always free with zero AI cost. See the pricing page for current plan details and limits."
+    "text": "Jawab24 offers a free trial with no credit card required. Paid plans start with a Starter tier for small pages and scale up to Business and Enterprise tiers for high-volume businesses. All plans include AI smart replies, preset replies, the Knowledge Base with RAG search, and e-commerce integration. Preset replies are always free with zero AI cost. See the pricing page for current plan details and limits."
   },
   "getStarted": {
     "title": "Get Started",
@@ -124,7 +124,7 @@
   "faq": {
     "title": "Frequently Asked Questions",
     "q1": "Is Jawab24 free?",
-    "a1": "Jawab24 offers a free trial. After the trial, paid plans are available starting at an affordable monthly rate. All plans include AI smart replies and template replies.",
+    "a1": "Jawab24 offers a free trial. After the trial, paid plans are available starting at an affordable monthly rate. All plans include AI smart replies and preset replies.",
     "q2": "Does Jawab24 work with Instagram?",
     "a2": "Yes. Jawab24 supports both Facebook Pages and Instagram Business Accounts. It can auto-reply to comments and direct messages on both platforms.",
     "q3": "Can Jawab24 reply in Arabic?",
@@ -134,7 +134,7 @@
     "q5": "Will the AI make mistakes?",
     "a5": "Jawab24 uses confidence scoring. When the AI is uncertain, it flags the reply for human review instead of sending an incorrect response. It also checks for hallucinated prices to ensure accuracy.",
     "q6": "Can I control what the AI says?",
-    "a6": "Absolutely. You control the AI through your Knowledge Base (what it knows), reply rules (keyword-based responses), reply style settings (professional, casual, or enthusiastic), and business hours (when it's active).",
+    "a6": "Absolutely. You control the AI through your Knowledge Base (what it knows), preset replies (keyword-based responses for common questions), reply style settings (professional, casual, or enthusiastic), and business hours (when it's active).",
     "q7": "How does Jawab24 handle Arabic dialects?",
     "a7": "Jawab24's AI can recognize and reply in 6 Arabic dialect families: Gulf (Saudi, Emirati, Kuwaiti), Egyptian, Levantine (Syrian, Lebanese, Jordanian), Maghrebi (Moroccan, Tunisian, Algerian), Iraqi, and Modern Standard Arabic. It detects which dialect the customer is using and replies naturally in the same dialect. It also handles Franco-Arabic (Arabic written in Latin letters) and mixed Arabic-English messages.",
     "q8": "Can Jawab24 answer product pricing questions from my Shopify or Salla store?",
@@ -144,10 +144,10 @@
     "q10": "Does Jawab24 work with Salla?",
     "a10": "Yes. Jawab24 has native integration with Salla, the leading Arabic e-commerce platform. You connect your Salla store via OAuth, and Jawab24 automatically syncs your product catalog, prices, product availability, and store policies (shipping, returns, warranty). The AI uses this data to answer customer questions accurately. Salla tokens are automatically refreshed so the connection stays active.",
     "q11": "Can I use Jawab24 for multiple Facebook pages?",
-    "a11": "Yes. You can connect multiple Facebook Pages and Instagram Business Accounts to a single Jawab24 workspace. Each page has its own Knowledge Base content, and reply rules apply across the workspace. The AI maintains separate context for each page, so replies are always relevant to the specific business."
+    "a11": "Yes. You can connect multiple Facebook Pages and Instagram Business Accounts to a single Jawab24 workspace. Each page has its own Knowledge Base content, and preset replies apply across the workspace. The AI maintains separate context for each page, so replies are always relevant to the specific business."
   },
   "whyDifferent": {
     "title": "Why Jawab24 Is Different",
-    "text": "Jawab24 is not a chatbot — it is an intelligent auto-reply system. Traditional chatbots force you to build conversation flows manually and follow rigid decision trees. Jawab24 understands what customers are asking, checks your product catalog for accurate information, and generates natural responses — all without any flow setup. It combines keyword-based templates, AI-generated replies, product catalog data, and business knowledge into a single system that works in Arabic and English. Designed from the ground up for Arabic-speaking markets, with native Salla integration, dialect-aware AI, and right-to-left interface support."
+    "text": "Jawab24 is not a chatbot — it is an intelligent auto-reply system. Traditional chatbots force you to build conversation flows manually and follow rigid decision trees. Jawab24 understands what customers are asking, checks your product catalog for accurate information, and generates natural responses — all without any flow setup. It combines preset replies, AI-generated smart replies, product catalog data, and business knowledge into a single system that works in Arabic and English. Designed from the ground up for Arabic-speaking markets, with native Salla integration, dialect-aware AI, and right-to-left interface support."
   }
 }
