@@ -43,7 +43,7 @@ function getRoleColor(role: WorkspaceRole) {
   switch (role) {
     case 'owner': return 'status-warning';
     case 'admin': return 'status-brand';
-    case 'member': return 'bg-surface-100 text-surface-600 dark:bg-surface-800 dark:text-surface-400';
+    case 'member': return 'bg-surface-100 text-muted-foreground dark:bg-surface-800';
   }
 }
 
@@ -260,7 +260,7 @@ export function TeamSection() {
                 readOnly
                 dir="ltr"
                 value={inviteLink.url}
-                className="flex-1 min-w-0 text-xs bg-white dark:bg-surface-200 border border-brand-200 dark:border-brand-700 rounded-lg px-3 py-2 text-foreground font-mono truncate"
+                className="flex-1 min-w-0 text-xs bg-background border border-brand-200 dark:border-brand-700 rounded-lg px-3 py-2 text-foreground font-mono truncate"
                 onClick={(e) => (e.target as HTMLInputElement).select()}
                 aria-label={t('copyLink')}
               />

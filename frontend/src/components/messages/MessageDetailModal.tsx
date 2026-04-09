@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Button, PlatformIcon, PauseToggle, LimitReachedCTA } from '@/components/ui';
+import { Badge, PlatformIcon, PauseToggle, SmartReplyButton } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -67,7 +67,7 @@ export function MessageDetailModal({
   const tc = useTranslations('common');
   const tComments = useTranslations('comments');
   const tDashboard = useTranslations('dashboard');
-  const tPricing = useTranslations('pricing');
+
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
   // was used to find this conversation. Tabs control which conversations appear in the list,
@@ -438,34 +438,13 @@ export function MessageDetailModal({
             <div className="flex items-center justify-between mb-2">
               {replyText && !isGenerating && <span className="text-xs text-muted-foreground">{tComments('aiSuggestedReply')}</span>}
               <div className="flex-1" />
-              <div className="relative group/tooltip inline-block">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleGenerateAi}
-                  disabled={isGenerating || !aiLimit.allowed}
-                  className={clsx(
-                    isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20',
-                    !aiLimit.allowed && 'opacity-50 cursor-not-allowed'
-                  )}
-                  icon={<Bot className="w-4 h-4" />}
-                >
-                  {isGenerating
-                    ? generationStatus || tc('loading')
-                    : !aiLimit.allowed
-                      ? tPricing('limitReached')
-                      : replyText
-                        ? tComments('regenerate')
-                        : tDashboard('aiReply')}
-                </Button>
-
-                {!aiLimit.allowed && (
-                  <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                    {aiLimit.reason || tPricing('limitReached')}
-                  </div>
-                )}
-              </div>
-              {!aiLimit.allowed && <LimitReachedCTA />}
+              <SmartReplyButton
+                onGenerate={handleGenerateAi}
+                isGenerating={isGenerating}
+                generationStatus={generationStatus}
+                aiLimit={aiLimit}
+                hasReply={!!replyText}
+              />
             </div>
           )}
 

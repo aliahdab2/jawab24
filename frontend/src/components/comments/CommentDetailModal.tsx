@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
-import clsx from 'clsx';
-import { Button, Badge, PlatformIcon, FlagTag, PauseToggle, LimitReachedCTA } from '@/components/ui';
+import { Button, Badge, PlatformIcon, FlagTag, PauseToggle, SmartReplyButton } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -59,7 +58,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const t = useTranslations('comments');
   const tc = useTranslations('common');
   const tDashboard = useTranslations('dashboard');
-  const tPricing = useTranslations('pricing');
+
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
   
@@ -218,16 +217,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         </div>
 
         {/* Modal Header */}
-        <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border">
-          <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${needsAttention ? 'icon-bg-red' : 'icon-bg-brand'}`}>
+        <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${needsAttention ? 'icon-bg-red' : 'icon-bg-brand'}`}>
               <Sparkles className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold text-foreground truncate">
                 {mode === 'quick' ? t('reply') : t('commentDetails')}
               </h2>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground truncate">
                 {comment.fromName || tc('unknownUser')}
               </p>
               {pageName && (
@@ -252,32 +251,34 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   )}
                 </div>
               )}
+              {(pauseStatus?.paused || needsAttention) && (
+                <div className="flex items-center gap-2 mt-1">
+                  {pauseStatus?.paused && (
+                    <Badge variant="info">
+                      <PauseCircle className="w-3 h-3 me-1" />
+                      {tMessages('smartReplyPaused')}
+                    </Badge>
+                  )}
+                  {needsAttention && (
+                    <>
+                      <Badge variant="warning">
+                        <AlertTriangle className="w-3 h-3 me-1" />
+                        {t('needsAttention')}
+                      </Badge>
+                      <FlagTag flagReason={comment.flagReason} />
+                    </>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            {pauseStatus?.paused && (
-              <Badge variant="info">
-                <PauseCircle className="w-3 h-3 me-1" />
-                {tMessages('smartReplyPaused')}
-              </Badge>
-            )}
-            {needsAttention && (
-              <div className="flex flex-col items-end gap-1">
-                <Badge variant="warning">
-                  <AlertTriangle className="w-3 h-3 me-1" />
-                  {t('needsAttention')}
-                </Badge>
-                <FlagTag flagReason={comment.flagReason} />
-              </div>
-            )}
-            <button
-              onClick={onClose}
-              className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors"
-              aria-label={t('close')}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
+            aria-label={t('close')}
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* Modal Body */}
@@ -348,48 +349,12 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   <span>{t('heldReplyBanner')}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center mb-2">
-                <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground">
-                  {comment.replied && needsAttention ? t('followUpReply') : t('reply')}
-                  {replyText && !isGenerating && (
-                    <span className="text-xs font-normal text-muted-foreground ms-2">{t('aiSuggestedReply')}</span>
-                  )}
-                </label>
-                
-                {mode === 'full' && (
-                  <>
-                    <div className="relative group/tooltip inline-block">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleGenerateAi}
-                        disabled={isGenerating || !aiLimit.allowed}
-                        className={clsx(
-                          isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20',
-                          !aiLimit.allowed && 'opacity-50 cursor-not-allowed'
-                        )}
-                        icon={<Bot className="w-4 h-4" />}
-                      >
-                        {isGenerating
-                          ? generationStatus || tc('loading')
-                          : !aiLimit.allowed
-                            ? tPricing('limitReached')
-                            : replyText
-                              ? t('regenerate')
-                              : tDashboard('aiReply')}
-                      </Button>
-
-                      {/* Tooltip for disabled state */}
-                      {!aiLimit.allowed && (
-                        <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                          {aiLimit.reason || tPricing('limitReached')}
-                        </div>
-                      )}
-                    </div>
-                    {!aiLimit.allowed && <LimitReachedCTA />}
-                  </>
+              <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground mb-2 block">
+                {comment.replied && needsAttention ? t('followUpReply') : t('reply')}
+                {replyText && !isGenerating && (
+                  <span className="text-xs font-normal text-muted-foreground ms-2">{t('aiSuggestedReply')}</span>
                 )}
-              </div>
+              </label>
               <textarea
                 id="comment-reply-textarea"
                 ref={textareaRef}
@@ -403,42 +368,26 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
-          {/* Resolve/Unresolve — only for comments that need manual attention */}
-          {needsAttention && onResolve && (
-            <div className="flex justify-center mt-3">
-              <button
-                onClick={() => { onResolve(); onClose(); }}
-                disabled={isSending}
-                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-emerald-700 dark:hover:text-emerald-400 transition-colors disabled:opacity-50"
-              >
-                <CheckCircle className="w-3.5 h-3.5" />
-                {t('resolve')}
-              </button>
-            </div>
-          )}
-          {comment.resolved && onUnresolve && (
-            <div className="flex justify-center mt-3">
-              <button
-                onClick={() => { onUnresolve(); onClose(); }}
-                disabled={isSending}
-                className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-              >
-                <Undo2 className="w-3.5 h-3.5" />
-                {t('unresolve')}
-              </button>
-            </div>
-          )}
-
-
         </div>
 
         {/* Modal Footer — always visible above keyboard */}
         <div
           className="px-4 md:px-6 pb-safe-modal pt-3 border-t border-theme-border bg-card flex-shrink-0"
         >
-          {/* Send buttons — shown when reply input is active (unreplied or flagged) */}
+          {/* Action buttons — shown when reply input is active (unreplied or flagged) */}
           {(!comment.replied || needsAttention) && (
-            <div className="flex justify-end gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2">
+              {mode === 'full' && (
+                <SmartReplyButton
+                  onGenerate={handleGenerateAi}
+                  isGenerating={isGenerating}
+                  generationStatus={generationStatus}
+                  aiLimit={aiLimit}
+                  hasReply={!!replyText}
+                  compactOnMobile
+                />
+              )}
+              <div className="flex-1" />
               <Button variant="secondary" onClick={onClose} disabled={isSending}>
                  {tc('cancel')}
               </Button>
@@ -453,14 +402,35 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               </Button>
             </div>
           )}
-          {mode === 'full' && comment.fromId && (
-            <PauseToggle
-              paused={!!pauseStatus?.paused}
-              remainingMinutes={pauseStatus?.remainingMinutes}
-              loading={pauseLoading}
-              onToggle={handleTogglePause}
-            />
-          )}
+          <div className="flex items-center justify-between">
+            {mode === 'full' && comment.fromId ? (
+              <PauseToggle
+                paused={!!pauseStatus?.paused}
+                remainingMinutes={pauseStatus?.remainingMinutes}
+                loading={pauseLoading}
+                onToggle={handleTogglePause}
+              />
+            ) : <div />}
+            {needsAttention && onResolve ? (
+              <button
+                onClick={() => { onResolve(); onClose(); }}
+                disabled={isSending}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30 transition-colors disabled:opacity-50"
+              >
+                <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                {t('resolve')}
+              </button>
+            ) : comment.resolved && onUnresolve ? (
+              <button
+                onClick={() => { onUnresolve(); onClose(); }}
+                disabled={isSending}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                <Undo2 className="w-3.5 h-3.5 flex-shrink-0" />
+                {t('unresolve')}
+              </button>
+            ) : null}
+          </div>
         </div>
 
       </div>

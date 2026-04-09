@@ -4,7 +4,7 @@ import { aiApi, subscriptionApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { useTranslations } from 'next-intl';
 
-interface AiLimit {
+export interface AiLimit {
   allowed: boolean;
   reason?: string;
 }
