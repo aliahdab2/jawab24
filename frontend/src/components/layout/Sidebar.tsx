@@ -12,7 +12,6 @@ import {
   ChevronRight,
   CreditCard,
   Shield,
-  BookTemplate,
   Zap,
   Plug,
   ChevronDown as ChevronDownIcon,
@@ -134,8 +133,7 @@ export function getNavigationGroups(hasEcommerceStore: boolean) {
     {
       labelKey: 'sidebar.automation',
       items: [
-        { key: 'nav.templates', href: '/templates', icon: BookTemplate },
-        { key: 'nav.rules', href: '/rules', icon: Zap },
+        { key: 'nav.presetReplies', href: '/preset-replies', icon: Zap },
         ...(hasEcommerceStore ? [{ key: 'nav.integrations', href: '/integrations', icon: Plug }] : []),
       ],
     },

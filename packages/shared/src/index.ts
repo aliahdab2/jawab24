@@ -176,6 +176,16 @@ export interface Rule {
   matchCount?: number;
 }
 
+// --- Preset Reply Types ---
+export interface PresetReply {
+  id: string;
+  keywords: string[] | null;
+  message: string | null;
+  active: boolean | null;
+  templateId: string | null;
+  createdAt: Date | string | null;
+}
+
 // --- Dashboard Stats Types ---
 export interface DashboardStats {
   totalComments: number;

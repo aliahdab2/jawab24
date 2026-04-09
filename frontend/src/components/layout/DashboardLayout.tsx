@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, MessageSquare, Settings, MoreHorizontal, X, LogOut, BookTemplate, Zap, FileText, CreditCard } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, MessageSquare, Settings, MoreHorizontal, X, LogOut, Zap, FileText, CreditCard } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -410,8 +410,7 @@ function MobileMenuOverlay({
     { path: '/pages', icon: FileText, label: tNav('pages') },
     { path: '/comments', icon: MessageSquare, label: tNav('comments') },
     { path: '/messages', icon: MessageCircle, label: tNav('messages') },
-    { path: '/templates', icon: BookTemplate, label: tNav('templates') },
-    { path: '/rules', icon: Zap, label: tNav('rules') },
+    { path: '/preset-replies', icon: Zap, label: tNav('presetReplies') },
     { path: '/pricing', icon: CreditCard, label: tPricing('title') },
     { path: '/settings', icon: Settings, label: tNav('settings') },
   ];

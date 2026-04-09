@@ -17,6 +17,7 @@ import authRoutes from "./routes/auth";
 import webhookRoutes from "./routes/webhook";
 import rulesRoutes from "./routes/rules";
 import templatesRoutes from "./routes/templates";
+import presetRepliesRoutes from "./routes/preset-replies";
 import aiRoutes from "./routes/ai";
 import pagesRoutes from "./routes/pages";
 import postsRoutes from "./routes/posts";
@@ -205,6 +206,7 @@ const start = async () => {
     await server.register(webhookRoutes);
     await server.register(rulesRoutes);
     await server.register(templatesRoutes);
+    await server.register(presetRepliesRoutes);
     await server.register(aiRoutes);
     await server.register(pagesRoutes);
     await server.register(postsRoutes);

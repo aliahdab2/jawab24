@@ -182,9 +182,11 @@ export class ReplyGenerator {
     ): Promise<GenerateReplyResult> {
         const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
 
-        // 1. Try to find a matching rule with template
-        const templateResult = await this.tryTemplateMatch(workspaceId, text);
-        if (templateResult) return templateResult;
+        // 1. Try to find a matching rule with template (skip if page has a store — AI answers with product context)
+        if (!context.ecommerceStoreId) {
+            const templateResult = await this.tryTemplateMatch(workspaceId, text);
+            if (templateResult) return templateResult;
+        }
 
         // 3. If no template, use AI if enabled
         if (aiEnabled) {

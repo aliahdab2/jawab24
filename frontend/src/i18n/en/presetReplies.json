@@ -1,0 +1,22 @@
+{
+  "title": "Preset Replies",
+  "description": "Keyword-triggered replies for short comments.",
+  "infoBanner": "For common repeated questions like address, phone number, or business hours. Saves your Smart Reply credits.",
+  "infoBannerNote1": "Only fires on short comments (under 6 words)",
+  "infoBannerNote2": "Does not apply to DMs — Smart Reply handles those",
+  "infoBannerNote3": "Does not apply to pages with a connected store — Smart Reply answers with product details",
+  "addReply": "Add Reply",
+  "editReply": "Edit Reply",
+  "deleteReply": "Delete Reply",
+  "keywords": "Keywords",
+  "keywordsPlaceholder": "address, phone number, business hours",
+  "keywordsHelper": "Separate keywords with commas",
+  "reply": "Reply",
+  "replyPlaceholder": "Type your reply...",
+  "noReplies": "No preset replies yet",
+  "noRepliesDesc": "Add keyword-triggered replies for common questions like address, phone number, or business hours.",
+  "searchPlaceholder": "Search replies...",
+  "deleteConfirm": "Are you sure you want to delete this preset reply?",
+  "disabledBadge": "Disabled",
+  "charCount": "{count} chars"
+}

@@ -231,26 +231,13 @@ export const commentsApi = {
   unresolve: (id: string) => api.post(`/comments/${id}/unresolve`),
 };
 
-// Templates API
-export const templatesApi = {
-  getAll: () => api.get('/templates'),
-  getById: (id: string) => api.get(`/templates/${id}`),
-  create: (data: { name: string; message: string }) =>
-    api.post('/templates', data),
-  update: (id: string, data: { name?: string; message?: string; active?: boolean }) =>
-    api.put(`/templates/${id}`, data),
-  delete: (id: string) => api.delete(`/templates/${id}`),
-};
-
-// Rules API
-export const rulesApi = {
-  getAll: () => api.get('/rules'),
-  getById: (id: string) => api.get(`/rules/${id}`),
-  create: (data: { name: string; keywords: string[]; templateId: string; priority?: number }) =>
-    api.post('/rules', data),
-  update: (id: string, data: { name?: string; keywords?: string[]; templateId?: string; priority?: number; active?: boolean }) =>
-    api.put(`/rules/${id}`, data),
-  delete: (id: string) => api.delete(`/rules/${id}`),
+export const presetRepliesApi = {
+  getAll: () => api.get('/preset-replies'),
+  create: (data: { keywords: string[]; message: string }) =>
+    api.post('/preset-replies', data),
+  update: (id: string, data: { keywords?: string[]; message?: string; active?: boolean }) =>
+    api.put(`/preset-replies/${id}`, data),
+  delete: (id: string) => api.delete(`/preset-replies/${id}`),
 };
 
 // Settings API
