@@ -1623,3 +1623,51 @@ describe('shouldSkipReply', () => {
         expect(shouldSkipReply(undefined, 'spam_or_irrelevant')).toBe(true);
     });
 });
+
+describe('Store routing — skip preset replies for store pages', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('should skip template matching when ecommerceStoreId is present', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+
+        const generator = new ReplyGenerator();
+        await generator.generateForComment(
+            {
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: 'كم السعر',
+                pageName: 'Store Page',
+                pageId: 'page-1',
+                ecommerceStoreId: 'store-uuid',
+            },
+            true,
+            'public',
+        );
+
+        // Template matching should be skipped — AI handles store pages
+        expect(rulesService.findMatchingRule).not.toHaveBeenCalled();
+    });
+
+    it('should try template matching when no store is connected', async () => {
+        const { rulesService } = await import('../../src/services/rules');
+        vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+
+        const generator = new ReplyGenerator();
+        await generator.generateForComment(
+            {
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: 'السعر',
+                pageName: 'Page',
+                pageId: 'page-1',
+            },
+            true,
+            'public',
+        );
+
+        // Template matching should be attempted — no store connected
+        expect(rulesService.findMatchingRule).toHaveBeenCalled();
+    });
+});

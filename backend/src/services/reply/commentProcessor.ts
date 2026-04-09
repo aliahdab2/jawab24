@@ -110,28 +110,24 @@ export class CommentProcessor {
                     matchesKeyword(normalizedComment, normalizeArabic(kw.toLowerCase())),
                 );
 
-                if (!matchedKeyword) {
-                    // Comment doesn't match any trigger keyword — store it but skip auto-reply
-                    await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
-                    pipelineMetrics.record(pipeline, 'trigger_no_match');
-                    this.logger.info(`[${platform}] Trigger keywords set but comment did not match any — skipping`, {
-                        platformCommentId, triggerKeywords,
+                if (matchedKeyword) {
+                    // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
+                    const { comment } = await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
+                    invalidateWorkspaceStatsCache(workspaceId);
+                    return this.sendAndFinalize({
+                        adapter, platform, pipeline,
+                        pageId: page.id, userId,
+                        comment, replyText: content.triggerReply, replyMethod: 'template',
+                        commentMessage, platformCommentId, platformPageId,
+                        accessToken: page.accessToken, fromId,
+                        userSettings: userSettings as unknown as Record<string, unknown>,
+                        postMessage: content.message || undefined,
+                        triggerKeyword: matchedKeyword,
                     });
-                    return { success: false, commentId: platformCommentId, error: 'Comment did not match post trigger keyword' };
                 }
-
-                // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
-                const { comment } = await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
-                invalidateWorkspaceStatsCache(workspaceId);
-                return this.sendAndFinalize({
-                    adapter, platform, pipeline,
-                    pageId: page.id, userId,
-                    comment, replyText: content.triggerReply, replyMethod: 'template',
-                    commentMessage, platformCommentId, platformPageId,
-                    accessToken: page.accessToken, fromId,
-                    userSettings: userSettings as unknown as Record<string, unknown>,
-                    postMessage: content.message || undefined,
-                    triggerKeyword: matchedKeyword,
+                // No match — fall through to preset replies / AI pipeline
+                this.logger.info(`[${platform}] Trigger keywords set but comment did not match — falling through to preset/AI`, {
+                    platformCommentId, triggerKeywords,
                 });
             } else if (content.triggerKeyword) {
                 // Trigger keywords exist but conditions not met — log for diagnostics

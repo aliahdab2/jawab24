@@ -1255,4 +1255,91 @@ describe('CommentProcessor — template reply mode behavior', () => {
             );
         }
     });
+
+    describe('Post trigger + preset reply fallthrough', () => {
+        it('should fall through to preset replies when trigger keyword does not match', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سجّل',
+                    triggerReply: 'مرحباً! سجّل عبر الرابط...',
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'وين العنوان', 'user-1', 'Ali',
+            );
+
+            // Should NOT return early — should fall through to generator
+            expect(replyGenerator.generateForComment).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('should use trigger reply when keyword matches (not fall through)', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سجّل',
+                    triggerReply: 'مرحباً! سجّل عبر الرابط...',
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+
+            // Should use trigger reply directly, NOT call generator
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('مرحباً! سجّل عبر الرابط...');
+        });
+    });
+
+    describe('Store routing — skip preset replies for store pages', () => {
+        it('should skip template matching when page has ecommerceStoreId', async () => {
+            const adapter = createMockAdapter({
+                getPage: vi.fn().mockResolvedValue({
+                    id: 'page-uuid',
+                    userId: 'user-uuid',
+                    workspaceId: 'test_workspace_id',
+                    name: 'Store Page',
+                    accessToken: 'token-123',
+                    knowledgeBase: null,
+                    kbActiveVersion: null,
+                    autoReplyEnabled: true,
+                    ecommerceStoreId: 'store-uuid',
+                }),
+                buildGeneratorContext: vi.fn().mockReturnValue({
+                    workspaceId: 'test_workspace_id',
+                    userId: 'user-uuid',
+                    text: '',
+                    pageName: 'Store Page',
+                    pageId: 'page-uuid',
+                    ecommerceStoreId: 'store-uuid',
+                }),
+            });
+
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: 'AI reply with product info',
+                replyMethod: 'ai',
+                needsAttention: false,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم السعر', 'user-1', 'Ali',
+            );
+
+            expect(result.success).toBe(true);
+            // Generator should be called with ecommerceStoreId in context
+            expect(replyGenerator.generateForComment).toHaveBeenCalledWith(
+                expect.objectContaining({ ecommerceStoreId: 'store-uuid' }),
+                expect.anything(),
+                expect.anything(),
+            );
+        });
+    });
 });
