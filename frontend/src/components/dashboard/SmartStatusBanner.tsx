@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import clsx from 'clsx';
+import type { Comment } from '@jawab24/shared';
 import {
   AlertTriangle,
   ChevronDown,
@@ -23,6 +24,8 @@ export interface NeedsAttentionItem {
   flagReason: string | null;
   /** Link path, e.g. "/comments?filter=needs_action" */
   href: string;
+  /** For comments: full comment object needed to open detail modal */
+  commentData?: Comment;
   /** For messages: sender ID needed to fetch conversation */
   senderId?: string;
   /** For messages: page ID needed to fetch conversation */
@@ -37,8 +40,8 @@ interface SmartStatusBannerProps {
   commentNeedsAction: number;
   messageNeedsAction: number;
   items: NeedsAttentionItem[];
-  /** Called when a message item is clicked (opens inline modal instead of navigating) */
-  onMessageItemClick?: (item: NeedsAttentionItem) => void;
+  /** Called when an item is clicked (opens inline modal instead of navigating) */
+  onItemClick?: (item: NeedsAttentionItem) => void;
 }
 
 /** Default SLA reasons that are obvious from context — no need to show a tag */
@@ -70,7 +73,7 @@ export function SmartStatusBanner({
   commentNeedsAction,
   messageNeedsAction,
   items,
-  onMessageItemClick,
+  onItemClick,
 }: SmartStatusBannerProps) {
   const tDash = useTranslations('dashboard');
   const tComments = useTranslations('comments');
@@ -205,7 +208,10 @@ export function SmartStatusBanner({
                     : item.text;
                   const reason = getReasonTag(item.flagReason, tFlagReason, tDash);
 
-                  const useInlineClick = item.type === 'message' && onMessageItemClick;
+                  const useInlineClick = !!onItemClick && (
+                    (item.type === 'message' && !!item.senderId) ||
+                    (item.type === 'comment' && !!item.commentData)
+                  );
                   const hasMultiple = item.messageCount && item.messageCount > 1;
                   const showReasonTag = isNotableFlagReason(item.flagReason);
                   // For grouped conversations, show "waiting since" (earliest); otherwise show latest
@@ -255,7 +261,7 @@ export function SmartStatusBanner({
                         <button
                           type="button"
                           className={sharedClassName}
-                          onClick={() => onMessageItemClick(item)}
+                          onClick={() => onItemClick?.(item)}
                         >
                           {itemContent}
                         </button>

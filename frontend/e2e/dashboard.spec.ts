@@ -494,6 +494,107 @@ test.describe('Dashboard Page', () => {
     await expect(page.getByRole('button', { name: t('pages.connectPage') })).toBeVisible();
   });
 
+  test('should open CommentDetailModal when clicking a comment in the needs-attention banner', async ({ page }) => {
+    const unrepliedComment = {
+      id: 'c_banner',
+      message: 'Is delivery available?',
+      fromName: 'Banner Commenter',
+      replied: false,
+      resolved: false,
+      needsAttention: true,
+      pageId: 'page_1',
+      createdAt: new Date().toISOString(),
+    };
+
+    // Override comments endpoints: preserve stats shape, return unreplied comment for list queries
+    await page.route('**/api/comments**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/stats')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ...MOCK_COMMENT_STATS, unreplied: 1, needsAttention: 1 }),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: [unrepliedComment] }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Expand the banner
+    const expandButton = page.getByRole('button', { name: /items need your attention/i });
+    await expandButton.click();
+
+    // Click the comment item in the banner
+    await page.getByText('Is delivery available?').first().click();
+
+    // CommentDetailModal should open showing the commenter's name and message
+    await expect(page.getByText('Banner Commenter').first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('Is delivery available?').first()).toBeVisible();
+  });
+
+  test('should open MessageDetailModal when clicking a message in the needs-attention banner', async ({ page }) => {
+    const bannerMessage = {
+      id: 'msg_1',
+      senderId: 'sender_banner',
+      senderName: 'Banner Sender',
+      message: 'Do you ship internationally?',
+      direction: 'incoming',
+      replied: false,
+      needsAttention: true,
+      pageId: 'page_1',
+      createdAt: new Date().toISOString(),
+    };
+
+    // Override messages endpoints: preserve stats shape, return banner message for list/conversation queries
+    await page.route('**/api/messages**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/stats')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ ...MOCK_MESSAGE_STATS, pending: 1, needsAttention: 1 }),
+        });
+      }
+      if (url.includes('/conversation/')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([bannerMessage]),
+        });
+      }
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ data: [bannerMessage] }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Expand the banner
+    const expandButton = page.getByRole('button', { name: /items need your attention/i });
+    await expandButton.click();
+
+    // Click the message item in the banner
+    await page.getByText('Do you ship internationally?').first().click();
+
+    // MessageDetailModal should open showing the sender's name
+    await expect(page.getByText('Banner Sender').first()).toBeVisible({ timeout: 5000 });
+  });
+
   test('should show empty state gracefully when APIs fail', async ({ page }) => {
     // Override API mocks to return errors
     await page.route('**/api/**', async (route) => {

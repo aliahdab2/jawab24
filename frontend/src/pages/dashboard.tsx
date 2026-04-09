@@ -326,6 +326,7 @@ const DashboardPage: NextPageWithLayout = () => {
           createdAt: c.createdTime || c.createdAt || null,
           flagReason: c.flagReason ?? null,
           href: '/comments?filter=needs_action',
+          commentData: c,
         });
       }
     }
@@ -488,6 +489,8 @@ const DashboardPage: NextPageWithLayout = () => {
   const handleAttentionItemClick = useCallback((item: NeedsAttentionItem) => {
     if (item.type === 'message' && item.senderId && item.pageId) {
       openConversationModal(item.senderId, item.pageId, item.senderName);
+    } else if (item.type === 'comment' && item.commentData) {
+      setSelectedCommentData({ comment: item.commentData, mode: 'full' });
     }
   }, [openConversationModal]);
 
@@ -553,7 +556,7 @@ const DashboardPage: NextPageWithLayout = () => {
         commentNeedsAction={statsData.commentsNeedsAction}
         messageNeedsAction={statsData.messagesNeedsAction}
         items={needsAttentionItems}
-        onMessageItemClick={handleAttentionItemClick}
+        onItemClick={handleAttentionItemClick}
       />
 
       {/* Command Center — consolidated metrics */}

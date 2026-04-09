@@ -1,9 +1,10 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import type { Comment } from '@jawab24/shared';
 import { SmartStatusBanner, type NeedsAttentionItem } from './SmartStatusBanner';
 
-function makeItem(overrides: Partial<NeedsAttentionItem> = {}): NeedsAttentionItem {
+function makeMessageItem(overrides: Partial<NeedsAttentionItem> = {}): NeedsAttentionItem {
   return {
     id: '1',
     type: 'message',
@@ -18,25 +19,45 @@ function makeItem(overrides: Partial<NeedsAttentionItem> = {}): NeedsAttentionIt
   };
 }
 
-function renderBanner(items: NeedsAttentionItem[], onClick = vi.fn()) {
+function makeCommentItem(overrides: Partial<NeedsAttentionItem> = {}): NeedsAttentionItem {
+  return {
+    id: 'c1',
+    type: 'comment',
+    senderName: 'Sara',
+    text: 'Is this available?',
+    createdAt: '2026-03-01T10:00:00Z',
+    flagReason: null,
+    href: '/comments?filter=needs_action',
+    commentData: { id: 'c1', message: 'Is this available?' } as Comment,
+    ...overrides,
+  };
+}
+
+function renderBanner(
+  items: NeedsAttentionItem[],
+  onClick = vi.fn(),
+  counts?: { comments?: number; messages?: number },
+) {
+  const commentCount = counts?.comments ?? items.filter(i => i.type === 'comment').length;
+  const messageCount = counts?.messages ?? items.filter(i => i.type === 'message').length;
   return render(
     <SmartStatusBanner
-      commentNeedsAction={0}
-      messageNeedsAction={items.length}
+      commentNeedsAction={commentCount}
+      messageNeedsAction={messageCount}
       items={items}
-      onMessageItemClick={onClick}
+      onItemClick={onClick}
     />,
   );
 }
 
 describe('SmartStatusBanner', () => {
   it('renders the correct attention count in the header button aria-label', () => {
-    renderBanner([makeItem(), makeItem({ id: '2' })]);
+    renderBanner([makeMessageItem(), makeMessageItem({ id: '2' })]);
     expect(screen.getByRole('button', { name: /2 items need your attention/i })).toBeInTheDocument();
   });
 
   it('renders items in the DOM after expanding', () => {
-    renderBanner([makeItem()]);
+    renderBanner([makeMessageItem()]);
     fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
     expect(screen.getByText('What are your packages?')).toBeInTheDocument();
   });
@@ -44,7 +65,7 @@ describe('SmartStatusBanner', () => {
   // Regression: bug where comma-separated flagReason was passed directly to
   // the translator, rendering raw "flagReason.info_not_in_kb,low_confidence"
   it('shows translated primary flag label for comma-separated flagReason', () => {
-    renderBanner([makeItem({ flagReason: 'info_not_in_kb,low_confidence' })]);
+    renderBanner([makeMessageItem({ flagReason: 'info_not_in_kb,low_confidence' })]);
     fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
     expect(screen.getByText('Information not in knowledge base')).toBeInTheDocument();
     expect(screen.queryByText(/info_not_in_kb,low_confidence/)).not.toBeInTheDocument();
@@ -52,22 +73,37 @@ describe('SmartStatusBanner', () => {
   });
 
   it('shows translated label for single flag', () => {
-    renderBanner([makeItem({ flagReason: 'angry_customer' })]);
+    renderBanner([makeMessageItem({ flagReason: 'angry_customer' })]);
     fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
     expect(screen.getByText('Angry customer')).toBeInTheDocument();
   });
 
   it('does not show a flag tag for sla_no_reply (default reason)', () => {
-    renderBanner([makeItem({ flagReason: 'sla_no_reply:60' })]);
+    renderBanner([makeMessageItem({ flagReason: 'sla_no_reply:60' })]);
     fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
     expect(screen.queryByText(/sla_no_reply/)).not.toBeInTheDocument();
   });
 
-  it('calls onMessageItemClick when a message item is clicked', () => {
+  it('calls onItemClick when a message item is clicked', () => {
     const onClick = vi.fn();
-    renderBanner([makeItem()], onClick);
+    renderBanner([makeMessageItem()], onClick);
     fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
     fireEvent.click(screen.getByText('What are your packages?'));
-    expect(onClick).toHaveBeenCalledWith(expect.objectContaining({ id: '1' }));
+    expect(onClick).toHaveBeenCalledWith(expect.objectContaining({ id: '1', type: 'message' }));
+  });
+
+  it('calls onItemClick when a comment item with commentData is clicked', () => {
+    const onClick = vi.fn();
+    renderBanner([makeCommentItem()], onClick);
+    fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
+    fireEvent.click(screen.getByText('Is this available?'));
+    expect(onClick).toHaveBeenCalledWith(expect.objectContaining({ id: 'c1', type: 'comment' }));
+  });
+
+  it('renders a link (not a button) for a comment item without commentData', () => {
+    renderBanner([makeCommentItem({ commentData: undefined })]);
+    fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
+    const item = screen.getByText('Is this available?').closest('a');
+    expect(item).toHaveAttribute('href', '/comments?filter=needs_action');
   });
 });
