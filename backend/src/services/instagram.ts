@@ -118,6 +118,39 @@ export class InstagramService {
     }
 
     /**
+     * Get Instagram media content (caption) by media ID.
+     * Returns the caption text or null if unavailable.
+     */
+    async getPostContent(mediaId: string, pageAccessToken: string): Promise<string | null> {
+        try {
+            this.logger.debug('[Instagram] Fetching media content', { mediaId });
+            const response = await axios.get(`${INSTAGRAM_GRAPH_API}/${mediaId}`, {
+                params: {
+                    fields: 'caption',
+                    access_token: pageAccessToken,
+                },
+            });
+
+            const caption = response.data.caption || null;
+            this.logger.debug('[Instagram] Media content fetched', {
+                mediaId,
+                hasContent: !!caption,
+                contentPreview: caption ? caption.substring(0, 50) : null,
+            });
+            return caption;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.error('[Instagram] Error fetching media content', {
+                    mediaId,
+                    error: error.response?.data?.error?.message || error.message,
+                });
+            }
+            // Don't throw — return null if we can't fetch the media
+            return null;
+        }
+    }
+
+    /**
      * Reply to an Instagram comment
      * Requires: instagram_business_manage_comments permission
      */

@@ -41,9 +41,11 @@ export class InstagramReplyService {
         senderId: string,
         messageText: string,
         messageId: string,
+        sharedPostUrl?: string,
+        sharedPostId?: string,
     ): Promise<MessageResult> {
         return messageProcessor.processMessage(
-            instagramMessageAdapter, instagramAccountId, senderId, messageText, messageId,
+            instagramMessageAdapter, instagramAccountId, senderId, messageText, messageId, sharedPostUrl, sharedPostId,
         );
     }
 }

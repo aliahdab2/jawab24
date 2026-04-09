@@ -7,6 +7,8 @@ const ATTACHMENT_TYPE_MAP: Record<string, string> = {
     file:     'attachmentFile',
     post:     'attachmentPost',
     ig_post:  'attachmentPost',
+    reel:     'attachmentPost',
+    ig_reel:  'attachmentPost',
     fallback: 'attachmentFallback',
 };
 

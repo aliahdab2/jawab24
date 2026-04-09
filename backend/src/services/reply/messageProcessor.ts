@@ -14,9 +14,11 @@ import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { facebookService } from '../facebook';
+import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
+import { extractPostId } from '../../utils/instagram';
 
 /**
  * Unified Message Processor
@@ -64,6 +66,7 @@ export class MessageProcessor {
         messageText: string,
         platformMessageId: string,
         sharedPostUrl?: string,
+        sharedPostId?: string,
     ): Promise<MessageResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_message` as Pipeline;
@@ -136,11 +139,13 @@ export class MessageProcessor {
             invalidateWorkspaceStatsCache(page.workspaceId);
 
             // 3.5. Enrich with shared post context (if customer attached a post to their message)
-            if (sharedPostUrl) {
+            if (sharedPostUrl || sharedPostId) {
                 try {
-                    const postIdMatch = sharedPostUrl.match(/\/(\d+)\/?(?:\?|$)/);
-                    if (postIdMatch) {
-                        const postContent = await facebookService.getPostContent(postIdMatch[1], page.accessToken);
+                    const resolvedId = extractPostId(sharedPostUrl, sharedPostId);
+                    if (resolvedId) {
+                        const postContent = platform === 'instagram'
+                            ? await instagramService.getPostContent(resolvedId, page.accessToken)
+                            : await facebookService.getPostContent(resolvedId, page.accessToken);
                         if (postContent) {
                             messageText = `[Shared post: "${postContent.slice(0, 200)}"] ${messageText}`;
                             this.logger.info(`[${platform}] Enriched message with shared post context`, {

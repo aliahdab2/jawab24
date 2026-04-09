@@ -327,6 +327,7 @@ export interface ReplyJobData {
   commentId?: string;       // Facebook/Instagram comment ID
   parentId?: string;        // Set when comment is a reply to another comment (sub-comment)
   sharedPostUrl?: string;   // URL of a shared post attached to a DM (for post context enrichment)
+  sharedPostId?: string;    // Numeric post/media ID from webhook payload (more reliable than URL parsing)
   messageId?: string;       // Facebook/Instagram message ID (for DMs)
   senderId?: string;        // User who sent the comment/message
   senderName?: string;      // Display name of sender

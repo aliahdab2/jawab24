@@ -9,6 +9,7 @@ import { auditLog } from '../services/auditLog';
 import { captureError } from '../utils/sentryHelpers';
 import * as Sentry from '@sentry/node';
 import { handleNonTextMessage } from '../services/reply/nonTextHandler';
+import { isSharedPostType } from '../utils/instagram';
 import { Logger, noopLogger, createRequestLogger } from '../types';
 import { db } from '../db';
 import { users } from '../db/schema';
@@ -47,8 +48,8 @@ interface MessagingEvent {
         text?: string;
         is_echo?: boolean;
         attachments?: Array<{
-            type: 'audio' | 'image' | 'video' | 'file' | 'fallback' | 'post' | 'ig_post';
-            payload?: { url?: string; title?: string };
+            type: 'audio' | 'image' | 'video' | 'file' | 'fallback' | 'post' | 'ig_post' | 'reel' | 'ig_reel';
+            payload?: { url?: string; title?: string; id?: string };
         }>;
     };
 }
@@ -258,11 +259,11 @@ export class WebhookController {
                     if (messageEvent.message?.is_echo) continue;
                     // Handle text messages through the normal pipeline
                     if (messageEvent.message && messageEvent.message.text) {
-                        // Check for attached shared post (text + post combo)
+                        // Check for attached shared post/reel (text + post combo)
                         const postAtt = messageEvent.message.attachments?.find(
-                            a => a.type === 'post' || a.type === 'ig_post',
+                            a => isSharedPostType(a.type),
                         );
-                        await this.processMessage(pageId, messageEvent, page, postAtt?.payload?.url);
+                        await this.processMessage(pageId, messageEvent, page, postAtt?.payload?.url, postAtt?.payload?.id);
                     } else if (messageEvent.message?.attachments?.length) {
                         const att = messageEvent.message.attachments[0];
                         if (messageEvent.sender?.id && messageEvent.message.mid) {
@@ -271,6 +272,8 @@ export class WebhookController {
                                 messageId: messageEvent.message.mid,
                                 attachmentType: att.type,
                                 attachmentUrl: att.payload?.url,
+                                attachmentId: att.payload?.id,
+                                attachmentTitle: att.payload?.title,
                             }, 'facebook', this.log());
                         }
                     }
@@ -282,7 +285,7 @@ export class WebhookController {
     /**
      * Process a messaging event - store immediately and enqueue for async reply
      */
-    private async processMessage(pageId: string, event: MessagingEvent, page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>, sharedPostUrl?: string) {
+    private async processMessage(pageId: string, event: MessagingEvent, page: Awaited<ReturnType<typeof pagesService.getPageByFacebookId>>, sharedPostUrl?: string, sharedPostId?: string) {
         const senderId = event.sender?.id;
         const messageText = event.message?.text;
         const messageId = event.message?.mid;
@@ -315,6 +318,7 @@ export class WebhookController {
                 senderId,
                 text: messageText,
                 sharedPostUrl,
+                sharedPostId,
                 requestId: this.requestId,
             });
 
@@ -432,7 +436,11 @@ export class WebhookController {
                     // Skip echo events (bot's own messages reflected back)
                     if (messageEvent.message?.is_echo) continue;
                     if (messageEvent.message && messageEvent.message.text) {
-                        await this.processInstagramMessage(instagramAccountId, messageEvent);
+                        // Check for attached shared post/reel (text + post combo)
+                        const postAtt = messageEvent.message.attachments?.find(
+                            a => isSharedPostType(a.type),
+                        );
+                        await this.processInstagramMessage(instagramAccountId, messageEvent, postAtt?.payload?.url, postAtt?.payload?.id);
                     } else if (messageEvent.message?.attachments?.length) {
                         const att = messageEvent.message.attachments[0];
                         if (messageEvent.sender?.id && messageEvent.message.mid) {
@@ -441,6 +449,8 @@ export class WebhookController {
                                 messageId: messageEvent.message.mid,
                                 attachmentType: att.type,
                                 attachmentUrl: att.payload?.url,
+                                attachmentId: att.payload?.id,
+                                attachmentTitle: att.payload?.title,
                             }, 'instagram', this.log());
                         }
                     }
@@ -516,7 +526,7 @@ export class WebhookController {
     /**
      * Process an Instagram DM - enqueue for async processing
      */
-    private async processInstagramMessage(instagramAccountId: string, event: MessagingEvent) {
+    private async processInstagramMessage(instagramAccountId: string, event: MessagingEvent, sharedPostUrl?: string, sharedPostId?: string) {
         const senderId = event.sender?.id;
         const messageText = event.message?.text;
         const messageId = event.message?.mid;
@@ -525,10 +535,10 @@ export class WebhookController {
             return;
         }
 
-        this.log().info('[Instagram] Enqueueing message for processing', { 
-            senderId, 
-            messageId, 
-            textLength: messageText.length 
+        this.log().info('[Instagram] Enqueueing message for processing', {
+            senderId,
+            messageId,
+            textLength: messageText.length
         });
 
         try {
@@ -538,6 +548,8 @@ export class WebhookController {
                 messageId,
                 senderId,
                 text: messageText,
+                sharedPostUrl,
+                sharedPostId,
                 requestId: this.requestId,
             });
 

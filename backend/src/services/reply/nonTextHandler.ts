@@ -7,7 +7,7 @@ import { redis } from '../../lib/redis';
 import { enqueueMessage } from '../../lib/replyQueue';
 import { detectLanguageCode } from '../../utils/language';
 import { getAttachmentPlaceholder, getTextOnlyNudge } from '../../utils/attachmentLabels';
-import { t } from '../../utils/i18n';
+import { extractPostId, isSharedPostType } from '../../utils/instagram';
 import type { Logger } from '../../types';
 
 /** Cooldown TTL: 1 hour. Prevents spamming the same customer with nudge replies. */
@@ -18,6 +18,8 @@ export interface NonTextMessageEvent {
     messageId: string;
     attachmentType: string;
     attachmentUrl?: string;
+    attachmentId?: string;
+    attachmentTitle?: string;
 }
 
 /**
@@ -32,7 +34,7 @@ export async function handleNonTextMessage(
     platform: 'facebook' | 'instagram',
     logger: Logger,
 ): Promise<void> {
-    const { senderId, messageId, attachmentType, attachmentUrl } = event;
+    const { senderId, messageId, attachmentType, attachmentUrl, attachmentId, attachmentTitle } = event;
 
     try {
         // 1. Look up the page
@@ -86,14 +88,49 @@ export async function handleNonTextMessage(
             });
         }
 
-        // 4. Shared post: send smart nudge that acknowledges the post
-        if (attachmentType === 'post' || attachmentType === 'ig_post') {
-            const placeholder = getAttachmentPlaceholder(attachmentType, lang);
+        // 4. Shared post/reel: fetch content (best-effort), always route to AI
+        if (isSharedPostType(attachmentType)) {
+            let postContent: string | null = null;
+            try {
+                const resolvedId = extractPostId(attachmentUrl, attachmentId);
+                if (resolvedId) {
+                    const isIg = attachmentType === 'ig_post' || attachmentType === 'ig_reel';
+                    postContent = isIg
+                        ? await instagramService.getPostContent(resolvedId, page.accessToken)
+                        : await facebookService.getPostContent(resolvedId, page.accessToken);
+                }
+            } catch {
+                // Non-critical — continue with fallback context
+            }
+
+            // Build the best context we have: content > title > generic marker
+            let enrichedText: string;
+            if (postContent) {
+                enrichedText = `[Shared post: "${postContent.slice(0, 200)}"]`;
+            } else if (attachmentTitle) {
+                enrichedText = `[Shared post: "${attachmentTitle}"]`;
+            } else {
+                enrichedText = '[Customer shared a post]';
+            }
+
             await messagesService.findOrCreateFromWebhook(
-                page.id, messageId, senderId, placeholder, undefined, attachmentType,
+                page.id, messageId, senderId, enrichedText, undefined, attachmentType,
             );
-            await sendNudge(page, senderId, t('sharedPostNudge', lang), platform, logger);
-            return;
+
+            const jobType = platform === 'facebook' ? 'facebook_message' : 'instagram_message';
+            await enqueueMessage({
+                jobType,
+                pageId: platformPageId,
+                messageId,
+                senderId,
+                text: enrichedText,
+            });
+
+            logger.info(`[${platform}] Shared post enqueued for AI`, {
+                senderId, messageId,
+                hasContent: !!postContent, hasTitle: !!attachmentTitle,
+            });
+            return; // AI pipeline handles the reply from here
         }
 
         // 5. Non-audio or failed transcription: store placeholder + send generic nudge

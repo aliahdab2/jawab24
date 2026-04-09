@@ -33,9 +33,10 @@ export class ReplyService {
         messageText: string,
         messageId: string,
         sharedPostUrl?: string,
+        sharedPostId?: string,
     ): Promise<MessageResult> {
         return messageProcessor.processMessage(
-            facebookMessageAdapter, pageId, senderId, messageText, messageId, sharedPostUrl,
+            facebookMessageAdapter, pageId, senderId, messageText, messageId, sharedPostUrl, sharedPostId,
         );
     }
 
