@@ -94,6 +94,20 @@ describe('CommentDetailModal', () => {
     });
   });
 
+  it('shows upgrade link when limit reached', async () => {
+    (subscriptionApi.checkAiLimit as any).mockResolvedValue({
+      data: { allowed: false, reason: 'Limit reached' }
+    });
+
+    await renderModal();
+
+    await waitFor(() => {
+      const upgradeLink = screen.getByRole('link', { name: /upgrade/i });
+      expect(upgradeLink).toBeInTheDocument();
+      expect(upgradeLink).toHaveAttribute('href', '/pricing');
+    });
+  });
+
   it('shows regenerate button after successful generation (allows multiple)', async () => {
     (aiApi.generateAsync as any).mockResolvedValue({ data: { jobId: 'job1' } });
 

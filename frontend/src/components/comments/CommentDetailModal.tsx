@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { Button, Badge, PlatformIcon, FlagTag, PauseToggle } from '@/components/ui';
+import { Button, Badge, PlatformIcon, FlagTag, PauseToggle, LimitReachedCTA } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -356,34 +356,37 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 </label>
                 
                 {mode === 'full' && (
-                  <div className="relative group/tooltip inline-block">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleGenerateAi}
-                      disabled={isGenerating || !aiLimit.allowed}
-                      className={clsx(
-                        isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20',
-                        !aiLimit.allowed && 'opacity-50 cursor-not-allowed'
-                      )}
-                      icon={<Bot className="w-4 h-4" />}
-                    >
-                      {isGenerating
-                        ? generationStatus || tc('loading')
-                        : !aiLimit.allowed
-                          ? tPricing('limitReached')
-                          : replyText
-                            ? t('regenerate')
-                            : tDashboard('aiReply')}
-                    </Button>
+                  <>
+                    <div className="relative group/tooltip inline-block">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleGenerateAi}
+                        disabled={isGenerating || !aiLimit.allowed}
+                        className={clsx(
+                          isGenerating ? 'animate-pulse text-brand-600' : 'text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-900/20',
+                          !aiLimit.allowed && 'opacity-50 cursor-not-allowed'
+                        )}
+                        icon={<Bot className="w-4 h-4" />}
+                      >
+                        {isGenerating
+                          ? generationStatus || tc('loading')
+                          : !aiLimit.allowed
+                            ? tPricing('limitReached')
+                            : replyText
+                              ? t('regenerate')
+                              : tDashboard('aiReply')}
+                      </Button>
 
-                    {/* Tooltip for disabled state */}
-                    {!aiLimit.allowed && (
-                      <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
-                        {aiLimit.reason || tPricing('limitReached')}
-                      </div>
-                    )}
-                  </div>
+                      {/* Tooltip for disabled state */}
+                      {!aiLimit.allowed && (
+                        <div className="absolute bottom-full mb-2 start-1/2 -translate-x-1/2 rtl:translate-x-1/2 px-2 py-1 bg-gray-800 text-white text-xs rounded shadow-lg whitespace-nowrap opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-opacity z-10">
+                          {aiLimit.reason || tPricing('limitReached')}
+                        </div>
+                      )}
+                    </div>
+                    {!aiLimit.allowed && <LimitReachedCTA />}
+                  </>
                 )}
               </div>
               <textarea

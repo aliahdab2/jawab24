@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, Button, PlatformIcon, PauseToggle } from '@/components/ui';
+import { Badge, Button, PlatformIcon, PauseToggle, LimitReachedCTA } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -464,6 +464,7 @@ export function MessageDetailModal({
                   </div>
                 )}
               </div>
+              {!aiLimit.allowed && <LimitReachedCTA />}
             </div>
           )}
 

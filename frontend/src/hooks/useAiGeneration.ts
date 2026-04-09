@@ -117,7 +117,7 @@ export function useAiGeneration(options: UseAiGenerationOptions = {}) {
           duration: 5000,
           action: {
             label: tPricing('upgrade'),
-            onClick: () => window.location.href = '/settings'
+            onClick: () => window.location.href = '/pricing'
           }
         });
       }

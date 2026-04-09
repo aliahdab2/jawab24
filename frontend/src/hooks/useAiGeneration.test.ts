@@ -160,6 +160,49 @@ describe('useAiGeneration', () => {
     expect(result.current.generationStatus).toBe('');
   });
 
+  it('shows upgrade toast with /pricing action on 403 error', async () => {
+    const { toast } = await import('sonner');
+
+    (aiApi.generateAsync as any).mockRejectedValue({
+      response: { status: 403, data: { error: 'Limit reached' } },
+    });
+
+    const { result } = renderHook(() => useAiGeneration());
+
+    await waitFor(() => {
+      expect(subscriptionApi.checkAiLimit).toHaveBeenCalled();
+    });
+
+    act(() => {
+      result.current.generate({ comment: 'test' });
+    });
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Limit reached',
+        expect.objectContaining({
+          action: expect.objectContaining({
+            label: expect.any(String),
+            onClick: expect.any(Function),
+          }),
+        })
+      );
+    });
+
+    // Verify the action onClick routes to /pricing not /settings
+    const toastCall = vi.mocked(toast.error).mock.calls.find(
+      ([, opts]: [unknown, { action?: { onClick?: () => void } }]) => opts?.action?.onClick
+    );
+    const action = (toastCall?.[1] as { action?: { onClick?: () => void } })?.action;
+    // jsdom doesn't allow spying on window.location.href — replace with a writable object
+    const originalLocation = window.location;
+    delete (window as unknown as { location: unknown }).location;
+    window.location = { ...originalLocation, href: '' } as Location;
+    action?.onClick?.();
+    expect(window.location.href).toBe('/pricing');
+    window.location = originalLocation;
+  });
+
   it('handles failed job status', async () => {
     const { toast } = await import('sonner');
 
