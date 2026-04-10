@@ -9,6 +9,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
+import { formatFullTime, formatMessageTime } from '@/utils/formatMessageTime';
 import { messagesApi } from '@/lib/api';
 import type { Conversation } from './MessageCard';
 import {
@@ -27,7 +28,6 @@ import {
   ArrowDown,
   Loader2,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
 import type { Locale } from 'date-fns';
 
 interface MessageDetailModalProps {
@@ -233,28 +233,6 @@ export function MessageDetailModal({
     m => m.direction === 'incoming' && !m.replied
   );
 
-  const formatFullTime = (dateValue: string | Date | null | undefined) => {
-    if (!dateValue) return '-';
-    try {
-      return format(new Date(dateValue), 'PPp', { locale: dateLocale });
-    } catch {
-      return String(dateValue);
-    }
-  };
-
-  const formatMessageTime = (dateValue: string | Date | null | undefined) => {
-    if (!dateValue) return '-';
-    try {
-      const d = new Date(dateValue);
-      const isRecent = Date.now() - d.getTime() < 24 * 60 * 60 * 1000;
-      return isRecent
-        ? formatDistanceToNow(d, { addSuffix: true, locale: dateLocale })
-        : format(d, 'PPp', { locale: dateLocale });
-    } catch {
-      return String(dateValue);
-    }
-  };
-
   const isPaused = conversation.pauseStatus?.paused;
   const hasUnresolvedUnreplied = messages.some(
     m => m.direction === 'incoming' && !m.replied && !m.resolved
@@ -375,7 +353,7 @@ export function MessageDetailModal({
                   "flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter",
                   msg.direction === 'outgoing' ? 'text-brand-500' : 'text-muted-foreground'
                 )}>
-                  <span title={formatFullTime(msg.createdAt)}>{formatMessageTime(msg.createdAt)}</span>
+                  <span title={formatFullTime(msg.createdAt, dateLocale)}>{formatMessageTime(msg.createdAt, dateLocale)}</span>
                   {msg.direction === 'outgoing' && msg.replyMethod && (
                     <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
                       {msg.replyMethod === 'ai' ? (

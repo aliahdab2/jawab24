@@ -15,6 +15,7 @@
 
 import type { AxiosInstance, AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
+import { tError } from '@/lib/i18nErrors';
 
 // Types
 interface AuthStateChangeCallback {
@@ -237,7 +238,7 @@ class AuthManager {
         // 403 INSUFFICIENT_ROLE: user tried an action above their permission level
         if (status === 403 && errorCode === 'INSUFFICIENT_ROLE') {
           const { toast } = await import('sonner');
-          toast.error('You don\'t have permission to do this. Only admins can make changes.');
+          toast.error(tError('insufficientRole'));
           return Promise.reject(error);
         }
 

@@ -17,6 +17,7 @@ import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
+import { formatFullTime, formatMessageTime } from '@/utils/formatMessageTime';
 import {
   Sparkles,
   Bot,
@@ -32,7 +33,6 @@ import {
   ChevronRight,
   Hash,
 } from 'lucide-react';
-import { format, formatDistanceToNow } from 'date-fns';
 
 interface CommentDetailModalProps {
   comment: Comment;
@@ -125,28 +125,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       toast.error(tMessages('pauseFailed'), { id: 'smart-reply-status' });
     } finally {
       setPauseLoading(false);
-    }
-  };
-
-  const formatFullTime = (dateValue: string | Date | null | undefined) => {
-    if (!dateValue) return '-';
-    try {
-      return format(new Date(dateValue), 'PPp', { locale: dateLocale });
-    } catch {
-      return String(dateValue);
-    }
-  };
-
-  const formatMessageTime = (dateValue: string | Date | null | undefined) => {
-    if (!dateValue) return '-';
-    try {
-      const d = new Date(dateValue);
-      const isRecent = Date.now() - d.getTime() < 24 * 60 * 60 * 1000;
-      return isRecent
-        ? formatDistanceToNow(d, { addSuffix: true, locale: dateLocale })
-        : format(d, 'PPp', { locale: dateLocale });
-    } catch {
-      return String(dateValue);
     }
   };
 
@@ -303,7 +281,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(comment.message)}</p>
               </div>
               <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
-                <span title={formatFullTime(comment.createdAt)}>{formatMessageTime(comment.createdAt)}</span>
+                <span title={formatFullTime(comment.createdAt, dateLocale)}>{formatMessageTime(comment.createdAt, dateLocale)}</span>
               </div>
             </div>
 
@@ -314,7 +292,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                   <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(comment.replyText)}</p>
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter text-brand-500">
-                  <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>
+                  <span title={formatFullTime(comment.repliedAt, dateLocale)}>{formatMessageTime(comment.repliedAt, dateLocale)}</span>
                   {comment.replyMethod && (
                     <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
                       {comment.replyMethod === 'ai' ? (

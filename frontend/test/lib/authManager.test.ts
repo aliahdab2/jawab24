@@ -253,6 +253,60 @@ describe('AuthManager', () => {
             await expect(errorHandler(error)).rejects.toBe(error);
         });
 
+        it('error handler should show translated toast and reject on 403 INSUFFICIENT_ROLE', async () => {
+            const mockToastError = vi.fn();
+            vi.doMock('sonner', () => ({ toast: { error: mockToastError } }));
+
+            vi.resetModules();
+            AuthManagerModule = await import('@/lib/authManager');
+
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: { response: { use: mockUse } },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+            const error = {
+                config: { url: '/settings/update' },
+                response: { status: 403, data: { code: 'INSUFFICIENT_ROLE' } },
+            } as unknown as AxiosError;
+
+            await expect(errorHandler(error)).rejects.toBe(error);
+            expect(mockToastError).toHaveBeenCalledTimes(1);
+            // Should show a non-empty translated string, not a raw key
+            const message = mockToastError.mock.calls[0][0] as string;
+            expect(typeof message).toBe('string');
+            expect(message).not.toBe('insufficientRole');
+            expect(message.length).toBeGreaterThan(10);
+        });
+
+        it('error handler should NOT show permission toast for 403 without INSUFFICIENT_ROLE code', async () => {
+            const mockToastError = vi.fn();
+            vi.doMock('sonner', () => ({ toast: { error: mockToastError } }));
+
+            vi.resetModules();
+            AuthManagerModule = await import('@/lib/authManager');
+
+            const mockUse = vi.fn();
+            const mockAxiosInstance = {
+                interceptors: { response: { use: mockUse } },
+            } as unknown as AxiosInstance;
+
+            AuthManagerModule.authManager.setupAuthInterceptor(mockAxiosInstance);
+
+            const errorHandler = mockUse.mock.calls[0][1];
+            const error = {
+                config: { url: '/settings/update' },
+                response: { status: 403, data: { code: 'WORKSPACE_ACCESS_DENIED' } },
+            } as unknown as AxiosError;
+
+            // WORKSPACE_ACCESS_DENIED tries to clear workspace and retry — just catch the rejection
+            await expect(errorHandler(error)).rejects.toBeDefined();
+            expect(mockToastError).not.toHaveBeenCalled();
+        });
+
         it('error handler should skip auth endpoints', async () => {
             const mockUse = vi.fn();
             const mockAxiosInstance = {

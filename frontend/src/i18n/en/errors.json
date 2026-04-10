@@ -17,5 +17,6 @@
   "contactSupport": "Contact Support",
   "refreshPage": "Refresh Page",
   "goHome": "Go Home",
-  "goBack": "Go Back"
+  "goBack": "Go Back",
+  "insufficientRole": "You don't have permission to do this. Only admins can make changes."
 }
