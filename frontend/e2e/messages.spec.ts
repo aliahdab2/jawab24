@@ -188,6 +188,10 @@ test.describe('Message Detail Modal', () => {
       if (url.includes('/subscription/usage')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
       }
+      // /pages returns a plain array (not { data: [...] })
+      if (url.includes('/pages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      }
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
 
