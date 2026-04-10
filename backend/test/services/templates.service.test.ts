@@ -8,6 +8,13 @@ vi.mock('../../src/db', () => ({
         update: vi.fn(),
         delete: vi.fn(),
         select: vi.fn(),
+        // Execute the callback with the same db mock so transaction-wrapped code works in tests
+        transaction: vi.fn((cb: (tx: any) => Promise<any>) => cb({
+            insert: vi.fn(),
+            update: vi.fn(),
+            delete: vi.fn(),
+            select: vi.fn(),
+        })),
     },
 }));
 
@@ -147,12 +154,21 @@ describe('TemplatesService', () => {
     });
 
     describe('deleteTemplate', () => {
-        it('should delete the template', async () => {
-            vi.mocked(db.delete).mockReturnValue(mockDeleteChain() as any);
+        it('should delete the template inside a transaction', async () => {
+            // Provide chainable mocks on the tx object passed to the transaction callback
+            const mockTx = {
+                update: vi.fn().mockReturnValue({
+                    set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+                }),
+                delete: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }),
+            };
+            vi.mocked(db.transaction).mockImplementationOnce((cb: any) => cb(mockTx));
 
             await templatesService.deleteTemplate('ws-1', 'tpl-1');
 
-            expect(db.delete).toHaveBeenCalledTimes(1);
+            expect(db.transaction).toHaveBeenCalledTimes(1);
+            expect(mockTx.update).toHaveBeenCalledTimes(1); // deactivate rules
+            expect(mockTx.delete).toHaveBeenCalledTimes(1); // delete template
         });
     });
 });

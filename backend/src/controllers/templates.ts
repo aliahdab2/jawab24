@@ -76,7 +76,7 @@ export class TemplatesController {
             }
             return reply.send(template);
         } catch (error) {
-            captureError(error, 'Failed to fetch template', { tags: { action: 'get_template' } });
+            captureError(error, 'Failed to fetch template', { tags: { action: 'get_template' }, extra: { workspaceId: req.workspaceId, templateId: id } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch template' });
         }
@@ -100,7 +100,7 @@ export class TemplatesController {
             }
             return reply.send(template);
         } catch (error) {
-            captureError(error, 'Failed to update template', { tags: { action: 'update_template' } });
+            captureError(error, 'Failed to update template', { tags: { action: 'update_template' }, extra: { workspaceId: req.workspaceId, templateId: id } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update template' });
         }
@@ -121,7 +121,7 @@ export class TemplatesController {
             await templatesService.deleteTemplate(req.workspaceId, id);
             return reply.status(204).send();
         } catch (error) {
-            captureError(error, 'Failed to delete template', { tags: { action: 'delete_template' } });
+            captureError(error, 'Failed to delete template', { tags: { action: 'delete_template' }, extra: { workspaceId: req.workspaceId, templateId: id } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to delete template' });
         }

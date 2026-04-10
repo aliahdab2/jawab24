@@ -63,18 +63,22 @@ export class TemplatesService {
     }
 
     /**
-     * Delete a template
+     * Delete a template.
+     * Wrapped in a transaction so rules are only deactivated if the template
+     * delete also succeeds — no partial state on DB failure.
      */
     async deleteTemplate(workspaceId: string, templateId: string) {
-        // Deactivate rules that reference this template before deleting
-        await db
-            .update(rules)
-            .set({ active: false, updatedAt: new Date() })
-            .where(and(eq(rules.templateId, templateId), eq(rules.workspaceId, workspaceId)));
+        await db.transaction(async (tx) => {
+            // Deactivate rules that reference this template before deleting
+            await tx
+                .update(rules)
+                .set({ active: false, updatedAt: new Date() })
+                .where(and(eq(rules.templateId, templateId), eq(rules.workspaceId, workspaceId)));
 
-        await db
-            .delete(templates)
-            .where(and(eq(templates.id, templateId), eq(templates.workspaceId, workspaceId)));
+            await tx
+                .delete(templates)
+                .where(and(eq(templates.id, templateId), eq(templates.workspaceId, workspaceId)));
+        });
     }
 }
 
