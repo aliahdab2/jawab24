@@ -1033,6 +1033,7 @@ const DashboardPage: NextPageWithLayout = () => {
           isResuming={isResuming}
           pageName={selectedMessagePageName}
           pageUrl={selectedMessagePageUrl}
+          isInstagram={selectedConversation.lastMessage.platform === 'instagram'}
         />
       )}
     </>

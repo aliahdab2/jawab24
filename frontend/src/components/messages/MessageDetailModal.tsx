@@ -257,7 +257,17 @@ export function MessageDetailModal({
         <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
           <span className="font-medium">{t('title')}</span>
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
-          <span className="font-semibold text-muted-foreground truncate">{conversation.senderName || tc('user')}</span>
+          {!isInstagram ? (
+            <button
+              onClick={() => openExternalUrl(`https://www.facebook.com/messages/t/${conversation.senderId}`)}
+              className="flex items-center gap-1 font-semibold text-muted-foreground hover:text-brand-500 transition-colors truncate"
+            >
+              <span className="truncate">{conversation.senderName || tc('user')}</span>
+              <ExternalLink className="w-3 h-3 flex-shrink-0" />
+            </button>
+          ) : (
+            <span className="font-semibold text-muted-foreground truncate">{conversation.senderName || tc('user')}</span>
+          )}
         </div>
 
         {/* Header */}
