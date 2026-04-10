@@ -18,7 +18,8 @@ vi.mock('../../src/services/notifications', () => ({
 
 // Mock schema exports (drizzle needs these for query building)
 vi.mock('../../src/db/schema', () => ({
-    comments: { id: 'id', postId: 'post_id', replied: 'replied', needsAttention: 'needs_attention', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
+    comments: { id: 'id', postId: 'post_id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', createdTime: 'created_time', createdAt: 'created_at', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
+    instagramComments: { id: 'id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', createdAt: 'created_at', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
     messages: { id: 'id', pageId: 'page_id', replied: 'replied', needsAttention: 'needs_attention', direction: 'direction', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at', senderName: 'sender_name', senderId: 'sender_id', message: 'message' },
     pages: { id: 'id', userId: 'user_id', name: 'name', autoReplyEnabled: 'auto_reply_enabled' },
     posts: { id: 'id', pageId: 'page_id' },
@@ -72,10 +73,10 @@ function mockBatchSelect(commentRows: any[], messageRows: any[]) {
     });
 }
 
-function mockDbUpdate() {
+function mockDbUpdate(rowCount = 0) {
     (db.update as any).mockReturnValue({
         set: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue(undefined),
+            where: vi.fn().mockResolvedValue({ rowCount }),
         }),
     });
 }
@@ -94,12 +95,27 @@ describe('Escalation Service', () => {
     });
 
     describe('runEscalationSweep', () => {
-        it('should skip when no stale items found', async () => {
+        it('should skip notifications when no stale items found', async () => {
             mockBatchSelect([], []);
+            mockDbUpdate(0); // resolveStuckSpamComments runs but resolves 0 rows
 
             await runEscalationSweep();
 
-            expect(db.update).not.toHaveBeenCalled();
+            // resolveStuckSpamComments always issues 2 updates (FB + IG tables)
+            expect(db.update).toHaveBeenCalledTimes(2);
+            // No escalation notifications because no stale real comments
+            expect(notificationService.sendNotification).not.toHaveBeenCalled();
+        });
+
+        it('should resolve stuck spam/punctuation comments before escalation runs', async () => {
+            mockBatchSelect([], []);
+            mockDbUpdate(3); // 3 stuck spam comments resolved (FB table returns rowCount 3)
+
+            await runEscalationSweep();
+
+            // db.update called twice: once for facebook comments, once for instagram_comments
+            expect(db.update).toHaveBeenCalledTimes(2);
+            // No escalation notifications — the resolved comments never reached escalation
             expect(notificationService.sendNotification).not.toHaveBeenCalled();
         });
 
@@ -275,10 +291,12 @@ describe('Escalation Service', () => {
                 [{ userId: null, itemId: 'c-1', pageName: null, pageId: null, fromName: 'test', messageText: 'test', thresholdMinutes: 60 }],
                 [{ userId: null, itemId: 'm-1', pageName: null, pageId: null, senderName: null, senderId: null, messageText: null, thresholdMinutes: 30 }]
             );
+            mockDbUpdate(0);
 
             await runEscalationSweep();
 
-            expect(db.update).not.toHaveBeenCalled();
+            // resolveStuckSpamComments still runs its 2 updates, but no escalation updates
+            expect(db.update).toHaveBeenCalledTimes(2);
             expect(notificationService.sendNotification).not.toHaveBeenCalled();
         });
 

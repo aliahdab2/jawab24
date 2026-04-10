@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { comments, messages, pages, posts, settings } from '../db/schema';
+import { comments, instagramComments, messages, pages, posts, settings } from '../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
 import { notificationService, NotificationType } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
@@ -89,12 +89,60 @@ function buildTitle(name: string | null, pageName: string | null): string {
 }
 
 /**
+ * Resolve comments stuck as pending because they contain no actionable content
+ * (punctuation-only, emoji-only, bare @mention). These should have been resolved
+ * by the processor but may slip through during transient failures or edge cases.
+ * Must run BEFORE escalation so they don't get incorrectly flagged as needing
+ * merchant attention.
+ *
+ * Matches after 10 minutes — enough time for any legitimate processing to finish.
+ */
+async function resolveStuckSpamComments(): Promise<void> {
+    // A comment is considered spam-stuck if its entire message (trimmed) contains
+    // no Arabic or Latin letters — only dots, punctuation, whitespace, or emojis.
+    const spamCondition = sql`
+        trim(message) ~ '^[[:space:].…!?،؟@#*+=~^&%$|/\\]+$'
+        OR (trim(message) ~ '^@\\S+$')
+    `;
+    const stuckCondition = sql`created_at < NOW() - INTERVAL '10 minutes'`;
+
+    const [fbResult, igResult] = await Promise.all([
+        db.update(comments)
+            .set({ resolved: true, updatedAt: new Date() })
+            .where(and(
+                eq(comments.replied, false),
+                eq(comments.resolved, false),
+                eq(comments.needsAttention, false),
+                stuckCondition,
+                spamCondition,
+            )),
+        db.update(instagramComments)
+            .set({ resolved: true, updatedAt: new Date() })
+            .where(and(
+                eq(instagramComments.replied, false),
+                eq(instagramComments.resolved, false),
+                eq(instagramComments.needsAttention, false),
+                stuckCondition,
+                spamCondition,
+            )),
+    ]);
+
+    const fbCount = (fbResult as unknown as { rowCount?: number }).rowCount ?? 0;
+    const igCount = (igResult as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (fbCount + igCount > 0) {
+        logger.info('Resolved stuck spam comments', { fbCount, igCount });
+    }
+}
+
+/**
  * Run a single escalation sweep.
- * Finds unreplied comments/messages past their SLA threshold,
- * flags them as needsAttention, and sends per-conversation notifications.
+ * First resolves stuck spam/punctuation comments silently, then finds unreplied
+ * comments/messages past their SLA threshold, flags them as needsAttention,
+ * and sends per-conversation notifications.
  */
 export async function runEscalationSweep(): Promise<void> {
     try {
+        await resolveStuckSpamComments();
         await escalateComments();
         await escalateMessages();
     } catch (error) {
