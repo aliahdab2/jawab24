@@ -103,41 +103,49 @@ test.describe('Messages Page', () => {
 });
 
 test.describe('Message Detail Modal', () => {
-  const MOCK_CONVERSATION_MESSAGES = [
+  // Flat Message[] shape — matches what /messages API returns.
+  // The page groups these client-side into Conversation objects by senderId.
+  const MOCK_FLAT_MESSAGES = {
+    data: [
+      {
+        id: 'msg1',
+        platformMessageId: 'fb_msg1',
+        senderId: 'sender_1',
+        senderName: 'Bob Wilson',
+        pageId: 'page_1',
+        direction: 'incoming',
+        message: 'Do you ship internationally?',
+        replied: false,
+        replyText: null,
+        replyMethod: null,
+        resolved: false,
+        flagReason: null,
+        createdAt: new Date(Date.now() - 60000).toISOString(),
+        repliedAt: null,
+      },
+    ],
+    pagination: { hasMore: false, nextCursor: null, limit: 50 },
+  };
+
+  // Full thread returned by /messages/conversation/:senderId inside the modal
+  const MOCK_THREAD = [
     {
       id: 'msg1',
+      platformMessageId: 'fb_msg1',
+      senderId: 'sender_1',
+      senderName: 'Bob Wilson',
+      pageId: 'page_1',
       direction: 'incoming',
       message: 'Do you ship internationally?',
       replied: false,
-      resolved: false,
+      replyText: null,
       replyMethod: null,
+      resolved: false,
+      flagReason: null,
       createdAt: new Date(Date.now() - 60000).toISOString(),
-      pageId: 'page_1',
+      repliedAt: null,
     },
   ];
-
-  const MOCK_CONVERSATIONS = {
-    data: [
-      {
-        senderId: 'sender_1',
-        senderName: 'Bob Wilson',
-        needsHumanAttention: false,
-        pauseStatus: { paused: false, pausedUntil: null, remainingMinutes: null },
-        messages: MOCK_CONVERSATION_MESSAGES,
-        lastMessage: {
-          id: 'msg1',
-          direction: 'incoming',
-          message: 'Do you ship internationally?',
-          replied: false,
-          resolved: false,
-          replyMethod: null,
-          createdAt: new Date(Date.now() - 60000).toISOString(),
-          pageId: 'page_1',
-        },
-      },
-    ],
-    pagination: { nextCursor: null },
-  };
 
   const setupPage = async (page: import('@playwright/test').Page) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
@@ -162,8 +170,17 @@ test.describe('Message Detail Modal', () => {
       if (url.includes('/messages/stats')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGE_STATS) });
       }
-      if (url.includes('/conversations') || url.includes('/messages')) {
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_CONVERSATIONS) });
+      // Full thread fetch inside the modal (getConversation)
+      if (url.match(/\/messages\/conversation\//)) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_THREAD) });
+      }
+      // Pause-status fetch inside the modal
+      if (url.includes('/pause-status')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ paused: false, pausedUntil: null, remainingMinutes: null }) });
+      }
+      // Flat messages list (what the page fetches)
+      if (url.includes('/messages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_FLAT_MESSAGES) });
       }
       if (url.includes('/auth/profile')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
@@ -183,8 +200,8 @@ test.describe('Message Detail Modal', () => {
     await setupPage(page);
     await page.locator('text=Bob Wilson').first().click();
 
-    // Modal opens — check for sender name in header
-    await expect(page.locator('text=Bob Wilson').nth(1)).toBeVisible({ timeout: 5000 });
+    // Modal opens — message text visible inside thread
+    await expect(page.locator('text=Do you ship internationally?').first()).toBeVisible({ timeout: 8000 });
   });
 
   test('should show reply compose textarea in modal footer', async ({ page }) => {
