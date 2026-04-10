@@ -1679,16 +1679,55 @@ describe('Store routing — skip preset replies for store pages', () => {
             generator = new ReplyGenerator();
         });
 
-        it('should strip @mention-only comment before passing to AI', async () => {
+        it('should return SPAM_OR_IRRELEVANT without calling AI for mention-only comment with no postMessage', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+
+            const result = await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: '@Ali Ahdab',
+                pageName: 'الفريق الدمشقي',
+                pageId: 'page-1',
+                // no postMessage
+            }, true);
+
+            // @Ali Ahdab stripped → empty → no postMessage → short-circuit, no AI call
+            expect(aiService.generateReply).not.toHaveBeenCalled();
+            expect(result.aiIntent).toBe('SPAM_OR_IRRELEVANT');
+            expect(result.replyText).toBeNull();
+        });
+
+        it('should return SPAM_OR_IRRELEVANT without calling AI for URL-only comment with no postMessage', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+
+            const result = await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: 'https://example.com/check-this',
+                pageName: 'Test Page',
+                pageId: 'page-1',
+                // no postMessage
+            }, true);
+
+            // URL stripped → empty → no postMessage → short-circuit, no AI call
+            expect(aiService.generateReply).not.toHaveBeenCalled();
+            expect(result.aiIntent).toBe('SPAM_OR_IRRELEVANT');
+        });
+
+        it('should call AI when mention-only comment has postMessage context', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
-            const { detectLanguageCode } = await import('../../src/utils/language');
 
             vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
             vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
             vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
-            vi.mocked(detectLanguageCode).mockReturnValue('unknown');
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'أهلاً! كيف يمكنني مساعدتك؟',
                 language: 'ar',
@@ -1704,9 +1743,10 @@ describe('Store routing — skip preset replies for store pages', () => {
                 text: '@Ali Ahdab',
                 pageName: 'الفريق الدمشقي',
                 pageId: 'page-1',
+                postMessage: 'علق لتصلك الأسعار',
             }, true);
 
-            // @Ali Ahdab stripped → empty string passed to AI
+            // postMessage present → pass to AI with empty comment so it uses post context
             expect(aiService.generateReply).toHaveBeenCalledWith(
                 expect.objectContaining({ comment: '' }),
             );

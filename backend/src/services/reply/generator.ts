@@ -192,7 +192,7 @@ export class ReplyGenerator {
         aiEnabled: boolean,
         commentReplyMode: CommentReplyMode = 'public',
     ): Promise<GenerateReplyResult> {
-        const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
+        const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken, postMessage: contextPostMessage } = context;
 
         // Strip platform noise from comment text before language detection and AI processing.
         // Both @mentions and URLs contain Latin chars that pollute language detection
@@ -202,6 +202,15 @@ export class ReplyGenerator {
             .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '') // @mentions (e.g. @Ali Ahdab)
             .replace(/https?:\/\/\S+|www\.\S+/gi, '')              // URLs
             .trim();
+
+        // If stripping removed all content (mention/URL-only comment) and there is no post context,
+        // there is nothing for the AI to respond to. Signal SPAM_OR_IRRELEVANT so the processor
+        // resolves it silently without wasting an API call.
+        // When postMessage exists, pass through to the AI — a dot on an engagement post
+        // ("علق لتصلك الأسعار") deserves a contextual reply, not a silent dismiss.
+        if (!commentForAI && !contextPostMessage) {
+            return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
+        }
 
         // 1. Try to find a matching rule with template (skip if page has a store — AI answers with product context)
         if (!context.ecommerceStoreId) {

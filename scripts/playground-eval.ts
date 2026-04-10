@@ -1991,6 +1991,93 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'School KB has no URLs at all — AI must not invent a website',
     },
+
+    // ===== Category 34: Engagement Post + Punctuation / @mention =====
+    // Tests for the "علق بنقطة لتصلك الأسعار" pattern and @mention handling.
+    // When postMessage contains a CTA, punctuation-only comments should get KB replies.
+    // Without postMessage, they should be SPAM_OR_IRRELEVANT.
+    {
+        id: 256, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '.',
+        page: 'training',
+        postMessage: 'علق بنقطة لتصلك تفاصيل الدورة 👇',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+        },
+        notes: 'Dot on engagement post CTA — AI should reply with KB context, not SPAM',
+    },
+    {
+        id: 257, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '..',
+        page: 'electronics',
+        postMessage: 'علق لتصلك الأسعار على iPhone 15 Pro',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+        },
+        notes: 'Double dot on price-CTA post — AI should use KB to reply with prices',
+    },
+    {
+        id: 258, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '👍',
+        page: 'training',
+        postMessage: 'علق بلايك ليصلك الكتالوج الكامل',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+        },
+        notes: 'Emoji on engagement post — should get KB reply not SPAM',
+    },
+    {
+        id: 259, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '.',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Dot with NO postMessage — should be SPAM_OR_IRRELEVANT',
+    },
+    {
+        id: 260, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '@محمد شوف هذا',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: '@mention-only comment (mention + filler) — no question, should be SPAM',
+    },
+    {
+        id: 261, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '.',
+        page: 'training',
+        postMessage: 'دورة IELTS الجديدة - سجل الآن! أماكن محدودة.',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Dot on normal (non-CTA) post — no call-to-action in postMessage, should be SPAM',
+    },
+
+    // ===== Language detection edge cases (Category 7 extension) =====
+    // Tests for language falling back correctly for script-less input.
+    {
+        id: 262, category: 7, categoryName: 'Language', channel: 'comment',
+        message: '@Ali check this',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Latin @mention — language detection must not classify as English business intent',
+    },
+    {
+        id: 263, category: 7, categoryName: 'Language', channel: 'comment',
+        message: '@نور شوفي هذا',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Arabic @mention tag — no question, no business intent',
+    },
 ];
 
 // ---------------------------------------------------------------------------

@@ -42,6 +42,7 @@ vi.mock('../../src/utils/language', () => ({
 vi.mock('../../src/services/comments', () => ({
     commentsService: {
         updateComment: vi.fn().mockResolvedValue(undefined),
+        resolveComment: vi.fn().mockResolvedValue(undefined),
     },
 }));
 vi.mock('../../src/lib/redis', () => ({
@@ -1295,6 +1296,29 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
             expect(result.success).toBe(true);
             expect(result.replyText).toBe('مرحباً! سجّل عبر الرابط...');
+        });
+    });
+
+    describe('Silent skip — SPAM_OR_IRRELEVANT comments are resolved, not left pending', () => {
+        it('should call resolveComment and not flagComment when AI returns SPAM_OR_IRRELEVANT', async () => {
+            const adapter = createMockAdapter();
+
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+                replyText: null,
+                replyMethod: 'ai',
+                aiIntent: 'SPAM_OR_IRRELEVANT',
+                needsAttention: false,
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', '.', 'user-1', 'Walaa',
+            );
+
+            expect(result.success).toBe(true);
+            // Should resolve the comment so it doesn't show as "pending" forever
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            // Should NOT flag it — silent skip means no merchant notification
+            expect(adapter.flagComment).not.toHaveBeenCalled();
         });
     });
 

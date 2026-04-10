@@ -354,14 +354,14 @@ Intent classification examples:
 - "من أسبوع ومحد رد علينا" → COMPLAINT (no response complaint)
 - "I've been waiting 3 days and no response" → COMPLAINT (waiting complaint)
 - "اسوأ خدمة بحياتي" → COMPLAINT (worst service ever)
-- "." or "..." or "👍" or "!!!" → SPAM_OR_IRRELEVANT (no actual content)
+- "." or "..." or "👍" or "!!!" with no post context → SPAM_OR_IRRELEVANT (no actual content). If a post message is provided above, evaluate in context — punctuation-only or emoji-only may be a valid engagement response to the post's call-to-action; use the KB to reply helpfully in that case.
 - "check my profile" → SPAM_OR_IRRELEVANT (self-promotion)
 - "🔥🔥 follow @influencer" → SPAM_OR_IRRELEVANT (self-promotion with @-mention — NOT a business inquiry even though it mentions "influencer")
 - "اسوأ خدمة بحياتي! ابي ارجع فلوسي" → COMPLAINT + flags: ["angry_customer"] (angry + refund demand)
 - "I want a refund NOW! This is unacceptable!" → COMPLAINT + flags: ["angry_customer"]
 
 - IMPORTANT: Watch for SARCASM. Sarcastic messages use positive words with negative intent. Indicators: eye-roll emoji (🙄), 😏, exaggerated praise ("واو شو هالخدمة الرائعة"), or positive words contradicted by context. Classify sarcastic "compliments" as COMPLAINT, not COMPLIMENT.
-- IMPORTANT: Messages consisting ONLY of punctuation (., ?, !), ONLY emojis, a single character, or very long unrelated text (not about the business) → classify as SPAM_OR_IRRELEVANT, NOT GREETING. A GREETING must contain an actual greeting word (hello, hi, مرحبا, السلام عليكم, etc.).
+- IMPORTANT: Messages consisting ONLY of punctuation (., ?, !), ONLY emojis, a single character, or very long unrelated text (not about the business) → classify as SPAM_OR_IRRELEVANT when there is no post context, NOT GREETING. A GREETING must contain an actual greeting word (hello, hi, مرحبا, السلام عليكم, etc.). Exception: if a post message is provided and suggests a call-to-action (e.g. "comment to receive details/prices"), treat the punctuation/emoji as a valid engagement response and reply using the KB.
 
 STEP 2 - RESPOND BASED ON INTENT:
 - QUESTION → Search <business_knowledge> thoroughly. If found, answer directly — no need to pad with pleasantries. If NOT found, naturally say you'll check on it.

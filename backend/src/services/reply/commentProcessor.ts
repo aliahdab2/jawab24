@@ -263,7 +263,9 @@ export class CommentProcessor {
             // 8c. Skip reply — silent for spam/tags, flagged for offensive content
             if (shouldSkipReply(flagReason, aiIntent)) {
                 if (shouldSilentlySkip(aiIntent)) {
-                    // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no notification
+                    // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no notification.
+                    // Resolve so the comment doesn't remain as "pending" in the merchant's view.
+                    await commentsService.resolveComment(comment.id);
                     pipelineMetrics.record(pipeline, 'skipped_spam');
                     return { success: true, commentId: comment.id };
                 }
