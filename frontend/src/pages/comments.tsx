@@ -523,7 +523,7 @@ const CommentsPage: NextPageWithLayout = () => {
         <>
           <div
             className={clsx(
-              "grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 pb-4 sm:pb-6 transition-all duration-300 ease-out",
+              "columns-1 lg:columns-2 gap-3 sm:gap-4 pb-4 sm:pb-6 transition-all duration-300 ease-out",
               isTransitioning ? "opacity-40 translate-y-2 scale-[0.99]" : "opacity-100 translate-y-0 scale-100"
             )}
           >
@@ -532,24 +532,25 @@ const CommentsPage: NextPageWithLayout = () => {
               const page = comment.pageId ? pageById.get(comment.pageId) : undefined;
               const earlierComments = group.count > 1 ? group.comments.slice(1) : undefined;
               return (
-                <CommentCard
-                  key={group.groupKey}
-                  comment={comment}
-                  variant="full"
-                  pageName={page?.name}
-                  showPlatformIcon={showPlatformIcon}
-                  animationDelay={i < 10 ? i * 0.05 : 0}
-                  onClick={() => setSelectedComment(comment)}
-                  onQuickReply={() => setSelectedComment(comment)}
-                  onResolve={!comment.resolved ? () => handleResolve(comment.id) : undefined}
-                  onUnresolve={comment.resolved ? () => handleUnresolve(comment.id) : undefined}
-                  groupCount={group.count}
-                  earlierComments={earlierComments}
-                  isExpanded={expandedGroups.has(group.groupKey)}
-                  onToggleExpand={() => toggleExpand(group.groupKey)}
-                  onTriggerClick={comment.postId ? () => setTriggerModalComment(comment) : undefined}
-                  triggerActive={comment.postId ? !!triggersByPostId[comment.postId] : false}
-                />
+                <div key={group.groupKey} className="break-inside-avoid mb-3 sm:mb-4">
+                  <CommentCard
+                    comment={comment}
+                    variant="full"
+                    pageName={page?.name}
+                    showPlatformIcon={showPlatformIcon}
+                    animationDelay={i < 10 ? i * 0.05 : 0}
+                    onClick={() => setSelectedComment(comment)}
+                    onQuickReply={() => setSelectedComment(comment)}
+                    onResolve={!comment.resolved ? () => handleResolve(comment.id) : undefined}
+                    onUnresolve={comment.resolved ? () => handleUnresolve(comment.id) : undefined}
+                    groupCount={group.count}
+                    earlierComments={earlierComments}
+                    isExpanded={expandedGroups.has(group.groupKey)}
+                    onToggleExpand={() => toggleExpand(group.groupKey)}
+                    onTriggerClick={comment.postId ? () => setTriggerModalComment(comment) : undefined}
+                    triggerActive={comment.postId ? !!triggersByPostId[comment.postId] : false}
+                  />
+                </div>
               );
             })}
           </div>

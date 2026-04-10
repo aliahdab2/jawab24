@@ -69,7 +69,7 @@ export function EmptyState({
       )}
 
       {action && (
-        <div className="transition-transform hover:scale-[1.02] active:scale-95 duration-200">
+        <div>
           {action}
         </div>
       )}
