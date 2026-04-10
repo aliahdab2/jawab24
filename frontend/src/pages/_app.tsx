@@ -384,7 +384,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
               const user = JSON.parse(userParam);
               if (user?.id) {
                 useAuthStore.getState().setAuth(user, token, fbToken);
-                routerRef.current.replace(safePath).catch(console.error);
+                routerRef.current.replace(safePath).catch((err: unknown) => captureError(err, 'Deep link replace failed', { tags: { page: 'deep-link', action: 'replace' } }));
                 return;
               }
             } catch (err) {
@@ -396,14 +396,14 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
           // Fallback: navigate to /auth/sync page (handles legacy deep links without user param)
           if (token) {
-            routerRef.current.push(`/auth/sync?token=${encodeURIComponent(token)}&fbToken=${encodeURIComponent(fbToken)}&redirect=${encodeURIComponent(safePath)}`).catch(console.error);
+            routerRef.current.push(`/auth/sync?token=${encodeURIComponent(token)}&fbToken=${encodeURIComponent(fbToken)}&redirect=${encodeURIComponent(safePath)}`).catch((err: unknown) => captureError(err, 'Deep link auth-sync push failed', { tags: { page: 'deep-link', action: 'auth-sync' } }));
             return;
           }
           // No token — fall through to normal navigation
         }
 
         setTimeout(() => {
-            routerRef.current.push(slug).catch(console.error);
+            routerRef.current.push(slug).catch((err: unknown) => captureError(err, 'Deep link push failed', { tags: { page: 'deep-link', action: 'push' } }));
         }, 50);
       });
 
@@ -412,7 +412,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       if (launchUrl && launchUrl.url) {
         const slug = handleDeepLink(launchUrl.url);
         if (slug) {
-             routerRef.current.push(slug).catch(console.error);
+             routerRef.current.push(slug).catch((err: unknown) => captureError(err, 'Deep link launch push failed', { tags: { page: 'deep-link', action: 'launch' } }));
         }
       }
     };

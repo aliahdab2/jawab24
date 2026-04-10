@@ -6,6 +6,7 @@ import { t } from '../../../utils/i18n';
 import { db } from '../../../db';
 import { instagramMedia, instagramComments } from '../../../db/schema';
 import { eq } from 'drizzle-orm';
+import { mapToPlatformPage } from './shared';
 import type { ReplyMode } from '../sender';
 import type {
     CommentPlatformAdapter,
@@ -27,19 +28,10 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
     async getPage(instagramAccountId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByInstagramId(instagramAccountId);
         if (!page) return null;
-        return {
-            id: page.id,
-            userId: page.userId,
-            workspaceId: page.workspaceId,
-            name: page.name,
-            accessToken: page.accessToken,
-            knowledgeBase: page.knowledgeBase,
-            kbActiveVersion: page.kbActiveVersion ?? null,
+        return mapToPlatformPage(page, {
             autoReplyEnabled: page.instagramAutoReplyEnabled ?? true,
             platformAccountId: page.instagramAccountId ?? undefined,
-            ecommerceStoreId: page.ecommerceStoreId,
-            businessProfile: page.businessProfile as Record<string, unknown> | null,
-        };
+        });
     }
 
     async findOrCreateContent(pageId: string, instagramMediaId: string): Promise<ContentEntity> {

@@ -1,69 +1,25 @@
-import crypto from 'crypto';
 import { config } from '../config';
-
-const ALGORITHM = 'aes-256-gcm';
-const IV_LENGTH = 16;
-const AUTH_TAG_LENGTH = 16;
+import { aesGcmEncrypt, aesGcmDecrypt, deriveKey } from '../lib/aesGcm';
 
 function getKey(): Buffer {
     const key = process.env.ECOMMERCE_TOKEN_ENCRYPTION_KEY || config.shopify.tokenEncryptionKey;
     if (!key || key.length < 32) {
         throw new Error('ECOMMERCE_TOKEN_ENCRYPTION_KEY (or SHOPIFY_TOKEN_ENCRYPTION_KEY) must be at least 32 characters');
     }
-    // Use first 32 bytes of the key (SHA-256 hash if longer)
-    return crypto.createHash('sha256').update(key).digest();
+    return deriveKey(key);
 }
 
 /**
- * Encrypt plaintext using AES-256-GCM
- * Returns ciphertext (base64) and iv (hex)
+ * Encrypt plaintext using AES-256-GCM.
+ * Returns ciphertext (base64 with auth tag) and iv (hex).
  */
 export function encrypt(plaintext: string): { ciphertext: string; iv: string } {
-    const key = getKey();
-    const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv(ALGORITHM, key, iv, { authTagLength: AUTH_TAG_LENGTH });
-
-    let encrypted = cipher.update(plaintext, 'utf8', 'base64');
-    encrypted += cipher.final('base64');
-    const authTag = cipher.getAuthTag();
-
-    // Append auth tag to ciphertext
-    return {
-        ciphertext: encrypted + '.' + authTag.toString('base64'),
-        iv: iv.toString('hex'),
-    };
+    return aesGcmEncrypt(plaintext, getKey());
 }
 
 /**
- * Decrypt ciphertext using AES-256-GCM
+ * Decrypt ciphertext using AES-256-GCM.
  */
 export function decrypt(ciphertext: string, iv: string): string {
-    const key = getKey();
-
-    // Validate IV format: must be exactly 32 hex chars (16 bytes)
-    if (!/^[0-9a-f]{32}$/i.test(iv)) {
-        throw new Error('Invalid IV format');
-    }
-    const ivBuf = Buffer.from(iv, 'hex');
-
-    const parts = ciphertext.split('.');
-    if (parts.length !== 2) {
-        throw new Error('Invalid ciphertext format');
-    }
-
-    const [encryptedData, authTagB64] = parts;
-    const authTag = Buffer.from(authTagB64, 'base64');
-
-    // Validate auth tag length
-    if (authTag.length !== AUTH_TAG_LENGTH) {
-        throw new Error('Invalid auth tag length');
-    }
-
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, ivBuf, { authTagLength: AUTH_TAG_LENGTH });
-    decipher.setAuthTag(authTag);
-
-    let decrypted = decipher.update(encryptedData, 'base64', 'utf8');
-    decrypted += decipher.final('utf8');
-
-    return decrypted;
+    return aesGcmDecrypt(ciphertext, iv, getKey());
 }

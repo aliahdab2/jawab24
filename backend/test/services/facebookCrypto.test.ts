@@ -191,7 +191,7 @@ describe('decryptFbToken — format validation', () => {
 
     it('throws when dot separator is missing between ciphertext and auth tag', () => {
         const malformed = `${PREFIX}aabbccddeeff00112233445566778899:nodot`;
-        expect(() => decryptFbToken(malformed)).toThrow('missing dot');
+        expect(() => decryptFbToken(malformed)).toThrow('Invalid ciphertext format');
     });
 
     it('throws when IV is not valid hex', () => {

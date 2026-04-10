@@ -5,6 +5,7 @@ import { facebookService } from '../../facebook';
 import { replySender, ReplyMode } from '../sender';
 import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode } from '../../../utils/language';
+import { mapToPlatformPage } from './shared';
 import type {
     CommentPlatformAdapter,
     PlatformPage,
@@ -25,18 +26,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
     async getPage(facebookPageId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByFacebookId(facebookPageId);
         if (!page) return null;
-        return {
-            id: page.id,
-            userId: page.userId,
-            workspaceId: page.workspaceId,
-            name: page.name,
-            accessToken: page.accessToken,
-            knowledgeBase: page.knowledgeBase,
-            kbActiveVersion: page.kbActiveVersion ?? null,
-            autoReplyEnabled: page.autoReplyEnabled ?? true,
-            ecommerceStoreId: page.ecommerceStoreId,
-            businessProfile: page.businessProfile as Record<string, unknown> | null,
-        };
+        return mapToPlatformPage(page, { autoReplyEnabled: page.autoReplyEnabled ?? true });
     }
 
     async findOrCreateContent(pageId: string, postId: string): Promise<ContentEntity> {
