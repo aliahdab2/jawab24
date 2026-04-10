@@ -47,6 +47,7 @@ vi.mock('../../src/services/reply/generator', () => ({
         setLogger: vi.fn(),
     },
     shouldSkipReply: vi.fn().mockReturnValue(false),
+    shouldSilentlySkip: vi.fn().mockReturnValue(false),
     shouldUseFallback: vi.fn().mockReturnValue(false),
     SKIP_REPLY_FLAGS: ['offensive_or_abusive', 'offensive'],
     SAFE_FALLBACK_FLAGS: ['price_not_in_kb'],

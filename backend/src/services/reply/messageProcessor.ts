@@ -2,7 +2,7 @@ import { workspaceSettingsService } from '../workspaceSettings';
 import { messagesService } from '../messages';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
+import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
@@ -353,8 +353,14 @@ export class MessageProcessor {
                 replyText = PRICE_FALLBACK[lang] || PRICE_FALLBACK['en'];
             }
 
-            // 12c. Skip reply entirely for offensive content
+            // 12c. Skip reply — silent for spam/tags, flagged for offensive content
             if (shouldSkipReply(flagReason, aiIntent)) {
+                if (shouldSilentlySkip(aiIntent)) {
+                    // Spam/irrelevant — no flag, no notification
+                    pipelineMetrics.record(pipeline, 'skipped_spam');
+                    return { success: true, messageId: platformMessageId };
+                }
+
                 await messagesService.flagMessage(
                     storedMessage.id, flagReason, aiIntent,
                 );

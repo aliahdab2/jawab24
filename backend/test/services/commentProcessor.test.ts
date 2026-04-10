@@ -548,7 +548,7 @@ describe('CommentProcessor', () => {
         );
     });
 
-    it('should skip reply for SPAM_OR_IRRELEVANT intent', async () => {
+    it('should skip reply for SPAM_OR_IRRELEVANT intent silently — no flag, no notification', async () => {
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: '',
             replyMethod: 'ai',
@@ -565,9 +565,8 @@ describe('CommentProcessor', () => {
         expect(result.success).toBe(true);
         expect(adapter.sendReply).not.toHaveBeenCalled();
         expect(adapter.markAsReplied).not.toHaveBeenCalled();
-        expect(adapter.flagComment).toHaveBeenCalledWith(
-            'comment-uuid', undefined, 'SPAM_OR_IRRELEVANT',
-        );
+        // Spam/irrelevant (tagging someone, emoji-only, etc.) should NOT flag or notify
+        expect(adapter.flagComment).not.toHaveBeenCalled();
     });
 
     // --- Price fallback tests ---

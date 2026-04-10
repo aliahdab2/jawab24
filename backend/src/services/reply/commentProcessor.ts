@@ -3,7 +3,7 @@ import { messagesService } from '../messages';
 import { commentsService } from '../comments';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from './generator';
+import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK } from './generator';
 import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
@@ -259,8 +259,14 @@ export class CommentProcessor {
                 generatedText = PRICE_FALLBACK[lang] || PRICE_FALLBACK['en'];
             }
 
-            // 8c. Skip reply entirely for offensive content
+            // 8c. Skip reply — silent for spam/tags, flagged for offensive content
             if (shouldSkipReply(flagReason, aiIntent)) {
+                if (shouldSilentlySkip(aiIntent)) {
+                    // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no notification
+                    pipelineMetrics.record(pipeline, 'skipped_spam');
+                    return { success: true, commentId: comment.id };
+                }
+
                 await adapter.flagComment(comment.id, flagReason, aiIntent);
 
                 if (page.userId) {

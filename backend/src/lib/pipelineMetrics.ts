@@ -35,6 +35,7 @@ export type Outcome =
     | 'post_disabled'
     | 'media_disabled'
     | 'skipped_risky'
+    | 'skipped_spam'
     | 'held_low_confidence'
     | 'greeting_sent'
     | 'subscription_inactive'

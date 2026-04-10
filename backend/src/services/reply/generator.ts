@@ -28,12 +28,24 @@ export const SKIP_REPLY_FLAGS = ['offensive_or_abusive', 'offensive'] as const;
 export const SAFE_FALLBACK_FLAGS = ['price_not_in_kb'] as const;
 export const SKIP_REPLY_INTENTS = ['OFFENSIVE', 'SPAM_OR_IRRELEVANT'] as const;
 
+/** Intents that skip silently — no needsAttention flag, no notification.
+ *  Tagging someone, emoji-only, "follow me", etc. are irrelevant noise.
+ *  Offensive content is excluded — it warrants merchant awareness. */
+export const SILENT_SKIP_INTENTS = ['SPAM_OR_IRRELEVANT'] as const;
+
 export function shouldSkipReply(flagReason?: string, aiIntent?: string): boolean {
     if (!flagReason && !aiIntent) return false;
     const flags = (flagReason || '').split(',').map(f => f.trim());
     const normalizedIntent = (aiIntent || '').trim().toUpperCase();
     return flags.some(f => (SKIP_REPLY_FLAGS as readonly string[]).includes(f)) ||
            (SKIP_REPLY_INTENTS as readonly string[]).includes(normalizedIntent);
+}
+
+/** Returns true when the skip should be completely silent — no flag, no notification.
+ *  Used for spam/irrelevant comments that don't warrant merchant attention. */
+export function shouldSilentlySkip(aiIntent?: string): boolean {
+    const normalizedIntent = (aiIntent || '').trim().toUpperCase();
+    return (SILENT_SKIP_INTENTS as readonly string[]).includes(normalizedIntent);
 }
 
 export function shouldUseFallback(flagReason?: string): boolean {
