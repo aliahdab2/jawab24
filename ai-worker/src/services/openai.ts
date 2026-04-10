@@ -162,6 +162,12 @@ export class OpenAIService {
                         },
                     }, { signal: controller.signal }),
                 );
+            } catch (e) {
+                // Timeout fired — expected behaviour, not a production error
+                if (e instanceof OpenAI.APIUserAbortError) {
+                    return this.getFallbackReply(request);
+                }
+                throw e;
             } finally {
                 clearTimeout(timeout);
             }

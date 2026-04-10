@@ -15,7 +15,7 @@ import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
 import { config } from '../config';
-import { isValidPhone, isValidEmail } from '@jawab24/shared';
+import { isValidPhone, isValidEmail, normalizeArabic } from '@jawab24/shared';
 
 function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: FastifyReply) {
     if (result === 'expired') {
@@ -487,13 +487,15 @@ export class AuthController {
      */
     async verifyOtp(request: FastifyRequest<{ Body: PhoneOtpVerifyRequest }>, reply: FastifyReply) {
         const { phone, code } = request.body;
+        // Normalize Arabic-Indic digits (٠-٩ → 0-9) so users on Arabic keyboards can enter OTP codes
+        const normalizedCode = code ? normalizeArabic(code, { normalizeDigits: true }) : code;
 
-        if (!phone || !isValidPhone(phone) || !code || !/^\d{6}$/.test(code)) {
+        if (!phone || !isValidPhone(phone) || !normalizedCode || !/^\d{6}$/.test(normalizedCode)) {
             return reply.status(400).send({ error: 'invalid_request', message: 'phone and code are required' });
         }
 
         try {
-            const result = await otpService.verifyOtp(phone, code);
+            const result = await otpService.verifyOtp(phone, normalizedCode);
 
             if (result !== 'valid') return replyOtpError(result, reply);
 
@@ -603,16 +605,18 @@ export class AuthController {
         }
 
         const { phone, code } = request.body as { phone?: string; code?: string };
+        // Normalize Arabic-Indic digits (٠-٩ → 0-9) so users on Arabic keyboards can enter OTP codes
+        const normalizedCode = code ? normalizeArabic(code, { normalizeDigits: true }) : code;
 
         if (!phone || !isValidPhone(phone)) {
             return reply.status(400).send({ error: 'invalid_phone', message: 'Phone must be in E.164 format' });
         }
-        if (!code || !/^\d{6}$/.test(code)) {
+        if (!normalizedCode || !/^\d{6}$/.test(normalizedCode)) {
             return reply.status(400).send({ error: 'invalid_request', message: 'phone and code are required' });
         }
 
         try {
-            const result = await otpService.verifyOtp(phone, code);
+            const result = await otpService.verifyOtp(phone, normalizedCode);
 
             if (result !== 'valid') return replyOtpError(result, reply);
 

@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { templatesService } from '../services/templates';
 import { subscriptionsService } from '../services/subscriptions';
+import { captureError } from '../utils/sentryHelpers';
 import { CreateTemplateDTO, UpdateTemplateDTO } from '../types';
 import type { WorkspaceRequest } from '../middleware/workspace';
 
@@ -31,6 +32,7 @@ export class TemplatesController {
             const template = await templatesService.createTemplate(workspaceId, request.body);
             return reply.status(201).send(template);
         } catch (error) {
+            captureError(error, 'Failed to create template', { tags: { action: 'create_template' } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to create template' });
         }
@@ -50,6 +52,7 @@ export class TemplatesController {
             const templates = await templatesService.getTemplates(req.workspaceId);
             return reply.send(templates);
         } catch (error) {
+            captureError(error, 'Failed to fetch templates', { tags: { action: 'get_templates' } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch templates' });
         }
@@ -73,6 +76,7 @@ export class TemplatesController {
             }
             return reply.send(template);
         } catch (error) {
+            captureError(error, 'Failed to fetch template', { tags: { action: 'get_template' } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to fetch template' });
         }
@@ -96,6 +100,7 @@ export class TemplatesController {
             }
             return reply.send(template);
         } catch (error) {
+            captureError(error, 'Failed to update template', { tags: { action: 'update_template' } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update template' });
         }
@@ -116,6 +121,7 @@ export class TemplatesController {
             await templatesService.deleteTemplate(req.workspaceId, id);
             return reply.status(204).send();
         } catch (error) {
+            captureError(error, 'Failed to delete template', { tags: { action: 'delete_template' } });
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to delete template' });
         }
