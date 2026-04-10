@@ -267,3 +267,145 @@ test.describe('Comments Page', () => {
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
 });
+
+test.describe('Comment Detail Modal', () => {
+  const setupPage = async (page: import('@playwright/test').Page) => {
+    page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
+
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'auth-storage',
+        JSON.stringify({
+          state: { user: { id: 'u1', email: 'test@test.com', name: 'Test' }, token: 'mock-token', fbToken: 'mock-fb', isAuthenticated: true },
+          version: 0,
+        })
+      );
+      localStorage.setItem(
+        'ui-storage',
+        JSON.stringify({ state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+      );
+      localStorage.setItem('jawab24_onboarding_complete', 'true');
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/comments/stats')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENT_STATS) });
+      }
+      if (url.includes('/comments')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENTS) });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/comments?filter=all');
+    await expect(page.locator('h1').filter({ hasText: t('comments.title') }).first()).toBeVisible({ timeout: 15000 });
+    // Wait for comments to load
+    await expect(page.locator('text=What are your business hours?').first()).toBeVisible({ timeout: 10000 });
+  };
+
+  test('should open comment detail modal when clicking a comment', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=What are your business hours?').first().click();
+
+    // Modal should open with comment details heading
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    // Sender name should appear
+    await expect(page.locator('text=Jane Doe').first()).toBeVisible();
+  });
+
+  test('should show customer comment as incoming chat bubble', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=What are your business hours?').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    // The comment text should be visible in the chat thread
+    await expect(page.locator('text=What are your business hours?').nth(1)).toBeVisible();
+  });
+
+  test('should show existing reply as outgoing chat bubble', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=What are your business hours?').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    // The existing reply should appear in the modal
+    await expect(page.locator('text=We are open 9-5 daily.').first()).toBeVisible();
+  });
+
+  test('should show compose textarea in footer for unreplied comments', async ({ page }) => {
+    await setupPage(page);
+    // Click the unreplied comment (John Smith)
+    await page.locator('text=How much does it cost?').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    // Compose textarea should be in footer
+    const textarea = page.locator(`textarea[aria-label="${t('comments.typeReply')}"]`);
+    await expect(textarea).toBeVisible();
+    await expect(textarea).toBeFocused({ timeout: 3000 });
+  });
+
+  test('should not show compose textarea for already-replied comments', async ({ page }) => {
+    await setupPage(page);
+    // Click the replied comment (Jane Doe)
+    await page.locator('text=What are your business hours?').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    // No compose textarea for replied comment
+    const textarea = page.locator(`textarea[aria-label="${t('comments.typeReply')}"]`);
+    await expect(textarea).not.toBeVisible();
+  });
+
+  test('should close modal when X button is clicked', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=What are your business hours?').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    await page.locator(`button[aria-label="${t('comments.close')}"]`).click();
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).not.toBeVisible({ timeout: 3000 });
+  });
+
+  test('should close modal when ESC is pressed', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=What are your business hours?').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    await page.keyboard.press('Escape');
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).not.toBeVisible({ timeout: 3000 });
+  });
+
+  test('should show post context snippet in chat thread', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=What are your business hours?').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    // Post context shown in chat area
+    await expect(page.locator('text=Check out our new schedule!').first()).toBeVisible();
+  });
+
+  test('should show resolve button for needs-attention comment', async ({ page }) => {
+    await setupPage(page);
+    // Sara Ahmed's comment has needsAttention: true
+    await page.locator('text=I need help with my order').first().click();
+
+    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+
+    // Resolve / "Mark as handled" button should appear in footer
+    await expect(page.locator(`button:has-text("${t('comments.resolve')}")`).first()).toBeVisible();
+  });
+});

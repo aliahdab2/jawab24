@@ -166,7 +166,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       // Note: is-native class is already added in the earlier useEffect
 
       // StatusBar overlay/style already configured in the early useEffect above
-      const [{ StatusBar, Style }, { Keyboard, KeyboardResize }, { App }, { SplashScreen }, { Network }] = await Promise.all([
+      const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
         import("@capacitor/status-bar"),
         import("@capacitor/keyboard"),
         import("@capacitor/app"),
@@ -174,36 +174,23 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         import("@capacitor/network")
       ]);
 
-      let isAndroid = false;
-      try {
-        // Config uses KeyboardResize.None (required for iOS — 'body' distorts WKWebView layout).
-        // Android works correctly with 'body' mode, so override at runtime.
-        const { getCapacitor } = await import('@/lib/capacitor');
-        isAndroid = getCapacitor()?.getPlatform() === 'android';
-        if (isAndroid) {
-          await Keyboard.setResizeMode({ mode: KeyboardResize.Body });
-        }
-      } catch (err) {
-        addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
-      }
+      // Both platforms use KeyboardResize.None — the viewport stays full-screen
+      // and modals use --keyboard-height CSS variable to offset above the keyboard.
+      // KeyboardResize.Body was tried on Android but it shrinks the viewport,
+      // leaving modals with too little space for header + messages + footer.
 
       // Clear existing listeners if any (prevent duplicates)
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
 
-      // iOS only: set --keyboard-height via Capacitor keyboard events.
-      // On Android, KeyboardResize.Body already resizes the viewport — setting
-      // --keyboard-height would double-compensate, squeezing modals to half height.
-      if (!isAndroid) {
-        const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
-          document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
-        });
-        const kbHideListener = await Keyboard.addListener('keyboardWillHide', () => {
-          document.documentElement.style.setProperty('--keyboard-height', '0px');
-        });
-        listenersRef.current.push(() => kbShowListener.remove());
-        listenersRef.current.push(() => kbHideListener.remove());
-      }
+      const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
+        document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
+      });
+      const kbHideListener = await Keyboard.addListener('keyboardWillHide', () => {
+        document.documentElement.style.setProperty('--keyboard-height', '0px');
+      });
+      listenersRef.current.push(() => kbShowListener.remove());
+      listenersRef.current.push(() => kbHideListener.remove());
 
       // Handle hardware back button (Android) - Industry Standard
       // Exit app when on root screens, otherwise go back in history

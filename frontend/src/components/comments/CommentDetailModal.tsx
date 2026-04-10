@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import clsx from 'clsx';
 import { toast } from 'sonner';
-import { Button, Badge, PlatformIcon, FlagTag, PauseToggle, SmartReplyButton } from '@/components/ui';
+import { Badge, PlatformIcon, FlagTag, PauseToggle, SmartReplyButton } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -19,9 +20,10 @@ import { getCommentExternalUrl } from '@/utils/pageUrl';
 import {
   Sparkles,
   Bot,
-  Reply,
   AlertTriangle,
   X,
+  Send,
+  Loader2,
   ExternalLink,
   CheckCircle,
   Undo2,
@@ -58,15 +60,18 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const t = useTranslations('comments');
   const tc = useTranslations('common');
   const tDashboard = useTranslations('dashboard');
-
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
-  
-  // Close on ESC
+
   useEscapeKey(onClose);
   useBodyScrollLock(true);
 
+  const needsAttention = checkNeedsAttention(comment);
   const isHeldReply = !comment.replied && !!comment.aiOriginalReply && comment.flagReason?.includes('held_low_confidence');
+  const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
+  const externalUrl = getCommentExternalUrl(comment, pageUrl);
+  const showComposeRow = !comment.replied || needsAttention;
+
   const [replyText, setReplyText] = useState(isHeldReply ? comment.aiOriginalReply! : '');
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -79,30 +84,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
   const [pauseLoading, setPauseLoading] = useState(false);
 
-  // Auto-focus textarea on open and scroll into view when keyboard appears
+  // Auto-focus textarea on open (for unreplied / needs-attention comments)
   useEffect(() => {
-    // Small timeout to allow modal animation to complete
+    if (!showComposeRow) return;
     const timer = setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
+      textareaRef.current?.focus();
     }, 100);
     return () => clearTimeout(timer);
-  }, []);
-
-  // Scroll textarea into view when focused (keyboard opens on mobile)
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const handleFocus = () => {
-      // Delay to let the keyboard fully open and viewport resize
-      setTimeout(() => {
-        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 500);
-    };
-    textarea.addEventListener('focus', handleFocus);
-    return () => textarea.removeEventListener('focus', handleFocus);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Sync AI-generated reply into textarea
   useEffect(() => {
@@ -180,9 +169,8 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     } catch (error) {
       const axiosErr = error as { response?: { status?: number } };
       if (axiosErr.response?.status === 404) {
-        // Comment was deleted or already handled between loading and replying
         toast.error(t('replyNotFound'));
-        onReplySuccess(); // refresh the list
+        onReplySuccess();
         onClose();
         return;
       }
@@ -192,10 +180,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       setIsSending(false);
     }
   };
-
-  const needsAttention = checkNeedsAttention(comment);
-  const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
-  const externalUrl = getCommentExternalUrl(comment, pageUrl);
 
   return createPortal(
     <div
@@ -216,10 +200,13 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           <span className="font-semibold text-muted-foreground truncate">{comment.fromName || tc('unknownUser')}</span>
         </div>
 
-        {/* Modal Header */}
+        {/* Header */}
         <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${needsAttention ? 'icon-bg-red' : 'icon-bg-brand'}`}>
+            <div className={clsx(
+              'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0',
+              needsAttention ? 'icon-bg-red' : 'icon-bg-brand'
+            )}>
               <Sparkles className="w-5 h-5" />
             </div>
             <div className="min-w-0">
@@ -281,128 +268,144 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-          {/* Post Context */}
-          {comment.postMessage && (
-            <div className="flex flex-col gap-2">
-              <div className="flex items-start gap-2 px-3 py-2.5 bg-muted rounded-lg text-sm text-muted-foreground">
-                <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <div className="max-h-28 overflow-y-auto min-w-0 flex-1">
-                  <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
+        {/* Chat Thread */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50">
+          <div className="min-h-full flex flex-col justify-end gap-4">
+            {/* Post context snippet */}
+            {comment.postMessage && (
+              <div className="flex flex-col gap-2">
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-background rounded-lg text-sm text-muted-foreground border border-theme-border">
+                  <FileText className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div className="max-h-28 overflow-y-auto min-w-0 flex-1">
+                    <p className="whitespace-pre-wrap break-words leading-relaxed" dir="auto">{comment.postMessage}</p>
+                  </div>
                 </div>
-              </div>
-              {postTriggerKeyword && (
-                <div className="flex items-center gap-1.5 flex-wrap px-1">
-                  <Hash className="w-3.5 h-3.5 flex-shrink-0 text-brand-500" aria-hidden="true" />
-                  {parseKeywords(postTriggerKeyword).map((kw, i) => (
-                    <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-700" dir="auto">
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Original Comment */}
-          <div className="bg-muted rounded-xl p-4">
-            <p className="text-foreground whitespace-pre-wrap" dir="auto">{renderMessageText(comment.message)}</p>
-            <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-              <span title={formatFullTime(comment.createdAt)}>{formatMessageTime(comment.createdAt)}</span>
-            </div>
-          </div>
-
-          {/* Reply */}
-          {mode === 'full' && comment.replied && comment.replyText && (
-            <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-2">
-                {t('reply')}
-              </h3>
-              <div className="bg-brand-50 dark:bg-brand-950/30 rounded-xl p-4 border-s-4 border-brand-500">
-                <p className="text-foreground whitespace-pre-wrap" dir="auto">{renderMessageText(comment.replyText)}</p>
-                <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
-                  <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>
-                  <Badge size="sm" variant={comment.replyMethod === 'ai' ? 'info' : 'success'}>
-                    {comment.replyMethod === 'ai' ? (
-                      <span className="flex items-center gap-1">
-                        <Bot className="w-3 h-3" /> {tDashboard('aiReply')}
+                {postTriggerKeyword && (
+                  <div className="flex items-center gap-1.5 flex-wrap px-1">
+                    <Hash className="w-3.5 h-3.5 flex-shrink-0 text-brand-500" aria-hidden="true" />
+                    {parseKeywords(postTriggerKeyword).map((kw, i) => (
+                      <span
+                        key={i}
+                        className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-700"
+                        dir="auto"
+                      >
+                        {kw}
                       </span>
-                    ) : (
-                      <>{tDashboard('templateReply')}</>
-                    )}
-                  </Badge>
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              
-              {/* Reply Feedback - AI Only */}
-              {comment.replyMethod === 'ai' && <ReplyFeedback commentId={comment.id} />}
+            )}
+
+            {/* Incoming: customer comment */}
+            <div className="flex flex-col items-start">
+              <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-bs-none p-3 sm:p-4 shadow-sm bg-card text-foreground border border-theme-border">
+                <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(comment.message)}</p>
+              </div>
+              <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter text-muted-foreground">
+                <span title={formatFullTime(comment.createdAt)}>{formatMessageTime(comment.createdAt)}</span>
+              </div>
+            </div>
+
+            {/* Outgoing: existing reply */}
+            {mode === 'full' && comment.replied && comment.replyText && (
+              <div className="flex flex-col items-end">
+                <div className="max-w-[90%] sm:max-w-[85%] rounded-2xl rounded-be-none p-3 sm:p-4 shadow-sm bg-brand-600 text-white">
+                  <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(comment.replyText)}</p>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter text-brand-500">
+                  <span title={formatFullTime(comment.repliedAt)}>{formatMessageTime(comment.repliedAt)}</span>
+                  {comment.replyMethod && (
+                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
+                      {comment.replyMethod === 'ai' ? (
+                        <>
+                          <Sparkles className="w-2.5 h-2.5" />
+                          {tDashboard('aiReply')}
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-2.5 h-2.5" />
+                          {tDashboard('templateReply')}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+                {comment.replyMethod === 'ai' && <ReplyFeedback commentId={comment.id} />}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer — always visible above keyboard */}
+        <div className="px-4 pt-4 md:px-6 md:pt-4 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
+          {/* Held reply banner */}
+          {isHeldReply && (
+            <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
+              <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{t('heldReplyBanner')}</span>
             </div>
           )}
 
-          {/* Reply Input Section — show for unreplied OR flagged (needs-attention) comments */}
-          {(!comment.replied || needsAttention) && (
-            <div className="bg-muted rounded-xl p-4 border border-theme-border">
-              {isHeldReply && (
-                <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
-                  <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>{t('heldReplyBanner')}</span>
-                </div>
+          {/* Smart Reply button — only when compose row is visible */}
+          {showComposeRow && mode === 'full' && (
+            <div className="flex items-center justify-between mb-2">
+              {replyText && !isGenerating && (
+                <span className="text-xs text-muted-foreground">{t('aiSuggestedReply')}</span>
               )}
-              <label htmlFor="comment-reply-textarea" className="text-sm font-medium text-foreground mb-2 block">
-                {comment.replied && needsAttention ? t('followUpReply') : t('reply')}
-                {replyText && !isGenerating && (
-                  <span className="text-xs font-normal text-muted-foreground ms-2">{t('aiSuggestedReply')}</span>
-                )}
-              </label>
-              <textarea
-                id="comment-reply-textarea"
-                ref={textareaRef}
-                className="w-full p-3 rounded-lg border border-theme-border bg-background focus:ring-2 focus:ring-brand-500 focus:border-transparent min-h-[100px] text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right resize-y"
-                placeholder={t('typeReply')}
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                disabled={isGenerating || isSending}
-                dir="auto"
+              <div className="flex-1" />
+              <SmartReplyButton
+                onGenerate={handleGenerateAi}
+                isGenerating={isGenerating}
+                generationStatus={generationStatus}
+                aiLimit={aiLimit}
+                hasReply={!!replyText}
+                compactOnMobile
               />
             </div>
           )}
 
-        </div>
-
-        {/* Modal Footer — always visible above keyboard */}
-        <div
-          className="px-4 md:px-6 pb-safe-modal pt-3 border-t border-theme-border bg-card flex-shrink-0"
-        >
-          {/* Action buttons — shown when reply input is active (unreplied or flagged) */}
-          {(!comment.replied || needsAttention) && (
-            <div className="flex items-center gap-2 mb-2">
-              {mode === 'full' && (
-                <SmartReplyButton
-                  onGenerate={handleGenerateAi}
-                  isGenerating={isGenerating}
-                  generationStatus={generationStatus}
-                  aiLimit={aiLimit}
-                  hasReply={!!replyText}
-                  compactOnMobile
-                />
-              )}
-              <div className="flex-1" />
-              <Button variant="secondary" onClick={onClose} disabled={isSending}>
-                 {tc('cancel')}
-              </Button>
-              <Button
-                variant="primary"
+          {/* Compose row — only when unreplied or needs attention */}
+          {showComposeRow && (
+            <div className="flex items-end gap-2">
+              <textarea
+                ref={textareaRef}
+                id="comment-reply-textarea"
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendReply();
+                  }
+                }}
+                dir="auto"
+                placeholder={comment.replied && needsAttention ? t('followUpReply') : t('typeReply')}
+                aria-label={t('typeReply')}
+                rows={1}
+                className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+                style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
+                disabled={isSending || isGenerating}
+              />
+              <button
                 onClick={handleSendReply}
-                loading={isSending}
-                disabled={!replyText.trim() || isGenerating}
-                icon={<Reply className="w-4 h-4" />}
+                disabled={!replyText.trim() || isSending || isGenerating}
+                aria-label={t('sendReply')}
+                className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
               >
-                {t('sendReply')}
-              </Button>
+                {isSending
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Send className="w-4 h-4" />
+                }
+              </button>
             </div>
           )}
-          <div className="flex items-center justify-between">
+
+          {/* Actions row: pause/resume + resolve/unresolve */}
+          <div className={clsx(
+            'flex items-center justify-between',
+            (showComposeRow || isHeldReply) ? 'mt-3' : 'mt-1'
+          )}>
             {mode === 'full' && comment.fromId ? (
               <PauseToggle
                 paused={!!pauseStatus?.paused}
@@ -411,6 +414,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 onToggle={handleTogglePause}
               />
             ) : <div />}
+
             {needsAttention && onResolve ? (
               <button
                 onClick={() => { onResolve(); onClose(); }}

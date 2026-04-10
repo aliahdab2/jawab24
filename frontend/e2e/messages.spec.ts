@@ -101,3 +101,113 @@ test.describe('Messages Page', () => {
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
 });
+
+test.describe('Message Detail Modal', () => {
+  const MOCK_CONVERSATION_MESSAGES = [
+    {
+      id: 'msg1',
+      direction: 'incoming',
+      message: 'Do you ship internationally?',
+      replied: false,
+      resolved: false,
+      replyMethod: null,
+      createdAt: new Date(Date.now() - 60000).toISOString(),
+      pageId: 'page_1',
+    },
+  ];
+
+  const MOCK_CONVERSATIONS = {
+    data: [
+      {
+        senderId: 'sender_1',
+        senderName: 'Bob Wilson',
+        needsHumanAttention: false,
+        pauseStatus: { paused: false, pausedUntil: null, remainingMinutes: null },
+        messages: MOCK_CONVERSATION_MESSAGES,
+        lastMessage: {
+          id: 'msg1',
+          direction: 'incoming',
+          message: 'Do you ship internationally?',
+          replied: false,
+          resolved: false,
+          replyMethod: null,
+          createdAt: new Date(Date.now() - 60000).toISOString(),
+          pageId: 'page_1',
+        },
+      },
+    ],
+    pagination: { nextCursor: null },
+  };
+
+  const setupPage = async (page: import('@playwright/test').Page) => {
+    page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
+
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'auth-storage',
+        JSON.stringify({
+          state: { user: { id: 'u1', email: 'test@test.com', name: 'Test' }, token: 'mock-token', fbToken: 'mock-fb', isAuthenticated: true },
+          version: 0,
+        })
+      );
+      localStorage.setItem(
+        'ui-storage',
+        JSON.stringify({ state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+      );
+      localStorage.setItem('jawab24_onboarding_complete', 'true');
+    });
+
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/messages/stats')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGE_STATS) });
+      }
+      if (url.includes('/conversations') || url.includes('/messages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_CONVERSATIONS) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/messages');
+    await expect(page.locator('h1').filter({ hasText: t('messages.title') }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('text=Bob Wilson').first()).toBeVisible({ timeout: 10000 });
+  };
+
+  test('should open message detail modal when clicking a conversation', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=Bob Wilson').first().click();
+
+    // Modal opens — check for sender name in header
+    await expect(page.locator('text=Bob Wilson').nth(1)).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should show reply compose textarea in modal footer', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=Bob Wilson').first().click();
+
+    // Compose textarea should always be visible in message modal
+    const textarea = page.locator(`textarea[aria-label="${t('messages.typeReply')}"]`);
+    await expect(textarea).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should show resolve button for unreplied messages', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=Bob Wilson').first().click();
+
+    // Resolve / "Mark as handled" button should appear in actions row
+    await expect(page.locator(`button:has-text("${t('comments.resolve')}")`).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should show pause smart reply button in actions row', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=Bob Wilson').first().click();
+
+    await expect(page.locator(`button:has-text("${t('messages.pauseSmartReply')}")`).first()).toBeVisible({ timeout: 5000 });
+  });
+});
