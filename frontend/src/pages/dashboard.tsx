@@ -238,7 +238,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const { data: needsActionComments } = useQuery({
     queryKey: ['dashboard-needs-action-comments'],
     queryFn: async () => {
-      const res = await commentsApi.getAll({ replied: false, resolved: false, limit: 5 });
+      const res = await commentsApi.getAll({ needsAttention: true, resolved: false, limit: 5 });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
@@ -248,7 +248,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const { data: recentMessages } = useQuery({
     queryKey: ['dashboard-recent-messages'],
     queryFn: async () => {
-      const res = await messagesApi.getAll({ limit: 20, direction: 'incoming' });
+      const res = await messagesApi.getAll({ needsAttention: true, limit: 20, direction: 'incoming' });
       if (Array.isArray(res.data)) return res.data;
       return res.data?.data ?? [];
     },
@@ -288,7 +288,7 @@ const DashboardPage: NextPageWithLayout = () => {
       repliedToday: (stats.repliedToday ?? 0) + (msgStats.repliedToday ?? 0),
       pendingReplies: stats.unreplied,
       needsAttention: stats.needsAttention,
-      commentsNeedsAction: Math.max(0, stats.unreplied ?? 0),
+      commentsNeedsAction: Math.max(0, stats.needsAttention ?? 0),
       activePages,
       aiReplies: stats.byMethod.ai + (msgStats.byMethod?.ai ?? 0),
       templateReplies: stats.byMethod.template + (msgStats.byMethod?.template ?? 0),
@@ -296,7 +296,7 @@ const DashboardPage: NextPageWithLayout = () => {
       totalMessages: msgStats.total,
       messagesPending: msgStats.pending,
       messagesNeedsAttention: msgStats.needsAttention ?? 0,
-      messagesNeedsAction: Math.max(0, msgStats.pending ?? 0),
+      messagesNeedsAction: Math.max(0, msgStats.needsAttention ?? 0),
       messagesAiReplies: msgStats.byMethod?.ai ?? 0,
       messagesTemplateReplies: msgStats.byMethod?.template ?? 0,
       messagesManualReplies: msgStats.byMethod?.manual ?? 0,

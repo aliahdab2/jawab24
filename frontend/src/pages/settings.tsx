@@ -99,11 +99,6 @@ const SettingsPage: NextPageWithLayout = () => {
       const response = await settingsApi.get();
       const data = response.data;
 
-      if (data.dashboardLanguage && data.dashboardLanguage !== language) {
-        setLanguage(data.dashboardLanguage as 'ar' | 'en');
-        return;
-      }
-
       const newSettings: SettingsState = {
         dashboardLanguage: data.dashboardLanguage || language,
         defaultReplyLanguage: data.defaultReplyLanguage || 'ar',
@@ -141,7 +136,7 @@ const SettingsPage: NextPageWithLayout = () => {
     } finally {
       setLoading(false);
     }
-  }, [language, setLanguage]);
+  }, [language]);
 
   useEffect(() => {
     if (isAuthenticated) {

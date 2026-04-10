@@ -76,8 +76,6 @@ export function SmartStatusBanner({
   onItemClick,
 }: SmartStatusBannerProps) {
   const tDash = useTranslations('dashboard');
-  const tComments = useTranslations('comments');
-  const tMessages = useTranslations('messages');
   const tc = useTranslations('common');
   const tFlagReason = useTranslations('flagReason');
   const tTime = useTranslations('time');
@@ -101,17 +99,13 @@ export function SmartStatusBanner({
   // Don't render if nothing needs action
   if (totalCount === 0) return null;
 
-  // Build breakdown text: "3 comments · 2 messages"
+  // Build breakdown text: "3 comments · 2 messages" (ICU plural-aware)
   const breakdownParts: string[] = [];
   if (commentNeedsAction > 0) {
-    breakdownParts.push(
-      `${commentNeedsAction} ${tComments('title').toLowerCase()}`
-    );
+    breakdownParts.push(tDash('smartBanner.commentsCount', { count: commentNeedsAction }));
   }
   if (messageNeedsAction > 0) {
-    breakdownParts.push(
-      `${messageNeedsAction} ${tMessages('title').toLowerCase()}`
-    );
+    breakdownParts.push(tDash('smartBanner.messagesCount', { count: messageNeedsAction }));
   }
   const breakdown = breakdownParts.join(' · ');
 

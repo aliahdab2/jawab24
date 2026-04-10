@@ -1521,6 +1521,15 @@ html, body {
   padding: 0;
 }
 
+/* #__next is Next.js's root div — must be in the height chain so that
+   .app-shell { height: 100% } resolves to viewport height (not auto).
+   Without this, flex-1 on .dashboard-scroll-root has no bounded parent,
+   the document scrolls at html-level, and the body background bleeds
+   below page content as an empty "dark void". */
+#__next {
+  height: 100%;
+}
+
 /* Global modal state: freeze background app scrolling and hide floating helpers */
 body.modal-open {
   overflow: hidden;

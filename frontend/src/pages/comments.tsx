@@ -275,7 +275,7 @@ const CommentsPage: NextPageWithLayout = () => {
     pendingDeepLinkRef.current = null;
   }, [allComments, isLoading, filter, t]);
 
-  // Update Page Title
+  // Update Page Title — use server stats counts to match chip badges
   useEffect(() => {
     const filterLabels: Record<FilterType, string> = {
       needs_action: t('needsAction'),
@@ -283,10 +283,17 @@ const CommentsPage: NextPageWithLayout = () => {
       auto_replied: t('autoReplied'),
       handled: t('handled'),
     };
+    const filterCounts: Record<FilterType, number> = {
+      needs_action: stats.actionRequired,
+      all: stats.total,
+      auto_replied: stats.autoReplied,
+      handled: stats.handled,
+    };
     const filterLabel = filterLabels[filter] ? ` — ${filterLabels[filter]}` : '';
-    const countLabel = filteredGroups.length > 0 ? ` (${filteredGroups.length})` : '';
+    const count = filterCounts[filter];
+    const countLabel = count > 0 ? ` (${count})` : '';
     document.title = `${t('title')}${filterLabel}${countLabel}`;
-  }, [filter, filteredGroups.length, t]);
+  }, [filter, stats, t]);
 
   // ESC key to close modal
   useEscapeKey(() => setSelectedComment(null), !!selectedComment);
