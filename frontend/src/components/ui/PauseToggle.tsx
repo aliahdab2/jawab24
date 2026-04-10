@@ -22,27 +22,31 @@ export function PauseToggle({
   const t = useTranslations('messages');
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex flex-col items-start gap-0.5">
       <button
         onClick={onToggle}
         disabled={loading}
         aria-label={paused ? t('resumeSmartReply') : t('pauseSmartReply')}
         className={clsx(
-          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all disabled:opacity-50',
+          'flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all disabled:opacity-50',
           paused
             ? 'text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/30'
             : 'text-muted-foreground hover:bg-muted dark:hover:bg-white/5'
         )}
       >
-        {paused ? <PlayCircle className="w-3.5 h-3.5 flex-shrink-0" /> : <PauseCircle className="w-3.5 h-3.5 flex-shrink-0" />}
+        {paused
+          ? <PlayCircle className="w-4 h-4 flex-shrink-0" />
+          : <PauseCircle className="w-4 h-4 flex-shrink-0" />
+        }
         <span>{paused ? t('resumeSmartReply') : t('pauseSmartReply')}</span>
-        <span className="text-[10px] font-normal text-muted-foreground">{t('pauseScope')}</span>
       </button>
-      {paused && remainingMinutes != null && (
-        <span className="text-[10px] font-medium text-violet-500">
-          {t('smartReplyPausedRemaining', { minutes: remainingMinutes })}
-        </span>
-      )}
+      {/* Scope label — below the button, not crammed inside it */}
+      <span className="text-[10px] ps-3 text-muted-foreground leading-none">
+        {paused && remainingMinutes != null
+          ? t('smartReplyPausedRemaining', { minutes: remainingMinutes })
+          : t('pauseScope')
+        }
+      </span>
     </div>
   );
 }

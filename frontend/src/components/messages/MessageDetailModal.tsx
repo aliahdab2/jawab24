@@ -411,22 +411,7 @@ export function MessageDetailModal({
             </div>
           )}
 
-          {/* Smart Reply button */}
-          {hasUnrepliedIncoming && (
-            <div className="flex items-center justify-between mb-2">
-              {replyText && !isGenerating && <span className="text-xs text-muted-foreground">{tComments('aiSuggestedReply')}</span>}
-              <div className="flex-1" />
-              <SmartReplyButton
-                onGenerate={handleGenerateAi}
-                isGenerating={isGenerating}
-                generationStatus={generationStatus}
-                aiLimit={aiLimit}
-                hasReply={!!replyText}
-              />
-            </div>
-          )}
-
-          {/* Compose row: textarea + send button */}
+          {/* Compose row: textarea + AI button + send */}
           <div className="flex items-end gap-2">
             <textarea
               value={replyText}
@@ -445,6 +430,16 @@ export function MessageDetailModal({
               style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
               disabled={isReplying || isGenerating}
             />
+            {/* Smart Reply — lives next to the send button so both compose actions are grouped */}
+            {hasUnrepliedIncoming && (
+              <SmartReplyButton
+                onGenerate={handleGenerateAi}
+                isGenerating={isGenerating}
+                generationStatus={generationStatus}
+                aiLimit={aiLimit}
+                hasReply={!!replyText}
+              />
+            )}
             <button
               onClick={handleSend}
               disabled={!replyText.trim() || isReplying || isGenerating}
@@ -458,8 +453,12 @@ export function MessageDetailModal({
             </button>
           </div>
 
-          {/* Actions row: pause/resume + resolve */}
-          <div className="flex items-center justify-between mt-4">
+          {replyText && !isGenerating && hasUnrepliedIncoming && (
+            <p className="mt-1.5 text-[10px] text-muted-foreground text-end">{tComments('aiSuggestedReply')}</p>
+          )}
+
+          {/* Actions row: pause/resume (left) + resolve/unresolve (right) */}
+          <div className="flex items-start justify-between mt-3 pt-3 border-t border-theme-border">
             <PauseToggle
               paused={!!isPaused}
               remainingMinutes={conversation.pauseStatus?.remainingMinutes}
@@ -477,22 +476,22 @@ export function MessageDetailModal({
             {hasUnresolvedUnreplied ? (
               <button
                 onClick={() => onResolve(conversation.senderId, pageId)}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30"
               >
-                <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
                 {tComments('resolve')}
               </button>
             ) : hasResolvedIncoming && onUnresolve ? (
               <button
                 onClick={() => onUnresolve(conversation.senderId, pageId)}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
               >
-                <Undo2 className="w-3.5 h-3.5 flex-shrink-0" />
+                <Undo2 className="w-4 h-4 flex-shrink-0" />
                 {tComments('unresolve')}
               </button>
             ) : hasResolvedIncoming ? (
-              <span className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                <CheckCircle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                <CheckCircle className="w-4 h-4 flex-shrink-0" />
                 {t('resolved')}
               </span>
             ) : null}
