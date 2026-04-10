@@ -307,25 +307,19 @@ const MessagesPage: NextPageWithLayout = () => {
   }, [conversations, selectedConversation, setSelectedConversation]);
 
   // Resolved page name + URL for modal — avoids pages.find() in JSX on every render
-  const selectedPageName = useMemo(
+  const selectedPage = useMemo(
     () => selectedConversation
-      ? pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.name
+      ? pages.find(p => p.id === selectedConversation.lastMessage.pageId)
       : undefined,
     [selectedConversation, pages]
   );
-
+  const selectedPageName = selectedPage?.name;
   const selectedPageUrl = useMemo(() => {
-    if (!selectedConversation) return undefined;
-    const page = pages.find(p => p.id === selectedConversation.lastMessage.pageId);
-    if (!page) return undefined;
-    const source = selectedConversation.lastMessage.platform === 'instagram' ? 'instagram' : undefined;
-    return getPageExternalUrl(page, source);
-  }, [selectedConversation, pages]);
-
-  const selectedFacebookPageId = useMemo(() => {
-    if (!selectedConversation) return undefined;
-    return pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.facebookPageId ?? undefined;
-  }, [selectedConversation, pages]);
+    if (!selectedPage) return undefined;
+    const source = selectedConversation?.lastMessage.platform === 'instagram' ? 'instagram' : undefined;
+    return getPageExternalUrl(selectedPage, source);
+  }, [selectedPage, selectedConversation?.lastMessage.platform]);
+  const selectedFacebookPageId = selectedPage?.facebookPageId ?? undefined;
 
   // Intersection Observer
   useEffect(() => {

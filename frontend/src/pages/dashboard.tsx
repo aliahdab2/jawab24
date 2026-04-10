@@ -502,24 +502,15 @@ const DashboardPage: NextPageWithLayout = () => {
   }, [queryClient, setSelectedConversation]);
 
   // Resolved page name + URL for message modal
-  const selectedMessagePageName = useMemo(
+  const selectedMessagePage = useMemo(
     () => selectedConversation
-      ? pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.name
+      ? pages.find(p => p.id === selectedConversation.lastMessage.pageId)
       : undefined,
     [selectedConversation, pages]
   );
-
-  const selectedMessagePageUrl = useMemo(() => {
-    if (!selectedConversation) return undefined;
-    const page = pages.find(p => p.id === selectedConversation.lastMessage.pageId);
-    if (!page) return undefined;
-    return getPageExternalUrl(page);
-  }, [selectedConversation, pages]);
-
-  const selectedMessageFacebookPageId = useMemo(() => {
-    if (!selectedConversation) return undefined;
-    return pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.facebookPageId ?? undefined;
-  }, [selectedConversation, pages]);
+  const selectedMessagePageName = selectedMessagePage?.name;
+  const selectedMessagePageUrl = selectedMessagePage ? getPageExternalUrl(selectedMessagePage) : undefined;
+  const selectedMessageFacebookPageId = selectedMessagePage?.facebookPageId ?? undefined;
 
   // Dashboard Skeleton Loading State
   if (loading) {
