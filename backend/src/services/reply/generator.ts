@@ -249,7 +249,7 @@ export class ReplyGenerator {
             const customerContext = context.senderName ? `Customer name: ${context.senderName}.` : undefined;
 
             const aiResponse = await aiService.generateReply({
-                comment: commentForAI || text,
+                comment: commentForAI,
                 language: effectiveLang !== 'unknown' ? effectiveLang : undefined,
                 context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext }
             });

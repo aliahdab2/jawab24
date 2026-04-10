@@ -1670,4 +1670,147 @@ describe('Store routing — skip preset replies for store pages', () => {
         // Template matching should be attempted — no store connected
         expect(rulesService.findMatchingRule).toHaveBeenCalled();
     });
+
+    describe('@mention handling in comments', () => {
+        let generator: ReplyGenerator;
+
+        beforeEach(() => {
+            vi.clearAllMocks();
+            generator = new ReplyGenerator();
+        });
+
+        it('should strip @mention-only comment before passing to AI', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(detectLanguageCode).mockReturnValue('unknown');
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'أهلاً! كيف يمكنني مساعدتك؟',
+                language: 'ar',
+                cached: false,
+                intent: 'GREETING',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: '@Ali Ahdab',
+                pageName: 'الفريق الدمشقي',
+                pageId: 'page-1',
+            }, true);
+
+            // @Ali Ahdab stripped → empty string passed to AI
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({ comment: '' }),
+            );
+        });
+
+        it('should preserve message content after stripping leading @mention', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'السعر 50 ألف',
+                language: 'ar',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: '@Ali كم السعر؟',
+                pageName: 'Test Page',
+                pageId: 'page-1',
+            }, true);
+
+            // @mention stripped, actual question preserved
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({ comment: 'كم السعر؟' }),
+            );
+        });
+
+        it('should pass senderName as customerContext for comments', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'أهلاً نور!',
+                language: 'ar',
+                cached: false,
+                intent: 'GREETING',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: 'مرحبا',
+                pageName: 'Test Page',
+                pageId: 'page-1',
+                senderName: 'Noor ALashkar',
+            }, true);
+
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.objectContaining({
+                        customerContext: 'Customer name: Noor ALashkar.',
+                    }),
+                }),
+            );
+        });
+
+        it('should not set customerContext when senderName is absent', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Hello!',
+                language: 'en',
+                cached: false,
+                intent: 'GREETING',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                text: 'Hello',
+                pageName: 'Test Page',
+                pageId: 'page-1',
+                // no senderName
+            }, true);
+
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.not.objectContaining({
+                        customerContext: expect.anything(),
+                    }),
+                }),
+            );
+        });
+    });
 });
