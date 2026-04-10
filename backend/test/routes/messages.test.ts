@@ -2,9 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import messagesRoutes from '../../src/routes/messages';
 import { messagesService } from '../../src/services/messages';
+import { pagesService } from '../../src/services/pages';
 
 // Mock services
 vi.mock('../../src/services/messages');
+vi.mock('../../src/services/pages');
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: async (req: any) => {
         req.user = { id: 'test_user_id', userId: 'test_user_id', facebookId: 'test_fb_id' };
@@ -94,6 +96,7 @@ describe('Messages Routes', () => {
                 { id: 'msg_2', message: 'Hi! How can I help?', direction: 'outgoing', senderId: 'sender_123' },
                 { id: 'msg_3', message: 'I have a question', direction: 'incoming', senderId: 'sender_123' }
             ];
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-uuid' } as any);
             vi.mocked(messagesService.getConversation).mockResolvedValue(conversation as any);
 
             const response = await app.inject({
@@ -109,6 +112,7 @@ describe('Messages Routes', () => {
         });
 
         it('should return empty array for sender with no messages', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-uuid' } as any);
             vi.mocked(messagesService.getConversation).mockResolvedValue([]);
 
             const response = await app.inject({
@@ -118,6 +122,19 @@ describe('Messages Routes', () => {
 
             expect(response.statusCode).toBe(200);
             expect(JSON.parse(response.payload)).toEqual([]);
+        });
+
+        it('should return 403 when page is not owned by workspace', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: '/messages/conversation/sender_123?pageId=page_other_workspace'
+            });
+
+            expect(response.statusCode).toBe(403);
+            expect(JSON.parse(response.payload)).toEqual({ error: 'Unauthorized: page not owned by workspace' });
+            expect(messagesService.getConversation).not.toHaveBeenCalled();
         });
 
         it('should return 400 if pageId is missing', async () => {

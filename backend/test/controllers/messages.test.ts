@@ -197,20 +197,44 @@ describe('MessagesController', () => {
     // ─── getConversation ───────────────────────────────────
 
     describe('getConversation', () => {
-        it('should return conversation messages on success', async () => {
-            const messages = [{ id: 'msg-1', message: 'hi' }];
-            vi.mocked(messagesService.getConversation).mockResolvedValue(messages as any);
+        beforeEach(() => {
             (mockRequest as any).params = { senderId: 'sender-1' };
             (mockRequest as any).query = { pageId: 'page-1', limit: '25' };
+        });
+
+        it('should return conversation messages on success', async () => {
+            const messages = [{ id: 'msg-1', message: 'hi' }];
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-uuid' } as any);
+            vi.mocked(messagesService.getConversation).mockResolvedValue(messages as any);
 
             await messagesController.getConversation(mockRequest as any, mockReply as any);
 
+            expect(pagesService.getPage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
             expect(messagesService.getConversation).toHaveBeenCalledWith('page-1', 'sender-1', 25);
             expect(mockReply.send).toHaveBeenCalledWith(messages);
         });
 
+        it('should return 401 when no workspaceId', async () => {
+            (mockRequest as any).workspaceId = undefined;
+
+            await messagesController.getConversation(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+            expect(pagesService.getPage).not.toHaveBeenCalled();
+            expect(messagesService.getConversation).not.toHaveBeenCalled();
+        });
+
+        it('should return 403 when page is not owned by workspace', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+
+            await messagesController.getConversation(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Unauthorized: page not owned by workspace' });
+            expect(messagesService.getConversation).not.toHaveBeenCalled();
+        });
+
         it('should return 400 when pageId is missing', async () => {
-            (mockRequest as any).params = { senderId: 'sender-1' };
             (mockRequest as any).query = {};
 
             await messagesController.getConversation(mockRequest as any, mockReply as any);
@@ -221,9 +245,8 @@ describe('MessagesController', () => {
         });
 
         it('should return 500 on service failure', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-uuid' } as any);
             vi.mocked(messagesService.getConversation).mockRejectedValue(new Error('fail'));
-            (mockRequest as any).params = { senderId: 'sender-1' };
-            (mockRequest as any).query = { pageId: 'page-1' };
 
             await messagesController.getConversation(mockRequest as any, mockReply as any);
 
