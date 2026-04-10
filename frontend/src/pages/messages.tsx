@@ -322,6 +322,11 @@ const MessagesPage: NextPageWithLayout = () => {
     return getPageExternalUrl(page, source);
   }, [selectedConversation, pages]);
 
+  const selectedFacebookPageId = useMemo(() => {
+    if (!selectedConversation) return undefined;
+    return pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.facebookPageId ?? undefined;
+  }, [selectedConversation, pages]);
+
   // Intersection Observer
   useEffect(() => {
     if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
@@ -595,6 +600,7 @@ const MessagesPage: NextPageWithLayout = () => {
           dateLocale={dateLocale}
           pageName={selectedPageName}
           pageUrl={selectedPageUrl}
+          facebookPageId={selectedFacebookPageId}
           isInstagram={selectedConversation.lastMessage.platform === 'instagram'}
         />
       )}

@@ -516,6 +516,11 @@ const DashboardPage: NextPageWithLayout = () => {
     return getPageExternalUrl(page);
   }, [selectedConversation, pages]);
 
+  const selectedMessageFacebookPageId = useMemo(() => {
+    if (!selectedConversation) return undefined;
+    return pages.find(p => p.id === selectedConversation.lastMessage.pageId)?.facebookPageId ?? undefined;
+  }, [selectedConversation, pages]);
+
   // Dashboard Skeleton Loading State
   if (loading) {
     return <PageSkeleton type="dashboard" />;
@@ -1033,6 +1038,7 @@ const DashboardPage: NextPageWithLayout = () => {
           isResuming={isResuming}
           pageName={selectedMessagePageName}
           pageUrl={selectedMessagePageUrl}
+          facebookPageId={selectedMessageFacebookPageId}
           isInstagram={selectedConversation.lastMessage.platform === 'instagram'}
         />
       )}

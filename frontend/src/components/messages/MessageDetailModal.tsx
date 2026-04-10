@@ -44,6 +44,7 @@ interface MessageDetailModalProps {
   dateLocale?: Locale;
   pageName?: string;
   pageUrl?: string;
+  facebookPageId?: string;
   isInstagram?: boolean;
 }
 
@@ -61,6 +62,7 @@ export function MessageDetailModal({
   dateLocale,
   pageName,
   pageUrl,
+  facebookPageId,
   isInstagram = false,
 }: MessageDetailModalProps) {
   const t = useTranslations('messages');
@@ -259,7 +261,11 @@ export function MessageDetailModal({
           <ChevronRight className="w-3 h-3 rtl:rotate-180" />
           {!isInstagram ? (
             <button
-              onClick={() => openExternalUrl(`https://www.facebook.com/messages/t/${conversation.senderId}`)}
+              onClick={() => openExternalUrl(
+                facebookPageId
+                  ? `https://www.facebook.com/${facebookPageId}/inbox/${conversation.senderId}`
+                  : `https://www.facebook.com/messages/t/${conversation.senderId}`
+              )}
               className="flex items-center gap-1 font-semibold text-muted-foreground hover:text-brand-500 transition-colors truncate"
             >
               <span className="truncate">{conversation.senderName || tc('user')}</span>
