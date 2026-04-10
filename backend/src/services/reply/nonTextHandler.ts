@@ -8,6 +8,8 @@ import { enqueueMessage } from '../../lib/replyQueue';
 import { detectLanguageCode } from '../../utils/language';
 import { getAttachmentPlaceholder, getTextOnlyNudge } from '../../utils/attachmentLabels';
 import { extractPostId, isSharedPostType } from '../../utils/instagram';
+import { facebookMessageAdapter } from './adapters/facebookAdapter';
+import { instagramMessageAdapter } from './adapters/instagramAdapter';
 import type { Logger } from '../../types';
 
 /** Cooldown TTL: 1 hour. Prevents spamming the same customer with nudge replies. */
@@ -44,7 +46,25 @@ export async function handleNonTextMessage(
 
         if (!page?.accessToken) return;
 
-        // 2. Detect language from sender's previous text messages (default: Arabic)
+        // 2. Fetch sender name (best-effort) — persisted so dashboard always shows real names,
+        //    even for non-text messages that bypass the normal AI pipeline.
+        let senderName: string | undefined;
+        try {
+            const adapter = platform === 'facebook' ? facebookMessageAdapter : instagramMessageAdapter;
+            senderName = await adapter.fetchSenderName(senderId, page.accessToken, page.id, platformPageId);
+        } catch { /* non-critical */ }
+
+        // Stickers (including the Facebook 👍 thumbs-up like button) carry no conversational
+        // intent — store silently in DB for chat history context but do NOT send a nudge.
+        if (attachmentType === 'sticker') {
+            await messagesService.findOrCreateFromWebhook(
+                page.id, messageId, senderId, '[Sticker]', senderName, 'sticker',
+            );
+            logger.debug(`[${platform}] Sticker ignored (no nudge)`, { senderId, messageId });
+            return;
+        }
+
+        // 3. Detect language from sender's previous text messages (default: Arabic)
         let lang: 'ar' | 'en' = 'ar';
         try {
             const lastText = await messagesService.getLastIncomingTextFromSender(page.id, senderId);
@@ -54,7 +74,7 @@ export async function handleNonTextMessage(
             }
         } catch { /* default to Arabic */ }
 
-        // 3. Attempt Whisper transcription for audio messages
+        // 4. Attempt Whisper transcription for audio messages
         if (attachmentType === 'audio' && attachmentUrl) {
             const result = await transcriptionService.transcribe(attachmentUrl, lang);
 
@@ -65,7 +85,7 @@ export async function handleNonTextMessage(
 
                 // Store transcribed text in DB (not placeholder)
                 await messagesService.findOrCreateFromWebhook(
-                    page.id, messageId, senderId, result.text, undefined, 'audio',
+                    page.id, messageId, senderId, result.text, senderName, 'audio',
                 );
 
                 // Enqueue for the normal AI reply pipeline
@@ -88,7 +108,7 @@ export async function handleNonTextMessage(
             });
         }
 
-        // 4. Shared post/reel: fetch content (best-effort), always route to AI
+        // 5. Shared post/reel: fetch content (best-effort), always route to AI
         if (isSharedPostType(attachmentType)) {
             let postContent: string | null = null;
             try {
@@ -114,7 +134,7 @@ export async function handleNonTextMessage(
             }
 
             await messagesService.findOrCreateFromWebhook(
-                page.id, messageId, senderId, enrichedText, undefined, attachmentType,
+                page.id, messageId, senderId, enrichedText, senderName, attachmentType,
             );
 
             const jobType = platform === 'facebook' ? 'facebook_message' : 'instagram_message';
@@ -133,10 +153,10 @@ export async function handleNonTextMessage(
             return; // AI pipeline handles the reply from here
         }
 
-        // 5. Non-audio or failed transcription: store placeholder + send generic nudge
+        // 6. Non-audio or failed transcription: store placeholder + send generic nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
         await messagesService.findOrCreateFromWebhook(
-            page.id, messageId, senderId, placeholder, undefined, attachmentType,
+            page.id, messageId, senderId, placeholder, senderName, attachmentType,
         );
         await sendNudge(page, senderId, getTextOnlyNudge(lang), platform, logger);
     } catch (error) {

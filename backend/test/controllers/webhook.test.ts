@@ -103,6 +103,18 @@ vi.mock('../../src/services/transcription', () => ({
     },
 }));
 
+// Mock platform adapters used by nonTextHandler for sender name lookup
+vi.mock('../../src/services/reply/adapters/facebookAdapter', () => ({
+    facebookMessageAdapter: {
+        fetchSenderName: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+vi.mock('../../src/services/reply/adapters/instagramAdapter', () => ({
+    instagramMessageAdapter: {
+        fetchSenderName: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
 describe('Webhook Controller', () => {
     let app: any;
 

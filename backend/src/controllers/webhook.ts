@@ -48,7 +48,7 @@ interface MessagingEvent {
         text?: string;
         is_echo?: boolean;
         attachments?: Array<{
-            type: 'audio' | 'image' | 'video' | 'file' | 'fallback' | 'post' | 'ig_post' | 'reel' | 'ig_reel';
+            type: 'audio' | 'image' | 'video' | 'file' | 'fallback' | 'post' | 'ig_post' | 'reel' | 'ig_reel' | 'sticker';
             payload?: { url?: string; title?: string; id?: string };
         }>;
     };
