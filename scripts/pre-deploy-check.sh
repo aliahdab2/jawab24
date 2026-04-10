@@ -155,7 +155,12 @@ AUDIT_FAILED=false
 # We use static schema only (no dynamic table/column names). Fix requires major upgrade (0.29→0.45).
 # GHSA-vpq2-c234-7xj6 — teeny-request via @google-cloud/firestore (optional dep of firebase-admin).
 # Transitive, no direct fix available until firebase-admin ships patched version.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6"
+# GHSA-q4gf-8mx6-v5v3 — Next.js DoS via Server Components (next@16.0.0-beta.0 - 16.2.2).
+# next-intl declares next@^16.0.0 as a peer dep, causing npm to hoist next@16.2.1 at root.
+# Our app runs on frontend/node_modules/next@15.5.15 (patched). The root next@16.x is a
+# resolution artifact only — it does not serve requests. Additionally, we use Pages Router
+# exclusively (no App Router server components), so the DoS vector does not apply.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {

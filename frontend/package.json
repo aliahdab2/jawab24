@@ -31,7 +31,6 @@
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
-    "@jawab24/shared": "*",
     "@capacitor-community/facebook-login": "^8.0.0",
     "@capacitor/android": "^8.0.0",
     "@capacitor/app": "^8.0.0",
@@ -47,7 +46,8 @@
     "@capacitor/splash-screen": "^8.0.0",
     "@capacitor/status-bar": "^8.0.0",
     "@capgo/capacitor-audio-recorder": "^8.0.12",
-    "@sentry/nextjs": "^10.35.0",
+    "@jawab24/shared": "*",
+    "@sentry/nextjs": "^10.48.0",
     "@stripe/react-stripe-js": "^3.10.0",
     "@stripe/stripe-js": "^2.4.0",
     "@tailwindcss/typography": "^0.5.19",
@@ -60,7 +60,7 @@
     "gray-matter": "^4.0.3",
     "libphonenumber-js": "1.12.40",
     "lucide-react": "^0.468.0",
-    "next": "^15.5.14",
+    "next": "15.5.15",
     "next-intl": "^4.8.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
