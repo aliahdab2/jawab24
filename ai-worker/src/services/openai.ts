@@ -290,16 +290,17 @@ export class OpenAIService {
         const rawPageName = request.context?.pageName || 'our page';
         // Sanitize to prevent prompt injection via page name
         const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
-        // When the message has no detectable language (e.g. emoji-only), infer from
-        // conversation history so the AI doesn't default to English mid-Arabic conversation.
-        // The || chain is lazy — history is only scanned when request.language is not set.
+        // When the message has no detectable language (e.g. "..." or emoji-only), infer from
+        // conversation history, then KB language, before defaulting to English.
+        // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
         const language = request.language
             || request.context?.conversationHistory
                 ?.filter(m => m.role === 'user' && /[a-zA-Z\u0600-\u06FF]/.test(m.content))
                 .reverse()
                 .map(m => this.detectLanguage(m.content))
                 .find(Boolean)
-            || this.detectLanguage(request.comment)
+            || this.detectLanguageOrNull(request.comment)
+            || this.detectLanguageOrNull(this.getKBText(request) || '')
             || 'en';
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
         const languageName = languageNames[language] || 'English';
@@ -648,6 +649,18 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
     }
 
     /**
+     * Language detection that returns null when no script is detectable.
+     * Used in the language fallback chain so punctuation/emoji-only input
+     * (e.g. "...") doesn't short-circuit to 'en' before KB inference runs.
+     */
+    private detectLanguageOrNull(text: string): string | null {
+        if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+        if (/[åäöÅÄÖ]/.test(text)) return 'sv';
+        if (/[a-zA-Z]/.test(text)) return 'en';
+        return null; // punctuation-only, emoji-only, digits-only
+    }
+
+    /**
      * Extract the effective KB text from the request context.
      * Returns combined chunk content if RAG, otherwise static KB, or null.
      */
@@ -731,8 +744,12 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
         }
 
         // Check 3: Language mismatch — reply language differs from input
+        // Uses the same fallback chain as buildSystemPrompt: message → KB → 'en'
         if (reply) {
-            const inputLang = request.language || this.detectLanguage(request.comment);
+            const inputLang = request.language
+                || this.detectLanguageOrNull(request.comment)
+                || this.detectLanguageOrNull(this.getKBText(request) || '')
+                || 'en';
             const replyLang = this.detectLanguage(reply);
             if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
                 flags.push('language_mismatch');
