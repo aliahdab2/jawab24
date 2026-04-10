@@ -1812,5 +1812,88 @@ describe('Store routing — skip preset replies for store pages', () => {
                 }),
             );
         });
+
+        it('should fall back to post language when comment is mention-only', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            // Simulate real detectLanguageCode: '' → 'unknown', Arabic → 'ar', Latin → 'en'
+            vi.mocked(detectLanguageCode).mockImplementation((text) => {
+                if (!text) return 'unknown';
+                if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+                return 'en';
+            });
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'أهلاً!',
+                language: 'ar',
+                cached: false,
+                intent: 'GREETING',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                // Latin @mention → stripped to '' → language 'unknown' → falls to Arabic post
+                text: '@Ali Ahdab',
+                pageName: 'الفريق الدمشقي',
+                pageId: 'page-1',
+                postMessage: 'كورس الاكسل المتقدم — 8 جلسات',
+            }, true);
+
+            // Language should be 'ar' (from post content), not 'en' (from raw @mention)
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({ language: 'ar' }),
+            );
+        });
+
+        it('should strip URLs before language detection', async () => {
+            const { rulesService } = await import('../../src/services/rules');
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            const { detectLanguageCode } = await import('../../src/utils/language');
+
+            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(detectLanguageCode).mockImplementation((text) => {
+                if (!text) return 'unknown';
+                if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+                return 'en';
+            });
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'أهلاً!',
+                language: 'ar',
+                cached: false,
+                intent: 'GREETING',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment({
+                workspaceId: 'ws-1',
+                userId: 'user-1',
+                // URL-only comment → stripped to '' → falls to Arabic post language
+                text: 'https://example.com/product',
+                pageName: 'Test Page',
+                pageId: 'page-1',
+                postMessage: 'منتجاتنا الجديدة',
+            }, true);
+
+            // Language should be 'ar' (from post), not 'en' (from URL Latin chars)
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({ language: 'ar' }),
+            );
+            // URL stripped — AI receives empty comment, not the raw URL
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({ comment: '' }),
+            );
+        });
     });
 });

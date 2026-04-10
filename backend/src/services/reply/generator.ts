@@ -194,11 +194,14 @@ export class ReplyGenerator {
     ): Promise<GenerateReplyResult> {
         const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
 
-        // Strip @mentions from comment text before passing to AI and language detection.
-        // @mentions are platform tagging mechanics (e.g. "@Ali Ahdab") — not message content.
-        // Without stripping: "@Ali Ahdab" is detected as 'en' (Latin chars) even on Arabic pages,
-        // and the AI extracts the tagged name and addresses the wrong person.
-        const commentForAI = text.replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '').trim();
+        // Strip platform noise from comment text before language detection and AI processing.
+        // Both @mentions and URLs contain Latin chars that pollute language detection
+        // (e.g. "@Ali Ahdab" or "https://example.com" on an Arabic page → incorrectly 'en').
+        // They also carry no message content the AI should respond to.
+        const commentForAI = text
+            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '') // @mentions (e.g. @Ali Ahdab)
+            .replace(/https?:\/\/\S+|www\.\S+/gi, '')              // URLs
+            .trim();
 
         // 1. Try to find a matching rule with template (skip if page has a store — AI answers with product context)
         if (!context.ecommerceStoreId) {
@@ -238,9 +241,10 @@ export class ReplyGenerator {
                 pageId, commentForAI || text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
             );
 
-            // Language detection: use stripped text so @mentions don't pollute the signal.
-            // If stripping left nothing (comment was only a tag), fall back to the post language.
-            const detectedLang = detectLanguageCode(commentForAI || text);
+            // Language detection: use stripped text only — never fall back to raw text.
+            // Empty commentForAI (mention/URL-only comment) returns 'unknown', which correctly
+            // triggers the post-content fallback below instead of locking in 'en'.
+            const detectedLang = detectLanguageCode(commentForAI);
             const effectiveLang = detectedLang !== 'unknown' ? detectedLang
                 : (postMessage ? detectLanguageCode(postMessage) : 'unknown');
 
