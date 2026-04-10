@@ -633,22 +633,6 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
     }
 
     /**
-     * Simple language detection based on character sets
-     */
-    private detectLanguage(text: string): string {
-        // Arabic characters
-        if (/[\u0600-\u06FF]/.test(text)) {
-            return 'ar';
-        }
-        // Swedish characters
-        if (/[åäöÅÄÖ]/.test(text)) {
-            return 'sv';
-        }
-        // Default to English
-        return 'en';
-    }
-
-    /**
      * Language detection that returns null when no script is detectable.
      * Used in the language fallback chain so punctuation/emoji-only input
      * (e.g. "...") doesn't short-circuit to 'en' before KB inference runs.
@@ -658,6 +642,14 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
         if (/[åäöÅÄÖ]/.test(text)) return 'sv';
         if (/[a-zA-Z]/.test(text)) return 'en';
         return null; // punctuation-only, emoji-only, digits-only
+    }
+
+    /**
+     * Simple language detection based on character sets.
+     * Delegates to detectLanguageOrNull and falls back to 'en'.
+     */
+    private detectLanguage(text: string): string {
+        return this.detectLanguageOrNull(text) ?? 'en';
     }
 
     /**
