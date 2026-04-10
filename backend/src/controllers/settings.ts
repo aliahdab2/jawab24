@@ -238,6 +238,12 @@ export class SettingsController {
             if (!updates.dualReplyNudge && updates.dualReplyNudgeMulti) {
                 updates.dualReplyNudge = updates.dualReplyNudgeMulti['en'] || updates.dualReplyNudgeMulti['ar'];
             }
+
+            // Legacy brandVoiceNotes compatibility — keep old text column in sync so the
+            // two columns never diverge. Cleared multi → empty string clears the old column.
+            if (updates.brandVoiceNotesMulti !== undefined && updates.brandVoiceNotesMulti !== null) {
+                updates.brandVoiceNotes = updates.brandVoiceNotesMulti['en'] || updates.brandVoiceNotesMulti['ar'] || '';
+            }
             const settings = await settingsService.updateSettings(userId, updates);
 
             // Audit trail (fire-and-forget)

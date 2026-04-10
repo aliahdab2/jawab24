@@ -65,9 +65,13 @@ export async function enrichPageContext(
     const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
     const lang = detectLanguageCode(messageText);
     const supportedLangs = (userSettings.supportedLanguages as string[] | undefined) || ['ar', 'en'];
+    // Only fall back to the legacy brandVoiceNotes text column if brandVoiceNotesMulti has
+    // never been written (i.e. it has no keys). Once the user has used the new UI, the multi
+    // column is authoritative — falling back to the old column would resurrect cleared values.
+    const legacyFallback = Object.keys(bvMulti).length === 0 ? userSettings.brandVoiceNotes : undefined;
     const brandVoiceNotes = bvMulti[lang]
         || supportedLangs.map(l => bvMulti[l]).find(Boolean)
-        || userSettings.brandVoiceNotes
+        || legacyFallback
         || undefined;
 
     return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId };
