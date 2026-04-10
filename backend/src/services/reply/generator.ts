@@ -194,6 +194,12 @@ export class ReplyGenerator {
     ): Promise<GenerateReplyResult> {
         const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken } = context;
 
+        // Strip @mentions from comment text before passing to AI and language detection.
+        // @mentions are platform tagging mechanics (e.g. "@Ali Ahdab") — not message content.
+        // Without stripping: "@Ali Ahdab" is detected as 'en' (Latin chars) even on Arabic pages,
+        // and the AI extracts the tagged name and addresses the wrong person.
+        const commentForAI = text.replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '').trim();
+
         // 1. Try to find a matching rule with template (skip if page has a store — AI answers with product context)
         if (!context.ecommerceStoreId) {
             const templateResult = await this.tryTemplateMatch(workspaceId, text);
@@ -227,19 +233,25 @@ export class ReplyGenerator {
             // Build gap source context for merchant insights
             const gapSource: GapSource = { type: 'comment', context: postMessage };
 
-            // Run RAG retrieval if enabled
+            // Run RAG retrieval if enabled (use stripped text for better semantic matching)
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                pageId, text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
+                pageId, commentForAI || text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
             );
 
-            const detectedLang = detectLanguageCode(text);
-            // For punctuation-only comments (e.g. ".", ".."), detect language from the post content
+            // Language detection: use stripped text so @mentions don't pollute the signal.
+            // If stripping left nothing (comment was only a tag), fall back to the post language.
+            const detectedLang = detectLanguageCode(commentForAI || text);
             const effectiveLang = detectedLang !== 'unknown' ? detectedLang
                 : (postMessage ? detectLanguageCode(postMessage) : 'unknown');
+
+            // Pass commenter name as customerContext (same as DMs) so the AI addresses
+            // the actual commenter, not a name extracted from an @mention.
+            const customerContext = context.senderName ? `Customer name: ${context.senderName}.` : undefined;
+
             const aiResponse = await aiService.generateReply({
-                comment: text,
+                comment: commentForAI || text,
                 language: effectiveLang !== 'unknown' ? effectiveLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);

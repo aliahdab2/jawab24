@@ -242,8 +242,9 @@ export class CommentProcessor {
             generatorContext.storePolicies = enriched.storePolicies;
             generatorContext.productCatalog = enriched.productCatalog;
             generatorContext.brandVoiceNotes = enriched.brandVoiceNotes;
-            // Pass reply style settings to generator context
             generatorContext.replyStyle = userSettings.replyStyle;
+            // Pass commenter name so the AI addresses the actual commenter, not a tagged person
+            generatorContext.senderName = fromName ?? undefined;
 
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
             let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent, confidence } =

@@ -42,6 +42,7 @@ export interface CommentReplyContext {
     productCatalog?: string;
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
+    senderName?: string;
 }
 
 export interface SendCommentResult {
