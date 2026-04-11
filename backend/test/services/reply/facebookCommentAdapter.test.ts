@@ -140,7 +140,7 @@ describe('FacebookCommentAdapter', () => {
             expect(result.id).toBe('post_uuid_1');
             expect(result.autoReplyEnabled).toBe(true);
             expect(result.message).toBe('Check out our new product!');
-            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith('page_uuid_1', 'fb_post_123', undefined);
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith('page_uuid_1', 'fb_post_123', undefined, undefined);
         });
 
         it('should default autoReplyEnabled to true when undefined', async () => {

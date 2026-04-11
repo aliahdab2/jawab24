@@ -157,7 +157,7 @@ describe('CommentProcessor', () => {
         expect(result.replyText).toBe('Thank you!');
         expect(result.replyMethod).toBe('template');
         expect(adapter.getPage).toHaveBeenCalledWith('platform-page-1');
-        expect(adapter.findOrCreateContent).toHaveBeenCalledWith('page-uuid', 'content-1');
+        expect(adapter.findOrCreateContent).toHaveBeenCalledWith('page-uuid', 'content-1', 'token-123');
         expect(adapter.storeComment).toHaveBeenCalledWith('content-uuid', 'comment-1', 'Hello!', 'user-1', 'Alice');
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.markAsReplied).toHaveBeenCalledWith(
