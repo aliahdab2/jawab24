@@ -252,14 +252,12 @@ test.describe('Dashboard Page', () => {
       page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // SmartStatusBanner uses unreplied (12) + pending (5) = 17
-    await expect(page.getByText(/17.*items need your attention/i)).toBeVisible({ timeout: 15000 });
+    // SmartStatusBanner uses needsAttention: comments (3) + messages (1) = 4
+    await expect(page.getByText(/4.*items need your attention/i)).toBeVisible({ timeout: 15000 });
 
-    // Breakdown should show comment and message counts (in the header button)
-    const commentsLabel = t('comments.title').toLowerCase();
-    const messagesLabel = t('messages.title').toLowerCase();
-    const breakdown = `12 ${commentsLabel} · 5 ${messagesLabel}`;
-    await expect(page.getByText(breakdown)).toBeVisible();
+    // Breakdown should show needsAttention counts (in the header button)
+    // Uses ICU plural keys: "3 Comments · 1 Message" (capitalisation varies by key)
+    await expect(page.getByText(/3\s+comments?\s*·\s*1\s+messages?/i)).toBeVisible();
 
     // Banner should be expandable (has a chevron toggle)
     const expandButton = page.getByRole('button', { name: /items need your attention/i });
@@ -267,19 +265,19 @@ test.describe('Dashboard Page', () => {
   });
 
   test('should hide banner when no items need action', async ({ page }) => {
-    // Override stats to have unreplied = 0 and pending = 0
+    // Override stats to have needsAttention = 0 for both comments and messages
     await page.route('**/api/comments/stats**', async (route) => {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ...MOCK_COMMENT_STATS, unreplied: 0 }),
+        body: JSON.stringify({ ...MOCK_COMMENT_STATS, needsAttention: 0 }),
       });
     });
     await page.route('**/api/messages/stats**', async (route) => {
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ...MOCK_MESSAGE_STATS, pending: 0 }),
+        body: JSON.stringify({ ...MOCK_MESSAGE_STATS, needsAttention: 0 }),
       });
     });
 
