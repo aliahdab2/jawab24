@@ -7,7 +7,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-quer
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import dynamic from 'next/dynamic';
-import { CommentCard } from '@/components/comments';
+import { SwipeableCommentCard } from '@/components/comments';
 
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
@@ -533,7 +533,7 @@ const CommentsPage: NextPageWithLayout = () => {
               const earlierComments = group.count > 1 ? group.comments.slice(1) : undefined;
               return (
                 <div key={group.groupKey} className="break-inside-avoid mb-3 sm:mb-4">
-                  <CommentCard
+                  <SwipeableCommentCard
                     comment={comment}
                     variant="full"
                     pageName={page?.name}
