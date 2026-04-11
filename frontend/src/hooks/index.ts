@@ -11,6 +11,7 @@
 export { useEscapeKey } from './useEscapeKey';
 export { useLandscape } from './useLandscape';
 export { useBodyScrollLock } from './useBodyScrollLock';
+export { useModalBackHandler, dismissTopModal } from './useModalBackHandler';
 export { useSwipe } from './useSwipe';
 export { useDebounce } from './useDebounce';
 export { useSSE } from './useSSE';

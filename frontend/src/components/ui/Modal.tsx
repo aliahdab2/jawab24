@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 
 interface ModalProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
   // Reusable hooks
   useBodyScrollLock(isOpen);
   useEscapeKey(onClose, isOpen);
+  useModalBackHandler(isOpen, onClose);
 
   if (!isOpen || !mounted) return null;
 

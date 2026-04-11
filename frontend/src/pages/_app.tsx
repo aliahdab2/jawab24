@@ -16,6 +16,7 @@ import { Toaster } from 'sonner';
 import { isNativePlatform } from '@/lib/capacitor';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
+import { dismissTopModal } from '@/hooks/useModalBackHandler';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useSSE, useTheme } from '@/hooks';
@@ -193,24 +194,32 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       listenersRef.current.push(() => kbHideListener.remove());
 
       // Handle hardware back button (Android) - Industry Standard
-      // Exit app when on root screens, otherwise go back in history
+      // Priority: close open modal/overlay first, then navigate back, then exit.
       const ROOT_SCREENS = ['/dashboard', '/login', '/'];
-      
+
+      // Track in-app navigation depth reliably.
+      // window.history.length is a cumulative session counter that never resets —
+      // deep-linking into the app can give length=15 with no real back destination.
+      // We maintain our own counter that only counts navigations within this session.
+      let navDepth = 0;
+      const onRouteChangeComplete = () => { navDepth++; };
+      routerRef.current.events.on('routeChangeComplete', onRouteChangeComplete);
+      listenersRef.current.push(() => routerRef.current.events.off('routeChangeComplete', onRouteChangeComplete));
+
       const backListener = await App.addListener('backButton', () => {
+        // 1. Dismiss topmost open modal/overlay first (Android user expectation)
+        if (dismissTopModal()) return;
+
         const router = routerRef.current;
         const currentPath = router.pathname;
-        
-        // Check if we're on a root screen (no meaningful "back" destination)
         const isRootScreen = ROOT_SCREENS.includes(currentPath);
-        
-        // Also check if browser history has somewhere to go
-        const hasHistory = window.history.length > 1;
-        
-        if (isRootScreen || !hasHistory) {
-          // On root screen or no history - exit app (like WhatsApp, Instagram)
+
+        // 2. Exit if on a root screen or no in-app navigation has happened
+        if (isRootScreen || navDepth === 0) {
           App.exitApp();
         } else {
-          // Has history and not on root - go back
+          // 3. Navigate back within the app
+          navDepth = Math.max(0, navDepth - 1);
           router.back();
         }
       });

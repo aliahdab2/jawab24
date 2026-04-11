@@ -6,6 +6,7 @@ import { Button } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { pagesApi } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import type { KnowledgeSection, SectionId, CustomSectionId, KbGap } from './types';
@@ -71,6 +72,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
 
   // Lock body scroll while modal is open
   useBodyScrollLock(true);
+  useModalBackHandler(true, onClose);
 
   // ESC to close
   useEscapeKey(onClose, true);
