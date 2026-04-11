@@ -380,7 +380,11 @@ export function MessageDetailModal({
                       <span>{t('voiceMessage')}</span>
                     </div>
                   )}
-                  <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(msg.message)}</p>
+                  {msg.attachmentType === 'sticker' ? (
+                    <p className="text-2xl leading-relaxed">👍</p>
+                  ) : (
+                    <p className="text-sm leading-relaxed italic-arabic" dir="auto">{renderMessageText(msg.message)}</p>
+                  )}
                 </div>
                 <div className={clsx(
                   "flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter",

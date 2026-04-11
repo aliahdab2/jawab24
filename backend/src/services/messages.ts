@@ -316,7 +316,7 @@ export class MessagesService {
         senderId: string,
         replyText: string,
         replyMethod: 'template' | 'ai' | 'manual',
-        conn: DbConn = db
+        conn: DbConn = db,
     ): Promise<Message> {
         const [newMessage] = await conn.insert(messages)
             .values({

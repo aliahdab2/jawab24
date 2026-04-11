@@ -258,6 +258,16 @@ export function isRTL(text: string): boolean {
 }
 
 /**
+ * Detect comment language with fallback to post language.
+ * Used when a comment is punctuation-only or script-less (e.g. ".", "...", emojis)
+ * and the caller has the post/media content available as context.
+ */
+export function detectCommentLanguage(commentText: string, postMessage?: string | null): SupportedLanguage {
+    const lang = detectLanguageCode(commentText);
+    return lang !== 'unknown' ? lang : (postMessage ? detectLanguageCode(postMessage) : 'unknown');
+}
+
+/**
  * Map language code to full name
  */
 export function getLanguageName(code: SupportedLanguage): string {

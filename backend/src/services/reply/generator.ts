@@ -10,7 +10,7 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
-import { detectLanguageCode } from '../../utils/language';
+import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { countContentWords } from '../../utils/text';
 
 // Messages longer than this many content words are assumed to have complex/
@@ -198,17 +198,16 @@ export class ReplyGenerator {
         // Both @mentions and URLs contain Latin chars that pollute language detection
         // (e.g. "@Ali Ahdab" or "https://example.com" on an Arabic page → incorrectly 'en').
         // They also carry no message content the AI should respond to.
-        const commentForAI = text
-            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '') // @mentions (e.g. @Ali Ahdab)
-            .replace(/https?:\/\/\S+|www\.\S+/gi, '')              // URLs
-            .trim();
+        const commentForAI = this.stripCommentNoise(text);
 
-        // If stripping removed all content (mention/URL-only comment) and there is no post context,
-        // there is nothing for the AI to respond to. Signal SPAM_OR_IRRELEVANT so the processor
-        // resolves it silently without wasting an API call.
-        // When postMessage exists, pass through to the AI — a dot on an engagement post
-        // ("علق لتصلك الأسعار") deserves a contextual reply, not a silent dismiss.
+        // Punctuation/emoji-only comment (dots, emojis, symbols) with no post context = spam.
+        // If postMessage is present, pass to AI — it has the full post text to judge whether
+        // this was an intentional engagement response. The exact-match cache means the AI call
+        // only happens once per (comment, post) pair regardless of how many people comment the same dot.
         if (!commentForAI && !contextPostMessage) {
+            return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
+        }
+        if (commentForAI && this.isPunctuationOnly(commentForAI) && !contextPostMessage) {
             return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
         }
 
@@ -253,9 +252,7 @@ export class ReplyGenerator {
             // Language detection: use stripped text only — never fall back to raw text.
             // Empty commentForAI (mention/URL-only comment) returns 'unknown', which correctly
             // triggers the post-content fallback below instead of locking in 'en'.
-            const detectedLang = detectLanguageCode(commentForAI);
-            const effectiveLang = detectedLang !== 'unknown' ? detectedLang
-                : (postMessage ? detectLanguageCode(postMessage) : 'unknown');
+            const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
 
             // Pass commenter name as customerContext (same as DMs) so the AI addresses
             // the actual commenter, not a name extracted from an @mention.
@@ -520,17 +517,35 @@ export class ReplyGenerator {
             }
         }
 
-        // 2. RAG retrieval (uses shared resolveKnowledge — same logic as production)
+        // 2. For comments: strip noise, check for spam, detect language with postMessage fallback
+        let questionForAI = question;
+        if (channel === 'comment') {
+            questionForAI = this.stripCommentNoise(question);
+            const isEmptyQ = !questionForAI;
+            const isPunctuationQ = questionForAI ? this.isPunctuationOnly(questionForAI) : false;
+            if (isEmptyQ || (isPunctuationQ && !postMessage)) {
+                return {
+                    reply: null, replyMethod: 'skipped', templateName: null, ragMode,
+                    chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
+                    confidence: null, flags: [], needsAttention: false, cached: false,
+                    detectedLanguage: null, tokensUsed: 0, model: null, gapRecorded: false,
+                };
+            }
+        }
+
+        // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production)
         const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-            pageId, question, knowledgeBase, kbActiveVersion, channel,
+            pageId, questionForAI, knowledgeBase, kbActiveVersion, channel,
             conversationHistory, !!productCatalog,
         );
 
         // 4. Call AI
-        const detectedLang = detectLanguageCode(question);
+        const effectiveLang = channel === 'comment'
+            ? detectCommentLanguage(questionForAI, postMessage)
+            : detectLanguageCode(question);
         const aiResponse = await aiService.generateReply({
-            comment: question,
-            language: detectedLang !== 'unknown' ? detectedLang : undefined,
+            comment: questionForAI,
+            language: effectiveLang !== 'unknown' ? effectiveLang : undefined,
             ...(model ? { model } : {}),
             context: {
                 pageId,
@@ -619,6 +634,27 @@ export class ReplyGenerator {
      * asks about the same topic again. When true, the pipeline skips the template
      * and lets AI handle the follow-up with full conversation context.
      */
+
+    /**
+     * Returns true when a comment consists entirely of punctuation, symbols, or emojis
+     * (no real words in any script). Used to detect engagement-style dots/emojis.
+     */
+    private isPunctuationOnly(text: string): boolean {
+        return text.length > 0 && /^[\p{P}\p{S}\p{Z}\p{Emoji}\s]+$/u.test(text);
+    }
+
+
+    /**
+     * Strips @mentions and URLs from a comment — platform noise that pollutes
+     * language detection and carries no message content for the AI.
+     */
+    private stripCommentNoise(text: string): string {
+        return text
+            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '')
+            .replace(/https?:\/\/\S+|www\.\S+/gi, '')
+            .trim();
+    }
+
     private async isRepeatTemplate(
         result: GenerateReplyResult,
         aiEnabled: boolean,

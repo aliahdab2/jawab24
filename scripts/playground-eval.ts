@@ -2053,9 +2053,9 @@ const TEST_CASES: TestCase[] = [
         page: 'training',
         postMessage: 'دورة IELTS الجديدة - سجل الآن! أماكن محدودة.',
         expected: {
-            intent: ['SPAM_OR_IRRELEVANT'],
+            replyMethod: ['ai'],
         },
-        notes: 'Dot on normal (non-CTA) post — no call-to-action in postMessage, should be SPAM',
+        notes: 'Dot on post with postMessage — pipeline passes to AI to judge context, should not hard-skip',
     },
 
     // ===== Language detection edge cases (Category 7 extension) =====

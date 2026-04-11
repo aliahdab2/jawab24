@@ -196,10 +196,10 @@ export class FacebookService {
      * Uses /me/messages with recipient.comment_id which works for any commenter
      * without requiring prior Messenger interaction.
      */
-    async sendPrivateReplyToComment(pageAccessToken: string, commentId: string, text: string): Promise<void> {
+    async sendPrivateReplyToComment(pageAccessToken: string, commentId: string, text: string): Promise<{ recipientId: string }> {
         try {
-            await traced('sendPrivateReplyToComment', () =>
-                fbAxios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
+            const response = await traced('sendPrivateReplyToComment', () =>
+                fbAxios.post<{ recipient_id: string }>(`${FACEBOOK_GRAPH_API}/me/messages`, {
                     recipient: { comment_id: commentId },
                     message: { text },
                 }, {
@@ -208,6 +208,7 @@ export class FacebookService {
                     },
                 }),
             );
+            return { recipientId: response.data.recipient_id };
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 const fbError = error.response?.data?.error;

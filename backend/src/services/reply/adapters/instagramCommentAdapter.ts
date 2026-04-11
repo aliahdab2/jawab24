@@ -1,7 +1,7 @@
 import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { pickNudgeVariation } from '../nudge';
-import { detectLanguageCode } from '../../../utils/language';
+import { detectLanguageCode, detectCommentLanguage } from '../../../utils/language';
 import { t } from '../../../utils/i18n';
 import { db } from '../../../db';
 import { instagramMedia, instagramComments } from '../../../db/schema';
@@ -118,9 +118,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         postMessage?: string;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
-        const commentLang = detectLanguageCode(opts.commentMessage);
-        const effectiveLang = commentLang !== 'unknown' ? commentLang
-            : (opts.postMessage ? detectLanguageCode(opts.postMessage) : 'unknown');
+        const effectiveLang = detectCommentLanguage(opts.commentMessage, opts.postMessage);
         const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
         const dualReplyNudge = pickNudgeVariation(variationsMulti, effectiveLang);
 
@@ -152,7 +150,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             let publicText = opts.replyText;
             if (replyMode === 'dual' && !errorMsg) {
                 // Nudge already truncated by pickNudgeVariation
-                publicText = dualReplyNudge || t('dualNudgeDefault', commentLang);
+                publicText = dualReplyNudge || t('dualNudgeDefault', effectiveLang as 'ar' | 'en');
             }
             try {
                 await instagramService.replyToComment(

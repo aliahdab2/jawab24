@@ -4,7 +4,7 @@ import { commentsService } from '../../comments';
 import { facebookService } from '../../facebook';
 import { replySender, ReplyMode } from '../sender';
 import { pickNudgeVariation } from '../nudge';
-import { detectLanguageCode } from '../../../utils/language';
+import { detectCommentLanguage } from '../../../utils/language';
 import { mapToPlatformPage } from './shared';
 import type {
     CommentPlatformAdapter,
@@ -71,9 +71,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
 
         // Pick a random nudge variation for this comment's language,
         // falling back to post language for punctuation-only comments (e.g. ".", "..")
-        const commentLang = detectLanguageCode(opts.commentMessage);
-        const effectiveLang = commentLang !== 'unknown' ? commentLang
-            : (opts.postMessage ? detectLanguageCode(opts.postMessage) : 'unknown');
+        const effectiveLang = detectCommentLanguage(opts.commentMessage, opts.postMessage);
         const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
         const dualReplyNudge = pickNudgeVariation(variationsMulti, effectiveLang);
 

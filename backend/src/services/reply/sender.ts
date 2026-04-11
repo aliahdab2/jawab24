@@ -23,6 +23,8 @@ export interface SendCommentReplyOptions {
 export interface SendReplyResult {
     success: boolean;
     error?: string;
+    /** PSID of the DM recipient, present when a private message was successfully sent */
+    dmRecipientId?: string;
 }
 
 /**
@@ -60,13 +62,15 @@ export class ReplySender {
 
         let success = false;
         let errorMsg = '';
+        let dmRecipientId: string | undefined;
 
         // Private or Dual mode: Send DM via /me/messages with comment_id
         if (replyMode === 'private' || replyMode === 'dual') {
             try {
-                await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
+                const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
                 success = true;
-                this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode });
+                dmRecipientId = dm.recipientId;
+                this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
             } catch (error) {
                 this.logger.error('[Sender] Failed to send private reply', {
                     facebookCommentId,
@@ -115,7 +119,7 @@ export class ReplySender {
             }
         }
 
-        return { success, error: errorMsg || undefined };
+        return { success, dmRecipientId, error: errorMsg || undefined };
     }
 
     /**

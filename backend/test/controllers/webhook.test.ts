@@ -1079,6 +1079,46 @@ describe('Webhook Controller', () => {
             );
         });
 
+        it('should silently ignore Facebook Like button (👍) without sending a nudge', async () => {
+            // Facebook sends the Like button as type="image" with sticker_id in the payload.
+            // It should be stored as a sticker and NOT trigger a nudge reply.
+            mockGetPageByFacebookId.mockResolvedValue(mockPage);
+            mockRedisSet.mockResolvedValueOnce('OK');
+
+            const webhookPayload = {
+                object: 'page',
+                entry: [{
+                    id: 'page_123',
+                    time: Date.now(),
+                    messaging: [{
+                        sender: { id: 'user_123' },
+                        message: {
+                            mid: 'msg_like_sticker',
+                            attachments: [{ type: 'image', payload: { sticker_id: 369239263222822, url: 'https://example.com/like.png' } }],
+                        },
+                    }],
+                }],
+            };
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/webhook',
+                headers: { 'x-hub-signature-256': generateSignature(webhookPayload) },
+                payload: webhookPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            // Stored as sticker (not image)
+            expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
+                mockPage.id, 'msg_like_sticker', 'user_123', '[Sticker]', undefined, 'sticker',
+            );
+
+            // No nudge sent
+            expect(mockSendPrivateMessage).not.toHaveBeenCalled();
+        });
+
         it('should do nothing if page is not found', async () => {
             // getPageByFacebookId returns null (default) — both for disconnect check and processNonTextMessage
 

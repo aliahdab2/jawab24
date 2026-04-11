@@ -116,6 +116,15 @@ interface WebhookBody {
  * connected page can spawn dozens of goroutines that exhaust the DB connection pool.
  */
 const MAX_CONCURRENT_WEBHOOK_PROCESSING = 10;
+
+/**
+ * Resolve the effective attachment type from a Facebook/Instagram attachment object.
+ * The Like button (👍) arrives as type="image" with sticker_id in the payload —
+ * normalise it to "sticker" so nonTextHandler silently ignores it.
+ */
+function resolveAttachmentType(att: { type: string; payload?: Record<string, unknown> }): string {
+    return att.payload?.sticker_id !== undefined && att.payload.sticker_id !== null ? 'sticker' : att.type;
+}
 let activeWebhookProcessors = 0;
 
 export class WebhookController {
@@ -280,7 +289,7 @@ export class WebhookController {
                             await handleNonTextMessage(pageId, {
                                 senderId: messageEvent.sender.id,
                                 messageId: messageEvent.message.mid,
-                                attachmentType: att.type,
+                                attachmentType: resolveAttachmentType(att),
                                 attachmentUrl: att.payload?.url,
                                 attachmentId: att.payload?.id,
                                 attachmentTitle: att.payload?.title,
@@ -457,7 +466,7 @@ export class WebhookController {
                             await handleNonTextMessage(instagramAccountId, {
                                 senderId: messageEvent.sender.id,
                                 messageId: messageEvent.message.mid,
-                                attachmentType: att.type,
+                                attachmentType: resolveAttachmentType(att),
                                 attachmentUrl: att.payload?.url,
                                 attachmentId: att.payload?.id,
                                 attachmentTitle: att.payload?.title,

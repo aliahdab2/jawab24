@@ -309,6 +309,25 @@ describe('MessagesService', () => {
             expect(result.id).toBe('out-1');
             expect(db.insert).toHaveBeenCalled();
         });
+
+        it('should set createdTime close to now', async () => {
+            const inserted = mockDbRow({ id: 'out-2', direction: 'outgoing', replied: true });
+            let capturedValues: Record<string, unknown> = {};
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((vals) => {
+                    capturedValues = vals;
+                    return { returning: vi.fn().mockResolvedValue([inserted]) };
+                }),
+            } as any);
+
+            const before = Date.now();
+            await messagesService.storeOutgoingMessage('page-1', 'sender-1', 'Reply', 'ai');
+            const after = Date.now();
+
+            const stored = capturedValues.createdTime as Date;
+            expect(stored.getTime()).toBeGreaterThanOrEqual(before);
+            expect(stored.getTime()).toBeLessThanOrEqual(after);
+        });
     });
 
     // ───────────────────────────────────────────

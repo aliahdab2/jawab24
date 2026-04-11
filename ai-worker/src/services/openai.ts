@@ -626,7 +626,15 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
 
         if (request.context?.postMessage) {
             const safePost = sanitizeForPrompt(request.context.postMessage).replace(/"/g, "'").slice(0, 500);
-            prompt = `Post: "${safePost}"\n\n${prompt}`;
+            // When a punctuation/emoji-only comment arrives with a post, the pipeline already
+            // determined it's worth replying (the post may be an engagement CTA). Signal this
+            // to the AI so it evaluates in context rather than defaulting to SPAM_OR_IRRELEVANT.
+            const commentOnly = request.comment.trim();
+            const isPunctuationOnly = /^[\p{P}\p{S}\p{Z}\p{Emoji}\s]+$/u.test(commentOnly) && commentOnly.length > 0;
+            const postLabel = isPunctuationOnly
+                ? `Post (engagement post — evaluate comment in context of this post): "${safePost}"`
+                : `Post: "${safePost}"`;
+            prompt = `${postLabel}\n\n${prompt}`;
         }
 
         return prompt;

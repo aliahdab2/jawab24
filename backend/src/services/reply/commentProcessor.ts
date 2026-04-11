@@ -4,7 +4,7 @@ import { commentsService } from '../comments';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK } from './generator';
-import { detectLanguageCode } from '../../utils/language';
+import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -441,10 +441,14 @@ export class CommentProcessor {
             return { success: false, commentId: comment.id, error: sendResult.error };
         }
 
+        // Store outgoing DM so conversation history exists for future messages from this sender
+        if (sendResult.dmRecipientId) {
+            messagesService.storeOutgoingMessage(pageId, sendResult.dmRecipientId, replyText, replyMethod as 'template' | 'ai' | 'manual')
+                .catch(err => this.logger.error('[CommentProcessor] Failed to store outgoing DM', { err, pageId, fromId }));
+        }
+
         // Detect language from comment, falling back to post language for punctuation-only comments
-        const commentLang = detectLanguageCode(commentMessage);
-        const detectedLanguage = commentLang !== 'unknown' ? commentLang
-            : (opts.postMessage ? detectLanguageCode(opts.postMessage) : 'unknown');
+        const detectedLanguage = detectCommentLanguage(commentMessage, opts.postMessage);
         await adapter.markAsReplied(
             comment.id,
             replyText,

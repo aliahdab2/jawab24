@@ -48,6 +48,8 @@ export interface CommentReplyContext {
 export interface SendCommentResult {
     success: boolean;
     error?: string;
+    /** PSID of the DM recipient, present when a private message was successfully sent */
+    dmRecipientId?: string;
 }
 
 export interface CommentPlatformAdapter {
