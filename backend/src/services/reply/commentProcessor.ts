@@ -88,7 +88,7 @@ export class CommentProcessor {
             const isCommentsEnabled = workspaceSettingsService.isAutoReplyEnabledFromSettings(userSettings, 'comments');
 
             // 3. Find or create content entity (post/media)
-            const content = await adapter.findOrCreateContent(page.id, contentId);
+            const content = await adapter.findOrCreateContent(page.id, contentId, page.accessToken);
             if (!content.autoReplyEnabled) {
                 pipelineMetrics.record(pipeline, 'post_disabled');
                 // Store comment even if content is disabled (preserves Instagram behavior)
@@ -267,6 +267,9 @@ export class CommentProcessor {
                     // Resolve so the comment doesn't remain as "pending" in the merchant's view.
                     await commentsService.resolveComment(comment.id);
                     pipelineMetrics.record(pipeline, 'skipped_spam');
+                    this.logger.info(`[${platform}] Comment silently skipped as spam/irrelevant`, {
+                        commentId: comment.id, platformCommentId, aiIntent, commentMessage,
+                    });
                     return { success: true, commentId: comment.id };
                 }
 

@@ -57,7 +57,7 @@ export interface CommentPlatformAdapter {
     getPage(platformPageId: string): Promise<PlatformPage | null>;
 
     /** Find or create the content entity (post/media) for this comment */
-    findOrCreateContent(pageId: string, contentId: string): Promise<ContentEntity>;
+    findOrCreateContent(pageId: string, contentId: string, accessToken?: string): Promise<ContentEntity>;
 
     /** Store the incoming comment, return { comment, isNew } */
     storeComment(

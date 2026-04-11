@@ -323,7 +323,92 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
     });
 
     // =========================================================
-    // 6. Price hallucination → safe fallback text sent
+    // 6. Access token forwarded to findOrCreateContent
+    // =========================================================
+    it('passes page accessToken to findOrCreateContent so post message can be fetched', async () => {
+        const findOrCreateContent = vi.fn(async (_pageId: string, _postId: string, accessToken?: string): Promise<ContentEntity> => {
+            const post = await postsService.findOrCreateFromWebhook(_pageId, _postId, undefined, accessToken);
+            return {
+                id: post.id,
+                autoReplyEnabled: post.autoReplyEnabled ?? true,
+                message: post.message,
+            };
+        });
+
+        const adapter = createMockAdapter(platformPage, { findOrCreateContent });
+
+        await processor.processComment(
+            adapter, facebookPageId, 'post-fb-token-001', 'comment-fb-token-001',
+            'Hello!', fromId, fromName,
+        );
+
+        expect(findOrCreateContent).toHaveBeenCalledWith(
+            pageId,
+            'post-fb-token-001',
+            platformPage.accessToken,
+        );
+    });
+
+    // =========================================================
+    // 7. Punctuation-only comment, no post message → silent skip
+    // =========================================================
+    it('silently resolves a punctuation-only comment when post has no message', async () => {
+        mockGenerateForComment.mockResolvedValueOnce({
+            replyText: null,
+            replyMethod: 'ai' as const,
+            needsAttention: false,
+            flagReason: undefined,
+            aiIntent: 'SPAM_OR_IRRELEVANT',
+        });
+
+        const adapter = createMockAdapter(platformPage, {
+            findOrCreateContent: vi.fn().mockResolvedValue({
+                id: (await postsService.findOrCreateFromWebhook(pageId, 'post-fb-dot-001', undefined)).id,
+                autoReplyEnabled: true,
+                message: null,
+            }),
+        });
+
+        const result = await processor.processComment(
+            adapter, facebookPageId, 'post-fb-dot-001', 'comment-fb-dot-001',
+            '.', fromId, fromName,
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+
+        const metrics = await pipelineMetrics.getMetrics();
+        expect(metrics.counters['facebook_comment.skipped_spam']).toBe(1);
+    });
+
+    // =========================================================
+    // 8. Punctuation-only comment, post HAS message → AI reply sent
+    // =========================================================
+    it('sends AI reply for punctuation-only comment when post has an engagement message', async () => {
+        const post = await postsService.findOrCreateFromWebhook(
+            pageId, 'post-fb-dot-engagement-001', 'علق لتصلك الأسعار',
+        );
+
+        const adapter = createMockAdapter(platformPage, {
+            findOrCreateContent: vi.fn().mockResolvedValue({
+                id: post.id,
+                autoReplyEnabled: true,
+                message: 'علق لتصلك الأسعار',
+            }),
+        });
+
+        const result = await processor.processComment(
+            adapter, facebookPageId, 'post-fb-dot-engagement-001', 'comment-fb-dot-engagement-001',
+            '.', fromId, fromName,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyText).toBe('Mocked AI reply');
+        expect(adapter.sendReply).toHaveBeenCalledOnce();
+    });
+
+    // =========================================================
+    // 9. Price hallucination → safe fallback text sent
     // =========================================================
     it('replaces hallucinated price with safe fallback text', async () => {
         mockGenerateForComment.mockResolvedValueOnce({

@@ -29,8 +29,8 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         return mapToPlatformPage(page, { autoReplyEnabled: page.autoReplyEnabled ?? true });
     }
 
-    async findOrCreateContent(pageId: string, postId: string): Promise<ContentEntity> {
-        const post = await postsService.findOrCreateFromWebhook(pageId, postId, undefined);
+    async findOrCreateContent(pageId: string, postId: string, accessToken?: string): Promise<ContentEntity> {
+        const post = await postsService.findOrCreateFromWebhook(pageId, postId, undefined, accessToken);
         return {
             id: post.id,
             autoReplyEnabled: post.autoReplyEnabled ?? true,
