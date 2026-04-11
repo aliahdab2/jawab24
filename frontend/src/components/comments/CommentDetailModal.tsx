@@ -180,6 +180,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="comment-detail-modal-title"
         className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
@@ -197,7 +200,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
               <Sparkles className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-base font-semibold text-foreground truncate">
+              <h2 id="comment-detail-modal-title" className="text-base font-semibold text-foreground truncate">
                 {comment.fromName || tc('unknownUser')}
               </h2>
               {pageName && (

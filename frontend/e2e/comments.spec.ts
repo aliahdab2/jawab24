@@ -317,8 +317,8 @@ test.describe('Comment Detail Modal', () => {
     await setupPage(page);
     await page.locator('text=What are your business hours?').first().click();
 
-    // Modal should open with comment details heading
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    // Modal should open (identified by dialog role)
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
     // Sender name should appear
     await expect(page.locator('text=Jane Doe').first()).toBeVisible();
   });
@@ -327,7 +327,7 @@ test.describe('Comment Detail Modal', () => {
     await setupPage(page);
     await page.locator('text=What are your business hours?').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     // The comment text should be visible in the chat thread
     await expect(page.locator('text=What are your business hours?').nth(1)).toBeVisible();
@@ -337,7 +337,7 @@ test.describe('Comment Detail Modal', () => {
     await setupPage(page);
     await page.locator('text=What are your business hours?').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     // The existing reply should appear in the modal
     await expect(page.locator('text=We are open 9-5 daily.').first()).toBeVisible();
@@ -348,7 +348,7 @@ test.describe('Comment Detail Modal', () => {
     // Click the unreplied comment (John Smith)
     await page.locator('text=How much does it cost?').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     // Compose textarea should be in footer
     const textarea = page.locator(`textarea[aria-label="${t('comments.typeReply')}"]`);
@@ -361,7 +361,7 @@ test.describe('Comment Detail Modal', () => {
     // Click the replied comment (Jane Doe)
     await page.locator('text=What are your business hours?').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     // No compose textarea for replied comment
     const textarea = page.locator(`textarea[aria-label="${t('comments.typeReply')}"]`);
@@ -372,27 +372,27 @@ test.describe('Comment Detail Modal', () => {
     await setupPage(page);
     await page.locator('text=What are your business hours?').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     await page.locator(`button[aria-label="${t('comments.close')}"]`).click();
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 3000 });
   });
 
   test('should close modal when ESC is pressed', async ({ page }) => {
     await setupPage(page);
     await page.locator('text=What are your business hours?').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     await page.keyboard.press('Escape');
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).not.toBeVisible({ timeout: 3000 });
+    await expect(page.getByRole('dialog')).not.toBeVisible({ timeout: 3000 });
   });
 
   test('should show post context snippet in chat thread', async ({ page }) => {
     await setupPage(page);
     await page.locator('text=What are your business hours?').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     // Post context shown in chat area
     await expect(page.locator('text=Check out our new schedule!').first()).toBeVisible();
@@ -403,7 +403,7 @@ test.describe('Comment Detail Modal', () => {
     // Sara Ahmed's comment has needsAttention: true
     await page.locator('text=I need help with my order').first().click();
 
-    await expect(page.locator(`text=${t('comments.commentDetails')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').first()).toBeVisible({ timeout: 5000 });
 
     // Resolve / "Mark as handled" button should appear in footer
     await expect(page.locator(`button:has-text("${t('comments.resolve')}")`).first()).toBeVisible();
