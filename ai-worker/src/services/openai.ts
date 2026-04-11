@@ -720,14 +720,15 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
                         .replace(/#\d+|ORD-?\d+/gi, '')                                    // order IDs
                         .replace(/\d+%/g, '');                                              // percentages
 
-                    const priceCues = /(?:price|cost|costs|only|starts?\s*at|starting|for just|valued at|سعر|السعر|بسعر|قيمت[هة]|تكلفة|فقط|يبدأ من)/gi;
+                    const priceCues = /(?:price|cost|costs|only|starts?\s*at|starting|for just|valued at|سعر|السعر|بسعر|فقط|قيمت[هة]|تكلفة|يبدأ من)/gi;
                     let cueMatch: RegExpExecArray | null;
                     while ((cueMatch = priceCues.exec(sanitized)) !== null) {
                         const window = sanitized.slice(cueMatch.index, cueMatch.index + cueMatch[0].length + 30);
                         const numberInWindow = window.match(/\d+(?:[,.\u066B]\d+)*/);
                         if (numberInWindow) {
                             const num = numberInWindow[0];
-                            if (num && !kbNums.has(num)) {
+                            // Skip single-digit numbers ("3 أيام", "2 days") — not prices
+                            if (num && num.replace(/[,.\u066B]/g, '').length >= 2 && !kbNums.has(num)) {
                                 flags.push('price_not_in_kb');
                                 break;
                             }
