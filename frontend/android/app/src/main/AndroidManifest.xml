@@ -39,6 +39,7 @@
       android:theme="@style/AppTheme.NoActionBarLaunch"
       android:launchMode="singleTask"
       android:exported="true"
+      android:windowSoftInputMode="adjustResize"
     >
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -50,12 +51,23 @@
                  web server can exchange the code, causing "Error validating verification code". -->
 
             <!-- Custom URL Scheme: com.jawab24.app:// -->
-            <!-- Used by web callback to redirect back to app after auth -->
+            <!-- Kept for backwards compatibility with any existing deep links -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="com.jawab24.app" />
+            </intent-filter>
+
+            <!-- App Links: https://jawab24.com/auth/app-sync -->
+            <!-- Used by web callback after OAuth code exchange to return to app.
+                 android:autoVerify triggers verification against /.well-known/assetlinks.json
+                 at install time. When verified, Android opens this app directly and Chrome closes. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="jawab24.com" android:pathPrefix="/auth/app-sync" />
             </intent-filter>
         </activity>
 
