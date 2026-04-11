@@ -103,7 +103,7 @@ describe('CommentCard', () => {
     // Full text is in the DOM; CSS line-clamp handles visual truncation
     const span = screen.getByText(longMessage);
     expect(span).toBeInTheDocument();
-    expect(span.className).toContain('line-clamp-2');
+    expect(span.className).toContain('line-clamp-1');
   });
 
   it('shows resolve button when onResolve is provided', () => {

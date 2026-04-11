@@ -218,7 +218,7 @@ export const CommentCard = React.memo(function CommentCard({
                <div className="flex flex-col gap-1 w-full">
                  <div className="flex items-start gap-1 px-2 py-1 text-[11px] text-muted-foreground w-full">
                    <FileText className="w-3 h-3 flex-shrink-0 text-icon-muted mt-0.5" aria-hidden="true" />
-                   <span className="line-clamp-2 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
+                   <span className="line-clamp-1 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
                  </div>
                  {onTriggerClick && (
                    <button
@@ -244,7 +244,7 @@ export const CommentCard = React.memo(function CommentCard({
                   "px-4 py-2.5 bg-muted/70 dark:bg-muted/50 rounded-2xl rounded-ss-sm text-foreground text-sm leading-relaxed",
                   "transition-colors"
                )}>
-                 <p className={clsx(variant === 'compact' ? "line-clamp-3" : "whitespace-pre-wrap")} dir="auto">
+                 <p className={clsx(variant === 'compact' ? "line-clamp-2" : "whitespace-pre-wrap")} dir="auto">
                     {renderMessageText(comment.message)}
                  </p>
                </div>
