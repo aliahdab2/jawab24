@@ -291,7 +291,7 @@ export class OpenAIService {
         // Sanitize to prevent prompt injection via page name
         const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
         // When the message has no detectable language (e.g. "..." or emoji-only), infer from
-        // conversation history, then KB language, before defaulting to English.
+        // conversation history, then post language, then KB language, before defaulting to English.
         // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
         const language = request.language
             || request.context?.conversationHistory
@@ -300,6 +300,7 @@ export class OpenAIService {
                 .map(m => this.detectLanguage(m.content))
                 .find(Boolean)
             || this.detectLanguageOrNull(request.comment)
+            || this.detectLanguageOrNull(request.context?.postMessage || '')
             || this.detectLanguageOrNull(this.getKBText(request) || '')
             || 'en';
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
@@ -388,12 +389,13 @@ ${isDM
 - When you don't have the answer, say it naturally — "خليني أسأل الفريق وأرجعلك" or "Let me check on that for you" — not the same phrase every time.
 - NEVER repeat something already said in the conversation history. If a prior assistant reply already mentioned an offer, promotion, price, or brand note (e.g. "free trial class", "حصة مجانية"), do NOT mention it again — even if brand voice notes say "always mention X". The no-repetition rule wins over "always".
 - NEVER end your reply with generic offer-to-help closings. These phrases are a dead giveaway of a bot and must NOT appear: "إذا لزمك شي خبرني", "إذا احتجت شي أنا هنا", "لا تتردد بالتواصل", "أنا هنا لمساعدتك", "لا تتردد إذا عندك أسئلة", "feel free to ask", "let me know if you need anything", "don't hesitate to reach out", "I'm here to help", or any variation of these. Just answer and stop. If the customer needs more, they'll ask.
+- After listing prices or plans, do NOT append a prompt asking which one they want details about — e.g. do NOT add "بدك تفاصيل عن أي باقة؟" / "which plan would you like more info on?" End at the last item. Real sales agents list the options and let the customer respond naturally.
 - For Arabic messages: Reply in the SAME dialect the customer used. Match their style naturally (Egyptian, Levantine, Gulf, Maghrebi, Iraqi, or formal). Do NOT use formal Arabic when they use colloquial dialect.
 ${isDM
     ? '- IMPORTANT: You ARE the business\'s page assistant talking to customers via DM. When you say "contact us" or "message us", you ARE the contact point. Do NOT tell customers to "contact us directly" or "send a DM" when they are ALREADY talking to you in a DM. Instead, ask them for the details you need right here in the conversation.'
     : '- For public comments: keep it brief but answer the question directly from <business_knowledge>.\n- Example good comment reply (English): "We have 3 plans starting from $15/month! Check our website for full details 😊"\n- Example good comment reply (Arabic): "عنا 3 باقات تبدأ من 56 ريال/شهر! تفاصيل أكثر على موقعنا 😊"'}
 - If a customer asks for contact info (phone, email, address) and it IS in <business_knowledge>, share it. If it is NOT, say you'll get that info for them and someone from the team will follow up.
-${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (${isDM && request.context?.conversationHistory?.length ? 'guidelines from the business owner — incorporate naturally. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below' : 'follow these additional guidelines from the business owner'}):\n${sanitizeForPrompt(request.context.brandVoiceNotes).slice(0, 500)}\n` : ''}
+${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (guidelines from the business owner — incorporate naturally):\n${sanitizeForPrompt(request.context.brandVoiceNotes).slice(0, 500)}\n${isDM && request.context?.conversationHistory?.length ? 'IMPORTANT: Check the conversation history before applying any brand voice note. If a point (offer, promotion, price, phrase) was already stated by the assistant in this conversation, do NOT repeat it — even if the note says "always mention". The no-repeat rule overrides "always".\n' : ''}` : ''}
 ${request.context?.customerContext ? `\nCUSTOMER CONTEXT: ${sanitizeForPrompt(request.context.customerContext).slice(0, 300)}\n` : ''}
 CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
@@ -402,7 +404,7 @@ CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER make up availability, stock levels, or delivery dates
 - IMPORTANT: Inventory data in <business_knowledge> reflects the last sync and may not be real-time. When answering stock/availability questions, share what the data says but add: "Please verify availability before ordering" (or Arabic equivalent). Never guarantee current stock.
 - NEVER invent dates, deadlines, schedules, or time-limited offers (e.g., "registration ends tomorrow") unless explicitly stated
-- NEVER invent payment terms, installment plans, or included items (e.g., "books included", "transport provided") unless explicitly stated
+- NEVER invent payment terms, payment methods (bank transfer, cash, credit card, مدى, Apple Pay, online payment, etc.), installment plans, or included items (e.g., "books included", "transport provided") unless explicitly stated in <business_knowledge>. If the customer asks how to pay and it is not in <business_knowledge>, say you will check and get back to them.
 - NEVER provide specific numbers (quantities, percentages, dimensions) unless given in context
 - NEVER promise refunds, exchanges, or returns unless the policy is explicitly in <business_knowledge>
 - NEVER confirm warranty terms, tax invoice availability, or return policies unless explicitly stated in <business_knowledge>
@@ -577,7 +579,7 @@ Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}`;
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}`;
 
         return prompt;
     }
@@ -752,28 +754,36 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
         // Short Latin-only tokens (acronyms like "Icdl", "WiFi", "USB") are commonly typed by
         // Arabic speakers and carry no real language signal. When the KB and the reply agree on
         // language, we treat the comment as language-neutral and skip the mismatch flag.
+        // For emoji/punctuation/sticker comments (no script detected), fall back to post language
+        // then KB language as the expected language signal.
         if (reply) {
             const commentLang = this.detectLanguageOrNull(request.comment);
+            const postLang = this.detectLanguageOrNull(request.context?.postMessage || '');
             const kbLang = this.detectLanguageOrNull(this.getKBText(request) || '');
             const replyLang = this.detectLanguage(reply);
 
-            // A comment is "ambiguous Latin" when it's short (≤2 words), contains only ASCII
-            // letters/digits, and the KB language matches the reply language. Classic case:
-            // Arabic user types an English acronym on an Arabic-language page.
-            const words = request.comment.trim().split(/\s+/);
-            const isAmbiguousLatin = commentLang === 'en'
-                && words.length <= 2
-                && /^[a-zA-Z0-9\s]+$/.test(request.comment.trim())
-                && kbLang === replyLang;
+            // Effective input language: comment → post → KB → skip (no signal anywhere)
+            const effectiveInputLang = commentLang ?? postLang ?? kbLang;
 
-            const inputLang = isAmbiguousLatin
-                ? replyLang                    // KB + reply agree — no mismatch
-                : (commentLang || kbLang || 'en');
+            if (effectiveInputLang !== null) {
+                // A comment is "ambiguous Latin" when it's short (≤2 words), contains only ASCII
+                // letters/digits, and the KB language matches the reply language. Classic case:
+                // Arabic user types an English acronym on an Arabic-language page.
+                const words = request.comment.trim().split(/\s+/);
+                const isAmbiguousLatin = commentLang === 'en'
+                    && words.length <= 2
+                    && /^[a-zA-Z0-9\s]+$/.test(request.comment.trim())
+                    && kbLang === replyLang;
 
-            if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
-                flags.push('language_mismatch');
-                flags.push(`expected_lang:${inputLang}`);
-                flags.push(`reply_lang:${replyLang}`);
+                const inputLang = isAmbiguousLatin
+                    ? replyLang                    // KB + reply agree — no mismatch
+                    : effectiveInputLang;
+
+                if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
+                    flags.push('language_mismatch');
+                    flags.push(`expected_lang:${inputLang}`);
+                    flags.push(`reply_lang:${replyLang}`);
+                }
             }
         }
 

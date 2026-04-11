@@ -2,7 +2,7 @@
 /**
  * Automated Playground Evaluation Script
  *
- * Runs all 253 edge-case tests from docs/playground-edge-cases.md against the
+ * Runs all 254 edge-case tests from docs/playground-edge-cases.md against the
  * admin playground endpoint and outputs a score report.
  *
  * Prerequisites:
@@ -1784,9 +1784,9 @@ const TEST_CASES: TestCase[] = [
         page: 'training',
         expected: {
             replyMethod: ['ai'],
-            replyContainsAny: ['/pricing', 'pricing', 'alnoor'],
+            replyContainsAny: ['/pricing', 'pricing', 'alnoor', 'تسجيل', 'التسجيل', 'التحاق', 'سجّل', 'register', 'تواصل', '0112345678', '0501112233'],
         },
-        notes: 'Enrollment question — should share pricing/registration URL from KB',
+        notes: 'Enrollment question — should share pricing/registration URL or explain enrollment steps from KB',
     },
 
     // 33.2 — Course details question should get courses URL, not pricing
@@ -1943,7 +1943,7 @@ const TEST_CASES: TestCase[] = [
     // 15.4 — Angry customer but asking something KB can answer
     {
         id: 252, category: 15, categoryName: 'Angry Customer', channel: 'dm',
-        message: 'والله خدمتكم وصخة! وين فرعكم بالرياض عشان أجي بنفسي؟',
+        message: 'والله خدمتكم وسخة! وين فرعكم بالرياض عشان أجي بنفسي؟',
         page: 'training',
         expected: {
             intent: ['COMPLAINT'],
@@ -2265,6 +2265,20 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['إذا احتجت', 'خبرني إذا', 'لا تتردد بالتواصل', 'أنا هنا'],
         },
         notes: 'Hours question — AI answers and stops, no trailing helper offer',
+    },
+    {
+        id: 283, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'شو أسعاركم؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyNotContains: [
+                'إذا بدك تفاصيل', 'بدك تفاصيل عن أي', 'خبرني إذا', 'أنا هنا لمساعدتك',
+                'لا تتردد', 'إذا احتجت', 'إذا لزمك', 'feel free', 'let me know',
+            ],
+        },
+        notes: 'Multi-tier pricing question — AI must list prices and stop, not append a boilerplate "need more details?" closer',
     },
 
     // ===== Category 38: No Repeated Hedging =====

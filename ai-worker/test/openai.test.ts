@@ -1511,6 +1511,79 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('language_mismatch');
     });
 
+    it('should NOT flag language_mismatch when comment is emoji-only', async () => {
+        setupMock(JSON.stringify({
+            reply: 'شكراً لتفاعلك! 😊',
+            intent: 'COMPLIMENT',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: '👍',
+            context: { channel: 'comment' },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
+    it('should NOT flag language_mismatch when comment is punctuation-only', async () => {
+        setupMock(JSON.stringify({
+            reply: 'شكراً!',
+            intent: 'COMPLIMENT',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: '...',
+            context: { channel: 'comment' },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
+    it('should NOT flag language_mismatch when emoji comment on Arabic post and reply is Arabic', async () => {
+        setupMock(JSON.stringify({
+            reply: 'شكراً لتفاعلك! 😊',
+            intent: 'COMPLIMENT',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: '👍',
+            context: { channel: 'comment', postMessage: 'تعرف على أحدث عروضنا!' },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
+    it('should flag language_mismatch when emoji comment on Arabic post but reply is English', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Thank you for your interest!',
+            intent: 'COMPLIMENT',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: '👍',
+            context: { channel: 'comment', postMessage: 'تعرف على أحدث عروضنا!' },
+        });
+
+        expect(result.flags).toContain('language_mismatch');
+        expect(result.flags).toContain('expected_lang:ar');
+    });
+
     it('should NOT check language mismatch for empty replies (OFFENSIVE/SPAM)', async () => {
         setupMock(JSON.stringify({
             reply: '',
