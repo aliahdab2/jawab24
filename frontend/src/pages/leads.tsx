@@ -226,7 +226,7 @@ const LeadsPage: NextPageWithLayout = () => {
       queryClient.invalidateQueries({ queryKey: ['leads', selectedPageId] });
     },
     onError: (err) => {
-      captureError(err);
+      captureError(err, 'Failed to update lead status');
       toast.error(t('statusUpdateFailed'));
     },
   });
@@ -239,7 +239,7 @@ const LeadsPage: NextPageWithLayout = () => {
       queryClient.invalidateQueries({ queryKey: ['leads', selectedPageId] });
     },
     onError: (err) => {
-      captureError(err);
+      captureError(err, 'Failed to delete lead');
       toast.error(t('deleteFailed'));
     },
   });
@@ -281,7 +281,7 @@ const LeadsPage: NextPageWithLayout = () => {
       const pageName = selectedPage?.name ?? 'leads';
       downloadCSV(`leads-${pageName}-${Date.now()}.csv`, headers, rows);
     } catch (err) {
-      captureError(err);
+      captureError(err, 'Failed to export leads CSV');
     } finally {
       setExporting(false);
     }
