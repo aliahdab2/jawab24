@@ -1407,6 +1407,13 @@
   padding-bottom: max(16px, calc(var(--sai-bottom) + 8px));
 }
 
+/* keyboard-open: keyboard overlays the screen (KeyboardResize.None, both platforms).
+   The backdrop is pushed up via --keyboard-height; the safe-area padding inside
+   the modal footer is no longer needed — set to 0 so there is no gap. */
+.is-native.keyboard-open .pb-safe-modal {
+  padding-bottom: 0;
+}
+
 @media (orientation: landscape) {
   .is-native .pb-safe-modal {
     padding-bottom: 12px;

@@ -124,13 +124,16 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     }).catch(() => {});
 
     // Track keyboard height via visualViewport API.
-    // With KeyboardResize.None on iOS, visualViewport accurately reflects keyboard height.
-    // Capacitor keyboard events serve as backup (added in initNativePlatform).
+    // With KeyboardResize.None (both platforms), the viewport stays fixed so
+    // window.innerHeight - vv.height accurately measures the keyboard height.
+    // This drives --keyboard-height and keyboard-open alongside the Capacitor
+    // events registered in initNativePlatform (belt-and-suspenders).
     const vv = window.visualViewport;
     if (vv) {
       const updateKeyboardHeight = () => {
         const kbHeight = Math.max(0, window.innerHeight - vv.height);
         document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
+        document.documentElement.classList.toggle('keyboard-open', kbHeight > 50);
       };
       vv.addEventListener('resize', updateKeyboardHeight);
     }
@@ -167,7 +170,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       // Note: is-native class is already added in the earlier useEffect
 
       // StatusBar overlay/style already configured in the early useEffect above
-      const [{ StatusBar, Style }, { Keyboard, KeyboardResize }, { App }, { SplashScreen }, { Network }] = await Promise.all([
+      const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
         import("@capacitor/status-bar"),
         import("@capacitor/keyboard"),
         import("@capacitor/app"),
@@ -184,7 +187,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           import('@/lib/keyboardSetup'),
         ]);
         isAndroid = getCapacitor()?.getPlatform() === 'android';
-        kbCleanup = await setupKeyboard(Keyboard, KeyboardResize.Body, isAndroid);
+        kbCleanup = await setupKeyboard(Keyboard, isAndroid);
       } catch (err) {
         addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
       }
