@@ -96,7 +96,8 @@ export default function AuthCallback() {
           const tokenStr = encodeURIComponent(linkData.token);
           const fbTokenStr = encodeURIComponent(linkData.fbAccessToken || '');
           const userStr = encodeURIComponent(JSON.stringify(linkData.user));
-          window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
+          // intent:// tells Chrome to close itself when handing off to the app (com.jawab24.app://)
+          window.location.href = `intent://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}#Intent;scheme=com.jawab24.app;package=com.jawab24.app;S.browser_fallback_url=${encodeURIComponent('https://jawab24.com')};end`;
           return;
         }
 
@@ -176,7 +177,8 @@ export default function AuthCallback() {
           const tokenStr = encodeURIComponent(data.token);
           const fbTokenStr = encodeURIComponent(data.fbAccessToken);
           const userStr = encodeURIComponent(JSON.stringify(data.user));
-          window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
+          // intent:// tells Chrome to close itself when handing off to the app (com.jawab24.app://)
+          window.location.href = `intent://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}#Intent;scheme=com.jawab24.app;package=com.jawab24.app;S.browser_fallback_url=${encodeURIComponent('https://jawab24.com')};end`;
           return;
         }
 
@@ -223,7 +225,8 @@ export default function AuthCallback() {
         const redirectStr = encodeURIComponent(safeUrl);
         const userStr = encodeURIComponent(JSON.stringify(data.user));
 
-        window.location.href = `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`;
+        // intent:// tells Chrome to close itself when handing off to the app (com.jawab24.app://)
+        window.location.href = `intent://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}#Intent;scheme=com.jawab24.app;package=com.jawab24.app;S.browser_fallback_url=${encodeURIComponent('https://jawab24.com')};end`;
         return;
       }
 

@@ -218,6 +218,9 @@ describe('CheckoutPage', () => {
       expect(screen.getByText('Log In')).toBeInTheDocument();
     });
 
+    // Flush all pending async effects before asserting (plan may still be loading)
+    await act(async () => {});
+
     // Should NOT create checkout session
     expect(mockApiPost).not.toHaveBeenCalled();
   });

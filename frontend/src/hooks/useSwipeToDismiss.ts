@@ -227,6 +227,8 @@ export function useSwipeToDismiss({
         const clearTransition = () => {
           element.removeEventListener('transitionend', clearTransition);
           element.style.transition = '';
+          element.style.transform = '';  // Remove translateX(0px) to avoid persistent stacking context
+          element.style.opacity = '';
         };
         element.addEventListener('transitionend', clearTransition, { once: true });
         setTimeout(clearTransition, SNAP_BACK_MS + 50);
@@ -243,6 +245,15 @@ export function useSwipeToDismiss({
       element.style.transition = `transform ${SNAP_BACK_MS}ms ease-out, opacity ${SNAP_BACK_MS}ms ease-out`;
       element.style.transform = 'translateX(0px)';
       element.style.opacity = '1';
+
+      const clearOnCancel = () => {
+        element.removeEventListener('transitionend', clearOnCancel);
+        element.style.transition = '';
+        element.style.transform = '';
+        element.style.opacity = '';
+      };
+      element.addEventListener('transitionend', clearOnCancel, { once: true });
+      setTimeout(clearOnCancel, SNAP_BACK_MS + 50);
 
       try {
         element.releasePointerCapture(e.pointerId);
