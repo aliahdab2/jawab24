@@ -1005,18 +1005,20 @@
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Custom scrollbar */
+/* Custom scrollbar — desktop only. Hidden on touch/native (pointer: coarse). */
+@media (pointer: fine) {
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
 
-::-webkit-scrollbar-track {
-  @apply bg-muted rounded-full;
-}
+  ::-webkit-scrollbar-track {
+    @apply bg-muted rounded-full;
+  }
 
-::-webkit-scrollbar-thumb {
-  @apply bg-surface-300 rounded-full hover:bg-surface-400;
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-300 rounded-full hover:bg-surface-400;
+  }
 }
 
 /* Animations */
@@ -1407,11 +1409,21 @@
   padding-bottom: max(16px, calc(var(--sai-bottom) + 8px));
 }
 
-/* keyboard-open: keyboard overlays the screen (KeyboardResize.None, both platforms).
-   The backdrop is pushed up via --keyboard-height; the safe-area padding inside
-   the modal footer is no longer needed — set to 0 so there is no gap. */
+/* keyboard-open: keyboard overlays the screen.
+   The safe-area padding inside the modal footer is no longer needed when the keyboard
+   is up — set to 0 so there is no gap. */
 .is-native.keyboard-open .pb-safe-modal {
   padding-bottom: 0;
+}
+
+/* Android: defence-in-depth fallback using dynamic viewport height.
+   With adjustNothing the Capacitor WebView does not update dvh when the keyboard
+   opens, so --keyboard-height (set by keyboardDidShow) is the primary mechanism.
+   dvh may help on future WebView versions or configurations where it does update.
+   `bottom: auto` overrides inset-0's `bottom: 0` so height drives the size. */
+.is-android .modal-overlay {
+  height: 100dvh;
+  bottom: auto;
 }
 
 @media (orientation: landscape) {

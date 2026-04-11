@@ -1,20 +1,26 @@
-import type { KeyboardPlugin, KeyboardResizeOptions } from '@capacitor/keyboard';
+import type { KeyboardPlugin } from '@capacitor/keyboard';
 
 /**
- * Sets up keyboard resize mode and CSS class / variable tracking.
+ * Sets up keyboard CSS class / variable tracking.
  *
  * capacitor.config.ts sets KeyboardResize.None globally (required for iOS).
- * Android overrides to Body at runtime here so the WebView resizes naturally
- * with the keyboard (adjustResize). This makes keyboardDidShow/DidHide fire
- * reliably — they do NOT fire correctly with adjustNothing on many devices
- * because Android's getWindowVisibleDisplayFrame returns the same value before
- * and after the keyboard appears when the window isn't being adjusted.
+ * No runtime resize mode change is made for Android — setResizeMode is a
+ * confirmed no-op on Android (the native method body is `call.unimplemented()`).
  *
- * Android (KeyboardResize.Body / adjustResize):
- *   - Viewport shrinks when keyboard appears — no --keyboard-height needed.
- *   - keyboardDidShow/DidHide toggle the `keyboard-open` class on <html>.
- *   - CSS: .is-native.keyboard-open .pb-safe-modal { padding-bottom: 0 }
- *     eliminates the safe-area gap in modal footers.
+ * Android (adjustNothing — windowSoftInputMode in AndroidManifest.xml):
+ *   - The OS never pans or resizes the WebView. The keyboard overlaps the viewport.
+ *   - keyboardDidShow fires (via WindowInsetsAnimationCompat regardless of soft-input mode)
+ *     and sets --keyboard-height. Modal backdrops use paddingBottom: var(--keyboard-height)
+ *     to lift content above the keyboard.
+ *   - keyboardDidHide clears --keyboard-height to 0.
+ *   - keyboard-open class collapses pb-safe-modal safe-area padding while keyboard is up.
+ *
+ *   Why adjustNothing and not adjustResize/adjustPan:
+ *   - adjustResize is deprecated on API 30+ for edge-to-edge apps (ignored by OS).
+ *   - When adjustResize is ignored, the OS may fall back to adjustPan, which pans the
+ *     entire WebView upward. Combined with our paddingBottom compensation this
+ *     double-compensates: the input appears far above the keyboard.
+ *   - adjustNothing prevents any OS intervention. We own all compensation via CSS.
  *
  * iOS (KeyboardResize.None — from config, no setResizeMode call here):
  *   - WKWebView must never be resized (distorts layout permanently).
@@ -24,32 +30,30 @@ import type { KeyboardPlugin, KeyboardResizeOptions } from '@capacitor/keyboard'
  *
  * Returns cleanup functions to remove all event listeners.
  */
+function setKeyboardHeight(px: number): void {
+  document.documentElement.style.setProperty('--keyboard-height', `${px}px`);
+}
+
+function setKeyboardOpen(open: boolean): void {
+  document.documentElement.classList.toggle('keyboard-open', open);
+}
+
 export async function setupKeyboard(
-  Keyboard: Pick<KeyboardPlugin, 'setResizeMode' | 'addListener'>,
+  Keyboard: Pick<KeyboardPlugin, 'addListener'>,
   isAndroid: boolean
 ): Promise<Array<() => void>> {
   const cleanup: Array<() => void> = [];
 
   if (isAndroid) {
-    // Override capacitor.config.ts 'none' → 'body' (adjustResize).
-    // With adjustResize, keyboardDidShow fires reliably and carries the
-    // correct keyboard height; the viewport shrinks so we don't use
-    // --keyboard-height for the backdrop (it would double-compensate).
-    //
-    // Wrapped in try-catch so a failure (e.g. API 30+ ignoring the mode
-    // change for edge-to-edge apps) does NOT abort listener registration.
-    // Listeners work correctly regardless of the active resize mode.
-    try {
-      await Keyboard.setResizeMode({ mode: 'body' as KeyboardResizeOptions['mode'] });
-    } catch {
-      // Ignore — listener registration continues below.
-    }
-
-    const kbShowListener = await Keyboard.addListener('keyboardDidShow', () => {
-      document.documentElement.classList.add('keyboard-open');
+    // adjustNothing: OS never pans/resizes, so window.innerHeight stays constant.
+    // keyboardDidShow always has the correct keyboard height from WindowInsetsAnimationCompat.
+    const kbShowListener = await Keyboard.addListener('keyboardDidShow', (info) => {
+      setKeyboardHeight(info.keyboardHeight);
+      setKeyboardOpen(true);
     });
     const kbHideListener = await Keyboard.addListener('keyboardDidHide', () => {
-      document.documentElement.classList.remove('keyboard-open');
+      setKeyboardHeight(0);
+      setKeyboardOpen(false);
     });
     cleanup.push(() => kbShowListener.remove());
     cleanup.push(() => kbHideListener.remove());
@@ -59,12 +63,12 @@ export async function setupKeyboard(
   // iOS: KeyboardResize.None is already set by capacitor.config.ts.
   // keyboardWillShow fires before the animation completes, shifting layout smoothly.
   const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
-    document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
-    document.documentElement.classList.add('keyboard-open');
+    setKeyboardHeight(info.keyboardHeight);
+    setKeyboardOpen(true);
   });
   const kbHideListener = await Keyboard.addListener('keyboardWillHide', () => {
-    document.documentElement.style.setProperty('--keyboard-height', '0px');
-    document.documentElement.classList.remove('keyboard-open');
+    setKeyboardHeight(0);
+    setKeyboardOpen(false);
   });
   cleanup.push(() => kbShowListener.remove());
   cleanup.push(() => kbHideListener.remove());

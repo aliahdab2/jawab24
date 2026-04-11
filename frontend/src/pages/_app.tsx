@@ -125,34 +125,30 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
 
     // Track --keyboard-height and keyboard-open via visualViewport API.
     //
-    // On iOS (KeyboardResize.None): vv.height shrinks while window.innerHeight
-    // stays fixed → kbHeight = keyboard height. Works perfectly.
+    // Primary use: iOS (KeyboardResize.None). vv.height shrinks while window.innerHeight
+    // stays fixed → kbHeight = keyboard height. Fires during animation for smooth layout.
     //
-    // On Android (modern, API 30+ edge-to-edge): even though setResizeMode('body')
-    // requests adjustResize, the system may ignore the mode change for edge-to-edge
-    // apps. However, vv.height is always updated by the Insets API regardless of
-    // windowSoftInputMode → kbHeight correctly reflects the keyboard height.
-    //
-    // On Android (older, adjustResize active): both window.innerHeight and vv.height
-    // shrink equally → kbHeight stays 0. In this case keyboard-open is handled
-    // exclusively by Capacitor's keyboardDidShow event in initNativePlatform.
-    //
-    // Rule: this handler ONLY adds keyboard-open (never removes it). Removal is
-    // owned by Capacitor keyboardDidHide/keyboardWillHide to avoid a race where
-    // vv fires kbHeight=0 on adjustResize after keyboardDidShow already set the class.
+    // Android: windowSoftInputMode=adjustNothing means neither window.innerHeight nor
+    // vv.height changes when keyboard opens. This handler is effectively a no-op on
+    // Android; keyboardDidShow in keyboardSetup.ts is the authoritative source there.
     const vv = window.visualViewport;
+    let removeVv: (() => void) | undefined;
     if (vv) {
       const updateKeyboardHeight = () => {
         const kbHeight = Math.max(0, window.innerHeight - vv.height);
-        document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
         if (kbHeight > 50) {
+          document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
           document.documentElement.classList.add('keyboard-open');
         }
       };
       vv.addEventListener('resize', updateKeyboardHeight);
+      removeVv = () => vv.removeEventListener('resize', updateKeyboardHeight);
     }
 
-    return () => clearTimeout(splashTimeout);
+    return () => {
+      clearTimeout(splashTimeout);
+      removeVv?.();
+    };
   }, []); // Empty deps = runs once on mount
 
   // Sync Next.js locale with language store
@@ -201,6 +197,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           import('@/lib/keyboardSetup'),
         ]);
         isAndroid = getCapacitor()?.getPlatform() === 'android';
+        if (isAndroid) {
+          document.documentElement.classList.add('is-android');
+        }
         kbCleanup = await setupKeyboard(Keyboard, isAndroid);
       } catch (err) {
         addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
