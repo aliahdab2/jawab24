@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { Badge, PlatformIcon, FlagTag, PauseToggle, SmartReplyButton } from '@/components/ui';
+import { PlatformIcon, FlagTag, PauseToggle, SmartReplyButton } from '@/components/ui';
 import { isKbRelatedFlag } from '@/utils/flagReason';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
@@ -31,9 +31,7 @@ import {
   ExternalLink,
   CheckCircle,
   Undo2,
-  PauseCircle,
   FileText,
-  ChevronRight,
   Hash,
 } from 'lucide-react';
 
@@ -166,9 +164,17 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     }
   };
 
+  const accentColor = needsAttention
+    ? 'bg-amber-500'
+    : comment.resolved
+    ? 'bg-emerald-500'
+    : pauseStatus?.paused
+    ? 'bg-blue-400'
+    : 'bg-brand-500';
+
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
+      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
       style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
@@ -178,29 +184,22 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1.5 px-4 md:px-6 pt-3 pb-0 text-xs text-muted-foreground">
-          <span className="font-medium">{t('title')}</span>
-          <ChevronRight className="w-3 h-3 rtl:rotate-180" />
-          <span className="font-semibold text-muted-foreground truncate">{comment.fromName || tc('unknownUser')}</span>
-        </div>
+        {/* Status accent bar */}
+        <div className={clsx('h-1 flex-shrink-0', accentColor)} />
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 md:p-6 pt-2 md:pt-3 border-b border-theme-border flex-shrink-0">
+        <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             <div className={clsx(
-              'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0',
+              'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0',
               needsAttention ? 'icon-bg-red' : 'icon-bg-brand'
             )}>
-              <Sparkles className="w-5 h-5" />
+              <Sparkles className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold text-foreground truncate">
-                {mode === 'quick' ? t('reply') : t('commentDetails')}
-              </h2>
-              <p className="text-sm text-muted-foreground truncate">
+              <h2 className="text-base font-semibold text-foreground truncate">
                 {comment.fromName || tc('unknownUser')}
-              </p>
+              </h2>
               {pageName && (
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <PlatformIcon
@@ -220,35 +219,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                     <span className="text-[10px] font-medium text-muted-foreground truncate">
                       {pageName}
                     </span>
-                  )}
-                </div>
-              )}
-              {(pauseStatus?.paused || needsAttention) && (
-                <div className="flex items-center gap-2 mt-1">
-                  {pauseStatus?.paused && (
-                    <Badge variant="info">
-                      <PauseCircle className="w-3 h-3 me-1" />
-                      {tMessages('smartReplyPaused')}
-                    </Badge>
-                  )}
-                  {needsAttention && (
-                    <>
-                      <Badge variant="warning">
-                        <AlertTriangle className="w-3 h-3 me-1" />
-                        {t('needsAttention')}
-                      </Badge>
-                      <FlagTag flagReason={comment.flagReason} />
-                      {isKbFlag && (
-                        <Link
-                          href={`/${locale}/pages?openKb=true`}
-                          onClick={onClose}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
-                        >
-                          <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
-                          <span>{t('addToBusinessInfo')}</span>
-                        </Link>
-                      )}
-                    </>
                   )}
                 </div>
               )}
@@ -334,6 +304,25 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
         {/* Footer — always visible above keyboard */}
         <div className="px-4 pt-4 md:px-6 md:pt-4 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
+          {/* Needs attention banner */}
+          {needsAttention && (
+            <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-lg status-warning border text-xs font-medium">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{t('needsAttention')}</span>
+              <FlagTag flagReason={comment.flagReason} />
+              {isKbFlag && (
+                <Link
+                  href={`/${locale}/pages?openKb=true`}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
+                >
+                  <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
+                  <span>{t('addToBusinessInfo')}</span>
+                </Link>
+              )}
+            </div>
+          )}
+
           {/* Held reply banner */}
           {isHeldReply && (
             <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
