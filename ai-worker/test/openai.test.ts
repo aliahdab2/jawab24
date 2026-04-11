@@ -1485,6 +1485,32 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('language_mismatch');
     });
 
+    it('should NOT flag language_mismatch when Latin-script acronym is used by Arabic speaker and reply is Arabic', async () => {
+        // "Icdl" is a Latin-chars acronym typed by an Arabic-speaking customer.
+        // The AI correctly replies in Arabic (KB language). Check 3 must NOT flag
+        // language_mismatch in this case — short Latin-only words with no English
+        // context should not lock in 'en' as the expected language.
+        setupMock(JSON.stringify({
+            reply: 'دورة ICDL مدتها شهر وتكلفتها 25000 ليرة سورية.',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Icdl',
+            language: 'en', // generator passed 'en' from Latin-char detection
+            context: {
+                knowledgeBase: 'دورة ICDL مدتها شهر وتكلفتها 25000 ليرة سورية',
+                channel: 'comment',
+            },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
     it('should NOT check language mismatch for empty replies (OFFENSIVE/SPAM)', async () => {
         setupMock(JSON.stringify({
             reply: '',

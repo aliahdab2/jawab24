@@ -747,14 +747,28 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
             }
         }
 
-        // Check 3: Language mismatch — reply language differs from input
-        // Uses the same fallback chain as buildSystemPrompt: message → KB → 'en'
+        // Check 3: Language mismatch — reply language differs from input.
+        // Short Latin-only tokens (acronyms like "Icdl", "WiFi", "USB") are commonly typed by
+        // Arabic speakers and carry no real language signal. When the KB and the reply agree on
+        // language, we treat the comment as language-neutral and skip the mismatch flag.
         if (reply) {
-            const inputLang = request.language
-                || this.detectLanguageOrNull(request.comment)
-                || this.detectLanguageOrNull(this.getKBText(request) || '')
-                || 'en';
+            const commentLang = this.detectLanguageOrNull(request.comment);
+            const kbLang = this.detectLanguageOrNull(this.getKBText(request) || '');
             const replyLang = this.detectLanguage(reply);
+
+            // A comment is "ambiguous Latin" when it's short (≤2 words), contains only ASCII
+            // letters/digits, and the KB language matches the reply language. Classic case:
+            // Arabic user types an English acronym on an Arabic-language page.
+            const words = request.comment.trim().split(/\s+/);
+            const isAmbiguousLatin = commentLang === 'en'
+                && words.length <= 2
+                && /^[a-zA-Z0-9\s]+$/.test(request.comment.trim())
+                && kbLang === replyLang;
+
+            const inputLang = isAmbiguousLatin
+                ? replyLang                    // KB + reply agree — no mismatch
+                : (commentLang || kbLang || 'en');
+
             if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
                 flags.push('language_mismatch');
                 flags.push(`expected_lang:${inputLang}`);
