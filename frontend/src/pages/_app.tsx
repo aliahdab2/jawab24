@@ -184,10 +184,14 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
 
-      const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
+      // keyboardWillShow/WillHide are iOS-only. Use keyboardDidShow/DidHide
+      // which fire on BOTH iOS and Android (and give accurate keyboardHeight).
+      // The visualViewport fallback above does not update reliably on Android
+      // with KeyboardResize.None because the layout viewport doesn't shrink.
+      const kbShowListener = await Keyboard.addListener('keyboardDidShow', (info) => {
         document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
       });
-      const kbHideListener = await Keyboard.addListener('keyboardWillHide', () => {
+      const kbHideListener = await Keyboard.addListener('keyboardDidHide', () => {
         document.documentElement.style.setProperty('--keyboard-height', '0px');
       });
       listenersRef.current.push(() => kbShowListener.remove());
@@ -380,7 +384,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         // Fast-path: handle auth sync inline instead of navigating to /auth/sync page.
         // The callback passes the full user object in the deep link URL, so we can
         // hydrate the store synchronously — zero network calls, instant redirect.
-        if (slug.startsWith('/auth/sync')) {
+        if (slug.startsWith('/auth/sync') || slug.startsWith('/auth/app-sync')) {
           const params = new URLSearchParams(slug.split('?')[1] || '');
           const token = params.get('token');
           const fbToken = params.get('fbToken') || '';
