@@ -35,7 +35,15 @@ export async function setupKeyboard(
     // With adjustResize, keyboardDidShow fires reliably and carries the
     // correct keyboard height; the viewport shrinks so we don't use
     // --keyboard-height for the backdrop (it would double-compensate).
-    await Keyboard.setResizeMode({ mode: 'body' as KeyboardResizeOptions['mode'] });
+    //
+    // Wrapped in try-catch so a failure (e.g. API 30+ ignoring the mode
+    // change for edge-to-edge apps) does NOT abort listener registration.
+    // Listeners work correctly regardless of the active resize mode.
+    try {
+      await Keyboard.setResizeMode({ mode: 'body' as KeyboardResizeOptions['mode'] });
+    } catch {
+      // Ignore — listener registration continues below.
+    }
 
     const kbShowListener = await Keyboard.addListener('keyboardDidShow', () => {
       document.documentElement.classList.add('keyboard-open');

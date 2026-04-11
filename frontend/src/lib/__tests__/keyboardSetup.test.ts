@@ -90,6 +90,25 @@ describe('setupKeyboard', () => {
     cleanup.forEach(fn => expect(typeof fn).toBe('function'));
   });
 
+  it('Android: setResizeMode failure does NOT prevent listener registration', async () => {
+    const removeShow = vi.fn();
+    const removeHide = vi.fn();
+    let callIndex = 0;
+    const kb = {
+      setResizeMode: vi.fn().mockRejectedValue(new Error('adjustResize ignored by OS')),
+      addListener: vi.fn().mockImplementation(() =>
+        Promise.resolve({ remove: callIndex++ === 0 ? removeShow : removeHide })
+      ),
+    };
+
+    // Must not throw, and must still return two working cleanup functions.
+    const cleanup = await setupKeyboard(kb, true);
+    expect(cleanup).toHaveLength(2);
+    cleanup.forEach(fn => fn());
+    expect(removeShow).toHaveBeenCalled();
+    expect(removeHide).toHaveBeenCalled();
+  });
+
   it('Android: cleanup functions call remove() on each listener', async () => {
     const removeShow = vi.fn();
     const removeHide = vi.fn();

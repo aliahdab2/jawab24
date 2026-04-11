@@ -123,21 +123,31 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       });
     }).catch(() => {});
 
-    // Track --keyboard-height via visualViewport API (iOS only in practice).
-    // On iOS (KeyboardResize.None), vv.height shrinks with the keyboard while
-    // window.innerHeight stays fixed, so the difference is the keyboard height.
-    // On Android (KeyboardResize.Body/adjustResize), both values shrink equally
-    // so kbHeight stays 0 — correct, since the backdrop doesn't need the variable.
+    // Track --keyboard-height and keyboard-open via visualViewport API.
     //
-    // IMPORTANT: do NOT toggle keyboard-open here. Capacitor events
-    // (keyboardDidShow/DidHide on Android, keyboardWillShow/WillHide on iOS)
-    // own that class. The visualViewport resize event can fire after keyboardDidShow
-    // on Android, and a classList.toggle(false) here would clobber the class.
+    // On iOS (KeyboardResize.None): vv.height shrinks while window.innerHeight
+    // stays fixed → kbHeight = keyboard height. Works perfectly.
+    //
+    // On Android (modern, API 30+ edge-to-edge): even though setResizeMode('body')
+    // requests adjustResize, the system may ignore the mode change for edge-to-edge
+    // apps. However, vv.height is always updated by the Insets API regardless of
+    // windowSoftInputMode → kbHeight correctly reflects the keyboard height.
+    //
+    // On Android (older, adjustResize active): both window.innerHeight and vv.height
+    // shrink equally → kbHeight stays 0. In this case keyboard-open is handled
+    // exclusively by Capacitor's keyboardDidShow event in initNativePlatform.
+    //
+    // Rule: this handler ONLY adds keyboard-open (never removes it). Removal is
+    // owned by Capacitor keyboardDidHide/keyboardWillHide to avoid a race where
+    // vv fires kbHeight=0 on adjustResize after keyboardDidShow already set the class.
     const vv = window.visualViewport;
     if (vv) {
       const updateKeyboardHeight = () => {
         const kbHeight = Math.max(0, window.innerHeight - vv.height);
         document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
+        if (kbHeight > 50) {
+          document.documentElement.classList.add('keyboard-open');
+        }
       };
       vv.addEventListener('resize', updateKeyboardHeight);
     }
