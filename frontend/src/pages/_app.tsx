@@ -123,17 +123,21 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       });
     }).catch(() => {});
 
-    // Track keyboard height via visualViewport API.
-    // With KeyboardResize.None (both platforms), the viewport stays fixed so
-    // window.innerHeight - vv.height accurately measures the keyboard height.
-    // This drives --keyboard-height and keyboard-open alongside the Capacitor
-    // events registered in initNativePlatform (belt-and-suspenders).
+    // Track --keyboard-height via visualViewport API (iOS only in practice).
+    // On iOS (KeyboardResize.None), vv.height shrinks with the keyboard while
+    // window.innerHeight stays fixed, so the difference is the keyboard height.
+    // On Android (KeyboardResize.Body/adjustResize), both values shrink equally
+    // so kbHeight stays 0 — correct, since the backdrop doesn't need the variable.
+    //
+    // IMPORTANT: do NOT toggle keyboard-open here. Capacitor events
+    // (keyboardDidShow/DidHide on Android, keyboardWillShow/WillHide on iOS)
+    // own that class. The visualViewport resize event can fire after keyboardDidShow
+    // on Android, and a classList.toggle(false) here would clobber the class.
     const vv = window.visualViewport;
     if (vv) {
       const updateKeyboardHeight = () => {
         const kbHeight = Math.max(0, window.innerHeight - vv.height);
         document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
-        document.documentElement.classList.toggle('keyboard-open', kbHeight > 50);
       };
       vv.addEventListener('resize', updateKeyboardHeight);
     }

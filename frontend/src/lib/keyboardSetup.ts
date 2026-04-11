@@ -1,22 +1,26 @@
 import type { KeyboardPlugin, KeyboardResizeOptions } from '@capacitor/keyboard';
 
 /**
- * Sets up keyboard resize mode and CSS variable / class tracking.
+ * Sets up keyboard resize mode and CSS class / variable tracking.
  *
- * Both platforms use KeyboardResize.None so the WebView is never resized.
- * Instead, keyboardDidShow (Android) / keyboardWillShow (iOS) fires with the
- * keyboard height, which is written to --keyboard-height on <html>. Modal
- * backdrops use `paddingBottom: var(--keyboard-height)` to lift themselves
- * above the keyboard, and the `keyboard-open` class on <html> lets CSS collapse
- * the safe-area padding inside modal footers.
+ * capacitor.config.ts sets KeyboardResize.None globally (required for iOS).
+ * Android overrides to Body at runtime here so the WebView resizes naturally
+ * with the keyboard (adjustResize). This makes keyboardDidShow/DidHide fire
+ * reliably — they do NOT fire correctly with adjustNothing on many devices
+ * because Android's getWindowVisibleDisplayFrame returns the same value before
+ * and after the keyboard appears when the window isn't being adjusted.
  *
- * Why None for Android (not Body):
- * With KeyboardResize.Body the viewport shrinks, so window.innerHeight and
- * visualViewport.height decrease equally → --keyboard-height stays 0 → the
- * backdrop cannot push the modal up. The keyboard-open class alone reduces
- * pb-safe-modal padding but leaves a visible gap.
- * With KeyboardResize.None the viewport stays fixed, the Capacitor event gives
- * us the exact height, and --keyboard-height drives the backdrop position.
+ * Android (KeyboardResize.Body / adjustResize):
+ *   - Viewport shrinks when keyboard appears — no --keyboard-height needed.
+ *   - keyboardDidShow/DidHide toggle the `keyboard-open` class on <html>.
+ *   - CSS: .is-native.keyboard-open .pb-safe-modal { padding-bottom: 0 }
+ *     eliminates the safe-area gap in modal footers.
+ *
+ * iOS (KeyboardResize.None — from config, no setResizeMode call here):
+ *   - WKWebView must never be resized (distorts layout permanently).
+ *   - keyboardWillShow/WillHide set --keyboard-height and keyboard-open.
+ *   - Modal backdrops use paddingBottom: var(--keyboard-height) to lift above keyboard.
+ *   - keyboard-open collapses pb-safe-modal to 0.
  *
  * Returns cleanup functions to remove all event listeners.
  */
@@ -27,15 +31,16 @@ export async function setupKeyboard(
   const cleanup: Array<() => void> = [];
 
   if (isAndroid) {
-    // Keep the WebView full-height; keyboard overlays on top.
-    await Keyboard.setResizeMode({ mode: 'none' as KeyboardResizeOptions['mode'] });
+    // Override capacitor.config.ts 'none' → 'body' (adjustResize).
+    // With adjustResize, keyboardDidShow fires reliably and carries the
+    // correct keyboard height; the viewport shrinks so we don't use
+    // --keyboard-height for the backdrop (it would double-compensate).
+    await Keyboard.setResizeMode({ mode: 'body' as KeyboardResizeOptions['mode'] });
 
-    const kbShowListener = await Keyboard.addListener('keyboardDidShow', (info) => {
-      document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
+    const kbShowListener = await Keyboard.addListener('keyboardDidShow', () => {
       document.documentElement.classList.add('keyboard-open');
     });
     const kbHideListener = await Keyboard.addListener('keyboardDidHide', () => {
-      document.documentElement.style.setProperty('--keyboard-height', '0px');
       document.documentElement.classList.remove('keyboard-open');
     });
     cleanup.push(() => kbShowListener.remove());
@@ -43,8 +48,8 @@ export async function setupKeyboard(
     return cleanup;
   }
 
-  // iOS: WKWebView must never be resized. keyboardWillShow fires before the
-  // animation completes so the layout shifts smoothly with the keyboard.
+  // iOS: KeyboardResize.None is already set by capacitor.config.ts.
+  // keyboardWillShow fires before the animation completes, shifting layout smoothly.
   const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
     document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
     document.documentElement.classList.add('keyboard-open');

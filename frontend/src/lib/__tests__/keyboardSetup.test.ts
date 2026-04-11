@@ -15,12 +15,21 @@ describe('setupKeyboard', () => {
   });
 
   // ── Android ────────────────────────────────────────────────────────────────
+  // Android uses KeyboardResize.Body (adjustResize): viewport shrinks with the
+  // keyboard so --keyboard-height stays 0; keyboard-open class handles the CSS.
 
-  it('Android: calls setResizeMode("none") to keep viewport fixed', async () => {
+  it('Android: calls setResizeMode("body") to enable adjustResize', async () => {
     const kb = makeKeyboardMock();
     await setupKeyboard(kb, true);
 
-    expect(kb.setResizeMode).toHaveBeenCalledWith({ mode: 'none' });
+    expect(kb.setResizeMode).toHaveBeenCalledWith({ mode: 'body' });
+  });
+
+  it('Android: does NOT call setResizeMode("none") — that breaks keyboard events', async () => {
+    const kb = makeKeyboardMock();
+    await setupKeyboard(kb, true);
+
+    expect(kb.setResizeMode).not.toHaveBeenCalledWith({ mode: 'none' });
   });
 
   it('Android: registers keyboardDidShow and keyboardDidHide listeners', async () => {
@@ -31,7 +40,7 @@ describe('setupKeyboard', () => {
     expect(kb.addListener).toHaveBeenCalledWith('keyboardDidHide', expect.any(Function));
   });
 
-  it('Android: does NOT register keyboardWillShow/WillHide', async () => {
+  it('Android: does NOT register keyboardWillShow/WillHide (iOS-only events)', async () => {
     const kb = makeKeyboardMock();
     await setupKeyboard(kb, true);
 
@@ -40,35 +49,26 @@ describe('setupKeyboard', () => {
     expect(events).not.toContain('keyboardWillHide');
   });
 
-  it('Android: keyboardDidShow sets --keyboard-height', async () => {
-    const kb = makeKeyboardMock();
-    await setupKeyboard(kb, true);
-
-    const showCall = kb.addListener.mock.calls.find(([event]: [string]) => event === 'keyboardDidShow');
-    showCall![1]({ keyboardHeight: 300 });
-
-    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('300px');
-  });
-
   it('Android: keyboardDidShow adds keyboard-open class', async () => {
     const kb = makeKeyboardMock();
     await setupKeyboard(kb, true);
 
     const showCall = kb.addListener.mock.calls.find(([event]: [string]) => event === 'keyboardDidShow');
-    showCall![1]({ keyboardHeight: 300 });
+    showCall![1]({});
 
     expect(document.documentElement.classList.contains('keyboard-open')).toBe(true);
   });
 
-  it('Android: keyboardDidHide sets --keyboard-height to 0px', async () => {
-    document.documentElement.style.setProperty('--keyboard-height', '300px');
+  it('Android: keyboardDidShow does NOT set --keyboard-height (viewport shrinks instead)', async () => {
     const kb = makeKeyboardMock();
     await setupKeyboard(kb, true);
 
-    const hideCall = kb.addListener.mock.calls.find(([event]: [string]) => event === 'keyboardDidHide');
-    hideCall![1]({});
+    const showCall = kb.addListener.mock.calls.find(([event]: [string]) => event === 'keyboardDidShow');
+    showCall![1]({ keyboardHeight: 300 });
 
-    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('0px');
+    // With adjustResize the backdrop doesn't need --keyboard-height.
+    // Setting it would double-compensate (viewport already shrank).
+    expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('');
   });
 
   it('Android: keyboardDidHide removes keyboard-open class', async () => {
@@ -109,8 +109,10 @@ describe('setupKeyboard', () => {
   });
 
   // ── iOS ────────────────────────────────────────────────────────────────────
+  // iOS uses KeyboardResize.None (from capacitor.config.ts, not set at runtime).
+  // --keyboard-height drives the fixed backdrop; keyboard-open collapses pb-safe-modal.
 
-  it('iOS: does NOT call setResizeMode', async () => {
+  it('iOS: does NOT call setResizeMode (config already sets None)', async () => {
     const kb = makeKeyboardMock();
     await setupKeyboard(kb, false);
 
@@ -125,7 +127,7 @@ describe('setupKeyboard', () => {
     expect(kb.addListener).toHaveBeenCalledWith('keyboardWillHide', expect.any(Function));
   });
 
-  it('iOS: does NOT register keyboardDidShow/DidHide', async () => {
+  it('iOS: does NOT register keyboardDidShow/DidHide (Android-only events)', async () => {
     const kb = makeKeyboardMock();
     await setupKeyboard(kb, false);
 
@@ -160,7 +162,7 @@ describe('setupKeyboard', () => {
     await setupKeyboard(kb, false);
 
     const hideCall = kb.addListener.mock.calls.find(([event]: [string]) => event === 'keyboardWillHide');
-    hideCall![1]({ keyboardHeight: 0 });
+    hideCall![1]({});
 
     expect(document.documentElement.style.getPropertyValue('--keyboard-height')).toBe('0px');
   });
@@ -171,7 +173,7 @@ describe('setupKeyboard', () => {
     await setupKeyboard(kb, false);
 
     const hideCall = kb.addListener.mock.calls.find(([event]: [string]) => event === 'keyboardWillHide');
-    hideCall![1]({ keyboardHeight: 0 });
+    hideCall![1]({});
 
     expect(document.documentElement.classList.contains('keyboard-open')).toBe(false);
   });
