@@ -2,14 +2,13 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, PlatformIcon, PauseToggle, SmartReplyButton } from '@/components/ui';
+import { Badge, PlatformIcon, PauseToggle } from '@/components/ui';
 import { useTranslations, useLocale } from 'next-intl';
 import Link from 'next/link';
 import { isKbRelatedFlag } from '@/utils/flagReason';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
-import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { formatFullTime, formatMessageTime } from '@/utils/formatMessageTime';
@@ -104,7 +103,6 @@ export function MessageDetailModal({
   );
   const [replyText, setReplyText] = useState(heldMessage?.aiOriginalReply || '');
   const [sendError, setSendError] = useState<string | null>(null);
-  const { isGenerating, generationStatus, aiLimit, generatedReply, generate } = useAiGeneration();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewMessage, setHasNewMessage] = useState(false);
@@ -186,13 +184,6 @@ export function MessageDetailModal({
     return () => observer.disconnect();
   }, [checkIfNearBottom, scrollToBottom]);
 
-  // Sync AI-generated reply into textarea
-  useEffect(() => {
-    if (generatedReply) {
-      setReplyText(generatedReply);
-    }
-  }, [generatedReply]);
-
   const sortedMessages = useMemo(() => {
     return [...messages].sort((a, b) => {
       const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -218,37 +209,14 @@ export function MessageDetailModal({
     setSendError(null);
   };
 
-  const handleGenerateAi = () => {
-    const incoming = sortedMessages.filter(m => m.direction === 'incoming');
-    const lastIncoming = incoming[incoming.length - 1];
-    if (!lastIncoming) return;
-
-    const conversationHistory = sortedMessages.map(m => ({
-      role: m.direction === 'incoming' ? 'user' as const : 'assistant' as const,
-      content: m.message,
-    }));
-
-    generate({
-      comment: lastIncoming.message,
-      context: {
-        channel: 'dm',
-        conversationHistory,
-        pageId: conversation.lastMessage.pageId,
-      },
-    });
-  };
-
-  const hasUnrepliedIncoming = messages.some(
-    m => m.direction === 'incoming' && !m.replied
-  );
-
-  const isPaused = conversation.pauseStatus?.paused;
   const hasUnresolvedUnreplied = messages.some(
     m => m.direction === 'incoming' && !m.replied && !m.resolved
   );
   const hasResolvedIncoming = messages.some(
     m => m.direction === 'incoming' && !!m.resolved
   );
+
+  const isPaused = conversation.pauseStatus?.paused;
 
   return createPortal(
     <div
@@ -448,7 +416,7 @@ export function MessageDetailModal({
             </div>
           )}
 
-          {/* Compose row: textarea + AI button + send */}
+          {/* Compose row: textarea + send */}
           <div className="flex items-end gap-2">
             <textarea
               value={replyText}
@@ -465,21 +433,11 @@ export function MessageDetailModal({
               rows={1}
               className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
               style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
-              disabled={isReplying || isGenerating}
+              disabled={isReplying}
             />
-            {/* Smart Reply — lives next to the send button so both compose actions are grouped */}
-            {hasUnrepliedIncoming && (
-              <SmartReplyButton
-                onGenerate={handleGenerateAi}
-                isGenerating={isGenerating}
-                generationStatus={generationStatus}
-                aiLimit={aiLimit}
-                hasReply={!!replyText}
-              />
-            )}
             <button
               onClick={handleSend}
-              disabled={!replyText.trim() || isReplying || isGenerating}
+              disabled={!replyText.trim() || isReplying}
               aria-label={tComments('reply')}
               className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
             >
@@ -489,10 +447,6 @@ export function MessageDetailModal({
               }
             </button>
           </div>
-
-          {replyText && !isGenerating && hasUnrepliedIncoming && (
-            <p className="mt-1.5 text-[10px] text-muted-foreground text-end">{tComments('aiSuggestedReply')}</p>
-          )}
 
           {/* Actions row: pause/resume (left) + resolve/unresolve (right) */}
           <div className="flex items-start justify-between mt-3 pt-3 border-t border-theme-border">

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { PlatformIcon, FlagTag, PauseToggle, SmartReplyButton } from '@/components/ui';
+import { PlatformIcon, FlagTag, PauseToggle } from '@/components/ui';
 import { isKbRelatedFlag } from '@/utils/flagReason';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
@@ -16,7 +16,6 @@ import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
-import { useAiGeneration } from '@/hooks/useAiGeneration';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
@@ -81,10 +80,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const [isSending, setIsSending] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const { isGenerating, generationStatus, aiLimit, generatedReply, generate } = useAiGeneration({
-    fetchLimitsOnMount: mode === 'full',
-  });
-
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
   const [pauseLoading, setPauseLoading] = useState(false);
@@ -97,13 +92,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     }, 100);
     return () => clearTimeout(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Sync AI-generated reply into textarea
-  useEffect(() => {
-    if (generatedReply) {
-      setReplyText(generatedReply);
-    }
-  }, [generatedReply]);
 
   // Fetch pause status for the commenter
   useEffect(() => {
@@ -131,14 +119,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
     } finally {
       setPauseLoading(false);
     }
-  };
-
-  const handleGenerateAi = () => {
-    generate({
-      comment: comment.message,
-      language: comment.detectedLanguage || undefined,
-      context: {},
-    });
   };
 
   const handleSendReply = async () => {
@@ -334,24 +314,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             </div>
           )}
 
-          {/* Smart Reply button — only when compose row is visible */}
-          {showComposeRow && mode === 'full' && (
-            <div className="flex items-center justify-between mb-2">
-              {replyText && !isGenerating && (
-                <span className="text-xs text-muted-foreground">{t('aiSuggestedReply')}</span>
-              )}
-              <div className="flex-1" />
-              <SmartReplyButton
-                onGenerate={handleGenerateAi}
-                isGenerating={isGenerating}
-                generationStatus={generationStatus}
-                aiLimit={aiLimit}
-                hasReply={!!replyText}
-                compactOnMobile
-              />
-            </div>
-          )}
-
           {/* Compose row — only when unreplied or needs attention */}
           {showComposeRow && (
             <div className="flex items-end gap-2">
@@ -372,11 +334,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 rows={1}
                 className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
                 style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
-                disabled={isSending || isGenerating}
+                disabled={isSending}
               />
               <button
                 onClick={handleSendReply}
-                disabled={!replyText.trim() || isSending || isGenerating}
+                disabled={!replyText.trim() || isSending}
                 aria-label={t('sendReply')}
                 className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
               >

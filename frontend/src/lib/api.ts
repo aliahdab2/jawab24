@@ -392,15 +392,6 @@ export const messagesApi = {
     api.post<{ success: boolean; unresolved: number }>(`/messages/conversation/${senderId}/unresolve`, { pageId }),
 };
 
-// AI API
-export const aiApi = {
-  generateAsync: (data: { comment: string; language?: string; context?: unknown }) =>
-    api.post<{ jobId: string; status: string }>('/ai/generate-async', data),
-
-  getJobStatus: (jobId: string) =>
-    api.get<{ jobId: string; status: string; result?: { reply: string }; error?: string }>(`/ai/jobs/${jobId}`),
-};
-
 // Messages API Types
 export interface Message {
   id: string;

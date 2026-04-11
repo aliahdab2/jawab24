@@ -232,6 +232,8 @@
   [dir="rtl"] body,
   [dir="rtl"] {
     font-family: 'Cairo', 'DM Sans', system-ui, sans-serif;
+    /* Disable Arabic-Indic digit substitution — keep Western digits (0-9) in all contexts */
+    font-feature-settings: "anum" 0;
   }
 
   /* Keyboard focus indicators for accessibility (WCAG 2.1 AA) */

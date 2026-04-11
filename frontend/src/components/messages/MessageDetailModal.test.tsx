@@ -36,20 +36,6 @@ vi.mock('@/hooks/useEscapeKey', () => ({
   },
 }));
 
-// Mock useAiGeneration hook
-const mockGenerate = vi.fn();
-vi.mock('@/hooks/useAiGeneration', () => ({
-  useAiGeneration: () => ({
-    isGenerating: false,
-    generationStatus: '',
-    aiLimit: { allowed: true },
-    generatedReply: null,
-    generate: mockGenerate,
-    fetchLimits: vi.fn(),
-    reset: vi.fn(),
-  }),
-}));
-
 // Mock date-fns
 vi.mock('date-fns', () => ({
   format: () => 'Feb 17, 2026, 10:00 AM',
@@ -531,7 +517,6 @@ describe('MessageDetailModal', () => {
       );
 
       const textarea = screen.getByPlaceholderText('Type your reply...');
-      // Textarea should not be disabled by default (isGenerating = false)
       expect(textarea).not.toBeDisabled();
     });
   });

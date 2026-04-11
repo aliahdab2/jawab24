@@ -23,5 +23,3 @@ export { FlagTag } from './FlagTag';
 export { PauseToggle } from './PauseToggle';
 export { ThemeToggleButton } from './ThemeToggleButton';
 export { KeywordChipInput } from './KeywordChipInput';
-export { LimitReachedCTA } from './LimitReachedCTA';
-export { SmartReplyButton } from './SmartReplyButton';
