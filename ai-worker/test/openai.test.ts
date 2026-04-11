@@ -2137,7 +2137,7 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
 
         const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
         expect(systemPrompt).toContain('incorporate naturally');
-        expect(systemPrompt).toContain('Do NOT repeat any point, offer, or promotion');
+        expect(systemPrompt).toContain('Check the conversation history before applying any brand voice note');
     });
 
     it('should use standard wording for comments (no conversation history)', async () => {
@@ -2168,8 +2168,8 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
         });
 
         const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
-        expect(systemPrompt).toContain('follow these additional guidelines');
-        expect(systemPrompt).not.toContain('Do NOT repeat any point, offer, or promotion');
+        expect(systemPrompt).toContain('incorporate naturally');
+        expect(systemPrompt).not.toContain('Check the conversation history before applying any brand voice note');
     });
 });
 
