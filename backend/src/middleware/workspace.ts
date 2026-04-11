@@ -8,6 +8,7 @@ import type { WorkspaceRole } from '@jawab24/shared';
 export interface WorkspaceRequest extends AuthenticatedRequest {
     workspaceId?: string;
     workspaceRole?: WorkspaceRole;
+    workspaceOwnerId?: string;
 }
 
 /**
@@ -52,8 +53,10 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         const membership = await db
             .select({
                 role: workspaceMembers.role,
+                ownerId: workspaces.ownerId,
             })
             .from(workspaceMembers)
+            .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
             .where(
                 and(
                     eq(workspaceMembers.workspaceId, headerWorkspaceId),
@@ -72,6 +75,7 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
 
         request.workspaceId = headerWorkspaceId;
         request.workspaceRole = membership[0].role as WorkspaceRole;
+        request.workspaceOwnerId = membership[0].ownerId;
         return;
     }
 
@@ -81,6 +85,7 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
             workspaceId: workspaceMembers.workspaceId,
             role: workspaceMembers.role,
             name: workspaces.name,
+            ownerId: workspaces.ownerId,
         })
         .from(workspaceMembers)
         .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
@@ -97,6 +102,7 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
     if (memberships.length === 1) {
         request.workspaceId = memberships[0].workspaceId;
         request.workspaceRole = memberships[0].role as WorkspaceRole;
+        request.workspaceOwnerId = memberships[0].ownerId;
         return;
     }
 
