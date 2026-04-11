@@ -301,7 +301,6 @@ const LeadsPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        icon={<Users className="w-5 h-5" aria-hidden="true" />}
       />
 
       {/* Controls row */}
