@@ -43,5 +43,8 @@
   "acceptInvalid": "This invite link is invalid.",
   "acceptAlreadyMember": "You're already a member of this workspace.",
   "acceptFull": "This workspace has reached its member limit.",
-  "goToDashboard": "Go to Dashboard"
+  "goToDashboard": "Go to Dashboard",
+  "online": "Online",
+  "lastSeenMinutes": "Active {minutes}m ago",
+  "lastSeenHours": "Active {hours}h ago"
 }

@@ -90,6 +90,7 @@ export class WorkspaceService {
                 userName: users.name,
                 userEmail: users.email,
                 userPicture: users.picture,
+                lastSeenAt: users.lastSeenAt,
             })
             .from(workspaceMembers)
             .innerJoin(users, eq(workspaceMembers.userId, users.id))

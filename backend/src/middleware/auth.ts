@@ -1,7 +1,28 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
+import { eq } from 'drizzle-orm';
+import { db } from '../db';
+import { users } from '../db/schema';
 import { authService } from '../services/auth';
+
+// In-memory throttle: avoid writing last_seen_at more than once per 2 minutes per user.
+// Capped at 10,000 entries to prevent unbounded growth on long-running instances.
+const lastSeenWritten = new Map<string, number>();
+const LAST_SEEN_THROTTLE_MS = 2 * 60 * 1000;
+const LAST_SEEN_MAP_CAP = 10_000;
+
+function touchLastSeen(userId: string): void {
+    const now = Date.now();
+    const last = lastSeenWritten.get(userId) ?? 0;
+    if (now - last < LAST_SEEN_THROTTLE_MS) return;
+    if (lastSeenWritten.size >= LAST_SEEN_MAP_CAP) lastSeenWritten.clear();
+    lastSeenWritten.set(userId, now);
+    db.update(users)
+        .set({ lastSeenAt: new Date() })
+        .where(eq(users.id, userId))
+        .catch((err) => Sentry.captureException(err));
+}
 
 export interface AuthenticatedRequest extends FastifyRequest {
     user?: {
@@ -60,6 +81,9 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
 
         // Set Sentry user context so every error in this request is linked to the user
         Sentry.setUser({ id: payload.userId });
+
+        // Stamp last_seen_at (throttled — max 1 DB write per 2 minutes per user)
+        touchLastSeen(payload.userId);
     } catch (error) {
         request.log.error(error);
         return reply.status(401).send({

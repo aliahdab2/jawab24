@@ -43,5 +43,8 @@
   "acceptInvalid": "رابط الدعوة غير صالح.",
   "acceptAlreadyMember": "أنت بالفعل عضو في مساحة العمل هذه.",
   "acceptFull": "مساحة العمل وصلت للحد الأقصى من الأعضاء.",
-  "goToDashboard": "الذهاب للوحة التحكم"
+  "goToDashboard": "الذهاب للوحة التحكم",
+  "online": "متصل الآن",
+  "lastSeenMinutes": "نشط منذ {minutes} د",
+  "lastSeenHours": "نشط منذ {hours} س"
 }

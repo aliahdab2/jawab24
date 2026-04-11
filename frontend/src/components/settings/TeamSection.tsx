@@ -19,6 +19,29 @@ interface MemberRow {
   userName: string | null;
   userEmail: string | null;
   userPicture: string | null;
+  lastSeenAt: string | null;
+}
+
+function PresenceBadge({ lastSeenAt, t }: { lastSeenAt: string | null; t: ReturnType<typeof useTranslations<'team'>> }) {
+  if (!lastSeenAt) return null;
+  const diffMs = Date.now() - new Date(lastSeenAt).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 5) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 flex-shrink-0" aria-hidden="true" />
+        {t('online')}
+      </span>
+    );
+  }
+  if (diffMin < 60) {
+    return <span className="text-xs text-muted-foreground">{t('lastSeenMinutes', { minutes: diffMin })}</span>;
+  }
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) {
+    return <span className="text-xs text-muted-foreground">{t('lastSeenHours', { hours: diffHours })}</span>;
+  }
+  return null;
 }
 
 interface InviteRow {
@@ -343,6 +366,7 @@ export function TeamSection() {
                   {member.userName && member.userEmail && (
                     <p className="text-xs text-muted-foreground truncate">{member.userEmail}</p>
                   )}
+                  <PresenceBadge lastSeenAt={member.lastSeenAt} t={t} />
                 </div>
 
                 {/* Role badge / dropdown */}
