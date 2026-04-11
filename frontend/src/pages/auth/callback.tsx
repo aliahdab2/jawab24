@@ -96,8 +96,9 @@ export default function AuthCallback() {
           const tokenStr = encodeURIComponent(linkData.token);
           const fbTokenStr = encodeURIComponent(linkData.fbAccessToken || '');
           const userStr = encodeURIComponent(JSON.stringify(linkData.user));
-          // intent:// tells Chrome to close itself when handing off to the app (com.jawab24.app://)
-          window.location.href = `intent://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}#Intent;scheme=com.jawab24.app;package=com.jawab24.app;S.browser_fallback_url=${encodeURIComponent('https://jawab24.com')};end`;
+          // App Link: Android verifies jawab24.com ownership via assetlinks.json and opens
+          // the native app directly, closing Chrome in the process (proper fix, not a workaround)
+          window.location.href = `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
           return;
         }
 
@@ -177,8 +178,9 @@ export default function AuthCallback() {
           const tokenStr = encodeURIComponent(data.token);
           const fbTokenStr = encodeURIComponent(data.fbAccessToken);
           const userStr = encodeURIComponent(JSON.stringify(data.user));
-          // intent:// tells Chrome to close itself when handing off to the app (com.jawab24.app://)
-          window.location.href = `intent://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}#Intent;scheme=com.jawab24.app;package=com.jawab24.app;S.browser_fallback_url=${encodeURIComponent('https://jawab24.com')};end`;
+          // App Link: Android verifies jawab24.com ownership via assetlinks.json and opens
+          // the native app directly, closing Chrome in the process (proper fix, not a workaround)
+          window.location.href = `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
           return;
         }
 
@@ -225,8 +227,9 @@ export default function AuthCallback() {
         const redirectStr = encodeURIComponent(safeUrl);
         const userStr = encodeURIComponent(JSON.stringify(data.user));
 
-        // intent:// tells Chrome to close itself when handing off to the app (com.jawab24.app://)
-        window.location.href = `intent://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}#Intent;scheme=com.jawab24.app;package=com.jawab24.app;S.browser_fallback_url=${encodeURIComponent('https://jawab24.com')};end`;
+        // App Link: Android verifies jawab24.com ownership via assetlinks.json and opens
+        // the native app directly, closing Chrome in the process (proper fix, not a workaround)
+        window.location.href = `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`;
         return;
       }
 

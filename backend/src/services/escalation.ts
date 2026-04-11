@@ -101,7 +101,7 @@ async function resolveStuckSpamComments(): Promise<void> {
     // A comment is considered spam-stuck if its entire message (trimmed) contains
     // no Arabic or Latin letters — only dots, punctuation, whitespace, or emojis.
     const spamCondition = sql`
-        trim(message) ~ '^[[:space:].…!?،؟@#*+=~^&%$|/\\]+$'
+        trim(message) ~ '^[[:space:].…!?،؟@#*+=~^&%$|/\\\\]+$'
         OR (trim(message) ~ '^@\\S+$')
     `;
     const stuckCondition = sql`created_at < NOW() - INTERVAL '10 minutes'`;

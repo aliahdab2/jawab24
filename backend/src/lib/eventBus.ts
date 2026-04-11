@@ -25,6 +25,10 @@ export function getSubscriber(): Redis {
             port: config.redis.port,
             password: config.redis.password,
             lazyConnect: false,
+            // Subscriber connections can only run subscribe/unsubscribe commands.
+            // Disabling readyCheck prevents ioredis from sending INFO after reconnect,
+            // which would throw "Connection in subscriber mode" on the dedicated channel.
+            enableReadyCheck: false,
             retryStrategy(times) {
                 return Math.min(times * 50, 2000);
             },
