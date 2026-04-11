@@ -167,7 +167,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       // Note: is-native class is already added in the earlier useEffect
 
       // StatusBar overlay/style already configured in the early useEffect above
-      const [{ StatusBar, Style }, { Keyboard }, { App }, { SplashScreen }, { Network }] = await Promise.all([
+      const [{ StatusBar, Style }, { Keyboard, KeyboardResize }, { App }, { SplashScreen }, { Network }] = await Promise.all([
         import("@capacitor/status-bar"),
         import("@capacitor/keyboard"),
         import("@capacitor/app"),
@@ -175,27 +175,41 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         import("@capacitor/network")
       ]);
 
-      // Both platforms use KeyboardResize.None — the viewport stays full-screen
-      // and modals use --keyboard-height CSS variable to offset above the keyboard.
-      // KeyboardResize.Body was tried on Android but it shrinks the viewport,
-      // leaving modals with too little space for header + messages + footer.
+      // Android: KeyboardResize.Body — the WebView viewport shrinks when the keyboard
+      // appears (windowSoftInputMode=adjustResize). No CSS variable needed; modal backdrops
+      // (fixed inset-0) automatically fit the shrunken viewport, sitting above the keyboard.
+      //
+      // iOS: KeyboardResize.None — WKWebView must never resize (it distorts the layout).
+      // Instead, keyboardWillShow sets --keyboard-height and modal backdrops use
+      // paddingBottom: --keyboard-height to push the sheet above the keyboard.
+      let isAndroid = false;
+      try {
+        const { getCapacitor } = await import('@/lib/capacitor');
+        isAndroid = getCapacitor()?.getPlatform() === 'android';
+        if (isAndroid) {
+          await Keyboard.setResizeMode({ mode: KeyboardResize.Body });
+        }
+      } catch (err) {
+        addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
+      }
 
       // Clear existing listeners if any (prevent duplicates)
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
 
-      // keyboardWillShow/WillHide are iOS-only. Use keyboardDidShow/DidHide
-      // which fire on BOTH iOS and Android (and give accurate keyboardHeight).
-      // The visualViewport fallback above does not update reliably on Android
-      // with KeyboardResize.None because the layout viewport doesn't shrink.
-      const kbShowListener = await Keyboard.addListener('keyboardDidShow', (info) => {
-        document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
-      });
-      const kbHideListener = await Keyboard.addListener('keyboardDidHide', () => {
-        document.documentElement.style.setProperty('--keyboard-height', '0px');
-      });
-      listenersRef.current.push(() => kbShowListener.remove());
-      listenersRef.current.push(() => kbHideListener.remove());
+      // iOS only: set --keyboard-height so modal backdrops can push the sheet up.
+      // On Android, KeyboardResize.Body already resizes the viewport — adding
+      // --keyboard-height would double-compensate and squeeze modal content.
+      if (!isAndroid) {
+        const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
+          document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
+        });
+        const kbHideListener = await Keyboard.addListener('keyboardWillHide', () => {
+          document.documentElement.style.setProperty('--keyboard-height', '0px');
+        });
+        listenersRef.current.push(() => kbShowListener.remove());
+        listenersRef.current.push(() => kbHideListener.remove());
+      }
 
       // Handle hardware back button (Android) - Industry Standard
       // Priority: close open modal/overlay first, then navigate back, then exit.
