@@ -695,7 +695,8 @@ describe('Admin Routes', () => {
                 from: vi.fn().mockReturnThis(),
                 where: vi.fn().mockReturnThis(),
                 leftJoin: vi.fn().mockReturnThis(),
-                orderBy: vi.fn().mockResolvedValue([
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([
                     {
                         id: 'user-1', email: 'user1@test.com', name: 'User 1', facebookId: 'fb-1', createdAt: '2025-01-01',
                         subscriptionId: 'sub-1', subscriptionStatus: 'active', planId: 'plan-1',
@@ -709,7 +710,6 @@ describe('Admin Routes', () => {
                         currentPeriodEnd: null, paymentMethod: null,
                     },
                 ]),
-                limit: vi.fn().mockReturnThis(),
             };
 
             vi.mocked(db.select).mockReturnValue(usersChain as any);

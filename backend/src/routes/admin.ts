@@ -86,7 +86,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         .from(users)
                         .leftJoin(subscriptions, eq(users.id, subscriptions.userId))
                         .leftJoin(plans, eq(subscriptions.planId, plans.id))
-                        .orderBy(desc(users.createdAt));
+                        .orderBy(desc(users.createdAt))
+                        .limit(5000); // Safety cap — filters/pagination applied in-memory below
 
                     // Get all users first (we'll filter and paginate)
                     let allUsers = await baseQuery;

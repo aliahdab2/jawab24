@@ -136,8 +136,9 @@ describe('SettingsPage - Infinite Loop Prevention', () => {
         expect(mockSetLanguage).not.toHaveBeenCalled();
     });
 
-    it('should call setLanguage when dashboardLanguage differs from current language', async () => {
-        // Mock server returning different language
+    it('should NOT call setLanguage on fetch even when dashboardLanguage differs from current language', async () => {
+        // The stored dashboardLanguage populates the dropdown but does not auto-redirect.
+        // setLanguage is only called when the user explicitly saves.
         mockedSettingsApi.get.mockImplementationOnce(async () => ({
             data: {
                 dashboardLanguage: 'ar', // Different from current 'en'
@@ -155,11 +156,8 @@ describe('SettingsPage - Infinite Loop Prevention', () => {
             expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
         });
 
-        // Should call setLanguage once to sync
-        await waitFor(() => {
-            expect(mockSetLanguage).toHaveBeenCalledWith('ar');
-            expect(mockSetLanguage).toHaveBeenCalledTimes(1);
-        });
+        // Should NOT call setLanguage on load — only on explicit save
+        expect(mockSetLanguage).not.toHaveBeenCalled();
     });
 
     it('should NOT cause infinite loop when settings change', async () => {

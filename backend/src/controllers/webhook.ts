@@ -199,8 +199,18 @@ export class WebhookController {
 
         const body = request.body as WebhookBody;
 
+        // Guard against malformed payloads (Facebook occasionally sends unexpected shapes)
+        if (!body || typeof body.object !== 'string' || !Array.isArray(body.entry)) {
+            this.log().warn('Malformed webhook body — missing object or entry array', {
+                hasBody: !!body,
+                objectType: typeof body?.object,
+                entryType: typeof body?.entry,
+            });
+            return reply.status(400).send('Invalid payload');
+        }
+
         // Log the webhook for debugging (only in debug level)
-        this.log().debug('Received webhook', { object: body.object, entryCount: body.entry?.length });
+        this.log().debug('Received webhook', { object: body.object, entryCount: body.entry.length });
 
         if (body.object === 'page') {
             if (!this.acquireWebhookSlot(reply)) return;
