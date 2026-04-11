@@ -39,6 +39,7 @@ vi.mock('../../src/services/ai', () => ({
 
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('ar'),
+    detectCommentLanguage: vi.fn().mockReturnValue('ar'),
 }));
 
 // getConversationHistory is re-mocked per test to control conversation context

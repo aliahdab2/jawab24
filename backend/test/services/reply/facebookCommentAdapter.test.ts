@@ -49,6 +49,7 @@ vi.mock('../../../src/services/reply/nudge', () => ({
 const mockDetectLanguageCode = vi.fn();
 vi.mock('../../../src/utils/language', () => ({
     detectLanguageCode: (...args: unknown[]) => mockDetectLanguageCode(...args),
+    detectCommentLanguage: (...args: unknown[]) => mockDetectLanguageCode(args[0]),
 }));
 
 import { FacebookCommentAdapter } from '../../../src/services/reply/adapters/facebookCommentAdapter';

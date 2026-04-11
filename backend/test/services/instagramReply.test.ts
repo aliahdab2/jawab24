@@ -77,6 +77,7 @@ vi.mock('../../src/services/notifications', () => ({
 
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
+    detectCommentLanguage: vi.fn().mockReturnValue('en'),
 }));
 
 vi.mock('../../src/services/workspaceSettings', () => ({

@@ -22,6 +22,7 @@ vi.mock('../../src/services/ai', () => ({
 
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
+    detectCommentLanguage: vi.fn().mockReturnValue('en'),
 }));
 
 vi.mock('../../src/services/messages', () => ({
@@ -1857,15 +1858,15 @@ describe('Store routing — skip preset replies for store pages', () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
-            const { detectLanguageCode } = await import('../../src/utils/language');
+            const { detectCommentLanguage } = await import('../../src/utils/language');
 
             vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
             vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
             vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
-            // Simulate real detectLanguageCode: '' → 'unknown', Arabic → 'ar', Latin → 'en'
-            vi.mocked(detectLanguageCode).mockImplementation((text) => {
-                if (!text) return 'unknown';
-                if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+            // Simulate real detectCommentLanguage: empty comment → falls back to post language
+            vi.mocked(detectCommentLanguage).mockImplementation((commentText, postMessage) => {
+                if (commentText && /[\u0600-\u06FF]/.test(commentText)) return 'ar';
+                if (!commentText && postMessage && /[\u0600-\u06FF]/.test(postMessage)) return 'ar';
                 return 'en';
             });
             vi.mocked(aiService.generateReply).mockResolvedValue({
@@ -1897,14 +1898,14 @@ describe('Store routing — skip preset replies for store pages', () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
-            const { detectLanguageCode } = await import('../../src/utils/language');
+            const { detectCommentLanguage } = await import('../../src/utils/language');
 
             vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
             vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
             vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
-            vi.mocked(detectLanguageCode).mockImplementation((text) => {
-                if (!text) return 'unknown';
-                if (/[\u0600-\u06FF]/.test(text)) return 'ar';
+            vi.mocked(detectCommentLanguage).mockImplementation((commentText, postMessage) => {
+                if (commentText && /[\u0600-\u06FF]/.test(commentText)) return 'ar';
+                if (!commentText && postMessage && /[\u0600-\u06FF]/.test(postMessage)) return 'ar';
                 return 'en';
             });
             vi.mocked(aiService.generateReply).mockResolvedValue({

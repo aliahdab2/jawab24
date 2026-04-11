@@ -640,7 +640,9 @@ export class ReplyGenerator {
      * (no real words in any script). Used to detect engagement-style dots/emojis.
      */
     private isPunctuationOnly(text: string): boolean {
-        return text.length > 0 && /^[\p{P}\p{S}\p{Z}\p{Emoji}\s]+$/u.test(text);
+        // Matches text with no letters (\p{L}) and no numbers (\p{N}).
+        // Avoids \p{Emoji} which incorrectly includes ASCII digits 0-9 in ECMAScript.
+        return text.length > 0 && /^[^\p{L}\p{N}]+$/u.test(text);
     }
 
 

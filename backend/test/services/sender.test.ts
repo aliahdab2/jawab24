@@ -41,7 +41,7 @@ describe('ReplySender', () => {
         sender.setLogger(mockLogger);
         vi.mocked(detectLanguageCode).mockReturnValue('ar');
         vi.mocked(fbAxios.post).mockResolvedValue({ data: { id: 'reply_id' } });
-        vi.mocked(facebookService.sendPrivateReplyToComment).mockResolvedValue(undefined);
+        vi.mocked(facebookService.sendPrivateReplyToComment).mockResolvedValue({ recipientId: 'user_456' });
     });
 
     // ─── Demo Mode ───────────────────────────────────────────────────
@@ -122,7 +122,9 @@ describe('ReplySender', () => {
         it('should return success when DM succeeds', async () => {
             const result = await sender.sendCommentReply(privateOptions);
 
-            expect(result).toEqual({ success: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeUndefined();
+            expect(result.dmRecipientId).toBe('user_456');
         });
 
         it('should fall back to public reply when fromId is missing', async () => {
@@ -132,7 +134,8 @@ describe('ReplySender', () => {
             });
 
             // private_replies uses comment ID not fromId, so it still works
-            expect(result).toEqual({ success: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeUndefined();
         });
 
         it('should fall back to public reply when DM throws', async () => {
@@ -181,7 +184,9 @@ describe('ReplySender', () => {
         it('should return success when both DM and public succeed', async () => {
             const result = await sender.sendCommentReply(dualOptions);
 
-            expect(result).toEqual({ success: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeUndefined();
+            expect(result.dmRecipientId).toBe('user_456');
         });
 
         it('should still work when fromId is missing (uses comment ID)', async () => {
@@ -191,7 +196,8 @@ describe('ReplySender', () => {
             });
 
             // private_replies uses comment ID not fromId, so it still works
-            expect(result).toEqual({ success: true });
+            expect(result.success).toBe(true);
+            expect(result.error).toBeUndefined();
         });
 
         it('should still post nudge (not full reply) when DM fails', async () => {
