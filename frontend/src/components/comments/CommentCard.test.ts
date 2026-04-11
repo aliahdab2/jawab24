@@ -6,14 +6,14 @@ describe('translateFlagReason', () => {
     const mockTranslations: Record<string, string> = {
         'offensive_or_abusive': 'Offensive or abusive',
         'angry_customer': 'Angry customer',
-        'low_confidence': 'Low confidence reply',
-        'price_not_in_kb': 'Price not in knowledge base',
+        'low_confidence': 'Needs your review',
+        'price_not_in_kb': 'Price missing from Business Info',
     };
     const mockTranslationsAr: Record<string, string> = {
         'offensive_or_abusive': 'محتوى مسيء',
         'angry_customer': 'عميل غاضب',
-        'low_confidence': 'ثقة منخفضة في الرد',
-        'price_not_in_kb': 'سعر غير موجود في قاعدة المعرفة',
+        'low_confidence': 'يحتاج مراجعتك',
+        'price_not_in_kb': 'سعر غير مضاف في معلوماتك',
     };
 
     const tEn = (key: string) => mockTranslations[key] ?? key;
@@ -34,12 +34,12 @@ describe('translateFlagReason', () => {
 
     it('should use comma separator for English', () => {
         const result = translateFlagReason('offensive_or_abusive,low_confidence', tEn, 'en');
-        expect(result).toBe('Offensive or abusive, Low confidence reply');
+        expect(result).toBe('Offensive or abusive, Needs your review');
     });
 
     it('should use Arabic comma separator for Arabic', () => {
         const result = translateFlagReason('offensive_or_abusive,low_confidence', tAr, 'ar');
-        expect(result).toBe('محتوى مسيء، ثقة منخفضة في الرد');
+        expect(result).toBe('محتوى مسيء، يحتاج مراجعتك');
     });
 
     it('should fall back to raw string when no translation exists', () => {
@@ -53,6 +53,6 @@ describe('translateFlagReason', () => {
 
     it('should trim whitespace around flags', () => {
         const result = translateFlagReason(' angry_customer , low_confidence ', tEn, 'en');
-        expect(result).toBe('Angry customer, Low confidence reply');
+        expect(result).toBe('Angry customer, Needs your review');
     });
 });

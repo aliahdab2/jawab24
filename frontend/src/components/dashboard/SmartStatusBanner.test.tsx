@@ -67,7 +67,7 @@ describe('SmartStatusBanner', () => {
   it('shows translated primary flag label for comma-separated flagReason', () => {
     renderBanner([makeMessageItem({ flagReason: 'info_not_in_kb,low_confidence' })]);
     fireEvent.click(screen.getByRole('button', { name: /item.*need.*attention/i }));
-    expect(screen.getByText('Information not in knowledge base')).toBeInTheDocument();
+    expect(screen.getByText('Missing from Business Info')).toBeInTheDocument();
     expect(screen.queryByText(/info_not_in_kb,low_confidence/)).not.toBeInTheDocument();
     expect(screen.queryByText(/flagReason\./)).not.toBeInTheDocument();
   });

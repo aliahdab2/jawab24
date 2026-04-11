@@ -5,6 +5,17 @@
  * into user-facing labels using the flagReason i18n namespace.
  */
 
+/** Flags that indicate the reply failed due to missing Business Info */
+const KB_FLAGS = new Set(['info_not_in_kb', 'price_not_in_kb']);
+
+/**
+ * Returns true when the primary flag on a comment/message is KB-related,
+ * meaning the user should be guided to add info to Business Info.
+ */
+export function isKbRelatedFlag(flagReason: string | null | undefined): boolean {
+    return KB_FLAGS.has(getPrimaryFlag(flagReason) ?? '');
+}
+
 /** Flags that represent urgent/high-stakes customer requests */
 const URGENT_FLAGS = new Set([
     'cancellation_request',

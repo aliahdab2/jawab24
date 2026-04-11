@@ -2,7 +2,7 @@
   "title": "الرسائل",
   "description": "عرض وإدارة الرسائل الخاصة لصفحاتك",
   "totalMessages": "إجمالي الرسائل",
-  "pending": "في قائمة الانتظار",
+  "pending": "سيتم الرد قريباً",
   "repliedToday": "تم الرد اليوم",
   "needsAttention": "تحتاج اهتمام",
   "msgCount": "{count, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالة} other {# رسالة}}",

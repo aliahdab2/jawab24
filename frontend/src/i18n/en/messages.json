@@ -2,7 +2,7 @@
   "title": "Messages",
   "description": "View and manage private messages for your pages",
   "totalMessages": "Total Messages",
-  "pending": "In queue",
+  "pending": "Waiting to reply",
   "repliedToday": "Replied Today",
   "needsAttention": "Needs attention",
   "msgCount": "{count, plural, one {# message} other {# messages}}",

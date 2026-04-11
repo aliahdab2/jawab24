@@ -3,9 +3,11 @@ import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
 import { Badge, PlatformIcon, FlagTag, PauseToggle, SmartReplyButton } from '@/components/ui';
+import { isKbRelatedFlag } from '@/utils/flagReason';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
+import Link from 'next/link';
 import { useLanguage } from '@/i18n/hooks';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -63,6 +65,9 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const tDashboard = useTranslations('dashboard');
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
+  const locale = useLocale();
+
+  const isKbFlag = isKbRelatedFlag(comment.flagReason);
 
   useEscapeKey(onClose);
   useBodyScrollLock(true);
@@ -233,6 +238,16 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                         {t('needsAttention')}
                       </Badge>
                       <FlagTag flagReason={comment.flagReason} />
+                      {isKbFlag && (
+                        <Link
+                          href={`/${locale}/pages?openKb=true`}
+                          onClick={onClose}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
+                        >
+                          <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
+                          <span>{t('addToBusinessInfo')}</span>
+                        </Link>
+                      )}
                     </>
                   )}
                 </div>

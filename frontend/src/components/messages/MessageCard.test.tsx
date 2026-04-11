@@ -211,7 +211,7 @@ describe('MessageCard', () => {
   });
 
   describe('status badges', () => {
-    it('shows IN QUEUE badge when last message is unreplied incoming', () => {
+    it('shows Waiting to reply badge when last message is unreplied incoming', () => {
       const incoming = makeMessage({
         direction: 'incoming',
         replied: false,
@@ -228,7 +228,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('In queue')).toBeInTheDocument();
+      expect(screen.getByText('Waiting to reply')).toBeInTheDocument();
     });
 
     it('shows NEEDS ATTENTION badge when flagged', () => {

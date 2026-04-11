@@ -3,7 +3,40 @@ import {
   getPrimaryFlag,
   getFlagTagStyle,
   translateFlagReason,
+  isKbRelatedFlag,
 } from '../../src/utils/flagReason';
+
+describe('isKbRelatedFlag', () => {
+  it('returns false for null/undefined/empty', () => {
+    expect(isKbRelatedFlag(null)).toBe(false);
+    expect(isKbRelatedFlag(undefined)).toBe(false);
+    expect(isKbRelatedFlag('')).toBe(false);
+  });
+
+  it('returns true for info_not_in_kb', () => {
+    expect(isKbRelatedFlag('info_not_in_kb')).toBe(true);
+  });
+
+  it('returns true for price_not_in_kb', () => {
+    expect(isKbRelatedFlag('price_not_in_kb')).toBe(true);
+  });
+
+  it('returns false for unrelated flags', () => {
+    expect(isKbRelatedFlag('low_confidence')).toBe(false);
+    expect(isKbRelatedFlag('cancellation_request')).toBe(false);
+    expect(isKbRelatedFlag('angry_customer')).toBe(false);
+  });
+
+  it('returns true when KB flag is the primary (first non-urgent) flag', () => {
+    expect(isKbRelatedFlag('info_not_in_kb,low_confidence')).toBe(true);
+  });
+
+  it('returns false when an urgent flag takes priority over a KB flag', () => {
+    // cancellation_request is urgent — it becomes the primary flag, not info_not_in_kb
+    expect(isKbRelatedFlag('info_not_in_kb,cancellation_request')).toBe(false);
+    expect(isKbRelatedFlag('low_confidence,price_not_in_kb,angry_customer')).toBe(false);
+  });
+});
 
 describe('getPrimaryFlag', () => {
   it('returns null for null/undefined/empty', () => {
@@ -52,7 +85,7 @@ describe('translateFlagReason', () => {
   const mockT = vi.fn((key: string, params?: Record<string, string>) => {
     const translations: Record<string, string> = {
       'cancellation_request': 'Cancellation request',
-      'low_confidence': 'Low confidence reply',
+      'low_confidence': 'Needs your review',
       'slaNoReply': `No reply after ${params?.minutes || '?'} min`,
     };
     return translations[key] || key;
@@ -69,12 +102,12 @@ describe('translateFlagReason', () => {
 
   it('translates comma-separated flags', () => {
     expect(translateFlagReason('cancellation_request,low_confidence', mockT, 'en'))
-      .toBe('Cancellation request, Low confidence reply');
+      .toBe('Cancellation request, Needs your review');
   });
 
   it('uses Arabic separator for ar locale', () => {
     expect(translateFlagReason('cancellation_request,low_confidence', mockT, 'ar'))
-      .toBe('Cancellation request، Low confidence reply');
+      .toBe('Cancellation request، Needs your review');
   });
 
   it('falls back to raw key for unknown flags', () => {

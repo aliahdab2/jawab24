@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import { Badge, PlatformIcon, PauseToggle, SmartReplyButton } from '@/components/ui';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
+import Link from 'next/link';
+import { isKbRelatedFlag } from '@/utils/flagReason';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
@@ -70,6 +72,9 @@ export function MessageDetailModal({
   const tc = useTranslations('common');
   const tComments = useTranslations('comments');
   const tDashboard = useTranslations('dashboard');
+  const locale = useLocale();
+
+  const isKbFlag = isKbRelatedFlag(conversation.lastMessage.flagReason);
 
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
@@ -300,6 +305,16 @@ export function MessageDetailModal({
                     <AlertTriangle className="w-3 h-3 me-1" />
                     {t('needsHuman')}
                   </Badge>
+                )}
+                {isKbFlag && (
+                  <Link
+                    href={`/${locale}/pages?openKb=true`}
+                    onClick={onClose}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
+                  >
+                    <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
+                    <span>{tComments('addToBusinessInfo')}</span>
+                  </Link>
                 )}
               </div>
               {pageName && (

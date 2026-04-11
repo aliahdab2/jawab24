@@ -62,7 +62,7 @@ describe('CommentCard', () => {
 
   it('shows pending badge for unreplied comments', () => {
     render(<CommentCard {...defaultProps} />);
-    expect(screen.getByText('In queue')).toBeInTheDocument();
+    expect(screen.getByText('Waiting to reply')).toBeInTheDocument();
   });
 
   it('shows needs attention badge for flagged comments', () => {
@@ -78,7 +78,7 @@ describe('CommentCard', () => {
       replyMethod: 'ai',
     };
     render(<CommentCard {...defaultProps} comment={replied} />);
-    expect(screen.queryByText('In queue')).not.toBeInTheDocument();
+    expect(screen.queryByText('Waiting to reply')).not.toBeInTheDocument();
   });
 
   it('shows reply bubble when comment is replied', () => {
