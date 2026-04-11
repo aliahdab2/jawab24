@@ -196,8 +196,9 @@ Each service is independently deployable but shares:
    - Subdomain services:
      - `kb/` — Knowledge Base (embedding, retrieval, semantic cache)
      - `reply/` — Reply generation pipeline (context, formatting, quality checks)
-       - `commentProcessor.ts` — unified comment pipeline: trigger check → template match → AI generation → send
-       - `messageProcessor.ts` — unified DM pipeline: shared post enrichment → template match → AI generation → send
+       - `commentProcessor.ts` — unified comment pipeline: trigger check → template match → AI generation → send → lead extraction (fire-and-forget)
+       - `messageProcessor.ts` — unified DM pipeline: shared post enrichment → template match → AI generation → send → lead extraction (fire-and-forget)
+       - `leadExtractor.ts` — fire-and-forget lead capture: phone detection (Arabic-Indic normalization) → Redis rate limit → OpenAI extraction → upsert leads table → SSE lead:captured
        - `nonTextHandler.ts` — handles non-text DMs (voice → Whisper transcription, shared posts → smart nudge, photos/videos → nudge)
        - `sender.ts` — Facebook comment reply logic (public/private/dual modes with fallback)
        - `nudge.ts` — dual mode nudge variation picker (avoids Facebook spam detection)

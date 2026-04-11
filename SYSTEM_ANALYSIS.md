@@ -2350,6 +2350,78 @@ Internal dashboard for monitoring system health and AI costs:
 
 ---
 
+# 17. Leads Module
+# وحدة العملاء المحتملين
+
+## English
+
+### Overview
+
+Automatically captures structured lead records whenever a customer shares a phone number in an AI conversation (DM or comment). AI analyzes the full conversation to extract dynamic, context-specific fields — e.g., course of interest for an institute, specialty needed for a clinic.
+
+### Pipeline Position
+
+Runs fire-and-forget after `reply_sent` in both `messageProcessor.ts` and `commentProcessor.ts`. Never blocks the reply pipeline.
+
+```
+Incoming message (with phone number)
+        ↓
+messageProcessor.ts / commentProcessor.ts — after reply_sent
+        ↓
+leadExtractorService.maybeCaptureLead() — fire-and-forget
+        ↓
+Phone detection (extractPhoneFromText — handles Arabic-Indic ٠١٢٣٤٥٦٧٨٩)
+        ↓
+Redis rate limit check (50 AI extractions/day per workspace)
+        ↓
+OpenAI gpt-4.1-mini — extracts { phone, summary, fields[] }
+        ↓
+DB upsert — ON CONFLICT (senderId, pageId) DO UPDATE (no duplicates)
+        ↓
+SSE lead:captured → frontend badge + toast
+```
+
+### DB Schema
+
+`leads` table — key columns:
+- `(sender_id, page_id)` unique index — deduplication
+- `extracted_data` JSONB `{ summary, fields: [{ key, label_en, label_ar, value }] }`
+- `status`: `new` → `contacted` → `converted`
+- `source_type`: `message` or `comment`
+
+### Frontend
+
+`/leads` page — page selector, status filter tabs (All/New/Contacted/Converted), dynamic table columns from `extractedData.fields`, CSV export, real-time SSE updates via `lead:captured` event, new-leads badge in sidebar.
+
+### Rate Limiting
+
+Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per workspace, TTL 86400s. Prevents runaway OpenAI costs on high-traffic pages.
+
+---
+
+## عربي
+
+### نظرة عامة
+
+تلتقط وحدة العملاء المحتملين تلقائيًا سجلات منظمة في كل مرة يشارك فيها عميل رقم هاتفه في محادثة ذكاء اصطناعي (رسالة مباشرة أو تعليق). يحلل الذكاء الاصطناعي المحادثة كاملة لاستخراج حقول ديناميكية تناسب السياق — مثل الدورة المطلوبة لمعهد، أو التخصص الطبي لعيادة.
+
+### الموقع في خط الإنتاج
+
+تعمل بأسلوب "أطلق وانسَ" (fire-and-forget) بعد إرسال الرد في `messageProcessor.ts` و`commentProcessor.ts`. لا تعيق خط الرد أبدًا.
+
+### المخطط في قاعدة البيانات
+
+جدول `leads` — الأعمدة الرئيسية:
+- مؤشر فريد على `(sender_id, page_id)` — لمنع التكرار
+- `extracted_data` JSONB يحتوي على `{ summary, fields: [{ key, label_en, label_ar, value }] }`
+- `status`: `new` → `contacted` → `converted`
+
+### الواجهة الأمامية
+
+صفحة `/leads` — تحديد الصفحة، تصفية بالحالة، أعمدة ديناميكية من `extractedData.fields`، تصدير CSV، تحديثات فورية عبر SSE، شارة عملاء جدد في الشريط الجانبي.
+
+---
+
 # Quick Reference Card / بطاقة مرجعية سريعة
 
 ```
