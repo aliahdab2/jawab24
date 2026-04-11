@@ -2,7 +2,7 @@
 /**
  * Automated Playground Evaluation Script
  *
- * Runs all 203 edge-case tests from docs/playground-edge-cases.md against the
+ * Runs all 253 edge-case tests from docs/playground-edge-cases.md against the
  * admin playground endpoint and outputs a score report.
  *
  * Prerequisites:
@@ -137,7 +137,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 205 total (163 original + 34 stress tests + 6 public comment regression + 2 context continuity)
+// Test cases — 271 total (263 previous + 4 comment post context + 4 comment sender name)
 // ---------------------------------------------------------------------------
 
 const TEST_CASES: TestCase[] = [
@@ -2077,6 +2077,241 @@ const TEST_CASES: TestCase[] = [
             intent: ['SPAM_OR_IRRELEVANT'],
         },
         notes: 'Arabic @mention tag — no question, no business intent',
+    },
+
+    // ===== Category 35: Comment Post Context =====
+    // Verifies that postMessage shapes the AI's reply for ambiguous comments.
+    // Without post context, vague comments should get generic/low-confidence replies.
+    // With post context, the same comment should be answered specifically.
+    {
+        id: 264, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'هل فيه ضمان؟',
+        page: 'electronics',
+        postMessage: 'iPhone 15 Pro وصل بضمان سنة كاملة مع خدمة توصيل مجانية',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['سنة', 'ضمان', 'warranty'],
+        },
+        notes: 'Post explicitly states 1-year warranty — AI should use post context, not just KB',
+    },
+    {
+        id: 265, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'متى؟',
+        page: 'training',
+        postMessage: 'دورة Python الجديدة - التسجيل يبدأ يوم الأحد 15 يناير',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+        },
+        notes: 'Single word "when" is ambiguous alone — post context anchors it to registration date',
+    },
+    {
+        id: 266, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'بكام؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai', 'template'],
+            intent: ['QUESTION'],
+        },
+        notes: 'Ambiguous price question with no post context — AI should ask which product or give generic KB reply',
+    },
+    {
+        id: 267, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'بكام؟',
+        page: 'electronics',
+        postMessage: 'سماعات AirPods Pro - عرض محدود هذا الأسبوع',
+        expected: {
+            replyMethod: ['ai', 'template'],
+            intent: ['QUESTION'],
+            replyNotContains: ['iPhone', 'لابتوب'],
+        },
+        notes: 'Same ambiguous price Q but post context anchors it to AirPods — must not answer about other products',
+    },
+
+    // ===== Category 36: Comment Sender Name =====
+    // Verifies correct handling of customerContext (senderName) for comments.
+    // Key rules: use provided name if relevant, never invent a name, never use @mentioned name instead.
+    {
+        id: 268, category: 36, categoryName: 'Comment Sender Name', channel: 'comment',
+        message: 'مرحبا، عندكم دورة انجليزي؟',
+        page: 'training',
+        customerContext: 'Customer name: فاطمة.',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyNotContains: ['خالد', 'محمد', 'أحمد'],
+        },
+        notes: 'Named commenter (Fatima) — AI must not confuse with other names. Gender forms tested in Cat 39.',
+    },
+    {
+        id: 269, category: 36, categoryName: 'Comment Sender Name', channel: 'comment',
+        message: '@خالد شوف معنا دورة الانجليزي، كم السعر؟',
+        page: 'training',
+        customerContext: 'Customer name: نور.',
+        expected: {
+            replyMethod: ['ai', 'template'],
+            replyNotContains: ['خالد'],
+        },
+        notes: '@mention in comment — AI must address the actual commenter (Nour), not the tagged person (Khaled)',
+    },
+    {
+        id: 270, category: 36, categoryName: 'Comment Sender Name', channel: 'comment',
+        message: 'كم سعر الدورة؟',
+        page: 'training',
+        expected: {
+            replyNotContains: ['محمد', 'أحمد', 'علي', 'سارة', 'نور', 'Dear', 'عزيزي'],
+        },
+        notes: 'No customerContext — AI must not invent a commenter name',
+    },
+    {
+        id: 271, category: 36, categoryName: 'Comment Sender Name', channel: 'comment',
+        message: 'أنا مهتم بدوراتكم، ممكن تعطوني كل التفاصيل عن الدورات والأسعار والمواعيد وطريقة التسجيل؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            replyMaxLength: 500,
+        },
+        notes: 'Broad question on public comment — reply must stay within 500 chars (public comment truncation limit)',
+    },
+
+    // ===== Category 39: Arabic Gender Agreement =====
+    // Verifies the AI uses correct masculine/feminine Arabic verb forms and pronouns
+    // based on the customer's name in customerContext.
+    {
+        id: 279, category: 39, categoryName: 'Arabic Gender Agreement', channel: 'dm',
+        message: 'كيف أسجل في دورة الانجليزي؟',
+        page: 'training',
+        customerContext: 'Customer name: فاطمة.',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['تفضلي', 'يمكنكِ', 'تقدرين', 'سجّلي', 'تسجّلي', 'تواصلي', 'اتصلي', 'لكِ'],
+        },
+        notes: 'Feminine name — reply must use feminine imperative verbs (تواصلي/سجّلي/اتصلي), not masculine forms',
+    },
+    {
+        id: 280, category: 39, categoryName: 'Arabic Gender Agreement', channel: 'dm',
+        message: 'كيف أسجل في دورة الانجليزي؟',
+        page: 'training',
+        customerContext: 'Customer name: محمد.',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['تفضلي', 'يمكنكِ', 'تقدرين', 'سجّلي', 'تسجّلي'],
+        },
+        notes: 'Masculine name — reply must NOT use feminine forms',
+    },
+    {
+        id: 281, category: 39, categoryName: 'Arabic Gender Agreement', channel: 'dm',
+        message: 'ابي اعرف عن دوراتكم',
+        page: 'training',
+        customerContext: 'Customer name: نور.',
+        expected: {
+            replyMethod: ['ai'],
+            replyContainsAny: ['تفضلي', 'يمكنكِ', 'تقدرين', 'لكِ', 'عندكِ'],
+        },
+        notes: 'Feminine name نور — Gulf dialect inquiry, reply must use feminine forms',
+    },
+    {
+        id: 282, category: 39, categoryName: 'Arabic Gender Agreement', channel: 'dm',
+        message: 'اريد اسجل',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['تفضلي', 'يمكنكِ', 'تقدرين'],
+        },
+        notes: 'No customerContext — no name known, default to masculine (standard Arabic convention)',
+    },
+
+    // ===== Category 37: No Bot Closings =====
+    // Verifies the AI never ends replies with generic offer-to-help closings that make it sound like a bot.
+    // Rule added in v29: banned phrases list in RESPONSE GUIDELINES.
+    {
+        id: 272, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'كم سعر دورة الانجليزي؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai', 'template'],
+            replyNotContains: ['إذا لزمك', 'أنا هنا لمساعدتك', 'لا تتردد', 'feel free', 'let me know if'],
+        },
+        notes: 'Basic price question — reply must NOT end with a generic closing phrase',
+    },
+    {
+        id: 273, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'الدورة ما كانت كما وصفتموها',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['COMPLAINT'],
+            replyNotContains: ['إذا لزمك', 'أنا هنا لمساعدتك', 'لا تتردد', "don't hesitate", "I'm here to help"],
+        },
+        notes: 'Complaint — AI must handle empathetically without appending a bot closing',
+    },
+    {
+        id: 274, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'What are your course prices?',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai', 'template'],
+            replyNotContains: ['feel free to ask', "let me know if you need anything", "don't hesitate to reach out", "I'm here to help"],
+        },
+        notes: 'English question — banned closing phrases in English must not appear',
+    },
+    {
+        id: 275, category: 37, categoryName: 'No Bot Closings', channel: 'dm',
+        message: 'ما هي مواعيد الدورات؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['إذا احتجت', 'خبرني إذا', 'لا تتردد بالتواصل', 'أنا هنا'],
+        },
+        notes: 'Hours question — AI answers and stops, no trailing helper offer',
+    },
+
+    // ===== Category 38: No Repeated Hedging =====
+    // Verifies the AI does NOT repeat "I'll check" / "خليني أتحقق" when conversation history
+    // already contains a check promise from a prior assistant reply.
+    // Rule added in v29: scan history before hedging.
+    {
+        id: 276, category: 38, categoryName: 'No Repeated Hedging', channel: 'dm',
+        message: 'وصلتك المعلومات؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'مين يدرّس دورة PMP؟' },
+            { role: 'assistant', content: 'خليني أتحقق من اسم المدرب وأرجعلك 😊' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['خليني أتحقق', 'سأتحقق', 'خليني أسأل', 'سأرجعلك مجدداً', 'let me check'],
+        },
+        notes: 'Customer follows up after AI already promised to check — must NOT re-promise, should acknowledge the wait',
+    },
+    {
+        id: 277, category: 38, categoryName: 'No Repeated Hedging', channel: 'dm',
+        message: 'شو صار؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'هل فيه خصومات للمجموعات؟' },
+            { role: 'assistant', content: 'سأتحقق من العروض الخاصة بالمجموعات وأرجعلك قريباً!' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['سأتحقق', 'خليني أتحقق', 'سأسأل الفريق', 'let me check'],
+        },
+        notes: 'Customer nudges after a pending check — second check promise must be blocked',
+    },
+    {
+        id: 278, category: 38, categoryName: 'No Repeated Hedging', channel: 'dm',
+        message: "You haven't replied yet",
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'Is the certificate internationally accredited?' },
+            { role: 'assistant', content: "Let me check on the international accreditation and get back to you!" },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ["let me check", "I'll check", "I'll get back to you", "let me find out"],
+        },
+        notes: 'English follow-up after English check promise — no second "I\'ll check"',
     },
 ];
 
