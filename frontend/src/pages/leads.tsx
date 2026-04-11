@@ -351,7 +351,7 @@ const LeadsPage: NextPageWithLayout = () => {
         {/* Export button */}
         {leads.length > 0 && (
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={handleExport}
             disabled={exporting}
