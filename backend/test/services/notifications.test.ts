@@ -297,7 +297,7 @@ describe('NotificationService', () => {
 
             const payload = sendNotificationSpy.mock.calls[0][1];
             expect(payload.bodies.ar).toContain('محتوى مسيء');
-            expect(payload.bodies.ar).toContain('ثقة منخفضة في الرد');
+            expect(payload.bodies.ar).toContain('يحتاج مراجعتك');
             expect(payload.bodies.ar).toContain('، '); // Arabic comma separator
         });
 
