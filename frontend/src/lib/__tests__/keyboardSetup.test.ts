@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { KeyboardResize } from '@capacitor/keyboard';
 import { setupKeyboard } from '../keyboardSetup';
 
-const RESIZE_BODY = 'body';
+const RESIZE_BODY = KeyboardResize.Body;
 
 function makeKeyboardMock() {
   return {

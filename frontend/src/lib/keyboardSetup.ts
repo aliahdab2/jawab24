@@ -1,3 +1,5 @@
+import type { KeyboardPlugin, KeyboardResizeOptions } from '@capacitor/keyboard';
+
 /**
  * Sets up keyboard resize mode and --keyboard-height CSS variable tracking.
  *
@@ -12,18 +14,15 @@
  * Returns cleanup functions to remove the keyboard event listeners.
  */
 export async function setupKeyboard(
-  Keyboard: {
-    setResizeMode: (opts: { mode: string }) => Promise<void>;
-    addListener: (event: string, handler: (info: { keyboardHeight: number }) => void) => Promise<{ remove: () => void }>;
-  },
-  KeyboardResizeBody: string,
+  Keyboard: Pick<KeyboardPlugin, 'setResizeMode' | 'addListener'>,
+  resizeBodyMode: KeyboardResizeOptions['mode'],
   isAndroid: boolean
 ): Promise<Array<() => void>> {
   const cleanup: Array<() => void> = [];
 
   if (isAndroid) {
     // Viewport resizes with the keyboard — no CSS variable tracking needed.
-    await Keyboard.setResizeMode({ mode: KeyboardResizeBody });
+    await Keyboard.setResizeMode({ mode: resizeBodyMode });
     return cleanup;
   }
 
