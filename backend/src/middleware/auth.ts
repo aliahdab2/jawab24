@@ -83,7 +83,8 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
         Sentry.setUser({ id: payload.userId });
 
         // Stamp last_seen_at (throttled — max 1 DB write per 2 minutes per user)
-        touchLastSeen(payload.userId);
+        // Isolated try/catch: last_seen_at is non-critical and must never fail auth
+        try { touchLastSeen(payload.userId); } catch { /* non-critical */ }
     } catch (error) {
         request.log.error(error);
         return reply.status(401).send({
