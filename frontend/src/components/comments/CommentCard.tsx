@@ -1,6 +1,6 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Button, FlagTag, PlatformIcon } from '@/components/ui';
+import { FlagTag, PlatformIcon } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { renderMessageText } from '@/utils/renderMessageText';
@@ -12,7 +12,6 @@ import {
   Hash,
   CheckCircle,
   CheckCheck,
-  Undo2,
   User,
   FileText,
   ChevronDown,
@@ -70,9 +69,7 @@ export { translateFlagReason } from '@/utils/flagReason';
 export const CommentCard = React.memo(function CommentCard({
   comment,
   onClick,
-  onQuickReply,
-  onResolve,
-  onUnresolve,
+  // onQuickReply/onResolve/onUnresolve accepted but handled by SwipeableCommentCard wrapper
   variant = 'compact',
   pageName,
   showPlatformIcon = false,
@@ -288,7 +285,7 @@ export const CommentCard = React.memo(function CommentCard({
         </div>
 
         {/* Reply Bubble (End/Right) */}
-        {(comment.replied && comment.replyText) ? (
+        {comment.replied && comment.replyText && (
            <div className="flex items-end justify-end gap-2.5 ms-4 sm:ms-8 lg:ms-10">
               <div className="flex flex-col items-end gap-1 min-w-0">
 
@@ -310,64 +307,6 @@ export const CommentCard = React.memo(function CommentCard({
                  <ReplySourceIndicator />
               </div>
            </div>
-        ) : (
-           /* Quick Reply + Resolve Actions (if not replied) — hover-reveal on desktop */
-           (onQuickReply || onResolve) && (
-             <div className={clsx(
-               "flex items-center justify-end gap-2 animate-fade-in",
-               "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity duration-150"
-             )}>
-                 {onResolve && (
-                   <Button
-                     size="sm"
-                     variant="secondary"
-                     className="rounded-xl px-3 min-h-[44px] sm:min-h-0 text-xs font-medium"
-                     onClick={(e) => {
-                       e.stopPropagation();
-                       onResolve();
-                     }}
-                     icon={<CheckCircle className="w-3.5 h-3.5" />}
-                   >
-                     {t('resolve')}
-                   </Button>
-                 )}
-                 {onQuickReply && (
-                   <Button
-                     size="sm"
-                     variant="primary"
-                     className="rounded-xl px-4 min-h-[44px] sm:min-h-0 shadow-sm text-xs font-medium"
-                     onClick={(e) => {
-                       e.stopPropagation();
-                       onQuickReply(e);
-                     }}
-                     icon={<Zap className="w-3.5 h-3.5" />}
-                   >
-                     {t('reply')}
-                   </Button>
-                 )}
-             </div>
-           )
-        )}
-
-        {/* Unresolve action (shown for handled comments) — hover-reveal on desktop */}
-        {onUnresolve && (
-          <div className={clsx(
-            "flex items-center justify-end animate-fade-in",
-            "sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity duration-150"
-          )}>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="rounded-xl px-3 min-h-[44px] sm:min-h-0 text-xs font-medium"
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnresolve();
-              }}
-              icon={<Undo2 className="w-3.5 h-3.5" />}
-            >
-              {t('unresolve')}
-            </Button>
-          </div>
         )}
       </div>
 

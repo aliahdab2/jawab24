@@ -55,10 +55,11 @@ export const SwipeableCommentCard = React.memo(function SwipeableCommentCard(
         </div>
       )}
 
-      {/* Foreground — swipeable layer */}
+      {/* Foreground — swipeable layer; relative+z-10 keeps it above the swipe background */}
       <div
         ref={ref}
         onClickCapture={handleClickCapture}
+        className="relative z-10"
       >
         <CommentCard {...props} />
       </div>

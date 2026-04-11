@@ -106,25 +106,12 @@ describe('CommentCard', () => {
     expect(span.className).toContain('line-clamp-1');
   });
 
-  it('shows resolve button when onResolve is provided', () => {
+  it('does not render inline action buttons (actions handled by swipe or modal)', () => {
+    // Inline resolve/reply buttons were removed — cards are compact and actions
+    // happen via the swipe gesture (SwipeableCommentCard) or the detail modal.
     render(<CommentCard {...defaultProps} onResolve={vi.fn()} onQuickReply={vi.fn()} />);
-    expect(screen.getByText('Mark as handled')).toBeInTheDocument();
-  });
-
-  it('shows reply button when onQuickReply is provided', () => {
-    render(<CommentCard {...defaultProps} onQuickReply={vi.fn()} />);
-    expect(screen.getByText('Reply')).toBeInTheDocument();
-  });
-
-  it('does not show resolve/reply buttons when comment is already replied', () => {
-    const replied: Comment = {
-      ...baseComment,
-      replied: true,
-      replyText: 'Done',
-      replyMethod: 'ai',
-    };
-    render(<CommentCard {...defaultProps} comment={replied} onResolve={vi.fn()} onQuickReply={vi.fn()} />);
     expect(screen.queryByText('Mark as handled')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reply')).not.toBeInTheDocument();
   });
 
   it('calls onClick when card is clicked', () => {
@@ -134,26 +121,6 @@ describe('CommentCard', () => {
     expect(onClick).toHaveBeenCalled();
   });
 
-  it('calls onResolve and stops propagation when resolve is clicked', () => {
-    const onClick = vi.fn();
-    const onResolve = vi.fn();
-    render(<CommentCard {...defaultProps} onClick={onClick} onResolve={onResolve} onQuickReply={vi.fn()} />);
-
-    fireEvent.click(screen.getByText('Mark as handled'));
-    expect(onResolve).toHaveBeenCalled();
-    // onClick should NOT be called — stopPropagation
-    expect(onClick).not.toHaveBeenCalled();
-  });
-
-  it('calls onQuickReply and stops propagation when reply is clicked', () => {
-    const onClick = vi.fn();
-    const onQuickReply = vi.fn();
-    render(<CommentCard {...defaultProps} onClick={onClick} onQuickReply={onQuickReply} />);
-
-    fireEvent.click(screen.getByText('Reply'));
-    expect(onQuickReply).toHaveBeenCalled();
-    expect(onClick).not.toHaveBeenCalled();
-  });
 
   it('shows page name when provided', () => {
     render(<CommentCard {...defaultProps} pageName="معهد النور" />);
