@@ -9,28 +9,37 @@
  * - Webhooks registered via API call after OAuth claim
  * - Webhook HMAC uses hex SHA256 digest (header: X-ZID-SIGNATURE)
  */
-import crypto from 'crypto';
 import { tracedExternalCall } from '../utils/tracing';
-import { eq, and, lt } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores } from '../db/schema';
 import { config } from '../config';
 import { decrypt } from './ecommerceCrypto';
 import { captureError } from '../utils/sentryHelpers';
-import { redis } from '../lib/redis';
 import {
     getStoreById,
-    updateStoreTokens,
     replaceProductsAndRebuildSummary,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
+import { verifyHexHmac } from '../utils/hmacVerify';
+import { ecommerceApiGet } from '../utils/httpRetry';
+import {
+    refreshAccessToken as sharedRefreshAccessToken,
+    ensureValidToken as sharedEnsureValidToken,
+    getStoresNeedingTokenRefresh as sharedGetStoresNeedingTokenRefresh,
+    refreshExpiringTokens as sharedRefreshExpiringTokens,
+    type TokenRefreshConfig,
+} from './ecommerceTokenRefresh';
 
 const MAX_PRODUCTS_PER_PAGE = 50;
 const MAX_PAGES_TO_FETCH = 6; // 300 products max
-const MAX_RETRIES = 3;
-const RETRY_BASE_DELAY_MS = 1000;
-const LOCK_WAIT_DELAY_MS = 2000; // wait for concurrent token refresh to finish
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+const ZID_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
+    platform: 'zid',
+    tokenEndpointUrl: 'https://oauth.zid.sa/oauth/token',
+    get clientId() { return config.zid.clientId; },
+    get clientSecret() { return config.zid.clientSecret; },
+};
 
 // --- OAuth ---
 
@@ -91,97 +100,25 @@ export async function exchangeCodeForToken(code: string): Promise<ZidTokenRespon
 
 // --- Token Refresh (distributed lock — refresh tokens may be single-use) ---
 
+/** @see ecommerceTokenRefresh.refreshAccessToken */
 export async function refreshAccessToken(storeId: string): Promise<void> {
-    const lockKey = `zid:token_refresh:${storeId}`;
-
-    const acquired = await redis.set(lockKey, '1', 'EX', 30, 'NX');
-    if (!acquired) {
-        await new Promise(r => setTimeout(r, LOCK_WAIT_DELAY_MS));
-        return;
-    }
-
-    try {
-        const store = await getStoreById(storeId);
-        if (!store) throw new Error('Store not found');
-
-        const oneDayFromNow = new Date(Date.now() + ONE_DAY_MS);
-        if (store.tokenExpiresAt && store.tokenExpiresAt > oneDayFromNow) return;
-
-        if (!store.refreshToken || !store.refreshTokenIv) {
-            throw new Error(`No refresh token for Zid store ${storeId}`);
-        }
-
-        const refreshToken = decrypt(store.refreshToken, store.refreshTokenIv);
-
-        const response = await tracedExternalCall('zid', 'refreshAccessToken', () =>
-            fetch('https://oauth.zid.sa/oauth/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    grant_type: 'refresh_token',
-                    refresh_token: refreshToken,
-                    client_id: config.zid.clientId,
-                    client_secret: config.zid.clientSecret,
-                }),
-            }),
-        );
-
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`Zid token refresh failed: ${response.status} ${text}`);
-        }
-
-        const data = await response.json() as {
-            access_token: string;
-            refresh_token: string;
-            expires_in: number;
-        };
-
-        await updateStoreTokens(storeId, {
-            accessToken: data.access_token,
-            refreshToken: data.refresh_token,
-            tokenExpiresAt: new Date(Date.now() + data.expires_in * 1000),
-        });
-    } finally {
-        await redis.del(lockKey);
-    }
+    return sharedRefreshAccessToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
 }
 
+/** @see ecommerceTokenRefresh.ensureValidToken */
 export async function ensureValidToken(storeId: string): Promise<void> {
-    const store = await getStoreById(storeId);
-    if (!store) throw new Error('Store not found');
-
-    if (!store.tokenExpiresAt) return;
-
-    const oneDayFromNow = new Date(Date.now() + ONE_DAY_MS);
-    if (store.tokenExpiresAt > oneDayFromNow) return;
-
-    await refreshAccessToken(storeId);
+    return sharedEnsureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
 }
 
+/** @see ecommerceTokenRefresh.getStoresNeedingTokenRefresh */
 export async function getStoresNeedingTokenRefresh() {
-    const twoDaysFromNow = new Date(Date.now() + 2 * ONE_DAY_MS);
-    return db.select({ id: ecommerceStores.id }).from(ecommerceStores).where(
-        and(
-            eq(ecommerceStores.platform, 'zid'),
-            eq(ecommerceStores.isActive, true),
-            lt(ecommerceStores.tokenExpiresAt, twoDaysFromNow),
-        )
-    );
+    return sharedGetStoresNeedingTokenRefresh('zid');
 }
 
 // --- Webhook Verification ---
 
 export function verifyWebhookHmac(body: string, signature: string): boolean {
-    if (!config.zid.webhookSecret) return false;
-    const hash = crypto
-        .createHmac('sha256', config.zid.webhookSecret)
-        .update(body, 'utf8')
-        .digest('hex');
-    const hashBuf = Buffer.from(hash);
-    const sigBuf = Buffer.from(signature);
-    if (hashBuf.length !== sigBuf.length) return false;
-    return crypto.timingSafeEqual(hashBuf, sigBuf);
+    return verifyHexHmac(body, signature, config.zid.webhookSecret);
 }
 
 // --- Webhook Registration ---
@@ -246,42 +183,12 @@ export async function registerWebhooks(accessToken: string): Promise<void> {
 
 // --- REST API Helper ---
 
-async function zidApiGet<T = unknown>(url: string, accessToken: string): Promise<T> {
-    let lastError: Error | undefined;
-
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        const response = await tracedExternalCall('zid', 'apiGet', () =>
-            fetch(url, {
-                method: 'GET',
-                headers: {
-                    'X-MANAGER-TOKEN': accessToken,
-                    'Accept': 'application/json',
-                },
-            }),
-        );
-
-        if (response.status === 429 || response.status >= 500) {
-            const retryAfter = response.headers.get('retry-after');
-            const delayMs = retryAfter
-                ? parseInt(retryAfter, 10) * 1000
-                : RETRY_BASE_DELAY_MS * Math.pow(2, attempt);
-
-            if (attempt < MAX_RETRIES) {
-                await new Promise(r => setTimeout(r, delayMs));
-                continue;
-            }
-            lastError = new Error(`Zid API ${response.status} after ${MAX_RETRIES} retries`);
-            break;
-        }
-
-        if (!response.ok) {
-            throw new Error(`Zid API HTTP error: ${response.status}`);
-        }
-
-        return await response.json() as T;
-    }
-
-    throw lastError || new Error('Zid API request failed');
+function zidApiGet<T = unknown>(url: string, accessToken: string): Promise<T> {
+    return ecommerceApiGet<T>(url, {
+        platform: 'zid',
+        authHeaderName: 'X-MANAGER-TOKEN',
+        authHeaderValue: accessToken,
+    });
 }
 
 // --- Store Info ---
@@ -435,23 +342,12 @@ export async function fullSync(storeId: string) {
 
 // --- Periodic Token Refresh ---
 
+/**
+ * Refresh tokens for all Zid stores nearing expiry.
+ * Called periodically from the integration adapter (every 6h).
+ */
 export async function refreshExpiringTokens(): Promise<number> {
-    const stores = await getStoresNeedingTokenRefresh();
-    let refreshed = 0;
-
-    for (const { id } of stores) {
-        try {
-            await refreshAccessToken(id);
-            refreshed++;
-        } catch (err) {
-            captureError(err, `Zid token refresh failed for store ${id}`, {
-                tags: { service: 'zid' },
-                extra: { storeId: id },
-            });
-        }
-    }
-
-    return refreshed;
+    return sharedRefreshExpiringTokens(ZID_TOKEN_REFRESH_CONFIG);
 }
 
 // --- E-Commerce Agent Tools (read-only order/inventory) ---

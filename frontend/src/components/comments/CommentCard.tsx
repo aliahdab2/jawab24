@@ -25,8 +25,8 @@ export interface CommentCardProps {
   comment: Comment;
   onClick: () => void;
   onQuickReply?: (e: React.MouseEvent) => void;
-  onResolve?: (e: React.MouseEvent) => void;
-  onUnresolve?: (e: React.MouseEvent) => void;
+  onResolve?: () => void;
+  onUnresolve?: () => void;
   variant?: 'compact' | 'full';
   pageName?: string;
   showPlatformIcon?: boolean;
@@ -324,7 +324,7 @@ export const CommentCard = React.memo(function CommentCard({
                      className="rounded-xl px-3 py-1.5 text-xs font-medium"
                      onClick={(e) => {
                        e.stopPropagation();
-                       onResolve(e);
+                       onResolve();
                      }}
                      icon={<CheckCircle className="w-3.5 h-3.5" />}
                    >
@@ -361,7 +361,7 @@ export const CommentCard = React.memo(function CommentCard({
               className="rounded-xl px-3 py-1.5 text-xs font-medium"
               onClick={(e) => {
                 e.stopPropagation();
-                onUnresolve(e);
+                onUnresolve();
               }}
               icon={<Undo2 className="w-3.5 h-3.5" />}
             >

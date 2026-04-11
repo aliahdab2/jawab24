@@ -21,7 +21,7 @@ export const SwipeableCommentCard = React.memo(function SwipeableCommentCard(
   const swipeEnabled = !!props.onResolve;
 
   const { ref, isDismissing, shouldSuppressClick } = useSwipeToDismiss({
-    onDismiss: () => props.onResolve?.(new MouseEvent('click') as unknown as React.MouseEvent),
+    onDismiss: () => props.onResolve?.(),
     enabled: swipeEnabled,
   });
 
