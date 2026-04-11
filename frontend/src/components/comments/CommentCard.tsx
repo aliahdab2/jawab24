@@ -321,7 +321,7 @@ export const CommentCard = React.memo(function CommentCard({
                    <Button
                      size="sm"
                      variant="secondary"
-                     className="rounded-xl px-3 py-1.5 text-xs font-medium"
+                     className="rounded-xl px-3 min-h-[44px] sm:min-h-0 text-xs font-medium"
                      onClick={(e) => {
                        e.stopPropagation();
                        onResolve();
@@ -335,7 +335,7 @@ export const CommentCard = React.memo(function CommentCard({
                    <Button
                      size="sm"
                      variant="primary"
-                     className="rounded-xl px-4 py-1.5 shadow-sm text-xs font-medium"
+                     className="rounded-xl px-4 min-h-[44px] sm:min-h-0 shadow-sm text-xs font-medium"
                      onClick={(e) => {
                        e.stopPropagation();
                        onQuickReply(e);
@@ -358,7 +358,7 @@ export const CommentCard = React.memo(function CommentCard({
             <Button
               size="sm"
               variant="secondary"
-              className="rounded-xl px-3 py-1.5 text-xs font-medium"
+              className="rounded-xl px-3 min-h-[44px] sm:min-h-0 text-xs font-medium"
               onClick={(e) => {
                 e.stopPropagation();
                 onUnresolve();

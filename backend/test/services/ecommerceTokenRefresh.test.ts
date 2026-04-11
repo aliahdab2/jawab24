@@ -189,7 +189,7 @@ describe('refreshAccessToken', () => {
         });
         mockFetch.mockResolvedValueOnce(makeResponse(401, { error: 'invalid_grant' }));
 
-        await expect(refreshAccessToken('store-1', testConfig)).rejects.toThrow('salla token refresh failed: 401');
+        await expect(refreshAccessToken('store-1', testConfig)).rejects.toThrow('Salla token refresh failed: 401');
     });
 });
 

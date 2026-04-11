@@ -37,6 +37,10 @@ export interface TokenRefreshConfig {
  * Uses a Redis distributed lock to prevent concurrent refreshes — both Salla and Zid
  * have single-use refresh tokens, so a race condition would permanently invalidate the token.
  */
+function platformLabel(cfg: TokenRefreshConfig): string {
+    return cfg.platform.charAt(0).toUpperCase() + cfg.platform.slice(1);
+}
+
 export async function refreshAccessToken(storeId: string, cfg: TokenRefreshConfig): Promise<void> {
     const lockKey = `${cfg.platform}:token_refresh:${storeId}`;
 
@@ -57,7 +61,7 @@ export async function refreshAccessToken(storeId: string, cfg: TokenRefreshConfi
         if (store.tokenExpiresAt && store.tokenExpiresAt > oneDayFromNow) return;
 
         if (!store.refreshToken || !store.refreshTokenIv) {
-            throw new Error(`No refresh token for ${cfg.platform} store ${storeId}`);
+            throw new Error(`No refresh token for ${platformLabel(cfg)} store ${storeId}`);
         }
 
         const refreshToken = decrypt(store.refreshToken, store.refreshTokenIv);
@@ -77,7 +81,7 @@ export async function refreshAccessToken(storeId: string, cfg: TokenRefreshConfi
 
         if (!response.ok) {
             const text = await response.text();
-            throw new Error(`${cfg.platform} token refresh failed: ${response.status} ${text}`);
+            throw new Error(`${platformLabel(cfg)} token refresh failed: ${response.status} ${text}`);
         }
 
         const data = await response.json() as {

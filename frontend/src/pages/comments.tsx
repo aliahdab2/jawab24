@@ -474,7 +474,7 @@ const CommentsPage: NextPageWithLayout = () => {
               onClick={() => updateFilter(chip.key)}
               aria-pressed={filter === chip.key}
               className={clsx(
-                "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200",
+                "flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 min-h-[44px] sm:min-h-0 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-200",
                 filter === chip.key
                   ? "bg-brand-500 text-white shadow-sm shadow-brand-500/25"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
@@ -510,7 +510,7 @@ const CommentsPage: NextPageWithLayout = () => {
               type="button"
               onClick={() => setSearchQuery('')}
               aria-label="Clear search"
-              className="absolute top-1/2 -translate-y-1/2 end-2.5 p-1 rounded-full text-muted-foreground hover:text-muted-foreground hover:bg-muted transition-colors z-10"
+              className="absolute top-1/2 -translate-y-1/2 end-2.5 p-2 rounded-full text-muted-foreground hover:text-muted-foreground hover:bg-muted transition-colors z-10"
             >
               <X className="w-3.5 h-3.5" />
             </button>
