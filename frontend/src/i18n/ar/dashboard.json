@@ -29,8 +29,6 @@
   "todayComments": "تعليقات اليوم",
   "vsYesterday": "مقارنة بالأمس",
   "waitingReply": "في انتظار الرد",
-  "activeRepliesOn": "الردود التلقائية مفعلة",
-  "autoReplyNote": "سنرد على تعليقات ورسائل عملائك تلقائياً",
   "autoReplyConfiguredButDisabled": "الرد التلقائي معطل",
   "autoReplyConfiguredNote": "فعّل الرد التلقائي للتعليقات أو الرسائل في الإعدادات للتفعيل",
   "autoReplyNoPagesActive": "الرد التلقائي مفعّل في الإعدادات لكن لم يتم تفعيله على أي صفحة",

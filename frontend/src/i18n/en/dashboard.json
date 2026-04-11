@@ -29,8 +29,6 @@
   "todayComments": "Today's Comments",
   "vsYesterday": "vs yesterday",
   "waitingReply": "Waiting for Reply",
-  "activeRepliesOn": "Auto-replies active",
-  "autoReplyNote": "We'll auto-reply to your customers' comments and messages",
   "autoReplyConfiguredButDisabled": "Auto-replies disabled",
   "autoReplyConfiguredNote": "Enable comment or message auto-reply in settings to activate",
   "autoReplyNoPagesActive": "Auto-reply is enabled in settings but no page has it turned on",

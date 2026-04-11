@@ -33,66 +33,13 @@ describe('AutoReplyStatusCard', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('should render VIOLET active card: Dismissible ONLY', () => {
-    render(
-      <AutoReplyStatusCard
-        activePages={3}
-        totalPages={3}
-        commentsAutoReply={true}
-        messagesAutoReply={false}
-      />
-    );
-
-    // Should show title (Modified: No count suffix)
-    expect(screen.getByText('Auto-replies active')).toBeInTheDocument();
-    
-    // Rule #5: Success has X (Dismissible)
-    const dismissBtn = screen.getByLabelText('Dismiss');
-    expect(dismissBtn).toBeInTheDocument();
-
-    // Rule #5: Success NOT expandable (clicking it shouldn't change height/visibility)
-    // There are 2 descriptions (desktop static, mobile expandable). We want the mobile one.
-    const notes = screen.getAllByText("We'll auto-reply to your customers' comments and messages");
-    const mobileNote = notes.find(n => !n.className.includes('hidden sm:block'));
-    
-    // It's collapsed on mobile
-    expect(mobileNote?.parentElement).toHaveClass('max-h-0');
-
-    fireEvent.click(screen.getByText('Auto-replies active'));
-    
-    // Should still be collapsed (not expandable)
-    expect(mobileNote?.parentElement).toHaveClass('max-h-0');
-
-    // Handle Dismiss
-    fireEvent.click(dismissBtn);
-    expect(screen.queryByText('Auto-replies active')).not.toBeInTheDocument();
-    expect(sessionStorage.getItem('dashboard_success_banner_dismissed')).toBe('true');
-  });
-
-  it('should use violet color scheme for the active banner', () => {
+  it('should render nothing when auto-replies are active (normal operating state)', () => {
     const { container } = render(
       <AutoReplyStatusCard
         activePages={3}
         totalPages={3}
         commentsAutoReply={true}
         messagesAutoReply={false}
-      />
-    );
-
-    // The banner should use alert-violet class (not alert-success)
-    const banner = container.querySelector('.alert-violet');
-    expect(banner).toBeInTheDocument();
-    expect(container.querySelector('.alert-success')).not.toBeInTheDocument();
-  });
-
-  it('should handle session persistence for dismissal', () => {
-    sessionStorage.setItem('dashboard_success_banner_dismissed', 'true');
-    const { container } = render(
-      <AutoReplyStatusCard
-        activePages={3}
-        totalPages={3}
-        commentsAutoReply={true}
-        messagesAutoReply={true}
       />
     );
     expect(container).toBeEmptyDOMElement();
