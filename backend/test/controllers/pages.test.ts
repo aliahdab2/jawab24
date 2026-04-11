@@ -54,6 +54,7 @@ describe('Pages Controller', () => {
         mockRequest = {
             user: { userId: 'user-123', facebookId: 'fb-123' },
             workspaceId: 'test_workspace_id',
+            workspaceOwnerId: 'user-123',
             workspaceRole: 'owner',
             query: {},
             params: {},
@@ -194,12 +195,12 @@ describe('Pages Controller', () => {
         it('should sync pages from Facebook successfully', async () => {
             const syncedPages = [{ id: 'page-1', accessToken: 'tok' }];
             vi.mocked(subscriptionsService.canEnablePage).mockResolvedValue({ allowed: true, limit: 5, used: 1, remaining: 4 } as any);
-            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages, skippedCount: 0, revokedCount: 0 } as any);
+            vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages, skippedCount: 0, takenCount: 0, revokedCount: 0 } as any);
             mockRequest.body = { accessToken: 'fb-token-abc' };
 
             await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user-123', 'fb-token-abc');
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user-123', 'fb-token-abc', 'user-123');
             const sent = (mockReply.send as any).mock.calls[0][0];
             expect(sent.synced).toBe(1);
             expect(sent.pages[0]).toEqual(expect.objectContaining({ id: 'page-1', isConnected: true }));

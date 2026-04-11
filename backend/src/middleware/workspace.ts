@@ -16,7 +16,7 @@ export interface WorkspaceRequest extends AuthenticatedRequest {
  * string because resolveWorkspace middleware always sets it before any handler runs.
  * Cast to this type inside controller functions to avoid non-null assertions.
  */
-export type ResolvedWorkspaceRequest = WorkspaceRequest & { workspaceId: string };
+export type ResolvedWorkspaceRequest = WorkspaceRequest & { workspaceId: string; workspaceOwnerId: string };
 
 const ROLE_HIERARCHY: Record<WorkspaceRole, number> = {
     owner: 3,

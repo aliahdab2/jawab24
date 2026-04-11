@@ -108,8 +108,11 @@ const PagesPage: NextPageWithLayout = () => {
 
     try {
       setSyncing(true);
-      // Call sync endpoint with user's FB token
-      await api.post('/pages/sync', { accessToken: fbToken });
+      const { data } = await api.post<{ takenCount?: number }>('/pages/sync', { accessToken: fbToken });
+
+      if (data?.takenCount && data.takenCount > 0) {
+        toast.warning(t('pageTakenWarning', { count: data.takenCount }), { duration: Infinity });
+      }
 
       // Refresh list
       fetchPages();
@@ -119,7 +122,7 @@ const PagesPage: NextPageWithLayout = () => {
     } finally {
       setSyncing(false);
     }
-  }, [fbToken, fetchPages]);
+  }, [fbToken, fetchPages, t]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;

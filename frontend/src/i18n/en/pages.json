@@ -62,5 +62,6 @@
   "sectionActive": "Active",
   "sectionInactive": "Inactive",
   "sectionDisconnected": "Needs Attention",
-  "addInfo": "Add info"
+  "addInfo": "Add info",
+  "pageTakenWarning": "{count, plural, one {# page is} other {# pages are}} already connected to another Jawab24 account. Ask that account's owner to invite you as a team member."
 }

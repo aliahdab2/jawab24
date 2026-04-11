@@ -4,7 +4,7 @@ import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { CreatePageDTO, UpdatePageDTO } from '../types';
-import type { WorkspaceRequest } from '../middleware/workspace';
+import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { BusinessProfileSchema, validateSchema } from '../utils/validation';
@@ -21,16 +21,16 @@ export class PagesController {
      * POST /pages
      */
     async create(request: FastifyRequest<{ Body: CreatePageDTO }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { userId } = req.user;
-        const { workspaceId } = req;
+        const { workspaceId, workspaceOwnerId } = req;
 
         try {
-            // Check enabled page limit before creating (billing stays per-user)
-            const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId);
+            // Check enabled page limit — billing is based on workspace owner's subscription
+            const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId);
             if (!limitCheck.allowed) {
                 return reply.status(403).send({
                     error: limitCheck.reason || 'Page limit reached',
@@ -59,7 +59,7 @@ export class PagesController {
      * GET /pages
      */
     async getAll(request: FastifyRequest, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -78,7 +78,7 @@ export class PagesController {
      * GET /pages/:id
      */
     async getOne(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -101,7 +101,7 @@ export class PagesController {
      * PUT /pages/:id
      */
     async update(request: FastifyRequest<{ Params: { id: string }; Body: UpdatePageDTO }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -133,7 +133,7 @@ export class PagesController {
      * DELETE /pages/:id
      */
     async delete(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -161,12 +161,11 @@ export class PagesController {
      * PATCH /pages/:id/auto-reply
      */
     async toggleAutoReply(request: FastifyRequest<{ Params: { id: string }; Body: { enabled: boolean } }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = req.user;
-        const { workspaceId } = req;
+        const { workspaceId, workspaceOwnerId } = req;
         const { id } = request.params;
         const { enabled } = request.body;
 
@@ -182,7 +181,7 @@ export class PagesController {
                     });
                 }
 
-                const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId, id);
+                const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     return reply.status(403).send({
                         error: limitCheck.reason || 'Page limit reached',
@@ -209,12 +208,12 @@ export class PagesController {
      * POST /pages/sync
      */
     async sync(request: FastifyRequest<{ Body: { accessToken: string } }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { userId } = req.user;
-        const { workspaceId } = req;
+        const { workspaceId, workspaceOwnerId } = req;
         const { accessToken } = request.body;
 
         if (!accessToken) {
@@ -233,9 +232,9 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, revokedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+            const { syncedPages, skippedCount, takenCount, revokedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId);
 
-            if (syncedPages.length === 0) {
+            if (syncedPages.length === 0 && takenCount === 0) {
                 return reply.send({
                     synced: 0,
                     pages: [],
@@ -250,13 +249,17 @@ export class PagesController {
                 response.skippedCount = skippedCount;
             }
 
+            if (takenCount > 0) {
+                response.takenCount = takenCount;
+            }
+
             if ((revokedCount ?? 0) > 0) {
                 response.revokedWarning = `${revokedCount} page(s) were disconnected because access was revoked in Facebook.`;
                 response.revokedCount = revokedCount;
             }
 
             // Include current limit status for frontend display
-            const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId);
+            const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId);
             if (limitCheck.remaining !== undefined) {
                 response.enabledPagesRemaining = limitCheck.remaining;
             }
@@ -277,7 +280,7 @@ export class PagesController {
      * GET /pages/:id/kb-gaps
      */
     async getKbGaps(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -303,7 +306,7 @@ export class PagesController {
      * POST /pages/:id/kb-gaps/:gapId/dismiss
      */
     async dismissGap(request: FastifyRequest<{ Params: { id: string; gapId: string } }>, reply: FastifyReply) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }

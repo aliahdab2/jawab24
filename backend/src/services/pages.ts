@@ -456,7 +456,7 @@ export class PagesService {
      * @param userAccessToken - Facebook user access token
      * @param logger - Optional logger for tracking sync progress
      */
-    async syncFromFacebook(workspaceId: string, userId: string, userAccessToken: string, logger: Logger = noopLogger) {
+    async syncFromFacebook(workspaceId: string, userId: string, userAccessToken: string, billingUserId?: string, logger: Logger = noopLogger) {
         logger.info(`[Pages] Starting sync for workspace ${workspaceId}`);
 
         const fbPages = await facebookService.getUserPages(userAccessToken);
@@ -464,7 +464,7 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return { syncedPages: [], skippedCount: 0 };
+            return { syncedPages: [], skippedCount: 0, takenCount: 0 };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -508,7 +508,7 @@ export class PagesService {
         const results = await Promise.all(processPromises);
 
         // 3. Determine how many more pages can be auto-enabled
-        const enableCheck = await subscriptionsService.canEnablePage(userId, workspaceId);
+        const enableCheck = await subscriptionsService.canEnablePage(billingUserId ?? userId, workspaceId);
         let remainingSlots: number | null = null; // null = unlimited
         if (enableCheck.allowed && enableCheck.remaining !== undefined) {
             remainingSlots = enableCheck.remaining;
@@ -516,6 +516,7 @@ export class PagesService {
             remainingSlots = 0;
         }
         let skippedCount = 0;
+        let takenCount = 0;
 
         // 4. Perform DB Writes (Sequential to ensure consistency)
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
@@ -585,7 +586,7 @@ export class PagesService {
                 } else if (globalExisting) {
                     // Page is active under another user — skip to avoid stealing it
                     logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
-                    skippedCount++;
+                    takenCount++;
                     continue;
                 } else {
                     // Brand new page — insert
@@ -669,7 +670,7 @@ export class PagesService {
         }
 
         logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit), ${revokedPages.length} disabled (access revoked).`);
-        return { syncedPages, skippedCount, revokedCount: revokedPages.length };
+        return { syncedPages, skippedCount, takenCount, revokedCount: revokedPages.length };
     }
 
     /**

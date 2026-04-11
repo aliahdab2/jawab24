@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import type { WorkspaceRequest } from '../middleware/workspace';
+import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
@@ -16,7 +16,7 @@ export class InstagramController {
         request: FastifyRequest<{ Params: { pageId: string } }>,
         reply: FastifyReply
     ) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -59,7 +59,7 @@ export class InstagramController {
         request: FastifyRequest<{ Params: { mediaId: string } }>,
         reply: FastifyReply
     ) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -112,7 +112,7 @@ export class InstagramController {
         }>,
         reply: FastifyReply
     ) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
@@ -203,19 +203,18 @@ export class InstagramController {
         }>,
         reply: FastifyReply
     ) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.user || !req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
-        const { userId } = req.user;
-        const { workspaceId } = req;
+        const { workspaceId, workspaceOwnerId } = req;
         const { id } = request.params;
         const { enabled } = request.body;
 
         try {
             // Only check limit when ENABLING (disabling is always allowed)
             if (enabled) {
-                const limitCheck = await subscriptionsService.canEnablePage(userId, workspaceId, id);
+                const limitCheck = await subscriptionsService.canEnablePage(workspaceOwnerId, workspaceId, id);
                 if (!limitCheck.allowed) {
                     return reply.status(403).send({
                         error: limitCheck.reason || 'Page limit reached',
@@ -245,7 +244,7 @@ export class InstagramController {
         request: FastifyRequest<{ Params: { pageId: string } }>,
         reply: FastifyReply
     ) {
-        const req = request as WorkspaceRequest;
+        const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
