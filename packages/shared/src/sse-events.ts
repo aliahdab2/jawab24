@@ -9,6 +9,7 @@ export type SSEEventType =
     | 'message:reply_sent'
     | 'message:reply_failed'
     | 'usage:updated'
+    | 'lead:captured'
     | 'heartbeat';
 
 /** Lightweight message snapshot included in SSE events for optimistic cache updates. */
@@ -68,6 +69,12 @@ export interface SSEEventDataMap {
     };
     'usage:updated': {
         aiRepliesUsed: number;
+    };
+    'lead:captured': {
+        leadId: string;
+        pageId: string;
+        senderName: string | null;
+        phone: string;
     };
     'heartbeat': Record<string, never>;
 }

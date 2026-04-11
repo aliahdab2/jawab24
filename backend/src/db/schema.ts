@@ -15,6 +15,7 @@ export const users = pgTable('users', {
     facebookTokenExpiresAt: timestamp('facebook_token_expires_at'),
     isAdmin: boolean('is_admin').default(false), // Admin flag for manual upgrades
     hasInstagramPermission: boolean('has_instagram_permission').default(false),
+    lastSeenAt: timestamp('last_seen_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
     // App-level invariant: at least one of facebookId or phone must be non-null
@@ -815,6 +816,32 @@ export const kbGaps = pgTable('kb_gaps', {
         unresolvedIdx: index('idx_kb_gaps_unresolved').on(table.pageId, table.resolved),
     };
 });
+
+// ============================================
+// LEADS
+// ============================================
+
+// Leads Table — captured customer contacts from AI conversations (DMs + comments)
+export const leads = pgTable('leads', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    sourceType: varchar('source_type', { length: 20 }).notNull().default('message'), // 'message' | 'comment'
+    sourceId: uuid('source_id'), // FK to messages.id or comments.id — intentionally no hard FK (different tables)
+    senderId: varchar('sender_id', { length: 255 }).notNull(),
+    senderName: varchar('sender_name', { length: 255 }),
+    phone: varchar('phone', { length: 50 }).notNull(),
+    extractedData: jsonb('extracted_data').$type<{ summary?: string; fields: Array<{ key: string; label_en: string; label_ar: string; value: string }> }>().notNull().default({ fields: [] }),
+    status: varchar('status', { length: 20 }).notNull().default('new'), // 'new' | 'contacted' | 'converted'
+    extractionStatus: varchar('extraction_status', { length: 20 }).notNull().default('completed'), // 'completed' | 'pending' | 'failed'
+    extractionAttempts: integer('extraction_attempts').notNull().default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => ({
+    pageIdIdx: index('idx_leads_page_id').on(table.pageId),
+    senderPageUnique: uniqueIndex('idx_leads_sender_page').on(table.senderId, table.pageId),
+    statusIdx: index('idx_leads_status').on(table.pageId, table.status),
+    createdAtIdx: index('idx_leads_created_at').on(table.pageId, table.createdAt),
+}));
 
 // ============================================
 // AI COST TRACKING

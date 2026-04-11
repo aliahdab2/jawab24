@@ -20,6 +20,7 @@ import enFeedback      from './en/feedback.json';
 import { flagReasonEn as enFlagReason } from '@jawab24/shared';
 import enIntegrations  from './en/integrations.json';
 import enKb            from './en/kb.json';
+import enLeads         from './en/leads.json';
 import enLanding       from './en/landing.json';
 import enLogout        from './en/logout.json';
 import enMessages      from './en/messages.json';
@@ -68,6 +69,7 @@ import arFeedback      from './ar/feedback.json';
 import { flagReasonAr as arFlagReason } from '@jawab24/shared';
 import arIntegrations  from './ar/integrations.json';
 import arKb            from './ar/kb.json';
+import arLeads         from './ar/leads.json';
 import arLanding       from './ar/landing.json';
 import arLogout        from './ar/logout.json';
 import arMessages      from './ar/messages.json';
@@ -120,6 +122,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/flagReason': enFlagReason, 'ar/flagReason': arFlagReason,
   'en/integrations': enIntegrations, 'ar/integrations': arIntegrations,
   'en/kb': enKb,                 'ar/kb': arKb,
+  'en/leads': enLeads,           'ar/leads': arLeads,
   'en/landing': enLanding,       'ar/landing': arLanding,
   'en/logout': enLogout,         'ar/logout': arLogout,
   'en/messages': enMessages,     'ar/messages': arMessages,

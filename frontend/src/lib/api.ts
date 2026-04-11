@@ -680,6 +680,56 @@ export const orderNotificationsApi = {
     api.get<NotificationStats>(`/notification-log/${storeId}/stats`),
 };
 
+// Leads API
+export type LeadStatus = 'new' | 'contacted' | 'converted';
+export type LeadSourceType = 'message' | 'comment';
+
+export interface LeadField {
+  key: string;
+  label_en: string;
+  label_ar: string;
+  value: string;
+}
+
+export interface LeadExtractedData {
+  summary?: string;
+  fields: LeadField[];
+}
+
+export interface Lead {
+  id: string;
+  pageId: string;
+  sourceType: LeadSourceType;
+  sourceId: string | null;
+  senderId: string;
+  senderName: string | null;
+  phone: string;
+  extractedData: LeadExtractedData;
+  status: LeadStatus;
+  extractionStatus: 'completed' | 'pending' | 'failed';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LeadsPaginatedResponse {
+  data: Lead[];
+  total: number;
+}
+
+export const leadsApi = {
+  getByPage: (pageId: string, params?: { status?: LeadStatus; limit?: number; offset?: number }) =>
+    api.get<LeadsPaginatedResponse>('/leads', { params: { pageId, ...params } }),
+
+  getCount: (pageId: string) =>
+    api.get<{ count: number }>('/leads/count', { params: { pageId } }),
+
+  updateStatus: (leadId: string, pageId: string, status: LeadStatus) =>
+    api.patch<Lead>(`/leads/${leadId}/status`, { pageId, status }),
+
+  deleteLead: (leadId: string, pageId: string) =>
+    api.delete(`/leads/${leadId}`, { params: { pageId } }),
+};
+
 // Workspace API
 export const workspaceApi = {
   list: () => api.get('/workspaces'),

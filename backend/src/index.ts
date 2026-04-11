@@ -41,6 +41,7 @@ import integrationsRoutes from "./routes/integrations";
 import waitlistRoutes from "./routes/waitlist";
 import sseRoutes from "./routes/sse";
 import customerNotificationRoutes from "./routes/customerNotifications";
+import leadsRoutes from "./routes/leads";
 import { sseManager } from "./lib/sseManager";
 import { shutdownEventBus } from "./lib/eventBus";
 import { integrationRegistry } from "./integrations";
@@ -213,6 +214,7 @@ const start = async () => {
     await server.register(commentsRoutes);
     await server.register(settingsRoutes);
     await server.register(messagesRoutes);
+    await server.register(leadsRoutes);
     await server.register(instagramRoutes);
     await server.register(plansRoutes, { prefix: "/plans" });
     await server.register(subscriptionsRoutes, { prefix: "/subscription" });

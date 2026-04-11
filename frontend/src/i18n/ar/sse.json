@@ -3,5 +3,6 @@
   "newMessage": "رسالة جديدة من {name}",
   "aiRepliedComment": "رد الذكاء الاصطناعي على تعليق",
   "aiRepliedMessage": "رد الذكاء الاصطناعي على رسالة",
+  "newLead": "عميل محتمل جديد من {name}",
   "view": "عرض"
 }

@@ -15,6 +15,7 @@ import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
+import { leadExtractorService } from '../leadExtractor';
 
 /**
  * Unified Comment Processor
@@ -116,10 +117,10 @@ export class CommentProcessor {
                     invalidateWorkspaceStatsCache(workspaceId);
                     return this.sendAndFinalize({
                         adapter, platform, pipeline,
-                        pageId: page.id, userId,
+                        pageId: page.id, userId, workspaceId,
                         comment, replyText: content.triggerReply, replyMethod: 'template',
                         commentMessage, platformCommentId, platformPageId,
-                        accessToken: page.accessToken, fromId,
+                        accessToken: page.accessToken, fromId, fromName,
                         userSettings: userSettings as unknown as Record<string, unknown>,
                         postMessage: content.message || undefined,
                         triggerKeyword: matchedKeyword,
@@ -354,10 +355,10 @@ export class CommentProcessor {
 
             return this.sendAndFinalize({
                 adapter, platform, pipeline,
-                pageId: page.id, userId,
+                pageId: page.id, userId, workspaceId,
                 comment, replyText, replyMethod, commentMessage,
                 platformCommentId, platformPageId,
-                accessToken: page.accessToken, fromId,
+                accessToken: page.accessToken, fromId, fromName,
                 userSettings: userSettings as unknown as Record<string, unknown>,
                 postMessage: content.message || undefined,
                 templateId, needsAttention, flagReason, aiIntent, aiOriginalReply,
@@ -393,6 +394,7 @@ export class CommentProcessor {
         pipeline: Pipeline;
         pageId: string;
         userId: string;
+        workspaceId: string;
         comment: { id: string };
         replyText: string;
         replyMethod: 'template' | 'ai';
@@ -401,6 +403,7 @@ export class CommentProcessor {
         platformPageId: string;
         accessToken: string;
         fromId?: string;
+        fromName?: string;
         userSettings: Record<string, unknown>;
         postMessage?: string;
         // Optional — only used by the main template/AI path
@@ -413,9 +416,9 @@ export class CommentProcessor {
         triggerKeyword?: string;
     }): Promise<CommentResult> {
         const {
-            adapter, platform, pipeline, pageId, userId,
+            adapter, platform, pipeline, pageId, userId, workspaceId,
             comment, replyText, replyMethod, commentMessage,
-            platformCommentId, platformPageId, accessToken, fromId, userSettings,
+            platformCommentId, platformPageId, accessToken, fromId, fromName, userSettings,
             templateId, needsAttention, flagReason, aiIntent, aiOriginalReply,
             confidence, triggerKeyword,
         } = opts;
@@ -471,6 +474,18 @@ export class CommentProcessor {
         if (replyMethod === 'ai') {
             publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });
         }
+
+        // Fire-and-forget lead extraction (non-critical — never blocks reply pipeline)
+        leadExtractorService.maybeCaptureLead({
+            pageId,
+            userId,
+            workspaceId,
+            sourceId: comment.id,
+            sourceType: 'comment',
+            senderId: fromId ?? '',
+            senderName: fromName,
+            messageText: commentMessage,
+        }).catch(() => { /* errors captured inside maybeCaptureLead */ });
 
         pipelineMetrics.record(pipeline, 'success');
 

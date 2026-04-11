@@ -50,6 +50,7 @@ export const PAGE_NAMESPACES = {
   dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'feedback', 'kb', 'messages', 'onboarding', 'pages', 'plans', 'subscription', 'time'],
   comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback', 'messages'],
   messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'messages'],
+  leads:              [...DASHBOARD_LAYOUT, 'leads', 'export'],
   presetReplies:      [...DASHBOARD_LAYOUT, 'presetReplies'],
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'team', 'time', 'logout'],

@@ -175,6 +175,7 @@ interface UIState {
   isOffline: boolean;
   unreadComments: number;
   unreadMessages: number;
+  newLeads: number;
   sseStatus: SSEStatus;
   setOffline: (offline: boolean) => void;
   toggleSidebar: () => void;
@@ -187,6 +188,8 @@ interface UIState {
   incrementUnreadMessages: () => void;
   resetUnreadComments: () => void;
   resetUnreadMessages: () => void;
+  incrementNewLeads: () => void;
+  resetNewLeads: () => void;
   setSSEStatus: (status: SSEStatus) => void;
 }
 
@@ -201,6 +204,7 @@ export const useUIStore = create<UIState>()(
       isOffline: false,
       unreadComments: 0,
       unreadMessages: 0,
+      newLeads: 0,
       sseStatus: 'disconnected' as SSEStatus,
       setOffline: (offline) => set({ isOffline: offline }),
       toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
@@ -213,6 +217,8 @@ export const useUIStore = create<UIState>()(
       incrementUnreadMessages: () => set((state) => ({ unreadMessages: state.unreadMessages + 1 })),
       resetUnreadComments: () => set({ unreadComments: 0 }),
       resetUnreadMessages: () => set({ unreadMessages: 0 }),
+      incrementNewLeads: () => set((state) => ({ newLeads: state.newLeads + 1 })),
+      resetNewLeads: () => set({ newLeads: 0 }),
       setSSEStatus: (status) => set({ sseStatus: status }),
     }),
     {

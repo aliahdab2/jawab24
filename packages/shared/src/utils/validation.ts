@@ -38,3 +38,21 @@ const ARABIC_PREFIX_RE = new RegExp(`^\\+(?:${ARABIC_CALLING_CODES.join('|')})`)
 export function isArabicPhone(phone: string): boolean {
   return ARABIC_PREFIX_RE.test(phone);
 }
+
+/** Normalize Arabic-Indic digits (٠١٢٣٤٥٦٧٨٩) to ASCII before phone matching. */
+export function normalizeArabicIndic(text: string): string {
+  return text.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+}
+
+/**
+ * Extract the first phone-like string from free text (Arabic/international formats).
+ * Matches: +966xxxxxxxxx, 009665xxxxxxx, 05xxxxxxxx, ٠٥xxxxxxxx (Arabic-Indic normalized first).
+ * Returns compact digit string (no spaces/dashes), or null if no match.
+ * Used for lead detection only — NOT for E.164 validation.
+ */
+export function extractPhoneFromText(text: string): string | null {
+  const normalized = normalizeArabicIndic(text);
+  const match = normalized.match(/(?:\+|00)?\d[\d\s\-().]{7,18}\d/);
+  if (!match) return null;
+  return match[0].replace(/[\s\-().]/g, '');
+}

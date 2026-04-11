@@ -10,7 +10,7 @@ export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
-export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType, isArabicPhone } from './utils/validation';
+export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhoneFromText } from './utils/validation';
 
 // --- SSE Event Types ---
 export * from './sse-events';
@@ -508,6 +508,38 @@ export interface EcommerceSyncJobData {
 
 // Redis queue key — value intentionally kept as 'shopify-sync-queue' for backward compatibility
 export const ECOMMERCE_SYNC_QUEUE_NAME = 'shopify-sync-queue';
+
+// --- Leads Types ---
+export type LeadStatus = 'new' | 'contacted' | 'converted';
+export type LeadSourceType = 'message' | 'comment';
+export type LeadExtractionStatus = 'completed' | 'pending' | 'failed';
+
+export interface LeadField {
+  key: string;
+  label_en: string;
+  label_ar: string;
+  value: string;
+}
+
+export interface LeadExtractedData {
+  summary?: string;
+  fields: LeadField[];
+}
+
+export interface Lead {
+  id: string;
+  pageId: string;
+  sourceType: LeadSourceType;
+  sourceId: string | null;
+  senderId: string;
+  senderName: string | null;
+  phone: string;
+  extractedData: LeadExtractedData;
+  status: LeadStatus;
+  extractionStatus: LeadExtractionStatus;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+}
 
 // --- Workspace / Team Types ---
 export type WorkspaceRole = 'owner' | 'admin' | 'member';

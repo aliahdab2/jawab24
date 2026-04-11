@@ -79,6 +79,7 @@ export function useSSE(): void {
     const setSSEStatus = useUIStore((s) => s.setSSEStatus);
     const incrementUnreadComments = useUIStore((s) => s.incrementUnreadComments);
     const incrementUnreadMessages = useUIStore((s) => s.incrementUnreadMessages);
+    const incrementNewLeads = useUIStore((s) => s.incrementNewLeads);
 
     const esRef = useRef<EventSource | null>(null);
     const retryCountRef = useRef(0);
@@ -195,6 +196,22 @@ export function useSSE(): void {
             queryClient.invalidateQueries({ queryKey: ['subscription-usage'] });
         });
 
+        // --- Leads ---
+        es.addEventListener('lead:captured', (e) => {
+            try {
+                const event: SSEEvent<'lead:captured'> = JSON.parse(e.data);
+                queryClient.invalidateQueries({ queryKey: ['leads'] });
+                queryClient.invalidateQueries({ queryKey: ['leads-count'] });
+                if (!isOnPage('/leads')) {
+                    incrementNewLeads();
+                    showToast(
+                        t('newLead', { name: event.data.senderName || event.data.phone }),
+                        { label: t('view'), onClick: () => routerRef.current.push('/leads') },
+                    );
+                }
+            } catch { /* malformed event — ignore */ }
+        });
+
         // --- Heartbeat (no action needed — keeps connection alive) ---
         es.addEventListener('heartbeat', () => {
             // no-op
@@ -220,6 +237,7 @@ export function useSSE(): void {
         setSSEStatus,
         incrementUnreadComments,
         incrementUnreadMessages,
+        incrementNewLeads,
         isOnPage,
         showToast,
         t,

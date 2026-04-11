@@ -14,6 +14,7 @@ import {
   Shield,
   Zap,
   Plug,
+  Users,
   ChevronDown as ChevronDownIcon,
   Check
 } from 'lucide-react';
@@ -128,6 +129,7 @@ export function getNavigationGroups(hasEcommerceStore: boolean) {
       items: [
         { key: 'nav.comments', href: '/comments', icon: MessageSquare },
         { key: 'nav.messages', href: '/messages', icon: MessageCircle },
+        { key: 'nav.leads', href: '/leads', icon: Users },
       ],
     },
     {
@@ -159,6 +161,7 @@ export const Sidebar = memo(function Sidebar() {
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
   const unreadMessages = useUIStore((s) => s.unreadMessages);
+  const newLeads = useUIStore((s) => s.newLeads);
   const sseStatus = useUIStore((s) => s.sseStatus);
   const tNav = useTranslations('nav');
   const tSidebar = useTranslations('sidebar');
@@ -380,6 +383,14 @@ export const Sidebar = memo(function Sidebar() {
                         sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
                       )}>
                         {sidebarOpen ? (unreadMessages > 99 ? '99+' : unreadMessages) : ''}
+                      </span>
+                    )}
+                    {item.href === '/leads' && newLeads > 0 && (
+                      <span className={clsx(
+                        'flex items-center justify-center bg-brand-500 text-white font-bold rounded-full flex-shrink-0',
+                        sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
+                      )}>
+                        {sidebarOpen ? (newLeads > 99 ? '99+' : newLeads) : ''}
                       </span>
                     )}
 

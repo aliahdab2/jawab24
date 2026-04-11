@@ -498,6 +498,20 @@
       "when": 1775577292449,
       "tag": "0070_steep_shinko_yamashiro",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1775949090685,
+      "tag": "0071_fast_sheva_callister",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1775949134963,
+      "tag": "0072_overrated_iron_fist",
+      "breakpoints": true
     }
   ]
 }

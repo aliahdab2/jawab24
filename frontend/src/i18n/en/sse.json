@@ -3,5 +3,6 @@
   "newMessage": "New message from {name}",
   "aiRepliedComment": "AI replied to a comment",
   "aiRepliedMessage": "AI replied to a message",
+  "newLead": "New lead from {name}",
   "view": "View"
 }

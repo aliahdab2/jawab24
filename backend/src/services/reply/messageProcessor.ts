@@ -18,6 +18,7 @@ import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
+import { leadExtractorService } from '../leadExtractor';
 import { extractPostId } from '../../utils/instagram';
 
 /**
@@ -504,6 +505,18 @@ export class MessageProcessor {
             if (replyMethod === 'ai') {
                 publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });
             }
+
+            // Fire-and-forget lead extraction (non-critical — never blocks reply pipeline)
+            leadExtractorService.maybeCaptureLead({
+                pageId: page.id,
+                userId,
+                workspaceId,
+                sourceId: storedMessage.id,
+                sourceType: 'message',
+                senderId,
+                senderName,
+                messageText: consolidatedText,
+            }).catch(() => { /* errors captured inside maybeCaptureLead */ });
 
             pipelineMetrics.record(pipeline, 'success');
             lap('DONE');
