@@ -250,63 +250,19 @@ describe('MessageCard', () => {
   });
 
   describe('resolve button', () => {
-    it('shows resolve button when onResolve is provided', () => {
-      const onResolve = vi.fn();
+    it('does not render inline resolve buttons (actions handled in the detail modal)', () => {
+      // Inline resolve button was removed — same as CommentCard. Actions via modal only.
       const incoming = makeMessage({ direction: 'incoming', message: 'Question' });
-
       render(
         <MessageCard
           {...defaultProps}
-          onResolve={onResolve}
-          conversation={makeConversation({
-            messages: [incoming],
-            lastMessage: incoming,
-          })}
+          onResolve={vi.fn()}
+          onUnresolve={vi.fn()}
+          conversation={makeConversation({ messages: [incoming], lastMessage: incoming })}
         />
       );
-
-      expect(screen.getByText('Mark as handled')).toBeInTheDocument();
-    });
-
-    it('does not show resolve button when onResolve is not provided', () => {
-      const incoming = makeMessage({ direction: 'incoming', message: 'Question' });
-
-      render(
-        <MessageCard
-          {...defaultProps}
-          conversation={makeConversation({
-            messages: [incoming],
-            lastMessage: incoming,
-          })}
-        />
-      );
-
       expect(screen.queryByText('Mark as handled')).not.toBeInTheDocument();
-    });
-
-    it('calls onResolve without triggering onClick', async () => {
-      const onResolve = vi.fn();
-      const onClick = vi.fn();
-      const incoming = makeMessage({ direction: 'incoming', message: 'Question' });
-
-      render(
-        <MessageCard
-          onClick={onClick}
-          onResolve={onResolve}
-          animationDelay={0}
-          conversation={makeConversation({
-            messages: [incoming],
-            lastMessage: incoming,
-          })}
-        />
-      );
-
-      const resolveBtn = screen.getByText('Mark as handled');
-      resolveBtn.click();
-
-      expect(onResolve).toHaveBeenCalledTimes(1);
-      // onClick should not fire due to stopPropagation
-      expect(onClick).not.toHaveBeenCalled();
+      expect(screen.queryByText('Mark as unhandled')).not.toBeInTheDocument();
     });
   });
 

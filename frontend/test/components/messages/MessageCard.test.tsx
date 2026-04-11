@@ -82,36 +82,12 @@ describe('MessageCard', () => {
     expect(screen.getByText('Handled')).toBeInTheDocument();
   });
 
-  it('shows "Mark as unhandled" button when onUnresolve is provided', () => {
+  it('does not render inline action buttons (actions handled in the detail modal)', () => {
+    // Inline resolve/unresolve buttons were removed from the card — actions happen in the modal.
     const msg = makeMessage({ resolved: true, replied: true, replyMethod: 'ai' });
     const conv = makeConversation([msg]);
-    const onUnresolve = vi.fn();
-    render(<MessageCard conversation={conv} onClick={vi.fn()} onUnresolve={onUnresolve} />);
-    expect(screen.getByText('Mark as unhandled')).toBeInTheDocument();
-  });
-
-  it('calls onUnresolve when "Mark as unhandled" is clicked', () => {
-    const msg = makeMessage({ resolved: true, replied: true, replyMethod: 'ai' });
-    const conv = makeConversation([msg]);
-    const onUnresolve = vi.fn();
-    render(<MessageCard conversation={conv} onClick={vi.fn()} onUnresolve={onUnresolve} />);
-    fireEvent.click(screen.getByText('Mark as unhandled'));
-    expect(onUnresolve).toHaveBeenCalled();
-  });
-
-  it('does not show "Mark as Handled" on successfully auto-replied conversations', () => {
-    const msg = makeMessage({ replied: true, replyMethod: 'ai', createdAt: '2026-01-01T00:00:00Z' });
-    const conv = makeConversation([msg]);
-    render(<MessageCard conversation={conv} onClick={vi.fn()} />);
-    // No resolve button should be present (onResolve not passed)
+    render(<MessageCard conversation={conv} onClick={vi.fn()} onResolve={vi.fn()} onUnresolve={vi.fn()} />);
     expect(screen.queryByText('Mark as handled')).not.toBeInTheDocument();
-  });
-
-  it('shows "Mark as Handled" only on conversations needing attention', () => {
-    const msg = makeMessage({ replied: true, needsAttention: true, replyMethod: 'ai', createdAt: '2026-01-01T00:00:00Z' });
-    const conv = makeConversation([msg], { needsHumanAttention: true });
-    const onResolve = vi.fn();
-    render(<MessageCard conversation={conv} onClick={vi.fn()} onResolve={onResolve} />);
-    expect(screen.getByText('Mark as handled')).toBeInTheDocument();
+    expect(screen.queryByText('Mark as unhandled')).not.toBeInTheDocument();
   });
 });
