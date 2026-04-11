@@ -1404,7 +1404,9 @@
 }
 
 .is-native .pb-safe-modal {
-  padding-bottom: max(16px, calc(var(--sai-bottom) + 8px));
+  /* When keyboard is open, it covers the safe area — subtract keyboard height
+     so no gap appears between the input and the keyboard. */
+  padding-bottom: max(12px, calc(var(--sai-bottom, 0px) + 8px - var(--keyboard-height, 0px)));
 }
 
 @media (orientation: landscape) {
