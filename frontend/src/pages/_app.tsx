@@ -175,20 +175,16 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         import("@capacitor/network")
       ]);
 
-      // Android: KeyboardResize.Body — the WebView viewport shrinks when the keyboard
-      // appears (windowSoftInputMode=adjustResize). No CSS variable needed; modal backdrops
-      // (fixed inset-0) automatically fit the shrunken viewport, sitting above the keyboard.
-      //
-      // iOS: KeyboardResize.None — WKWebView must never resize (it distorts the layout).
-      // Instead, keyboardWillShow sets --keyboard-height and modal backdrops use
-      // paddingBottom: --keyboard-height to push the sheet above the keyboard.
+      // See src/lib/keyboardSetup.ts for the platform-specific strategy.
       let isAndroid = false;
+      let kbCleanup: Array<() => void> = [];
       try {
-        const { getCapacitor } = await import('@/lib/capacitor');
+        const [{ getCapacitor }, { setupKeyboard }] = await Promise.all([
+          import('@/lib/capacitor'),
+          import('@/lib/keyboardSetup'),
+        ]);
         isAndroid = getCapacitor()?.getPlatform() === 'android';
-        if (isAndroid) {
-          await Keyboard.setResizeMode({ mode: KeyboardResize.Body });
-        }
+        kbCleanup = await setupKeyboard(Keyboard, KeyboardResize.Body, isAndroid);
       } catch (err) {
         addErrorBreadcrumb('capacitor', 'Keyboard resize mode setup failed', { error: String(err) });
       }
@@ -197,19 +193,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
       listenersRef.current.forEach(remove => remove());
       listenersRef.current = [];
 
-      // iOS only: set --keyboard-height so modal backdrops can push the sheet up.
-      // On Android, KeyboardResize.Body already resizes the viewport — adding
-      // --keyboard-height would double-compensate and squeeze modal content.
-      if (!isAndroid) {
-        const kbShowListener = await Keyboard.addListener('keyboardWillShow', (info) => {
-          document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
-        });
-        const kbHideListener = await Keyboard.addListener('keyboardWillHide', () => {
-          document.documentElement.style.setProperty('--keyboard-height', '0px');
-        });
-        listenersRef.current.push(() => kbShowListener.remove());
-        listenersRef.current.push(() => kbHideListener.remove());
-      }
+      kbCleanup.forEach(fn => listenersRef.current.push(fn));
 
       // Handle hardware back button (Android) - Industry Standard
       // Priority: close open modal/overlay first, then navigate back, then exit.
