@@ -282,19 +282,11 @@ export class MessageProcessor {
             }
             lap('10-replyDelay');
 
-            // 10b. Post-delay debounce re-check: after waiting, a newer message
-            //      may have arrived. Let the newer job handle the consolidated reply.
-            if (replyDelay > 0) {
-                const hasNewer = await messagesService.hasNewerUnrepliedMessage(page.id, senderId, internalMessageId);
-                lap('10b-postDelayDebounce');
-                if (hasNewer) {
-                    pipelineMetrics.record(pipeline, 'debounce_skipped');
-                    this.logger.info(`[${platform}] Skipping after delay — newer message pending`, { messageId: platformMessageId, senderId });
-                    return { success: false, messageId: platformMessageId, error: 'Skipped: newer message pending (post-delay)' };
-                }
-            }
-
             // 11. Consolidate all unreplied messages from this sender
+            // Note: no post-delay re-check here. If newer messages arrived during the
+            // delay, step 11 will include them in the consolidation below. A post-delay
+            // skip would cause the newer message to be dropped: Worker 2 already bailed
+            // at step 4b ("Lock held"), so nobody would process it.
             const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
             lap('11-consolidate');
 
