@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button, PageHeader, EmptyState, ConfirmationModal } from '@/components/ui';
+import { Button, PageHeader, EmptyState, ConfirmationModal, Select, FilterButtons } from '@/components/ui';
 import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
 import type { Page, UsageSummary } from '@jawab24/shared';
@@ -14,7 +14,6 @@ import {
   Trash2,
   Download,
   Lock,
-  ChevronDown,
   Loader2,
   ChevronRight,
 } from 'lucide-react';
@@ -412,38 +411,22 @@ const LeadsPage: NextPageWithLayout = () => {
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
         {/* Page selector */}
-        <div className="relative">
-          <select
+        <div className="w-full sm:w-auto sm:min-w-[220px]">
+          <Select
             value={selectedPageId}
-            onChange={(e) => setSelectedPageId(e.target.value)}
-            className="appearance-none w-full sm:w-auto bg-card border border-theme-border text-foreground text-sm rounded-xl ps-3 pe-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-400/50 min-w-[180px]"
+            onChange={setSelectedPageId}
+            options={pages.map((p) => ({ value: p.id, label: p.name }))}
+            placeholder={t('selectPage')}
             aria-label={t('selectPage')}
-          >
-            {pages.length === 0 && <option value="">{t('selectPage')}</option>}
-            {pages.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute end-2 top-1/2 -translate-y-1/2 w-4 h-4 text-icon-muted pointer-events-none" aria-hidden="true" />
+          />
         </div>
 
         {/* Status filter tabs */}
-        <div className="flex gap-1 bg-surface-100 rounded-xl p-1 border border-white/10 overflow-x-auto">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={clsx(
-                'px-3 py-1.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap',
-                statusFilter === tab.key
-                  ? 'bg-brand-400/15 text-brand-400'
-                  : 'text-muted-foreground hover:text-white',
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <FilterButtons
+          options={filterTabs.map((tab) => ({ value: tab.key, label: tab.label }))}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
 
         {total > 0 && (
           <span className="text-sm text-muted-foreground sm:ms-auto">
