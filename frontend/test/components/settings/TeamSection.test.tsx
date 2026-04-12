@@ -291,4 +291,41 @@ describe('TeamSection', () => {
     expect(await screen.findByText('Ahmad')).toBeInTheDocument();
     expect(await screen.findByText('ahmad@test.com')).toBeInTheDocument();
   });
+
+  // ─── Avatar: referrerPolicy + onError fallback ────────────────────────
+
+  it('renders profile picture with referrerPolicy="no-referrer" when userPicture is set', async () => {
+    mockMembers.mockResolvedValue({
+      data: [{ ...ownerMember, userPicture: 'https://platform-lookaside.fbsbx.com/picture.jpg' }],
+    });
+    renderTeamSection();
+
+    const img = await screen.findByRole('img', { name: 'Ahmad' });
+    expect(img).toHaveAttribute('src', 'https://platform-lookaside.fbsbx.com/picture.jpg');
+    expect(img).toHaveAttribute('referrerpolicy', 'no-referrer');
+  });
+
+  it('shows initial avatar when userPicture is null', async () => {
+    mockMembers.mockResolvedValue({ data: [{ ...ownerMember, userPicture: null }] });
+    renderTeamSection();
+
+    await screen.findByText('Ahmad');
+    // No img element for this member — initial div shown instead
+    expect(screen.queryByRole('img', { name: 'Ahmad' })).not.toBeInTheDocument();
+  });
+
+  it('falls back to initial avatar when profile image fails to load', async () => {
+    mockMembers.mockResolvedValue({
+      data: [{ ...ownerMember, userPicture: 'https://platform-lookaside.fbsbx.com/picture.jpg' }],
+    });
+    renderTeamSection();
+
+    const img = await screen.findByRole('img', { name: 'Ahmad' });
+
+    // Simulate network failure
+    fireEvent.error(img);
+
+    // Image should be gone, initial letter should appear
+    expect(screen.queryByRole('img', { name: 'Ahmad' })).not.toBeInTheDocument();
+  });
 });
