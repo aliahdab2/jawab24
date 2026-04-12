@@ -4,8 +4,8 @@
  *
  * Platform strategy:
  *   Native (Capacitor): write to Documents via @capacitor/filesystem — returns savedToDocuments: true
- *   Mobile web (iOS Safari / Android Chrome): Web Share API with File
- *   Desktop web: programmatic <a> click with blob URL
+ *   iOS Safari (web): Web Share API with File — <a download> opens a tab instead of downloading on iOS
+ *   Desktop + Android Chrome: programmatic <a> click with blob URL
  */
 import { getIntlLocale } from '@/i18n';
 import { isNativePlatform } from '@/lib/capacitor';
@@ -15,6 +15,11 @@ function escapeCSVField(value: string): string {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
+}
+
+/** Strip non-ASCII characters so all platforms accept the filename. */
+function sanitizeFilename(name: string): string {
+  return name.replace(/[^\w.\-]/g, '_');
 }
 
 /**
@@ -34,12 +39,15 @@ export async function downloadCSV(
 
   // ── Native (Capacitor WKWebView / Android WebView) ────────────────────
   // blob URL + link.click() does not trigger a download in Capacitor WebViews.
-  // Write the file to the app's Documents directory instead.
+  // Write the file directly to the app's Documents directory using UTF-8 encoding.
   if (isNativePlatform()) {
-    const { Filesystem, Directory } = await import('@capacitor/filesystem');
-    // btoa only handles latin1; use encodeURIComponent → unescape for UTF-8
-    const base64 = btoa(unescape(encodeURIComponent(content)));
-    await Filesystem.writeFile({ path: filename, data: base64, directory: Directory.Documents });
+    const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
+    await Filesystem.writeFile({
+      path: sanitizeFilename(filename),
+      data: content,
+      directory: Directory.Documents,
+      encoding: Encoding.UTF8,
+    });
     return { savedToDocuments: true };
   }
 
@@ -67,12 +75,10 @@ export async function downloadCSV(
   }
 
   // ── Desktop + Android Chrome: programmatic download ────────────────────
-  // Use an ASCII-safe filename so Android doesn't reject the download.
-  const safeFilename = filename.replace(/[^\w.\-]/g, '_');
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = safeFilename;
+  link.download = sanitizeFilename(filename);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);

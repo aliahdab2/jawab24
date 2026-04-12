@@ -53,17 +53,30 @@ interface StatusDropdownProps {
   disabled?: boolean;
 }
 
+const STATUS_DOT: Record<LeadStatus, string> = {
+  new:       'bg-blue-400',
+  contacted: 'bg-amber-400',
+  converted: 'bg-green-500',
+};
+
 function StatusDropdown({ status, t, onSelect, disabled }: StatusDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    const handler = (e: MouseEvent) => {
+    const onMouseDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [open]);
 
   const labelKey = STATUS_LABEL_KEY[status] as Parameters<typeof t>[0];
@@ -105,12 +118,8 @@ function StatusDropdown({ status, t, onSelect, disabled }: StatusDropdownProps) 
                   s === status ? 'font-semibold bg-muted/50' : 'text-foreground/80 hover:bg-muted',
                 )}
               >
-                <span className={clsx('inline-flex items-center gap-1.5')}>
-                  <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', {
-                    'bg-blue-400':  s === 'new',
-                    'bg-amber-400': s === 'contacted',
-                    'bg-green-400': s === 'converted',
-                  })} />
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[s])} />
                   {t(key)}
                 </span>
                 {s === status && <Check className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />}
@@ -380,7 +389,7 @@ const LeadsPage: NextPageWithLayout = () => {
         ];
       });
       const { savedToDocuments } = await downloadCSV(`leads-${Date.now()}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
-      toast.success(savedToDocuments ? tc('exportSavedToFiles') : tc('success'));
+      toast.success(savedToDocuments ? tc('exportSavedToFiles') : t('exportCsv'));
     } catch (err) {
       captureError(err, 'Failed to export leads CSV');
     } finally {
