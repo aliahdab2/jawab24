@@ -665,8 +665,8 @@ export class ReplyGenerator {
      */
     private stripCommentNoise(text: string): string {
         return text
-            .replace(/@\[\d+:[^\]]*\]/g, '')                                    // @[id:Name] — any name, any length
-            .replace(/@[\w\u0600-\u06FF]+(?:\s+[\w\u0600-\u06FF]+)?/g, '')     // @Name — 1–2 words, any script
+            .replace(/@\[\d+:[^\]]*\]/g, '')                                    // @[id:Name] — Facebook structured mention
+            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '')               // @name — plain mention, optional capitalized words
             .replace(/https?:\/\/\S+|www\.\S+/gi, '')
             .trim();
     }
