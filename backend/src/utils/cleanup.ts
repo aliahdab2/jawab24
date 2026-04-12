@@ -82,11 +82,13 @@ export async function cleanupRefreshTokens(): Promise<CleanupResult> {
  *
  * 1. Version-outdated: entries whose kb_active_version_at_creation no longer matches
  *    the page's current kbActiveVersion. These will never be served again — the query
- *    in semantic-cache.ts filters them out. Cleaning them promptly frees space after
- *    every KB update without waiting for age-based expiry.
+ *    in semantic-cache.ts filters them out by version. Cleaning them promptly frees space
+ *    immediately after every KB update.
  *
- * 2. Age-expired: entries older than 7 days, matching the TTL enforced at query time.
- *    Catches orphaned entries for deleted pages or other edge cases.
+ * 2. Orphaned: entries older than 90 days. These are storage management only — correctness
+ *    is fully guaranteed by version scoping. The 90-day window catches entries for deleted
+ *    pages or pages whose KB has not been re-ingested in a long time.
+ *    (No 7-day TTL — valid entries should live as long as the KB version is current.)
  */
 export async function cleanupSemanticCache(batchSize: number = 1000): Promise<CleanupResult> {
     let totalDeleted = 0;
@@ -110,10 +112,10 @@ export async function cleanupSemanticCache(batchSize: number = 1000): Promise<Cl
             totalDeleted += deletedInBatch;
         } while (deletedInBatch >= batchSize);
 
-        // 2. Age-expired entries: catch orphans for deleted pages or other edge cases.
+        // 2. Orphaned entries: storage management for deleted pages or very long-lived entries.
         const aged = await batchDelete(
             'semantic_cache', semanticCache, semanticCache.id,
-            lt(semanticCache.createdAt, daysAgo(7)), batchSize,
+            lt(semanticCache.createdAt, daysAgo(90)), batchSize,
         );
         totalDeleted += aged.deletedCount;
         if (aged.error) throw new Error(aged.error);

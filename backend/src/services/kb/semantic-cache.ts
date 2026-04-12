@@ -55,7 +55,10 @@ export interface SemanticCacheSaveParams {
  * - kbActiveVersion (stale entries auto-invalidate when KB is re-ingested)
  * - promptVersion (stale entries auto-invalidate when prompt is updated)
  * - channel + replyStyle (stored in metadata JSONB, filtered application-side)
- * - 7-day TTL (eventual expiration)
+ *
+ * No time-based TTL at query time — correctness is fully guaranteed by version scoping.
+ * Stale entries are removed by the background cleanup job (cleanup.ts) which deletes
+ * version-outdated entries immediately and orphaned entries after 90 days.
  */
 export class SemanticCacheService {
     private logger: Logger = noopLogger;
@@ -98,7 +101,6 @@ export class SemanticCacheService {
                   AND intent = ${intent}
                   AND kb_active_version_at_creation = ${kbActiveVersion}
                   AND prompt_version = ${PROMPT_VERSION}
-                  AND created_at > NOW() - INTERVAL '7 days'
                   AND 1 - (query_embedding <=> ${vectorStr}::vector) >= ${threshold}
                 ORDER BY 1 - (query_embedding <=> ${vectorStr}::vector) DESC
                 LIMIT 5
