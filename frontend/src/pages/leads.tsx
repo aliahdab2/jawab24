@@ -1,17 +1,19 @@
 import React, { useState, useEffect, type ReactElement } from 'react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
+import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, PageHeader, EmptyState, ConfirmationModal } from '@/components/ui';
 import { useUIStore } from '@/lib/store';
-import { leadsApi, pagesApi, type Lead, type LeadStatus } from '@/lib/api';
-import type { Page } from '@jawab24/shared';
+import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
+import type { Page, UsageSummary } from '@jawab24/shared';
 import {
   Users,
   Phone,
   Trash2,
   Download,
+  Lock,
   ChevronDown,
   Loader2,
   ChevronRight,
@@ -20,6 +22,8 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
+import { isNativePlatform } from '@/lib/capacitor';
+import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
@@ -233,6 +237,19 @@ const LeadsPage: NextPageWithLayout = () => {
     staleTime: 60_000,
   });
 
+  const { data: usageData } = useQuery<UsageSummary>({
+    queryKey: ['subscription', 'usage'],
+    queryFn: async () => {
+      const res = await subscriptionApi.getUsage();
+      return (res.data?.data ?? res.data) as UsageSummary;
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  // CSV export is available on Business and Pro plans only.
+  // Default to true while loading so the button doesn't flash in for Starter users.
+  const canExport = usageData ? usageData.subscription.plan.slug !== 'starter' : true;
+
   const pages = React.useMemo(() => pagesData ?? [], [pagesData]);
 
   useEffect(() => {
@@ -348,19 +365,41 @@ const LeadsPage: NextPageWithLayout = () => {
         description={t('description')}
         action={
           leads.length > 0 ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleExport}
-              disabled={exporting}
-              className="flex items-center gap-2"
-            >
-              {exporting
-                ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                : <Download className="w-4 h-4" aria-hidden="true" />
-              }
-              <span className="hidden sm:inline">{t('exportCsv')}</span>
-            </Button>
+            canExport ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex items-center gap-2"
+              >
+                {exporting
+                  ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                  : <Download className="w-4 h-4" aria-hidden="true" />
+                }
+                <span className="hidden sm:inline">{t('exportCsv')}</span>
+              </Button>
+            ) : (
+              isNativePlatform() ? (
+                <button
+                  onClick={() => openExternalUrl('https://jawab24.com/pricing')}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
+                >
+                  <Lock className="w-4 h-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">{t('exportCsv')}</span>
+                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 px-1.5 py-0.5 rounded-md">Business+</span>
+                </button>
+              ) : (
+                <Link
+                  href="/pricing"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
+                >
+                  <Lock className="w-4 h-4" aria-hidden="true" />
+                  <span className="hidden sm:inline">{t('exportCsv')}</span>
+                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 px-1.5 py-0.5 rounded-md">Business+</span>
+                </Link>
+              )
+            )
           ) : undefined
         }
       />
