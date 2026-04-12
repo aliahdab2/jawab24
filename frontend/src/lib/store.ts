@@ -152,17 +152,16 @@ export const useAuthStore = create<AuthState>()(
             const isNative = isNativePlatform();
             if (!isNative) {
                 // On Web: Do NOT persist token or fbToken (security + conflict with cookies)
-                // We only persist the user object, isAuthenticated flag, and activeWorkspaceId for UI state
-                // The actual session is validated via cookies
+                // Persist user, isAuthenticated, activeWorkspaceId, and workspaces so the
+                // workspace switcher and role checks survive page refreshes.
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                const { token, fbToken, workspaces, ...rest } = state;
-                return rest; // includes activeWorkspaceId so header survives page refresh
+                const { token, fbToken, ...rest } = state;
+                return rest;
             }
         }
-        // On Native: Persist everything except workspaces list (refetched on login)
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { workspaces, ...rest } = state;
-        return rest;
+        // On Native: Persist everything including workspaces so the switcher and
+        // useWorkspaceRole return correct values after a cold app restart.
+        return state;
       },
     }
   )
