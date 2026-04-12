@@ -267,11 +267,19 @@ export class ReplyGenerator {
             // Language detection: use stripped text only — never fall back to raw text.
             // Empty commentForAI (mention/URL-only comment) returns 'unknown', which correctly
             // triggers the post-content fallback below instead of locking in 'en'.
+            // Short Latin-only tokens (≤3 words, e.g. "Icdl", "Excel") are commonly typed by
+            // Arabic speakers. When KB is Arabic, treat them as Arabic to avoid English replies.
             const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
+            const kbLang = detectLanguageCode(effectiveKB || '');
+            const isAmbiguousLatin = effectiveLang === 'en'
+                && commentForAI.trim().split(/\s+/).length <= 3
+                && /^[a-zA-Z0-9\s]+$/.test(commentForAI.trim())
+                && kbLang === 'ar';
+            const resolvedLang = isAmbiguousLatin ? 'ar' : effectiveLang;
 
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
-                language: effectiveLang !== 'unknown' ? effectiveLang : undefined,
+                language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
                 context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName }
             });
 
@@ -556,9 +564,16 @@ export class ReplyGenerator {
         const effectiveLang = channel === 'comment'
             ? detectCommentLanguage(questionForAI, postMessage)
             : detectLanguageCode(question);
+        const kbLang = detectLanguageCode(effectiveKB || '');
+        const isAmbiguousLatin = channel === 'comment'
+            && effectiveLang === 'en'
+            && questionForAI.trim().split(/\s+/).length <= 3
+            && /^[a-zA-Z0-9\s]+$/.test(questionForAI.trim())
+            && kbLang === 'ar';
+        const resolvedLang = isAmbiguousLatin ? 'ar' : effectiveLang;
         const aiResponse = await aiService.generateReply({
             comment: questionForAI,
-            language: effectiveLang !== 'unknown' ? effectiveLang : undefined,
+            language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
             ...(model ? { model } : {}),
             context: {
                 pageId,
