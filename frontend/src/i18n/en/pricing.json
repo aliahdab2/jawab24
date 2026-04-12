@@ -108,5 +108,6 @@
   "downgradeToFreeMessage": "You will lose access to AI-powered smart replies, additional pages, and premium features at the end of your current billing period. Your preset replies and settings will be preserved.",
   "downgradeToFreeConfirm": "Manage Subscription",
   "unavailableRegion": "Payments are not available in your region. Please contact support.",
-  "billingPortalError": "Could not open billing portal. Please try again."
+  "billingPortalError": "Could not open billing portal. Please try again.",
+  "ownerOnlyBilling": "Only the workspace owner can manage subscriptions."
 }

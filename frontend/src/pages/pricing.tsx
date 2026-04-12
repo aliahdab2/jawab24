@@ -10,6 +10,7 @@ import { subscriptionApi, publicApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
+import { useWorkspaceRole } from '@/hooks';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
@@ -345,6 +346,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     return params ? tSub(k, params) : tSub(k);
   };
   const { isAuthenticated } = useAuthStore();
+  const { isOwner } = useWorkspaceRole();
   const [plans, setPlans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
@@ -406,6 +408,12 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
       const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}&theme=${theme}`;
       await openExternalUrl(`https://jawab24.com${locale}/login?redirect=${encodeURIComponent(checkoutPath)}`);
+      return;
+    }
+
+    // Members cannot manage subscriptions — only the workspace owner can
+    if (isAuthenticated && !isOwner) {
+      toast.error(tPricing('ownerOnlyBilling'));
       return;
     }
 

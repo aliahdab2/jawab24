@@ -11,6 +11,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 import { useAuthStore } from '@/lib/store';
+import { useWorkspaceRole } from '@/hooks';
 import { useLocale } from 'next-intl';
 
 import { Button, BrandLogo } from '@/components/ui';
@@ -204,6 +205,7 @@ export default function CheckoutPage() {
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
   const { isAuthenticated } = useAuthStore();
+  const { isOwner } = useWorkspaceRole();
 
   useEffect(() => {
     if (themeParam === 'dark' || themeParam === 'light') {
@@ -217,6 +219,13 @@ export default function CheckoutPage() {
       openExternalUrl(`https://jawab24.com${locale}/pricing`);
     }
   }, [router.locale]);
+
+  // Members cannot subscribe — only the workspace owner manages billing
+  useEffect(() => {
+    if (isAuthenticated && !isOwner) {
+      router.replace('/dashboard');
+    }
+  }, [isAuthenticated, isOwner, router]);
 
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
