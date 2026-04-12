@@ -3,7 +3,7 @@ import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { messagesService } from '../../messages';
 import { config } from '../../../config';
-import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
+import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied, fetchNameFromConversationsApi } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
 
 const INSTAGRAM_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
@@ -26,7 +26,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         });
     }
 
-    async fetchSenderName(senderId: string, accessToken: string, pageId?: string): Promise<string | undefined> {
+    async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined> {
         // 1. Check DB first: reuse name from a previous message
         if (pageId) {
             const cached = await messagesService.getSenderNameBySenderId(pageId, senderId);
@@ -38,10 +38,22 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
             const res = await axios.get(`${INSTAGRAM_GRAPH_API}/${senderId}`, {
                 params: { fields: 'name,username', access_token: accessToken },
             });
-            return res.data.username || res.data.name;
+            const name = res.data.username || res.data.name;
+            if (name) return name;
         } catch {
-            return undefined;
+            // fall through to conversations API fallback
         }
+
+        // 3. Fallback: Conversations API — returns participant names even when direct lookup is restricted
+        if (platformPageId) {
+            try {
+                return await fetchNameFromConversationsApi(platformPageId, senderId, accessToken, 'instagram');
+            } catch {
+                // Both approaches failed — return undefined
+            }
+        }
+
+        return undefined;
     }
 
     async storeIncomingMessage(

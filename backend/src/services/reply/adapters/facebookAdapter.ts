@@ -20,7 +20,10 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
     async getPage(facebookPageId: string): Promise<PlatformPage | null> {
         const page = await pagesService.getPageByFacebookId(facebookPageId);
         if (!page) return null;
-        return mapToPlatformPage(page, { autoReplyEnabled: page.autoReplyEnabled ?? true });
+        return mapToPlatformPage(page, {
+            autoReplyEnabled: page.autoReplyEnabled ?? true,
+            platformAccountId: page.facebookPageId ?? undefined,
+        });
     }
 
     async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined> {

@@ -37,6 +37,7 @@ import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useConversationActions } from '@/hooks';
+import { useWorkspaceRole } from '@/hooks';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
@@ -124,6 +125,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const tPlans = useTranslations('plans');
   const { language, intlLocale } = useLanguage();
   const { isAuthenticated, fbToken, user } = useAuthStore();
+  const { isOwner } = useWorkspaceRole();
   const { setOnboardingVisible } = useUIStore();
   const isDemoUser = useIsDemoUser();
   const queryClient = useQueryClient();
@@ -189,7 +191,7 @@ const DashboardPage: NextPageWithLayout = () => {
     enabled: isAuthenticated,
   });
 
-  const { data: pages = [], isError: pagesError } = useQuery({
+  const { data: pages = [], isLoading: pagesLoading, isError: pagesError } = useQuery({
     queryKey: ['pages'],
     queryFn: async () => {
       const res = await pagesApi.getAll();
@@ -386,7 +388,7 @@ const DashboardPage: NextPageWithLayout = () => {
   const syncAttemptedRef = useRef(false);
   useEffect(() => {
     const onboardingComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY) || userSettings?.onboardingCompletedAt;
-    if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncAttemptedRef.current && onboardingComplete) {
+    if (!loading && !pagesLoading && pages.length === 0 && fbToken && isAuthenticated && isOwner && !syncAttemptedRef.current && onboardingComplete) {
       syncAttemptedRef.current = true;
       api.post('/pages/sync', { accessToken: fbToken })
         .then(() => {
@@ -397,7 +399,7 @@ const DashboardPage: NextPageWithLayout = () => {
           captureError(err, 'Dashboard auto-sync failed', { tags: { page: 'dashboard', action: 'auto-sync' } });
         });
     }
-  }, [loading, pages.length, fbToken, isAuthenticated, queryClient, t, userSettings]);
+  }, [loading, pagesLoading, pages.length, fbToken, isAuthenticated, isOwner, queryClient, t, userSettings]);
 
   // Show onboarding for new users — server-side state is the source of truth,
   // localStorage is a fast cache to prevent flash on subsequent page loads.

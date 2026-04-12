@@ -1,5 +1,38 @@
+import axios from 'axios';
+import { config } from '../../../config';
 import { messagesService } from '../../messages';
 import type { PlatformPage, StoredMessage } from '../../../interfaces';
+
+const GRAPH_API_BASE = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
+
+type ConversationParticipant = { id: string; name?: string; username?: string };
+type ConversationEntry = { participants?: { data?: ConversationParticipant[] } };
+
+/**
+ * Resolve a sender's display name via the Conversations API.
+ * Works for both Facebook (no platform param) and Instagram (platform: 'instagram').
+ * Used as a fallback when the direct profile API is restricted.
+ */
+export async function fetchNameFromConversationsApi(
+    platformPageId: string,
+    senderId: string,
+    accessToken: string,
+    platform?: 'instagram',
+): Promise<string | undefined> {
+    const res = await axios.get(`${GRAPH_API_BASE}/${platformPageId}/conversations`, {
+        params: {
+            user_id: senderId,
+            fields: 'participants',
+            access_token: accessToken,
+            ...(platform ? { platform } : {}),
+        },
+    });
+    const conversations = res.data?.data as ConversationEntry[] | undefined;
+    if (!conversations?.length) return undefined;
+    const participants = conversations[0].participants?.data ?? [];
+    const sender = participants.find(p => p.id === senderId);
+    return sender?.username || sender?.name;
+}
 
 /**
  * Shared adapter helpers — default implementations for methods that are

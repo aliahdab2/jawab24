@@ -4,6 +4,7 @@ import { tracedExternalCall } from '../utils/tracing';
 import { fbAxios } from '../lib/fbAxios';
 import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, Logger } from '../types';
 import { noopLogger } from '../types';
+import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 
 const traced = <T>(method: string, fn: () => Promise<T>) =>
     tracedExternalCall('facebook', method, fn);
@@ -339,21 +340,8 @@ export class FacebookService {
         // Fallback: Conversations API — returns participant names even when User API is restricted
         if (pageId) {
             try {
-                const convResponse = await traced('getSenderProfile.conversations', () =>
-                    fbAxios.get(`${FACEBOOK_GRAPH_API}/${pageId}/conversations`, {
-                        params: {
-                            user_id: senderId,
-                            fields: 'participants',
-                            access_token: pageAccessToken,
-                        },
-                    }),
-                );
-                const conversations = convResponse.data?.data as Array<{ participants?: { data?: Array<{ id: string; name?: string }> } }> | undefined;
-                if (conversations && conversations.length > 0) {
-                    const participants = conversations[0].participants?.data ?? [];
-                    const sender = participants.find(p => p.id === senderId);
-                    if (sender?.name) return { name: sender.name };
-                }
+                const name = await fetchNameFromConversationsApi(pageId, senderId, pageAccessToken);
+                if (name) return { name };
             } catch {
                 // Both approaches failed — return null
             }
