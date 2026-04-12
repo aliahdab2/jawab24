@@ -73,14 +73,6 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
             },
         }, pagesController.toggleAutoReply);
 
-        adminRoutes.post('/pages/sync', {
-            schema: {
-                tags: ['Pages'],
-                summary: 'Sync pages from Facebook',
-                security: auth,
-            },
-        }, pagesController.sync);
-
         adminRoutes.post('/pages/:id/kb-gaps/:gapId/dismiss', {
             schema: {
                 tags: ['Pages'],
@@ -88,5 +80,23 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, pagesController.dismissGap);
+    });
+
+    // --- Owner only: connecting pages uses the caller's Facebook token and sets
+    //     pages.userId to the caller. Only owners should connect pages so that
+    //     token ownership stays with the workspace owner, not a team member who
+    //     may later leave or lose Facebook page access. ---
+    fastify.register(async (ownerRoutes) => {
+        ownerRoutes.addHook('preHandler', authenticate);
+        ownerRoutes.addHook('preHandler', resolveWorkspace);
+        ownerRoutes.addHook('preHandler', requireRole('owner'));
+
+        ownerRoutes.post('/pages/sync', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Sync pages from Facebook (owner only)',
+                security: auth,
+            },
+        }, pagesController.sync);
     });
 }

@@ -45,7 +45,7 @@ const PagesPage: NextPageWithLayout = () => {
   const { language } = useLanguage();
   const router = useRouter();
   const { isAuthenticated, fbToken } = useAuthStore();
-  const { canEdit } = useWorkspaceRole();
+  const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [editingPage, setEditingPage] = useState<Page | null>(null);
@@ -264,7 +264,7 @@ const PagesPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={canEdit
+        action={isOwner
           ? <Button
               onClick={() => setShowConnectDialog(true)}
               disabled={syncing}
@@ -572,7 +572,7 @@ const PagesPage: NextPageWithLayout = () => {
             icon={FileText}
             title={t('noPages')}
             description={t('noPagesDesc')}
-            action={canEdit
+            action={isOwner
               ? <Button onClick={() => setShowConnectDialog(true)}>
                   {t('connectPage')}
                 </Button>
