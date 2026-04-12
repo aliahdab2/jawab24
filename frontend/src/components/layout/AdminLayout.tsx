@@ -67,7 +67,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                 <title>{pageTitle}</title>
             </Head>
             <div
-                className="h-full overflow-y-auto bg-surface-50"
+                className="h-full min-h-0 overflow-y-auto bg-surface-50"
             >
                 {/* Admin Header */}
                 <header className="sticky top-0 z-40 bg-zinc-900 text-white shadow-lg">
