@@ -22,6 +22,28 @@ interface MemberRow {
   lastSeenAt: string | null;
 }
 
+function MemberAvatar({ picture, name }: { picture: string | null; name: string }) {
+  const [failed, setFailed] = useState(false);
+  const initial = name.charAt(0).toUpperCase();
+
+  if (picture && !failed) {
+    return (
+      <img
+        src={picture}
+        alt={name}
+        referrerPolicy="no-referrer"
+        onError={() => setFailed(true)}
+        className="w-9 h-9 rounded-full object-cover flex-shrink-0"
+      />
+    );
+  }
+  return (
+    <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-600 flex items-center justify-center font-bold text-sm flex-shrink-0" aria-hidden="true">
+      {initial}
+    </div>
+  );
+}
+
 function PresenceBadge({ lastSeenAt, t }: { lastSeenAt: string | null; t: ReturnType<typeof useTranslations<'team'>> }) {
   if (!lastSeenAt) return null;
   const diffMs = Date.now() - new Date(lastSeenAt).getTime();
@@ -349,22 +371,11 @@ export function TeamSection() {
             const canChangeRole = isOwner && !isMe;
             const canRemove = isOwner ? (!isMe && !isMemberOwner) : (isAdmin && !isMe && member.role === 'member');
             const RoleIcon = ROLE_ICONS[member.role];
-            const initial = member.userName?.charAt(0) || member.userEmail?.charAt(0) || '?';
 
             return (
               <div key={member.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
                 {/* Avatar */}
-                {member.userPicture ? (
-                  <img
-                    src={member.userPicture}
-                    alt={member.userName || ''}
-                    className="w-9 h-9 rounded-full object-cover flex-shrink-0"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-brand-100 dark:bg-brand-900/30 text-brand-600 flex items-center justify-center font-bold text-sm flex-shrink-0">
-                    {initial}
-                  </div>
-                )}
+                <MemberAvatar picture={member.userPicture} name={member.userName || member.userEmail || '?'} />
 
                 {/* Name + email */}
                 <div className="flex-1 min-w-0 text-start">
