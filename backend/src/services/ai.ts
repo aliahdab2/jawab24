@@ -13,6 +13,7 @@ import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { estimateCostUsd } from '../config/aiPricing';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
+import { captureError } from '../utils/sentryHelpers';
 import { classifyFallback, classifyFallbackIntent } from './reply/fallbackClassifier';
 import { notificationService } from './notifications';
 
@@ -304,6 +305,10 @@ export class AiService {
                     );
 
                     if (semanticHit) {
+                        // Fire-and-forget: log zero-cost semantic cache hit
+                        if (userId) {
+                            this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch((err) => captureError(err, 'semantic cache usage log failed'));
+                        }
                         return {
                             reply: semanticHit.reply,
                             language: request.language || 'auto',
