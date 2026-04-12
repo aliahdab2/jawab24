@@ -23,7 +23,6 @@
   "statusUpdated": "تم تحديث الحالة",
   "statusUpdateFailed": "فشل تحديث الحالة",
   "exportCsv": "تصدير CSV",
-  "exportSavedToFiles": "تم الحفظ في الملفات",
   "loadFailed": "فشل تحميل العملاء المحتملين",
   "deleteLead": "حذف",
   "deleteConfirm": "هل أنت متأكد من حذف هذا العميل المحتمل؟",

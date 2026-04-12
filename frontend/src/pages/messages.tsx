@@ -341,7 +341,7 @@ const MessagesPage: NextPageWithLayout = () => {
   // (resolve handler provided by useConversationActions)
 
   // CSV Export
-  const exportToCSV = () => {
+  const exportToCSV = async () => {
     setExporting(true);
     try {
       const headers = [
@@ -360,7 +360,8 @@ const MessagesPage: NextPageWithLayout = () => {
           formatDateForExport(msg.repliedAt, language),
         ];
       });
-      downloadCSV(`messages_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
+      const { savedToDocuments } = await downloadCSV(`messages_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
+      if (savedToDocuments) toast.success(tc('exportSavedToFiles'));
     } catch (error) {
       captureError(error, 'Message export failed', { tags: { page: 'messages', action: 'export' } });
     } finally {

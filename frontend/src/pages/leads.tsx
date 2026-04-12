@@ -217,6 +217,7 @@ function LeadRow({ lead, dynamicKeys, language, onStatusChange, onDelete, isPend
 
 const LeadsPage: NextPageWithLayout = () => {
   const t = useTranslations('leads');
+  const tc = useTranslations('common');
   const { language } = useLanguage();
   const queryClient = useQueryClient();
   const resetNewLeads = useUIStore((s) => s.resetNewLeads);
@@ -344,7 +345,7 @@ const LeadsPage: NextPageWithLayout = () => {
       });
       const selectedPage = pages.find((p) => p.id === selectedPageId);
       const { savedToDocuments } = await downloadCSV(`leads-${selectedPage?.name ?? 'leads'}-${Date.now()}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
-      if (savedToDocuments) toast.success(t('exportSavedToFiles'));
+      if (savedToDocuments) toast.success(tc('exportSavedToFiles'));
     } catch (err) {
       captureError(err, 'Failed to export leads CSV');
     } finally {

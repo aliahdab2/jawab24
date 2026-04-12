@@ -23,7 +23,6 @@
   "statusUpdated": "Status updated",
   "statusUpdateFailed": "Failed to update status",
   "exportCsv": "Export CSV",
-  "exportSavedToFiles": "Saved to Files",
   "loadFailed": "Failed to load leads",
   "deleteLead": "Delete",
   "deleteConfirm": "Are you sure you want to delete this lead?",

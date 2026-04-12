@@ -322,7 +322,7 @@ const CommentsPage: NextPageWithLayout = () => {
     }
   }, [queryClient, t, tc]);
 
-  const exportToCSV = () => {
+  const exportToCSV = async () => {
     setExporting(true);
     try {
       const headers = [
@@ -339,7 +339,8 @@ const CommentsPage: NextPageWithLayout = () => {
           formatDateForExport(c.repliedAt, language),
         ];
       });
-      downloadCSV(`comments_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
+      const { savedToDocuments } = await downloadCSV(`comments_${format(new Date(), 'yyyy-MM-dd')}.csv`, headers, rows);
+      if (savedToDocuments) toast.success(tc('exportSavedToFiles'));
     } catch (error) {
       captureError(error, 'Comment export failed', { tags: { page: 'comments', action: 'export' } });
       toast.error(tc('error'));
