@@ -163,12 +163,12 @@ const PagesPage: NextPageWithLayout = () => {
   }, [language, t]);
 
   useEffect(() => {
-    if (!loading && pages.length === 0 && fbToken && isAuthenticated && !syncing && !syncAttemptedRef.current) {
-      // Auto-sync pages from Facebook (only attempt once)
+    if (!loading && pages.length === 0 && fbToken && isAuthenticated && isOwner && !syncing && !syncAttemptedRef.current) {
+      // Auto-sync pages from Facebook (owner only — POST /pages/sync requires owner role)
       syncAttemptedRef.current = true;
       handleSyncRef.current?.();
     }
-  }, [loading, pages.length, fbToken, isAuthenticated, syncing]);
+  }, [loading, pages.length, fbToken, isAuthenticated, isOwner, syncing]);
 
   // Auto-open KB modal when navigated with ?openKb=true (e.g. from dashboard nudge)
   const openKbHandledRef = useRef(false);

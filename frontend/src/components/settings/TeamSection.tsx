@@ -101,18 +101,23 @@ export function TeamSection() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [membersRes, invitesRes] = await Promise.all([
-        workspaceApi.getMembers(),
-        workspaceApi.listInvites().catch(() => ({ data: [] })),
-      ]);
-      setMembers(membersRes.data ?? []);
-      setInvites(invitesRes.data ?? []);
+      const membersRes = await workspaceApi.getMembers();
+      const fetchedMembers: MemberRow[] = membersRes.data ?? [];
+      setMembers(fetchedMembers);
+
+      // Only fetch invites for admin+ — members don't have access to GET /workspaces/current/invites
+      const myM = fetchedMembers.find((m) => m.userId === user?.id);
+      const role = myM?.role ?? 'member';
+      if (role === 'owner' || role === 'admin') {
+        const invitesRes = await workspaceApi.listInvites();
+        setInvites(invitesRes.data ?? []);
+      }
     } catch (error) {
       captureError(error, 'Failed to fetch team data', { tags: { page: 'settings', section: 'team' } });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     fetchData();
