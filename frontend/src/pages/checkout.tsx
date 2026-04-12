@@ -11,7 +11,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 import { useAuthStore } from '@/lib/store';
-import { useWorkspaceRole } from '@/hooks';
+import { withOwnerOnly } from '@/hoc/withOwnerOnly';
 import { useLocale } from 'next-intl';
 
 import { Button, BrandLogo } from '@/components/ui';
@@ -195,7 +195,7 @@ function PaymentForm({
   );
 }
 
-export default function CheckoutPage() {
+function CheckoutPage() {
   const router = useRouter();
   const { planId, interval, theme: themeParam } = router.query;
   const billingInterval = interval === 'year' ? 'year' : 'month';
@@ -204,8 +204,7 @@ export default function CheckoutPage() {
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
-  const { isAuthenticated, _hasHydrated } = useAuthStore();
-  const { isOwner } = useWorkspaceRole();
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     if (themeParam === 'dark' || themeParam === 'light') {
@@ -220,15 +219,6 @@ export default function CheckoutPage() {
     }
   }, [router.locale]);
 
-  // Members cannot subscribe — only the workspace owner manages billing.
-  // Wait for _hasHydrated before acting: useWorkspaceRole defaults to 'owner'
-  // while the store is loading, which would incorrectly let members through.
-  useEffect(() => {
-    if (!_hasHydrated) return;
-    if (isAuthenticated && !isOwner) {
-      router.replace('/dashboard');
-    }
-  }, [_hasHydrated, isAuthenticated, isOwner, router]);
 
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -357,12 +347,6 @@ export default function CheckoutPage() {
     const fromPlans = tPlans(`${p.slug}.description` as unknown as PlansKey);
     return fromPlans !== `${p.slug}.description` ? fromPlans : (p.description ?? '');
   };
-
-  // Show spinner while store is loading or while a redirect is about to fire.
-  // Prevents members from seeing the payment form for even a single frame.
-  if (!_hasHydrated || (isAuthenticated && !isOwner)) {
-    return <FullPageSpinner />;
-  }
 
   if (isSanctioned === null) {
     return <FullPageSpinner />;
@@ -585,6 +569,8 @@ export default function CheckoutPage() {
     </>
   );
 }
+
+export default withOwnerOnly(CheckoutPage);
 
 import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
