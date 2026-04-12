@@ -62,7 +62,7 @@ vi.mock('@/components/ui', () => ({
     EmptyState: ({ title }: { title: string }) => <div>{title}</div>,
     PageHeader: ({ title }: { title: string }) => <h1>{title}</h1>,
     PageSkeleton: () => <div data-testid="page-skeleton">Loading...</div>,
-    ConfirmationModal: ({ isOpen, onClose, onConfirm, title, message, confirmText }: any) =>
+    ConfirmationModal: ({ isOpen, onClose, onConfirm, title, message, confirmText }: { isOpen: boolean; onClose: () => void; onConfirm: () => void; title?: string; message?: string; confirmText?: string }) =>
         isOpen ? (
             <div data-testid="confirmation-modal">
                 <p>{title}</p>
@@ -119,11 +119,11 @@ describe('PagesPage - Toggle Error Handling', () => {
 
         mockedPagesApi.getAll.mockResolvedValue({
             data: { data: MOCK_PAGES },
-        } as any);
+        } as unknown as Awaited<ReturnType<typeof mockedPagesApi.getAll>>);
 
         // Default: toggle calls succeed
-        mockedPagesApi.toggle.mockResolvedValue({ data: {} } as any);
-        mockedApi.patch.mockResolvedValue({ data: {} } as any);
+        mockedPagesApi.toggle.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedPagesApi.toggle>>);
+        mockedApi.patch.mockResolvedValue({ data: {} } as unknown as Awaited<ReturnType<typeof mockedApi.patch>>);
     });
 
     afterEach(() => {

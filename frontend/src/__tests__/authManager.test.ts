@@ -11,7 +11,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import axios, { AxiosError } from 'axios';
+import axios, { type AxiosResponse, AxiosError } from 'axios';
+
+/** Shape captured when spying on interceptors.response.use */
+type ResponseInterceptorCapture = {
+  onFulfilled?: ((value: AxiosResponse) => AxiosResponse | Promise<AxiosResponse>) | null;
+  onRejected?: ((error: unknown) => unknown) | null;
+};
 
 // Mock the store module before importing authManager
 vi.mock('../lib/store', () => ({
@@ -384,7 +390,7 @@ describe('AuthManager', () => {
 
     it('should pass through successful responses unchanged', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled) => {
@@ -403,7 +409,7 @@ describe('AuthManager', () => {
 
     it('should reject non-401 errors without attempting refresh', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -427,7 +433,7 @@ describe('AuthManager', () => {
 
     it('should reject 403 errors without attempting refresh', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -451,7 +457,7 @@ describe('AuthManager', () => {
 
     it('should reject errors without response object', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -472,7 +478,7 @@ describe('AuthManager', () => {
 
     it('should reject errors without config', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -492,7 +498,7 @@ describe('AuthManager', () => {
 
     it('should prevent retry loops by checking _retry flag', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -531,7 +537,7 @@ describe('AuthManager', () => {
     authEndpoints.forEach(endpoint => {
       it(`should skip 401 handling for ${endpoint}`, async () => {
         const mockAxiosInstance = axios.create();
-        let responseInterceptor: any;
+        let responseInterceptor: ResponseInterceptorCapture;
         
         vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
           (onFulfilled, onRejected) => {
@@ -564,7 +570,7 @@ describe('AuthManager', () => {
   describe('Browser Reopen with Expired Token (Regression Test)', () => {
     it('should gracefully logout when both access and refresh tokens are expired', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -603,7 +609,7 @@ describe('AuthManager', () => {
 
     it('should clear localStorage before redirecting', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -635,7 +641,7 @@ describe('AuthManager', () => {
 
     it('should not hang when refresh fails (no infinite Promise)', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -671,7 +677,7 @@ describe('AuthManager', () => {
   describe('Request Queuing (Concurrent 401 Handling)', () => {
     it('should queue requests while refreshing', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -712,7 +718,7 @@ describe('AuthManager', () => {
 
     it('should reject all queued requests when refresh fails', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -748,7 +754,7 @@ describe('AuthManager', () => {
 
     it('should reset isRefreshing flag after refresh completes', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -787,7 +793,7 @@ describe('AuthManager', () => {
 
     it('should reset isRefreshing flag even when refresh throws', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -828,7 +834,7 @@ describe('AuthManager', () => {
   describe('Refresh Success with Request Retry', () => {
     it('should call refresh endpoint when 401 is received', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {
@@ -859,7 +865,7 @@ describe('AuthManager', () => {
 
     it('should mark original request as _retry before retrying', async () => {
       const mockAxiosInstance = axios.create();
-      let responseInterceptor: any;
+      let responseInterceptor: ResponseInterceptorCapture;
       
       vi.spyOn(mockAxiosInstance.interceptors.response, 'use').mockImplementation(
         (onFulfilled, onRejected) => {

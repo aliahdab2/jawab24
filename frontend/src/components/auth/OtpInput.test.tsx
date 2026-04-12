@@ -181,7 +181,7 @@ describe('OtpInput — Web OTP API', () => {
         const credentialGet = vi.fn();
         Object.assign(navigator, { credentials: { get: credentialGet } });
         const desc = Object.getOwnPropertyDescriptor(window, 'OTPCredential');
-        if (desc) delete (window as any).OTPCredential;
+        if (desc) delete (window as Window & { OTPCredential?: unknown }).OTPCredential;
 
         renderOtp();
         await act(async () => {});

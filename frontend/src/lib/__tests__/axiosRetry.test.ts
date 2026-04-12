@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import axios, { AxiosError } from 'axios';
+import axios, { type AxiosResponse, AxiosError } from 'axios';
 import MockAdapter from 'axios-mock-adapter';
 import {
     addRetryInterceptor,
@@ -116,7 +116,7 @@ describe('axiosRetry', () => {
 
         it('should return false for response errors', () => {
             const error = new Error('Server Error') as AxiosError;
-            error.response = { status: 500 } as any;
+            error.response = { status: 500 } as unknown as AxiosResponse;
             expect(isNetworkError(error)).toBe(false);
         });
 
@@ -176,14 +176,14 @@ describe('axiosRetry', () => {
 
         it('should return rate limit message for 429 errors', () => {
             const error = new Error('Too many requests') as AxiosError;
-            error.response = { status: 429 } as any;
+            error.response = { status: 429 } as unknown as AxiosResponse;
             const message = getErrorMessage(error, 'en');
             expect(message).toContain('Too many requests');
         });
 
         it('should return server error message for 5xx errors', () => {
             const error = new Error('Server error') as AxiosError;
-            error.response = { status: 500 } as any;
+            error.response = { status: 500 } as unknown as AxiosResponse;
             const message = getErrorMessage(error, 'en');
             expect(message).toContain('Server error');
         });

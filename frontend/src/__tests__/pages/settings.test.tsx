@@ -46,7 +46,7 @@ vi.mock('@/components/ui', () => ({
     Button: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => (
         <button onClick={onClick}>{children}</button>
     ),
-    Input: (props: any) => <input {...props} />,
+    Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
     Toggle: ({ enabled, onChange }: { enabled: boolean; onChange: (val: boolean) => void }) => (
         <button onClick={() => onChange(!enabled)}>{enabled ? 'ON' : 'OFF'}</button>
     ),
@@ -83,7 +83,7 @@ describe('SettingsPage - Infinite Loop Prevention', () => {
                     commentsAutoReply: true,
                     messagesAutoReply: true,
                 },
-            } as any;
+            } as unknown as Awaited<ReturnType<typeof mockedSettingsApi.get>>;
         });
     });
 
@@ -148,7 +148,7 @@ describe('SettingsPage - Infinite Loop Prevention', () => {
                 commentsAutoReply: true,
                 messagesAutoReply: true,
             },
-        } as any));
+        } as unknown as Awaited<ReturnType<typeof mockedSettingsApi.get>>));
 
         render(<SettingsPage />);
 

@@ -1,10 +1,11 @@
+import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
 import { ConfirmationModal } from './ConfirmationModal';
 
 // Mock Modal since it uses portals
 vi.mock('./Modal', () => ({
-  Modal: ({ children, isOpen, onClose, title }: any) => isOpen ? (
+  Modal: ({ children, isOpen, onClose, title }: { children: React.ReactNode; isOpen: boolean; onClose: () => void; title?: string }) => isOpen ? (
     <div role="dialog">
       {title && <h1>{title}</h1>}
       <button onClick={onClose} aria-label="Close">X</button>
