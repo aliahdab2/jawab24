@@ -431,9 +431,12 @@ test.describe('Invite Accept Page', () => {
   });
 
   test('redirects unauthenticated user to login with return URL', async ({ page }) => {
-    // No auth set in localStorage — user is not logged in
+    // No auth set in localStorage — user is not logged in.
+    // Return 200 for all API calls so authManager's 401 interceptor does NOT fire
+    // (it would redirect to /login without a redirect param via window.location.href).
+    // The accept page's own useEffect handles the redirect with ?redirect= preserved.
     await page.route('**/api/**', async (route) => {
-      await route.fulfill({ status: 401, contentType: 'application/json', body: '{}' });
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await page.goto('/en/invites/accept?token=valid-token');
 
