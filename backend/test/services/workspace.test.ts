@@ -135,24 +135,58 @@ describe('WorkspaceService', () => {
         it('adds member when under limit', async () => {
             const member = { id: 'mem-1', workspaceId: WS_ID, userId: USER_2_ID, role: 'member' };
 
-            // Count query (no .limit()) returns 2 members — under the limit of 5
-            const countResult = [{ count: 2 }];
-            const chain: any = {
+            // First select: existing-member check — returns [] (not a member yet)
+            // Second select: count check — returns 2 (under limit)
+            const existingChain: any = {
                 from: vi.fn().mockReturnThis(),
                 where: vi.fn().mockReturnThis(),
-                limit: vi.fn().mockResolvedValue(countResult),
+                limit: vi.fn().mockResolvedValue([]),
                 then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
-                    Promise.resolve(countResult).then(resolve, reject),
+                    Promise.resolve([]).then(resolve, reject),
             };
-            vi.mocked(db.select).mockReturnValue(chain);
+            const countChain: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ count: 2 }]),
+                then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+                    Promise.resolve([{ count: 2 }]).then(resolve, reject),
+            };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(existingChain)
+                .mockReturnValueOnce(countChain);
             mockInsert([member]);
 
             const result = await service.addMember(WS_ID, USER_2_ID, 'member');
             expect(result).toEqual(member);
         });
 
+        it('throws when already a member', async () => {
+            // First select: existing-member check — returns a row (already member)
+            mockSelect([{ id: 'mem-1' }]);
+
+            await expect(service.addMember(WS_ID, USER_2_ID)).rejects.toThrow('already been');
+        });
+
         it('throws when member limit reached', async () => {
-            mockSelect([{ count: 5 }]);
+            // First select: existing-member check — returns [] (not yet a member)
+            // Second select: count check — returns 5 (at limit)
+            const existingChain: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+                then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+                    Promise.resolve([]).then(resolve, reject),
+            };
+            const countChain: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ count: 5 }]),
+                then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
+                    Promise.resolve([{ count: 5 }]).then(resolve, reject),
+            };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(existingChain)
+                .mockReturnValueOnce(countChain);
 
             await expect(service.addMember(WS_ID, USER_2_ID)).rejects.toThrow('Member limit reached');
         });

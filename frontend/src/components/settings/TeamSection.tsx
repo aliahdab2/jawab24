@@ -144,6 +144,10 @@ export function TeamSection() {
       toast.error(t('alreadyMember'));
       return;
     }
+    if (invites.some((i) => (i.email ?? i.phone ?? '').toLowerCase() === trimmed)) {
+      toast.error(t('invitePending'));
+      return;
+    }
     setSending(true);
     try {
       const res = await workspaceApi.createInvite(trimmed);

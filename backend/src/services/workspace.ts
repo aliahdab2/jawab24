@@ -129,6 +129,17 @@ export class WorkspaceService {
         role: WorkspaceRole = 'member',
         invitedBy?: string,
     ) {
+        // Check if already a member
+        const [existing] = await db
+            .select({ id: workspaceMembers.id })
+            .from(workspaceMembers)
+            .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
+            .limit(1);
+
+        if (existing) {
+            throw new Error('User has already been added to this workspace');
+        }
+
         // Check member count
         const [{ count }] = await db
             .select({ count: sql<number>`count(*)::int` })

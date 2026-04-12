@@ -83,7 +83,7 @@ const AcceptInvitePage: NextPageWithLayout = () => {
     already_member: { icon: CheckCircle2, title: t('acceptAlreadyMember'), desc: '', color: 'text-brand-500' },
     full: { icon: AlertTriangle, title: t('acceptFull'), desc: '', color: 'text-amber-500' },
     wrong_account: { icon: AlertTriangle, title: t('acceptWrongAccount'), desc: '', color: 'text-red-500' },
-    error: { icon: AlertTriangle, title: t('acceptInvalid'), desc: '', color: 'text-red-500' },
+    error: { icon: AlertTriangle, title: t('acceptError'), desc: '', color: 'text-red-500' },
   };
 
   const c = content[state];
