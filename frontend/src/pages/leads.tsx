@@ -414,7 +414,7 @@ const LeadsPage: NextPageWithLayout = () => {
           <select
             value={selectedPageId}
             onChange={(e) => setSelectedPageId(e.target.value)}
-            className="appearance-none w-full sm:w-auto bg-surface-100 border border-white/10 text-white text-sm rounded-xl ps-3 pe-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-400/50 min-w-[180px]"
+            className="appearance-none w-full sm:w-auto bg-card border border-theme-border text-foreground text-sm rounded-xl ps-3 pe-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-brand-400/50 min-w-[180px]"
             aria-label={t('selectPage')}
           >
             {pages.length === 0 && <option value="">{t('selectPage')}</option>}
