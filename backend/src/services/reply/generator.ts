@@ -653,10 +653,12 @@ export class ReplyGenerator {
     /**
      * Strips @mentions and URLs from a comment — platform noise that pollutes
      * language detection and carries no message content for the AI.
+     * Handles both plain @mentions and Facebook's structured mention format @[id:Name].
      */
     private stripCommentNoise(text: string): string {
         return text
-            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '')
+            .replace(/@\[\d+:[^\]]*\]/g, '')                    // Facebook structured: @[id:Name]
+            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '') // Plain @mention
             .replace(/https?:\/\/\S+|www\.\S+/gi, '')
             .trim();
     }
