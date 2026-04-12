@@ -526,15 +526,22 @@ export class PagesService {
             const existingPage = existingPagesMap.get(fbPage.id);
 
             if (existingPage) {
-                // Update existing page (always update tokens regardless of limit)
-                logger.debug(`[Pages] Updating existing page: ${fbPage.name}`);
+                // Industry standard (ManyChat / Chatfuel model): the access token belongs to
+                // whoever originally connected the page. Only that user's sync may refresh it.
+                // Team members who share Facebook page admin access must not overwrite the
+                // stored token — if they did, the page would break when they lose access.
+                const isOriginalConnector = existingPage.userId === userId;
+                logger.debug(`[Pages] Updating existing page: ${fbPage.name} (tokenUpdate: ${isOriginalConnector})`);
                 const businessProfile = buildBusinessProfile(fbPage);
                 const [updated] = await db
                     .update(pages)
                     .set({
                         name: fbPage.name,
-                        accessToken: maybeEncryptToken(fbPage.access_token),
-                        tokenLastVerifiedAt: new Date(),
+                        // Only refresh the token if this is the user who connected the page
+                        ...(isOriginalConnector && {
+                            accessToken: maybeEncryptToken(fbPage.access_token),
+                            tokenLastVerifiedAt: new Date(),
+                        }),
                         instagramAccountId,
                         instagramUsername,
                         instagramProfilePicUrl,

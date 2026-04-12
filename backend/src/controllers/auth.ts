@@ -77,7 +77,9 @@ export class AuthController {
             ]);
 
             // 6. Sync pages from Facebook (awaited — ensures pages exist when onboarding wizard loads)
-            const syncWorkspaceId = workspaces[0]?.id;
+            // Only sync to a workspace this user OWNS — never overwrite another owner's page
+            // token just because a team member shares admin access to the same Facebook page.
+            const syncWorkspaceId = workspaces.find(w => w.role === 'owner')?.id;
             if (syncWorkspaceId) {
                 try {
                     const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
@@ -182,7 +184,9 @@ export class AuthController {
             ]);
 
             // 8. Sync pages from Facebook (awaited — ensures pages exist when onboarding wizard loads)
-            const syncWorkspaceId = workspaces[0]?.id;
+            // Only sync to a workspace this user OWNS — never overwrite another owner's page
+            // token just because a team member shares admin access to the same Facebook page.
+            const syncWorkspaceId = workspaces.find(w => w.role === 'owner')?.id;
             if (syncWorkspaceId) {
                 try {
                     const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);

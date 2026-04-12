@@ -197,6 +197,9 @@ async function acceptInvite(request: AuthenticatedRequest, reply: FastifyReply) 
         if (message.includes('already been')) {
             return reply.status(400).send({ error: true, code: 'already_member', message });
         }
+        if (message.includes('identity mismatch')) {
+            return reply.status(403).send({ error: true, code: 'invite_identity_mismatch', message: 'This invite was sent to a different account' });
+        }
         if (message.includes('limit reached')) {
             return reply.status(400).send({ error: true, code: 'member_limit_reached', message });
         }

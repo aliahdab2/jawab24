@@ -1,4 +1,4 @@
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, desc } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaces, workspaceMembers, users } from '../db/schema';
 import type { WorkspaceRole, WorkspaceSummary } from '@jawab24/shared';
@@ -41,7 +41,13 @@ export class WorkspaceService {
             })
             .from(workspaceMembers)
             .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
-            .where(eq(workspaceMembers.userId, userId));
+            .where(eq(workspaceMembers.userId, userId))
+            // Oldest membership first — invited-to workspaces (accepted after own workspace creation)
+            // end up last, but the frontend preserves activeWorkspaceId across logins so this
+            // only affects first-ever workspace selection.
+            // Most-recently-joined first: for team members whose own workspace was created
+            // before accepting an invite, the invited workspace sorts to the top.
+            .orderBy(desc(workspaceMembers.joinedAt));
         return rows as WorkspaceSummary[];
     }
 

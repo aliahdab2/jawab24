@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { pages, users } from '../db/schema';
-import { and, ne, eq, isNotNull, lt, isNull, or } from 'drizzle-orm';
+import { and, ne, eq, isNotNull, lt, isNull, or, inArray } from 'drizzle-orm';
 import { facebookService } from './facebook';
 import { maybeEncryptToken } from './facebookCrypto';
 import { notificationService } from './notifications';
@@ -182,9 +182,16 @@ function isTokenExpiredError(error: unknown): boolean {
 /** Notify user that they need to reconnect their page(s). */
 async function notifyReconnectNeeded(
     userId: string,
-    failedPages: Array<{ name: string | null }>,
+    failedPages: Array<{ id: string; name: string | null }>,
 ): Promise<void> {
     try {
+        // Clear stored tokens so isConnected becomes false and the reconnect UI appears.
+        const pageIds = failedPages.map(p => p.id);
+        await db
+            .update(pages)
+            .set({ accessToken: '', updatedAt: new Date() })
+            .where(inArray(pages.id, pageIds));
+
         const pageNames = failedPages.map(p => p.name || 'Unknown').join(', ');
         await notificationService.sendNotification(userId, {
             type: 'page_disconnected',

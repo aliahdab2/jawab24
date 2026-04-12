@@ -4,9 +4,9 @@ import {
     comments, instagramComments, messages, conversationPauses,
     templates, rules, settings, logs, subscriptions, usage,
     usageLogs, deviceTokens, notifications, ecommerceStores,
-    pendingEcommerceInstalls, workspaces, workspaceMembers,
+    pendingEcommerceInstalls, workspaces, workspaceMembers, workspaceInvites,
 } from '../db/schema';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, inArray, sql, and, or, gt } from 'drizzle-orm';
 import { config } from '../config';
 import crypto from 'crypto';
 import { encryptFbToken, decryptFbToken } from './facebookCrypto';
@@ -68,8 +68,9 @@ export class AuthService {
             // initial subscription creation failed silently during signup)
             await this.ensureSubscription(user.id);
 
-            // Ensure returning users have a workspace (for users created before workspace support)
-            await this.ensureWorkspace(user.id, name || user.name || 'My Workspace');
+            // Ensure returning users have a workspace. provisionUserWorkspace is a no-op
+            // if the user already belongs to one — idempotent and safe to call every login.
+            await this.provisionUserWorkspace(user.id, name || user.name || 'My Workspace', email, null);
 
             return {
                 ...user,
@@ -101,8 +102,11 @@ export class AuthService {
         // Create subscription for new user (with free trial)
         await this.createSubscriptionForNewUser(newUser.id);
 
-        // Create default workspace for new user
-        await this.createDefaultWorkspace(newUser.id, name || 'My Workspace');
+        // Provision workspace — skipped if a pending invite exists for this email.
+        // Note: subscription and workspace are not wrapped in a transaction. If workspace
+        // creation fails after subscription succeeds, provisionUserWorkspace will self-heal
+        // on next login (idempotent membership check + createDefaultWorkspace retry).
+        await this.provisionUserWorkspace(newUser.id, name, email, null);
 
         // Return plaintext token in memory — the DB row holds the encrypted form
         return {
@@ -186,9 +190,38 @@ export class AuthService {
     }
 
     /**
-     * Ensure user has a workspace (for existing users who might not have one)
+     * Returns true if a non-expired pending invite exists for the given email or phone.
+     * Used to skip personal workspace creation for users who are about to join an existing workspace.
      */
-    private async ensureWorkspace(userId: string, name: string): Promise<void> {
+    private async hasPendingInvite(email?: string | null, phone?: string | null): Promise<boolean> {
+        if (!email && !phone) return false;
+        const conditions = [];
+        if (email) conditions.push(eq(workspaceInvites.email, email));
+        if (phone) conditions.push(eq(workspaceInvites.phone, phone));
+        if (conditions.length === 0) return false; // defensive — unreachable given the guard above
+
+        const result = await db
+            .select({ id: workspaceInvites.id })
+            .from(workspaceInvites)
+            .where(and(
+                or(...conditions),
+                eq(workspaceInvites.status, 'pending'),
+                gt(workspaceInvites.expiresAt, new Date()), // only truly active invites
+            ))
+            .limit(1);
+        return result.length > 0;
+    }
+
+    /**
+     * Provision a personal workspace for a user who has none.
+     *
+     * - No-op if the user already belongs to any workspace (idempotent — safe on every login).
+     * - Skips creation if a non-expired pending invite exists: the user will be added to the
+     *   inviting workspace when they accept. If the invite later expires without being accepted,
+     *   the next login call will find no invite and create the workspace automatically.
+     * - Works for any login method: pass whichever contact info is available (email, phone, or both).
+     */
+    private async provisionUserWorkspace(userId: string, name: string, email?: string | null, phone?: string | null): Promise<void> {
         try {
             const existing = await db
                 .select({ id: workspaceMembers.id })
@@ -196,11 +229,17 @@ export class AuthService {
                 .where(eq(workspaceMembers.userId, userId))
                 .limit(1);
 
-            if (existing.length === 0) {
-                await this.createDefaultWorkspace(userId, name);
+            if (existing.length > 0) return; // already in a workspace — nothing to do
+
+            const pendingInvite = await this.hasPendingInvite(email, phone);
+            if (!pendingInvite) {
+                await this.createDefaultWorkspace(userId, name || 'My Workspace');
             }
         } catch (error) {
-            captureError(error, 'Failed to ensure workspace', { tags: { context: 'auth', action: 'ensure-workspace' }, extra: { userId } });
+            captureError(error, 'Failed to provision user workspace', {
+                tags: { context: 'auth', action: 'provision-workspace' },
+                extra: { userId },
+            });
         }
     }
 
@@ -240,7 +279,7 @@ export class AuthService {
         const user = rows[0];
 
         await this.ensureSubscription(user.id);
-        await this.ensureWorkspace(user.id, user.name || name || 'My Workspace');
+        await this.provisionUserWorkspace(user.id, user.name || name || 'My Workspace', null, phone);
 
         return {
             ...user,

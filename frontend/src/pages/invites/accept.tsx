@@ -11,7 +11,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import type { NextPageWithLayout } from '../_app';
 
-type AcceptState = 'loading' | 'success' | 'expired' | 'invalid' | 'already_member' | 'full' | 'error';
+type AcceptState = 'loading' | 'success' | 'expired' | 'invalid' | 'already_member' | 'full' | 'wrong_account' | 'error';
 
 const AcceptInvitePage: NextPageWithLayout = () => {
   const router = useRouter();
@@ -49,6 +49,8 @@ const AcceptInvitePage: NextPageWithLayout = () => {
         setState('full');
       } else if (status === 404 || code === 'invite_not_found') {
         setState('invalid');
+      } else if (code === 'invite_identity_mismatch' || status === 403) {
+        setState('wrong_account');
       } else {
         captureError(error, 'Failed to accept invite', { tags: { page: 'invites/accept' } });
         setState('error');
@@ -80,6 +82,7 @@ const AcceptInvitePage: NextPageWithLayout = () => {
     invalid: { icon: AlertTriangle, title: t('acceptInvalid'), desc: '', color: 'text-red-500' },
     already_member: { icon: CheckCircle2, title: t('acceptAlreadyMember'), desc: '', color: 'text-brand-500' },
     full: { icon: AlertTriangle, title: t('acceptFull'), desc: '', color: 'text-amber-500' },
+    wrong_account: { icon: AlertTriangle, title: t('acceptWrongAccount'), desc: '', color: 'text-red-500' },
     error: { icon: AlertTriangle, title: t('acceptInvalid'), desc: '', color: 'text-red-500' },
   };
 
@@ -107,6 +110,14 @@ const AcceptInvitePage: NextPageWithLayout = () => {
               <Link href="/dashboard">
                 <Button size="lg" className="mt-4">
                   {t('goToDashboard')}
+                </Button>
+              </Link>
+            )}
+
+            {state === 'wrong_account' && (
+              <Link href="/logout">
+                <Button size="lg" className="mt-4">
+                  {t('switchAccount')}
                 </Button>
               </Link>
             )}

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
-import { workspaceInvites } from '../db/schema';
+import { workspaceInvites, users } from '../db/schema';
 import { workspaceService } from './workspace';
 import { smsService } from './sms';
 import { detectContactType, isArabicPhone } from '@jawab24/shared';
@@ -124,6 +124,21 @@ export class WorkspaceInviteService {
                 .set({ status: 'expired' })
                 .where(eq(workspaceInvites.id, invite.id));
             throw new Error('Invite has expired');
+        }
+
+        // Verify the accepting user's identity matches who was invited.
+        // Prevents invite link forwarding: only the intended recipient can accept.
+        const [user] = await db
+            .select({ email: users.email, phone: users.phone })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+
+        const emailMatch = invite.email && user?.email && invite.email.toLowerCase() === user.email.toLowerCase();
+        const phoneMatch = invite.phone && user?.phone && invite.phone === user.phone;
+
+        if (!emailMatch && !phoneMatch) {
+            throw new Error('Invite identity mismatch');
         }
 
         const member = await workspaceService.addMember(

@@ -60,10 +60,16 @@ export const useAuthStore = create<AuthState>()(
       _hasHydrated: false,
       workspaces: [],
       activeWorkspaceId: null,
-      setWorkspaces: (workspaces) => {
-        const activeId = workspaces[0]?.id ?? null;
-        set({ workspaces, activeWorkspaceId: activeId });
-      },
+      setWorkspaces: (workspaces) => set((state) => {
+        // Preserve the current activeWorkspaceId if it's still valid in the new list.
+        // Without this, re-login always resets to workspaces[0] (undefined DB order),
+        // causing team members to land on their own empty workspace instead of the one
+        // they previously selected (e.g. the owner's workspace they were invited to).
+        const stillValid = state.activeWorkspaceId !== null &&
+          workspaces.some(w => w.id === state.activeWorkspaceId);
+        const activeId = stillValid ? state.activeWorkspaceId : (workspaces[0]?.id ?? null);
+        return { workspaces, activeWorkspaceId: activeId };
+      }),
       setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
       setAuth: (user, token, fbToken) => {
         // Defensive validation

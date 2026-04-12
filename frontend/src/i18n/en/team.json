@@ -43,7 +43,9 @@
   "acceptInvalid": "This invite link is invalid.",
   "acceptAlreadyMember": "You're already a member of this workspace.",
   "acceptFull": "This workspace has reached its member limit.",
+  "acceptWrongAccount": "This invite was sent to a different account. Log in with the email or phone number the invite was sent to.",
   "goToDashboard": "Go to Dashboard",
+  "switchAccount": "Log out & switch account",
   "online": "Online",
   "lastSeenMinutes": "Active {minutes}m ago",
   "lastSeenHours": "Active {hours}h ago"
