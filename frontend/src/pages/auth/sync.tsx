@@ -4,10 +4,11 @@ import Head from 'next/head';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
+import type { WorkspaceSummary } from '@jawab24/shared';
 
 export default function AuthSync() {
   const router = useRouter();
-  const { setAuth } = useAuthStore();
+  const { setAuth, setWorkspaces } = useAuthStore();
   const [status, setStatus] = useState('Initializing...');
 
   useEffect(() => {
@@ -38,9 +39,21 @@ export default function AuthSync() {
           throw new Error('Failed to fetch user profile');
         }
 
-        // 3. Hydrate the store
+        // 3. Fetch workspaces so activeWorkspaceId is set before dashboard loads.
+        //    Required for native: sync.tsx runs in the app WebView which doesn't share
+        //    state with the system browser where callback.tsx ran setWorkspaces.
+        try {
+          const wsRes = await axios.get<WorkspaceSummary[]>(`${apiUrl}/workspaces`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (wsRes.data?.length) setWorkspaces(wsRes.data);
+        } catch {
+          // Non-fatal — workspace middleware will auto-select if user has exactly 1 workspace
+        }
+
+        // 4. Hydrate the store
         setAuth(user, token, fbToken as string || '');
-        
+
         setStatus('Redirecting...');
         
         // Brief delay to ensure storage persistence
@@ -61,7 +74,7 @@ export default function AuthSync() {
     };
 
     syncAuth();
-  }, [router.isReady, router.query, setAuth, router]);
+  }, [router.isReady, router.query, setAuth, setWorkspaces, router]);
 
   return (
     <>
