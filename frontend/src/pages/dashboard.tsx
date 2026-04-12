@@ -401,10 +401,11 @@ const DashboardPage: NextPageWithLayout = () => {
     }
   }, [loading, pagesLoading, pages.length, fbToken, isAuthenticated, isOwner, queryClient, t, userSettings]);
 
-  // Show onboarding for new users — server-side state is the source of truth,
+  // Show onboarding for new workspace owners — server-side state is the source of truth,
   // localStorage is a fast cache to prevent flash on subsequent page loads.
+  // Members can't connect pages and can't call PUT /settings, so skip onboarding for them.
   useEffect(() => {
-    if (!loading && pages.length === 0 && userSettings !== undefined) {
+    if (!loading && !pagesLoading && pages.length === 0 && isOwner && userSettings !== undefined) {
       const localComplete = localStorage.getItem(ONBOARDING_COMPLETE_KEY);
       const serverComplete = !!userSettings?.onboardingCompletedAt;
 
@@ -417,7 +418,7 @@ const DashboardPage: NextPageWithLayout = () => {
         settingsApi.update({ onboardingCompletedAt: new Date().toISOString() }).catch(() => {});
       }
     }
-  }, [loading, pages.length, userSettings, setOnboardingVisible]);
+  }, [loading, pagesLoading, pages.length, isOwner, userSettings, setOnboardingVisible]);
 
   // Pre-build a Map for O(1) page name lookups (avoids O(n×m) find() in render loops)
   const pageNameMap = useMemo(() => {
@@ -437,14 +438,17 @@ const DashboardPage: NextPageWithLayout = () => {
   };
 
   // Handle onboarding completion — persist to server + localStorage
+  // Only owners can update settings (PUT /settings is admin+)
   const markOnboardingDone = useCallback(() => {
     localStorage.setItem(ONBOARDING_COMPLETE_KEY, 'true');
     setShowOnboarding(false);
     setOnboardingVisible(false);
-    settingsApi.update({ onboardingCompletedAt: new Date().toISOString() }).catch(() => {});
+    if (isOwner) {
+      settingsApi.update({ onboardingCompletedAt: new Date().toISOString() }).catch(() => {});
+    }
     queryClient.invalidateQueries({ queryKey: ['pages'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-settings'] });
-  }, [setOnboardingVisible, queryClient]);
+  }, [isOwner, setOnboardingVisible, queryClient]);
 
   const handleOnboardingComplete = markOnboardingDone;
   const handleOnboardingSkip = markOnboardingDone;
