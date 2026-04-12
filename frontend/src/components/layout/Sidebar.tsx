@@ -39,7 +39,7 @@ const loadedImageCache = new Set<string>();
  */
 const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { picture?: string; name?: string; onError?: () => void }) {
   // Initialize as loaded if image is already in our cache
-  const [imageLoaded, setImageLoaded] = useState(() => 
+  const [imageLoaded, setImageLoaded] = useState(() =>
     picture ? loadedImageCache.has(picture) : false
   );
   const [imageSrc, setImageSrc] = useState<string | null>(picture || null);
@@ -97,7 +97,7 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { 
       >
         {fallbackInitial}
       </div>
-      
+
       {/* Actual image - fades in when loaded */}
       {imageSrc && (
         <img
@@ -149,6 +149,138 @@ export function getNavigationGroups(hasEcommerceStore: boolean) {
   ];
 }
 
+/* ------------------------------------------------------------------ */
+/*  UnreadBadge                                                         */
+/* ------------------------------------------------------------------ */
+
+function UnreadBadge({ count, sidebarOpen, color = 'red' }: { count: number; sidebarOpen: boolean; color?: 'red' | 'brand' }) {
+  if (count <= 0) return null;
+  const bg = color === 'brand' ? 'bg-brand-500' : 'bg-red-500';
+  return (
+    <span className={clsx(
+      `flex items-center justify-center ${bg} text-white font-bold rounded-full flex-shrink-0`,
+      sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
+    )}>
+      {sidebarOpen ? (count > 99 ? '99+' : count) : ''}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  NavItem                                                             */
+/* ------------------------------------------------------------------ */
+
+interface NavItemProps {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  isActive: boolean;
+  sidebarOpen: boolean;
+  badge?: React.ReactNode;
+}
+
+function NavItem({ href, icon: Icon, label, isActive, sidebarOpen, badge }: NavItemProps) {
+  return (
+    <Link
+      href={href}
+      className={clsx(
+        'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group/nav relative',
+        isActive
+          ? 'bg-brand-400/10 text-brand-400 shadow-xl shadow-brand-400/20'
+          : 'text-zinc-400 hover:bg-white/5 hover:text-white',
+        !sidebarOpen && 'justify-center'
+      )}
+    >
+      <Icon className={clsx(
+        "w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110",
+        isActive ? "text-brand-400" : "text-surface-500 group-hover/nav:text-brand-400"
+      )} />
+      {sidebarOpen && <span className="font-bold text-sm tracking-tight">{label}</span>}
+
+      {badge}
+
+      {/* Tooltip — visible only when sidebar is collapsed */}
+      {!sidebarOpen && (
+        <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
+          {label}
+        </span>
+      )}
+
+      {isActive && (
+        <div className={clsx(
+          "absolute inset-y-2 w-1 bg-white rounded-full transition-all",
+          sidebarOpen ? "start-0" : "start-1 h-1 top-1/2 -translate-y-1/2 w-1 rounded-full"
+        )} />
+      )}
+    </Link>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  WorkspaceSwitcher                                                   */
+/* ------------------------------------------------------------------ */
+
+interface WorkspaceSwitcherProps {
+  workspaces: { id: string; name: string }[];
+  activeWorkspaceId: string | null;
+  sidebarOpen: boolean;
+  onSwitch: (id: string) => void;
+}
+
+function WorkspaceSwitcher({ workspaces, activeWorkspaceId, sidebarOpen, onSwitch }: WorkspaceSwitcherProps) {
+  const [open, setOpen] = useState(false);
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+
+  return (
+    <div className="px-3 pt-3 pb-1 relative">
+      <button
+        onClick={() => setOpen(!open)}
+        className={clsx(
+          'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-start',
+          !sidebarOpen && 'justify-center px-0'
+        )}
+      >
+        <span className="w-7 h-7 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
+          {activeWorkspace?.name?.charAt(0) || 'W'}
+        </span>
+        {sidebarOpen && (
+          <>
+            <span className="text-sm font-bold text-white truncate flex-1">{activeWorkspace?.name}</span>
+            <ChevronDownIcon className={clsx('w-4 h-4 text-zinc-400 flex-shrink-0 transition-transform', open && 'rotate-180')} />
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div className={clsx(
+          'absolute z-50 mt-1 bg-surface-900 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[200px]',
+          sidebarOpen ? 'start-3 end-3' : 'start-full ms-2 top-3'
+        )}>
+          {workspaces.map((ws) => (
+            <button
+              key={ws.id}
+              onClick={() => { onSwitch(ws.id); setOpen(false); }}
+              className="w-full flex items-center gap-2 px-3 py-2.5 text-start hover:bg-white/10 transition-colors"
+            >
+              <span className="w-6 h-6 rounded-md bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0">
+                {ws.name?.charAt(0) || 'W'}
+              </span>
+              <span className="text-sm text-white truncate flex-1">{ws.name}</span>
+              {ws.id === activeWorkspaceId && (
+                <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sidebar                                                             */
+/* ------------------------------------------------------------------ */
+
 /**
  * Sidebar - Memoized to prevent unnecessary re-renders on page navigation
  * The memo() wrapper ensures the component only re-renders when its props change
@@ -178,15 +310,15 @@ export const Sidebar = memo(function Sidebar() {
     return key;
   };
 
-  // Memoize logout handler to prevent unnecessary re-renders
   const handleLogout = useCallback(() => {
     logout();
     router.push('/login');
   }, [logout, router]);
 
-  const [wsDropdownOpen, setWsDropdownOpen] = useState(false);
-  const hasMultipleWorkspaces = workspaces.length > 1;
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId);
+  const handleWorkspaceSwitch = useCallback((id: string) => {
+    setActiveWorkspace(id);
+    router.push('/dashboard');
+  }, [setActiveWorkspace, router]);
 
   // Local override for picture — set when the stored CDN URL expires and we refresh it
   const [pictureOverride, setPictureOverride] = useState<string | undefined>(undefined);
@@ -213,11 +345,17 @@ export const Sidebar = memo(function Sidebar() {
     }
   }, [fbToken, user?.facebookId]);
 
-  // Memoize user data to prevent ProfileAvatar re-renders
   const userPicture = pictureOverride ?? user?.picture;
   const userName = isDemoUser ? tAuth('demoUserName') : (user?.name || user?.phone || undefined);
   // Phone-only: no name set, phone is the only identifier — needs LTR direction
   const isPhoneOnly = !isDemoUser && !user?.name && !!user?.phone;
+
+  // Badge counts keyed by href for easy lookup in NavItem rendering
+  const badgeCounts: Record<string, { count: number; color: 'red' | 'brand' }> = {
+    '/comments': { count: unreadComments, color: 'red' },
+    '/messages': { count: unreadMessages, color: 'red' },
+    '/leads': { count: newLeads, color: 'brand' },
+  };
 
   return (
     <aside
@@ -272,7 +410,6 @@ export const Sidebar = memo(function Sidebar() {
             {BRAND_ASSETS.meta.appName}
           </span>
         </Link>
-        {/* Notification Bell + Connection Status - only visible when sidebar is expanded */}
         {sidebarOpen && (
           <div className="flex items-center gap-1 text-white me-2">
             {sseStatus === 'reconnecting' && (
@@ -284,130 +421,40 @@ export const Sidebar = memo(function Sidebar() {
       </div>
 
       {/* Workspace Switcher — only when user has 2+ workspaces */}
-      {hasMultipleWorkspaces && (
-        <div className="px-3 pt-3 pb-1 relative">
-          <button
-            onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
-            className={clsx(
-              'w-full flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-start',
-              !sidebarOpen && 'justify-center px-0'
-            )}
-          >
-            <span className="w-7 h-7 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-xs flex-shrink-0">
-              {activeWorkspace?.name?.charAt(0) || 'W'}
-            </span>
-            {sidebarOpen && (
-              <>
-                <span className="text-sm font-bold text-white truncate flex-1">{activeWorkspace?.name}</span>
-                <ChevronDownIcon className={clsx('w-4 h-4 text-zinc-400 flex-shrink-0 transition-transform', wsDropdownOpen && 'rotate-180')} />
-              </>
-            )}
-          </button>
-
-          {wsDropdownOpen && (
-            <div className={clsx(
-              'absolute z-50 mt-1 bg-surface-900 border border-white/10 rounded-xl shadow-2xl py-1 min-w-[200px]',
-              sidebarOpen ? 'start-3 end-3' : 'start-full ms-2 top-3'
-            )}>
-              {workspaces.map((ws) => (
-                <button
-                  key={ws.id}
-                  onClick={() => {
-                    setActiveWorkspace(ws.id);
-                    setWsDropdownOpen(false);
-                    router.push('/dashboard');
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2.5 text-start hover:bg-white/10 transition-colors"
-                >
-                  <span className="w-6 h-6 rounded-md bg-brand-500/20 text-brand-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0">
-                    {ws.name?.charAt(0) || 'W'}
-                  </span>
-                  <span className="text-sm text-white truncate flex-1">{ws.name}</span>
-                  {ws.id === activeWorkspaceId && (
-                    <Check className="w-4 h-4 text-brand-400 flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+      {workspaces.length > 1 && (
+        <WorkspaceSwitcher
+          workspaces={workspaces}
+          activeWorkspaceId={activeWorkspaceId}
+          sidebarOpen={sidebarOpen}
+          onSwitch={handleWorkspaceSwitch}
+        />
       )}
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-6 overflow-y-auto custom-scrollbar">
         {navigationGroups.map((group, groupIndex) => (
           <div key={group.labelKey} className={groupIndex > 0 ? 'mt-5' : ''}>
-            {/* Group label — visible only when sidebar is expanded */}
             {sidebarOpen && (
               <p className="px-3 mb-2 text-[11px] font-bold text-zinc-500 uppercase tracking-[0.15em]">
                 {tSidebar(group.labelKey.replace('sidebar.', '') as Parameters<typeof tSidebar>[0])}
               </p>
             )}
-            {/* Collapsed divider — thin line between groups */}
             {!sidebarOpen && groupIndex > 0 && (
               <div className="mx-3 mb-2 border-t border-white/10" />
             )}
             <div className="space-y-1">
               {group.items.map((item) => {
-                const isActive = router.pathname === item.href || router.pathname.startsWith(item.href + '/');
+                const badge = badgeCounts[item.href];
                 return (
-                  <Link
+                  <NavItem
                     key={item.key}
                     href={item.href}
-                    className={clsx(
-                      'flex items-center gap-3 px-3 py-3 rounded-2xl transition-all duration-300 group/nav relative',
-                      isActive
-                        ? 'bg-brand-400/10 text-brand-400 shadow-xl shadow-brand-400/20'
-                        : 'text-zinc-400 hover:bg-white/5 hover:text-white',
-                      !sidebarOpen && 'justify-center'
-                    )}
-                  >
-                    <item.icon className={clsx(
-                      "w-6 h-6 flex-shrink-0 transition-transform group-hover/nav:scale-110",
-                      isActive ? "text-brand-400" : "text-surface-500 group-hover/nav:text-brand-400"
-                    )} />
-                    {sidebarOpen && <span className="font-bold text-sm tracking-tight">{resolveItemKey(item.key)}</span>}
-
-                    {/* Unread badge */}
-                    {item.href === '/comments' && unreadComments > 0 && (
-                      <span className={clsx(
-                        'flex items-center justify-center bg-red-500 text-white font-bold rounded-full flex-shrink-0',
-                        sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
-                      )}>
-                        {sidebarOpen ? (unreadComments > 99 ? '99+' : unreadComments) : ''}
-                      </span>
-                    )}
-                    {item.href === '/messages' && unreadMessages > 0 && (
-                      <span className={clsx(
-                        'flex items-center justify-center bg-red-500 text-white font-bold rounded-full flex-shrink-0',
-                        sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
-                      )}>
-                        {sidebarOpen ? (unreadMessages > 99 ? '99+' : unreadMessages) : ''}
-                      </span>
-                    )}
-                    {item.href === '/leads' && newLeads > 0 && (
-                      <span className={clsx(
-                        'flex items-center justify-center bg-brand-500 text-white font-bold rounded-full flex-shrink-0',
-                        sidebarOpen ? 'ms-auto w-5 h-5 text-[10px]' : 'absolute top-1 end-1 w-2.5 h-2.5',
-                      )}>
-                        {sidebarOpen ? (newLeads > 99 ? '99+' : newLeads) : ''}
-                      </span>
-                    )}
-
-                    {/* Tooltip — visible only when sidebar is collapsed */}
-                    {!sidebarOpen && (
-                      <span className="absolute start-full ms-3 px-2.5 py-1.5 rounded-lg bg-surface-200 text-white text-xs font-medium whitespace-nowrap opacity-0 group-hover/nav:opacity-100 pointer-events-none transition-opacity duration-200 z-50 shadow-lg">
-                        {resolveItemKey(item.key)}
-                      </span>
-                    )}
-
-                    {isActive && (
-                      <div className={clsx(
-                        "absolute inset-y-2 w-1 bg-white rounded-full transition-all",
-                        sidebarOpen ? "start-0" : "start-1 h-1 top-1/2 -translate-y-1/2 w-1 rounded-full"
-                      )}></div>
-                    )}
-                  </Link>
+                    icon={item.icon}
+                    label={resolveItemKey(item.key)}
+                    isActive={router.pathname === item.href || router.pathname.startsWith(item.href + '/')}
+                    sidebarOpen={sidebarOpen}
+                    badge={badge && <UnreadBadge count={badge.count} sidebarOpen={sidebarOpen} color={badge.color} />}
+                  />
                 );
               })}
             </div>
@@ -438,12 +485,11 @@ export const Sidebar = memo(function Sidebar() {
                   {tAdmin('title')}
                 </span>
               )}
-
               {router.pathname.startsWith('/admin') && (
                 <div className={clsx(
                   "absolute inset-y-2 w-1 bg-white rounded-full transition-all",
                   sidebarOpen ? "start-0" : "start-1 h-1 top-1/2 -translate-y-1/2 w-1 rounded-full"
-                )}></div>
+                )} />
               )}
             </Link>
           </>
@@ -452,7 +498,6 @@ export const Sidebar = memo(function Sidebar() {
 
       {/* User & Logout */}
       <div className="flex-shrink-0 p-4 border-t border-white/5 bg-black/20">
-        {/* Theme toggle — standalone icon when collapsed, inside profile card when expanded */}
         {!sidebarOpen && <ThemeToggleButton variant="sidebar" sidebarOpen={false} />}
 
         {user && (
@@ -460,7 +505,6 @@ export const Sidebar = memo(function Sidebar() {
             "px-3 py-3 mb-4 rounded-2xl bg-white/5 border border-white/5 flex items-center gap-3",
             !sidebarOpen && "justify-center px-0"
           )}>
-            {/* Profile Picture with smooth loading - prevents flicker on navigation */}
             <ProfileAvatar picture={userPicture} name={userName} onError={handlePictureRefresh} />
             {sidebarOpen && (
               <>
