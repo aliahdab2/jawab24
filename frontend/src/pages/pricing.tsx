@@ -10,7 +10,7 @@ import { subscriptionApi, publicApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
-import { useWorkspaceRole } from '@/hooks';
+import { useOwnerGate } from '@/hooks';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
@@ -345,8 +345,8 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     if (ns === 'pricing') return params ? tPricing(k, params) : tPricing(k);
     return params ? tSub(k, params) : tSub(k);
   };
-  const { isAuthenticated, _hasHydrated } = useAuthStore();
-  const { isOwner } = useWorkspaceRole();
+  const { isAuthenticated } = useAuthStore();
+  const isBlockedForMember = useOwnerGate();
   const [plans, setPlans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [changingPlan, setChangingPlan] = useState<string | null>(null);
@@ -412,9 +412,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     }
 
     // Members cannot manage subscriptions — only the workspace owner can.
-    // Guard is only applied after hydration: useWorkspaceRole defaults to 'owner'
-    // while the store loads, so acting before _hasHydrated would be wrong.
-    if (_hasHydrated && isAuthenticated && !isOwner) {
+    if (isBlockedForMember) {
       toast.error(tPricing('ownerOnlyBilling'));
       return;
     }

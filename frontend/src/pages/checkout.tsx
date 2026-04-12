@@ -11,7 +11,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
 import { useAuthStore } from '@/lib/store';
-import { withOwnerOnly } from '@/hoc/withOwnerOnly';
+import { withOwnerOnly } from '@/hoc';
 import { useLocale } from 'next-intl';
 
 import { Button, BrandLogo } from '@/components/ui';

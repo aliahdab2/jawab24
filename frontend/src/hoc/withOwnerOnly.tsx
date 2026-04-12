@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { Loader2 } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
-import { useWorkspaceRole } from '@/hooks';
+import { useOwnerGate } from '@/hooks';
 
 /**
  * HOC: restricts a page to workspace owners only.
@@ -21,10 +21,7 @@ export function withOwnerOnly<P extends object>(
   const WithOwnerOnly: React.FC<P> = (props) => {
     const router = useRouter();
     const _hasHydrated = useAuthStore((s) => s._hasHydrated);
-    const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-    const { isOwner } = useWorkspaceRole();
-
-    const shouldRedirect = _hasHydrated && isAuthenticated && !isOwner;
+    const shouldRedirect = useOwnerGate();
 
     useEffect(() => {
       if (shouldRedirect) {

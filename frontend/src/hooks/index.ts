@@ -19,3 +19,4 @@ export { useTheme } from './useTheme';
 export { useConversationActions } from './useConversationActions';
 export { useMobileMessages } from './useMobileMessages';
 export { useWorkspaceRole } from './useWorkspaceRole';
+export { useOwnerGate } from './useOwnerGate';
