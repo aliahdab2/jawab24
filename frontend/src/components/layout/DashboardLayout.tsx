@@ -1,9 +1,9 @@
-import { MessageCircle, LayoutDashboard, MessageSquare, Settings, MoreHorizontal, X, LogOut, Zap, FileText, CreditCard } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, MessageSquare, MoreHorizontal, X, LogOut } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { Sidebar } from './Sidebar';
+import { Sidebar, getNavigationGroups } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -27,6 +27,17 @@ interface DashboardLayoutProps {
   skipTitle?: boolean;
 }
 
+/**
+ * Isolated component so SSE reconnect state changes don't re-render DashboardLayout.
+ * sseStatus transitions (connecting → error → reconnecting) happen frequently during
+ * retries — reading it here keeps those re-renders contained to this small indicator.
+ */
+function SseReconnectingDot() {
+  const sseStatus = useUIStore((s) => s.sseStatus);
+  if (sseStatus !== 'reconnecting') return null;
+  return <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />;
+}
+
 export function DashboardLayout({ children, title, isPublic = false, skipTitle = false }: DashboardLayoutProps) {
   const router = useRouter();
   const tDashboard = useTranslations('dashboard');
@@ -37,11 +48,12 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const locale = useLocale();
   const { setLanguage } = useLanguage();
   const isRTL = isRTLLocale(locale);
-  const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
-  const { sidebarOpen, isOnboardingVisible } = useUIStore();
+  const { isAuthenticated, _hasHydrated, logout, user } = useAuthStore();
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
+  const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   const unreadComments = useUIStore((s) => s.unreadComments);
   const unreadMessages = useUIStore((s) => s.unreadMessages);
-  const sseStatus = useUIStore((s) => s.sseStatus);
+  const newLeads = useUIStore((s) => s.newLeads);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
 
@@ -205,9 +217,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             </Link>
 
             <div className="flex items-center gap-2">
-              {sseStatus === 'reconnecting' && (
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-              )}
+              <SseReconnectingDot />
               <NotificationBell />
             </div>
           </div>
@@ -256,6 +266,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           <>
             {/* Bottom navigation - sits ABOVE the safe area in portrait, at bottom in landscape */}
             <nav
+              aria-label="Mobile navigation"
               className="lg:hidden fixed left-0 right-0 bg-card border-t border-theme-border/50 flex justify-around items-center h-16 max-lg:landscape:h-12 z-40 shadow-[0_-4px_16px_rgba(0,0,0,0.05)] px-safe-landscape bottom-nav-position"
             >
               <MobileNavButton
@@ -282,7 +293,9 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 onClick={() => setMobileMenuOpen(true)}
                 icon={<MoreHorizontal className="w-7 h-7" />}
                 label={tNav('more') || 'More'}
-                active={mobileMenuOpen || ['/pages', '/templates', '/rules', '/pricing', '/settings'].includes(router.pathname)}
+                active={mobileMenuOpen || ['/pages', '/leads', '/templates', '/rules', '/pricing', '/settings'].includes(router.pathname)}
+                badge={newLeads}
+                badgeColor="brand"
               />
             </nav>
           </>
@@ -296,6 +309,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             isRTL={isRTL}
             router={router}
             onLogout={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
+            hasEcommerceStore={user?.hasEcommerceStore ?? false}
           />
         )}
 
@@ -340,12 +354,13 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 }
 
 // Mobile nav button component
-function MobileNavButton({ onClick, icon, label, active, badge }: {
+function MobileNavButton({ onClick, icon, label, active, badge, badgeColor = 'red' }: {
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
   badge?: number;
+  badgeColor?: 'red' | 'brand';
 }) {
   return (
     <button
@@ -358,7 +373,10 @@ function MobileNavButton({ onClick, icon, label, active, badge }: {
       )}>
         {icon}
         {badge != null && badge > 0 && (
-          <span className="absolute -top-1.5 -end-2.5 flex items-center justify-center w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full">
+          <span aria-hidden="true" className={clsx(
+            "absolute -top-1.5 -end-2.5 flex items-center justify-center w-4 h-4 text-white text-[9px] font-bold rounded-full",
+            badgeColor === 'brand' ? 'bg-brand-500' : 'bg-red-500'
+          )}>
             {badge > 99 ? '99+' : badge}
           </span>
         )}
@@ -391,29 +409,33 @@ function MobileMenuOverlay({
   onClose,
   isRTL,
   router,
-  onLogout
+  onLogout,
+  hasEcommerceStore,
 }: {
   isOpen: boolean;
   onClose: () => void;
   isRTL: boolean;
   router: ReturnType<typeof useRouter>;
   onLogout: () => void;
+  hasEcommerceStore: boolean;
 }) {
   const tNav = useTranslations('nav');
   const tPricing = useTranslations('pricing');
-  // Reusable hooks
   const isLandscape = useLandscape();
   useBodyScrollLock(isOpen);
 
-  const menuItems = [
-    { path: '/dashboard', icon: LayoutDashboard, label: tNav('dashboard') },
-    { path: '/pages', icon: FileText, label: tNav('pages') },
-    { path: '/comments', icon: MessageSquare, label: tNav('comments') },
-    { path: '/messages', icon: MessageCircle, label: tNav('messages') },
-    { path: '/preset-replies', icon: Zap, label: tNav('presetReplies') },
-    { path: '/pricing', icon: CreditCard, label: tPricing('title') },
-    { path: '/settings', icon: Settings, label: tNav('settings') },
-  ];
+  const navigationGroups = getNavigationGroups(hasEcommerceStore);
+  const menuItems = navigationGroups.flatMap((group) =>
+    group.items.map((item) => ({
+      path: item.href,
+      icon: item.icon,
+      label: item.key.startsWith('nav.')
+        ? tNav(item.key.replace('nav.', '') as Parameters<typeof tNav>[0])
+        : item.key.startsWith('pricing.')
+          ? tPricing(item.key.replace('pricing.', '') as Parameters<typeof tPricing>[0])
+          : item.key,
+    }))
+  );
 
   const handleNavigate = (path: string) => {
     // On native, open pricing on the web (Google Play policy)
