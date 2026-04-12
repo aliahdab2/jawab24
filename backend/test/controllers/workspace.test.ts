@@ -9,6 +9,7 @@ vi.mock('../../src/services/workspace', () => ({
         updateWorkspace: vi.fn(),
         deleteWorkspace: vi.fn(),
         getMembers: vi.fn(),
+        getMemberRole: vi.fn(),
         removeMember: vi.fn(),
         updateMemberRole: vi.fn(),
     },
@@ -168,33 +169,83 @@ describe('WorkspaceController', () => {
 
     // ── removeMember ──────────────────────────────────────────────────────
     describe('removeMember', () => {
-        it('removes member and returns 204', async () => {
+        it('owner removes a member — returns 204', async () => {
+            vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'member' });
             vi.mocked(workspaceService.removeMember).mockResolvedValue();
             const reply = makeReply();
 
             await workspaceController.removeMember(
-                makeRequest({ params: { userId: 'user-2' } }),
+                makeRequest({ workspaceRole: 'owner', params: { userId: 'user-2' } }),
                 reply,
             );
 
             expect(reply.status).toHaveBeenCalledWith(204);
         });
 
-        it('returns 400 when removing last owner', async () => {
-            vi.mocked(workspaceService.removeMember).mockRejectedValue(
-                new Error('Cannot remove the last owner. Transfer ownership first.'),
-            );
+        it('admin removes a member — returns 204', async () => {
+            vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'member' });
+            vi.mocked(workspaceService.removeMember).mockResolvedValue();
             const reply = makeReply();
 
             await workspaceController.removeMember(
-                makeRequest({ params: { userId: USER_ID } }),
+                makeRequest({ workspaceRole: 'admin', params: { userId: 'user-2' } }),
                 reply,
             );
 
-            expect(reply.status).toHaveBeenCalledWith(400);
+            expect(reply.status).toHaveBeenCalledWith(204);
+        });
+
+        it('admin cannot remove another admin — returns 403', async () => {
+            vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'admin' });
+            const reply = makeReply();
+
+            await workspaceController.removeMember(
+                makeRequest({ workspaceRole: 'admin', params: { userId: 'user-2' } }),
+                reply,
+            );
+
+            expect(reply.status).toHaveBeenCalledWith(403);
             expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({
-                message: expect.stringContaining('last owner'),
+                code: 'INSUFFICIENT_ROLE',
             }));
+        });
+
+        it('admin cannot remove an owner — returns 403', async () => {
+            vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'owner' });
+            const reply = makeReply();
+
+            await workspaceController.removeMember(
+                makeRequest({ workspaceRole: 'admin', params: { userId: 'user-2' } }),
+                reply,
+            );
+
+            expect(reply.status).toHaveBeenCalledWith(403);
+        });
+
+        it('returns 404 when target member not found', async () => {
+            vi.mocked(workspaceService.getMemberRole).mockResolvedValue(null);
+            const reply = makeReply();
+
+            await workspaceController.removeMember(
+                makeRequest({ params: { userId: 'ghost-user' } }),
+                reply,
+            );
+
+            expect(reply.status).toHaveBeenCalledWith(404);
+        });
+
+        it('owner cannot remove another owner — blocked at controller level', async () => {
+            vi.mocked(workspaceService.getMemberRole).mockResolvedValue({ role: 'owner' });
+            const reply = makeReply();
+
+            await workspaceController.removeMember(
+                makeRequest({ workspaceRole: 'owner', params: { userId: 'other-owner' } }),
+                reply,
+            );
+
+            // Controller blocks this before reaching the service (equal role level)
+            expect(reply.status).toHaveBeenCalledWith(403);
+            expect(workspaceService.removeMember).not.toHaveBeenCalled();
         });
     });
 

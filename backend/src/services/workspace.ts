@@ -104,6 +104,23 @@ export class WorkspaceService {
     }
 
     /**
+     * Get a single member's role. Returns null if not a member.
+     */
+    async getMemberRole(workspaceId: string, userId: string): Promise<{ role: WorkspaceRole } | null> {
+        const [row] = await db
+            .select({ role: workspaceMembers.role })
+            .from(workspaceMembers)
+            .where(
+                and(
+                    eq(workspaceMembers.workspaceId, workspaceId),
+                    eq(workspaceMembers.userId, userId),
+                )
+            )
+            .limit(1);
+        return row ? { role: row.role as WorkspaceRole } : null;
+    }
+
+    /**
      * Add a member to a workspace. Enforces internal member limit.
      */
     async addMember(

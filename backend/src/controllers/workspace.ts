@@ -3,6 +3,7 @@ import { workspaceService } from '../services/workspace';
 import { workspaceInviteService } from '../services/workspaceInvite';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import type { WorkspaceRequest, ResolvedWorkspaceRequest } from '../middleware/workspace';
+import { ROLE_HIERARCHY } from '../utils/roles';
 import type { AuthenticatedRequest } from '../middleware/auth';
 import type { WorkspaceRole } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
@@ -90,7 +91,26 @@ async function getMembers(request: WorkspaceRequest, reply: FastifyReply) {
 async function removeMember(request: WorkspaceRequest, reply: FastifyReply) {
     try {
         const { userId } = request.params as { userId: string };
-        await workspaceService.removeMember((request as ResolvedWorkspaceRequest).workspaceId, userId);
+        const req = request as ResolvedWorkspaceRequest;
+
+        // Fetch the target member's role before removing
+        const targetMember = await workspaceService.getMemberRole(req.workspaceId, userId);
+        if (!targetMember) {
+            return reply.status(404).send({ error: true, message: 'Member not found' });
+        }
+
+        // Admins can only remove members — not other admins or owners
+        const requesterLevel = ROLE_HIERARCHY[req.workspaceRole] ?? 0;
+        const targetLevel = ROLE_HIERARCHY[targetMember.role] ?? 0;
+        if (requesterLevel <= targetLevel) {
+            return reply.status(403).send({
+                error: true,
+                message: 'You can only remove members with a lower role than your own',
+                code: 'INSUFFICIENT_ROLE',
+            });
+        }
+
+        await workspaceService.removeMember(req.workspaceId, userId);
         return reply.status(204).send();
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Failed to remove member';

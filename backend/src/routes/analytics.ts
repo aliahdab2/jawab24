@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { analyticsController } from '../controllers/analytics';
 import { authenticate } from '../middleware/auth';
-import { resolveWorkspace } from '../middleware/workspace';
+import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
 import { externalApiDuration } from '../lib/metrics';
 import { probeDatabase, probeRedis, probeAiWorkerCircuit } from '../utils/healthChecks';
@@ -73,6 +73,7 @@ async function computeExternalApiSummary(): Promise<Array<{
 }
 
 export default async function analyticsRoutes(fastify: FastifyInstance) {
+    // --- Member+: usage and overview ---
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
         protectedRoutes.addHook('preHandler', resolveWorkspace);
@@ -105,6 +106,13 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
                 },
             },
         }, analyticsController.getOverview);
+    });
+
+    // --- Admin+: internal infrastructure metrics ---
+    fastify.register(async (adminRoutes) => {
+        adminRoutes.addHook('preHandler', authenticate);
+        adminRoutes.addHook('preHandler', resolveWorkspace);
+        adminRoutes.addHook('preHandler', requireRole('admin'));
 
         /**
          * Operational system health metrics (JSON, for admin dashboard)
@@ -113,7 +121,7 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
          * Uses Node.js APIs directly (not prom-client JSON parsing) for reliability.
          * Shared health probes from utils/healthChecks.ts avoid duplication with /health.
          */
-        protectedRoutes.get('/system-health', {
+        adminRoutes.get('/system-health', {
             schema: {
                 tags: ['Analytics'],
                 summary: 'Get operational system health metrics',

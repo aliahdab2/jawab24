@@ -4,6 +4,7 @@ import { db } from '../db';
 import { workspaceMembers, workspaces } from '../db/schema';
 import type { AuthenticatedRequest } from './auth';
 import type { WorkspaceRole } from '@jawab24/shared';
+import { ROLE_HIERARCHY } from '../utils/roles';
 
 export interface WorkspaceRequest extends AuthenticatedRequest {
     workspaceId?: string;
@@ -16,13 +17,8 @@ export interface WorkspaceRequest extends AuthenticatedRequest {
  * string because resolveWorkspace middleware always sets it before any handler runs.
  * Cast to this type inside controller functions to avoid non-null assertions.
  */
-export type ResolvedWorkspaceRequest = WorkspaceRequest & { workspaceId: string; workspaceOwnerId: string };
+export type ResolvedWorkspaceRequest = WorkspaceRequest & { workspaceId: string; workspaceOwnerId: string; workspaceRole: WorkspaceRole };
 
-const ROLE_HIERARCHY: Record<WorkspaceRole, number> = {
-    owner: 3,
-    admin: 2,
-    member: 1,
-};
 
 /**
  * Resolves the workspace context for the current request.

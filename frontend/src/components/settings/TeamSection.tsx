@@ -338,7 +338,7 @@ export function TeamSection() {
             const isMe = member.userId === user?.id;
             const isMemberOwner = member.role === 'owner';
             const canChangeRole = isOwner && !isMe;
-            const canRemove = isAdmin && !isMe && !isMemberOwner;
+            const canRemove = isOwner ? (!isMe && !isMemberOwner) : (isAdmin && !isMe && member.role === 'member');
             const RoleIcon = ROLE_ICONS[member.role];
             const initial = member.userName?.charAt(0) || member.userEmail?.charAt(0) || '?';
 
