@@ -37,7 +37,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const locale = useLocale();
   const { setLanguage } = useLanguage();
   const isRTL = isRTLLocale(locale);
-  const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
+  const { isAuthenticated, _hasHydrated, logout, workspaces, setWorkspaces } = useAuthStore();
   const { sidebarOpen, isOnboardingVisible } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
   const unreadMessages = useUIStore((s) => s.unreadMessages);
@@ -79,6 +79,26 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
     verifySession();
   }, [_hasHydrated, isAuthenticated]);
+
+  // Refresh workspace list on startup if the store is empty.
+  // workspaces[] is excluded from localStorage persistence so it resets on every
+  // native app restart. Without this fetch, the workspace switcher never shows
+  // and useWorkspaceRole defaults to 'owner' for all users.
+  useEffect(() => {
+    if (!_hasHydrated || !isAuthenticated || workspaces.length > 0) return;
+    const refresh = async () => {
+      try {
+        const { workspaceApi } = await import('@/lib/api');
+        const res = await workspaceApi.list();
+        if (Array.isArray(res.data) && res.data.length > 0) {
+          setWorkspaces(res.data);
+        }
+      } catch {
+        // Non-fatal — workspace middleware auto-resolves single-workspace users
+      }
+    };
+    refresh();
+  }, [_hasHydrated, isAuthenticated, workspaces.length, setWorkspaces]);
 
   useEffect(() => {
     if (_hasHydrated && !isAuthenticated && !isPublic) {
