@@ -1,8 +1,9 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Mic, Square, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useVoiceRecorder } from '@/hooks/useVoiceRecorder';
+import { useHintDisplay } from '@/hooks/useHintDisplay';
 
 interface VoiceRecordButtonProps {
   /** Called with transcribed text — component does NOT set textarea value directly */
@@ -30,13 +31,12 @@ export function VoiceRecordButton({
   disabled = false,
 }: VoiceRecordButtonProps) {
   const tKb = useTranslations('kb');
-  const [showHint, setShowHint] = useState(false);
+  const { hint, showHint } = useHintDisplay();
 
   const handleTranscribed = useCallback((text: string) => {
     onTranscribed(text);
-    setShowHint(true);
-    setTimeout(() => setShowHint(false), 5000);
-  }, [onTranscribed]);
+    showHint(tKb('voice.reviewHint'));
+  }, [onTranscribed, showHint, tKb]);
 
   const { state, elapsed, startRecording, stopRecording, isSupported } = useVoiceRecorder({
     languageHint,
@@ -116,13 +116,12 @@ export function VoiceRecordButton({
         )}
       </button>
 
-      {/* Review hint — fades after 5s */}
-      {showHint && (
+      {hint && (
         <span
           className="text-xs text-amber-600 dark:text-amber-400 animate-fade-in"
           role="status"
         >
-          {tKb('voice.reviewHint')}
+          {hint}
         </span>
       )}
     </div>

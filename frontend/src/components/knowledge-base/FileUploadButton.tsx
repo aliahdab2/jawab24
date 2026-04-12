@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { kbApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { useHintDisplay } from '@/hooks/useHintDisplay';
 
 // image/* triggers camera option on mobile (iOS/Android)
 const ACCEPTED_TYPES = '.pdf,.docx,.doc,image/*';
@@ -41,14 +42,7 @@ export function FileUploadButton({
   const t = useTranslations('kb');
   const inputRef = useRef<HTMLInputElement>(null);
   const [extracting, setExtracting] = useState(false);
-  const [showHint, setShowHint] = useState(false);
-  const [hintText, setHintText] = useState('');
-
-  const showHintBriefly = useCallback((text: string) => {
-    setHintText(text);
-    setShowHint(true);
-    setTimeout(() => setShowHint(false), 5000);
-  }, []);
+  const { hint, showHint: showHintBriefly } = useHintDisplay();
 
   const handleClick = useCallback(() => {
     if (disabled || extracting) return;
@@ -146,13 +140,12 @@ export function FileUploadButton({
         )}
       </button>
 
-      {/* Review hint — fades after 5s, matches VoiceRecordButton hint style */}
-      {showHint && (
+      {hint && (
         <span
           className="text-xs text-amber-600 dark:text-amber-400 animate-fade-in"
           role="status"
         >
-          {hintText}
+          {hint}
         </span>
       )}
     </div>

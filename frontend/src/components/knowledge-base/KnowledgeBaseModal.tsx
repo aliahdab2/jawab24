@@ -168,7 +168,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     <div className="fixed inset-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2">
 
       <div
-        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-[80%] lg:max-h-[85dvh] flex flex-col pt-safe lg:pt-0 landscape:pb-2"
+        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-[92dvh] lg:max-h-[85dvh] flex flex-col pt-safe lg:pt-0 landscape:pb-2"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-theme-border flex-shrink-0 z-10 bg-card">
@@ -192,9 +192,9 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
         </div>
 
         {/* Body — flex-1 + min-h-0 + overflow-y-auto ensures this scrolls while header/footer stay fixed */}
-        <div className="flex-1 min-h-0 p-4 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto relative">
+        <div className="flex-1 min-h-0 p-3 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto relative">
           {/* Description */}
-          <p className="text-xs sm:text-sm text-surface-500 mb-3 text-start landscape:hidden">
+          <p className="text-xs sm:text-sm text-surface-500 mb-2 text-start landscape:hidden">
             {tKb('description')}
           </p>
 

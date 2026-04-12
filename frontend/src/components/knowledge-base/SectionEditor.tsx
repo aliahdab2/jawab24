@@ -1,6 +1,7 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useEffect, useCallback, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { toast } from 'sonner';
+import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
 import { VoiceRecordButton } from './VoiceRecordButton';
 import { FileUploadButton } from './FileUploadButton';
 
@@ -30,24 +31,8 @@ export function SectionEditor({
 }: SectionEditorProps) {
   const locale = useLocale();
   const tKb = useTranslations('kb');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { ref: textareaRef, autoResize } = useTextareaAutoResize(80);
   const [justTranscribed, setJustTranscribed] = useState(false);
-
-  const autoResize = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    // Find the nearest scrollable ancestor and save its position.
-    // Setting height='auto' momentarily collapses the textarea, which can cause
-    // the scroll container to jump. Restoring scrollTop after prevents that.
-    let scrollEl: HTMLElement | null = el.parentElement;
-    while (scrollEl && !['auto', 'scroll'].includes(getComputedStyle(scrollEl).overflowY)) {
-      scrollEl = scrollEl.parentElement as HTMLElement | null;
-    }
-    const savedTop = scrollEl?.scrollTop ?? 0;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(80, el.scrollHeight)}px`;
-    if (scrollEl) scrollEl.scrollTop = savedTop;
-  }, []);
 
   /** Shared handler for voice transcription and file extraction — append text + highlight.
    *  Truncates inserted text to fit the remaining KB budget when available. */
@@ -83,12 +68,17 @@ export function SectionEditor({
       textareaRef.current.focus({ preventScroll: true });
       autoResize();
     }
-  }, [isExpanded, autoResize]);
+  }, [isExpanded, autoResize, textareaRef]);
 
   return (
     <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <p className="text-xs text-muted-foreground min-w-0">
+      {/* Toolbar row: description (desktop) + action buttons */}
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <p className="text-xs text-muted-foreground min-w-0 hidden sm:block">
+          {description}
+        </p>
+        {/* On mobile show description as a compact label; on desktop it's in the row above */}
+        <p className="text-xs text-muted-foreground min-w-0 sm:hidden truncate flex-1">
           {description}
         </p>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -106,7 +96,7 @@ export function SectionEditor({
       </div>
       <textarea
         ref={textareaRef}
-        className={`w-full min-h-[80px] p-3 sm:p-4 border-2 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-hidden text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground transition-colors duration-500 ${
+        className={`w-full min-h-[min(42dvh,280px)] sm:min-h-[120px] p-3 sm:p-4 border-2 rounded-xl focus:ring-2 focus:ring-brand-500 focus:border-brand-500 overflow-y-auto text-sm leading-relaxed bg-background text-foreground placeholder:text-muted-foreground transition-colors duration-500 resize-none ${
           justTranscribed ? 'border-amber-400' : 'border-theme-border'
         }`}
         placeholder={placeholder}
@@ -115,7 +105,6 @@ export function SectionEditor({
         onChange={(e) => onChange(e.target.value)}
         onInput={autoResize}
         dir="auto"
-        rows={3}
       />
     </div>
   );

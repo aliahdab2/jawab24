@@ -1,9 +1,10 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { ChevronDown, Trash2 } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ConfirmationModal } from '@/components/ui';
 import { CUSTOM_SECTION_MARKER } from './types';
 import type { KnowledgeSection } from './types';
+import { CollapsibleSectionCard } from './CollapsibleSectionCard';
 import { SectionEditor } from './SectionEditor';
 
 interface KnowledgeBaseCustomSectionProps {
@@ -59,81 +60,51 @@ export function KnowledgeBaseCustomSection({
   };
 
   return (
-    <div
-      className={`rounded-2xl border-2 transition-all duration-200 overflow-hidden ${
-        isExpanded
-          ? 'border-brand-400 bg-brand-50/20 shadow-sm'
-          : hasContent
-            ? 'border-brand-200 bg-brand-50/10'
-            : 'border-theme-border bg-card hover:border-surface-300 dark:hover:border-surface-500'
-      }`}
-    >
-      {/* Header */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center gap-3 p-3.5 sm:p-4 text-start"
+    <>
+      <CollapsibleSectionCard
+        isExpanded={isExpanded}
+        hasContent={hasContent}
+        charCount={section.content.length}
+        onToggle={onToggle}
+        header={
+          <>
+            <span className="text-xl flex-shrink-0 text-icon-muted">{CUSTOM_SECTION_MARKER}</span>
+            <div className="flex-1 min-w-0">
+              {isExpanded ? (
+                <input
+                  ref={titleRef}
+                  className="text-sm font-bold text-foreground bg-transparent border-0 border-b border-transparent focus:border-brand-400 outline-none w-full p-0"
+                  value={section.title || ''}
+                  onChange={handleTitleChange}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder={tKb('customSection.titlePlaceholder')}
+                  aria-label={tKb('customSection.titlePlaceholder')}
+                  maxLength={40}
+                  dir="auto"
+                />
+              ) : (
+                <p className={`text-sm font-bold ${hasContent ? 'text-foreground' : 'text-muted-foreground'}`}>
+                  {section.title || tKb('customSection.titlePlaceholder')}
+                </p>
+              )}
+              {!isExpanded && (
+                <p className={`text-xs mt-0.5 truncate ${hasContent ? 'text-surface-500 dark:text-surface-700' : 'text-muted-foreground'}`}>
+                  {preview}
+                </p>
+              )}
+            </div>
+          </>
+        }
+        headerAction={
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        }
       >
-        {/* Custom marker icon */}
-        <span className="text-xl flex-shrink-0 text-icon-muted">{CUSTOM_SECTION_MARKER}</span>
-
-        {/* Title + preview */}
-        <div className="flex-1 min-w-0">
-          {isExpanded ? (
-            <input
-              ref={titleRef}
-              className="text-sm font-bold text-foreground bg-transparent border-0 border-b border-transparent focus:border-brand-400 outline-none w-full p-0"
-              value={section.title || ''}
-              onChange={handleTitleChange}
-              onClick={(e) => e.stopPropagation()}
-              placeholder={tKb('customSection.titlePlaceholder')}
-              aria-label={tKb('customSection.titlePlaceholder')}
-              maxLength={40}
-              dir="auto"
-            />
-          ) : (
-            <p className={`text-sm font-bold ${hasContent ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {section.title || tKb('customSection.titlePlaceholder')}
-            </p>
-          )}
-          {!isExpanded && (
-            <p className={`text-xs mt-0.5 truncate ${hasContent ? 'text-surface-500 dark:text-surface-700' : 'text-muted-foreground'}`}>
-              {preview}
-            </p>
-          )}
-        </div>
-
-        {/* Delete button */}
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Char count + Status dot */}
-        {!isExpanded && hasContent && (
-          <span className="text-[10px] tabular-nums text-muted-foreground flex-shrink-0">
-            {section.content.length.toLocaleString()}
-          </span>
-        )}
-        <div
-          className={`w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors ${
-            hasContent ? 'bg-brand-500' : 'bg-dot-muted'
-          }`}
-        />
-
-        {/* Chevron */}
-        <ChevronDown
-          className={`w-4 h-4 text-icon-muted flex-shrink-0 transition-transform duration-200 ${
-            isExpanded ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
-
-      {/* Expanded content */}
-      {isExpanded && (
         <SectionEditor
           content={section.content}
           onChange={onChange}
@@ -143,7 +114,7 @@ export function KnowledgeBaseCustomSection({
           isExpanded={isExpanded}
           remainingChars={remainingChars}
         />
-      )}
+      </CollapsibleSectionCard>
 
       <ConfirmationModal
         isOpen={showDeleteConfirm}
@@ -153,6 +124,6 @@ export function KnowledgeBaseCustomSection({
         message={tKb('customSection.deleteConfirm')}
         variant="danger"
       />
-    </div>
+    </>
   );
 }

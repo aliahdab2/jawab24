@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Button } from '@/components/ui';
+import { useTextareaAutoResize } from '@/hooks/useTextareaAutoResize';
 import type { KbGap } from './types';
 import { VoiceRecordButton } from './VoiceRecordButton';
 
@@ -17,21 +18,14 @@ export function GapCard({ gap, isExpanded, onToggle, onApprove, onSkip }: GapCar
   const tKb = useTranslations('kb');
   const locale = useLocale();
   const [answer, setAnswer] = useState('');
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const autoResize = useCallback(() => {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${Math.max(56, Math.min(el.scrollHeight, 160))}px`;
-  }, []);
+  const { ref: textareaRef, autoResize } = useTextareaAutoResize(56, 160);
 
   useEffect(() => {
     if (isExpanded && textareaRef.current) {
       textareaRef.current.focus();
       autoResize();
     }
-  }, [isExpanded, autoResize]);
+  }, [isExpanded, autoResize, textareaRef]);
 
   const handleApprove = () => {
     const trimmed = answer.trim();
