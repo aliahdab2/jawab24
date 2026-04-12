@@ -318,8 +318,9 @@ function CheckoutPage() {
   }, [plan, isAuthenticated, clientSecret, sessionLoading, isSanctioned, billingInterval, router, t]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     createSession();
-  }, [createSession]);
+  }, [createSession, isAuthenticated]);
 
   const handleLogin = () => {
     if (!plan) return;
