@@ -204,7 +204,7 @@ export default function CheckoutPage() {
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, _hasHydrated } = useAuthStore();
   const { isOwner } = useWorkspaceRole();
 
   useEffect(() => {
@@ -220,12 +220,15 @@ export default function CheckoutPage() {
     }
   }, [router.locale]);
 
-  // Members cannot subscribe — only the workspace owner manages billing
+  // Members cannot subscribe — only the workspace owner manages billing.
+  // Wait for _hasHydrated before acting: useWorkspaceRole defaults to 'owner'
+  // while the store is loading, which would incorrectly let members through.
   useEffect(() => {
+    if (!_hasHydrated) return;
     if (isAuthenticated && !isOwner) {
       router.replace('/dashboard');
     }
-  }, [isAuthenticated, isOwner, router]);
+  }, [_hasHydrated, isAuthenticated, isOwner, router]);
 
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -354,6 +357,12 @@ export default function CheckoutPage() {
     const fromPlans = tPlans(`${p.slug}.description` as unknown as PlansKey);
     return fromPlans !== `${p.slug}.description` ? fromPlans : (p.description ?? '');
   };
+
+  // Show spinner while store is loading or while a redirect is about to fire.
+  // Prevents members from seeing the payment form for even a single frame.
+  if (!_hasHydrated || (isAuthenticated && !isOwner)) {
+    return <FullPageSpinner />;
+  }
 
   if (isSanctioned === null) {
     return <FullPageSpinner />;

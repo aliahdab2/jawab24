@@ -345,7 +345,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     if (ns === 'pricing') return params ? tPricing(k, params) : tPricing(k);
     return params ? tSub(k, params) : tSub(k);
   };
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, _hasHydrated } = useAuthStore();
   const { isOwner } = useWorkspaceRole();
   const [plans, setPlans] = useState<Plan[]>(serverPlans);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
@@ -411,8 +411,10 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       return;
     }
 
-    // Members cannot manage subscriptions — only the workspace owner can
-    if (isAuthenticated && !isOwner) {
+    // Members cannot manage subscriptions — only the workspace owner can.
+    // Guard is only applied after hydration: useWorkspaceRole defaults to 'owner'
+    // while the store loads, so acting before _hasHydrated would be wrong.
+    if (_hasHydrated && isAuthenticated && !isOwner) {
       toast.error(tPricing('ownerOnlyBilling'));
       return;
     }
