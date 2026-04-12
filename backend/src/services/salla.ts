@@ -25,7 +25,9 @@ import { stripHtml } from '../utils/htmlUtils';
 import { verifyHexHmac } from '../utils/hmacVerify';
 import { ecommerceApiGet } from '../utils/httpRetry';
 import {
-    ensureValidToken,
+    refreshAccessToken as sharedRefreshAccessToken,
+    ensureValidToken as sharedEnsureValidToken,
+    getStoresNeedingTokenRefresh as sharedGetStoresNeedingTokenRefresh,
     refreshExpiringTokens as sharedRefreshExpiringTokens,
     type TokenRefreshConfig,
 } from './ecommerceTokenRefresh';
@@ -269,7 +271,7 @@ async function fetchAllProducts(accessToken: string): Promise<SallaProduct[]> {
  * Sync all products from Salla store
  */
 export async function syncProducts(storeId: string) {
-    await ensureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
+    await sharedEnsureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
 
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
@@ -309,7 +311,7 @@ export async function syncProducts(storeId: string) {
  * Full sync: store info + products
  */
 export async function fullSync(storeId: string) {
-    await ensureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
+    await sharedEnsureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
 
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
@@ -342,6 +344,18 @@ export async function refreshExpiringTokens(): Promise<number> {
     return sharedRefreshExpiringTokens(SALLA_TOKEN_REFRESH_CONFIG);
 }
 
+export async function refreshAccessToken(storeId: string): Promise<void> {
+    return sharedRefreshAccessToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
+}
+
+export async function ensureValidToken(storeId: string): Promise<void> {
+    return sharedEnsureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
+}
+
+export async function getStoresNeedingTokenRefresh() {
+    return sharedGetStoresNeedingTokenRefresh('salla');
+}
+
 // --- E-Commerce Agent Tools (read-only order/tracking/inventory) ---
 
 import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
@@ -351,7 +365,7 @@ import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/sh
  * Ensures token is valid (refreshes if needed) and returns decrypted accessToken.
  */
 async function resolveStoreCredentials(storeId: string): Promise<string | null> {
-    await ensureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
+    await sharedEnsureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
     const store = await getStoreById(storeId);
     if (!store || !store.isActive) return null;
     if (!store.accessToken || !store.accessTokenIv) return null;
