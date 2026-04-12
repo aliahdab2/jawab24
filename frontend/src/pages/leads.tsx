@@ -343,7 +343,8 @@ const LeadsPage: NextPageWithLayout = () => {
         ];
       });
       const selectedPage = pages.find((p) => p.id === selectedPageId);
-      downloadCSV(`leads-${selectedPage?.name ?? 'leads'}-${Date.now()}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
+      const { savedToDocuments } = await downloadCSV(`leads-${selectedPage?.name ?? 'leads'}-${Date.now()}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
+      if (savedToDocuments) toast.success(t('exportSavedToFiles'));
     } catch (err) {
       captureError(err, 'Failed to export leads CSV');
     } finally {
