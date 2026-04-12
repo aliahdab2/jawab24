@@ -2322,6 +2322,38 @@ const TEST_CASES: TestCase[] = [
         notes: 'Arabic post with English course name + sticker/emoji comment — same engagement pattern as dot, should reply with KB info',
     },
 
+    // ===== Category 40: Engagement Post — KB Answer Quality =====
+    // Verifies the AI provides actual KB content when a dot/emoji comment responds to a
+    // schedule/info CTA post — not a vague deflection like "ما عندي تفاصيل".
+    // Root cause of bug: AI had full KB but answered with "contact us" only, ignoring
+    // available general info. Fixed by prompt rule: provide partial info BEFORE deflecting.
+    {
+        id: 287, category: 40, categoryName: 'Engagement Post KB Answer Quality', channel: 'comment',
+        message: '🔥',
+        page: 'training',
+        postMessage: 'علق بنقطة لتعرف أوقات الدوام والدورات المتاحة 🔥',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['8', 'الأحد', 'الخميس', 'صباح', 'مساء', 'دوام', 'ساعات'],
+            replyNotContains: ['ما عندي تفاصيل', 'ما في تفاصيل', 'لا تتوفر لديّ', 'لا تتوفر لدي'],
+        },
+        notes: 'Emoji on schedule CTA post — same as above, must not deflect when KB has the info',
+    },
+    {
+        id: 289, category: 40, categoryName: 'Engagement Post KB Answer Quality', channel: 'comment',
+        message: '.',
+        page: 'training',
+        postMessage: 'دورة اللغة الإنجليزية - علق بنقطة لتصلك التفاصيل والأسعار 💬',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            confidence: ['high', 'medium'],
+            replyContainsAny: ['1500', 'ريال', 'إنجليزي', 'إنجليزية', 'English'],
+        },
+        notes: 'Dot on course CTA post — AI should provide course price from KB (1500 ريال), not generic deflection',
+    },
+
     // ===== Category 38: No Repeated Hedging =====
     // Verifies the AI does NOT repeat "I'll check" / "خليني أتحقق" when conversation history
     // already contains a check promise from a prior assistant reply.
