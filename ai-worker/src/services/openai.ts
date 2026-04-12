@@ -306,12 +306,7 @@ export class OpenAIService {
             || 'en';
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
         const languageName = languageNames[language] || 'English';
-        // When the comment itself has no language signal (punctuation-only, emoji-only, etc.),
-        // telling GPT "the customer wrote in X" is misleading and causes it to ignore the instruction.
-        // Instead, ground the instruction in the post/page context which IS in that language.
-        const languageInstruction = commentLang !== null
-            ? `The customer wrote in ${languageName}. You MUST reply in ${languageName}.`
-            : `The post and business context are in ${languageName}. You MUST reply in ${languageName} regardless of what the customer typed.`;
+        const languageInstruction = `The customer wrote in ${languageName}. You MUST reply in ${languageName}.`;
         const retrievedChunks = request.context?.retrievedChunks;
         const knowledgeBase = request.context?.knowledgeBase;
         const channel = request.context?.channel
@@ -743,53 +738,6 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
                             }
                         }
                     }
-                }
-            }
-        }
-
-        // Check 2: Comment too long — public comments should be brief
-        const channel = request.context?.channel
-            || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
-        if (channel === 'comment' && reply) {
-            const wordCount = reply.split(/\s+/).filter(Boolean).length;
-            if (wordCount > 50 && !flags.includes('comment_too_long')) {
-                flags.push('comment_too_long');
-            }
-        }
-
-        // Check 3: Language mismatch — reply language differs from input.
-        // Short Latin-only tokens (acronyms like "Icdl", "WiFi", "USB") are commonly typed by
-        // Arabic speakers and carry no real language signal. When the KB and the reply agree on
-        // language, we treat the comment as language-neutral and skip the mismatch flag.
-        // For emoji/punctuation/sticker comments (no script detected), fall back to post language
-        // then KB language as the expected language signal.
-        if (reply) {
-            const commentLang = this.detectLanguageOrNull(request.comment);
-            const postLang = this.detectLanguageOrNull(request.context?.postMessage || '');
-            const kbLang = this.detectLanguageOrNull(this.getKBText(request) || '');
-            const replyLang = this.detectLanguage(reply);
-
-            // Effective input language: comment → post → KB → skip (no signal anywhere)
-            const effectiveInputLang = commentLang ?? postLang ?? kbLang;
-
-            if (effectiveInputLang !== null) {
-                // A comment is "ambiguous Latin" when it's short (≤2 words), contains only ASCII
-                // letters/digits, and the KB language matches the reply language. Classic case:
-                // Arabic user types an English acronym on an Arabic-language page.
-                const words = request.comment.trim().split(/\s+/);
-                const isAmbiguousLatin = commentLang === 'en'
-                    && words.length <= 2
-                    && /^[a-zA-Z0-9\s]+$/.test(request.comment.trim())
-                    && kbLang === replyLang;
-
-                const inputLang = isAmbiguousLatin
-                    ? replyLang                    // KB + reply agree — no mismatch
-                    : effectiveInputLang;
-
-                if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
-                    flags.push('language_mismatch');
-                    flags.push(`expected_lang:${inputLang}`);
-                    flags.push(`reply_lang:${replyLang}`);
                 }
             }
         }

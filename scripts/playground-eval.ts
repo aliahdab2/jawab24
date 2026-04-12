@@ -2281,6 +2281,47 @@ const TEST_CASES: TestCase[] = [
         notes: 'Multi-tier pricing question — AI must list prices and stop, not append a boilerplate "need more details?" closer',
     },
 
+    // ===== Category 34 extension: Arabic post with English course name + dot comment =====
+    // Scenario: post is in Arabic but contains an English course/product name.
+    // A dot comment is punctuation-only → engagement post pattern.
+    // Expected: AI replies in Arabic using KB, not SPAM.
+    {
+        id: 284, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '.',
+        page: 'training',
+        postMessage: 'دورة IELTS الجديدة وصلت! علق بنقطة لتصلك التفاصيل والأسعار 👇',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+            replyNotContains: ['SPAM', 'spam'],
+        },
+        notes: 'Arabic post with English course name (IELTS) + dot comment — should reply with KB info, not SPAM',
+    },
+    {
+        id: 285, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '.',
+        page: 'training',
+        postMessage: 'دورة IELTS الجديدة وصلت! علق بنقطة لتصلك التفاصيل والأسعار 👇',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Hello', 'Hi there', 'Good day'],
+        },
+        notes: 'Same scenario — reply must not be in English despite the English course name in the post',
+    },
+
+    {
+        id: 286, category: 34, categoryName: 'Engagement Post Punctuation', channel: 'comment',
+        message: '🙌',
+        page: 'training',
+        postMessage: 'دورة IELTS الجديدة وصلت! علق بنقطة لتصلك التفاصيل والأسعار 👇',
+        expected: {
+            intent: ['QUESTION', 'GREETING', 'OTHER'],
+            replyMethod: ['ai'],
+            replyNotContains: ['SPAM', 'spam'],
+        },
+        notes: 'Arabic post with English course name + sticker/emoji comment — same engagement pattern as dot, should reply with KB info',
+    },
+
     // ===== Category 38: No Repeated Hedging =====
     // Verifies the AI does NOT repeat "I'll check" / "خليني أتحقق" when conversation history
     // already contains a check promise from a prior assistant reply.
