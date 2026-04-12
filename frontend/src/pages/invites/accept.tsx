@@ -137,7 +137,7 @@ const AcceptInvitePage: NextPageWithLayout = () => {
 };
 
 AcceptInvitePage.getLayout = (page: ReactElement) => (
-  <DashboardLayout title="Accept Invite">{page}</DashboardLayout>
+  <DashboardLayout title="Accept Invite" isPublic>{page}</DashboardLayout>
 );
 
 export default AcceptInvitePage;
