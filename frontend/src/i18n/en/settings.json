@@ -48,10 +48,10 @@
     "brandVoice": "Brand Voice Notes",
     "addBrandVoice": "+ Add Brand Voice Notes",
     "hideBrandVoice": "− Hide Brand Voice Notes",
-    "brandVoicePlaceholder": "e.g. Always mention free delivery, use customer's name when possible...",
+    "brandVoicePlaceholder": "Tone & style only — e.g. 'Be friendly, use emojis, speak casually'. For business info (prices, hours, contacts) add it to the Knowledge Base instead.",
     "autoTranslated": "Auto-translated — edit to customise",
     "holdLowConfidence": "Review Uncertain Replies",
-    "holdLowConfidenceDesc": "Hold low-confidence AI replies for your review before sending"
+    "holdLowConfidenceDesc": "When the AI can't find the answer in your Knowledge Base, it will hold the reply for you to review and send manually — instead of sending a vague \"let me check\" response automatically."
   },
   "saveSettings": "Save",
   "settingsSaved": "Saved ✓",
