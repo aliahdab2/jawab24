@@ -95,12 +95,11 @@ function isDraftDirty(draft: TemplateDraft, original: TemplateDraft): boolean {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Component                                                           */
+/*  Hook                                                                */
 /* ------------------------------------------------------------------ */
 
-export function OrderNotificationsCard({ storeId }: { storeId: string }) {
+function useOrderNotifications(storeId: string) {
   const t = useTranslations('orderNotifications');
-  const { canEdit } = useWorkspaceRole();
 
   const [saved, setSaved] = useState<Record<OrderNotificationType, TemplateDraft> | null>(null);
   const [draft, setDraft] = useState<Record<OrderNotificationType, TemplateDraft> | null>(null);
@@ -108,7 +107,6 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const [expandedType, setExpandedType] = useState<OrderNotificationType | null>(null);
 
   const hasChanges = saved !== null && draft !== null &&
     NOTIFICATION_TYPES.some((type) => isDraftDirty(draft[type], saved[type]));
@@ -120,13 +118,10 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
         orderNotificationsApi.getStats(storeId).catch(() => null),
       ]);
 
-      const templates = templatesRes.data;
       const byType: Record<string, TemplateDraft> = {};
-      for (const tmpl of templates) {
+      for (const tmpl of templatesRes.data) {
         byType[tmpl.notificationType] = templateToDraft(tmpl);
       }
-
-      // Fill any missing types with safe defaults (shouldn't happen after seedDefaults)
       for (const type of NOTIFICATION_TYPES) {
         if (!byType[type]) {
           byType[type] = { isEnabled: false, messageAr: '', messageEn: '', delayMinutes: 0 };
@@ -145,9 +140,7 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
     }
   }, [storeId, t]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  useEffect(() => { loadData(); }, [loadData]);
 
   const handleToggle = (type: OrderNotificationType, enabled: boolean) => {
     if (!draft) return;
@@ -196,7 +189,186 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
     }
   };
 
-  if (loading || !draft) return null;
+  return { draft, saved, stats, loading, saving, resetting, hasChanges, handleToggle, handleFieldChange, handleSave, handleReset };
+}
+
+/* ------------------------------------------------------------------ */
+/*  NotificationTypeRow                                                 */
+/* ------------------------------------------------------------------ */
+
+interface NotificationTypeRowProps {
+  type: OrderNotificationType;
+  draft: TemplateDraft;
+  saved: TemplateDraft;
+  isExpanded: boolean;
+  canEdit: boolean;
+  onToggle: (type: OrderNotificationType, enabled: boolean) => void;
+  onFieldChange: (type: OrderNotificationType, field: 'messageAr' | 'messageEn' | 'delayMinutes', value: string | number) => void;
+  onExpandToggle: (type: OrderNotificationType) => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}
+
+function NotificationTypeRow({ type, draft, saved, isExpanded, canEdit, onToggle, onFieldChange, onExpandToggle, t }: NotificationTypeRowProps) {
+  const Icon = TYPE_ICONS[type];
+  const dirty = isDraftDirty(draft, saved);
+
+  return (
+    <div
+      className={clsx(
+        'rounded-xl border transition-colors',
+        isExpanded ? 'border-brand-200 bg-brand-50/30 dark:border-brand-800 dark:bg-brand-950/20' : 'border-theme-border bg-card',
+      )}
+    >
+      {/* Row header */}
+      <div className="flex items-center gap-3 p-3">
+        <div className={clsx(
+          'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+          draft.isEnabled ? 'icon-bg-brand' : 'bg-muted text-muted-foreground',
+        )}>
+          <Icon className="w-4 h-4" aria-hidden />
+        </div>
+
+        <div className="flex-1 min-w-0 text-start">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-semibold text-foreground">
+              {t(`types.${type}` as `types.${typeof type}`)}
+            </span>
+            {dirty && (
+              <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wide">
+                •
+              </span>
+            )}
+            <span className="text-[11px] text-muted-foreground border border-theme-border rounded-full px-2 py-0.5">
+              {formatDelay(draft.delayMinutes, t)}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground truncate">
+            {t(`typeDesc.${type}` as `typeDesc.${typeof type}`)}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Toggle
+            enabled={draft.isEnabled}
+            onChange={(v) => onToggle(type, v)}
+            disabled={!canEdit}
+            size="sm"
+            aria-label={t(`types.${type}` as `types.${typeof type}`)}
+          />
+          <button
+            onClick={() => onExpandToggle(type)}
+            aria-expanded={isExpanded}
+            aria-label={t(`types.${type}` as `types.${typeof type}`)}
+            className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <ChevronDown className={clsx('w-4 h-4 transition-transform duration-200', isExpanded && 'rotate-180')} aria-hidden />
+          </button>
+        </div>
+      </div>
+
+      {/* Expanded editor */}
+      {isExpanded && (
+        <div className="px-3 pb-3 space-y-3 border-t border-theme-border pt-3">
+          {/* Variable hints */}
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-[11px] text-muted-foreground font-medium">{t('variables')}:</span>
+            {TYPE_VARIABLES[type].map((v) => (
+              <code
+                key={v}
+                className="text-[11px] font-mono bg-muted text-foreground px-1.5 py-0.5 rounded border border-theme-border cursor-pointer select-all"
+              >
+                {`{${v}}`}
+              </code>
+            ))}
+          </div>
+
+          {/* AR message */}
+          <div>
+            <label htmlFor={`msg-ar-${type}`} className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
+              {t('templateAr')}
+            </label>
+            <textarea
+              id={`msg-ar-${type}`}
+              dir="auto"
+              rows={3}
+              readOnly={!canEdit}
+              value={draft.messageAr}
+              onChange={(e) => onFieldChange(type, 'messageAr', e.target.value)}
+              className={clsx(
+                'w-full px-3 py-2 rounded-lg text-sm border resize-none',
+                'bg-background text-foreground placeholder:text-muted-foreground',
+                'border-theme-border focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500',
+                !canEdit && 'opacity-60 cursor-default',
+              )}
+            />
+          </div>
+
+          {/* EN message */}
+          <div>
+            <label htmlFor={`msg-en-${type}`} className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
+              {t('templateEn')}
+            </label>
+            <textarea
+              id={`msg-en-${type}`}
+              dir="auto"
+              rows={3}
+              readOnly={!canEdit}
+              value={draft.messageEn}
+              onChange={(e) => onFieldChange(type, 'messageEn', e.target.value)}
+              className={clsx(
+                'w-full px-3 py-2 rounded-lg text-sm border resize-none',
+                'bg-background text-foreground placeholder:text-muted-foreground',
+                'border-theme-border focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500',
+                !canEdit && 'opacity-60 cursor-default',
+              )}
+            />
+          </div>
+
+          {/* Delay selector */}
+          <div>
+            <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
+              {t('delayLabel')}
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {DELAY_PRESETS.map((minutes) => (
+                <button
+                  key={minutes}
+                  disabled={!canEdit}
+                  onClick={() => onFieldChange(type, 'delayMinutes', minutes)}
+                  className={clsx(
+                    'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all',
+                    'disabled:opacity-50 disabled:cursor-default',
+                    draft.delayMinutes === minutes
+                      ? 'bg-brand-500 text-white border-brand-600 shadow-sm'
+                      : 'bg-background text-muted-foreground border-theme-border hover:enabled:border-brand-400',
+                  )}
+                >
+                  {formatDelay(minutes, t)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                           */
+/* ------------------------------------------------------------------ */
+
+export function OrderNotificationsCard({ storeId }: { storeId: string }) {
+  const t = useTranslations('orderNotifications');
+  const { canEdit } = useWorkspaceRole();
+  const [expandedType, setExpandedType] = useState<OrderNotificationType | null>(null);
+
+  const {
+    draft, saved, stats, loading, saving, resetting, hasChanges,
+    handleToggle, handleFieldChange, handleSave, handleReset,
+  } = useOrderNotifications(storeId);
+
+  if (loading || !draft || !saved) return null;
 
   return (
     <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4">
@@ -212,7 +384,6 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
           </div>
         </div>
 
-        {/* Stats pill */}
         {stats && (
           <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground flex-shrink-0">
             <span className="text-[10px] font-bold uppercase tracking-wider">{t('thisMonth')}:</span>
@@ -230,155 +401,20 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
 
       {/* Notification type rows */}
       <div className="space-y-1">
-        {NOTIFICATION_TYPES.map((type) => {
-          const Icon = TYPE_ICONS[type];
-          const isExpanded = expandedType === type;
-          const typeDraft = draft[type];
-          const typeSaved = saved![type];
-          const dirty = isDraftDirty(typeDraft, typeSaved);
-
-          return (
-            <div
-              key={type}
-              className={clsx(
-                'rounded-xl border transition-colors',
-                isExpanded ? 'border-brand-200 bg-brand-50/30 dark:border-brand-800 dark:bg-brand-950/20' : 'border-theme-border bg-card',
-              )}
-            >
-              {/* Row header */}
-              <div className="flex items-center gap-3 p-3">
-                <div className={clsx(
-                  'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
-                  typeDraft.isEnabled ? 'icon-bg-brand' : 'bg-muted text-muted-foreground',
-                )}>
-                  <Icon className="w-4 h-4" aria-hidden />
-                </div>
-
-                <div className="flex-1 min-w-0 text-start">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-semibold text-foreground">
-                      {t(`types.${type}` as `types.${typeof type}`)}
-                    </span>
-                    {dirty && (
-                      <span className="text-[10px] font-bold text-brand-600 dark:text-brand-400 uppercase tracking-wide">
-                        •
-                      </span>
-                    )}
-                    <span className="text-[11px] text-muted-foreground border border-theme-border rounded-full px-2 py-0.5">
-                      {formatDelay(typeDraft.delayMinutes, t)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {t(`typeDesc.${type}` as `typeDesc.${typeof type}`)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <Toggle
-                    enabled={typeDraft.isEnabled}
-                    onChange={(v) => handleToggle(type, v)}
-                    disabled={!canEdit}
-                    size="sm"
-                    aria-label={t(`types.${type}` as `types.${typeof type}`)}
-                  />
-                  <button
-                    onClick={() => setExpandedType(isExpanded ? null : type)}
-                    aria-expanded={isExpanded}
-                    aria-label={t(`types.${type}` as `types.${typeof type}`)}
-                    className="p-1 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                  >
-                    <ChevronDown className={clsx('w-4 h-4 transition-transform duration-200', isExpanded && 'rotate-180')} aria-hidden />
-                  </button>
-                </div>
-              </div>
-
-              {/* Expanded editor */}
-              {isExpanded && (
-                <div className="px-3 pb-3 space-y-3 border-t border-theme-border pt-3">
-                  {/* Variable hints */}
-                  <div className="flex flex-wrap gap-1.5 items-center">
-                    <span className="text-[11px] text-muted-foreground font-medium">{t('variables')}:</span>
-                    {TYPE_VARIABLES[type].map((v) => (
-                      <code
-                        key={v}
-                        className="text-[11px] font-mono bg-muted text-foreground px-1.5 py-0.5 rounded border border-theme-border cursor-pointer select-all"
-                      >
-                        {`{${v}}`}
-                      </code>
-                    ))}
-                  </div>
-
-                  {/* AR message */}
-                  <div>
-                    <label htmlFor={`msg-ar-${type}`} className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
-                      {t('templateAr')}
-                    </label>
-                    <textarea
-                      id={`msg-ar-${type}`}
-                      dir="auto"
-                      rows={3}
-                      readOnly={!canEdit}
-                      value={typeDraft.messageAr}
-                      onChange={(e) => handleFieldChange(type, 'messageAr', e.target.value)}
-                      className={clsx(
-                        'w-full px-3 py-2 rounded-lg text-sm border resize-none',
-                        'bg-background text-foreground placeholder:text-muted-foreground',
-                        'border-theme-border focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500',
-                        !canEdit && 'opacity-60 cursor-default',
-                      )}
-                    />
-                  </div>
-
-                  {/* EN message */}
-                  <div>
-                    <label htmlFor={`msg-en-${type}`} className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-1">
-                      {t('templateEn')}
-                    </label>
-                    <textarea
-                      id={`msg-en-${type}`}
-                      dir="auto"
-                      rows={3}
-                      readOnly={!canEdit}
-                      value={typeDraft.messageEn}
-                      onChange={(e) => handleFieldChange(type, 'messageEn', e.target.value)}
-                      className={clsx(
-                        'w-full px-3 py-2 rounded-lg text-sm border resize-none',
-                        'bg-background text-foreground placeholder:text-muted-foreground',
-                        'border-theme-border focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500',
-                        !canEdit && 'opacity-60 cursor-default',
-                      )}
-                    />
-                  </div>
-
-                  {/* Delay selector */}
-                  <div>
-                    <label className="block text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">
-                      {t('delayLabel')}
-                    </label>
-                    <div className="flex flex-wrap gap-2">
-                      {DELAY_PRESETS.map((minutes) => (
-                        <button
-                          key={minutes}
-                          disabled={!canEdit}
-                          onClick={() => handleFieldChange(type, 'delayMinutes', minutes)}
-                          className={clsx(
-                            'px-3 py-1.5 rounded-lg text-xs font-bold border transition-all',
-                            'disabled:opacity-50 disabled:cursor-default',
-                            typeDraft.delayMinutes === minutes
-                              ? 'bg-brand-500 text-white border-brand-600 shadow-sm'
-                              : 'bg-background text-muted-foreground border-theme-border hover:enabled:border-brand-400',
-                          )}
-                        >
-                          {formatDelay(minutes, t)}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
+        {NOTIFICATION_TYPES.map((type) => (
+          <NotificationTypeRow
+            key={type}
+            type={type}
+            draft={draft[type]}
+            saved={saved[type]}
+            isExpanded={expandedType === type}
+            canEdit={canEdit}
+            onToggle={handleToggle}
+            onFieldChange={handleFieldChange}
+            onExpandToggle={(type) => setExpandedType(expandedType === type ? null : type)}
+            t={t}
+          />
+        ))}
       </div>
 
       {/* Footer */}
