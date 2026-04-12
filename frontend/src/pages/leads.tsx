@@ -30,8 +30,7 @@ import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 
 type StatusFilter = LeadStatus | 'all';
 
-// ── Status badge ──────────────────────────────────────────────────────────────
-
+// ── Status config ─────────────────────────────────────────────────────────────
 
 const ALL_STATUSES: LeadStatus[] = ['new', 'contacted', 'converted'];
 
@@ -39,6 +38,13 @@ const STATUS_LABEL_KEY: Record<LeadStatus, string> = {
   new:       'statusNew',
   contacted: 'statusContacted',
   converted: 'statusConverted',
+};
+
+// Physical bg colors — used in swipe panel (needs physical screen positioning)
+const STATUS_BG: Record<LeadStatus, string> = {
+  new:       'bg-blue-500',
+  contacted: 'bg-amber-500',
+  converted: 'bg-green-500',
 };
 
 interface StatusDropdownProps {
@@ -131,7 +137,7 @@ function StatusDropdown({ status, t, onSelect, disabled }: StatusDropdownProps) 
   );
 }
 
-// ── Lead card (mobile) ────────────────────────────────────────────────────────
+// ── Lead card (mobile, swipeable) ─────────────────────────────────────────────
 
 interface LeadCardProps {
   lead: Lead;
@@ -142,52 +148,152 @@ interface LeadCardProps {
   t: ReturnType<typeof useTranslations>;
 }
 
+// Width of the action panel revealed by swiping left
+const SWIPE_ACTION_WIDTH = 160;
+
 function LeadCard({ lead, language, onStatusChange, onDelete, isPending, t }: LeadCardProps) {
+  const [translateX, setTranslateX] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const startX = useRef(0);
+  const startTranslate = useRef(0);
+
+  const isOpen = translateX < -(SWIPE_ACTION_WIDTH / 3);
+
+  const snapOpen  = () => setTranslateX(-SWIPE_ACTION_WIDTH);
+  const snapClose = () => setTranslateX(0);
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    startX.current = e.touches[0].clientX;
+    startTranslate.current = translateX;
+    setIsDragging(true);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    const dx = e.touches[0].clientX - startX.current;
+    const next = startTranslate.current + dx;
+    // Only allow sliding left (negative), clamped to panel width
+    setTranslateX(Math.min(0, Math.max(next, -SWIPE_ACTION_WIDTH)));
+  };
+
+  const onTouchEnd = () => {
+    setIsDragging(false);
+    if (translateX < -50) snapOpen();
+    else snapClose();
+  };
+
+  // The two statuses the user can switch to (not the current one)
+  const otherStatuses = ALL_STATUSES.filter((s) => s !== lead.status);
+
   return (
-    <div className="bg-card border border-theme-border rounded-2xl p-4 space-y-3">
-      {/* Header: name + status */}
-      <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold text-foreground text-base leading-tight">
-          {lead.senderName ?? '—'}
-        </p>
-        <StatusDropdown
-          status={lead.status}
-          t={t}
-          onSelect={(next) => onStatusChange(lead, next)}
-          disabled={isPending}
-        />
+    <div className="relative overflow-hidden rounded-2xl">
+      {/* Action panel — sits behind the card, revealed as card slides left.
+          Uses physical `right-0` intentionally: swipe gesture is screen-physical,
+          not text-direction-relative (same as WhatsApp Arabic). */}
+      <div
+        className="absolute inset-y-0 right-0 flex"
+        style={{ width: SWIPE_ACTION_WIDTH }}
+        aria-hidden={!isOpen}
+      >
+        {otherStatuses.map((s) => {
+          const key = STATUS_LABEL_KEY[s] as Parameters<typeof t>[0];
+          return (
+            <button
+              key={s}
+              type="button"
+              disabled={isPending}
+              onClick={() => { onStatusChange(lead, s); snapClose(); }}
+              className={clsx(
+                'flex-1 flex flex-col items-center justify-center gap-1.5 text-xs font-semibold text-white transition-opacity',
+                STATUS_BG[s],
+                isPending && 'opacity-50',
+              )}
+            >
+              <span className="w-2 h-2 rounded-full bg-white/50" aria-hidden="true" />
+              {t(key)}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Phone — tappable, always LTR */}
-      <a
-        href={`tel:${lead.phone}`}
-        dir="ltr"
-        className="flex items-center gap-2 text-brand-400 hover:text-brand-300 transition-colors w-fit min-h-[44px]"
+      {/* Card — slides left on swipe */}
+      <div
+        style={{
+          transform: `translateX(${translateX}px)`,
+          transition: isDragging ? 'none' : 'transform 0.2s ease',
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        className="bg-card border border-theme-border rounded-2xl p-4 space-y-3 relative z-10"
       >
-        <Phone className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-        <span className="font-mono text-sm">{lead.phone}</span>
-      </a>
+        {/* Invisible overlay when open — tap card to close without acting */}
+        {isOpen && (
+          <div
+            className="absolute inset-0 z-20 rounded-2xl"
+            onClick={snapClose}
+            aria-hidden="true"
+          />
+        )}
 
-      {/* Summary */}
-      {lead.extractedData?.summary && (
-        <p className="text-sm text-muted-foreground line-clamp-2">
-          {lead.extractedData.summary}
-        </p>
-      )}
+        {/* Header: name + status badge + swipe hint */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Swipe hint — three dots on the leading edge, subtle when closed */}
+            <span
+              className={clsx(
+                'flex flex-col gap-[3px] flex-shrink-0 transition-opacity duration-200',
+                isOpen ? 'opacity-0' : 'opacity-30',
+              )}
+              aria-hidden="true"
+            >
+              <span className="w-3.5 h-px bg-current rounded-full" />
+              <span className="w-2.5 h-px bg-current rounded-full" />
+              <span className="w-2 h-px bg-current rounded-full" />
+            </span>
+            <p className="font-semibold text-foreground text-base leading-tight truncate">
+              {lead.senderName ?? '—'}
+            </p>
+          </div>
+          <span className={clsx(
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-white flex-shrink-0',
+            STATUS_BG[lead.status],
+          )}>
+            <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
+            {t(STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0])}
+          </span>
+        </div>
 
-      {/* Footer: date + delete */}
-      <div className="flex items-center justify-between pt-1 border-t border-theme-border/50">
-        <span className="text-xs text-muted-foreground">
-          {formatDateForExport(lead.createdAt, language)}
-        </span>
-        <button
-          onClick={() => onDelete(lead)}
-          disabled={isPending}
-          className="p-2 -m-2 text-icon-muted hover:text-red-400 transition-colors disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
-          aria-label={t('deleteLead')}
+        {/* Phone — tappable, always LTR */}
+        <a
+          href={`tel:${lead.phone}`}
+          dir="ltr"
+          className="flex items-center gap-2 text-brand-400 hover:text-brand-300 transition-colors w-fit min-h-[44px]"
         >
-          <Trash2 className="w-4 h-4" aria-hidden="true" />
-        </button>
+          <Phone className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+          <span className="font-mono text-sm">{lead.phone}</span>
+        </a>
+
+        {/* Summary */}
+        {lead.extractedData?.summary && (
+          <p className="text-sm text-muted-foreground line-clamp-2">
+            {lead.extractedData.summary}
+          </p>
+        )}
+
+        {/* Footer: date + delete */}
+        <div className="flex items-center justify-between pt-1 border-t border-theme-border/50">
+          <span className="text-xs text-muted-foreground">
+            {formatDateForExport(lead.createdAt, language)}
+          </span>
+          <button
+            onClick={() => onDelete(lead)}
+            disabled={isPending}
+            className="p-2 -m-2 text-icon-muted hover:text-red-400 transition-colors disabled:opacity-50 min-h-[44px] min-w-[44px] flex items-center justify-center"
+            aria-label={t('deleteLead')}
+          >
+            <Trash2 className="w-4 h-4" aria-hidden="true" />
+          </button>
+        </div>
       </div>
     </div>
   );
