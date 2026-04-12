@@ -248,9 +248,14 @@ export class ReplyGenerator {
             // Build gap source context for merchant insights
             const gapSource: GapSource = { type: 'comment', context: postMessage };
 
-            // Run RAG retrieval if enabled (use stripped text for better semantic matching)
+            // Run RAG retrieval if enabled (use stripped text for better semantic matching).
+            // If the comment has no real words (e.g. "......" or emoji-only), fall back to the
+            // post message as the RAG query — the commenter is responding to the post's call-to-action
+            // (e.g. "comment with a dot to get schedule info"), so the post context is the intent.
+            const commentHasWords = /\p{L}/u.test(commentForAI || '');
+            const ragQuery = commentHasWords ? (commentForAI || text) : (postMessage || commentForAI || text);
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                pageId, commentForAI || text, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
+                pageId, ragQuery, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
             );
 
             // Language detection: use stripped text only — never fall back to raw text.
