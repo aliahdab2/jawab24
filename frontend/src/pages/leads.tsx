@@ -246,9 +246,12 @@ const LeadsPage: NextPageWithLayout = () => {
     staleTime: 5 * 60_000,
   });
 
-  // CSV export is available on Business and Pro plans only.
+  // CSV export is available on Business and Pro plans (and any trialing user,
+  // so they experience the full product before deciding to pay).
   // Default to true while loading so the button doesn't flash in for Starter users.
-  const canExport = usageData ? usageData.subscription.plan.slug !== 'starter' : true;
+  const canExport = usageData
+    ? usageData.subscription.plan.slug !== 'starter' || usageData.subscription.status === 'trialing'
+    : true;
 
   const pages = React.useMemo(() => pagesData ?? [], [pagesData]);
 

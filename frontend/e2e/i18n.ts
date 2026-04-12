@@ -25,6 +25,7 @@ import enFeedback from '../src/i18n/en/feedback.json';
 import { flagReasonEn as enFlagReason } from '@jawab24/shared';
 import enIntegrations from '../src/i18n/en/integrations.json';
 import enKb from '../src/i18n/en/kb.json';
+import enLeads from '../src/i18n/en/leads.json';
 import enLanding from '../src/i18n/en/landing.json';
 import enLogout from '../src/i18n/en/logout.json';
 import enMessages from '../src/i18n/en/messages.json';
@@ -69,6 +70,7 @@ import arFeedback from '../src/i18n/ar/feedback.json';
 import { flagReasonAr as arFlagReason } from '@jawab24/shared';
 import arIntegrations from '../src/i18n/ar/integrations.json';
 import arKb from '../src/i18n/ar/kb.json';
+import arLeads from '../src/i18n/ar/leads.json';
 import arLanding from '../src/i18n/ar/landing.json';
 import arLogout from '../src/i18n/ar/logout.json';
 import arMessages from '../src/i18n/ar/messages.json';
@@ -101,7 +103,7 @@ export const en = {
   comments: enComments, common: enCommon, compare: enCompare, contact: enContact,
   dashboard: enDashboard, dataDeletion: enDataDeletion, errorBoundary: enErrorBoundary,
   errors: enErrors, export: enExport, feedback: enFeedback, flagReason: enFlagReason,
-  integrations: enIntegrations, kb: enKb, landing: enLanding, logout: enLogout,
+  integrations: enIntegrations, kb: enKb, leads: enLeads, landing: enLanding, logout: enLogout,
   messages: enMessages, meta: enMeta, nav: enNav, notifications: enNotifications, orderNotifications: enOrderNotifications,
   onboarding: enOnboarding, pages: enPages, payment: enPayment, plans: enPlans,
   pricing: enPricing, privacy: enPrivacy, profile: enProfile, rules: enRules,
@@ -115,7 +117,7 @@ export const ar = {
   comments: arComments, common: arCommon, compare: arCompare, contact: arContact,
   dashboard: arDashboard, dataDeletion: arDataDeletion, errorBoundary: arErrorBoundary,
   errors: arErrors, export: arExport, feedback: arFeedback, flagReason: arFlagReason,
-  integrations: arIntegrations, kb: arKb, landing: arLanding, logout: arLogout,
+  integrations: arIntegrations, kb: arKb, leads: arLeads, landing: arLanding, logout: arLogout,
   messages: arMessages, meta: arMeta, nav: arNav, notifications: arNotifications, orderNotifications: arOrderNotifications,
   onboarding: arOnboarding, pages: arPages, payment: arPayment, plans: arPlans,
   pricing: arPricing, privacy: arPrivacy, profile: arProfile, rules: arRules,
