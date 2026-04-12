@@ -165,8 +165,8 @@ function LeadRow({ lead, dynamicKeys, language, onStatusChange, onDelete, isPend
   );
 
   return (
-    <tr className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
-      <td className="px-4 py-3 text-sm text-white font-medium">
+    <tr className="border-b border-theme-border hover:bg-muted/40 transition-colors">
+      <td className="px-4 py-3 text-sm text-foreground font-medium">
         {lead.senderName ?? '—'}
       </td>
       <td className="px-4 py-3 text-sm" dir="ltr">
@@ -464,10 +464,10 @@ const LeadsPage: NextPageWithLayout = () => {
           </div>
 
           {/* Desktop: table */}
-          <div className="hidden md:block overflow-x-auto rounded-2xl border border-white/10">
+          <div className="hidden md:block overflow-x-auto rounded-2xl border border-theme-border">
             <table className="w-full text-start">
               <thead>
-                <tr className="border-b border-white/10 bg-surface-100/50">
+                <tr className="border-b border-theme-border bg-muted/30">
                   <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('name')}</th>
                   <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('phone')}</th>
                   <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('status')}</th>
