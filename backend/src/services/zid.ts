@@ -24,9 +24,7 @@ import { stripHtml } from '../utils/htmlUtils';
 import { verifyHexHmac } from '../utils/hmacVerify';
 import { ecommerceApiGet } from '../utils/httpRetry';
 import {
-    refreshAccessToken as sharedRefreshAccessToken,
-    ensureValidToken as sharedEnsureValidToken,
-    getStoresNeedingTokenRefresh as sharedGetStoresNeedingTokenRefresh,
+    ensureValidToken,
     refreshExpiringTokens as sharedRefreshExpiringTokens,
     type TokenRefreshConfig,
 } from './ecommerceTokenRefresh';
@@ -99,21 +97,6 @@ export async function exchangeCodeForToken(code: string): Promise<ZidTokenRespon
 }
 
 // --- Token Refresh (distributed lock — refresh tokens may be single-use) ---
-
-/** @see ecommerceTokenRefresh.refreshAccessToken */
-export async function refreshAccessToken(storeId: string): Promise<void> {
-    return sharedRefreshAccessToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
-}
-
-/** @see ecommerceTokenRefresh.ensureValidToken */
-export async function ensureValidToken(storeId: string): Promise<void> {
-    return sharedEnsureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
-}
-
-/** @see ecommerceTokenRefresh.getStoresNeedingTokenRefresh */
-export async function getStoresNeedingTokenRefresh() {
-    return sharedGetStoresNeedingTokenRefresh('zid');
-}
 
 // --- Webhook Verification ---
 
@@ -283,7 +266,7 @@ async function fetchAllProducts(accessToken: string): Promise<ZidProduct[]> {
 }
 
 export async function syncProducts(storeId: string) {
-    await ensureValidToken(storeId);
+    await ensureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
 
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
@@ -321,7 +304,7 @@ export async function syncProducts(storeId: string) {
 }
 
 export async function fullSync(storeId: string) {
-    await ensureValidToken(storeId);
+    await ensureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
 
     const store = await getStoreById(storeId);
     if (!store) throw new Error('Store not found');
@@ -355,7 +338,7 @@ export async function refreshExpiringTokens(): Promise<number> {
 import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
 
 async function resolveStoreCredentials(storeId: string): Promise<string | null> {
-    await ensureValidToken(storeId);
+    await ensureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
     const store = await getStoreById(storeId);
     if (!store || !store.isActive) return null;
     if (!store.accessToken || !store.accessTokenIv) return null;
