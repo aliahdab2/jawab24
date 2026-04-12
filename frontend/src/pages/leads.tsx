@@ -1,4 +1,4 @@
-import React, { useState, useEffect, type ReactElement } from 'react';
+import React, { useState, useEffect, useRef, type ReactElement } from 'react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import Link from 'next/link';
@@ -15,7 +15,8 @@ import {
   Download,
   Lock,
   Loader2,
-  ChevronRight,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -37,50 +38,88 @@ const STATUS_CLASSES: Record<LeadStatus, string> = {
   converted:  'status-success',
 };
 
-const NEXT_STATUS: Record<LeadStatus, LeadStatus> = {
-  new:       'contacted',
-  contacted: 'converted',
-  converted: 'new',
+const ALL_STATUSES: LeadStatus[] = ['new', 'contacted', 'converted'];
+
+const STATUS_LABEL_KEY: Record<LeadStatus, string> = {
+  new:       'statusNew',
+  contacted: 'statusContacted',
+  converted: 'statusConverted',
 };
 
-const NEXT_STATUS_LABEL_KEY: Record<LeadStatus, string> = {
-  new:       'markContacted',
-  contacted: 'markConverted',
-  converted: 'markNew',
-};
-
-interface StatusBadgeProps {
+interface StatusDropdownProps {
   status: LeadStatus;
   t: ReturnType<typeof useTranslations>;
-  interactive?: boolean;
-  onClick?: () => void;
+  onSelect: (next: LeadStatus) => void;
   disabled?: boolean;
 }
 
-function StatusBadge({ status, t, interactive, onClick, disabled }: StatusBadgeProps) {
-  const labelKey = `status${status.charAt(0).toUpperCase()}${status.slice(1)}` as Parameters<typeof t>[0];
-  if (interactive) {
-    return (
+function StatusDropdown({ status, t, onSelect, disabled }: StatusDropdownProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const labelKey = STATUS_LABEL_KEY[status] as Parameters<typeof t>[0];
+
+  return (
+    <div ref={ref} className="relative inline-block">
       <button
-        onClick={onClick}
+        type="button"
+        onClick={() => !disabled && setOpen((o) => !o)}
         disabled={disabled}
-        title={t(NEXT_STATUS_LABEL_KEY[status] as Parameters<typeof t>[0])}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         className={clsx(
           'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-opacity',
           STATUS_CLASSES[status],
-          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-80 active:scale-95',
+          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:opacity-80',
         )}
-        aria-label={t(NEXT_STATUS_LABEL_KEY[status] as Parameters<typeof t>[0])}
       >
         {t(labelKey)}
-        <ChevronRight className="w-3 h-3 opacity-60" aria-hidden="true" />
+        <ChevronDown className={clsx('w-3 h-3 opacity-70 transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </button>
-    );
-  }
-  return (
-    <span className={clsx('inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold', STATUS_CLASSES[status])}>
-      {t(labelKey)}
-    </span>
+
+      {open && (
+        <div
+          role="listbox"
+          className="absolute start-0 top-full mt-1 z-50 bg-card border border-theme-border rounded-xl shadow-xl min-w-[140px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+        >
+          {ALL_STATUSES.map((s) => {
+            const key = STATUS_LABEL_KEY[s] as Parameters<typeof t>[0];
+            return (
+              <button
+                key={s}
+                role="option"
+                aria-selected={s === status}
+                type="button"
+                onClick={() => { onSelect(s); setOpen(false); }}
+                className={clsx(
+                  'w-full flex items-center justify-between gap-2 px-3 py-2.5 text-sm transition-colors text-start',
+                  s === status ? 'font-semibold bg-muted/50' : 'text-foreground/80 hover:bg-muted',
+                )}
+              >
+                <span className={clsx('inline-flex items-center gap-1.5')}>
+                  <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', {
+                    'bg-blue-400':  s === 'new',
+                    'bg-amber-400': s === 'contacted',
+                    'bg-green-400': s === 'converted',
+                  })} />
+                  {t(key)}
+                </span>
+                {s === status && <Check className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -103,11 +142,10 @@ function LeadCard({ lead, language, onStatusChange, onDelete, isPending, t }: Le
         <p className="font-semibold text-foreground text-base leading-tight">
           {lead.senderName ?? '—'}
         </p>
-        <StatusBadge
+        <StatusDropdown
           status={lead.status}
           t={t}
-          interactive
-          onClick={() => onStatusChange(lead, NEXT_STATUS[lead.status])}
+          onSelect={(next) => onStatusChange(lead, next)}
           disabled={isPending}
         />
       </div>
@@ -179,11 +217,10 @@ function LeadRow({ lead, dynamicKeys, language, onStatusChange, onDelete, isPend
         </a>
       </td>
       <td className="px-4 py-3">
-        <StatusBadge
+        <StatusDropdown
           status={lead.status}
           t={t}
-          interactive
-          onClick={() => onStatusChange(lead, NEXT_STATUS[lead.status])}
+          onSelect={(next) => onStatusChange(lead, next)}
           disabled={isPending}
         />
       </td>
