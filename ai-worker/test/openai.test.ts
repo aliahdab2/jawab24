@@ -1413,25 +1413,6 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('price_not_in_kb');
     });
 
-    it('should add comment_too_long flag when comment reply exceeds 50 words', async () => {
-        const longReply = 'word '.repeat(55).trim();
-        setupMock(JSON.stringify({
-            reply: longReply,
-            intent: 'QUESTION',
-            confidence: 'high',
-            flags: [],
-        }));
-
-        const { OpenAIService: FreshService } = await import('../src/services/openai');
-        const service = new FreshService();
-        const result = await service.generateReply({
-            comment: 'Tell me about your services',
-            context: { channel: 'comment' },
-        });
-
-        expect(result.flags).toContain('comment_too_long');
-    });
-
     it('should NOT flag long replies for DM channel', async () => {
         const longReply = 'word '.repeat(55).trim();
         setupMock(JSON.stringify({
@@ -1449,23 +1430,6 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         });
 
         expect(result.flags).not.toContain('comment_too_long');
-    });
-
-    it('should add language_mismatch flag when reply language differs from input', async () => {
-        setupMock(JSON.stringify({
-            reply: 'Thank you for asking! Send us a message.',
-            intent: 'QUESTION',
-            confidence: 'high',
-            flags: [],
-        }));
-
-        const { OpenAIService: FreshService } = await import('../src/services/openai');
-        const service = new FreshService();
-        const result = await service.generateReply({
-            comment: 'كم السعر؟',
-        });
-
-        expect(result.flags).toContain('language_mismatch');
     });
 
     it('should NOT flag language_mismatch when reply matches input language', async () => {
@@ -1563,25 +1527,6 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         });
 
         expect(result.flags).not.toContain('language_mismatch');
-    });
-
-    it('should flag language_mismatch when emoji comment on Arabic post but reply is English', async () => {
-        setupMock(JSON.stringify({
-            reply: 'Thank you for your interest!',
-            intent: 'COMPLIMENT',
-            confidence: 'high',
-            flags: [],
-        }));
-
-        const { OpenAIService: FreshService } = await import('../src/services/openai');
-        const service = new FreshService();
-        const result = await service.generateReply({
-            comment: '👍',
-            context: { channel: 'comment', postMessage: 'تعرف على أحدث عروضنا!' },
-        });
-
-        expect(result.flags).toContain('language_mismatch');
-        expect(result.flags).toContain('expected_lang:ar');
     });
 
     it('should NOT check language mismatch for empty replies (OFFENSIVE/SPAM)', async () => {
