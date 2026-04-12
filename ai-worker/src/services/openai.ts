@@ -293,18 +293,25 @@ export class OpenAIService {
         // When the message has no detectable language (e.g. "..." or emoji-only), infer from
         // conversation history, then post language, then KB language, before defaulting to English.
         // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
+        const commentLang = this.detectLanguageOrNull(request.comment);
         const language = request.language
             || request.context?.conversationHistory
                 ?.filter(m => m.role === 'user' && /[a-zA-Z\u0600-\u06FF]/.test(m.content))
                 .reverse()
                 .map(m => this.detectLanguage(m.content))
                 .find(Boolean)
-            || this.detectLanguageOrNull(request.comment)
+            || commentLang
             || this.detectLanguageOrNull(request.context?.postMessage || '')
             || this.detectLanguageOrNull(this.getKBText(request) || '')
             || 'en';
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
         const languageName = languageNames[language] || 'English';
+        // When the comment itself has no language signal (punctuation-only, emoji-only, etc.),
+        // telling GPT "the customer wrote in X" is misleading and causes it to ignore the instruction.
+        // Instead, ground the instruction in the post/page context which IS in that language.
+        const languageInstruction = commentLang !== null
+            ? `The customer wrote in ${languageName}. You MUST reply in ${languageName}.`
+            : `The post and business context are in ${languageName}. You MUST reply in ${languageName} regardless of what the customer typed.`;
         const retrievedChunks = request.context?.retrievedChunks;
         const knowledgeBase = request.context?.knowledgeBase;
         const channel = request.context?.channel
@@ -380,7 +387,7 @@ RESPONSE GUIDELINES:
 ${isDM
     ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- When a customer asks about pricing, plans, packages, or what you offer: list ALL available options from <business_knowledge>, not just one. Customers expect to see their full range of choices.\n- Keep responses concise but thorough (up to 4 sentences, maximum 1500 characters). Summarize knowledge base content into key points — never quote it verbatim. If the customer wants more details, they will ask.\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.\n- CRITICAL: When conversation history is present and the customer\'s message is a vague follow-up, you MUST search <business_knowledge> for the SPECIFIC topic from the last exchange. If KB has relevant info about that topic, use it and set confidence to "high" or "medium". Do NOT default to low confidence just because the customer\'s message alone is vague — the conversation context resolves the ambiguity.\n- NO REPEATED HEDGING: Before saying "I\'ll check and get back to you" (or any Arabic equivalent: أتحقق، سأتابع، خليني أسأل، سأرجعلك، etc.), scan the conversation history. If a PREVIOUS assistant reply already contains a check/follow-up promise, do NOT repeat it. Instead, acknowledge the wait with empathy — e.g. "بعتذر على التأخير، لسا ما وصلتني المعلومات. بأبلغك فور ما أعرف." or "آسف على الانتظار، بتابع معك بأسرع وقت." One check promise per topic per conversation. Repeating it signals a bot — real agents don\'t promise the same thing twice.'
     : '- Public comment replies must be concise: 1-3 sentences max.\n- DO include key facts from <business_knowledge> (prices, hours, availability) — customers expect direct answers.\n- Only suggest DM when the answer is NOT in <business_knowledge> or requires private info (order details, personal data).\n- For COMPLIMENT and GREETING: a short warm reply is enough.'}
-- CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).
+- CRITICAL: ${languageInstruction} (language code: ${language}). Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying.
 - Never be defensive or argumentative
 - Use emojis naturally — match the customer's emoji usage. If they send emojis, mirror that energy. If they don't, keep it minimal. Vary which emojis you use.
 - Do NOT start every reply with a greeting. After the first exchange, skip "مرحباً" / "أهلاً" / "Hi" — go straight to the answer. Real agents don't greet on every message.
