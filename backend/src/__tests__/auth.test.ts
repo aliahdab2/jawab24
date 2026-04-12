@@ -71,7 +71,7 @@ vi.mock('../integrations', () => ({
 
 vi.mock('../services/workspace', () => ({
     workspaceService: {
-        getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'test_workspace_id' }]),
+        getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'test_workspace_id', role: 'owner' }]),
     }
 }));
 

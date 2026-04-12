@@ -24,6 +24,7 @@ function mockSelect(result: unknown) {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue(result),
         // Thenable so queries without .limit() can be awaited directly
         then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
