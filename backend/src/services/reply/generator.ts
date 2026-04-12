@@ -57,13 +57,17 @@ export function shouldUseFallback(flagReason?: string): boolean {
 /** Determine if a message needs human attention based on flags and intent.
  *  For non-question intents (GREETING, COMPLIMENT, SPAM_OR_IRRELEVANT), a low_confidence
  *  flag alone is normal — no human review needed. Only meaningful flags (info_not_in_kb,
- *  price_not_in_kb, etc.) or attention-worthy intents (COMPLAINT, OFFENSIVE) trigger review. */
+ *  price_not_in_kb, etc.) or attention-worthy intents (COMPLAINT, OFFENSIVE) trigger review.
+ *  language_mismatch is also excluded for non-question intents — punctuation/emoji engagement
+ *  comments (e.g. ".") have no language signal so the AI sometimes replies in the wrong language,
+ *  but a GREETING/COMPLIMENT reply doesn't need merchant review regardless of language. */
 const QUESTION_LIKE_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+const ATTENTION_EXEMPT_FLAGS = new Set(['low_confidence', 'language_mismatch']);
 export function computeNeedsAttention(flags: string[], normalizedIntent: string | undefined): boolean {
     const intent = normalizedIntent || '';
     const meaningfulFlags = QUESTION_LIKE_INTENTS.has(intent)
         ? flags.length > 0
-        : flags.some(f => f !== 'low_confidence');
+        : flags.some(f => !ATTENTION_EXEMPT_FLAGS.has(f) && !f.startsWith('expected_lang:') && !f.startsWith('reply_lang:'));
     return meaningfulFlags ||
         intent === 'COMPLAINT' ||
         intent === 'OFFENSIVE';
