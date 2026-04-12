@@ -653,12 +653,20 @@ export class ReplyGenerator {
     /**
      * Strips @mentions and URLs from a comment — platform noise that pollutes
      * language detection and carries no message content for the AI.
-     * Handles both plain @mentions and Facebook's structured mention format @[id:Name].
+     *
+     * Two formats handled:
+     * - Facebook structured: @[userid:Display Name]
+     *   Brackets bound the full name exactly — safe to strip regardless of length or language.
+     * - Plain @mention: @word + optionally one more word (2 words max).
+     *   We cap at 2 words because we cannot tell where a name ends and actual message content
+     *   begins (e.g. "@Ahmad Ali كيف أسجل؟" — "Ali" is the surname, "كيف أسجل؟" is the question).
+     *   Names longer than 2 words in real Facebook tags always arrive in the structured format,
+     *   so 2 words is sufficient for plain mentions (which are typically single-word handles).
      */
     private stripCommentNoise(text: string): string {
         return text
-            .replace(/@\[\d+:[^\]]*\]/g, '')                    // Facebook structured: @[id:Name]
-            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '') // Plain @mention
+            .replace(/@\[\d+:[^\]]*\]/g, '')                                    // @[id:Name] — any name, any length
+            .replace(/@[\w\u0600-\u06FF]+(?:\s+[\w\u0600-\u06FF]+)?/g, '')     // @Name — 1–2 words, any script
             .replace(/https?:\/\/\S+|www\.\S+/gi, '')
             .trim();
     }
