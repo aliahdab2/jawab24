@@ -45,22 +45,34 @@ export async function downloadCSV(
 
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
 
-  // ── Mobile web (iOS Safari 15+, Chrome for Android) ───────────────────
-  // navigator.canShare with files is the only reliable way to export files
-  // on iOS Safari — programmatic link.click() is silently ignored.
-  if (typeof navigator.canShare === 'function') {
+  // ── iOS Safari (web, not Capacitor) ───────────────────────────────────
+  // <a download> opens a new tab on iOS Safari instead of downloading.
+  // Web Share API with a File is the only reliable workaround.
+  // Android Chrome and all desktop browsers support <a download> directly.
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isIOS && typeof navigator.canShare === 'function') {
     const file = new File([blob], filename, { type: 'text/csv;charset=utf-8;' });
     if (navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: filename });
+      try {
+        await navigator.share({ files: [file], title: filename });
+      } catch (err) {
+        // AbortError = user dismissed the share sheet — not a real failure
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          return { savedToDocuments: false };
+        }
+        throw err;
+      }
       return { savedToDocuments: false };
     }
   }
 
-  // ── Desktop web fallback ───────────────────────────────────────────────
+  // ── Desktop + Android Chrome: programmatic download ────────────────────
+  // Use an ASCII-safe filename so Android doesn't reject the download.
+  const safeFilename = filename.replace(/[^\w.\-]/g, '_');
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = filename;
+  link.download = safeFilename;
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
