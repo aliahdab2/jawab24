@@ -269,14 +269,10 @@ export class ReplyGenerator {
             // triggers the post-content fallback below instead of locking in 'en'.
             const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
 
-            // Pass commenter name as customerContext (same as DMs) so the AI addresses
-            // the actual commenter, not a name extracted from an @mention.
-            const customerContext = context.senderName ? `Customer name: ${context.senderName}.` : undefined;
-
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: effectiveLang !== 'unknown' ? effectiveLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -323,8 +319,10 @@ export class ReplyGenerator {
                     messagesService.getConversationHistory(pageId, senderId, 12),
                     messagesService.getCustomerSummary(pageId, senderId),
                 ]);
-                const namePart = context.senderName ? `Customer name: ${context.senderName}.` : '';
-                const customerContext = [namePart, customerSummary].filter(Boolean).join(' ') || undefined;
+                // senderName is passed separately — never merged into customerContext.
+                // customerContext holds substantive info only (returning-customer summary, etc.)
+                // so it can safely participate in cache-key scoping without fragmenting by name.
+                const customerContext = customerSummary || undefined;
 
                 // Build gap source: last customer message before the current one
                 const prevUserMsg = conversationHistory
@@ -349,7 +347,7 @@ export class ReplyGenerator {
                 const aiRequest = {
                     comment: text,
                     language: msgLang !== 'unknown' ? msgLang : undefined,
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, customerContext, ecommerceStoreId: context.ecommerceStoreId },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId },
                 };
 
                 // When an e-commerce store is linked, use the tool loop

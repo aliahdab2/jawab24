@@ -74,6 +74,8 @@ export class AiService {
             `p:${ctx.postMessage || ''}`,
             `sp:${ctx.storePolicies ? crypto.createHash('md5').update(ctx.storePolicies).digest('hex').slice(0, 8) : ''}`,
             `rs:${ctx.replyStyle || 'professional'}`,
+            // customerContext = substantive history/summary only (senderName is excluded).
+            // This prevents fragmentation by commenter name while still scoping by real customer state.
             `cc:${ctx.customerContext ? crypto.createHash('md5').update(ctx.customerContext).digest('hex').slice(0, 8) : ''}`,
             `pv:${PROMPT_VERSION}`,
         ].join(':');

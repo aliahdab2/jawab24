@@ -87,6 +87,9 @@ export interface AiGenerateRequest {
         queryEmbedding?: number[];
         replyStyle?: string;
         brandVoiceNotes?: string;
+        /** Customer's display name — used for personalization only, never affects cache keys. */
+        senderName?: string;
+        /** Substantive customer context (history, returning-customer summary, etc.) that changes the answer. */
         customerContext?: string;
         ecommerceStoreId?: string;
         ecommerceToolsEnabled?: boolean;

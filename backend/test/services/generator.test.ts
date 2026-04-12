@@ -1784,7 +1784,7 @@ describe('Store routing — skip preset replies for store pages', () => {
             );
         });
 
-        it('should pass senderName as customerContext for comments', async () => {
+        it('should pass senderName directly (not merged into customerContext) for comments', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -1810,16 +1810,25 @@ describe('Store routing — skip preset replies for store pages', () => {
                 senderName: 'Noor ALashkar',
             }, true);
 
+            // senderName passes through as its own field — never merged into customerContext.
+            // This prevents the cache from being fragmented by commenter name.
             expect(aiService.generateReply).toHaveBeenCalledWith(
                 expect.objectContaining({
                     context: expect.objectContaining({
-                        customerContext: 'Customer name: Noor ALashkar.',
+                        senderName: 'Noor ALashkar',
+                    }),
+                }),
+            );
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.not.objectContaining({
+                        customerContext: expect.anything(),
                     }),
                 }),
             );
         });
 
-        it('should not set customerContext when senderName is absent', async () => {
+        it('should not set customerContext or senderName when senderName is absent', async () => {
             const { rulesService } = await import('../../src/services/rules');
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
@@ -1849,6 +1858,13 @@ describe('Store routing — skip preset replies for store pages', () => {
                 expect.objectContaining({
                     context: expect.not.objectContaining({
                         customerContext: expect.anything(),
+                    }),
+                }),
+            );
+            expect(aiService.generateReply).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    context: expect.not.objectContaining({
+                        senderName: expect.anything(),
                     }),
                 }),
             );

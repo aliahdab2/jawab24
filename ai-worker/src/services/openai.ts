@@ -59,6 +59,9 @@ export interface GenerateRequest {
         conversationHistory?: ConversationMessage[];
         replyStyle?: string;
         brandVoiceNotes?: string;
+        /** Customer's display name — personalization only, never affects cache keys. */
+        senderName?: string;
+        /** Substantive customer context (history, returning-customer summary, etc.). */
         customerContext?: string;
     };
 }
@@ -399,7 +402,7 @@ ${isDM
     : '- For public comments: keep it brief but answer the question directly from <business_knowledge>.\n- Example good comment reply (English): "We have 3 plans starting from $15/month! Check our website for full details 😊"\n- Example good comment reply (Arabic): "عنا 3 باقات تبدأ من 56 ريال/شهر! تفاصيل أكثر على موقعنا 😊"'}
 - If a customer asks for contact info (phone, email, address) and it IS in <business_knowledge>, share it. If it is NOT, say you'll get that info for them and someone from the team will follow up.
 ${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (guidelines from the business owner — incorporate naturally):\n${sanitizeForPrompt(request.context.brandVoiceNotes).slice(0, 500)}\n${isDM && request.context?.conversationHistory?.length ? 'IMPORTANT: Check the conversation history before applying any brand voice note. If a point (offer, promotion, price, phrase) was already stated by the assistant in this conversation, do NOT repeat it — even if the note says "always mention". The no-repeat rule overrides "always".\n' : ''}` : ''}
-${request.context?.customerContext ? `\nCUSTOMER CONTEXT: ${sanitizeForPrompt(request.context.customerContext).slice(0, 300)}\n` : ''}
+${(request.context?.senderName || request.context?.customerContext) ? `\nCUSTOMER CONTEXT: ${[request.context.senderName ? `Customer name: ${sanitizeForPrompt(request.context.senderName)}.` : '', request.context.customerContext ? sanitizeForPrompt(request.context.customerContext).slice(0, 260) : ''].filter(Boolean).join(' ')}\n` : ''}
 CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
 - NEVER invent or guess prices, costs, or fees unless explicitly stated in <business_knowledge>
