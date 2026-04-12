@@ -285,4 +285,50 @@ test.describe('Sidebar', () => {
 
     await expect(page.getByText('Second Workspace').first()).toBeVisible({ timeout: 5000 });
   });
+
+  test('should switch active workspace and navigate to dashboard', async ({ page }) => {
+    await setupAuth(page, {
+      workspaces: [
+        { id: 'ws1', name: 'First Workspace' },
+        { id: 'ws2', name: 'Second Workspace' },
+      ],
+    });
+    await mockAPIs(page);
+    await gotoWithSidebar(page);
+
+    // Open the switcher
+    const switcherBtn = page.locator('aside').getByRole('button').filter({ hasText: 'First Workspace' }).first();
+    await switcherBtn.waitFor({ timeout: 10000 });
+    await switcherBtn.click();
+
+    // Click the second workspace
+    await page.getByText('Second Workspace').first().click();
+
+    // Should navigate to dashboard
+    await page.waitForURL(/\/dashboard/, { timeout: 10000 });
+
+    // Active workspace in the switcher should now show Second Workspace
+    await expect(page.locator('aside').getByText('Second Workspace')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should show checkmark on the currently active workspace in dropdown', async ({ page }) => {
+    await setupAuth(page, {
+      workspaces: [
+        { id: 'ws1', name: 'First Workspace' },
+        { id: 'ws2', name: 'Second Workspace' },
+      ],
+    });
+    await mockAPIs(page);
+    await gotoWithSidebar(page);
+
+    const switcherBtn = page.locator('aside').getByRole('button').filter({ hasText: 'First Workspace' }).first();
+    await switcherBtn.waitFor({ timeout: 10000 });
+    await switcherBtn.click();
+
+    // The active workspace row (ws1) should have a checkmark; ws2 should not
+    const ws1Row = page.locator('button').filter({ hasText: 'First Workspace' }).last();
+    const ws2Row = page.locator('button').filter({ hasText: 'Second Workspace' });
+    await expect(ws1Row.locator('svg')).toBeVisible({ timeout: 5000 }); // Check icon
+    await expect(ws2Row.locator('svg')).not.toBeVisible();
+  });
 });
