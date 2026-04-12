@@ -262,6 +262,11 @@ export default function BlogPostPage({
         <meta key="og:title" property="og:title" content={frontmatter.seoTitle} />
         <meta key="og:description" property="og:description" content={frontmatter.seoDescription} />
         <meta key="og:type" property="og:type" content="article" />
+        <meta key="og:url" property="og:url" content={`https://jawab24.com${locale === 'en' ? '/en' : ''}/blog/${slug}`} />
+        <meta key="article:published_time" property="article:published_time" content={post.date} />
+        <meta key="article:modified_time" property="article:modified_time" content={post.date} />
+        <meta key="article:author" property="article:author" content="Jawab24" />
+        <meta key="article:section" property="article:section" content="Technology" />
 
         <meta name="twitter:title" content={frontmatter.seoTitle} />
         <meta name="twitter:description" content={frontmatter.seoDescription} />
@@ -292,10 +297,10 @@ export default function BlogPostPage({
               },
               'mainEntityOfPage': {
                 '@type': 'WebPage',
-                '@id': `https://jawab24.com/blog/${slug}`,
+                '@id': `https://jawab24.com${locale === 'en' ? '/en' : ''}/blog/${slug}`,
               },
               'inLanguage': locale === 'en' ? 'en-US' : 'ar-SA',
-              'url': `https://jawab24.com/blog/${slug}`,
+              'url': `https://jawab24.com${locale === 'en' ? '/en' : ''}/blog/${slug}`,
               'image': BRAND_ASSETS.urls.ogImage(),
             }),
           }}
