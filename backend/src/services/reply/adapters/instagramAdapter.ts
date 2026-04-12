@@ -1,12 +1,9 @@
-import axios from 'axios';
 import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { messagesService } from '../../messages';
-import { config } from '../../../config';
+import { fbAxios, GRAPH_API_BASE } from '../../../lib/fbAxios';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied, fetchNameFromConversationsApi } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
-
-const INSTAGRAM_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 /**
  * Instagram Platform Adapter
@@ -35,7 +32,7 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
 
         // 2. Call Instagram Graph API to get sender profile
         try {
-            const res = await axios.get(`${INSTAGRAM_GRAPH_API}/${senderId}`, {
+            const res = await fbAxios.get(`${GRAPH_API_BASE}/${senderId}`, {
                 params: { fields: 'name,username', access_token: accessToken },
             });
             const name = res.data.username || res.data.name;

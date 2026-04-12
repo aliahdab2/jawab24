@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import axios from 'axios';
 
-vi.mock('axios');
-vi.mock('../config', () => ({
-    config: { facebook: { graphApiVersion: 'v19.0' } },
+vi.mock('../lib/fbAxios', () => ({
+    fbAxios: { get: vi.fn() },
+    GRAPH_API_BASE: 'https://graph.facebook.com/v19.0',
 }));
 
+import { fbAxios } from '../lib/fbAxios';
 import { fetchNameFromConversationsApi } from '../services/reply/adapters/shared';
 
-const mockGet = vi.mocked(axios.get);
+const mockGet = vi.mocked(fbAxios.get);
 
 beforeEach(() => {
     vi.clearAllMocks();

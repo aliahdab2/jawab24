@@ -13,6 +13,10 @@
  * Facebook/Instagram Graph API. NOT used for cosmetic calls (typing indicators).
  */
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { config } from '../config';
+
+/** Single source of truth for the Facebook/Instagram Graph API base URL. */
+export const GRAPH_API_BASE = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 const MAX_RETRIES = 2;
 const DEFAULT_RATE_LIMIT_WAIT_MS = 60_000;

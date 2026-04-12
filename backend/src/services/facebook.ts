@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { config } from '../config';
 import { tracedExternalCall } from '../utils/tracing';
-import { fbAxios } from '../lib/fbAxios';
+import { fbAxios, GRAPH_API_BASE } from '../lib/fbAxios';
 import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, Logger } from '../types';
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
@@ -9,7 +9,7 @@ import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 const traced = <T>(method: string, fn: () => Promise<T>) =>
     tracedExternalCall('facebook', method, fn);
 
-const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
+const FACEBOOK_GRAPH_API = GRAPH_API_BASE;
 const DEFAULT_TOKEN_EXPIRY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — Facebook long-lived token default
 
 export class FacebookService {

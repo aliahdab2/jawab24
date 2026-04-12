@@ -1,9 +1,6 @@
-import axios from 'axios';
-import { config } from '../../../config';
+import { fbAxios, GRAPH_API_BASE } from '../../../lib/fbAxios';
 import { messagesService } from '../../messages';
 import type { PlatformPage, StoredMessage } from '../../../interfaces';
-
-const GRAPH_API_BASE = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
 type ConversationParticipant = { id: string; name?: string; username?: string };
 type ConversationEntry = { participants?: { data?: ConversationParticipant[] } };
@@ -19,7 +16,7 @@ export async function fetchNameFromConversationsApi(
     accessToken: string,
     platform?: 'instagram',
 ): Promise<string | undefined> {
-    const res = await axios.get(`${GRAPH_API_BASE}/${platformPageId}/conversations`, {
+    const res = await fbAxios.get(`${GRAPH_API_BASE}/${platformPageId}/conversations`, {
         params: {
             user_id: senderId,
             fields: 'participants',

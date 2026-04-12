@@ -11,6 +11,7 @@ vi.mock('../../src/lib/fbAxios', () => ({
         post: vi.fn(),
         delete: vi.fn(),
     },
+    GRAPH_API_BASE: 'https://graph.facebook.com/v18.0',
 }));
 vi.mock('../../src/utils/tracing', () => ({
     tracedExternalCall: (_service: string, _method: string, fn: () => unknown) => fn(),
@@ -278,20 +279,21 @@ describe('Facebook Service', () => {
                 response: { data: { error: { message: 'Permission denied' } } },
             });
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
-            vi.mocked(fbAxios.get).mockRejectedValueOnce(axiosError);
-            // Conversations API fallback goes through plain axios.get (via shared helper)
-            vi.mocked(axios.get).mockResolvedValueOnce({
-                data: {
-                    data: [{
-                        participants: {
-                            data: [
-                                { id: PAGE_ID, name: 'My Page' },
-                                { id: SENDER_ID, name: 'Ali Ahdab' },
-                            ],
-                        },
-                    }],
-                },
-            });
+            vi.mocked(fbAxios.get)
+                .mockRejectedValueOnce(axiosError)
+                // Conversations API fallback goes through fbAxios.get (with retry logic)
+                .mockResolvedValueOnce({
+                    data: {
+                        data: [{
+                            participants: {
+                                data: [
+                                    { id: PAGE_ID, name: 'My Page' },
+                                    { id: SENDER_ID, name: 'Ali Ahdab' },
+                                ],
+                            },
+                        }],
+                    },
+                });
 
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
 
@@ -299,17 +301,18 @@ describe('Facebook Service', () => {
         });
 
         it('falls back to Conversations API when User Profile API returns no name', async () => {
-            vi.mocked(fbAxios.get).mockResolvedValueOnce({ data: { id: SENDER_ID } });
-            // Conversations API fallback goes through plain axios.get (via shared helper)
-            vi.mocked(axios.get).mockResolvedValueOnce({
-                data: {
-                    data: [{
-                        participants: {
-                            data: [{ id: SENDER_ID, name: 'Ali via Conversations' }],
-                        },
-                    }],
-                },
-            });
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { id: SENDER_ID } })
+                // Conversations API fallback goes through fbAxios.get (with retry logic)
+                .mockResolvedValueOnce({
+                    data: {
+                        data: [{
+                            participants: {
+                                data: [{ id: SENDER_ID, name: 'Ali via Conversations' }],
+                            },
+                        }],
+                    },
+                });
 
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
 
@@ -319,9 +322,10 @@ describe('Facebook Service', () => {
         it('returns null when both APIs fail', async () => {
             const axiosError = Object.assign(new Error('Forbidden'), { isAxiosError: true });
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
-            vi.mocked(fbAxios.get).mockRejectedValueOnce(axiosError);
-            // Conversations API fallback goes through plain axios.get (via shared helper)
-            vi.mocked(axios.get).mockRejectedValueOnce(new Error('Network error'));
+            vi.mocked(fbAxios.get)
+                .mockRejectedValueOnce(axiosError)
+                // Conversations API fallback goes through fbAxios.get (with retry logic)
+                .mockRejectedValueOnce(new Error('Network error'));
 
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
 
@@ -329,15 +333,16 @@ describe('Facebook Service', () => {
         });
 
         it('returns null when Conversations API returns no matching participant', async () => {
-            vi.mocked(fbAxios.get).mockResolvedValueOnce({ data: { id: SENDER_ID } });
-            // Conversations API fallback goes through plain axios.get (via shared helper)
-            vi.mocked(axios.get).mockResolvedValueOnce({
-                data: {
-                    data: [{
-                        participants: { data: [{ id: 'other-user', name: 'Someone Else' }] },
-                    }],
-                },
-            });
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { id: SENDER_ID } })
+                // Conversations API fallback goes through fbAxios.get (with retry logic)
+                .mockResolvedValueOnce({
+                    data: {
+                        data: [{
+                            participants: { data: [{ id: 'other-user', name: 'Someone Else' }] },
+                        }],
+                    },
+                });
 
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
 
@@ -345,9 +350,10 @@ describe('Facebook Service', () => {
         });
 
         it('returns null when Conversations API returns empty conversations list', async () => {
-            vi.mocked(fbAxios.get).mockResolvedValueOnce({ data: { id: SENDER_ID } });
-            // Conversations API fallback goes through plain axios.get (via shared helper)
-            vi.mocked(axios.get).mockResolvedValueOnce({ data: { data: [] } });
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { id: SENDER_ID } })
+                // Conversations API fallback goes through fbAxios.get (with retry logic)
+                .mockResolvedValueOnce({ data: { data: [] } });
 
             const result = await service.getSenderProfile(SENDER_ID, PAGE_TOKEN, PAGE_ID);
 

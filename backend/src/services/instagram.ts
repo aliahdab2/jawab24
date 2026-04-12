@@ -1,17 +1,17 @@
 import axios from 'axios';
-import { 
-    Logger, 
+import {
+    Logger,
     noopLogger,
     InstagramAccount,
     InstagramMedia,
     InstagramComment,
     InstagramMediaResponse,
-    InstagramCommentsResponse 
+    InstagramCommentsResponse
 } from '../types';
 
-import { config } from '../config';
+import { GRAPH_API_BASE } from '../lib/fbAxios';
 
-const INSTAGRAM_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
+const INSTAGRAM_GRAPH_API = GRAPH_API_BASE;
 
 export class InstagramService {
     private logger: Logger = noopLogger;
