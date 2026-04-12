@@ -249,11 +249,17 @@ export class ReplyGenerator {
             const gapSource: GapSource = { type: 'comment', context: postMessage };
 
             // Run RAG retrieval if enabled (use stripped text for better semantic matching).
-            // If the comment has no real words (e.g. "......" or emoji-only), fall back to the
-            // post message as the RAG query — the commenter is responding to the post's call-to-action
-            // (e.g. "comment with a dot to get schedule info"), so the post context is the intent.
-            const commentHasWords = /\p{L}/u.test(commentForAI || '');
-            const ragQuery = commentHasWords ? (commentForAI || text) : (postMessage || commentForAI || text);
+            // Enrich the query with post context when the comment is short/vague — mirrors how
+            // the DM pipeline enriches vague follow-ups with conversation history.
+            // A comment like "شو السعر؟" on a hairstyling post should search for
+            // "hairstyling course + شو السعر؟", not just "شو السعر؟" alone.
+            // For symbol-only comments ("......", emojis), the post message IS the intent.
+            const commentText = commentForAI || text;
+            const commentWordCount = (commentForAI || '').trim().split(/\s+/).filter(w => /\p{L}/u.test(w)).length;
+            const isVagueComment = commentWordCount <= 6;
+            const ragQuery = (isVagueComment && postMessage)
+                ? `${postMessage.slice(0, 200)} ${commentText}`.trim()
+                : commentText;
             const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
                 pageId, ragQuery, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
             );
