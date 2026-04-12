@@ -335,3 +335,176 @@ test.describe('Integrations Page', () => {
     await expect(page.getByText(t('shopify.never')).first()).toBeVisible({ timeout: 15000 });
   });
 });
+
+/* ------------------------------------------------------------------ */
+/*  OrderNotificationsCard                                              */
+/* ------------------------------------------------------------------ */
+
+const MOCK_TEMPLATES = [
+  { id: 't1', storeId: 'store_1', notificationType: 'abandoned_cart', isEnabled: true, messageAr: 'نسيت شيئاً في سلتك!', messageEn: 'You left something in your cart!', delayMinutes: 60 },
+  { id: 't2', storeId: 'store_1', notificationType: 'order_confirmed', isEnabled: true, messageAr: 'تم تأكيد طلبك', messageEn: 'Your order is confirmed', delayMinutes: 0 },
+  { id: 't3', storeId: 'store_1', notificationType: 'order_shipped', isEnabled: false, messageAr: 'تم شحن طلبك', messageEn: 'Your order has shipped', delayMinutes: 0 },
+  { id: 't4', storeId: 'store_1', notificationType: 'order_delivered', isEnabled: false, messageAr: 'تم تسليم طلبك', messageEn: 'Your order was delivered', delayMinutes: 0 },
+  { id: 't5', storeId: 'store_1', notificationType: 'review_request', isEnabled: false, messageAr: 'شاركنا رأيك', messageEn: 'Leave us a review', delayMinutes: 1440 },
+  { id: 't6', storeId: 'store_1', notificationType: 'digital_delivery', isEnabled: false, messageAr: 'رابط التحميل', messageEn: 'Your download link', delayMinutes: 0 },
+];
+
+const MOCK_NOTIF_STATS = { sent: 45, failed: 2, total: 47 };
+
+function mockAPIsWithNotifications(page: import('@playwright/test').Page) {
+  return page.route('**/api/**', async (route) => {
+    const url = route.request().url();
+    const method = route.request().method();
+
+    if (url.includes('/shopify/store') && !url.includes('/sync') && method === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SHOPIFY_STORE) });
+    }
+    if (url.includes('/notification-templates/') && method === 'GET') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_TEMPLATES) });
+    }
+    if (url.includes('/notification-templates/') && method === 'PUT') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) });
+    }
+    if (url.includes('/notification-templates/') && url.includes('/reset') && method === 'POST') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) });
+    }
+    if (url.includes('/notification-log/') && url.includes('/stats')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_NOTIF_STATS) });
+    }
+    if (url.includes('/pages')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
+    }
+    if (url.includes('/salla/store') && method === 'GET') {
+      return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not found' }) });
+    }
+    if (url.includes('/auth/profile')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+    }
+    if (url.includes('/subscription/usage')) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+    }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+  });
+}
+
+test.describe('OrderNotificationsCard', () => {
+  test.beforeEach(async ({ page }) => {
+    page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
+    await setupAuth(page);
+    await mockAPIsWithNotifications(page);
+    await page.goto('/en/integrations');
+    await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
+  });
+
+  test('should render the card with all 6 notification types', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    for (const type of ['abandoned_cart', 'order_confirmed', 'order_shipped', 'order_delivered', 'review_request', 'digital_delivery'] as const) {
+      await expect(page.getByText(t(`orderNotifications.types.${type}`)).first()).toBeVisible();
+    }
+  });
+
+  test('should show stats pill when stats are available', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(`45 ${t('orderNotifications.sent')}`).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText(`2 ${t('orderNotifications.failed')}`).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should expand a notification type and show message fields', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    // Click the expand chevron for "Abandoned Cart"
+    const expandBtn = page.getByRole('button', { name: t('orderNotifications.types.abandoned_cart') }).first();
+    await expandBtn.click();
+
+    // AR and EN textareas visible
+    await expect(page.getByLabel(t('orderNotifications.templateAr')).first()).toBeVisible({ timeout: 5000 });
+    await expect(page.getByLabel(t('orderNotifications.templateEn')).first()).toBeVisible({ timeout: 5000 });
+
+    // Delay presets visible
+    await expect(page.getByText(t('orderNotifications.immediately')).first()).toBeVisible();
+
+    // Variables hint visible
+    await expect(page.getByText(t('orderNotifications.variables')).first()).toBeVisible();
+  });
+
+  test('should show existing message content when expanded', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    const expandBtn = page.getByRole('button', { name: t('orderNotifications.types.abandoned_cart') }).first();
+    await expandBtn.click();
+
+    const arTextarea = page.locator('textarea#msg-ar-abandoned_cart');
+    await expect(arTextarea).toHaveValue('نسيت شيئاً في سلتك!', { timeout: 5000 });
+
+    const enTextarea = page.locator('textarea#msg-en-abandoned_cart');
+    await expect(enTextarea).toHaveValue('You left something in your cart!', { timeout: 5000 });
+  });
+
+  test('should enable save button when toggling a notification type', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    const saveBtn = page.getByRole('button', { name: t('orderNotifications.noChanges') }).first();
+    await expect(saveBtn).toBeDisabled();
+
+    // Toggle "Order Shipped" (currently disabled)
+    const toggle = page.locator('[aria-label="' + t('orderNotifications.types.order_shipped') + '"][role="switch"]').first();
+    await toggle.click();
+
+    await expect(page.getByRole('button', { name: t('orderNotifications.save') }).first()).toBeEnabled({ timeout: 5000 });
+  });
+
+  test('should enable save button when editing a message field', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    const expandBtn = page.getByRole('button', { name: t('orderNotifications.types.order_confirmed') }).first();
+    await expandBtn.click();
+
+    const enTextarea = page.locator('textarea#msg-en-order_confirmed');
+    await enTextarea.fill('Your order has been placed successfully!');
+
+    await expect(page.getByRole('button', { name: t('orderNotifications.save') }).first()).toBeEnabled({ timeout: 5000 });
+  });
+
+  test('should save changes and show success toast', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    // Make a change
+    const expandBtn = page.getByRole('button', { name: t('orderNotifications.types.order_confirmed') }).first();
+    await expandBtn.click();
+    const enTextarea = page.locator('textarea#msg-en-order_confirmed');
+    await enTextarea.fill('Updated message!');
+
+    const saveBtn = page.getByRole('button', { name: t('orderNotifications.save') }).first();
+    await expect(saveBtn).toBeEnabled({ timeout: 5000 });
+    await saveBtn.click();
+
+    await expect(page.getByText(t('orderNotifications.savedSuccess')).first()).toBeVisible({ timeout: 5000 });
+  });
+
+  test('should change active delay preset when clicked', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    const expandBtn = page.getByRole('button', { name: t('orderNotifications.types.order_confirmed') }).first();
+    await expandBtn.click();
+
+    // Click "5 min" preset
+    const fiveMinBtn = page.getByRole('button', { name: t('orderNotifications.delayMin', { n: 5 }) }).first();
+    await fiveMinBtn.click();
+
+    // Save button should be enabled (delay changed from 0 to 5)
+    await expect(page.getByRole('button', { name: t('orderNotifications.save') }).first()).toBeEnabled({ timeout: 5000 });
+  });
+
+  test('should collapse expanded section when chevron clicked again', async ({ page }) => {
+    await expect(page.getByText(t('orderNotifications.title')).first()).toBeVisible({ timeout: 10000 });
+
+    const expandBtn = page.getByRole('button', { name: t('orderNotifications.types.abandoned_cart') }).first();
+    await expandBtn.click();
+    await expect(page.locator('textarea#msg-ar-abandoned_cart')).toBeVisible({ timeout: 5000 });
+
+    // Collapse
+    await expandBtn.click();
+    await expect(page.locator('textarea#msg-ar-abandoned_cart')).not.toBeVisible();
+  });
+});

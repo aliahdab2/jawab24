@@ -31,6 +31,7 @@ import enMessages from '../src/i18n/en/messages.json';
 import enMeta from '../src/i18n/en/meta.json';
 import enNav from '../src/i18n/en/nav.json';
 import enNotifications from '../src/i18n/en/notifications.json';
+import enOrderNotifications from '../src/i18n/en/orderNotifications.json';
 import enOnboarding from '../src/i18n/en/onboarding.json';
 import enPages from '../src/i18n/en/pages.json';
 import enPayment from '../src/i18n/en/payment.json';
@@ -74,6 +75,7 @@ import arMessages from '../src/i18n/ar/messages.json';
 import arMeta from '../src/i18n/ar/meta.json';
 import arNav from '../src/i18n/ar/nav.json';
 import arNotifications from '../src/i18n/ar/notifications.json';
+import arOrderNotifications from '../src/i18n/ar/orderNotifications.json';
 import arOnboarding from '../src/i18n/ar/onboarding.json';
 import arPages from '../src/i18n/ar/pages.json';
 import arPayment from '../src/i18n/ar/payment.json';
@@ -100,7 +102,7 @@ export const en = {
   dashboard: enDashboard, dataDeletion: enDataDeletion, errorBoundary: enErrorBoundary,
   errors: enErrors, export: enExport, feedback: enFeedback, flagReason: enFlagReason,
   integrations: enIntegrations, kb: enKb, landing: enLanding, logout: enLogout,
-  messages: enMessages, meta: enMeta, nav: enNav, notifications: enNotifications,
+  messages: enMessages, meta: enMeta, nav: enNav, notifications: enNotifications, orderNotifications: enOrderNotifications,
   onboarding: enOnboarding, pages: enPages, payment: enPayment, plans: enPlans,
   pricing: enPricing, privacy: enPrivacy, profile: enProfile, rules: enRules,
   salla: enSalla, settings: enSettings, shopify: enShopify, sidebar: enSidebar,
@@ -114,7 +116,7 @@ export const ar = {
   dashboard: arDashboard, dataDeletion: arDataDeletion, errorBoundary: arErrorBoundary,
   errors: arErrors, export: arExport, feedback: arFeedback, flagReason: arFlagReason,
   integrations: arIntegrations, kb: arKb, landing: arLanding, logout: arLogout,
-  messages: arMessages, meta: arMeta, nav: arNav, notifications: arNotifications,
+  messages: arMessages, meta: arMeta, nav: arNav, notifications: arNotifications, orderNotifications: arOrderNotifications,
   onboarding: arOnboarding, pages: arPages, payment: arPayment, plans: arPlans,
   pricing: arPricing, privacy: arPrivacy, profile: arProfile, rules: arRules,
   salla: arSalla, settings: arSettings, shopify: arShopify, sidebar: arSidebar,
@@ -133,12 +135,19 @@ function resolve(obj: Record<string, unknown>, key: string): string {
   return typeof current === 'string' ? current : key;
 }
 
-/** Get English translation by dot-notation key */
-export function t(key: string): string {
-  return resolve(en as unknown as Record<string, unknown>, key);
+/** Replace {param} placeholders in a translated string */
+function interpolate(value: string, params: Record<string, string | number>): string {
+  return value.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? `{${k}}`));
 }
 
-/** Get Arabic translation by dot-notation key */
-export function tAr(key: string): string {
-  return resolve(ar as unknown as Record<string, unknown>, key);
+/** Get English translation by dot-notation key, with optional interpolation */
+export function t(key: string, params?: Record<string, string | number>): string {
+  const value = resolve(en as unknown as Record<string, unknown>, key);
+  return params ? interpolate(value, params) : value;
+}
+
+/** Get Arabic translation by dot-notation key, with optional interpolation */
+export function tAr(key: string, params?: Record<string, string | number>): string {
+  const value = resolve(ar as unknown as Record<string, unknown>, key);
+  return params ? interpolate(value, params) : value;
 }
