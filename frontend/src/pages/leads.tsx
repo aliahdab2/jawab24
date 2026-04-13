@@ -698,35 +698,39 @@ const LeadsPage: NextPageWithLayout = () => {
         description={t('description')}
         action={
           selectedPageId ? (
-            canExport ? (
-              <button
-                onClick={handleExport}
-                disabled={exporting}
-                className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
-                aria-label={t('exportCsv')}
-              >
-                {exporting
-                  ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-                  : <Download className="w-5 h-5" aria-hidden="true" />
-                }
-              </button>
-            ) : isNativePlatform() ? (
-              <button
-                onClick={() => openExternalUrl('https://jawab24.com/pricing')}
-                className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
-                aria-label={t('exportCsv')}
-              >
-                <Lock className="w-5 h-5" aria-hidden="true" />
-              </button>
-            ) : (
-              <Link
-                href="/pricing"
-                className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
-                aria-label={t('exportCsv')}
-              >
-                <Lock className="w-5 h-5" aria-hidden="true" />
-              </Link>
-            )
+            <div className={leads.length === 0 ? 'invisible pointer-events-none' : undefined}>
+              {canExport ? (
+                <button
+                  onClick={handleExport}
+                  disabled={exporting}
+                  className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
+                  aria-label={t('exportCsv')}
+                >
+                  {exporting
+                    ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                    : <Download className="w-5 h-5" aria-hidden="true" />
+                  }
+                </button>
+              ) : isNativePlatform() ? (
+                <button
+                  onClick={() => openExternalUrl('https://jawab24.com/pricing')}
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
+                  aria-label={t('exportCsv')}
+                >
+                  <Lock className="w-4 h-4" aria-hidden="true" />
+                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
+                </button>
+              ) : (
+                <Link
+                  href="/pricing"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
+                  aria-label={t('exportCsv')}
+                >
+                  <Lock className="w-4 h-4" aria-hidden="true" />
+                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
+                </Link>
+              )}
+            </div>
           ) : undefined
         }
       />
