@@ -208,22 +208,13 @@ test.describe('Mobile Navigation', () => {
     await expect(dialog.getByRole('button', { name: t('nav.settings'), exact: true })).toBeVisible();
   });
 
-  test('Stores item absent for non-ecommerce user', async ({ page }) => {
-    await setupAuth(page, { user: { hasEcommerceStore: false } });
-    await mockAPIs(page);
-    await gotoWithMobileNav(page);
-
-    await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
-    await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.integrations'), exact: true })).not.toBeVisible();
-  });
-
-  test('Stores item present for ecommerce user', async ({ page }) => {
+  test('Integrations item is never shown (automation section removed)', async ({ page }) => {
     await setupAuth(page, { user: { hasEcommerceStore: true } });
     await mockAPIs(page);
     await gotoWithMobileNav(page);
 
     await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
-    await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.integrations'), exact: true })).toBeVisible({ timeout: 5000 });
+    await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.integrations'), exact: true })).not.toBeVisible();
   });
 
   /* ------------------------------------------------------------------ */
