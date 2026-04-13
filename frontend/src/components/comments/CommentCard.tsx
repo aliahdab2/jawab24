@@ -17,7 +17,7 @@ import {
   ChevronDown,
   MessageSquare,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatMessageTime } from '@/utils/dateUtils';
 import type { Comment } from '@jawab24/shared';
 
 export interface CommentCardProps {
@@ -88,13 +88,7 @@ export const CommentCard = React.memo(function CommentCard({
   const needsAttention = checkNeedsAttention(comment);
   const isGrouped = (groupCount ?? 1) > 1;
 
-  const formatTime = (date?: string | Date | null) => {
-    if (!date) return '';
-    return formatDistanceToNow(new Date(date), {
-      addSuffix: true,
-      locale: dateLocale
-    });
-  };
+  const formatTime = (date?: string | Date | null) => formatMessageTime(date, dateLocale);
 
   // Avatar initials from sender name
   const initials = comment.fromName

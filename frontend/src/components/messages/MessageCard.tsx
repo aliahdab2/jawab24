@@ -12,7 +12,7 @@ import {
   User,
   PauseCircle,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { formatMessageTime } from '@/utils/dateUtils';
 import { renderMessageText } from '@/utils/renderMessageText';
 import type { Message } from '@/lib/api';
 
@@ -50,10 +50,7 @@ export const MessageCard = React.memo(function MessageCard({
   const isPending = !conv.lastMessage.replied && conv.lastMessage.direction === 'incoming';
   const isResolved = conv.messages.some(m => m.direction === 'incoming' && m.resolved);
 
-  const formatTime = (date?: string | Date | null) => {
-    if (!date) return '';
-    return formatDistanceToNow(new Date(date), { addSuffix: true, locale: dateLocale });
-  };
+  const formatTime = (date?: string | Date | null) => formatMessageTime(date, dateLocale);
 
   // Most recent customer message and most recent auto-reply
   const sorted = [...conv.messages].sort(
