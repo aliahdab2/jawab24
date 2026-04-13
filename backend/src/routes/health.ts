@@ -56,7 +56,8 @@ const healthRoutes: FastifyPluginAsync = async (fastify, _opts) => {
             : { status: 'not_configured' as const, message: 'AI service disabled' };
 
         const allServicesUp = dbProbe.status === 'up' && redisProbe.status === 'up';
-        const anyServiceDown = dbProbe.status === 'down';
+        // Both DB and Redis are critical: DB for data, Redis for rate limiting and caching.
+        const anyServiceDown = dbProbe.status === 'down' || redisProbe.status === 'down';
 
         const health: HealthStatus = {
             status: anyServiceDown ? 'unhealthy' : allServicesUp ? 'healthy' : 'degraded',

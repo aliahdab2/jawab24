@@ -55,5 +55,6 @@
   "offline": "You're offline",
   "backOnline": "Back online",
   "viewOnly": "View only",
-  "viewOnlyHint": "Only admins can make changes"
+  "viewOnlyHint": "Only admins can make changes",
+  "tryAgain": "Try again"
 }

@@ -58,7 +58,7 @@ const PagesPage: NextPageWithLayout = () => {
 
   // ESC key handled inside KnowledgeBaseModal
 
-  const { data: pagesRaw, isLoading: loading } = useQuery({
+  const { data: pagesRaw, isLoading: loading, isError: pagesError, refetch: refetchPages } = useQuery({
     queryKey: ['pages'],
     queryFn: async () => {
       const response = await pagesApi.getAll();
@@ -257,6 +257,23 @@ const PagesPage: NextPageWithLayout = () => {
 
   if (loading && pages.length === 0) {
     return <PageSkeleton type="grid" />;
+  }
+
+  if (pagesError) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        iconColorClass="text-red-500"
+        iconBgClass="bg-red-50 dark:bg-red-900/20"
+        title={tc('error')}
+        description={t('loadFailed')}
+        action={
+          <Button onClick={() => refetchPages()} variant="outline">
+            {tc('tryAgain')}
+          </Button>
+        }
+      />
+    );
   }
 
   return (
