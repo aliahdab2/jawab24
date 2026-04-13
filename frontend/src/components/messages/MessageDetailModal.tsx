@@ -11,7 +11,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
-import { formatFullTime, formatMessageTime } from '@/utils/formatMessageTime';
+import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import { messagesApi } from '@/lib/api';
 import type { Conversation } from './MessageCard';
 import {

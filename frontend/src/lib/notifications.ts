@@ -347,17 +347,34 @@ function handleNotificationTap(action: ActionPerformed): void {
     }
 }
 
+export interface UnreadCountResult {
+    count: number;
+    /** Seconds to wait before retrying, set when rate-limited (HTTP 429). */
+    retryAfter?: number;
+}
+
 /**
  * Get unread notification count from backend.
- * Uses the authenticated api instance for consistent auth handling and retry logic.
+ * Returns retryAfter when rate-limited so callers can back off intelligently.
  */
-export async function getUnreadCount(): Promise<number> {
+export async function getUnreadCount(): Promise<UnreadCountResult> {
     try {
         const response = await api.get('/notifications/unread-count');
-        return response.data.count || 0;
-    } catch {
+        return { count: response.data.count || 0 };
+    } catch (error) {
+        const axiosErr = error as { response?: { status?: number; headers?: Record<string, string>; data?: { retryAfter?: string } } };
+        if (axiosErr.response?.status === 429) {
+            const raw = axiosErr.response.headers?.['retry-after'] ?? axiosErr.response.data?.retryAfter;
+            const retryAfter = raw ? parseInt(String(raw), 10) : 60;
+            captureError(error, 'Notification poll rate-limited', {
+                level: 'warning',
+                tags: { area: 'notifications' },
+                extra: { retryAfter },
+            });
+            return { count: 0, retryAfter };
+        }
         addErrorBreadcrumb('notifications', 'Failed to get unread count');
-        return 0;
+        return { count: 0 };
     }
 }
 

@@ -8,7 +8,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { formatConnectedDate } from '@/utils/formatConnectedDate';
+import { formatConnectedDate } from '@/utils/dateUtils';
 import { getPageAvatarUrl } from '@/utils/pageUrl';
 import type { Page } from '@jawab24/shared';
 

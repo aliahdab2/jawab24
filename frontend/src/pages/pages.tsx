@@ -33,8 +33,8 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { ApiError } from '@/lib/api-utils';
 import { useWorkspaceRole } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
-import { formatConnectedDate } from '@/utils/formatConnectedDate';
-import { formatRelativeTime } from '@/utils/formatRelativeTime';
+import { formatConnectedDate } from '@/utils/dateUtils';
+import { formatRelativeTime } from '@/utils/dateUtils';
 import { getPageAvatarUrl, getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 

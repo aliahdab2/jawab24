@@ -56,7 +56,7 @@ describe('facebookMessageAdapter.getPage', () => {
         const page = await facebookMessageAdapter.getPage('fb-page-123');
 
         expect(page).not.toBeNull();
-        expect(page!.platformAccountId).toBe('fb-page-123');
+        expect(page?.platformAccountId).toBe('fb-page-123');
     });
 
     it('returns null when page is not found', async () => {

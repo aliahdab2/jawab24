@@ -10,7 +10,8 @@
  *   Step 2 → Enter code  → link phone to account (POST /auth/phone/link)
  *   → Redirect to intended destination
  */
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useCountdown } from '@/hooks';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useTranslations } from 'next-intl';
@@ -36,21 +37,7 @@ export default function PhoneCollectPage() {
     const [otpCode, setOtpCode] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [otpExpiry, setOtpExpiry] = useState(0);
-    const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    const startExpiryTimer = useCallback(() => {
-        setOtpExpiry(5 * 60);
-        if (expiryRef.current) clearInterval(expiryRef.current);
-        expiryRef.current = setInterval(() => {
-            setOtpExpiry(prev => {
-                if (prev <= 1) { clearInterval(expiryRef.current!); return 0; }
-                return prev - 1;
-            });
-        }, 1000);
-    }, []);
-
-    useEffect(() => () => { if (expiryRef.current) clearInterval(expiryRef.current); }, []);
+    const { count: otpExpiry, start: startExpiryTimer } = useCountdown();
 
     const {
         phoneE164, setPhoneE164,
@@ -62,7 +49,7 @@ export default function PhoneCollectPage() {
         requestOtp: handleRequestOtp,
     } = useOtpRequest({
         page: 'phone-collect',
-        onSuccess: () => { setStep('code'); setOtpCode(''); startExpiryTimer(); },
+        onSuccess: () => { setStep('code'); setOtpCode(''); startExpiryTimer(5 * 60); },
     });
 
     // Guard: if no authenticated user, redirect to login

@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useTranslations } from 'next-intl';
-import { formatRelativeTime } from '@/utils/formatRelativeTime';
+import { formatRelativeTime } from '@/utils/dateUtils';
 import { getPrimaryFlag } from '@/utils/flagReason';
 
 // Unified item type for both comments and messages needing attention

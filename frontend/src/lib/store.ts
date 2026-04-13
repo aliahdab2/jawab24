@@ -181,6 +181,7 @@ interface UIState {
   unreadComments: number;
   unreadMessages: number;
   newLeads: number;
+  notificationUnreadCount: number;
   sseStatus: SSEStatus;
   setOffline: (offline: boolean) => void;
   toggleSidebar: () => void;
@@ -195,6 +196,7 @@ interface UIState {
   resetUnreadMessages: () => void;
   incrementNewLeads: () => void;
   resetNewLeads: () => void;
+  setNotificationUnreadCount: (count: number) => void;
   setSSEStatus: (status: SSEStatus) => void;
 }
 
@@ -224,6 +226,8 @@ export const useUIStore = create<UIState>()(
       resetUnreadMessages: () => set({ unreadMessages: 0 }),
       incrementNewLeads: () => set((state) => ({ newLeads: state.newLeads + 1 })),
       resetNewLeads: () => set({ newLeads: 0 }),
+      notificationUnreadCount: 0,
+      setNotificationUnreadCount: (count) => set({ notificationUnreadCount: count }),
       setSSEStatus: (status) => set({ sseStatus: status }),
     }),
     {

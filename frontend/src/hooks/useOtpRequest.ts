@@ -4,11 +4,12 @@
  * Shared hook for the "enter phone → send OTP → resend cooldown" flow.
  * Used by the login page (phone tab) and the phone-collect page.
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { useTranslations, useLocale } from 'next-intl';
 import { otpApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import type { ApiError } from '@/lib/api-utils';
+import { useCountdown } from './useCountdown';
 
 const RESEND_COOLDOWN_SECONDS = 60;
 
@@ -27,23 +28,7 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
     const [phoneTouched, setPhoneTouched] = useState(false);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [resendCountdown, setResendCountdown] = useState(0);
-    const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-    useEffect(() => {
-        return () => { if (countdownRef.current) clearInterval(countdownRef.current); };
-    }, []);
-
-    const startCountdown = useCallback(() => {
-        setResendCountdown(RESEND_COOLDOWN_SECONDS);
-        if (countdownRef.current) clearInterval(countdownRef.current);
-        countdownRef.current = setInterval(() => {
-            setResendCountdown(prev => {
-                if (prev <= 1) { clearInterval(countdownRef.current!); return 0; }
-                return prev - 1;
-            });
-        }, 1000);
-    }, []);
+    const { count: resendCountdown, start: startCountdown } = useCountdown();
 
     const requestOtp = useCallback(async () => {
         setPhoneTouched(true);
@@ -53,8 +38,7 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
         try {
             await otpApi.requestOtp(phoneE164, locale);
             onSuccess();
-            setResendCountdown(0); // reset before new countdown
-            startCountdown();
+            startCountdown(RESEND_COOLDOWN_SECONDS);
         } catch (err: unknown) {
             captureError(err, 'OTP request failed', { tags: { page } });
             const axiosErr = err as ApiError;

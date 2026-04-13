@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useCountdown } from '@/hooks';
 import { toast } from 'sonner';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
@@ -62,21 +63,7 @@ export default function LoginPage() {
   const [otpCode, setOtpCode] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [otpError, setOtpError] = useState('');
-  const [otpExpiry, setOtpExpiry] = useState(0);
-  const expiryRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const startExpiryTimer = useCallback(() => {
-    setOtpExpiry(5 * 60); // 5 minutes
-    if (expiryRef.current) clearInterval(expiryRef.current);
-    expiryRef.current = setInterval(() => {
-      setOtpExpiry(prev => {
-        if (prev <= 1) { clearInterval(expiryRef.current!); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-  }, []);
-
-  useEffect(() => () => { if (expiryRef.current) clearInterval(expiryRef.current); }, []);
+  const { count: otpExpiry, start: startExpiryTimer } = useCountdown();
 
   const isOtpStep = authTab === 'phone' && otpStep === 'code';
 
@@ -90,7 +77,7 @@ export default function LoginPage() {
     requestOtp: handleRequestOtp,
   } = useOtpRequest({
     page: 'login',
-    onSuccess: () => { setOtpStep('code'); setOtpCode(''); startExpiryTimer(); },
+    onSuccess: () => { setOtpStep('code'); setOtpCode(''); startExpiryTimer(5 * 60); },
   });
 
   const handleVerifyOtp = useCallback(async (completedCode?: string) => {

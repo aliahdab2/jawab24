@@ -190,6 +190,18 @@ const start = async () => {
         statusCode: 429,
         retryAfter: context.after,
       }),
+      onExceeded: (request: { ip: string; url: string; headers: Record<string, string | string[] | undefined> }) => {
+        // Fingerprint by IP + URL so repeated hits group into one Sentry issue
+        // rather than flooding with individual events.
+        Sentry.withScope((scope) => {
+          scope.setFingerprint(['rate-limit-exceeded', request.url, request.ip]);
+          scope.setLevel('warning');
+          scope.setTag('url', request.url);
+          scope.setExtra('ip', request.ip);
+          scope.setExtra('workspaceId', request.headers['x-workspace-id']);
+          Sentry.captureMessage(`Rate limit exceeded: ${request.url}`);
+        });
+      },
     });
 
     // Register other routes

@@ -19,7 +19,7 @@ import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
-import { formatFullTime, formatMessageTime } from '@/utils/formatMessageTime';
+import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import {
   Sparkles,
   Bot,

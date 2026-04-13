@@ -4,16 +4,16 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { useAuthStore } from '@/lib/store';
+import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
-import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead, getUnreadCount } from '@/lib/notifications';
+import { useBodyScrollLock, useNotificationPoller } from '@/hooks';
+import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '@/lib/notifications';
 import { SwipeableNotificationItem } from './SwipeableNotificationItem';
 import { NotificationFilterPills, FILTER_TYPE_MAP, type NotificationFilter } from '../notifications/NotificationFilterPills';
 import { NotificationGroupHeader } from '../notifications/NotificationGroup';
 import { NotificationEmptyState } from '../notifications/NotificationEmptyState';
-import { formatRelativeTime } from '@/utils/formatRelativeTime';
+import { formatRelativeTime } from '@/utils/dateUtils';
 import {
     type Notification,
     type GroupedNotifications,
@@ -40,7 +40,9 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const router = useRouter();
     const [isOpen, setIsOpen] = useState(false);
     const [notifications, setNotifications] = useState<Notification[]>([]);
-    const [unreadCount, setUnreadCount] = useState(0);
+    const storeUnreadCount = useUIStore((s) => s.notificationUnreadCount);
+    const setNotificationUnreadCount = useUIStore((s) => s.setNotificationUnreadCount);
+    const [unreadCount, setUnreadCount] = useState(storeUnreadCount);
     const [loading, setLoading] = useState(false);
     const [activeFilter, setActiveFilter] = useState<NotificationFilter>('all');
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -48,20 +50,12 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const bellRef = useRef<HTMLButtonElement>(null);
 
     useBodyScrollLock(isOpen);
+    useNotificationPoller();
 
-    // Fetch unread count on mount and periodically
+    // Sync local display count from shared store (only one instance polls — see useNotificationPoller)
     useEffect(() => {
-        if (!isAuthenticated) return;
-
-        const fetchUnreadCount = async () => {
-            const count = await getUnreadCount();
-            setUnreadCount(count);
-        };
-
-        fetchUnreadCount();
-        const interval = setInterval(fetchUnreadCount, 60000);
-        return () => clearInterval(interval);
-    }, [isAuthenticated]);
+        setUnreadCount(storeUnreadCount);
+    }, [storeUnreadCount]);
 
     // Fetch notifications when dropdown opens
     useEffect(() => {
@@ -72,11 +66,12 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
             const result = await getNotifications();
             setNotifications(result.notifications);
             setUnreadCount(result.unreadCount);
+            setNotificationUnreadCount(result.unreadCount);
             setLoading(false);
         };
 
         fetchNotifications();
-    }, [isOpen, isAuthenticated]);
+    }, [isOpen, isAuthenticated, setNotificationUnreadCount]);
 
     // Reset filter and expanded groups when dropdown closes
     useEffect(() => {
@@ -198,7 +193,11 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
 
         setNotifications(prev => prev.filter(n => !ids.includes(n.id)));
         if (unreadInGroup > 0) {
-            setUnreadCount(prev => Math.max(0, prev - unreadInGroup));
+            setUnreadCount(prev => {
+                const next = Math.max(0, prev - unreadInGroup);
+                setNotificationUnreadCount(next);
+                return next;
+            });
         }
 
         for (const n of group.notifications) {
