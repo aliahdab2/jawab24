@@ -1,6 +1,6 @@
 import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { subscriptions, plans, usage, usageLogs, pages } from '../db/schema';
+import { subscriptions, plans, usage, usageLogs, pages, workspaces } from '../db/schema';
 import { plansService } from './plans';
 import { redis } from '../lib/redis';
 import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, LimitCheckResult } from '@jawab24/shared';
@@ -309,10 +309,25 @@ export const subscriptionsService = {
      * Get full usage summary with limits and subscription info
      */
     async getUsageSummary(userId: string, workspaceId: string): Promise<UsageSummary | null> {
-        const subscription = await this.getUserSubscription(userId);
+        let subscription = await this.getUserSubscription(userId);
+        let subscriptionOwnerId = userId;
+
+        // Team members have no subscription row — fall back to the workspace owner's plan
+        if (!subscription) {
+            const [workspace] = await db
+                .select({ ownerId: workspaces.ownerId })
+                .from(workspaces)
+                .where(eq(workspaces.id, workspaceId))
+                .limit(1);
+            if (workspace?.ownerId && workspace.ownerId !== userId) {
+                subscription = await this.getUserSubscription(workspace.ownerId);
+                subscriptionOwnerId = workspace.ownerId;
+            }
+        }
+
         if (!subscription) return null;
 
-        const currentUsage = await this.getCurrentUsage(userId);
+        const currentUsage = await this.getCurrentUsage(subscriptionOwnerId);
         const plan = subscription.plan;
 
         // Count enabled page slots (FB + IG counted separately)

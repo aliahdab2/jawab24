@@ -12,7 +12,6 @@ import {
   ChevronRight,
   CreditCard,
   Shield,
-  Plug,
   Users,
   ChevronDown as ChevronDownIcon,
   Check
@@ -114,7 +113,18 @@ const ProfileAvatar = memo(function ProfileAvatar({ picture, name, onError }: { 
   );
 })
 
-export function getNavigationGroups(hasEcommerceStore: boolean) {
+/** Resolves a nav item key to its translated label. Shared by Sidebar and mobile nav. */
+export function resolveNavKey(
+    key: string,
+    tNav: (k: string) => string,
+    tPricing: (k: string) => string,
+): string {
+    if (key.startsWith('nav.')) return tNav(key.replace('nav.', ''));
+    if (key.startsWith('pricing.')) return tPricing(key.replace('pricing.', ''));
+    return key;
+}
+
+export function getNavigationGroups() {
   return [
     {
       labelKey: 'sidebar.overview',
@@ -129,12 +139,6 @@ export function getNavigationGroups(hasEcommerceStore: boolean) {
         { key: 'nav.comments', href: '/comments', icon: MessageSquare },
         { key: 'nav.messages', href: '/messages', icon: MessageCircle },
         { key: 'nav.leads', href: '/leads', icon: Users },
-      ],
-    },
-    {
-      labelKey: 'sidebar.automation',
-      items: [
-        ...(hasEcommerceStore ? [{ key: 'nav.integrations', href: '/integrations', icon: Plug }] : []),
       ],
     },
     {
@@ -299,14 +303,9 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const navigationGroups = getNavigationGroups(user?.hasEcommerceStore ?? false);
+  const navigationGroups = getNavigationGroups();
 
-  // Helper to resolve navigation item translation keys across namespaces
-  const resolveItemKey = (key: string): string => {
-    if (key.startsWith('nav.')) return tNav(key.replace('nav.', '') as Parameters<typeof tNav>[0]);
-    if (key.startsWith('pricing.')) return tPricing(key.replace('pricing.', '') as Parameters<typeof tPricing>[0]);
-    return key;
-  };
+  const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing);
 
   const handleLogout = useCallback(() => {
     logout();

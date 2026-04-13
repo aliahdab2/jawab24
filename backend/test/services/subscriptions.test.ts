@@ -88,6 +88,7 @@ vi.mock('../../src/db/schema', () => ({
     usage: { userId: 'user_id', periodStart: 'period_start', periodEnd: 'period_end' },
     usageLogs: {},
     pages: { userId: 'user_id', id: 'id' },
+    workspaces: { id: 'id', ownerId: 'owner_id' },
 }));
 
 vi.mock('../../src/lib/redis', () => ({
@@ -1146,6 +1147,168 @@ describe('isSubscriptionActive', () => {
         expect(result).toBe(false);
         expect(spy).not.toHaveBeenCalled(); // DB not hit
         spy.mockRestore();
+    });
+
+    describe('getUsageSummary', () => {
+        const mockPlan = {
+            id: 'plan_123',
+            name: 'Business',
+            slug: 'business',
+            price: 2500,
+            maxPages: 3,
+            maxAiRepliesPerMonth: 1500,
+            trialDays: 0,
+            facebookEnabled: true,
+            instagramEnabled: true,
+            whatsappEnabled: false,
+            showBranding: false,
+            prioritySupport: false,
+        };
+
+        const mockSubscription = {
+            id: 'sub_1',
+            userId: 'owner-1',
+            planId: 'plan_123',
+            plan: mockPlan,
+            status: 'active' as const,
+            trialEndsAt: null,
+            currentPeriodStart: new Date('2026-04-01'),
+            currentPeriodEnd: new Date('2026-05-01'),
+            stripeCustomerId: 'cus_xxx',
+            canceledAt: null,
+            cancelReason: null,
+            externalSubscriptionId: null,
+            paymentMethod: 'stripe' as const,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        const mockUsage = {
+            id: 'usage_1',
+            userId: 'owner-1',
+            periodStart: new Date('2026-04-01'),
+            periodEnd: new Date('2026-05-01'),
+            aiRepliesCount: 300,
+            templateRepliesCount: 50,
+            totalCommentsProcessed: 350,
+            totalMessagesProcessed: 100,
+            dailyBreakdown: {},
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        };
+
+        it('returns usage summary for workspace owner', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
+            vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+            vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(2);
+
+            const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
+
+            expect(result).not.toBeNull();
+            expect(subscriptionsService.getUserSubscription).toHaveBeenCalledWith('owner-1');
+            expect(result!.aiReplies.used).toBe(300);
+            expect(result!.pages.used).toBe(2);
+        });
+
+        it('returns null when no subscription and workspace not found', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([]),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.getUsageSummary('owner-1', 'ws-1');
+
+            expect(result).toBeNull();
+        });
+
+        it('falls back to workspace owner subscription for team members', async () => {
+            const getUserSubscription = vi.spyOn(subscriptionsService, 'getUserSubscription')
+                .mockResolvedValueOnce(null)              // member has no subscription
+                .mockResolvedValueOnce(mockSubscription); // owner's subscription
+            vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+            vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(1);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.getUsageSummary('member-1', 'ws-1');
+
+            expect(result).not.toBeNull();
+            expect(getUserSubscription).toHaveBeenCalledWith('member-1');
+            expect(getUserSubscription).toHaveBeenCalledWith('owner-1');
+            expect(result!.aiReplies.used).toBe(300);
+        });
+
+        it('returns null when member has no subscription and owner also has none', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(null);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.getUsageSummary('member-1', 'ws-1');
+
+            expect(result).toBeNull();
+        });
+
+        it('counts page slots by workspaceId, not owner userId', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription')
+                .mockResolvedValueOnce(null)
+                .mockResolvedValueOnce(mockSubscription);
+            vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+            const countSpy = vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(2);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
+                    }),
+                }),
+            } as any);
+
+            await subscriptionsService.getUsageSummary('member-1', 'ws-1');
+
+            expect(countSpy).toHaveBeenCalledWith('ws-1');
+        });
+
+        it('fetches AI usage from owner, not member', async () => {
+            vi.spyOn(subscriptionsService, 'getUserSubscription')
+                .mockResolvedValueOnce(null)
+                .mockResolvedValueOnce(mockSubscription);
+            const getUsageSpy = vi.spyOn(subscriptionsService, 'getCurrentUsage').mockResolvedValue(mockUsage);
+            vi.spyOn(subscriptionsService, 'countEnabledPageSlots').mockResolvedValue(0);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([{ ownerId: 'owner-1' }]),
+                    }),
+                }),
+            } as any);
+
+            await subscriptionsService.getUsageSummary('member-1', 'ws-1');
+
+            expect(getUsageSpy).toHaveBeenCalledWith('owner-1');
+        });
     });
 });
 

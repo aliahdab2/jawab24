@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
-import { Sidebar, getNavigationGroups } from './Sidebar';
+import { Sidebar, getNavigationGroups, resolveNavKey } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -48,7 +48,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const locale = useLocale();
   const { setLanguage } = useLanguage();
   const isRTL = isRTLLocale(locale);
-  const { isAuthenticated, _hasHydrated, logout, user } = useAuthStore();
+  const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   const unreadComments = useUIStore((s) => s.unreadComments);
@@ -309,7 +309,6 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             isRTL={isRTL}
             router={router}
             onLogout={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
-            hasEcommerceStore={user?.hasEcommerceStore ?? false}
           />
         )}
 
@@ -410,30 +409,24 @@ function MobileMenuOverlay({
   isRTL,
   router,
   onLogout,
-  hasEcommerceStore,
 }: {
   isOpen: boolean;
   onClose: () => void;
   isRTL: boolean;
   router: ReturnType<typeof useRouter>;
   onLogout: () => void;
-  hasEcommerceStore: boolean;
 }) {
   const tNav = useTranslations('nav');
   const tPricing = useTranslations('pricing');
   const isLandscape = useLandscape();
   useBodyScrollLock(isOpen);
 
-  const navigationGroups = getNavigationGroups(hasEcommerceStore);
+  const navigationGroups = getNavigationGroups();
   const menuItems = navigationGroups.flatMap((group) =>
     group.items.map((item) => ({
       path: item.href,
       icon: item.icon,
-      label: item.key.startsWith('nav.')
-        ? tNav(item.key.replace('nav.', '') as Parameters<typeof tNav>[0])
-        : item.key.startsWith('pricing.')
-          ? tPricing(item.key.replace('pricing.', '') as Parameters<typeof tPricing>[0])
-          : item.key,
+      label: resolveNavKey(item.key, tNav, tPricing),
     }))
   );
 
