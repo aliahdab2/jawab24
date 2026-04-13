@@ -203,10 +203,19 @@ export default function AuthCallback() {
       }
 
       // Check if phone is required (PHONE_AUTH_ENABLED and user has no phone yet)
-      // Use preferredLocale (login page locale) not finalLocale (dashboard language) —
-      // phone-collect is part of the auth flow, not the dashboard.
       if (data.requiresPhone) {
         const collectUrl = `/auth/phone-collect?redirect=${encodeURIComponent(safeUrl)}`;
+        if (platform === 'mobile') {
+          // Deep-link back to the native app with phone-collect as the redirect target.
+          // This closes Chrome Custom Tab and lets the native app handle the phone step.
+          const tokenStr = encodeURIComponent(data.token);
+          const fbTokenStr = encodeURIComponent(data.fbAccessToken || '');
+          const userStr = encodeURIComponent(JSON.stringify(data.user));
+          window.location.href = `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent(collectUrl)}&user=${userStr}`;
+          return;
+        }
+        // Use preferredLocale (login page locale) not finalLocale (dashboard language) —
+        // phone-collect is part of the auth flow, not the dashboard.
         routerRef.current.replace(collectUrl, collectUrl, { locale: preferredLocale });
         return;
       }

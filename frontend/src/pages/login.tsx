@@ -164,6 +164,12 @@ export default function LoginPage() {
 
         const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
 
+        // Reset button when user closes Chrome Custom Tab without completing login
+        const browserFinishedListener = await Browser.addListener('browserFinished', () => {
+          setIsRedirecting(false);
+          browserFinishedListener.remove();
+        });
+
         await Browser.open({ url: oauthUrl });
       } catch (error: unknown) {
         setIsRedirecting(false);
