@@ -25,6 +25,7 @@
   "markConverted": "تحديد كـ: تحوّل",
   "markNew": "تحديد كـ: جديد",
   "statusUpdated": "تم تحديث الحالة",
+  "statusConvertedCelebration": "تم التحويل — إنجاز رائع!",
   "statusUpdateFailed": "فشل تحديث الحالة",
   "exportCsv": "تصدير CSV",
   "exportFailed": "فشل التصدير. يرجى المحاولة مرة أخرى.",

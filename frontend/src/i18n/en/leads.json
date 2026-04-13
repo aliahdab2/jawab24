@@ -25,6 +25,7 @@
   "markConverted": "Mark as Converted",
   "markNew": "Mark as New",
   "statusUpdated": "Status updated",
+  "statusConvertedCelebration": "Lead converted — great win!",
   "statusUpdateFailed": "Failed to update status",
   "exportCsv": "Export CSV",
   "exportFailed": "Failed to export. Please try again.",

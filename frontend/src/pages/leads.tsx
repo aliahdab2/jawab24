@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, type ReactElement } from 'react';
-import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import Link from 'next/link';
@@ -17,10 +16,8 @@ import {
   Download,
   Lock,
   Loader2,
-  ChevronDown,
-  ChevronRight,
-  Check,
 } from 'lucide-react';
+import { StatusPicker, StatusCell, ALL_STATUSES, STATUS_LABEL_KEY, STATUS_BG } from '@/components/leads/StatusControl';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
@@ -33,129 +30,6 @@ import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 
 type StatusFilter = LeadStatus | 'all';
-
-// ── Status config ─────────────────────────────────────────────────────────────
-
-const ALL_STATUSES: LeadStatus[] = ['new', 'contacted', 'converted'];
-
-const STATUS_LABEL_KEY: Record<LeadStatus, string> = {
-  new:       'statusNew',
-  contacted: 'statusContacted',
-  converted: 'statusConverted',
-};
-
-// Physical bg colors — used in swipe panel (needs physical screen positioning)
-const STATUS_BG: Record<LeadStatus, string> = {
-  new:       'bg-blue-500',
-  contacted: 'bg-amber-500',
-  converted: 'bg-green-500',
-};
-
-interface StatusDropdownProps {
-  status: LeadStatus;
-  t: ReturnType<typeof useTranslations>;
-  onSelect: (next: LeadStatus) => void;
-  disabled?: boolean;
-}
-
-const STATUS_DOT: Record<LeadStatus, string> = {
-  new:       'bg-blue-400',
-  contacted: 'bg-amber-400',
-  converted: 'bg-green-500',
-};
-
-function StatusDropdown({ status, t, onSelect, disabled }: StatusDropdownProps) {
-  const [open, setOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
-  const triggerRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    const onScroll = () => setOpen(false);
-    document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKeyDown);
-    window.addEventListener('scroll', onScroll, true);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('scroll', onScroll, true);
-    };
-  }, [open]);
-
-  const handleOpen = () => {
-    if (disabled) return;
-    if (!open && triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      setCoords({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-    }
-    setOpen((o) => !o);
-  };
-
-  const labelKey = STATUS_LABEL_KEY[status] as Parameters<typeof t>[0];
-
-  const menu = open && createPortal(
-    <div
-      role="listbox"
-      style={{ position: 'fixed', top: coords.top, left: coords.left, minWidth: Math.max(coords.width, 150), zIndex: 9999 }}
-      className="bg-card border border-theme-border rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
-    >
-      {ALL_STATUSES.map((s) => {
-        const key = STATUS_LABEL_KEY[s] as Parameters<typeof t>[0];
-        const isSelected = s === status;
-        return (
-          <button
-            key={s}
-            role="option"
-            aria-selected={isSelected}
-            type="button"
-            onClick={() => { onSelect(s); setOpen(false); }}
-            className={clsx(
-              'w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm transition-colors text-start',
-              isSelected ? 'bg-muted/60 text-foreground font-medium' : 'text-foreground/70 hover:bg-muted/40',
-            )}
-          >
-            <span className="inline-flex items-center gap-2">
-              <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[s])} />
-              {t(key)}
-            </span>
-            {isSelected && <Check className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />}
-          </button>
-        );
-      })}
-    </div>,
-    document.body,
-  );
-
-  return (
-    <div className="relative inline-block">
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={handleOpen}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className={clsx(
-          'inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all',
-          'bg-card border-theme-border text-foreground',
-          disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:border-brand-400/60 hover:bg-muted/50',
-          open && 'border-brand-400/60 bg-muted/50',
-        )}
-      >
-        <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[status])} />
-        {t(labelKey)}
-        <ChevronDown className={clsx('w-3 h-3 text-icon-muted transition-transform', open && 'rotate-180')} aria-hidden="true" />
-      </button>
-      {menu}
-    </div>
-  );
-}
 
 // ── Lead card (mobile, swipeable) ─────────────────────────────────────────────
 
@@ -277,7 +151,7 @@ function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPendin
             </p>
           </div>
           <span className={clsx(
-            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium text-white flex-shrink-0',
+            'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium text-white flex-shrink-0',
             STATUS_BG[lead.status],
           )}>
             <span className="w-1.5 h-1.5 rounded-full bg-white/60" aria-hidden="true" />
@@ -322,51 +196,6 @@ function LeadCard({ lead, language, onStatusChange, onDelete, onSelect, isPendin
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ── Status picker (panel only) — segmented control, no dropdown ───────────────
-
-interface StatusPickerProps {
-  status: LeadStatus;
-  onSelect: (next: LeadStatus) => void;
-  t: ReturnType<typeof useTranslations>;
-  disabled?: boolean;
-}
-
-const STATUS_SEGMENT_SELECTED: Record<LeadStatus, string> = {
-  new:       'bg-blue-500 text-white',
-  contacted: 'bg-amber-500 text-white',
-  converted: 'bg-green-500 text-white',
-};
-
-function StatusPicker({ status, onSelect, t, disabled }: StatusPickerProps) {
-  return (
-    <div className={clsx('flex rounded-lg border border-theme-border overflow-hidden', disabled && 'opacity-50')}>
-      {ALL_STATUSES.map((s, i) => {
-        const key = STATUS_LABEL_KEY[s] as Parameters<typeof t>[0];
-        const isSelected = s === status;
-        return (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onSelect(s)}
-            disabled={disabled}
-            className={clsx(
-              'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-all whitespace-nowrap',
-              i > 0 && 'border-s border-theme-border',
-              isSelected
-                ? STATUS_SEGMENT_SELECTED[s]
-                : 'text-muted-foreground hover:bg-muted/60',
-              disabled && 'cursor-not-allowed',
-            )}
-          >
-            <span className={clsx('w-1.5 h-1.5 rounded-full flex-shrink-0', isSelected ? 'bg-white/70' : STATUS_DOT[s])} aria-hidden="true" />
-            {t(key)}
-          </button>
-        );
-      })}
     </div>
   );
 }
@@ -489,10 +318,10 @@ function LeadRow({ lead, language, onStatusChange, onDelete, onSelect, isPending
       className="group border-b border-theme-border hover:bg-muted/40 transition-colors cursor-pointer"
       onClick={() => onSelect(lead)}
     >
-      <td className="px-4 py-3 text-sm text-foreground font-medium">
+      <td className="px-4 py-4 text-sm text-foreground font-medium">
         {lead.senderName ?? '—'}
       </td>
-      <td className="px-4 py-3 text-sm" dir="ltr" onClick={(e) => e.stopPropagation()}>
+      <td className="px-4 py-4 text-sm" dir="ltr" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm text-foreground select-all cursor-text">{lead.phone}</span>
           <a
@@ -504,33 +333,27 @@ function LeadRow({ lead, language, onStatusChange, onDelete, onSelect, isPending
           </a>
         </div>
       </td>
-      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-        <StatusDropdown
-          status={lead.status}
-          t={t}
-          onSelect={(next) => onStatusChange(lead, next)}
-          disabled={isPending}
-        />
+      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+        <StatusCell lead={lead} onStatusChange={onStatusChange} isPending={isPending} t={t} />
       </td>
-      <td className="px-4 py-3 max-w-[200px]">
+      <td className="px-4 py-4 max-w-[200px]">
         <p className="text-sm text-muted-foreground truncate">
           {lead.extractedData?.summary ?? '—'}
         </p>
       </td>
-      <td className="px-4 py-3 text-sm text-muted-foreground whitespace-nowrap">
+      <td className="px-4 py-4 text-sm text-muted-foreground whitespace-nowrap">
         {formatDateForExport(lead.createdAt, language)}
       </td>
-      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-end gap-1">
+      <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-end">
           <button
             onClick={() => onDelete(lead)}
             disabled={isPending}
-            className="text-icon-muted hover:text-red-400 transition-colors disabled:opacity-50 p-1 opacity-0 group-hover:opacity-100"
+            className="text-icon-muted hover:text-red-400 transition-colors disabled:opacity-50 p-1.5 opacity-0 group-hover:opacity-100"
             aria-label={t('deleteLead')}
           >
             <Trash2 className="w-4 h-4" aria-hidden="true" />
           </button>
-          <ChevronRight className="w-4 h-4 text-icon-muted flex-shrink-0" aria-hidden="true" />
         </div>
       </td>
     </tr>
@@ -626,8 +449,12 @@ const LeadsPage: NextPageWithLayout = () => {
   const statusMutation = useMutation({
     mutationFn: ({ lead, status }: { lead: Lead; status: LeadStatus }) =>
       leadsApi.updateStatus(lead.id, lead.pageId, status),
-    onSuccess: () => {
-      toast.success(t('statusUpdated'), { id: 'lead-status' });
+    onSuccess: (_, { status }) => {
+      if (status === 'converted') {
+        toast.success(`🎉 ${t('statusConvertedCelebration')}`, { id: 'lead-status', duration: 4000 });
+      } else {
+        toast.success(t('statusUpdated'), { id: 'lead-status' });
+      }
       queryClient.invalidateQueries({ queryKey: ['leads', selectedPageId] });
     },
     onError: (err) => {
@@ -806,12 +633,12 @@ const LeadsPage: NextPageWithLayout = () => {
             <table className="w-full text-start">
               <thead>
                 <tr className="border-b border-theme-border bg-muted/30">
-                  <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('name')}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('phone')}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('status')}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('intent')}</th>
-                  <th className="px-4 py-3 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('createdAt')}</th>
-                  <th className="px-4 py-3 w-16"></th>
+                  <th className="px-4 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('name')}</th>
+                  <th className="px-4 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('phone')}</th>
+                  <th className="px-4 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('status')}</th>
+                  <th className="px-4 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('intent')}</th>
+                  <th className="px-4 py-4 text-xs font-bold text-muted-foreground uppercase tracking-wide text-start">{t('createdAt')}</th>
+                  <th className="px-4 py-4 w-16"></th>
                 </tr>
               </thead>
               <tbody>
