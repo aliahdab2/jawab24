@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { formatFullTime, formatMessageTime } from './formatMessageTime';
+import { formatFullTime, formatMessageTime } from './dateUtils';
 
 const NOW = new Date('2026-04-10T10:00:00.000Z').getTime();
 

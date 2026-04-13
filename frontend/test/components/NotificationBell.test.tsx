@@ -11,9 +11,16 @@ vi.mock('sonner', () => ({
 // Mock useAuthStore
 let mockIsAuthenticated = true;
 
+let mockNotificationUnreadCount = 0;
+const mockSetNotificationUnreadCount = vi.fn((count: number) => { mockNotificationUnreadCount = count; });
+
 vi.mock('../../src/lib/store', () => ({
     useAuthStore: () => ({
         isAuthenticated: mockIsAuthenticated,
+    }),
+    useUIStore: (selector: (s: { notificationUnreadCount: number; setNotificationUnreadCount: typeof mockSetNotificationUnreadCount }) => unknown) => selector({
+        notificationUnreadCount: mockNotificationUnreadCount,
+        setNotificationUnreadCount: mockSetNotificationUnreadCount,
     }),
 }));
 
@@ -61,7 +68,8 @@ describe('NotificationBell', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockIsAuthenticated = true;
-        mockGetUnreadCount.mockResolvedValue(0);
+        mockNotificationUnreadCount = 0;
+        mockGetUnreadCount.mockResolvedValue({ count: 0 });
         mockGetNotifications.mockResolvedValue({ notifications: [], unreadCount: 0 });
     });
 
@@ -77,7 +85,9 @@ describe('NotificationBell', () => {
     });
 
     it('should show badge with unread count when > 0', async () => {
-        mockGetUnreadCount.mockResolvedValue(5);
+        // Set store value before render — the component initializes unreadCount from the store.
+        mockNotificationUnreadCount = 5;
+        mockGetUnreadCount.mockResolvedValue({ count: 5 });
 
         render(<NotificationBell />);
 
@@ -87,7 +97,8 @@ describe('NotificationBell', () => {
     });
 
     it('should show 99+ when count exceeds 99', async () => {
-        mockGetUnreadCount.mockResolvedValue(150);
+        mockNotificationUnreadCount = 150;
+        mockGetUnreadCount.mockResolvedValue({ count: 150 });
 
         render(<NotificationBell />);
 
@@ -97,7 +108,7 @@ describe('NotificationBell', () => {
     });
 
     it('should not show badge when count is 0', async () => {
-        mockGetUnreadCount.mockResolvedValue(0);
+        mockGetUnreadCount.mockResolvedValue({ count: 0 });
 
         render(<NotificationBell />);
 
@@ -120,7 +131,7 @@ describe('NotificationBell', () => {
     });
 
     it('should call getUnreadCount on mount', async () => {
-        mockGetUnreadCount.mockResolvedValue(3);
+        mockGetUnreadCount.mockResolvedValue({ count: 3 });
 
         render(<NotificationBell />);
 
@@ -131,7 +142,7 @@ describe('NotificationBell', () => {
 
     it('should handle API errors gracefully (returns 0)', async () => {
         // Real getUnreadCount catches errors and returns 0
-        mockGetUnreadCount.mockResolvedValue(0);
+        mockGetUnreadCount.mockResolvedValue({ count: 0 });
 
         render(<NotificationBell />);
 
@@ -240,7 +251,7 @@ describe('NotificationBell', () => {
 
     it('should mark all as read when clicking mark all button', async () => {
         mockMarkAllNotificationsAsRead.mockResolvedValue(undefined);
-        mockGetUnreadCount.mockResolvedValue(2);
+        mockGetUnreadCount.mockResolvedValue({ count: 2 });
         mockGetNotifications.mockResolvedValue({
             notifications: [{ ...sampleNotification, read: false }],
             unreadCount: 2
@@ -272,7 +283,7 @@ describe('NotificationBell', () => {
     it('should refresh count periodically', async () => {
         vi.useFakeTimers();
 
-        mockGetUnreadCount.mockResolvedValue(1);
+        mockGetUnreadCount.mockResolvedValue({ count: 1 });
 
         let unmount: (() => void) | null = null;
         await act(async () => {
@@ -732,7 +743,7 @@ describe('NotificationBell', () => {
 
     describe('Header layout', () => {
         it('should separate Mark all read from close button', async () => {
-            mockGetUnreadCount.mockResolvedValue(2);
+            mockGetUnreadCount.mockResolvedValue({ count: 2 });
             mockGetNotifications.mockResolvedValue({
                 notifications: [{ ...sampleNotification, read: false }],
                 unreadCount: 2,

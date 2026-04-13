@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatRelativeTime } from './formatRelativeTime';
+import { formatRelativeTime } from './dateUtils';
 import timeEN from '../i18n/en/time.json';
 
 // Mock translator that returns the key + params for logic assertions

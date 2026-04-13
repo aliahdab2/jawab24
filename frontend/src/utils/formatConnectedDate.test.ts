@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatConnectedDate } from './formatConnectedDate';
+import { formatConnectedDate } from './dateUtils';
 import pagesEN from '../i18n/en/pages.json';
 
 // Mock translator for logic assertions
