@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, type ReactElement } from 'react';
+import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import Link from 'next/link';
@@ -62,32 +63,78 @@ const STATUS_DOT: Record<LeadStatus, string> = {
 
 function StatusDropdown({ status, t, onSelect, disabled }: StatusDropdownProps) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onMouseDown = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (triggerRef.current && !triggerRef.current.contains(e.target as Node)) setOpen(false);
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false);
     };
+    const onScroll = () => setOpen(false);
     document.addEventListener('mousedown', onMouseDown);
     document.addEventListener('keydown', onKeyDown);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
       document.removeEventListener('mousedown', onMouseDown);
       document.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
 
+  const handleOpen = () => {
+    if (disabled) return;
+    if (!open && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setCoords({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+    setOpen((o) => !o);
+  };
+
   const labelKey = STATUS_LABEL_KEY[status] as Parameters<typeof t>[0];
 
+  const menu = open && createPortal(
+    <div
+      role="listbox"
+      style={{ position: 'fixed', top: coords.top, left: coords.left, minWidth: Math.max(coords.width, 150), zIndex: 9999 }}
+      className="bg-card border border-theme-border rounded-xl shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
+    >
+      {ALL_STATUSES.map((s) => {
+        const key = STATUS_LABEL_KEY[s] as Parameters<typeof t>[0];
+        const isSelected = s === status;
+        return (
+          <button
+            key={s}
+            role="option"
+            aria-selected={isSelected}
+            type="button"
+            onClick={() => { onSelect(s); setOpen(false); }}
+            className={clsx(
+              'w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm transition-colors text-start',
+              isSelected ? 'bg-muted/60 text-foreground font-medium' : 'text-foreground/70 hover:bg-muted/40',
+            )}
+          >
+            <span className="inline-flex items-center gap-2">
+              <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[s])} />
+              {t(key)}
+            </span>
+            {isSelected && <Check className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />}
+          </button>
+        );
+      })}
+    </div>,
+    document.body,
+  );
+
   return (
-    <div ref={ref} className="relative inline-block">
-      {/* Trigger — looks like a form control, not a badge */}
+    <div className="relative inline-block">
       <button
+        ref={triggerRef}
         type="button"
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onClick={handleOpen}
         disabled={disabled}
         aria-haspopup="listbox"
         aria-expanded={open}
@@ -102,37 +149,7 @@ function StatusDropdown({ status, t, onSelect, disabled }: StatusDropdownProps) 
         {t(labelKey)}
         <ChevronDown className={clsx('w-3 h-3 text-icon-muted transition-transform', open && 'rotate-180')} aria-hidden="true" />
       </button>
-
-      {open && (
-        <div
-          role="listbox"
-          className="absolute start-0 top-full mt-1 z-50 bg-card border border-theme-border rounded-xl shadow-xl min-w-[150px] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150"
-        >
-          {ALL_STATUSES.map((s) => {
-            const key = STATUS_LABEL_KEY[s] as Parameters<typeof t>[0];
-            const isSelected = s === status;
-            return (
-              <button
-                key={s}
-                role="option"
-                aria-selected={isSelected}
-                type="button"
-                onClick={() => { onSelect(s); setOpen(false); }}
-                className={clsx(
-                  'w-full flex items-center justify-between gap-3 px-3 py-2.5 text-sm transition-colors text-start',
-                  isSelected ? 'bg-muted/60 text-foreground font-medium' : 'text-foreground/70 hover:bg-muted/40',
-                )}
-              >
-                <span className="inline-flex items-center gap-2">
-                  <span className={clsx('w-2 h-2 rounded-full flex-shrink-0', STATUS_DOT[s])} />
-                  {t(key)}
-                </span>
-                {isSelected && <Check className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" aria-hidden="true" />}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      {menu}
     </div>
   );
 }
