@@ -42,10 +42,10 @@ function createMockAdapter(
             };
         }),
         sendReply: vi.fn().mockResolvedValue({ success: true }),
-        markAsReplied: vi.fn(async (commentId, replyText, replyMethod, detectedLanguage, templateId, needsAttention, flagReason, aiIntent) => {
+        markAsReplied: vi.fn(async (commentId, replyText, replyMethod, detectedLanguage, needsAttention, flagReason, aiIntent, aiOriginalReply) => {
             await commentsService.markAsReplied(
-                commentId, replyText, replyMethod, templateId,
-                detectedLanguage, needsAttention, flagReason, aiIntent,
+                commentId, replyText, replyMethod, detectedLanguage,
+                needsAttention, flagReason, aiIntent, aiOriginalReply,
             );
         }),
         buildGeneratorContext: vi.fn((p: PlatformPage, _content: ContentEntity, contentId: string): CommentReplyContext => ({

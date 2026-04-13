@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createTestUser, createTestPage, insertMessage, testDb } from './setup';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import * as schema from '../../src/db/schema';
 import { authService } from '../../src/services/auth';
 
@@ -14,18 +14,9 @@ async function seedFullUserData(userId: string, pageId: string) {
         pageId, facebookPostId: `post-${Date.now()}`, message: 'Test post',
     }).returning();
 
-    const [template] = await testDb.insert(schema.templates).values({
-        userId, name: 'Greeting Template',
-    }).returning();
-
     await testDb.insert(schema.comments).values({
         postId: post.id, facebookCommentId: `comment-${Date.now()}`,
-        message: 'Hello!', templateId: template.id,
-    });
-
-    // Rule referencing template
-    await testDb.insert(schema.rules).values({
-        userId, name: 'Auto-greet', templateId: template.id,
+        message: 'Hello!',
     });
 
     // Settings
@@ -46,7 +37,7 @@ async function seedFullUserData(userId: string, pageId: string) {
         userId, pageId, action: 'test_action', status: 'success',
     });
 
-    return { postId: post.id, templateId: template.id };
+    return { postId: post.id };
 }
 
 // ---------------------------------------------------------------------------
@@ -71,9 +62,6 @@ describe('deleteUser — explicit ordered deletion', () => {
         // Assert: all related data is gone
         const [pageRow] = await testDb.select().from(schema.pages).where(eq(schema.pages.userId, user.id));
         expect(pageRow).toBeUndefined();
-
-        const [templateRow] = await testDb.select().from(schema.templates).where(eq(schema.templates.userId, user.id));
-        expect(templateRow).toBeUndefined();
 
         const [settingsRow] = await testDb.select().from(schema.settings).where(eq(schema.settings.userId, user.id));
         expect(settingsRow).toBeUndefined();

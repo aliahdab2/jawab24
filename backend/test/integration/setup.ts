@@ -30,7 +30,7 @@ beforeEach(async () => {
     await testDb.execute(sql`
         TRUNCATE TABLE
             logs, comments, instagram_comments, posts, instagram_media,
-            messages, conversation_pauses, rules, templates, settings,
+            messages, conversation_pauses, settings,
             subscriptions, usage, usage_logs, device_tokens, notifications,
             refresh_tokens, workspace_invites, workspace_members, workspaces,
             kb_chunks, kb_gaps,

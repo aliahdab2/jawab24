@@ -64,25 +64,6 @@ describe('Demo seed — workspace scoping', () => {
         expect(pages.every(p => p.workspaceId === ws.id)).toBe(true);
     });
 
-    it('seeded templates belong to the workspace', async () => {
-        const { testDb } = await import('./setup');
-        const { templates } = await import('../../src/db/schema');
-        const { eq } = await import('drizzle-orm');
-
-        const user = await createTestUser({ facebookId: 'demo_user_jawab24_tmpl' });
-        const ws = await createTestWorkspace(user.id);
-
-        await seedDemoData(user.id, ws.id);
-
-        const wsTemplates = await testDb
-            .select()
-            .from(templates)
-            .where(eq(templates.workspaceId, ws.id));
-
-        expect(wsTemplates.length).toBeGreaterThan(0);
-        expect(wsTemplates.every(t => t.workspaceId === ws.id)).toBe(true);
-    });
-
     it('seeded pages are NOT visible under a different workspace', async () => {
         const user = await createTestUser({ facebookId: 'demo_user_jawab24_iso' });
         const ws = await createTestWorkspace(user.id);
