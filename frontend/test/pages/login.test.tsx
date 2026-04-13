@@ -55,9 +55,11 @@ vi.mock('@capacitor-community/facebook-login', () => ({
 
 // Mock Capacitor Browser (used as web OAuth fallback on Android)
 const mockBrowserOpen = vi.fn().mockResolvedValue(undefined);
+const mockBrowserAddListener = vi.fn().mockResolvedValue({ remove: vi.fn() });
 vi.mock('@capacitor/browser', () => ({
     Browser: {
         open: (...args: unknown[]) => mockBrowserOpen(...args),
+        addListener: (...args: unknown[]) => mockBrowserAddListener(...args),
     }
 }));
 
