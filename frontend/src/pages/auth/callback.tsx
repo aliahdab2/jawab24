@@ -239,7 +239,7 @@ export default function AuthCallback() {
       // Aborted — user navigated away, silently ignore
       if (err instanceof Error && err.name === 'AbortError') return;
 
-      const isNetworkError = err instanceof TypeError && (
+      const isNetworkError = err instanceof Error && (
         err.message.includes('Failed to fetch') || // Chrome
         err.message.includes('NetworkError')       // Firefox
       );
