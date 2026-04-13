@@ -396,6 +396,12 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         // Fast-path: handle auth sync inline instead of navigating to /auth/sync page.
         // The callback passes the full user object in the deep link URL, so we can
         // hydrate the store synchronously — zero network calls, instant redirect.
+        // OAuth cancelled or failed — return to login
+        if (slug.startsWith('/auth/error')) {
+          routerRef.current.replace('/login').catch((err: unknown) => captureError(err, 'Deep link error redirect failed', { tags: { page: 'deep-link', action: 'error' } }));
+          return;
+        }
+
         if (slug.startsWith('/auth/sync') || slug.startsWith('/auth/app-sync')) {
           const params = new URLSearchParams(slug.split('?')[1] || '');
           const token = params.get('token');

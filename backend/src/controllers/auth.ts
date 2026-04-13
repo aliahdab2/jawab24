@@ -126,6 +126,122 @@ export class AuthController {
     }
 
     /**
+     * Mobile OAuth callback — GET /auth/facebook/mobile-callback
+     *
+     * Facebook redirects here after the user authorises the app on mobile.
+     * The server exchanges the code, builds a JWT, then HTTP 302 redirects
+     * to the custom URL scheme so the Chrome Custom Tab closes and the native
+     * app opens directly — no JavaScript navigation, no App Links dependency.
+     *
+     * This follows RFC 8252 §7.2 (Loopback/Private-Use URI Scheme Redirect).
+     */
+    async mobileFacebookCallback(
+        request: FastifyRequest<{ Querystring: { code?: string; error?: string; state?: string } }>,
+        reply: FastifyReply,
+    ) {
+        const { code, error: fbError, state } = request.query;
+
+        // Parse state: "returnUrl|mobile|locale"
+        const parts = (state ? decodeURIComponent(state) : '').split('|');
+        const returnUrlRaw = parts[0] || '/dashboard';
+        const locale = parts[2] || 'ar';
+        const safeReturn = returnUrlRaw.startsWith('/') ? returnUrlRaw : '/dashboard';
+
+        const errorRedirect = `com.jawab24.app://auth/error?reason=cancelled&locale=${encodeURIComponent(locale)}`;
+
+        if (fbError || !code) {
+            return reply.redirect(errorRedirect);
+        }
+
+        // redirect_uri must match exactly what was sent in the OAuth initiation
+        const backendUrl = process.env.BACKEND_PUBLIC_URL || 'https://jawab24.com/api';
+        const redirectUri = `${backendUrl}/auth/facebook/mobile-callback`;
+
+        try {
+            // 1. Exchange code for access token
+            const accessToken = await facebookService.getAccessToken(code, redirectUri);
+
+            // 2. Exchange for long-lived token
+            let longLivedToken = accessToken;
+            let tokenExpiresAt: Date | undefined;
+            try {
+                const { token: llt, expiresAt } = await facebookService.getLongLivedToken(accessToken);
+                longLivedToken = llt;
+                tokenExpiresAt = expiresAt;
+            } catch (err) {
+                request.log.warn({ err }, 'mobileFacebookCallback: could not get long-lived token');
+            }
+
+            // 3. Get Facebook profile
+            const fbProfile = await facebookService.getUserProfile(longLivedToken);
+
+            // 4. Find or create user
+            const user = await authService.findOrCreateUser(
+                fbProfile.id,
+                fbProfile.name,
+                fbProfile.email,
+                longLivedToken,
+                tokenExpiresAt,
+                fbProfile.picture,
+            );
+
+            // 5. Generate JWT
+            const token = authService.generateToken(user);
+
+            // 6. Fetch settings + workspaces
+            const [userSettings, workspaces] = await Promise.all([
+                settingsService.getSettings(user.id),
+                workspaceService.getUserWorkspaces(user.id),
+            ]);
+
+            // 7. Sync pages
+            const syncWorkspaceId = workspaces.find(w => w.role === 'owner')?.id;
+            if (syncWorkspaceId) {
+                try {
+                    await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
+                } catch (err) {
+                    request.log.warn({ err }, 'mobileFacebookCallback: page sync failed (non-fatal)');
+                }
+            }
+
+            // 8. Build user payload for deep link
+            const requiresPhone = config.phoneAuthEnabled && !user.phone;
+            const userPayload = {
+                id: user.id,
+                name: user.name || '',
+                email: user.email || undefined,
+                facebookId: user.facebookId,
+                phone: user.phone,
+                picture: user.picture || undefined,
+                isAdmin: user.isAdmin || false,
+            };
+
+            // 9. Determine where the app should navigate after auth
+            let redirectTarget = safeReturn;
+            if (requiresPhone) {
+                redirectTarget = `/auth/phone-collect?redirect=${encodeURIComponent(safeReturn)}`;
+            } else if (userSettings.dashboardLanguage) {
+                // Apply server-side language preference by embedding it in the redirect
+                redirectTarget = safeReturn;
+            }
+
+            // 10. HTTP 302 → custom scheme — Chrome Custom Tab follows the redirect,
+            //     Android fires an intent to the native app, tab closes automatically.
+            const tokenStr = encodeURIComponent(token);
+            const fbTokenStr = encodeURIComponent(longLivedToken);
+            const redirectStr = encodeURIComponent(redirectTarget);
+            const userStr = encodeURIComponent(JSON.stringify(userPayload));
+
+            return reply.redirect(
+                `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`,
+            );
+        } catch (error) {
+            request.log.error({ err: error }, 'mobileFacebookCallback failed');
+            return reply.redirect(errorRedirect);
+        }
+    }
+
+    /**
      * Handle Native Mobile Facebook Login
      * POST /auth/facebook/native
      */

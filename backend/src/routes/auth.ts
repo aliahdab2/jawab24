@@ -16,6 +16,17 @@ export default async function authRoutes(fastify: FastifyInstance) {
         },
     }, authController.facebookLogin);
 
+    // Mobile OAuth callback — Facebook redirects here for native app logins.
+    // Server exchanges the code and HTTP 302 redirects to com.jawab24.app://
+    // so Chrome Custom Tab closes and the native app opens directly.
+    fastify.get('/auth/facebook/mobile-callback', {
+        ...authRateLimit,
+        schema: {
+            tags: ['Auth'],
+            summary: 'Mobile Facebook OAuth callback (server-side redirect to custom scheme)',
+        },
+    }, authController.mobileFacebookCallback);
+
     // Native Mobile Login (with schema validation)
     fastify.post('/auth/facebook/native', {
         ...authRateLimit,

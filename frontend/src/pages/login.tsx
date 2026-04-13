@@ -154,9 +154,10 @@ export default function LoginPage() {
       try {
         const { Browser } = await import('@capacitor/browser');
 
-        const normalizedOrigin = BRAND_ASSETS.urls.base;
-        const localePath = getLocalePath(locale);
-        const redirectUri = encodeURIComponent(`${normalizedOrigin}${localePath}${FB_CALLBACK_PATH}`);
+        // Server-side callback: backend exchanges the code and HTTP 302 redirects
+        // to com.jawab24.app:// directly — no client-side code exchange needed.
+        const apiUrl = (process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api').replace(/\/$/, '');
+        const redirectUri = encodeURIComponent(`${apiUrl}/auth/facebook/mobile-callback`);
         const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
         const returnUrl = router.query.redirect as string || '/dashboard';
