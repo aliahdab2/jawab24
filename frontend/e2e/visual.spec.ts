@@ -71,25 +71,6 @@ const MOCK_MESSAGES = {
   pagination: { nextCursor: null },
 };
 
-const MOCK_TEMPLATES = {
-  data: [
-    { id: 't1', name: 'Welcome', message: 'Welcome to our business!', enabled: true,
-      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
-    { id: 't2', name: 'Business Hours', message: 'We are open 9 AM - 5 PM.', enabled: true,
-      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
-  ],
-};
-
-const MOCK_RULES = {
-  data: [
-    { id: 'r1', name: 'Price Inquiry', keywords: ['price', 'cost', 'how much'],
-      templateId: 't1', enabled: true, priority: 1,
-      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
-    { id: 'r2', name: 'Hours Question', keywords: ['hours', 'open', 'when'],
-      templateId: 't2', enabled: true, priority: 2,
-      createdAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' },
-  ],
-};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -143,10 +124,6 @@ function setupApiMocks(page: import('@playwright/test').Page) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENTS) });
     if (url.includes('/messages'))
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGES) });
-    if (url.includes('/templates'))
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_TEMPLATES) });
-    if (url.includes('/rules'))
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_RULES) });
     if (url.includes('/pages'))
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
     if (url.includes('/subscription/usage'))
@@ -288,13 +265,6 @@ test.describe('Dashboard Page Spacing', () => {
     await page.waitForSelector('h1', { timeout: 15000 });
     await page.waitForTimeout(800);
     await expect(page).toHaveScreenshot('messages-en-mobile.png', SNAP_OPTS);
-  });
-
-  test('preset replies page spacing', async ({ page }) => {
-    await page.goto('/en/preset-replies');
-    await page.waitForSelector('h1', { timeout: 15000 });
-    await page.waitForTimeout(800);
-    await expect(page).toHaveScreenshot('preset-replies-en-mobile.png', SNAP_OPTS);
   });
 
   test('settings page spacing', async ({ page }) => {

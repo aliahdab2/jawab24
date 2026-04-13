@@ -87,7 +87,7 @@ describe('CompleteProfilePage', () => {
 
   it('should respect redirect query param when user has email', () => {
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
-      query: { redirect: '/rules' },
+      query: { redirect: '/pages' },
       push: mockPush,
       replace: mockReplace,
       pathname: '/complete-profile',
@@ -100,7 +100,7 @@ describe('CompleteProfilePage', () => {
     });
 
     render(<CompleteProfilePage />);
-    expect(mockPush).toHaveBeenCalledWith('/rules');
+    expect(mockPush).toHaveBeenCalledWith('/pages');
   });
 
   // ─── Email validation ────────────────────────────────────

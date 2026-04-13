@@ -126,8 +126,8 @@ export class CommentProcessor {
                         triggerKeyword: matchedKeyword,
                     });
                 }
-                // No match — fall through to preset replies / AI pipeline
-                this.logger.info(`[${platform}] Trigger keywords set but comment did not match — falling through to preset/AI`, {
+                // No match — fall through to AI
+                this.logger.info(`[${platform}] Trigger keywords set but comment did not match — falling through to AI`, {
                     platformCommentId, triggerKeywords,
                 });
             } else if (content.triggerKeyword) {

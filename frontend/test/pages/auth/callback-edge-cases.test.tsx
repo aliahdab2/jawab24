@@ -301,7 +301,7 @@ describe('AuthCallback - edge cases', () => {
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
       query: {
         code: 'valid-code',
-        state: encodeURIComponent('/rules|web|ar'),
+        state: encodeURIComponent('/pages|web|ar'),
       },
       isReady: true,
       push: mockPush,
@@ -315,7 +315,7 @@ describe('AuthCallback - edge cases', () => {
     });
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/rules', '/rules', { locale: 'ar' });
+      expect(mockReplace).toHaveBeenCalledWith('/pages', '/pages', { locale: 'ar' });
     });
   });
 

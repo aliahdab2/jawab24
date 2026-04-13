@@ -44,14 +44,6 @@ const MOCK_MESSAGES = {
   pagination: { nextCursor: null },
 };
 
-const MOCK_TEMPLATES = [
-  { id: 'tpl_1', name: 'Welcome', translations: { en: 'Hello! Welcome to our page.', ar: 'مرحبا! أهلا بك في صفحتنا.' }, active: true },
-  { id: 'tpl_2', name: 'Pricing', translations: { en: 'Our prices start at $5.', ar: 'أسعارنا تبدأ من 5 دولار.' }, active: true },
-];
-
-const MOCK_RULES = [
-  { id: 'rule_1', name: 'Greeting Rule', keywords: ['hello', 'hi', 'مرحبا'], templateId: 'tpl_1', enabled: true, priority: 1 },
-];
 
 const MOCK_USAGE = {
   data: {
@@ -101,12 +93,6 @@ function setupApiMocks(page: import('@playwright/test').Page) {
     }
     if (url.includes('/messages')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_MESSAGES) });
-    }
-    if (url.includes('/rules')) {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_RULES }) });
-    }
-    if (url.includes('/templates')) {
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_TEMPLATES }) });
     }
     if (url.includes('/pages')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
@@ -164,8 +150,6 @@ const AUTH_PAGES = [
   { url: '/en/comments', name: 'comments', waitFor: 'h1' },
   { url: '/en/messages', name: 'messages', waitFor: 'h1' },
   { url: '/en/pages', name: 'pages', waitFor: 'h1' },
-  { url: '/en/templates', name: 'templates', waitFor: 'h1' },
-  { url: '/en/rules', name: 'rules', waitFor: 'h1' },
   { url: '/en/settings', name: 'settings', waitFor: 'h1' },
 ];
 

@@ -40,7 +40,6 @@ import enPlans from '../src/i18n/en/plans.json';
 import enPricing from '../src/i18n/en/pricing.json';
 import enPrivacy from '../src/i18n/en/privacy.json';
 import enProfile from '../src/i18n/en/profile.json';
-import enRules from '../src/i18n/en/rules.json';
 import enSalla from '../src/i18n/en/salla.json';
 import enSettings from '../src/i18n/en/settings.json';
 import enShopify from '../src/i18n/en/shopify.json';
@@ -48,7 +47,6 @@ import enSidebar from '../src/i18n/en/sidebar.json';
 import enSse from '../src/i18n/en/sse.json';
 import enSubscription from '../src/i18n/en/subscription.json';
 import enTeam from '../src/i18n/en/team.json';
-import enTemplates from '../src/i18n/en/templates.json';
 import enTerms from '../src/i18n/en/terms.json';
 import enTime from '../src/i18n/en/time.json';
 
@@ -85,7 +83,6 @@ import arPlans from '../src/i18n/ar/plans.json';
 import arPricing from '../src/i18n/ar/pricing.json';
 import arPrivacy from '../src/i18n/ar/privacy.json';
 import arProfile from '../src/i18n/ar/profile.json';
-import arRules from '../src/i18n/ar/rules.json';
 import arSalla from '../src/i18n/ar/salla.json';
 import arSettings from '../src/i18n/ar/settings.json';
 import arShopify from '../src/i18n/ar/shopify.json';
@@ -93,7 +90,6 @@ import arSidebar from '../src/i18n/ar/sidebar.json';
 import arSse from '../src/i18n/ar/sse.json';
 import arSubscription from '../src/i18n/ar/subscription.json';
 import arTeam from '../src/i18n/ar/team.json';
-import arTemplates from '../src/i18n/ar/templates.json';
 import arTerms from '../src/i18n/ar/terms.json';
 import arTime from '../src/i18n/ar/time.json';
 
@@ -106,9 +102,9 @@ export const en = {
   integrations: enIntegrations, kb: enKb, leads: enLeads, landing: enLanding, logout: enLogout,
   messages: enMessages, meta: enMeta, nav: enNav, notifications: enNotifications, orderNotifications: enOrderNotifications,
   onboarding: enOnboarding, pages: enPages, payment: enPayment, plans: enPlans,
-  pricing: enPricing, privacy: enPrivacy, profile: enProfile, rules: enRules,
+  pricing: enPricing, privacy: enPrivacy, profile: enProfile,
   salla: enSalla, settings: enSettings, shopify: enShopify, sidebar: enSidebar,
-  sse: enSse, subscription: enSubscription, team: enTeam, templates: enTemplates,
+  sse: enSse, subscription: enSubscription, team: enTeam,
   terms: enTerms, time: enTime,
 };
 
@@ -120,9 +116,9 @@ export const ar = {
   integrations: arIntegrations, kb: arKb, leads: arLeads, landing: arLanding, logout: arLogout,
   messages: arMessages, meta: arMeta, nav: arNav, notifications: arNotifications, orderNotifications: arOrderNotifications,
   onboarding: arOnboarding, pages: arPages, payment: arPayment, plans: arPlans,
-  pricing: arPricing, privacy: arPrivacy, profile: arProfile, rules: arRules,
+  pricing: arPricing, privacy: arPrivacy, profile: arProfile,
   salla: arSalla, settings: arSettings, shopify: arShopify, sidebar: arSidebar,
-  sse: arSse, subscription: arSubscription, team: arTeam, templates: arTemplates,
+  sse: arSse, subscription: arSubscription, team: arTeam,
   terms: arTerms, time: arTime,
 };
 

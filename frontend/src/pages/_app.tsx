@@ -255,8 +255,6 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           '/pages',
           '/settings',
           '/pricing',
-          '/templates',
-          '/rules',
           '/auth',
           '/terms',
           '/privacy'
