@@ -21,7 +21,6 @@ import {
   CheckCircle,
   Sparkles,
   Download,
-  MoreVertical,
   Loader2,
   type LucideIcon,
 } from 'lucide-react';
@@ -46,7 +45,6 @@ const MessagesPage: NextPageWithLayout = () => {
   const t = useTranslations('messages');
   const tc = useTranslations('common');
   const tExport = useTranslations('export');
-  const tComments = useTranslations('comments');
   const { language, dateLocale } = useLanguage();
   const { isAuthenticated } = useAuthStore();
   const resetUnreadMessages = useUIStore((s) => s.resetUnreadMessages);
@@ -61,21 +59,10 @@ const MessagesPage: NextPageWithLayout = () => {
   const [isTransitioning, setIsTransitioning] = useState(false);
   const pendingDeepLinkRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
 
   // Infinite scroll observer ref
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  // Close overflow menu on outside click
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
 
   // Sync Filter to URL
   const updateFilter = useCallback((newFilter: FilterType) => {
@@ -418,28 +405,17 @@ const MessagesPage: NextPageWithLayout = () => {
         title={t('title')}
         description={t('description')}
         action={!isNativePlatform() ? (
-          <div ref={menuRef} className="relative">
-            <button
-              onClick={() => setMenuOpen(prev => !prev)}
-              className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
-              aria-label={tc('export')}
-              aria-expanded={menuOpen}
-            >
-              <MoreVertical className="w-5 h-5" />
-            </button>
-            {menuOpen && (
-              <div className="absolute end-0 top-full mt-1 w-44 sm:w-48 bg-card rounded-xl shadow-lg ring-1 ring-theme-border/60 py-1 z-20 animate-in fade-in slide-in-from-top-2 duration-150">
-                <button
-                  onClick={() => { exportToCSV(); setMenuOpen(false); }}
-                  disabled={exporting}
-                  className="w-full flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2.5 text-sm text-foreground/70 hover:bg-background transition-colors disabled:opacity-50"
-                >
-                  <Download className="w-4 h-4 flex-shrink-0" />
-                  {tComments('exportCSV')}
-                </button>
-              </div>
-            )}
-          </div>
+          <button
+            onClick={exportToCSV}
+            disabled={exporting}
+            className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
+            aria-label={tc('export')}
+          >
+            {exporting
+              ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+              : <Download className="w-5 h-5" aria-hidden="true" />
+            }
+          </button>
         ) : undefined}
       />
 

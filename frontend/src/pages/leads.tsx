@@ -5,7 +5,7 @@ import clsx from 'clsx';
 import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button, PageHeader, EmptyState, ConfirmationModal, Select } from '@/components/ui';
+import { PageHeader, EmptyState, ConfirmationModal, Select } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
@@ -699,39 +699,33 @@ const LeadsPage: NextPageWithLayout = () => {
         action={
           selectedPageId ? (
             canExport ? (
-              <Button
-                variant="ghost"
-                size="sm"
+              <button
                 onClick={handleExport}
                 disabled={exporting}
-                className="flex items-center gap-2"
+                className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
+                aria-label={t('exportCsv')}
               >
                 {exporting
-                  ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-                  : <Download className="w-4 h-4" aria-hidden="true" />
+                  ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                  : <Download className="w-5 h-5" aria-hidden="true" />
                 }
-                <span className="hidden sm:inline">{t('exportCsv')}</span>
-              </Button>
+              </button>
+            ) : isNativePlatform() ? (
+              <button
+                onClick={() => openExternalUrl('https://jawab24.com/pricing')}
+                className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
+                aria-label={t('exportCsv')}
+              >
+                <Lock className="w-5 h-5" aria-hidden="true" />
+              </button>
             ) : (
-              isNativePlatform() ? (
-                <button
-                  onClick={() => openExternalUrl('https://jawab24.com/pricing')}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
-                >
-                  <Lock className="w-4 h-4" aria-hidden="true" />
-                  <span className="hidden sm:inline">{t('exportCsv')}</span>
-                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 px-1.5 py-0.5 rounded-md">Business+</span>
-                </button>
-              ) : (
-                <Link
-                  href="/pricing"
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
-                >
-                  <Lock className="w-4 h-4" aria-hidden="true" />
-                  <span className="hidden sm:inline">{t('exportCsv')}</span>
-                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-950/30 border border-brand-200 dark:border-brand-800 px-1.5 py-0.5 rounded-md">Business+</span>
-                </Link>
-              )
+              <Link
+                href="/pricing"
+                className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
+                aria-label={t('exportCsv')}
+              >
+                <Lock className="w-5 h-5" aria-hidden="true" />
+              </Link>
             )
           ) : undefined
         }
