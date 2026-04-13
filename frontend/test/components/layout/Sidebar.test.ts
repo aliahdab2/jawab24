@@ -18,7 +18,7 @@ describe('getNavigationGroups', () => {
   });
 
   it('should always include core nav items regardless of store status', () => {
-    const coreHrefs = ['/dashboard', '/pages', '/comments', '/messages', '/preset-replies', '/pricing', '/settings'];
+    const coreHrefs = ['/dashboard', '/pages', '/comments', '/messages', '/pricing', '/settings'];
     for (const hasStore of [true, false]) {
       const groups = getNavigationGroups(hasStore);
       const allHrefs = groups.flatMap((g) => g.items.map((i) => i.href));

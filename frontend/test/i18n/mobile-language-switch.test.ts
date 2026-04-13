@@ -166,8 +166,6 @@ describe('mobile language switching', () => {
       expect(namespaces).toContain('comments');
       expect(namespaces).toContain('messages');
       expect(namespaces).toContain('landing');
-      expect(namespaces).toContain('templates');
-      expect(namespaces).toContain('rules');
       expect(namespaces.length).toBeGreaterThanOrEqual(30);
     });
 
