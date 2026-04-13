@@ -1,11 +1,11 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useRouter } from 'next/router';
 import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
-import type { SSEEvent, Page } from '@jawab24/shared';
+import type { SSEEvent, Page, Comment } from '@jawab24/shared';
 import type { Message } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -127,8 +127,13 @@ export function useSSE(): void {
         es.addEventListener('comment:received', (e) => {
             try {
                 const event: SSEEvent<'comment:received'> = JSON.parse(e.data);
-                queryClient.invalidateQueries({ queryKey: ['comments'] });
+                // Stats badge is visible everywhere — always refresh
                 queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+                // List only needs refresh when the user is on the comments page;
+                // navigating there later will trigger a refetch automatically
+                if (isOnPage('/comments')) {
+                    queryClient.invalidateQueries({ queryKey: ['comments'] });
+                }
                 if (!isOnPage('/comments') && isActivePageId(queryClient.getQueryData<Page[]>(['pages']), event.data.pageId)) {
                     incrementUnreadComments();
                     showToast(
@@ -142,25 +147,52 @@ export function useSSE(): void {
         es.addEventListener('comment:reply_sent', (e) => {
             try {
                 const event: SSEEvent<'comment:reply_sent'> = JSON.parse(e.data);
-                queryClient.invalidateQueries({ queryKey: ['comments'] });
+                const { commentId, replyText, replyMethod } = event.data;
+                // Stats badge always needs to refresh (pending count changes)
                 queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-                if (!isOnPage('/comments') && event.data.replyMethod === 'ai') {
+                // Surgically patch the comment in cache — no network call needed
+                queryClient.setQueriesData<InfiniteData<{ data: Comment[]; pagination: { nextCursor?: string | null } }>>(
+                    { queryKey: ['comments'] },
+                    (old) => {
+                        if (!old) return old;
+                        return {
+                            ...old,
+                            pages: old.pages.map(page => ({
+                                ...page,
+                                data: page.data.map(c =>
+                                    c.id === commentId
+                                        ? { ...c, replied: true, replyText, replyMethod }
+                                        : c
+                                ),
+                            })),
+                        };
+                    },
+                );
+                if (!isOnPage('/comments') && replyMethod === 'ai') {
                     showToast(t('aiRepliedComment'));
                 }
             } catch { /* malformed event — ignore */ }
         });
 
         es.addEventListener('comment:reply_failed', () => {
-            queryClient.invalidateQueries({ queryKey: ['comments'] });
+            // Stats badge always needs to refresh
             queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+            // List only needs refresh when the user is on the comments page
+            if (isOnPage('/comments')) {
+                queryClient.invalidateQueries({ queryKey: ['comments'] });
+            }
         });
 
         // --- Message events ---
         es.addEventListener('message:received', (e) => {
             try {
                 const event: SSEEvent<'message:received'> = JSON.parse(e.data);
-                queryClient.invalidateQueries({ queryKey: ['messages'] });
+                // Stats badge always needs to refresh
                 queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+                // List and conversation only refresh when user is on the messages page
+                if (isOnPage('/messages')) {
+                    queryClient.invalidateQueries({ queryKey: ['messages'] });
+                }
                 appendToConversationCache(queryClient, event.data.message as Message | undefined, event.data.senderId);
                 if (!isOnPage('/messages') && isActivePageId(queryClient.getQueryData<Page[]>(['pages']), event.data.pageId)) {
                     incrementUnreadMessages();
@@ -175,8 +207,13 @@ export function useSSE(): void {
         es.addEventListener('message:reply_sent', (e) => {
             try {
                 const event: SSEEvent<'message:reply_sent'> = JSON.parse(e.data);
-                queryClient.invalidateQueries({ queryKey: ['messages'] });
+                // Stats badge always needs to refresh
                 queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
+                // List only refreshes when user is on the messages page;
+                // appendToConversationCache handles the detail view surgically
+                if (isOnPage('/messages')) {
+                    queryClient.invalidateQueries({ queryKey: ['messages'] });
+                }
                 const replyMsg = event.data.message as Message | undefined;
                 appendToConversationCache(queryClient, replyMsg, replyMsg?.senderId ?? '');
                 if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
@@ -186,9 +223,13 @@ export function useSSE(): void {
         });
 
         es.addEventListener('message:reply_failed', () => {
-            queryClient.invalidateQueries({ queryKey: ['messages'] });
+            // Stats badge always needs to refresh
             queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-            queryClient.invalidateQueries({ queryKey: ['conversation'] });
+            // List and conversation only refresh when user is on the messages page
+            if (isOnPage('/messages')) {
+                queryClient.invalidateQueries({ queryKey: ['messages'] });
+                queryClient.invalidateQueries({ queryKey: ['conversation'] });
+            }
         });
 
         // --- Usage ---
@@ -200,8 +241,12 @@ export function useSSE(): void {
         es.addEventListener('lead:captured', (e) => {
             try {
                 const event: SSEEvent<'lead:captured'> = JSON.parse(e.data);
-                queryClient.invalidateQueries({ queryKey: ['leads'] });
+                // Count badge always needs to refresh
                 queryClient.invalidateQueries({ queryKey: ['leads-count'] });
+                // List only refreshes when user is on the leads page
+                if (isOnPage('/leads')) {
+                    queryClient.invalidateQueries({ queryKey: ['leads'] });
+                }
                 if (!isOnPage('/leads')) {
                     incrementNewLeads();
                     showToast(
