@@ -19,7 +19,7 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const [shouldPulse, setShouldPulse] = useState(false);
 
   // Hide on internal action screens where FAB overlaps with primary actions or content
-  const HIDDEN_ROUTES = ['/messages', '/comments', '/notifications', '/settings'];
+  const HIDDEN_ROUTES = ['/messages', '/comments', '/notifications', '/settings', '/leads'];
   const isHiddenRoute = HIDDEN_ROUTES.some(r => pathname.startsWith(r));
 
   // Pulse once on mount
