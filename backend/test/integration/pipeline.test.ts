@@ -73,6 +73,7 @@ vi.mock('../../src/services/reply/generator', async (importOriginal) => {
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
+        sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
