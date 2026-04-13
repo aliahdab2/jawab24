@@ -14,7 +14,11 @@ const sseRoutes: FastifyPluginAsync = async (fastify) => {
      * The query-param path is required because the browser EventSource API
      * cannot set custom headers (needed for mobile / Capacitor).
      */
-    fastify.get<{ Querystring: SSEQuerystring }>('/events', async (request, reply) => {
+    // SSE is a persistent connection — exempt it from the global rate limit so
+    // reconnects after a network blip don't consume the shared request budget.
+    fastify.get<{ Querystring: SSEQuerystring }>('/events', {
+        config: { rateLimit: { max: 60, timeWindow: '1 minute' } },
+    }, async (request, reply) => {
         // --- Authenticate (3 sources) ---
         let jwtToken: string | undefined;
 

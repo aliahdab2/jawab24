@@ -180,7 +180,7 @@ const start = async () => {
     // Register rate limiting
     // Use shared Redis instance for consistency across blue/green deployments
     await registerPlugin(server, rateLimit, {
-      max: 2000, // 2000 requests per 15 minutes
+      max: 5000, // 5000 requests per 15 minutes (~5.5 req/s per IP)
       timeWindow: "15 minutes",
       redis,
       errorResponseBuilder: (request: { ip: string }, context: { after: string }) => ({

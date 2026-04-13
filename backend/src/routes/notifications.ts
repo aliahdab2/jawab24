@@ -30,8 +30,11 @@ export default async function notificationRoutes(fastify: FastifyInstance) {
     }, getNotifications);
 
     // Get unread notification count
+    // Own rate-limit bucket (500/15 min per IP) so background polling
+    // never competes with and exhausts the global request budget.
     fastify.get('/unread-count', {
         schema: { tags: ['Notifications'], summary: 'Get unread notification count', security: auth },
+        config: { rateLimit: { max: 500, timeWindow: '15 minutes' } },
     }, getUnreadCount);
 
     // Mark a notification as read
