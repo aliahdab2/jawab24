@@ -13,6 +13,8 @@ vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue('notif-123'),
         sendNotification: vi.fn().mockResolvedValue('notif-123'),
+        sendNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
+        sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -21,7 +23,7 @@ vi.mock('../../src/db/schema', () => ({
     comments: { id: 'id', postId: 'post_id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', createdTime: 'created_time', createdAt: 'created_at', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
     instagramComments: { id: 'id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', createdAt: 'created_at', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
     messages: { id: 'id', pageId: 'page_id', replied: 'replied', needsAttention: 'needs_attention', direction: 'direction', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at', senderName: 'sender_name', senderId: 'sender_id', message: 'message' },
-    pages: { id: 'id', userId: 'user_id', name: 'name', autoReplyEnabled: 'auto_reply_enabled' },
+    pages: { id: 'id', userId: 'user_id', workspaceId: 'workspace_id', name: 'name', autoReplyEnabled: 'auto_reply_enabled' },
     posts: { id: 'id', pageId: 'page_id' },
     settings: { userId: 'user_id', commentEscalationMinutes: 'comment_escalation_minutes', messageEscalationMinutes: 'message_escalation_minutes' },
 }));
@@ -86,6 +88,7 @@ describe('Escalation Service', () => {
         vi.clearAllMocks();
         vi.useFakeTimers();
         (notificationService.sendNotification as any).mockResolvedValue('notif-123');
+        (notificationService.sendNotificationToWorkspace as any).mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -104,7 +107,7 @@ describe('Escalation Service', () => {
             // resolveStuckSpamComments always issues 2 updates (FB + IG tables)
             expect(db.update).toHaveBeenCalledTimes(2);
             // No escalation notifications because no stale real comments
-            expect(notificationService.sendNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('should resolve stuck spam/punctuation comments before escalation runs', async () => {
@@ -116,14 +119,14 @@ describe('Escalation Service', () => {
             // db.update called twice: once for facebook comments, once for instagram_comments
             expect(db.update).toHaveBeenCalledTimes(2);
             // No escalation notifications — the resolved comments never reached escalation
-            expect(notificationService.sendNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('should send individual notification per stale comment with customer context', async () => {
             mockBatchSelect(
                 [
-                    { userId: 'user-1', itemId: 'c-1', pageName: 'My Page', pageId: 'page-1', fromName: 'Ahmad', messageText: 'كم سعر المنتج؟', thresholdMinutes: 60 },
-                    { userId: 'user-1', itemId: 'c-2', pageName: 'My Page', pageId: 'page-1', fromName: 'Sara', messageText: 'Hello, is this available?', thresholdMinutes: 60 },
+                    { workspaceId: 'ws-1', itemId: 'c-1', pageName: 'My Page', pageId: 'page-1', fromName: 'Ahmad', messageText: 'كم سعر المنتج؟', thresholdMinutes: 60 },
+                    { workspaceId: 'ws-1', itemId: 'c-2', pageName: 'My Page', pageId: 'page-1', fromName: 'Sara', messageText: 'Hello, is this available?', thresholdMinutes: 60 },
                 ],
                 []
             );
@@ -132,10 +135,10 @@ describe('Escalation Service', () => {
             await runEscalationSweep();
 
             expect(db.update).toHaveBeenCalled();
-            // One notification per comment
-            expect(notificationService.sendNotification).toHaveBeenCalledTimes(2);
-            expect(notificationService.sendNotification).toHaveBeenCalledWith(
-                'user-1',
+            // One notification per comment (fan-out to workspace members handled inside sendNotificationToWorkspace)
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledTimes(2);
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-1',
                 expect.objectContaining({
                     type: 'stale_comment',
                     titles: { en: 'Ahmad — My Page', ar: 'Ahmad — My Page' },
@@ -143,8 +146,8 @@ describe('Escalation Service', () => {
                     data: { commentId: 'c-1' },
                 })
             );
-            expect(notificationService.sendNotification).toHaveBeenCalledWith(
-                'user-1',
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-1',
                 expect.objectContaining({
                     type: 'stale_comment',
                     titles: { en: 'Sara — My Page', ar: 'Sara — My Page' },
@@ -158,15 +161,15 @@ describe('Escalation Service', () => {
             mockBatchSelect(
                 [],
                 [
-                    { userId: 'user-2', itemId: 'm-1', pageName: 'Shop', pageId: 'page-1', senderName: 'Omar', senderId: 'sender-1', messageText: 'مرحبا', thresholdMinutes: 30 },
+                    { workspaceId: 'ws-2', itemId: 'm-1', pageName: 'Shop', pageId: 'page-1', senderName: 'Omar', senderId: 'sender-1', messageText: 'مرحبا', thresholdMinutes: 30 },
                 ]
             );
             mockDbUpdate();
 
             await runEscalationSweep();
 
-            expect(notificationService.sendNotification).toHaveBeenCalledWith(
-                'user-2',
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-2',
                 expect.objectContaining({
                     type: 'stale_message',
                     titles: { en: 'Omar — Shop', ar: 'Omar — Shop' },
@@ -186,25 +189,25 @@ describe('Escalation Service', () => {
             mockBatchSelect(
                 [],
                 [
-                    { userId: 'user-1', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'مرحبا', thresholdMinutes: 30 },
-                    { userId: 'user-1', itemId: 'm-2', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'هل فيه خصم؟', thresholdMinutes: 30 },
+                    { workspaceId: 'ws-1', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'مرحبا', thresholdMinutes: 30 },
+                    { workspaceId: 'ws-1', itemId: 'm-2', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: 'هل فيه خصم؟', thresholdMinutes: 30 },
                     // Different sender = separate notification
-                    { userId: 'user-1', itemId: 'm-3', pageName: 'Shop', pageId: 'p1', senderName: 'Sara', senderId: 's2', messageText: 'Hi', thresholdMinutes: 30 },
+                    { workspaceId: 'ws-1', itemId: 'm-3', pageName: 'Shop', pageId: 'p1', senderName: 'Sara', senderId: 's2', messageText: 'Hi', thresholdMinutes: 30 },
                 ]
             );
             mockDbUpdate();
 
             await runEscalationSweep();
 
-            // 2 conversations = 2 notifications (not 3)
-            expect(notificationService.sendNotification).toHaveBeenCalledTimes(2);
+            // 2 conversations = 2 workspace notifications (not 3)
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledTimes(2);
         });
 
-        it('should handle multiple users independently', async () => {
+        it('should handle multiple workspaces independently', async () => {
             mockBatchSelect(
                 [
-                    { userId: 'user-a', itemId: 'c-a1', pageName: 'Page A', pageId: 'pa', fromName: 'Ahmad', messageText: 'test', thresholdMinutes: 60 },
-                    { userId: 'user-b', itemId: 'c-b1', pageName: 'Page B', pageId: 'pb', fromName: 'Sara', messageText: 'hello', thresholdMinutes: 120 },
+                    { workspaceId: 'ws-a', itemId: 'c-a1', pageName: 'Page A', pageId: 'pa', fromName: 'Ahmad', messageText: 'test', thresholdMinutes: 60 },
+                    { workspaceId: 'ws-b', itemId: 'c-b1', pageName: 'Page B', pageId: 'pb', fromName: 'Sara', messageText: 'hello', thresholdMinutes: 120 },
                 ],
                 []
             );
@@ -212,13 +215,13 @@ describe('Escalation Service', () => {
 
             await runEscalationSweep();
 
-            expect(notificationService.sendNotification).toHaveBeenCalledTimes(2);
-            expect(notificationService.sendNotification).toHaveBeenCalledWith(
-                'user-a',
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledTimes(2);
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-a',
                 expect.objectContaining({ titles: { en: 'Ahmad — Page A', ar: 'Ahmad — Page A' } })
             );
-            expect(notificationService.sendNotification).toHaveBeenCalledWith(
-                'user-b',
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-b',
                 expect.objectContaining({ titles: { en: 'Sara — Page B', ar: 'Sara — Page B' } })
             );
         });
@@ -227,15 +230,15 @@ describe('Escalation Service', () => {
             mockBatchSelect(
                 [],
                 [
-                    { userId: 'user-1', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: null, senderId: 's1', messageText: 'hi', thresholdMinutes: 30 },
+                    { workspaceId: 'ws-1', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: null, senderId: 's1', messageText: 'hi', thresholdMinutes: 30 },
                 ]
             );
             mockDbUpdate();
 
             await runEscalationSweep();
 
-            expect(notificationService.sendNotification).toHaveBeenCalledWith(
-                'user-1',
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-1',
                 expect.objectContaining({
                     titles: { en: 'Unknown — Shop', ar: 'Unknown — Shop' },
                 })
@@ -245,7 +248,7 @@ describe('Escalation Service', () => {
         it('should cap notifications at MAX_INDIVIDUAL_NOTIFICATIONS and send overflow', async () => {
             // 12 different senders = 12 conversations, should cap at 10 + 1 overflow
             const messageRows = Array.from({ length: 12 }, (_, i) => ({
-                userId: 'user-1',
+                workspaceId: 'ws-1',
                 itemId: `m-${i}`,
                 pageName: 'Shop',
                 pageId: 'p1',
@@ -260,11 +263,11 @@ describe('Escalation Service', () => {
 
             await runEscalationSweep();
 
-            // 10 individual + 1 overflow summary = 11
-            expect(notificationService.sendNotification).toHaveBeenCalledTimes(11);
+            // 10 individual + 1 overflow summary = 11 workspace notifications
+            expect(notificationService.sendNotificationToWorkspace).toHaveBeenCalledTimes(11);
 
             // Last call should be overflow summary
-            const lastCall = (notificationService.sendNotification as any).mock.calls[10];
+            const lastCall = (notificationService.sendNotificationToWorkspace as any).mock.calls[10];
             expect(lastCall[1].titles.en).toContain('more conversations need attention');
             expect(lastCall[1].data.deepLink).toBe('/messages?filter=needs_action');
         });
@@ -274,22 +277,22 @@ describe('Escalation Service', () => {
             mockBatchSelect(
                 [],
                 [
-                    { userId: 'user-1', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: longMessage, thresholdMinutes: 30 },
+                    { workspaceId: 'ws-1', itemId: 'm-1', pageName: 'Shop', pageId: 'p1', senderName: 'Omar', senderId: 's1', messageText: longMessage, thresholdMinutes: 30 },
                 ]
             );
             mockDbUpdate();
 
             await runEscalationSweep();
 
-            const call = (notificationService.sendNotification as any).mock.calls[0];
+            const call = (notificationService.sendNotificationToWorkspace as any).mock.calls[0];
             expect(call[1].bodies.en.length).toBeLessThanOrEqual(83); // 80 + "..."
             expect(call[1].bodies.en).toMatch(/\.\.\.$/);
         });
 
-        it('should skip rows with null userId', async () => {
+        it('should skip rows with null workspaceId', async () => {
             mockBatchSelect(
-                [{ userId: null, itemId: 'c-1', pageName: null, pageId: null, fromName: 'test', messageText: 'test', thresholdMinutes: 60 }],
-                [{ userId: null, itemId: 'm-1', pageName: null, pageId: null, senderName: null, senderId: null, messageText: null, thresholdMinutes: 30 }]
+                [{ workspaceId: null, itemId: 'c-1', pageName: null, pageId: null, fromName: 'test', messageText: 'test', thresholdMinutes: 60 }],
+                [{ workspaceId: null, itemId: 'm-1', pageName: null, pageId: null, senderName: null, senderId: null, messageText: null, thresholdMinutes: 30 }]
             );
             mockDbUpdate(0);
 
@@ -297,7 +300,7 @@ describe('Escalation Service', () => {
 
             // resolveStuckSpamComments still runs its 2 updates, but no escalation updates
             expect(db.update).toHaveBeenCalledTimes(2);
-            expect(notificationService.sendNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('should not throw on database error', async () => {

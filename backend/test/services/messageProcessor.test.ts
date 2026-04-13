@@ -32,6 +32,7 @@ vi.mock('../../src/services/protection', () => ({
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue('notif-id'),
+        sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 vi.mock('../../src/utils/language', () => ({
@@ -428,10 +429,10 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
 
         // Import the mock to check calls
         const { notificationService } = await import('../../src/services/notifications');
-        const sendMock = vi.mocked(notificationService.sendTemplateNotification);
+        const sendMock = vi.mocked(notificationService.sendTemplateNotificationToWorkspace);
 
         expect(sendMock).toHaveBeenCalledWith(
-            'user-uuid',
+            'test_workspace_id',
             'flagged_reply',
             expect.objectContaining({
                 reason: expect.stringContaining('cancellation_request'),
@@ -467,10 +468,10 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
         );
 
         const { notificationService } = await import('../../src/services/notifications');
-        const sendMock = vi.mocked(notificationService.sendTemplateNotification);
+        const sendMock = vi.mocked(notificationService.sendTemplateNotificationToWorkspace);
 
         expect(sendMock).toHaveBeenCalledWith(
-            'user-uuid',
+            'test_workspace_id',
             'flagged_reply',
             expect.anything(),
             expect.not.objectContaining({ urgent: true }),
@@ -497,10 +498,10 @@ describe('MessageProcessor — High-Stakes Notification Wiring', () => {
         );
 
         const { notificationService } = await import('../../src/services/notifications');
-        const sendMock = vi.mocked(notificationService.sendTemplateNotification);
+        const sendMock = vi.mocked(notificationService.sendTemplateNotificationToWorkspace);
 
         expect(sendMock).toHaveBeenCalledWith(
-            'user-uuid',
+            'test_workspace_id',
             'flagged_reply',
             expect.objectContaining({
                 reason: 'refund_request',

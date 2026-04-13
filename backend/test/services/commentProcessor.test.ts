@@ -34,6 +34,7 @@ vi.mock('../../src/services/protection', () => ({
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue('notif-id'),
+        sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 vi.mock('../../src/utils/language', () => ({
@@ -403,8 +404,8 @@ describe('CommentProcessor', () => {
             adapter, 'page-1', 'content-1', 'comment-1', 'Terrible!', 'from-1', 'Bob',
         );
 
-        expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
-            'user-uuid',
+        expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+            'test_workspace_id',
             'flagged_reply',
             expect.objectContaining({ senderName: 'Bob', reason: 'angry_customer' }),
             expect.objectContaining({ commentId: 'comment-uuid', type: 'comment' }),
@@ -424,7 +425,7 @@ describe('CommentProcessor', () => {
             adapter, 'page-1', 'content-1', 'comment-1', 'Great!', 'from-1', 'Alice',
         );
 
-        expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+        expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
     });
 
     it('should handle adapter errors gracefully', async () => {
@@ -494,8 +495,8 @@ describe('CommentProcessor', () => {
         // flagComment should be called
         expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'offensive_or_abusive', 'OFFENSIVE');
         // Notification should be skipped_reply
-        expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
-            'user-uuid',
+        expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+            'test_workspace_id',
             'skipped_reply',
             expect.objectContaining({ senderName: 'Troll', reason: 'offensive_or_abusive' }),
             expect.objectContaining({ commentId: 'comment-uuid', type: 'comment' }),
@@ -541,8 +542,8 @@ describe('CommentProcessor', () => {
         expect(adapter.markAsReplied).toHaveBeenCalled();
         expect(adapter.flagComment).not.toHaveBeenCalled();
         // Should still notify as flagged_reply (not skipped)
-        expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
-            'user-uuid',
+        expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+            'test_workspace_id',
             'flagged_reply',
             expect.objectContaining({ senderName: 'Bob', reason: 'angry_customer' }),
             expect.any(Object),
@@ -613,7 +614,7 @@ describe('CommentProcessor', () => {
         // Should NOT call AI again
         expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
         // Should NOT send another notification
-        expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+        expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
     });
 
     // --- Business profile enrichment tests ---

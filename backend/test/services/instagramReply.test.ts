@@ -72,6 +72,7 @@ vi.mock('../../src/services/protection', () => ({
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
+        sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -548,9 +549,9 @@ describe('InstagramReplyService', () => {
                 'msg-uuid', 'offensive_or_abusive', 'OFFENSIVE',
             );
             expect(messagesService.markAsReplied).not.toHaveBeenCalled();
-            // Notification should be skipped_reply
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
-                'user-uuid',
+            // Notification should be skipped_reply (sent to whole workspace)
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+                'test_workspace_id',
                 'skipped_reply',
                 expect.objectContaining({ reason: 'offensive_or_abusive' }),
                 expect.objectContaining({ type: 'message' }),

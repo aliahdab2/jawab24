@@ -14,6 +14,7 @@ vi.mock('../../../src/db', () => ({
 vi.mock('../../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue('notif-1'),
+        sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -61,10 +62,10 @@ function mockExecuteForIncrement(existingGap: Record<string, unknown>, newCount:
         .mockResolvedValueOnce([{ occurrence_count: newCount }]);   // atomic UPDATE RETURNING
 }
 
-/** Helper to mock db.select for page lookup (userId resolution) */
-function mockPageLookup(userId: string | null, pageName: string | null = 'My Shop') {
+/** Helper to mock db.select for page lookup (workspaceId resolution) */
+function mockPageLookup(workspaceId: string | null, pageName: string | null = 'My Shop') {
     const selectLimitChain = {
-        limit: vi.fn().mockResolvedValue(userId ? [{ userId, name: pageName }] : []),
+        limit: vi.fn().mockResolvedValue(workspaceId ? [{ workspaceId, name: pageName }] : []),
     };
     const selectWhereChain = {
         where: vi.fn().mockReturnValue(selectLimitChain),
@@ -137,13 +138,13 @@ describe('GapDetectorService', () => {
 
         it('sends notification via template when threshold is reached (count = 3)', async () => {
             mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
-            mockPageLookup('user-1', 'My Shop');
+            mockPageLookup('ws-1', 'My Shop');
 
             await gapDetectorService.recordGap('page-1', 'How much is the cake?');
 
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledTimes(1);
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
-                'user-1',
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledTimes(1);
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+                'ws-1',
                 'kb_gap',
                 { pageName: 'My Shop', topic: 'What is the price?' },
                 expect.objectContaining({ pageId: 'page-1', intent: 'PRICE', occurrenceCount: 3 }),
@@ -155,7 +156,7 @@ describe('GapDetectorService', () => {
 
             await gapDetectorService.recordGap('page-1', 'How much is the cake?');
 
-            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('does NOT send notification when count > threshold (already sent)', async () => {
@@ -163,7 +164,7 @@ describe('GapDetectorService', () => {
 
             await gapDetectorService.recordGap('page-1', 'How much is the cake?');
 
-            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('does not throw when db fails (non-blocking)', async () => {
@@ -192,32 +193,32 @@ describe('GapDetectorService', () => {
         it('truncates long queries in notification variables', async () => {
             const longQuery = 'A'.repeat(200);
             mockExecuteForIncrement(mockGapRow({ query_text: longQuery, occurrence_count: 2 }), 3);
-            mockPageLookup('user-1', 'Shop');
+            mockPageLookup('ws-1', 'Shop');
 
             await gapDetectorService.recordGap('page-1', 'Another price query');
 
-            const call = (notificationService.sendTemplateNotification as ReturnType<typeof vi.fn>).mock.calls[0];
+            const call = (notificationService.sendTemplateNotificationToWorkspace as ReturnType<typeof vi.fn>).mock.calls[0];
             const variables = call[2]; // { pageName, topic }
             // topic should be truncated to 77 chars + "..."
             expect(variables.topic).toContain('...');
             expect(variables.topic.length).toBeLessThanOrEqual(80);
         });
 
-        it('skips notification when page has no userId', async () => {
+        it('skips notification when page has no workspaceId', async () => {
             mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
-            // Page lookup returns no user
+            // Page lookup returns no workspace
             mockPageLookup(null);
 
             await gapDetectorService.recordGap('page-1', 'How much is this?');
 
-            // Should NOT send notification — no userId to send to
-            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+            // Should NOT send notification — no workspaceId to send to
+            expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('does not throw when notification service fails', async () => {
             mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
-            mockPageLookup('user-1', 'My Shop');
-            (notificationService.sendTemplateNotification as ReturnType<typeof vi.fn>)
+            mockPageLookup('ws-1', 'My Shop');
+            (notificationService.sendTemplateNotificationToWorkspace as ReturnType<typeof vi.fn>)
                 .mockRejectedValue(new Error('FCM unavailable'));
 
             // Should not throw — notification failure is caught
@@ -228,11 +229,11 @@ describe('GapDetectorService', () => {
 
         it('uses page name fallback when page name is null', async () => {
             mockExecuteForIncrement(mockGapRow({ occurrence_count: 2 }), 3);
-            mockPageLookup('user-1', null);
+            mockPageLookup('ws-1', null);
 
             await gapDetectorService.recordGap('page-1', 'How much?');
 
-            const call = (notificationService.sendTemplateNotification as ReturnType<typeof vi.fn>).mock.calls[0];
+            const call = (notificationService.sendTemplateNotificationToWorkspace as ReturnType<typeof vi.fn>).mock.calls[0];
             const variables = call[2];
             expect(variables.pageName).toBe('your page');
         });

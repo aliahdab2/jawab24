@@ -173,19 +173,19 @@ class GapDetectorService {
         occurrenceCount: number,
     ): Promise<void> {
         try {
-            // Resolve userId from page
+            // Resolve workspaceId from page
             const page = await db
-                .select({ userId: pages.userId, name: pages.name })
+                .select({ workspaceId: pages.workspaceId, name: pages.name })
                 .from(pages)
                 .where(eq(pages.id, pageId))
                 .limit(1);
 
-            if (!page[0]?.userId) {
-                this.logger.error('Gap notification: page has no userId', { pageId });
+            if (!page[0]?.workspaceId) {
+                this.logger.error('Gap notification: page has no workspaceId', { pageId });
                 return;
             }
 
-            const userId = page[0].userId;
+            const workspaceId = page[0].workspaceId;
             const pageName = page[0].name || 'your page';
 
             // Truncate query for notification display
@@ -193,15 +193,15 @@ class GapDetectorService {
                 ? sampleQuery.substring(0, 77) + '...'
                 : sampleQuery;
 
-            await notificationService.sendTemplateNotification(
-                userId,
+            await notificationService.sendTemplateNotificationToWorkspace(
+                workspaceId,
                 'kb_gap',
                 { pageName, topic: shortQuery },
                 { pageId, intent, occurrenceCount, sampleQuery, deepLink: `/pages#page-${pageId}` },
             );
 
-            this.logger.info('Gap notification sent to merchant', {
-                userId, pageId, intent, occurrenceCount,
+            this.logger.info('Gap notification sent to workspace', {
+                workspaceId, pageId, intent, occurrenceCount,
             });
         } catch (error) {
             this.logger.error('Failed to send gap notification', {

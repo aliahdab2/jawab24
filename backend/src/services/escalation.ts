@@ -26,16 +26,16 @@ function truncatePreview(text: string | null): string {
     return `${trimmed.slice(0, PREVIEW_MAX_LENGTH)}...`;
 }
 
-/** Group rows by userId, filtering out null userIds. */
-function groupByUser<T extends { userId: string | null }>(rows: T[]): Map<string, T[]> {
-    const byUser = new Map<string, T[]>();
+/** Group rows by workspaceId, filtering out null workspaceIds. */
+function groupByWorkspace<T extends { workspaceId: string | null }>(rows: T[]): Map<string, T[]> {
+    const byWorkspace = new Map<string, T[]>();
     for (const row of rows) {
-        if (!row.userId) continue;
-        const arr = byUser.get(row.userId) ?? [];
+        if (!row.workspaceId) continue;
+        const arr = byWorkspace.get(row.workspaceId) ?? [];
         arr.push(row);
-        byUser.set(row.userId, arr);
+        byWorkspace.set(row.workspaceId, arr);
     }
-    return byUser;
+    return byWorkspace;
 }
 
 interface NotificationItem {
@@ -46,19 +46,21 @@ interface NotificationItem {
 }
 
 /**
- * Send per-item notifications with a flood cap.
+ * Send per-item notifications with a flood cap to all members of a workspace.
+ * Delegates the member fan-out to notificationService.sendNotificationToWorkspace
+ * so the workspace lookup is centralised and testable.
  * Sends up to MAX_INDIVIDUAL_NOTIFICATIONS, then one overflow summary if needed.
  */
-function sendItemNotifications(
-    userId: string,
+async function sendItemNotificationsToWorkspace(
+    workspaceId: string,
     type: NotificationType,
     items: NotificationItem[],
     overflow: { deepLink: string; labelEn: string; labelAr: string },
-): void {
+): Promise<void> {
     const toNotify = items.slice(0, MAX_INDIVIDUAL_NOTIFICATIONS);
 
     for (const item of toNotify) {
-        notificationService.sendNotification(userId, {
+        await notificationService.sendNotificationToWorkspace(workspaceId, {
             type,
             titles: { en: item.title, ar: item.title },
             bodies: { en: item.preview, ar: item.preview },
@@ -68,7 +70,7 @@ function sendItemNotifications(
 
     const overflowCount = items.length - toNotify.length;
     if (overflowCount > 0) {
-        notificationService.sendNotification(userId, {
+        await notificationService.sendNotificationToWorkspace(workspaceId, {
             type,
             titles: {
                 en: `${overflowCount} more ${overflow.labelEn} need attention`,
@@ -155,7 +157,7 @@ export async function runEscalationSweep(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 interface StaleCommentRow {
-    userId: string | null;
+    workspaceId: string | null;
     itemId: string;
     pageName: string | null;
     pageId: string | null;
@@ -167,7 +169,7 @@ interface StaleCommentRow {
 async function escalateComments(): Promise<void> {
     const staleRows: StaleCommentRow[] = await db
         .select({
-            userId: pages.userId,
+            workspaceId: pages.workspaceId,
             itemId: comments.id,
             pageName: pages.name,
             pageId: posts.pageId,
@@ -188,7 +190,7 @@ async function escalateComments(): Promise<void> {
 
     if (staleRows.length === 0) return;
 
-    for (const [userId, rows] of groupByUser(staleRows)) {
+    for (const [workspaceId, rows] of groupByWorkspace(staleRows)) {
         const ids = rows.map(r => r.itemId);
         const threshold = Number(rows[0].thresholdMinutes);
 
@@ -203,7 +205,7 @@ async function escalateComments(): Promise<void> {
             data: { commentId: row.itemId },
         }));
 
-        sendItemNotifications(userId, 'stale_comment', items, {
+        await sendItemNotificationsToWorkspace(workspaceId, 'stale_comment', items, {
             deepLink: '/comments?filter=needs_action',
             labelEn: 'comments',
             labelAr: 'تعليقات إضافية',
@@ -216,7 +218,7 @@ async function escalateComments(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 interface StaleMessageRow {
-    userId: string | null;
+    workspaceId: string | null;
     itemId: string;
     pageName: string | null;
     pageId: string | null;
@@ -229,7 +231,7 @@ interface StaleMessageRow {
 async function escalateMessages(): Promise<void> {
     const staleRows: StaleMessageRow[] = await db
         .select({
-            userId: pages.userId,
+            workspaceId: pages.workspaceId,
             itemId: messages.id,
             pageName: pages.name,
             pageId: messages.pageId,
@@ -251,7 +253,7 @@ async function escalateMessages(): Promise<void> {
 
     if (staleRows.length === 0) return;
 
-    for (const [userId, rows] of groupByUser(staleRows)) {
+    for (const [workspaceId, rows] of groupByWorkspace(staleRows)) {
         const ids = rows.map(r => r.itemId);
         const threshold = Number(rows[0].thresholdMinutes);
 
@@ -278,7 +280,7 @@ async function escalateMessages(): Promise<void> {
             },
         }));
 
-        sendItemNotifications(userId, 'stale_message', items, {
+        await sendItemNotificationsToWorkspace(workspaceId, 'stale_message', items, {
             deepLink: '/messages?filter=needs_action',
             labelEn: 'conversations',
             labelAr: 'محادثات إضافية',

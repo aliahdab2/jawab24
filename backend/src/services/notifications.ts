@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { deviceTokens, notifications, settings } from '../db/schema';
+import { deviceTokens, notifications, settings, workspaceMembers } from '../db/schema';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
@@ -525,6 +525,50 @@ class NotificationService {
             .update(notifications)
             .set({ read: true })
             .where(eq(notifications.userId, userId));
+    }
+
+    /**
+     * Send a notification to every member of a workspace.
+     * Used for workspace-level events (flagged reply, stale comment, etc.)
+     * so team admins see the same notifications as the owner.
+     */
+    async sendNotificationToWorkspace(
+        workspaceId: string,
+        payload: NotificationPayload,
+    ): Promise<void> {
+        const members = await db
+            .select({ userId: workspaceMembers.userId })
+            .from(workspaceMembers)
+            .where(eq(workspaceMembers.workspaceId, workspaceId));
+
+        await Promise.all(
+            members.map(m =>
+                this.sendNotification(m.userId, payload).catch(err =>
+                    captureError(err, 'Failed to send workspace notification to member', {
+                        tags: { service: 'notifications' },
+                        extra: { workspaceId, userId: m.userId },
+                    }),
+                ),
+            ),
+        );
+    }
+
+    /**
+     * Send a template notification to every member of a workspace.
+     */
+    async sendTemplateNotificationToWorkspace(
+        workspaceId: string,
+        type: NotificationType,
+        variables: Record<string, string> = {},
+        data?: Record<string, unknown>,
+    ): Promise<void> {
+        const template = NOTIFICATION_TEMPLATES[type];
+        return this.sendNotificationToWorkspace(workspaceId, {
+            type,
+            titles: replaceVariables(template.titles, variables),
+            bodies: replaceVariables(template.bodies, variables),
+            data,
+        });
     }
 }
 

@@ -19,6 +19,7 @@ vi.mock('../../src/services/facebook');
 vi.mock('../../src/services/notifications', () => ({
     notificationService: {
         sendTemplateNotification: vi.fn().mockResolvedValue('notif-123'),
+        sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 vi.mock('../../src/services/subscriptions', () => ({
@@ -411,9 +412,9 @@ describe('Reply Service', () => {
                 'John Doe'
             );
 
-            // Verify notification was sent
-            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
-                'user_uuid',
+            // Verify notification was sent to workspace (so all team members receive it)
+            expect(notificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+                'test_workspace_id',
                 'flagged_reply',
                 expect.objectContaining({
                     senderName: 'John Doe',
@@ -455,7 +456,7 @@ describe('Reply Service', () => {
             );
 
             // Should NOT have sent notification
-            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+            expect(notificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('should set TTL on first rate limit increment', async () => {

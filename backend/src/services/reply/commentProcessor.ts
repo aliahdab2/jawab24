@@ -276,14 +276,12 @@ export class CommentProcessor {
 
                 await adapter.flagComment(comment.id, flagReason, aiIntent);
 
-                if (page.userId) {
-                    notificationService.sendTemplateNotification(
-                        page.userId,
-                        'skipped_reply',
-                        { senderName: fromName || 'Unknown', reason: flagReason || 'offensive' },
-                        { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
-                    ).catch(err => this.logger.error('Offensive comment notification failed', { err }));
-                }
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'skipped_reply',
+                    { senderName: fromName || 'Unknown', reason: flagReason || 'offensive' },
+                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                ).catch(err => this.logger.error('Offensive comment notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'skipped_risky');
                 return { success: true, commentId: comment.id };
             }
@@ -296,14 +294,12 @@ export class CommentProcessor {
                     lang === 'unknown' ? 'en' : lang,
                     true, 'held_low_confidence', aiIntent, aiOriginalReply,
                 );
-                if (page.userId) {
-                    notificationService.sendTemplateNotification(
-                        page.userId,
-                        'flagged_reply',
-                        { senderName: fromName || 'Unknown', reason: 'held_low_confidence' },
-                        { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
-                    ).catch(err => this.logger.error('Held reply notification failed', { err }));
-                }
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'flagged_reply',
+                    { senderName: fromName || 'Unknown', reason: 'held_low_confidence' },
+                    { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                ).catch(err => this.logger.error('Held reply notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, commentId: comment.id };
             }
@@ -316,14 +312,12 @@ export class CommentProcessor {
                     replyText = fallback;
                 } else {
                     // Notify user about pending comment
-                    if (page.userId) {
-                        notificationService.sendTemplateNotification(
-                            page.userId,
-                            'new_comment',
-                            { senderName: fromName || 'Unknown' },
-                            { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
-                        ).catch(err => this.logger.error('New comment notification failed', { err }));
-                    }
+                    notificationService.sendTemplateNotificationToWorkspace(
+                        workspaceId,
+                        'new_comment',
+                        { senderName: fromName || 'Unknown' },
+                        { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                    ).catch(err => this.logger.error('New comment notification failed', { err }));
                     pipelineMetrics.record(pipeline, 'no_reply_generated');
                     return { success: false, commentId: comment.id, error: 'No reply generated' };
                 }
@@ -344,9 +338,9 @@ export class CommentProcessor {
             }
 
             // 10-12. Send reply, mark as replied, fire SSE events + metrics
-            if (needsAttention && page.userId) {
-                notificationService.sendTemplateNotification(
-                    page.userId,
+            if (needsAttention) {
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
                     'flagged_reply',
                     { senderName: fromName || 'Unknown', reason: flagReason || 'AI flagged this reply' },
                     { commentId: comment.id, type: 'comment', deepLink: '/comments?filter=flagged' },

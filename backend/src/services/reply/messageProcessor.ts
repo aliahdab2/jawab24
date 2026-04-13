@@ -358,14 +358,12 @@ export class MessageProcessor {
                     storedMessage.id, flagReason, aiIntent,
                 );
 
-                if (page.userId) {
-                    notificationService.sendTemplateNotification(
-                        page.userId,
-                        'skipped_reply',
-                        { senderName: senderName || senderId, reason: flagReason || 'offensive' },
-                        { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
-                    ).catch(err => this.logger.error('Offensive message notification failed', { err }));
-                }
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'skipped_reply',
+                    { senderName: senderName || senderId, reason: flagReason || 'offensive' },
+                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                ).catch(err => this.logger.error('Offensive message notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'skipped_risky');
                 return { success: true, messageId: platformMessageId };
             }
@@ -376,14 +374,12 @@ export class MessageProcessor {
                     storedMessage.id, '', replyMethod,
                     true, 'held_low_confidence', aiIntent, db, aiOriginalReply,
                 );
-                if (page.userId) {
-                    notificationService.sendTemplateNotification(
-                        page.userId,
-                        'flagged_reply',
-                        { senderName: senderName || senderId, reason: 'held_low_confidence' },
-                        { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
-                    ).catch(err => this.logger.error('Held reply notification failed', { err }));
-                }
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'flagged_reply',
+                    { senderName: senderName || senderId, reason: 'held_low_confidence' },
+                    { messageId: storedMessage.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                ).catch(err => this.logger.error('Held reply notification failed', { err }));
                 pipelineMetrics.record(pipeline, 'held_low_confidence');
                 return { success: true, messageId: platformMessageId };
             }
@@ -472,8 +468,8 @@ export class MessageProcessor {
                 const notifyReason = buildNotificationReason(flagReason, consolidatedText);
                 const urgent = isUrgentFlag(flagReason);
 
-                notificationService.sendTemplateNotification(
-                    page.userId,
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
                     'flagged_reply',
                     { senderName: senderName || senderId, reason: notifyReason },
                     {
