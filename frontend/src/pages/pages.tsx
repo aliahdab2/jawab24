@@ -268,7 +268,7 @@ const PagesPage: NextPageWithLayout = () => {
         title={tc('error')}
         description={t('loadFailed')}
         action={
-          <Button onClick={() => refetchPages()} variant="outline">
+          <Button onClick={() => refetchPages()} variant="ghost">
             {tc('tryAgain')}
           </Button>
         }
