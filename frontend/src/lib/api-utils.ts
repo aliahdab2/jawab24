@@ -102,7 +102,7 @@ export function hasDataProperty(obj: unknown): obj is { data: unknown } {
 export interface ApiError {
   response?: {
     status?: number;
-    data?: { error?: string; message?: string };
+    data?: { error?: string | boolean; message?: string; code?: string };
   };
 }
 

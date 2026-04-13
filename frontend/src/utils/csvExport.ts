@@ -42,13 +42,20 @@ export async function downloadCSV(
   // Write the file directly to the app's Documents directory using UTF-8 encoding.
   if (isNativePlatform()) {
     const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem');
-    await Filesystem.writeFile({
-      path: sanitizeFilename(filename),
-      data: content,
-      directory: Directory.Documents,
-      encoding: Encoding.UTF8,
-    });
-    return { savedToDocuments: true };
+    try {
+      await Filesystem.writeFile({
+        path: sanitizeFilename(filename),
+        data: content,
+        directory: Directory.Documents,
+        encoding: Encoding.UTF8,
+      });
+      return { savedToDocuments: true };
+    } catch (err) {
+      // Storage permission denied — fall through to blob download below
+      if (!(err instanceof DOMException && err.name === 'NotAllowedError')) {
+        throw err;
+      }
+    }
   }
 
   const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });

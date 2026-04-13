@@ -496,7 +496,11 @@ const LeadsPage: NextPageWithLayout = () => {
       const { savedToDocuments } = await downloadCSV(`leads-${Date.now()}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
       toast.success(savedToDocuments ? tc('exportSavedToFiles') : t('exportCsv'));
     } catch (err) {
-      captureError(err, 'Failed to export leads CSV');
+      const isPermissionDenied = err instanceof DOMException && err.name === 'NotAllowedError';
+      if (!isPermissionDenied) {
+        captureError(err, 'Failed to export leads CSV');
+      }
+      toast.error(t('exportFailed'));
     } finally {
       setExporting(false);
     }

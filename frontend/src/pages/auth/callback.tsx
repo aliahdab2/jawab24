@@ -108,7 +108,7 @@ export default function AuthCallback() {
 
       // Create a timeout promise (15 seconds)
       const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(t('loginTimeout'))), 15000);
+        setTimeout(() => reject(Object.assign(new Error(t('loginTimeout')), { isLoginTimeout: true })), 15000);
       });
 
       // Determine appropriate origin based on platform
@@ -236,27 +236,29 @@ export default function AuthCallback() {
       // Web: replace navigation with correct locale (don't keep callback in history)
       routerRef.current.replace(safeUrl, safeUrl, { locale: finalLocale });
     } catch (err) {
-      // Don't show error if request was aborted (user navigated away)
-      if (err instanceof Error && err.name === 'AbortError') {
-        return;
+      // Aborted — user navigated away, silently ignore
+      if (err instanceof Error && err.name === 'AbortError') return;
+
+      const isNetworkError = err instanceof TypeError && (
+        err.message.includes('Failed to fetch') || // Chrome
+        err.message.includes('NetworkError')       // Firefox
+      );
+      const isTimeout = err instanceof Error && (err as Error & { isLoginTimeout?: boolean }).isLoginTimeout === true;
+
+      // Network blips and timeouts are not actionable — skip Sentry to avoid noise
+      if (!isNetworkError && !isTimeout) {
+        captureError(err, 'Auth callback error', { tags: { page: 'auth-callback' } });
       }
-      captureError(err, 'Auth callback error', { tags: { page: 'auth-callback' } });
-      
-      // Provide user-friendly error messages
+
       let errorMessage = t('loginError');
-      if (err instanceof Error) {
-        if (err.message === 'Failed to fetch' || err.message.includes('NetworkError')) {
-          // Network connectivity issue
-          errorMessage = tErrors('networkError');
-        } else if (err.message === t('loginTimeout')) {
-          // Timeout
-          errorMessage = err.message;
-        } else if (err.message) {
-          // API error message
-          errorMessage = err.message;
-        }
+      if (isNetworkError) {
+        errorMessage = tErrors('networkError');
+      } else if (isTimeout) {
+        errorMessage = err instanceof Error ? err.message : t('loginTimeout');
+      } else if (err instanceof Error && err.message) {
+        errorMessage = err.message;
       }
-      
+
       setError(errorMessage);
       setTimeout(() => routerRef.current.push('/login'), 3000);
     }

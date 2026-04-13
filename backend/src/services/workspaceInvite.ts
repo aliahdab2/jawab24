@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
-import { workspaceInvites } from '../db/schema';
+import { workspaceInvites, users } from '../db/schema';
 import { workspaceService } from './workspace';
 import { smsService } from './sms';
 import { detectContactType, isArabicPhone } from '@jawab24/shared';
@@ -124,6 +124,16 @@ export class WorkspaceInviteService {
                 .set({ status: 'expired' })
                 .where(eq(workspaceInvites.id, invite.id));
             throw new Error('Invite has expired');
+        }
+
+        const [userRow] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+
+        if (!userRow) {
+            throw new Error('User account not found');
         }
 
         const member = await workspaceService.addMember(

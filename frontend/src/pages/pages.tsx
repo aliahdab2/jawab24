@@ -30,6 +30,7 @@ import dynamic from 'next/dynamic';
 
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 import { captureError } from '@/lib/sentryHelpers';
+import type { ApiError } from '@/lib/api-utils';
 import { useWorkspaceRole } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/formatConnectedDate';
@@ -598,8 +599,13 @@ const PagesPage: NextPageWithLayout = () => {
               setSaved(true);
               setTimeout(() => setSaved(false), 3000);
             } catch (error) {
-              captureError(error, 'Failed to save knowledge base', { tags: { page: 'pages', action: 'save-kb' } });
-              toast.error(t('saveFailed'));
+              const apiError = error as ApiError;
+              if (apiError.response?.status === 403 && apiError.response?.data?.code === 'WORKSPACE_ACCESS_DENIED') {
+                toast.error(t('saveFailedAccessRevoked'));
+              } else {
+                captureError(error, 'Failed to save knowledge base', { tags: { page: 'pages', action: 'save-kb' } });
+                toast.error(t('saveFailed'));
+              }
             } finally {
               setSaving(false);
             }
