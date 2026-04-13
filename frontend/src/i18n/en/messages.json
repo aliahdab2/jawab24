@@ -33,7 +33,7 @@
   "resumeFailed": "Failed to resume smart reply",
   "needsAction": "Needs Action",
   "handled": "Handled",
-  "allMessages": "All Messages",
+  "allMessages": "All",
   "autoReplied": "Auto-replied",
   "resolveSuccess": "Marked as handled",
   "unresolveSuccess": "Marked as unhandled",

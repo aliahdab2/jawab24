@@ -1,7 +1,7 @@
 {
   "title": "Comments",
   "description": "Track and manage all comments from your connected pages. Use # on any post to set a post reply.",
-  "allComments": "All Comments",
+  "allComments": "All",
   "replied": "Replied",
   "repliedDesc": "Already responded to.",
   "template": "Preset Replies",
