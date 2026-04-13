@@ -2,7 +2,7 @@
 process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_mock';
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
 import { useRouter } from 'next/router';
 import CheckoutPage from '@/pages/checkout';
 import { useAuthStore } from '@/lib/store';
@@ -118,7 +118,11 @@ describe('CheckoutPage', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Unmount components before clearing mocks to stop any in-flight async effects
+    // (e.g. createSession) from leaking into the next test's mock state.
+    cleanup();
+    await act(async () => {});
     vi.clearAllMocks();
   });
 
