@@ -150,7 +150,7 @@ describe('Comments Routes', () => {
             });
 
             expect(response.statusCode).toBe(200);
-            expect(commentsService.markAsReplied).toHaveBeenCalledWith('comment_1', 'Thank you!', 'manual', undefined, undefined);
+            expect(commentsService.markAsReplied).toHaveBeenCalledWith('comment_1', 'Thank you!', 'manual', undefined);
         });
 
         it('should return 400 if reply text is missing', async () => {

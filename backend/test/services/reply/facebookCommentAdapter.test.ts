@@ -339,23 +339,11 @@ describe('FacebookCommentAdapter', () => {
             mockMarkAsReplied.mockResolvedValue(undefined);
 
             await adapter.markAsReplied(
-                'comment_uuid_1', 'Thank you!', 'ai', 'en', undefined, false, undefined, 'positive',
+                'comment_uuid_1', 'Thank you!', 'ai', 'en', false, undefined, 'positive',
             );
 
             expect(mockMarkAsReplied).toHaveBeenCalledWith(
-                'comment_uuid_1', 'Thank you!', 'ai', undefined, 'en', false, undefined, 'positive', undefined,
-            );
-        });
-
-        it('should pass templateId when reply is template-based', async () => {
-            mockMarkAsReplied.mockResolvedValue(undefined);
-
-            await adapter.markAsReplied(
-                'comment_uuid_1', 'Thanks!', 'template', 'ar', 'tpl_123',
-            );
-
-            expect(mockMarkAsReplied).toHaveBeenCalledWith(
-                'comment_uuid_1', 'Thanks!', 'template', 'tpl_123', 'ar', undefined, undefined, undefined, undefined,
+                'comment_uuid_1', 'Thank you!', 'ai', 'en', false, undefined, 'positive', undefined,
             );
         });
     });

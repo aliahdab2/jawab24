@@ -2,12 +2,12 @@ import type { Plan } from '@jawab24/shared';
 
 /**
  * FALLBACK PLANS - Display Only
- * 
+ *
  * ⚠️ CRITICAL: These plans are for DISPLAY PURPOSES ONLY
  * - Never use for billing calculations
  * - Always fetch real plans from API for checkout
  * - Backend validates all payments
- * 
+ *
  * Last updated: 2026-02-21
  * Source: Production API /plans endpoint
  */
@@ -23,8 +23,6 @@ export const FALLBACK_PLANS: Plan[] = [
         interval: 'month',
         maxPages: 1,
         maxAiRepliesPerMonth: 400,
-        maxTemplates: 5,
-        maxRules: 7,
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,
@@ -42,15 +40,13 @@ export const FALLBACK_PLANS: Plan[] = [
         id: 'fallback-business',
         name: 'Business',
         slug: 'business',
-        description: 'Auto-reply to 2 Facebook/Instagram pages with unlimited templates',
+        description: 'Auto-reply to 2 Facebook/Instagram pages',
         price: 3900, // $39.00/month
         yearlyPrice: 39000, // $390.00/year (10 months)
         currency: 'USD',
         interval: 'month',
         maxPages: 2,
         maxAiRepliesPerMonth: 3000,
-        maxTemplates: null,
-        maxRules: null,
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,
@@ -75,8 +71,6 @@ export const FALLBACK_PLANS: Plan[] = [
         interval: 'month',
         maxPages: 5,
         maxAiRepliesPerMonth: 10000,
-        maxTemplates: null,
-        maxRules: null,
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,

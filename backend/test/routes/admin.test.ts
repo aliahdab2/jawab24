@@ -100,14 +100,6 @@ vi.mock('../../src/services/ai', () => ({
     aiService: { generateReply: vi.fn().mockResolvedValue({ reply: 'test reply', language: 'en', cached: false }) },
 }));
 
-vi.mock('../../src/services/rules', () => ({
-    rulesService: { findMatchingRule: vi.fn().mockResolvedValue(null) },
-}));
-
-vi.mock('../../src/services/templates', () => ({
-    templatesService: { getTemplate: vi.fn().mockResolvedValue(null) },
-}));
-
 vi.mock('../../src/services/kb/retrieval', () => ({
     RetrievalService: vi.fn().mockImplementation(() => ({
         retrieve: vi.fn().mockResolvedValue({ chunks: [], queryEmbedding: [] }),

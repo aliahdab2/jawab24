@@ -231,15 +231,6 @@ export const commentsApi = {
   unresolve: (id: string) => api.post(`/comments/${id}/unresolve`),
 };
 
-export const presetRepliesApi = {
-  getAll: () => api.get('/preset-replies'),
-  create: (data: { keywords: string[]; message: string }) =>
-    api.post('/preset-replies', data),
-  update: (id: string, data: { keywords?: string[]; message?: string; active?: boolean }) =>
-    api.put(`/preset-replies/${id}`, data),
-  delete: (id: string) => api.delete(`/preset-replies/${id}`),
-};
-
 // Settings API
 export const settingsApi = {
   get: () => api.get('/settings'),
@@ -357,7 +348,6 @@ export const subscriptionApi = {
   resume: () => api.post('/subscription/resume'),
   checkAiLimit: () => api.get('/subscription/limits/ai'),
   checkPageLimit: () => api.get('/subscription/limits/pages'),
-  checkRuleLimit: () => api.get('/subscription/limits/rules'),
 };
 
 // Messages API

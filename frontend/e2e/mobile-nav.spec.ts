@@ -205,7 +205,6 @@ test.describe('Mobile Navigation', () => {
     await expect(dialog.getByRole('button', { name: t('nav.comments'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.messages'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.leads'), exact: true })).toBeVisible();
-    await expect(dialog.getByRole('button', { name: t('nav.presetReplies'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.settings'), exact: true })).toBeVisible();
   });
 

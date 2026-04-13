@@ -16,12 +16,3 @@ export function truncateAtSentence(text: string, maxLength: number): string {
     return (lastSpace > maxLength * 0.3 ? truncated.slice(0, lastSpace) : truncated).trim() + '…';
 }
 
-/**
- * Count content words in a message, ignoring single-character tokens.
- * Drops stray punctuation and standalone Arabic prefixes (و، ب، ل، etc.).
- * Language-agnostic — works for Arabic, English, Turkish, French, or any
- * whitespace-delimited language with zero maintenance overhead.
- */
-export function countContentWords(text: string): number {
-    return text.trim().split(/\s+/).filter(w => w.length > 1).length;
-}

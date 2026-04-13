@@ -140,8 +140,7 @@ describe('CommentProcessor', () => {
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Thank you!',
-            replyMethod: 'template',
-            templateId: 'tpl-1',
+            replyMethod: 'ai',
             needsAttention: false,
         });
     });
@@ -156,13 +155,13 @@ describe('CommentProcessor', () => {
         expect(result.success).toBe(true);
         expect(result.commentId).toBe('comment-uuid');
         expect(result.replyText).toBe('Thank you!');
-        expect(result.replyMethod).toBe('template');
+        expect(result.replyMethod).toBe('ai');
         expect(adapter.getPage).toHaveBeenCalledWith('platform-page-1');
         expect(adapter.findOrCreateContent).toHaveBeenCalledWith('page-uuid', 'content-1', 'token-123');
         expect(adapter.storeComment).toHaveBeenCalledWith('content-uuid', 'comment-1', 'Hello!', 'user-1', 'Alice');
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.markAsReplied).toHaveBeenCalledWith(
-            'comment-uuid', 'Thank you!', 'template', 'en', 'tpl-1', false, undefined, undefined, undefined,
+            'comment-uuid', 'Thank you!', 'ai', 'en', false, undefined, undefined, 'Thank you!',
         );
         expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.success']).toBe(1);
     });
@@ -1026,8 +1025,7 @@ describe('CommentProcessor — fromName fallback fetch', () => {
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Thank you!',
-            replyMethod: 'template',
-            templateId: 'tpl-1',
+            replyMethod: 'ai',
             needsAttention: false,
         });
     });
@@ -1162,8 +1160,7 @@ describe('CommentProcessor — template reply mode behavior', () => {
         // Template match returns the price redirect text (old-style template)
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'للاطلاع على الرسوم يرجى مراسلتنا على الخاص 💰',
-            replyMethod: 'template',
-            templateId: 'tpl-price',
+            replyMethod: 'ai',
             needsAttention: false,
         });
     });

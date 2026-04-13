@@ -149,58 +149,6 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         });
 
         /**
-         * GET /subscription/limits/templates - Check template limits
-         */
-        protectedRoutes.get('/limits/templates', { schema: { tags: ['Subscriptions'], summary: 'Check template limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const req = request as WorkspaceRequest;
-            if (!req.user || !req.workspaceId) {
-                return reply.status(401).send({ error: 'Unauthorized' });
-            }
-            const { userId } = req.user;
-
-            try {
-                const result = await subscriptionsService.canAddTemplate(userId, req.workspaceId);
-
-                return reply.send({
-                    success: true,
-                    data: result,
-                });
-            } catch (error) {
-                request.log.error(error, 'Failed to check template limits');
-                return reply.status(500).send({
-                    success: false,
-                    error: 'Failed to check limits',
-                });
-            }
-        });
-
-        /**
-         * GET /subscription/limits/rules - Check rule limits
-         */
-        protectedRoutes.get('/limits/rules', { schema: { tags: ['Subscriptions'], summary: 'Check rule limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {
-            const req = request as WorkspaceRequest;
-            if (!req.user || !req.workspaceId) {
-                return reply.status(401).send({ error: 'Unauthorized' });
-            }
-            const { userId } = req.user;
-
-            try {
-                const result = await subscriptionsService.canAddRule(userId, req.workspaceId);
-
-                return reply.send({
-                    success: true,
-                    data: result,
-                });
-            } catch (error) {
-                request.log.error(error, 'Failed to check rule limits');
-                return reply.status(500).send({
-                    success: false,
-                    error: 'Failed to check limits',
-                });
-            }
-        });
-
-        /**
          * POST /subscription/change-plan - Change subscription plan
          */
         protectedRoutes.post<{ Body: ChangePlanBody }>(

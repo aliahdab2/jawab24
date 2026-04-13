@@ -176,16 +176,6 @@ export interface Rule {
   matchCount?: number;
 }
 
-// --- Preset Reply Types ---
-export interface PresetReply {
-  id: string;
-  keywords: string[] | null;
-  message: string | null;
-  active: boolean | null;
-  templateId: string | null;
-  createdAt: Date | string | null;
-}
-
 // --- Dashboard Stats Types ---
 export interface DashboardStats {
   totalComments: number;
@@ -194,8 +184,6 @@ export interface DashboardStats {
   avgResponseTime: string;
   replyRate: number;
   activePages: number;
-  templatesCount: number;
-  activeRules: number;
 }
 
 // --- Pricing & Subscription Types ---
@@ -211,8 +199,6 @@ export interface Plan {
   // Limits
   maxPages: number | null;
   maxAiRepliesPerMonth: number | null;
-  maxTemplates: number | null;
-  maxRules: number | null;
   maxProducts: number | null;
   // Features
   facebookEnabled: boolean;
@@ -272,16 +258,6 @@ export interface UsageSummary {
     percentUsed: number;
   };
   pages: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-  };
-  templates: {
-    used: number;
-    limit: number | null;
-    remaining: number | null;
-  };
-  rules: {
     used: number;
     limit: number | null;
     remaining: number | null;

@@ -51,7 +51,7 @@ export const PAGE_NAMESPACES = {
   comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback', 'messages'],
   messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'messages'],
   leads:              [...DASHBOARD_LAYOUT, 'leads', 'export'],
-  presetReplies:      [...DASHBOARD_LAYOUT, 'presetReplies'],
+
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'team', 'time', 'logout'],
   integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'orderNotifications', 'salla', 'shopify', 'zid'],

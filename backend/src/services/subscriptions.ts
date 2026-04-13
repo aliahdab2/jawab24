@@ -1,6 +1,6 @@
 import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { subscriptions, plans, usage, usageLogs, pages, templates, rules } from '../db/schema';
+import { subscriptions, plans, usage, usageLogs, pages } from '../db/schema';
 import { plansService } from './plans';
 import { redis } from '../lib/redis';
 import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, LimitCheckResult } from '@jawab24/shared';
@@ -318,16 +318,6 @@ export const subscriptionsService = {
         // Count enabled page slots (FB + IG counted separately)
         const pagesUsed = await this.countEnabledPageSlots(workspaceId);
 
-        const [templatesCount] = await db
-            .select({ count: templates.id })
-            .from(templates)
-            .where(eq(templates.workspaceId, workspaceId));
-
-        const [rulesCount] = await db
-            .select({ count: rules.id })
-            .from(rules)
-            .where(eq(rules.workspaceId, workspaceId));
-
         // Calculate trial days remaining
         let trialDaysRemaining: number | undefined;
         if (subscription.status === 'trialing' && subscription.trialEndsAt) {
@@ -354,16 +344,6 @@ export const subscriptionsService = {
                 used: pagesUsed,
                 limit: plan.maxPages,
                 remaining: plan.maxPages ? Math.max(0, plan.maxPages - pagesUsed) : null,
-            },
-            templates: {
-                used: Number(templatesCount?.count) || 0,
-                limit: plan.maxTemplates,
-                remaining: plan.maxTemplates ? Math.max(0, plan.maxTemplates - (Number(templatesCount?.count) || 0)) : null,
-            },
-            rules: {
-                used: Number(rulesCount?.count) || 0,
-                limit: plan.maxRules,
-                remaining: plan.maxRules ? Math.max(0, plan.maxRules - (Number(rulesCount?.count) || 0)) : null,
             },
             subscription: {
                 plan,
@@ -581,102 +561,6 @@ export const subscriptionsService = {
             return {
                 allowed: false,
                 reason: 'Enabled page limit reached. Disable another page or upgrade your plan.',
-                limit,
-                used,
-                remaining: 0,
-            };
-        }
-
-        return {
-            allowed: true,
-            limit,
-            used,
-            remaining: limit - used,
-        };
-    },
-
-    /**
-     * Check if user can add more templates
-     */
-    async canAddTemplate(userId: string, workspaceId: string): Promise<LimitCheckResult> {
-        const subscription = await this.getUserSubscription(userId);
-
-        if (!subscription) {
-            return { allowed: false, reason: 'No active subscription' };
-        }
-
-        // Check subscription status (canceled/paused/expired)
-        const statusCheck = this.checkSubscriptionStatus(subscription);
-        if (!statusCheck.allowed) return statusCheck;
-
-        const plan = subscription.plan;
-
-        // Check if templates limit is unlimited (null)
-        if (plan.maxTemplates === null) {
-            return { allowed: true };
-        }
-
-        // Count current templates in workspace
-        const [result] = await db
-            .select({ count: templates.id })
-            .from(templates)
-            .where(eq(templates.workspaceId, workspaceId));
-
-        const used = Number(result?.count) || 0;
-        const limit = plan.maxTemplates;
-
-        if (used >= limit) {
-            return {
-                allowed: false,
-                reason: 'Template limit reached. Upgrade to create more templates.',
-                limit,
-                used,
-                remaining: 0,
-            };
-        }
-
-        return {
-            allowed: true,
-            limit,
-            used,
-            remaining: limit - used,
-        };
-    },
-
-    /**
-     * Check if user can add more rules
-     */
-    async canAddRule(userId: string, workspaceId: string): Promise<LimitCheckResult> {
-        const subscription = await this.getUserSubscription(userId);
-
-        if (!subscription) {
-            return { allowed: false, reason: 'No active subscription' };
-        }
-
-        // Check subscription status (canceled/paused/expired)
-        const statusCheck = this.checkSubscriptionStatus(subscription);
-        if (!statusCheck.allowed) return statusCheck;
-
-        const plan = subscription.plan;
-
-        // Check if rules limit is unlimited (null)
-        if (plan.maxRules === null) {
-            return { allowed: true };
-        }
-
-        // Count current rules in workspace
-        const [result] = await db
-            .select({ count: rules.id })
-            .from(rules)
-            .where(eq(rules.workspaceId, workspaceId));
-
-        const used = Number(result?.count) || 0;
-        const limit = plan.maxRules;
-
-        if (used >= limit) {
-            return {
-                allowed: false,
-                reason: 'Rule limit reached. Upgrade to create more rules.',
                 limit,
                 used,
                 remaining: 0,

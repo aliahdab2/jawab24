@@ -291,7 +291,7 @@ describe('InstagramCommentAdapter', () => {
             mockDbUpdateWhere.mockResolvedValue(undefined);
 
             await adapter.markAsReplied(
-                'igc_uuid_1', 'Thank you!', 'ai', 'en', undefined, false, undefined, 'positive',
+                'igc_uuid_1', 'Thank you!', 'ai', 'en', false, undefined, 'positive',
             );
 
             expect(mockDbUpdateWhere).toHaveBeenCalledTimes(1);
@@ -315,7 +315,7 @@ describe('InstagramCommentAdapter', () => {
             mockDbUpdateWhere.mockResolvedValue(undefined);
 
             await adapter.markAsReplied(
-                'igc_uuid_1', 'Thanks!', 'template', 'ar', 'tpl_123',
+                'igc_uuid_1', 'Thanks!', 'template', 'ar',
             );
 
             expect(mockDbSetArgs).toHaveBeenCalledWith(

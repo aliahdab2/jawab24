@@ -11,8 +11,6 @@ vi.mock('../../src/services/plans', () => ({
             price: 2500,
             maxPages: 3,
             maxAiRepliesPerMonth: 1500,
-            maxTemplates: null,
-            maxRules: null,
             trialDays: 0,
             facebookEnabled: true,
             instagramEnabled: true,
@@ -27,8 +25,6 @@ vi.mock('../../src/services/plans', () => ({
             price: 0,
             maxPages: 1,
             maxAiRepliesPerMonth: 60,
-            maxTemplates: 3,
-            maxRules: 2,
             trialDays: 30,
             facebookEnabled: true,
             instagramEnabled: true,
@@ -92,8 +88,6 @@ vi.mock('../../src/db/schema', () => ({
     usage: { userId: 'user_id', periodStart: 'period_start', periodEnd: 'period_end' },
     usageLogs: {},
     pages: { userId: 'user_id', id: 'id' },
-    templates: { userId: 'user_id', id: 'id' },
-    rules: { userId: 'user_id', id: 'id' },
 }));
 
 vi.mock('../../src/lib/redis', () => ({
@@ -284,8 +278,6 @@ describe('Subscriptions Service', () => {
             const plan = {
                 maxAiRepliesPerMonth: null, // unlimited
                 maxPages: null,
-                maxTemplates: null,
-                maxRules: null,
             };
 
             // When limit is null, it means unlimited
@@ -369,8 +361,6 @@ describe('Subscriptions Service', () => {
                 price: 0,
                 maxPages: 1,
                 maxAiRepliesPerMonth: 60,
-                maxTemplates: 3,
-                maxRules: 2,
                 trialDays: 30,
                 facebookEnabled: true,
                 instagramEnabled: true,
@@ -425,8 +415,6 @@ describe('Subscriptions Service', () => {
                 price: 2500,
                 maxPages: 3,
                 maxAiRepliesPerMonth: 1500,
-                maxTemplates: null,
-                maxRules: null,
                 trialDays: 0,
                 facebookEnabled: true,
                 instagramEnabled: true,
@@ -478,8 +466,6 @@ describe('Subscriptions Service', () => {
                 price: 2500,
                 maxPages: 3,
                 maxAiRepliesPerMonth: 1500,
-                maxTemplates: null,
-                maxRules: null,
                 trialDays: 0,
                 facebookEnabled: true,
                 instagramEnabled: true,
@@ -563,7 +549,7 @@ describe('Subscriptions Service', () => {
                     },
                     plan: {
                         id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
+                        maxPages: 1, maxAiRepliesPerMonth: 60,
                         trialDays: 30, facebookEnabled: true, instagramEnabled: true,
                         whatsappEnabled: false, showBranding: true, prioritySupport: false,
                     },
@@ -609,8 +595,7 @@ describe('Subscriptions Service', () => {
                                             },
                                             plan: {
                                                 id: 'plan_1', name: 'Business', slug: 'business', price: 2500,
-                                                maxPages: 3, maxAiRepliesPerMonth: 1500, maxTemplates: null,
-                                                maxRules: null, trialDays: 0, facebookEnabled: true,
+                                                maxPages: 3, maxAiRepliesPerMonth: 1500, trialDays: 0, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
                                                 showBranding: false, prioritySupport: false,
                                             },
@@ -657,8 +642,7 @@ describe('Subscriptions Service', () => {
                                             },
                                             plan: {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
-                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
                                                 showBranding: true, prioritySupport: false,
                                             },
@@ -689,166 +673,6 @@ describe('Subscriptions Service', () => {
         });
     });
 
-    describe('canAddTemplate - integration', () => {
-        it('should reject when subscription is paused', async () => {
-            const { db } = await import('../../src/db');
-
-            const mockOrderBy = vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{
-                    subscription: {
-                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
-                        status: 'paused', trialEndsAt: null,
-                        currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
-                        canceledAt: null, cancelReason: null,
-                        createdAt: new Date(), updatedAt: new Date(),
-                    },
-                    plan: {
-                        id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
-                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
-                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
-                    },
-                }]),
-            });
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockReturnValue({
-                            orderBy: mockOrderBy,
-                        }),
-                    }),
-                    where: vi.fn().mockResolvedValue([{ count: 0 }]),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.canAddTemplate('user_1');
-            expect(result.allowed).toBe(false);
-            expect(result.reason).toContain('paused');
-        });
-
-        it('should allow unlimited templates (null limit)', async () => {
-            const { db } = await import('../../src/db');
-
-            const mockOrderBy = vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{
-                    subscription: {
-                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
-                        status: 'active', trialEndsAt: null,
-                        currentPeriodStart: new Date(),
-                        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                        canceledAt: null, cancelReason: null,
-                        createdAt: new Date(), updatedAt: new Date(),
-                    },
-                    plan: {
-                        id: 'plan_1', name: 'Business', slug: 'business', price: 2500,
-                        maxPages: 3, maxAiRepliesPerMonth: 1500, maxTemplates: null,
-                        maxRules: null, trialDays: 0, facebookEnabled: true,
-                        instagramEnabled: true, whatsappEnabled: false,
-                        showBranding: false, prioritySupport: false,
-                    },
-                }]),
-            });
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockReturnValue({
-                            orderBy: mockOrderBy,
-                        }),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.canAddTemplate('user_1');
-            expect(result.allowed).toBe(true);
-        });
-    });
-
-    describe('canAddRule - integration', () => {
-        it('should reject when subscription expired beyond grace period', async () => {
-            const { db } = await import('../../src/db');
-
-            // Period ended 10 days ago — beyond the 7-day grace period
-            const expiredPeriodEnd = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
-            const mockOrderBy = vi.fn().mockReturnValue({
-                limit: vi.fn().mockResolvedValue([{
-                    subscription: {
-                        id: 'sub_1', userId: 'user_1', planId: 'plan_1',
-                        status: 'past_due', trialEndsAt: null,
-                        currentPeriodStart: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
-                        currentPeriodEnd: expiredPeriodEnd,
-                        canceledAt: null, cancelReason: null,
-                        createdAt: new Date(), updatedAt: new Date(),
-                    },
-                    plan: {
-                        id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
-                        trialDays: 30, facebookEnabled: true, instagramEnabled: true,
-                        whatsappEnabled: false, showBranding: true, prioritySupport: false,
-                    },
-                }]),
-            });
-            vi.mocked(db.select).mockReturnValue({
-                from: vi.fn().mockReturnValue({
-                    innerJoin: vi.fn().mockReturnValue({
-                        where: vi.fn().mockReturnValue({
-                            orderBy: mockOrderBy,
-                        }),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.canAddRule('user_1');
-            expect(result.allowed).toBe(false);
-            expect(result.reason).toContain('expired');
-        });
-
-        it('should allow when under rule limit', async () => {
-            const { db } = await import('../../src/db');
-
-            let callCount = 0;
-            vi.mocked(db.select).mockImplementation(() => {
-                callCount++;
-                if (callCount === 1) {
-                    return {
-                        from: vi.fn().mockReturnValue({
-                            innerJoin: vi.fn().mockReturnValue({
-                                where: vi.fn().mockReturnValue({
-                                    orderBy: vi.fn().mockReturnValue({
-                                        limit: vi.fn().mockResolvedValue([{
-                                            subscription: {
-                                                id: 'sub_1', userId: 'user_1', planId: 'plan_1',
-                                                status: 'active', trialEndsAt: null,
-                                                currentPeriodStart: new Date(),
-                                                currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                                                canceledAt: null, cancelReason: null,
-                                                createdAt: new Date(), updatedAt: new Date(),
-                                            },
-                                            plan: {
-                                                id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
-                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
-                                                instagramEnabled: true, whatsappEnabled: false,
-                                                showBranding: true, prioritySupport: false,
-                                            },
-                                        }]),
-                                    }),
-                                }),
-                            }),
-                        }),
-                    } as any;
-                }
-                return {
-                    from: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([{ count: 1 }]),
-                    }),
-                } as any;
-            });
-
-            const result = await subscriptionsService.canAddRule('user_1');
-            expect(result.allowed).toBe(true);
-            expect(result.remaining).toBe(1); // 2 limit - 1 used
-        });
-    });
 
     describe('canUseAiReplies - integration', () => {
         it('should reject when no subscription', async () => {
@@ -871,7 +695,7 @@ describe('Subscriptions Service', () => {
                     },
                     plan: {
                         id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                        maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3, maxRules: 2,
+                        maxPages: 1, maxAiRepliesPerMonth: 60,
                         trialDays: 30, facebookEnabled: true, instagramEnabled: true,
                         whatsappEnabled: false, showBranding: true, prioritySupport: false,
                     },
@@ -907,8 +731,7 @@ describe('Subscriptions Service', () => {
                     },
                     plan: {
                         id: 'plan_1', name: 'Enterprise', slug: 'enterprise', price: 10000,
-                        maxPages: null, maxAiRepliesPerMonth: null, maxTemplates: null,
-                        maxRules: null, trialDays: 0, facebookEnabled: true,
+                        maxPages: null, maxAiRepliesPerMonth: null, trialDays: 0, facebookEnabled: true,
                         instagramEnabled: true, whatsappEnabled: true,
                         showBranding: false, prioritySupport: true,
                     },
@@ -952,8 +775,7 @@ describe('Subscriptions Service', () => {
                                             },
                                             plan: {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
-                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
                                                 showBranding: true, prioritySupport: false,
                                             },
@@ -1016,8 +838,7 @@ describe('Subscriptions Service', () => {
                                             },
                                             plan: {
                                                 id: 'plan_1', name: 'Free', slug: 'free', price: 0,
-                                                maxPages: 1, maxAiRepliesPerMonth: 60, maxTemplates: 3,
-                                                maxRules: 2, trialDays: 30, facebookEnabled: true,
+                                                maxPages: 1, maxAiRepliesPerMonth: 60, trialDays: 30, facebookEnabled: true,
                                                 instagramEnabled: true, whatsappEnabled: false,
                                                 showBranding: true, prioritySupport: false,
                                             },
@@ -1184,8 +1005,6 @@ describe('checkSubscriptionStatus', () => {
             price: 0,
             maxPages: 1,
             maxAiRepliesPerMonth: 60,
-            maxTemplates: 3,
-            maxRules: 2,
             trialDays: 30,
             facebookEnabled: true,
             instagramEnabled: true,

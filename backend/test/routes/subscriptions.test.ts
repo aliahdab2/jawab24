@@ -9,8 +9,6 @@ vi.mock('../../src/services/subscriptions', () => ({
         getUsageSummary: vi.fn(),
         canUseAiReplies: vi.fn(),
         canAddPage: vi.fn(),
-        canAddTemplate: vi.fn(),
-        canAddRule: vi.fn(),
         changePlan: vi.fn(),
         cancelSubscription: vi.fn(),
         pauseSubscription: vi.fn(),
@@ -281,76 +279,6 @@ describe('Subscriptions Routes', () => {
             const response = await app.inject({
                 method: 'GET',
                 url: '/api/subscription/limits/pages',
-                headers: { authorization: 'Bearer test_token' },
-            });
-
-            expect(response.statusCode).toBe(500);
-            const body = JSON.parse(response.payload);
-            expect(body.success).toBe(false);
-        });
-    });
-
-    // ── GET /limits/templates ──────────────────────────────────────────────────
-
-    describe('GET /api/subscription/limits/templates', () => {
-        it('should return 200 on success', async () => {
-            const { subscriptionsService } = await import('../../src/services/subscriptions');
-            vi.mocked(subscriptionsService.canAddTemplate).mockResolvedValue({ allowed: true } as never);
-
-            const response = await app.inject({
-                method: 'GET',
-                url: '/api/subscription/limits/templates',
-                headers: { authorization: 'Bearer test_token' },
-            });
-
-            expect(response.statusCode).toBe(200);
-            const body = JSON.parse(response.payload);
-            expect(body.success).toBe(true);
-            expect(body.data.allowed).toBe(true);
-        });
-
-        it('should return 500 when service throws', async () => {
-            const { subscriptionsService } = await import('../../src/services/subscriptions');
-            vi.mocked(subscriptionsService.canAddTemplate).mockRejectedValue(new Error('error'));
-
-            const response = await app.inject({
-                method: 'GET',
-                url: '/api/subscription/limits/templates',
-                headers: { authorization: 'Bearer test_token' },
-            });
-
-            expect(response.statusCode).toBe(500);
-            const body = JSON.parse(response.payload);
-            expect(body.success).toBe(false);
-        });
-    });
-
-    // ── GET /limits/rules ─────────────────────────────────────────────────────
-
-    describe('GET /api/subscription/limits/rules', () => {
-        it('should return 200 on success', async () => {
-            const { subscriptionsService } = await import('../../src/services/subscriptions');
-            vi.mocked(subscriptionsService.canAddRule).mockResolvedValue({ allowed: true } as never);
-
-            const response = await app.inject({
-                method: 'GET',
-                url: '/api/subscription/limits/rules',
-                headers: { authorization: 'Bearer test_token' },
-            });
-
-            expect(response.statusCode).toBe(200);
-            const body = JSON.parse(response.payload);
-            expect(body.success).toBe(true);
-            expect(body.data.allowed).toBe(true);
-        });
-
-        it('should return 500 when service throws', async () => {
-            const { subscriptionsService } = await import('../../src/services/subscriptions');
-            vi.mocked(subscriptionsService.canAddRule).mockRejectedValue(new Error('error'));
-
-            const response = await app.inject({
-                method: 'GET',
-                url: '/api/subscription/limits/rules',
                 headers: { authorization: 'Bearer test_token' },
             });
 

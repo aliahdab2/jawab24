@@ -2,7 +2,7 @@ import { db } from '../db';
 import {
     users, refreshTokens, pages, posts, instagramMedia,
     comments, instagramComments, messages, conversationPauses,
-    templates, rules, settings, logs, subscriptions, usage,
+    settings, logs, subscriptions, usage,
     usageLogs, deviceTokens, notifications, ecommerceStores,
     pendingEcommerceInstalls, workspaces, workspaceMembers, workspaceInvites,
 } from '../db/schema';
@@ -440,8 +440,6 @@ export class AuthService {
             // 5. Delete user-level data (order doesn't matter — all reference users directly)
             await tx.delete(logs).where(eq(logs.userId, userId));
             await tx.delete(usageLogs).where(eq(usageLogs.userId, userId));
-            await tx.delete(rules).where(eq(rules.userId, userId));
-            await tx.delete(templates).where(eq(templates.userId, userId));
             await tx.delete(settings).where(eq(settings.userId, userId));
             await tx.delete(subscriptions).where(eq(subscriptions.userId, userId));
             await tx.delete(usage).where(eq(usage.userId, userId));

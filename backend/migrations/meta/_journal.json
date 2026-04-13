@@ -519,6 +519,13 @@
       "when": 1776182400000,
       "tag": "0073_backfill_pages_workspace_id",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "5",
+      "when": 1776073252090,
+      "tag": "0074_narrow_magus",
+      "breakpoints": true
     }
   ]
 }

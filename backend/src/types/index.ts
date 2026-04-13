@@ -7,48 +7,6 @@ export * from './instagram';
 export * from './settings';
 export * from './payment';
 
-// Rule Types
-export interface Rule {
-    id: string;
-    userId: string | null;
-    name: string;
-    keywords: string[] | null;
-    templateId: string | null;
-    priority: number | null;
-    active: boolean | null;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-}
-
-export interface CreateRuleDTO {
-    name: string;
-    keywords?: string[];
-    templateId?: string;
-    priority?: number;
-    active?: boolean;
-}
-
-export type UpdateRuleDTO = Partial<CreateRuleDTO>;
-
-// Template Types
-export interface Template {
-    id: string;
-    userId: string | null;
-    name: string;
-    message: string;
-    active: boolean | null;
-    createdAt: Date | null;
-    updatedAt: Date | null;
-}
-
-export interface CreateTemplateDTO {
-    name: string;
-    message: string;
-    active?: boolean;
-}
-
-export type UpdateTemplateDTO = Partial<CreateTemplateDTO>;
-
 // Conversation Message for AI context
 export interface ConversationMessage {
     role: 'user' | 'assistant';
@@ -173,7 +131,6 @@ export interface Comment {
     replied: boolean | null;
     replyText: string | null;
     replyMethod: string | null;
-    templateId: string | null;
     detectedLanguage: string | null;
     replyLanguage: string | null;
     needsAttention: boolean | null;
@@ -199,7 +156,6 @@ export interface UpdateCommentDTO {
     replied?: boolean;
     replyText?: string;
     replyMethod?: 'template' | 'ai' | 'manual';
-    templateId?: string;
     detectedLanguage?: string;
     replyLanguage?: string;
     repliedAt?: Date;

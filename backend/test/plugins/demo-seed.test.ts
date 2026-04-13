@@ -74,16 +74,15 @@ describe('seedDemoData', () => {
 
         await seedDemoData('user-123');
 
-        // 4 page name refreshes + 2 e-commerce page link updates (Shopify + Salla) + 4 template upserts
-        // (kbActiveVersion activation is now handled inside ingestFullPage, not by invalidateCachesForStore)
-        expect(db.update).toHaveBeenCalledTimes(10);
+        // 4 page name refreshes + 2 e-commerce page link updates (Shopify + Salla)
+        expect(db.update).toHaveBeenCalledTimes(6);
     });
 
     it('should create pages when no demo data exists', async () => {
         // select existing pages → none
         vi.mocked(db.select).mockReturnValue(mockSelectChain([]) as any);
 
-        // insert for settings, pages, posts, comments, templates, notifications
+        // insert for settings, pages, posts, comments, notifications
         vi.mocked(db.insert).mockReturnValue(mockInsertChain() as any);
 
         // update for settings (may not be called if no existing settings)
@@ -94,7 +93,7 @@ describe('seedDemoData', () => {
 
         await seedDemoData('user-123');
 
-        // Should have called insert multiple times (settings + 3 pages + 6 posts + 10 comments + 4 templates + 7 notifications)
+        // Should have called insert multiple times (settings + 3 pages + 6 posts + 10 comments + 7 notifications)
         expect(db.insert).toHaveBeenCalled();
         // Should NOT have called update for pages (they are new)
         // The first select returns [] so no update is triggered for pages

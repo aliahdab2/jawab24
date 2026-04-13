@@ -89,7 +89,6 @@ export interface CommentPlatformAdapter {
         replyText: string,
         replyMethod: 'template' | 'ai' | 'manual',
         detectedLanguage: string,
-        templateId?: string,
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,

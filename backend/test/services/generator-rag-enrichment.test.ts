@@ -16,14 +16,6 @@ import { ReplyGenerator } from '../../src/services/reply/generator';
 
 // ── Dependency mocks ──────────────────────────────────────────────────────────
 
-vi.mock('../../src/services/rules', () => ({
-    rulesService: { findMatchingRule: vi.fn().mockResolvedValue(null) },
-}));
-
-vi.mock('../../src/services/templates', () => ({
-    templatesService: { getTemplate: vi.fn() },
-}));
-
 vi.mock('../../src/services/ai', () => ({
     aiService: {
         generateReply: vi.fn().mockResolvedValue({

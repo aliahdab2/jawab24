@@ -3,8 +3,6 @@ import { replyService } from '../../src/services/reply';
 import { pagesService } from '../../src/services/pages';
 import { postsService } from '../../src/services/posts';
 import { commentsService } from '../../src/services/comments';
-import { rulesService } from '../../src/services/rules';
-import { templatesService } from '../../src/services/templates';
 import { aiService } from '../../src/services/ai';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { redis } from '../../src/lib/redis';
@@ -14,8 +12,6 @@ import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 vi.mock('../../src/services/pages');
 vi.mock('../../src/services/posts');
 vi.mock('../../src/services/comments');
-vi.mock('../../src/services/rules');
-vi.mock('../../src/services/templates');
 vi.mock('../../src/services/ai');
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
@@ -155,44 +151,10 @@ describe('Reply Service', () => {
             replied: false,
         };
 
-        it('should process comment and reply using template', async () => {
-            const mockRule = { id: 'rule_1', templateId: 'template_1' };
-            const mockTemplate = {
-                id: 'template_1',
-                message: 'Thank you for your feedback!',
-            };
-
+        it('should process comment and reply using AI', async () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
-            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
-            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
-
-            // Mock the Facebook API call
-            const axios = await import('axios');
-            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
-
-            const result = await replyService.processComment(
-                'fb_page_123',
-                'fb_post_123',
-                'fb_comment_123',
-                'Great product!',
-                'user_123',
-                'John Doe'
-            );
-
-            expect(result.success).toBe(true);
-            expect(result.replyMethod).toBe('template');
-            expect(result.replyText).toBe('Thank you for your feedback!');
-            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.success']).toBe(1);
-        });
-
-        it('should process comment and reply using AI when no template', async () => {
-            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
-            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'AI generated reply',
                 language: 'en',
@@ -325,12 +287,6 @@ describe('Reply Service', () => {
             vi.mocked(redis.incr).mockResolvedValue(3);
             vi.mocked(redis.expire).mockResolvedValue(1);
 
-            const mockRule = { id: 'rule_1', templateId: 'template_1' };
-            const mockTemplate = {
-                id: 'template_1',
-                message: 'Thank you!',
-            };
-
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
             vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
@@ -338,8 +294,7 @@ describe('Reply Service', () => {
                 comment: mockComment as any,
                 isNew: true,
             });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
-            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
+            vi.mocked(aiService.generateReply).mockResolvedValue({ reply: 'Thank you!', language: 'en', cached: false });
             vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
 
             const axios = await import('axios');
@@ -362,12 +317,6 @@ describe('Reply Service', () => {
             // Simulate Redis failure
             vi.mocked(redis.incr).mockRejectedValue(new Error('Redis connection failed'));
 
-            const mockRule = { id: 'rule_1', templateId: 'template_1' };
-            const mockTemplate = {
-                id: 'template_1',
-                message: 'Thank you!',
-            };
-
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
             vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
@@ -375,8 +324,7 @@ describe('Reply Service', () => {
                 comment: mockComment as any,
                 isNew: true,
             });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
-            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
+            vi.mocked(aiService.generateReply).mockResolvedValue({ reply: 'Thank you!', language: 'en', cached: false });
             vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
 
             const axios = await import('axios');
@@ -399,7 +347,6 @@ describe('Reply Service', () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'We apologize for the inconvenience.',
                 language: 'en',
@@ -428,7 +375,6 @@ describe('Reply Service', () => {
                 'comment_uuid',
                 'We apologize for the inconvenience.',
                 'ai',
-                undefined, // templateId
                 expect.any(String), // language
                 true, // needsAttention
                 'angry_customer', // flagReason
@@ -443,7 +389,6 @@ describe('Reply Service', () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'We apologize.',
                 language: 'en',
@@ -487,7 +432,6 @@ describe('Reply Service', () => {
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
             vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
             vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(null);
             vi.mocked(aiService.generateReply).mockResolvedValue({
                 reply: 'Thank you!',
                 language: 'en',
@@ -514,56 +458,10 @@ describe('Reply Service', () => {
             expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
         });
 
-        it('should pass needsAttention: false for template replies', async () => {
-            const mockRule = { id: 'rule_1', templateId: 'template_1' };
-            const mockTemplate = {
-                id: 'template_1',
-                message: 'Thank you for your feedback!',
-            };
-
-            vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
-            vi.mocked(postsService.findOrCreateFromWebhook).mockResolvedValue(mockPost as any);
-            vi.mocked(commentsService.findOrCreateFromWebhook).mockResolvedValue({ comment: mockComment as any, isNew: true });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
-            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
-            vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
-
-            const axios = await import('axios');
-            vi.mocked(axios.default.post).mockResolvedValue({ data: { id: 'reply_id' } });
-
-            await replyService.processComment(
-                'fb_page_123',
-                'fb_post_123',
-                'fb_comment_123',
-                'Great product!',
-                'user_123',
-                'John Doe'
-            );
-
-            // markAsReplied should have needsAttention=false for template replies
-            expect(commentsService.markAsReplied).toHaveBeenCalledWith(
-                'comment_uuid',
-                'Thank you for your feedback!',
-                'template',
-                'template_1',
-                expect.any(String),
-                false, // needsAttention
-                undefined, // flagReason
-                undefined, // aiIntent
-                undefined // aiOriginalReply
-            );
-        });
-
         it('should set TTL on first rate limit increment', async () => {
             // Simulate first request (count = 1)
             vi.mocked(redis.incr).mockResolvedValue(1);
             vi.mocked(redis.expire).mockResolvedValue(1);
-
-            const mockRule = { id: 'rule_1', templateId: 'template_1' };
-            const mockTemplate = {
-                id: 'template_1',
-                message: 'Thank you!',
-            };
 
             vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as any);
             vi.mocked(workspaceSettingsService.isCommentsAutoReplyEnabled).mockResolvedValue(true);
@@ -572,8 +470,7 @@ describe('Reply Service', () => {
                 comment: mockComment as any,
                 isNew: true,
             });
-            vi.mocked(rulesService.findMatchingRule).mockResolvedValue(mockRule as any);
-            vi.mocked(templatesService.getTemplate).mockResolvedValue(mockTemplate as any);
+            vi.mocked(aiService.generateReply).mockResolvedValue({ reply: 'Thank you!', language: 'en', cached: false });
             vi.mocked(commentsService.markAsReplied).mockResolvedValue(mockComment as any);
 
             const axios = await import('axios');

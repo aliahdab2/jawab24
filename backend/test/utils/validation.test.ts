@@ -3,10 +3,6 @@ import {
     BusinessProfileSchema,
     CreatePlanSchema,
     UpdatePlanSchema,
-    CreateRuleSchema,
-    UpdateRuleSchema,
-    CreateTemplateSchema,
-    UpdateTemplateSchema,
     UpdateSettingsSchema,
     PaginationSchema,
     UUIDSchema,
@@ -100,78 +96,6 @@ describe('Validation Schemas', () => {
         it('should allow empty object', () => {
             const result = UpdatePlanSchema.safeParse({});
             expect(result.success).toBe(true);
-        });
-    });
-
-    describe('CreateRuleSchema', () => {
-        it('should validate a valid rule', () => {
-            const validRule = {
-                name: 'Price Inquiry',
-                keywords: ['price', 'cost', 'how much'],
-                templateId: '123e4567-e89b-12d3-a456-426614174000',
-            };
-            
-            const result = CreateRuleSchema.safeParse(validRule);
-            expect(result.success).toBe(true);
-        });
-
-        it('should require at least one keyword', () => {
-            const invalidRule = {
-                name: 'Empty Rule',
-                keywords: [],
-                templateId: '123e4567-e89b-12d3-a456-426614174000',
-            };
-            
-            const result = CreateRuleSchema.safeParse(invalidRule);
-            expect(result.success).toBe(false);
-        });
-
-        it('should validate UUID format for templateId', () => {
-            const invalidRule = {
-                name: 'Bad Template ID',
-                keywords: ['test'],
-                templateId: 'not-a-uuid',
-            };
-            
-            const result = CreateRuleSchema.safeParse(invalidRule);
-            expect(result.success).toBe(false);
-        });
-
-        it('should apply default values', () => {
-            const minimalRule = {
-                name: 'Test Rule',
-                keywords: ['test'],
-                templateId: '123e4567-e89b-12d3-a456-426614174000',
-            };
-            
-            const result = CreateRuleSchema.safeParse(minimalRule);
-            expect(result.success).toBe(true);
-            if (result.success) {
-                expect(result.data.priority).toBe(0);
-                expect(result.data.active).toBe(true);
-            }
-        });
-    });
-
-    describe('CreateTemplateSchema', () => {
-        it('should validate a valid template', () => {
-            const validTemplate = {
-                name: 'Thank You',
-                message: 'Thank you for your comment!',
-            };
-
-            const result = CreateTemplateSchema.safeParse(validTemplate);
-            expect(result.success).toBe(true);
-        });
-
-        it('should require message field', () => {
-            const invalidTemplate = {
-                name: 'Empty Template',
-                message: '',
-            };
-
-            const result = CreateTemplateSchema.safeParse(invalidTemplate);
-            expect(result.success).toBe(false);
         });
     });
 

@@ -201,23 +201,6 @@ export const instagramMedia = pgTable('instagram_media', {
     };
 });
 
-// 5. Templates Table (Defined before rules and comments due to foreign keys)
-export const templates = pgTable('templates', {
-    id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    name: varchar('name', { length: 255 }).notNull(),
-    message: text('message').notNull().default(''),
-    active: boolean('active').default(true),
-    createdAt: timestamp('created_at').defaultNow(),
-    updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => {
-    return {
-        userIdIdx: index('idx_templates_user_id').on(table.userId),
-        workspaceIdIdx: index('idx_templates_workspace_id').on(table.workspaceId),
-    };
-});
-
 // 4. Comments Table (Facebook Comments)
 export const comments = pgTable('comments', {
     id: uuid('id').defaultRandom().primaryKey(),
@@ -230,7 +213,6 @@ export const comments = pgTable('comments', {
     replyText: text('reply_text'),
     aiOriginalReply: text('ai_original_reply'),
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
-    templateId: uuid('template_id').references(() => templates.id, { onDelete: 'set null' }),
     detectedLanguage: varchar('detected_language', { length: 10 }),
     replyLanguage: varchar('reply_language', { length: 10 }),
     needsAttention: boolean('needs_attention').default(false),
@@ -289,27 +271,6 @@ export const instagramComments = pgTable('instagram_comments', {
         createdTimeIdx: index('idx_instagram_comments_created_time').on(table.createdTime),
         // Composite index for actionRequired filter (mirrors comments table)
         actionRequiredIdx: index('idx_ig_comments_action_required').on(table.mediaId, table.resolved, table.replied, table.needsAttention, table.createdAt),
-    };
-});
-
-// 6. Rules Table
-export const rules = pgTable('rules', {
-    id: uuid('id').defaultRandom().primaryKey(),
-    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
-    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
-    name: varchar('name', { length: 255 }).notNull(),
-    keywords: text('keywords').array(),
-    templateId: uuid('template_id').references(() => templates.id, { onDelete: 'set null' }),
-    priority: integer('priority').default(0),
-    active: boolean('active').default(true),
-    createdAt: timestamp('created_at').defaultNow(),
-    updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => {
-    return {
-        userIdIdx: index('idx_rules_user_id').on(table.userId),
-        workspaceIdIdx: index('idx_rules_workspace_id').on(table.workspaceId),
-        // Covering index for "get active rules by priority" queries
-        activeRulesIdx: index('idx_rules_workspace_active_priority').on(table.workspaceId, table.active, table.priority),
     };
 });
 
@@ -483,8 +444,6 @@ export const plans = pgTable('plans', {
     // Limits
     maxPages: integer('max_pages').default(1),
     maxAiRepliesPerMonth: integer('max_ai_replies_per_month').default(200),
-    maxTemplates: integer('max_templates').default(5), // null = unlimited
-    maxRules: integer('max_rules').default(7), // null = unlimited
     maxProducts: integer('max_products').default(50), // null = unlimited
 
     // Features

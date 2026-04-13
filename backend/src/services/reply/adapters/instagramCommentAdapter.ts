@@ -173,7 +173,6 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         replyText: string,
         replyMethod: 'template' | 'ai' | 'manual',
         detectedLanguage: string,
-        _templateId?: string,
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,

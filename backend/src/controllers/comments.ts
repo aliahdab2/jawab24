@@ -144,7 +144,7 @@ export class CommentsController {
             if (!owned) {
                 return reply.status(404).send({ error: 'Comment not found' });
             }
-            const comment = await commentsService.markAsReplied(id, replyText, 'manual', undefined, language);
+            const comment = await commentsService.markAsReplied(id, replyText, 'manual', language);
             return reply.send(comment);
         } catch (error) {
             request.log.error(error);

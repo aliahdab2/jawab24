@@ -1,5 +1,3 @@
-import { rulesService } from '../rules';
-import { templatesService } from '../templates';
 import { aiService } from '../ai';
 import { messagesService } from '../messages';
 import { subscriptionsService } from '../subscriptions';
@@ -11,15 +9,6 @@ import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { countContentWords } from '../../utils/text';
-
-// Messages longer than this many content words are assumed to have complex/
-// multi-intent context. Template keyword matching on them produces false positives
-// (e.g. "كلمة السر لنظام التسجيل" containing تسجيل keyword), so they go straight to AI.
-// Threshold of 6 covers the longest natural short-query pattern:
-//   "السلام عليكم كم سعر الدورة" (5 words) → correctly hits template
-//   "أنا ناسي كلمة السر لنظام التسجيل ممكن تساعدوني" (8 words) → correctly skips to AI
-const TEMPLATE_WORD_LIMIT = 6;
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
  *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
@@ -113,8 +102,6 @@ export type CommentReplyMode = 'public' | 'private' | 'dual';
 export interface GenerateReplyResult {
     replyText: string | null;
     replyMethod: 'template' | 'ai';
-    templateId?: string;
-    templateName?: string;
     needsAttention?: boolean;
     flagReason?: string;
     aiIntent?: string;
@@ -196,7 +183,7 @@ export class ReplyGenerator {
         aiEnabled: boolean,
         commentReplyMode: CommentReplyMode = 'public',
     ): Promise<GenerateReplyResult> {
-        const { workspaceId, userId, text, pageName, knowledgeBase, postId, pageId, accessToken, postMessage: contextPostMessage } = context;
+        const { userId, text, pageName, knowledgeBase, postId, pageId, accessToken, postMessage: contextPostMessage } = context;
 
         // Strip platform noise from comment text before language detection and AI processing.
         // Both @mentions and URLs contain Latin chars that pollute language detection
@@ -215,13 +202,7 @@ export class ReplyGenerator {
             return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
         }
 
-        // 1. Try to find a matching rule with template (skip if page has a store — AI answers with product context)
-        if (!context.ecommerceStoreId) {
-            const templateResult = await this.tryTemplateMatch(workspaceId, text);
-            if (templateResult) return templateResult;
-        }
-
-        // 3. If no template, use AI if enabled
+        // 1. Use AI if enabled
         if (aiEnabled) {
             const limitCheck = await subscriptionsService.canUseAiReplies(userId);
 
@@ -299,20 +280,9 @@ export class ReplyGenerator {
         context: GenerateReplyContext,
         aiEnabled: boolean
     ): Promise<GenerateReplyResult> {
-        const { workspaceId, userId, text, pageName, knowledgeBase, pageId, senderId } = context;
+        const { userId, text, pageName, knowledgeBase, pageId, senderId } = context;
 
-        // 1. Templates are for comment-triggered replies. DMs belong to AI.
-        // When AI is on, skip template matching entirely — AI answers with full context
-        // (conversation history, product catalog, KB). Templates only fire as a fallback
-        // when AI is deliberately disabled, so DMs still get some auto-reply.
-        if (!aiEnabled) {
-            const templateResult = await this.tryTemplateMatch(workspaceId, context.templateMatchText || text);
-            if (templateResult && !await this.isRepeatTemplate(templateResult, aiEnabled, pageId, senderId)) {
-                return templateResult;
-            }
-        }
-
-        // 3. If no template, use AI with conversation context
+        // 1. Use AI with conversation context
         if (aiEnabled) {
             const limitCheck = await subscriptionsService.canUseAiReplies(userId);
 
@@ -507,36 +477,12 @@ export class ReplyGenerator {
      */
     async generateForPlayground(input: PlaygroundInput): Promise<PlaygroundResult> {
         const {
-            pageId, userId, workspaceId, question, channel, knowledgeBase, kbActiveVersion,
+            pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
             replyStyle, brandVoiceNotes, customerContext, model,
         } = input;
 
         const ragMode = config.ragMode || 'off';
-
-        // 1. Template match — comments only. Playground always runs AI, so skip templates for DM.
-        if (workspaceId && channel !== 'dm') {
-            const templateResult = await this.tryTemplateMatch(workspaceId, question);
-            if (templateResult) {
-                return {
-                    reply: templateResult.replyText,
-                    replyMethod: 'template',
-                    templateName: templateResult.templateName ?? null,
-                    ragMode,
-                    chunksRetrieved: 0,
-                    chunks: [],
-                    intent: null,
-                    confidence: null,
-                    flags: [],
-                    needsAttention: false,
-                    cached: false,
-                    detectedLanguage: null,
-                    tokensUsed: 0,
-                    model: null,
-                    gapRecorded: false,
-                };
-            }
-        }
 
         // 2. For comments: strip noise, check for spam, detect language with postMessage fallback
         let questionForAI = question;
@@ -693,53 +639,6 @@ export class ReplyGenerator {
             .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '')               // @name — plain mention, optional capitalized words
             .replace(/https?:\/\/\S+|www\.\S+/gi, '')
             .trim();
-    }
-
-    private async isRepeatTemplate(
-        result: GenerateReplyResult,
-        aiEnabled: boolean,
-        pageId?: string,
-        senderId?: string,
-    ): Promise<boolean> {
-        // Only dedup in DMs when AI can handle the fallback
-        if (!aiEnabled || !pageId || !senderId || !result.replyText) return false;
-
-        const history = await messagesService.getConversationHistory(pageId, senderId, 12);
-        const isRepeat = history.some(m => m.role === 'assistant' && m.content === result.replyText);
-
-        if (isRepeat) {
-            this.logger.debug('[Generator] Template dedup: skipping repeated template for DM');
-        }
-
-        return isRepeat;
-    }
-
-    /**
-     * Try to match a template rule — shared across all platforms.
-     *
-     * Skips template matching entirely when the message exceeds TEMPLATE_WORD_LIMIT
-     * content words. Long messages almost always contain multiple intents or use
-     * a keyword incidentally — AI handles them far better than a keyword reply.
-     */
-    private async tryTemplateMatch(workspaceId: string, text: string): Promise<GenerateReplyResult | null> {
-        const wordCount = countContentWords(text);
-        if (wordCount > TEMPLATE_WORD_LIMIT) {
-            this.logger.debug('[Generator] Skipping template match — message too long', { wordCount, limit: TEMPLATE_WORD_LIMIT });
-            return null;
-        }
-
-        const matchingRule = await rulesService.findMatchingRule(workspaceId, text);
-
-        if (matchingRule?.templateId) {
-            const template = await templatesService.getTemplate(workspaceId, matchingRule.templateId);
-
-            if (template?.message && template.active !== false) {
-                this.logger.debug('[Generator] Using template', { templateName: template.name });
-                return { replyText: template.message, replyMethod: 'template', templateId: template.id, templateName: template.name, needsAttention: false };
-            }
-        }
-
-        return null;
     }
 
     /**

@@ -47,8 +47,6 @@ function makeDbRow(overrides: Record<string, unknown> = {}) {
         interval: 'month',
         maxPages: 3,
         maxAiRepliesPerMonth: 1000,
-        maxTemplates: null,
-        maxRules: null,
         maxProducts: 50,
         facebookEnabled: true,
         instagramEnabled: true,
@@ -108,8 +106,6 @@ describe('Plans Service', () => {
                 price: 2500,
                 maxPages: 3,
                 maxAiRepliesPerMonth: 1500,
-                maxTemplates: null,
-                maxRules: null,
                 showBranding: false,
                 regionalPricing: { SY: 350000 },
                 sortOrder: 2,
@@ -122,7 +118,6 @@ describe('Plans Service', () => {
             expect(plan.slug).toBe('business');
             expect(plan.price).toBe(2500);
             expect(plan.maxPages).toBe(3);
-            expect(plan.maxTemplates).toBeNull();
             expect(plan.facebookEnabled).toBe(true);
             expect(plan.showBranding).toBe(false);
             expect(plan.regionalPricing).toEqual({ SY: 350000 });
@@ -140,8 +135,6 @@ describe('Plans Service', () => {
                 interval: null,
                 maxPages: 1,
                 maxAiRepliesPerMonth: 50,
-                maxTemplates: 3,
-                maxRules: 2,
                 maxProducts: null,
                 facebookEnabled: null,
                 instagramEnabled: null,
@@ -190,8 +183,6 @@ describe('Plans Service', () => {
             interval: 'month' as const,
             maxPages: 3,
             maxAiRepliesPerMonth: 1500,
-            maxTemplates: null,
-            maxRules: null,
             maxProducts: 50,
             facebookEnabled: true,
             instagramEnabled: true,
@@ -372,8 +363,6 @@ describe('Plans Service', () => {
                 currency: 'USD',
                 interval: 'month',
                 maxAiRepliesPerMonth: 50,
-                maxTemplates: null,
-                maxRules: null,
             });
             const returning = vi.fn().mockResolvedValue([row]);
             const values = vi.fn().mockReturnValue({ returning });

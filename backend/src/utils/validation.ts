@@ -6,38 +6,6 @@ import { z } from 'zod';
  */
 
 // ==========================================
-// Templates
-// ==========================================
-export const CreateTemplateSchema = z.object({
-    name: z.string()
-        .min(1, 'Template name is required')
-        .max(100, 'Template name must be less than 100 characters'),
-    message: z.string()
-        .min(1, 'Template message is required')
-        .max(1000, 'Template message must be less than 1000 characters'),
-    active: z.boolean().default(true),
-});
-
-export const UpdateTemplateSchema = CreateTemplateSchema.partial();
-
-// ==========================================
-// Rules
-// ==========================================
-export const CreateRuleSchema = z.object({
-    name: z.string()
-        .min(1, 'Rule name is required')
-        .max(100, 'Rule name must be less than 100 characters'),
-    keywords: z.array(z.string())
-        .min(1, 'At least one keyword is required')
-        .max(50, 'Maximum 50 keywords allowed'),
-    templateId: z.string().uuid('Invalid template ID'),
-    priority: z.number().int().min(0).max(100).default(0),
-    active: z.boolean().default(true),
-});
-
-export const UpdateRuleSchema = CreateRuleSchema.partial();
-
-// ==========================================
 // Settings
 // ==========================================
 export const UpdateSettingsSchema = z.object({
@@ -87,8 +55,6 @@ export const CreatePlanSchema = z.object({
     interval: z.enum(['month', 'year']).default('month'),
     maxPages: z.number().int().min(1).nullable().optional(),
     maxAiRepliesPerMonth: z.number().int().min(0).nullable().optional(),
-    maxTemplates: z.number().int().min(0).nullable().optional(),
-    maxRules: z.number().int().min(0).nullable().optional(),
     facebookEnabled: z.boolean().default(true),
     instagramEnabled: z.boolean().default(true),
     whatsappEnabled: z.boolean().default(false),
@@ -166,10 +132,6 @@ export function validateSchema<T>(schema: z.ZodSchema<T>, data: unknown): { succ
 // ==========================================
 // Export Types
 // ==========================================
-export type CreateTemplateInput = z.infer<typeof CreateTemplateSchema>;
-export type UpdateTemplateInput = z.infer<typeof UpdateTemplateSchema>;
-export type CreateRuleInput = z.infer<typeof CreateRuleSchema>;
-export type UpdateRuleInput = z.infer<typeof UpdateRuleSchema>;
 export type UpdateSettingsInput = z.infer<typeof UpdateSettingsSchema>;
 export type PaginationInput = z.infer<typeof PaginationSchema>;
 export type CreatePlanInput = z.infer<typeof CreatePlanSchema>;

@@ -248,7 +248,7 @@ export class CommentProcessor {
             generatorContext.senderName = fromName ?? undefined;
 
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
-            let { replyText: generatedText, replyMethod, templateId, needsAttention, flagReason, aiIntent, confidence } =
+            let { replyText: generatedText, replyMethod, needsAttention, flagReason, aiIntent, confidence } =
                 await replyGenerator.generateForComment(generatorContext, userSettings.aiEnabled ?? false, commentReplyMode);
 
             // Capture the original AI-generated reply before any modifications (fallback, truncation, CTA)
@@ -294,7 +294,7 @@ export class CommentProcessor {
                 await adapter.markAsReplied(
                     comment.id, '', replyMethod,
                     lang === 'unknown' ? 'en' : lang,
-                    undefined, true, 'held_low_confidence', aiIntent, aiOriginalReply,
+                    true, 'held_low_confidence', aiIntent, aiOriginalReply,
                 );
                 if (page.userId) {
                     notificationService.sendTemplateNotification(
@@ -361,7 +361,7 @@ export class CommentProcessor {
                 accessToken: page.accessToken, fromId, fromName,
                 userSettings: userSettings as unknown as Record<string, unknown>,
                 postMessage: content.message || undefined,
-                templateId, needsAttention, flagReason, aiIntent, aiOriginalReply,
+                needsAttention, flagReason, aiIntent, aiOriginalReply,
                 confidence,
             });
 
@@ -406,8 +406,6 @@ export class CommentProcessor {
         fromName?: string;
         userSettings: Record<string, unknown>;
         postMessage?: string;
-        // Optional — only used by the main template/AI path
-        templateId?: string;
         needsAttention?: boolean;
         flagReason?: string;
         aiIntent?: string;
@@ -419,7 +417,7 @@ export class CommentProcessor {
             adapter, platform, pipeline, pageId, userId, workspaceId,
             comment, replyText, replyMethod, commentMessage,
             platformCommentId, platformPageId, accessToken, fromId, fromName, userSettings,
-            templateId, needsAttention, flagReason, aiIntent, aiOriginalReply,
+            needsAttention, flagReason, aiIntent, aiOriginalReply,
             confidence, triggerKeyword,
         } = opts;
 
@@ -457,7 +455,6 @@ export class CommentProcessor {
             replyText,
             replyMethod,
             detectedLanguage === 'unknown' ? 'en' : detectedLanguage,
-            templateId,
             needsAttention,
             flagReason,
             aiIntent,

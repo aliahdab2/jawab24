@@ -34,7 +34,7 @@ import enPlans         from './en/plans.json';
 import enPricing       from './en/pricing.json';
 import enPrivacy       from './en/privacy.json';
 import enProfile       from './en/profile.json';
-import enRules         from './en/rules.json';
+
 import enSalla         from './en/salla.json';
 import enSettings      from './en/settings.json';
 import enShopify       from './en/shopify.json';
@@ -42,12 +42,10 @@ import enSidebar       from './en/sidebar.json';
 import enSse           from './en/sse.json';
 import enSubscription  from './en/subscription.json';
 import enTeam          from './en/team.json';
-import enTemplates     from './en/templates.json';
 import enTerms         from './en/terms.json';
 import enTime          from './en/time.json';
 import enZid           from './en/zid.json';
 import enOrderNotifications from './en/orderNotifications.json';
-import enPresetReplies from './en/presetReplies.json';
 
 // ── Arabic namespace imports ──────────────────────────────────────────────────
 import arAbout         from './ar/about.json';
@@ -83,7 +81,6 @@ import arPlans         from './ar/plans.json';
 import arPricing       from './ar/pricing.json';
 import arPrivacy       from './ar/privacy.json';
 import arProfile       from './ar/profile.json';
-import arRules         from './ar/rules.json';
 import arSalla         from './ar/salla.json';
 import arSettings      from './ar/settings.json';
 import arShopify       from './ar/shopify.json';
@@ -91,12 +88,10 @@ import arSidebar       from './ar/sidebar.json';
 import arSse           from './ar/sse.json';
 import arSubscription  from './ar/subscription.json';
 import arTeam          from './ar/team.json';
-import arTemplates     from './ar/templates.json';
 import arTerms         from './ar/terms.json';
 import arTime          from './ar/time.json';
 import arZid           from './ar/zid.json';
 import arOrderNotifications from './ar/orderNotifications.json';
-import arPresetReplies from './ar/presetReplies.json';
 
 // Global namespaces loaded on every page
 const GLOBAL_NAMESPACES = ['common', 'nav', 'notifications', 'errors', 'errorBoundary', 'meta', 'sse'];
@@ -136,7 +131,6 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/pricing': enPricing,       'ar/pricing': arPricing,
   'en/privacy': enPrivacy,       'ar/privacy': arPrivacy,
   'en/profile': enProfile,       'ar/profile': arProfile,
-  'en/rules': enRules,           'ar/rules': arRules,
   'en/salla': enSalla,           'ar/salla': arSalla,
   'en/settings': enSettings,     'ar/settings': arSettings,
   'en/shopify': enShopify,       'ar/shopify': arShopify,
@@ -144,12 +138,10 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/sse': enSse,               'ar/sse': arSse,
   'en/subscription': enSubscription, 'ar/subscription': arSubscription,
   'en/team': enTeam,             'ar/team': arTeam,
-  'en/templates': enTemplates,   'ar/templates': arTemplates,
   'en/terms': enTerms,           'ar/terms': arTerms,
   'en/time': enTime,             'ar/time': arTime,
   'en/zid': enZid,               'ar/zid': arZid,
   'en/orderNotifications': enOrderNotifications, 'ar/orderNotifications': arOrderNotifications,
-  'en/presetReplies': enPresetReplies, 'ar/presetReplies': arPresetReplies,
 };
 
 // All namespace names (derived from lookup table keys)

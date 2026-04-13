@@ -182,7 +182,7 @@ describe('CommentsController', () => {
 
             await commentsController.reply(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.markAsReplied).toHaveBeenCalledWith('c-1', 'Thanks for your feedback!', 'manual', undefined, 'en');
+            expect(commentsService.markAsReplied).toHaveBeenCalledWith('c-1', 'Thanks for your feedback!', 'manual', 'en');
             expect(mockReply.send).toHaveBeenCalledWith(repliedComment);
         });
 

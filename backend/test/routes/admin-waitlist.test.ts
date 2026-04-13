@@ -70,8 +70,7 @@ vi.mock('../../src/config', () => ({
 
 // Mock services used by other admin routes (they get imported at module level)
 vi.mock('../../src/services/ai', () => ({ aiService: {} }));
-vi.mock('../../src/services/rules', () => ({ rulesService: {} }));
-vi.mock('../../src/services/templates', () => ({ templatesService: {} }));
+
 vi.mock('../../src/services/kb/retrieval', () => ({ RetrievalService: vi.fn() }));
 vi.mock('../../src/services/kb/embedding', () => ({ OpenAIEmbeddingProvider: vi.fn() }));
 vi.mock('../../src/services/kb/gap-detector', () => ({ gapDetectorService: {} }));

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { truncateAtSentence, countContentWords } from '../../src/utils/text';
+import { truncateAtSentence } from '../../src/utils/text';
 
 describe('truncateAtSentence', () => {
     it('returns text unchanged when under limit', () => {
@@ -56,53 +56,5 @@ describe('truncateAtSentence', () => {
         const text = 'Thank you for your comment. We appreciate your feedback very much and want to make sure you know that.';
         const result = truncateAtSentence(text, 60);
         expect(result).toBe('Thank you for your comment.');
-    });
-});
-
-describe('countContentWords', () => {
-    it('counts Arabic short query correctly', () => {
-        // "كم سعر دورة PMP" = 4 content words
-        expect(countContentWords('كم سعر دورة PMP')).toBe(4);
-    });
-
-    it('counts Arabic greeting + question', () => {
-        // "السلام عليكم كم سعر الدورة" = 5 content words  
-        expect(countContentWords('السلام عليكم كم سعر الدورة')).toBe(5);
-    });
-
-    it('counts long Arabic sentence correctly', () => {
-        // "أنا ناسي كلمة السر لنظام التسجيل ممكن تساعدوني" = 8 content words (all > 1 char)
-        expect(countContentWords('أنا ناسي كلمة السر لنظام التسجيل ممكن تساعدوني')).toBe(8);
-    });
-
-    it('filters out standalone Arabic conjunction و', () => {
-        // "أبي أرجع المنتج و أعرف السعر" → و is 1 char, filtered → 5 words
-        expect(countContentWords('أبي أرجع المنتج و أعرف السعر')).toBe(5);
-    });
-
-    it('counts English sentence correctly', () => {
-        expect(countContentWords('Your service is terrible what is your phone number')).toBe(9);
-    });
-
-    it('counts short English query', () => {
-        // All 4 words have length > 1
-        expect(countContentWords('what is the price')).toBe(4);
-    });
-
-    it('handles empty string', () => {
-        expect(countContentWords('')).toBe(0);
-    });
-
-    it('handles whitespace-only string', () => {
-        expect(countContentWords('   ')).toBe(0);
-    });
-
-    it('filters out single-character punctuation', () => {
-        // stray punctuation like ? ! should be filtered
-        expect(countContentWords('hello ? world !')).toBe(2);
-    });
-
-    it('handles mixed Arabic and English', () => {
-        expect(countContentWords('Hello مرحبا')).toBe(2);
     });
 });
