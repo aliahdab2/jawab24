@@ -22,6 +22,7 @@ export class MessagesController {
             resolved?: string;
             needsAttention?: string;
             actionRequired?: string;
+            pageId?: string;
         }
     }>, reply: FastifyReply) {
         const req = request as WorkspaceRequest;
@@ -30,12 +31,13 @@ export class MessagesController {
         }
 
         try {
-            const { cursor, limit, direction, replied, resolved, needsAttention, actionRequired } = request.query;
+            const { cursor, limit, direction, replied, resolved, needsAttention, actionRequired, pageId } = request.query;
 
             const options = {
                 ...(cursor && { cursor }),
                 ...(limit !== undefined && { limit: parseLimit(limit) }),
                 ...(direction && ['incoming', 'outgoing'].includes(direction) && { direction }),
+                ...(pageId && { pageId }),
                 ...parseInboxFilters({ replied, resolved, needsAttention, actionRequired }),
             };
 

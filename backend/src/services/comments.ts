@@ -48,6 +48,7 @@ export class CommentsService {
         needsAttention?: boolean;  // Filter by needsAttention flag
         resolved?: boolean;  // Filter by resolved status
         actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
+        pageId?: string;  // Filter by specific page
         limit?: number;
         cursor?: string;  // Comment ID to start after (for pagination)
     }) {
@@ -68,6 +69,7 @@ export class CommentsService {
 
         // --- Facebook comments query ---
         const fbConditions = [eq(pages.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)];
+        if (options?.pageId) fbConditions.push(eq(pages.id, options.pageId));
         if (options?.actionRequired) {
             fbConditions.push(eq(comments.resolved, false));
             fbConditions.push(sql`(${comments.replied} = false OR ${comments.needsAttention} = true)`);
@@ -113,6 +115,7 @@ export class CommentsService {
 
         // --- Instagram comments query ---
         const igConditions = [eq(pages.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true)];
+        if (options?.pageId) igConditions.push(eq(pages.id, options.pageId));
         if (options?.actionRequired) {
             igConditions.push(eq(instagramComments.resolved, false));
             igConditions.push(sql`(${instagramComments.replied} = false OR ${instagramComments.needsAttention} = true)`);

@@ -5,12 +5,13 @@ import { useRouter } from 'next/router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
+import { InboxHeaderActions } from '@/components/inbox/InboxHeaderActions';
 import { MessageCard, type Conversation } from '@/components/messages';
 import dynamic from 'next/dynamic';
 
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, useConversationActions } from '@/hooks';
+import { useDebounce, useConversationActions, usePageFilter } from '@/hooks';
 import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import {
@@ -20,7 +21,6 @@ import {
   Check,
   CheckCircle,
   Sparkles,
-  Download,
   Loader2,
   type LucideIcon,
 } from 'lucide-react';
@@ -28,7 +28,6 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
-import { isNativePlatform } from '@/lib/capacitor';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
@@ -63,6 +62,17 @@ const MessagesPage: NextPageWithLayout = () => {
   // Infinite scroll observer ref
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
+  // Fetch pages (must come before usePageFilter + URL sync that references syncFromUrl)
+  const { data: pagesData = [] } = useQuery({
+    queryKey: ['pages'],
+    queryFn: async () => {
+      const { data } = await pagesApi.getAll();
+      return data;
+    },
+    enabled: isAuthenticated,
+  });
+  const pages = pagesData as Page[];
+  const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
   // Sync Filter to URL
   const updateFilter = useCallback((newFilter: FilterType) => {
@@ -98,10 +108,14 @@ const MessagesPage: NextPageWithLayout = () => {
     }
     const currentParam = router.query.filter as string | undefined;
     setFilter(resolveFilter(currentParam));
-  }, [router.isReady, router.query.filter, router.query.messageId, router]);
+    syncFromUrl(router.query.page as string | undefined);
+  }, [router.isReady, router.query.filter, router.query.messageId, router.query.page, router, syncFromUrl]);
 
-  // API params derived from current filter
-  const apiParams = useMemo(() => getApiParams(filter), [filter]);
+  // API params derived from current filter + page
+  const apiParams = useMemo(() => ({
+    ...getApiParams(filter),
+    ...(pageId && { pageId }),
+  }), [filter, pageId]);
 
   // Conversation modal actions (reply, pause, resume, resolve, pause-status)
   const {
@@ -119,17 +133,6 @@ const MessagesPage: NextPageWithLayout = () => {
 
   // ESC key to close modal
   useEscapeKey(() => setSelectedConversation(null), !!selectedConversation);
-
-  // Fetch pages for CSV page name resolution
-  const { data: pagesData = [] } = useQuery({
-    queryKey: ['pages'],
-    queryFn: async () => {
-      const { data } = await pagesApi.getAll();
-      return data;
-    },
-    enabled: isAuthenticated,
-  });
-  const pages = pagesData as Page[];
 
   // Fetch Stats
   const { data: statsData } = useQuery({
@@ -404,19 +407,15 @@ const MessagesPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={!isNativePlatform() ? (
-          <button
-            onClick={exportToCSV}
-            disabled={exporting}
-            className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
-            aria-label={tc('export')}
-          >
-            {exporting
-              ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-              : <Download className="w-5 h-5" aria-hidden="true" />
-            }
-          </button>
-        ) : undefined}
+        action={(
+          <InboxHeaderActions
+            activePages={activePages}
+            pageId={pageId}
+            onPageChange={updatePageId}
+            onExport={exportToCSV}
+            exporting={exporting}
+          />
+        )}
       />
 
       {/* Filter Chips + Search */}

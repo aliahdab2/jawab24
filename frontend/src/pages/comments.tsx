@@ -6,13 +6,14 @@ import { useRouter } from 'next/router';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
+import { InboxHeaderActions } from '@/components/inbox/InboxHeaderActions';
 import dynamic from 'next/dynamic';
 import { SwipeableCommentCard } from '@/components/comments';
 
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce } from '@/hooks';
+import { useDebounce, usePageFilter } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import {
   MessageSquare,
@@ -21,7 +22,6 @@ import {
   Check,
   CheckCircle,
   Sparkles,
-  Download,
   AlertTriangle,
   ExternalLink,
   Loader2,
@@ -31,7 +31,6 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { format } from 'date-fns';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
-import { isNativePlatform } from '@/lib/capacitor';
 import type { Comment, Page } from '@jawab24/shared';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
@@ -106,9 +105,13 @@ const CommentsPage: NextPageWithLayout = () => {
     enabled: isAuthenticated,
   });
   const pages = pagesData as Page[];
+  const { pageId, activePages, updatePageId, syncFromUrl } = usePageFilter(pages);
 
-  // Get API params based on current filter
-  const apiParams = useMemo(() => getApiParams(filter), [filter]);
+  // Get API params based on current filter + page
+  const apiParams = useMemo(() => ({
+    ...getApiParams(filter),
+    ...(pageId && { pageId }),
+  }), [filter, pageId]);
 
   // Infinite query for comments
   const {
@@ -245,7 +248,8 @@ const CommentsPage: NextPageWithLayout = () => {
     }
     const currentParam = router.query.filter as string | undefined;
     setFilter(resolveFilter(currentParam));
-  }, [router.isReady, router.query.filter, router.query.commentId, router]);
+    syncFromUrl(router.query.page as string | undefined);
+  }, [router.isReady, router.query.filter, router.query.page, router.query.commentId, router, syncFromUrl]);
 
   // Deep-link: auto-select comment after "all" data loads
   useEffect(() => {
@@ -420,19 +424,15 @@ const CommentsPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={!isNativePlatform() ? (
-          <button
-            onClick={exportToCSV}
-            disabled={exporting}
-            className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
-            aria-label={tc('export')}
-          >
-            {exporting
-              ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-              : <Download className="w-5 h-5" aria-hidden="true" />
-            }
-          </button>
-        ) : undefined}
+        action={(
+          <InboxHeaderActions
+            activePages={activePages}
+            pageId={pageId}
+            onPageChange={updatePageId}
+            onExport={exportToCSV}
+            exporting={exporting}
+          />
+        )}
       />
 
       {/* Filter Chips + Search */}

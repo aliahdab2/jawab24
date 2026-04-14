@@ -266,6 +266,76 @@ test.describe('Comments Page', () => {
     await expect(page).toHaveTitle(/Comments/i, { timeout: 15000 });
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
+
+  test('should hide page filter when only one active page', async ({ page }) => {
+    await page.goto('/en/comments');
+    await expect(page.locator('h1').filter({ hasText: t('comments.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    // MOCK_PAGES has only 1 page — dropdown should NOT appear
+    await expect(page.getByText(t('common.allPages'))).not.toBeVisible();
+  });
+
+  test('should show page filter when multiple active pages', async ({ page }) => {
+    const TWO_PAGES = [
+      { id: 'page_1', facebookPageId: 'fb_123', name: 'Page One', autoReplyEnabled: true },
+      { id: 'page_2', facebookPageId: 'fb_456', name: 'Page Two', autoReplyEnabled: true },
+    ];
+
+    await page.route('**/api/pages**', async (route) => {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: TWO_PAGES }) });
+    });
+
+    await page.goto('/en/comments');
+    await expect(page.locator('h1').filter({ hasText: t('comments.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    // Dropdown should be visible with "All Pages" text
+    await expect(page.getByText(t('common.allPages')).first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should pass pageId to API when page filter is selected', async ({ page }) => {
+    const TWO_PAGES = [
+      { id: 'page_1', facebookPageId: 'fb_123', name: 'Page One', autoReplyEnabled: true },
+      { id: 'page_2', facebookPageId: 'fb_456', name: 'Page Two', autoReplyEnabled: true },
+    ];
+
+    let lastCommentsUrl = '';
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/comments/stats')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENT_STATS) });
+      }
+      if (url.includes('/comments')) {
+        lastCommentsUrl = url;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENTS) });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: TWO_PAGES }) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/comments');
+    await expect(page.locator('h1').filter({ hasText: t('comments.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    // Click the page dropdown and select "Page Two"
+    await page.getByText(t('common.allPages')).first().click();
+    await page.getByText('Page Two').click();
+
+    // Wait for the filtered API call
+    await page.waitForTimeout(500);
+
+    // URL should have page param
+    expect(page.url()).toContain('page=page_2');
+
+    // API call should include pageId
+    expect(lastCommentsUrl).toContain('pageId=page_2');
+  });
 });
 
 test.describe('Comment Detail Modal', () => {

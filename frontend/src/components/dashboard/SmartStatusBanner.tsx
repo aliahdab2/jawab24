@@ -8,11 +8,14 @@ import {
   MessageSquare,
   MessageCircle,
   Clock,
+  X,
 } from 'lucide-react';
 import { Card } from '@/components/ui';
+import { SwipeDismissWrapper } from '@/components/ui/SwipeDismissWrapper';
 import { useTranslations } from 'next-intl';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import { getPrimaryFlag } from '@/utils/flagReason';
+import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 
 // Unified item type for both comments and messages needing attention
 export interface NeedsAttentionItem {
@@ -85,6 +88,14 @@ export function SmartStatusBanner({
 
   const totalCount = commentNeedsAction + messageNeedsAction;
 
+  const { dismissed, dismiss: handleDismiss } = useTimedDismiss({
+    key: 'smartBannerDismissedAt',
+    durationMs: 24 * 60 * 60 * 1000,
+    count: totalCount,
+  });
+
+  const shouldHide = totalCount === 0 || dismissed;
+
   // Measure content height for smooth animation
   useEffect(() => {
     if (contentRef.current) {
@@ -96,8 +107,8 @@ export function SmartStatusBanner({
     setExpanded(prev => !prev);
   }, []);
 
-  // Don't render if nothing needs action
-  if (totalCount === 0) return null;
+  // Don't render if nothing needs action or dismissed
+  if (shouldHide) return null;
 
   // Build breakdown text: "3 comments · 2 messages" (ICU plural-aware)
   const breakdownParts: string[] = [];
@@ -138,162 +149,192 @@ export function SmartStatusBanner({
     }
   }
 
+  const swipeBackground = (
+    <div className="flex items-center justify-center bg-surface-100 dark:bg-surface-200 rounded-[1.5rem] h-full">
+      <span className="text-sm font-medium text-muted-foreground">
+        {tDash('smartBanner.dismissLabel')}
+      </span>
+    </div>
+  );
+
   return (
-    <Card
-      className={clsx(
-        'mb-8 relative overflow-hidden transition-all duration-300',
-        'bg-amber-50 border-amber-200 text-amber-900',
-        'border-s-4 border-s-amber-500'
-      )}
-      padding="none"
+    <SwipeDismissWrapper
+      onDismiss={handleDismiss}
+      enabled={!shouldHide}
+      className="mb-8 rounded-[1.5rem]"
+      background={swipeBackground}
     >
-      {/* Header row — always visible */}
-      <button
-        type="button"
-        onClick={toggle}
-        className="w-full flex items-center gap-3 sm:gap-4 p-3 sm:p-5 text-start cursor-pointer select-none"
-        aria-expanded={expanded}
-        aria-label={tDash('smartBanner.needsAttention', { count: totalCount })}
-      >
-        {/* Warning icon */}
-        <div className={clsx(
-          'w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0',
-          'bg-amber-100 text-amber-600 animate-pulse-attention'
-        )}>
-          <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
-        </div>
-
-        {/* Title + breakdown */}
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-sm sm:text-base leading-tight">
-            {tDash('smartBanner.needsAttention', { count: totalCount })}
-          </p>
-          {breakdown && (
-            <p className="text-xs sm:text-sm text-amber-700/80 mt-0.5 truncate">
-              {breakdown}
-            </p>
+      <Card
+          className={clsx(
+            'overflow-hidden transition-all duration-300',
+            // Explicit utilities override Card's .card base class reliably
+            // (alert-warning @apply class would depend on CSS source order)
+            'bg-amber-50 text-amber-900 border border-amber-200',
+            'dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
+            'border-s-4 border-s-amber-500'
           )}
-        </div>
-
-        {/* Chevron toggle */}
-        <div className="shrink-0 p-1">
-          <ChevronDown
-            className={clsx(
-              'w-5 h-5 text-amber-600 transition-transform duration-300',
-              expanded && 'rotate-180'
-            )}
-          />
-        </div>
-      </button>
-
-      {/* Expandable item list */}
-      <div
-        style={{ maxHeight: expanded ? `${contentHeight}px` : '0px' }}
-        className="transition-[max-height] duration-300 ease-in-out overflow-hidden"
-      >
-        <div ref={contentRef}>
-          <div className="border-t border-amber-200/60">
-            {visibleItems.length > 0 ? (
-              <ul className="divide-y divide-amber-100/80">
-                {visibleItems.map((item) => {
-                  const ItemIcon = item.type === 'comment' ? MessageSquare : MessageCircle;
-                  const snippet = item.text.length > 60
-                    ? `${item.text.slice(0, 60)}…`
-                    : item.text;
-                  const reason = getReasonTag(item.flagReason, tFlagReason, tDash);
-
-                  const useInlineClick = !!onItemClick && (
-                    (item.type === 'message' && !!item.senderId) ||
-                    (item.type === 'comment' && !!item.commentData)
-                  );
-                  const hasMultiple = item.messageCount && item.messageCount > 1;
-                  const showReasonTag = isNotableFlagReason(item.flagReason);
-                  // For grouped conversations, show "waiting since" (earliest); otherwise show latest
-                  const displayTime = hasMultiple && item.earliestAt
-                    ? tDash('smartBanner.waitingSince', { time: formatRelativeTime(item.earliestAt, tTime) })
-                    : formatRelativeTime(item.createdAt, tTime);
-
-                  const itemContent = (
-                    <>
-                      {/* Type icon */}
-                      <div className="shrink-0 mt-0.5">
-                        <ItemIcon className="w-4 h-4 text-amber-600" aria-hidden="true" />
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-semibold text-amber-900 truncate">
-                            {item.senderName || tc('unknownUser')}
-                            {hasMultiple && (
-                              <span className="text-amber-700/70 font-bold"> ({item.messageCount})</span>
-                            )}
-                          </span>
-                          <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700/70">
-                            <Clock className="w-3 h-3" aria-hidden="true" />
-                            {displayTime}
-                          </span>
-                        </div>
-                        <p className="text-xs text-amber-800/70 truncate leading-relaxed">
-                          {snippet}
-                        </p>
-                        {/* Reason tag — only for notable reasons (not default SLA) */}
-                        {showReasonTag && (
-                          <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-800/80">
-                            {reason}
-                          </span>
-                        )}
-                      </div>
-                    </>
-                  );
-
-                  const sharedClassName = "flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors group w-full text-start";
-
-                  return (
-                    <li key={`${item.type}-${item.id}`}>
-                      {useInlineClick ? (
-                        <button
-                          type="button"
-                          className={sharedClassName}
-                          onClick={() => onItemClick?.(item)}
-                        >
-                          {itemContent}
-                        </button>
-                      ) : (
-                        <Link
-                          href={item.href}
-                          className={sharedClassName}
-                        >
-                          {itemContent}
-                        </Link>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <div className="px-4 py-3 text-xs text-amber-700/70">
-                {tc('loading')}
+          padding="none"
+        >
+          {/* Header row — toggle and dismiss are separate buttons in flex flow */}
+          <div className="flex items-center gap-3 sm:gap-4 p-3 sm:p-5">
+            <button
+              type="button"
+              onClick={toggle}
+              className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0 text-start cursor-pointer select-none"
+              aria-expanded={expanded}
+              aria-label={tDash('smartBanner.needsAttention', { count: totalCount })}
+            >
+              {/* Warning icon */}
+              <div className={clsx(
+                'w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0',
+                'bg-amber-200/50 text-amber-600 dark:bg-amber-800/40 dark:text-amber-400'
+              )}>
+                <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
               </div>
-            )}
 
-            {/* View all link(s) */}
-            {viewAllLinks.length > 0 && (
-              <div className="flex items-center gap-4 px-4 py-3 sm:px-5 border-t border-amber-200/60">
-                {viewAllLinks.map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="text-xs sm:text-sm font-bold text-amber-700 hover:text-amber-900 transition-colors"
-                  >
-                    {link.label} <span aria-hidden="true" className="rtl:inline-block rtl:rotate-180">→</span>
-                  </Link>
-                ))}
+              {/* Title + breakdown */}
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-sm sm:text-base leading-tight">
+                  {tDash('smartBanner.needsAttention', { count: totalCount })}
+                </p>
+                {breakdown && (
+                  <p className="text-xs sm:text-sm text-amber-700/80 dark:text-amber-400/70 mt-0.5 truncate">
+                    {breakdown}
+                  </p>
+                )}
               </div>
-            )}
+
+              {/* Chevron toggle */}
+              <div className="shrink-0 p-1">
+                <ChevronDown
+                  className={clsx(
+                    'w-5 h-5 text-amber-600 dark:text-amber-400 transition-transform duration-300',
+                    expanded && 'rotate-180'
+                  )}
+                />
+              </div>
+            </button>
+
+            {/* Dismiss button — desktop fallback, in flow next to chevron */}
+            <button
+              type="button"
+              onClick={handleDismiss}
+              className="shrink-0 p-1.5 rounded-lg text-amber-600/60 dark:text-amber-400/60 hover:text-amber-800 dark:hover:text-amber-300 hover:bg-amber-200/40 dark:hover:bg-amber-700/30 transition-colors hidden sm:flex items-center justify-center"
+              aria-label={tDash('smartBanner.dismissLabel')}
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-        </div>
-      </div>
-    </Card>
+
+          {/* Expandable item list */}
+          <div
+            style={{ maxHeight: expanded ? `${contentHeight}px` : '0px' }}
+            className="transition-[max-height] duration-300 ease-in-out overflow-hidden"
+          >
+            <div ref={contentRef}>
+              <div className="border-t border-amber-200/60 dark:border-amber-700/40">
+                {visibleItems.length > 0 ? (
+                  <ul className="divide-y divide-amber-100/80 dark:divide-amber-700/30">
+                    {visibleItems.map((item) => {
+                      const ItemIcon = item.type === 'comment' ? MessageSquare : MessageCircle;
+                      const snippet = item.text.length > 60
+                        ? `${item.text.slice(0, 60)}…`
+                        : item.text;
+                      const reason = getReasonTag(item.flagReason, tFlagReason, tDash);
+
+                      const useInlineClick = !!onItemClick && (
+                        (item.type === 'message' && !!item.senderId) ||
+                        (item.type === 'comment' && !!item.commentData)
+                      );
+                      const hasMultiple = item.messageCount && item.messageCount > 1;
+                      const showReasonTag = isNotableFlagReason(item.flagReason);
+                      // For grouped conversations, show "waiting since" (earliest); otherwise show latest
+                      const displayTime = hasMultiple && item.earliestAt
+                        ? tDash('smartBanner.waitingSince', { time: formatRelativeTime(item.earliestAt, tTime) })
+                        : formatRelativeTime(item.createdAt, tTime);
+
+                      const itemContent = (
+                        <>
+                          {/* Type icon */}
+                          <div className="shrink-0 mt-0.5">
+                            <ItemIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <span className="text-sm font-semibold truncate">
+                                {item.senderName || tc('unknownUser')}
+                                {hasMultiple && (
+                                  <span className="text-amber-700/70 dark:text-amber-400/60 font-bold"> ({item.messageCount})</span>
+                                )}
+                              </span>
+                              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700/70 dark:text-amber-400/60">
+                                <Clock className="w-3 h-3" aria-hidden="true" />
+                                {displayTime}
+                              </span>
+                            </div>
+                            <p className="text-xs text-amber-800/70 dark:text-amber-300/60 truncate leading-relaxed">
+                              {snippet}
+                            </p>
+                            {/* Reason tag — only for notable reasons (not default SLA) */}
+                            {showReasonTag && (
+                              <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-800/80 dark:bg-amber-800/40 dark:text-amber-300/80">
+                                {reason}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      );
+
+                      const sharedClassName = "flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-amber-100/50 dark:hover:bg-amber-800/30 transition-colors group w-full text-start";
+
+                      return (
+                        <li key={`${item.type}-${item.id}`}>
+                          {useInlineClick ? (
+                            <button
+                              type="button"
+                              className={sharedClassName}
+                              onClick={() => onItemClick?.(item)}
+                            >
+                              {itemContent}
+                            </button>
+                          ) : (
+                            <Link
+                              href={item.href}
+                              className={sharedClassName}
+                            >
+                              {itemContent}
+                            </Link>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <div className="px-4 py-3 text-xs text-amber-700/70 dark:text-amber-400/60">
+                    {tc('loading')}
+                  </div>
+                )}
+
+                {/* View all link(s) */}
+                {viewAllLinks.length > 0 && (
+                  <div className="flex items-center gap-4 px-4 py-3 sm:px-5 border-t border-amber-200/60 dark:border-amber-700/40">
+                    {viewAllLinks.map((link) => (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className="text-xs sm:text-sm font-bold text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
+                      >
+                        {link.label} <span aria-hidden="true" className="rtl:inline-block rtl:rotate-180">→</span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Card>
+    </SwipeDismissWrapper>
   );
 }

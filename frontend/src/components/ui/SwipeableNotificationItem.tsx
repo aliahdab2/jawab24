@@ -1,7 +1,8 @@
 import React from 'react';
 import { Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useSwipeToDismiss } from '@/hooks/useSwipeToDismiss';
+import { SwipeDismissWrapper } from './SwipeDismissWrapper';
+import { SwipeBothSidesLabel } from './SwipeBothSidesLabel';
 
 interface SwipeableNotificationItemProps {
   children: React.ReactNode;
@@ -22,49 +23,22 @@ export function SwipeableNotificationItem({
   className,
 }: SwipeableNotificationItemProps) {
   const t = useTranslations('notifications');
-  const { ref, isDismissing, shouldSuppressClick } = useSwipeToDismiss({
-    onDismiss,
-    enabled,
-  });
-
-  const handleClick = (e: React.MouseEvent) => {
-    if (shouldSuppressClick()) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-  };
 
   return (
-    <div
-      className={`relative overflow-hidden border-b border-theme-border ${className ?? ''}`}
-      style={isDismissing ? { pointerEvents: 'none' } : undefined}
+    <SwipeDismissWrapper
+      onDismiss={onDismiss}
+      enabled={enabled}
+      className={`border-b border-theme-border ${className ?? ''}`}
+      foregroundClassName="bg-card"
+      background={
+        <SwipeBothSidesLabel
+          icon={<Check className="w-4 h-4 text-brand-600" />}
+          label={t('markAsRead')}
+          className="bg-brand-50 text-brand-700"
+        />
+      }
     >
-      {/* Background revealed during swipe — both sides */}
-      {enabled && (
-        <div className="absolute inset-0 flex items-center justify-between bg-brand-50 px-5">
-          <div className="flex items-center gap-2">
-            <Check className="w-4 h-4 text-brand-600" />
-            <span className="text-sm font-medium text-brand-700">
-              {t('markAsRead')}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-brand-700">
-              {t('markAsRead')}
-            </span>
-            <Check className="w-4 h-4 text-brand-600" />
-          </div>
-        </div>
-      )}
-
-      {/* Foreground — swipeable layer */}
-      <div
-        ref={ref}
-        className="relative bg-card"
-        onClickCapture={handleClick}
-      >
-        {children}
-      </div>
-    </div>
+      {children}
+    </SwipeDismissWrapper>
   );
 }

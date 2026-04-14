@@ -17,13 +17,15 @@ interface SelectProps {
   'aria-labelledby'?: string;
   className?: string;
   disabled?: boolean;
+  /** Compact mode for inline filter bars — smaller padding, pill shape, muted background */
+  compact?: boolean;
 }
 
 /**
  * Custom Select component that works correctly on iOS
  * Native selects have issues inside modals on iOS Safari
  */
-export function Select({ value, onChange, options, placeholder, label, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy, className, disabled = false }: SelectProps) {
+export function Select({ value, onChange, options, placeholder, label, 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledBy, className, disabled = false, compact = false }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -86,7 +88,9 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
         aria-expanded={isOpen}
         aria-haspopup="listbox"
         className={clsx(
-          "input !py-2.5 sm:!py-3 w-full text-start flex items-center justify-between gap-2",
+          compact
+            ? "w-full px-3 py-2 rounded-full bg-muted/50 border-none text-sm text-start flex items-center justify-between gap-2 transition-all focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+            : "input !py-2.5 sm:!py-3 w-full text-start flex items-center justify-between gap-2",
           !selectedOption && "text-muted-foreground",
           disabled && "opacity-50 cursor-not-allowed",
           className

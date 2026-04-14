@@ -100,6 +100,34 @@ test.describe('Messages Page', () => {
     await expect(page).toHaveTitle(/Messages.*Jawab24/i, { timeout: 15000 });
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
+
+  test('should hide page filter when only one active page', async ({ page }) => {
+    // Default mock has no /pages route — add one with 1 page
+    await page.route('**/api/pages**', async (route) => {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'page_1', name: 'Only Page', autoReplyEnabled: true }]) });
+    });
+
+    await page.goto('/en/messages');
+    await expect(page.locator('h1').filter({ hasText: t('messages.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    // Only 1 active page — dropdown should NOT appear
+    await expect(page.getByText(t('common.allPages'))).not.toBeVisible();
+  });
+
+  test('should show page filter when multiple active pages', async ({ page }) => {
+    await page.route('**/api/pages**', async (route) => {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([
+        { id: 'page_1', name: 'Page One', autoReplyEnabled: true },
+        { id: 'page_2', name: 'Page Two', autoReplyEnabled: true },
+      ]) });
+    });
+
+    await page.goto('/en/messages');
+    await expect(page.locator('h1').filter({ hasText: t('messages.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    // Dropdown should be visible
+    await expect(page.getByText(t('common.allPages')).first()).toBeVisible({ timeout: 10000 });
+  });
 });
 
 test.describe('Message Detail Modal', () => {

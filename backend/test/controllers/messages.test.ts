@@ -117,6 +117,18 @@ describe('MessagesController', () => {
             });
         });
 
+        it('should forward pageId filter to service', async () => {
+            vi.mocked(messagesService.getMessages).mockResolvedValue({
+                data: [],
+                pagination: { hasMore: false, nextCursor: null, limit: 50 },
+            });
+            (mockRequest as any).query = { pageId: 'page_42' };
+
+            await messagesController.getAll(mockRequest as any, mockReply as any);
+
+            expect(messagesService.getMessages).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ pageId: 'page_42' }));
+        });
+
         it('should use default options when no query params provided', async () => {
             vi.mocked(messagesService.getMessages).mockResolvedValue({
                 data: [],

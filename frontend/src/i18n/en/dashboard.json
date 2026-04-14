@@ -58,7 +58,9 @@
   "commandCenter": {
     "repliedToday": "Replied Today",
     "replyRate": "Reply Rate",
-    "avgSpeed": "Avg Speed"
+    "avgSpeed": "Avg Speed",
+    "quotaWarning": "{percent}% of plan",
+    "quotaExceeded": "Over limit"
   },
   "smartBanner": {
     "needsAttention": "{count, plural, one {# item needs} other {# items need}} your attention",
@@ -70,7 +72,8 @@
     "messagesCount": "{count, plural, one {# Message} other {# Messages}}",
     "goToComments": "Go to Comments",
     "goToMessages": "Go to Messages",
-    "waitingSince": "waiting {time}"
+    "waitingSince": "waiting {time}",
+    "dismissLabel": "Dismiss for now"
   },
   "inbox": {
     "commentsTitle": "Comments",

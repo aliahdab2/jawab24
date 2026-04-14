@@ -31,16 +31,18 @@ export class CommentsController {
             needsAttention?: string;
             resolved?: string;
             actionRequired?: string;
+            pageId?: string;
         }
     }>, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
-        const { cursor, limit, replied, replyMethod, needsAttention, resolved, actionRequired } = request.query;
+        const { cursor, limit, replied, replyMethod, needsAttention, resolved, actionRequired, pageId } = request.query;
 
         try {
             const options = {
                 ...(cursor && { cursor }),
                 ...(limit !== undefined && { limit: parseLimit(limit) }),
                 ...(replyMethod && ['ai', 'template', 'manual'].includes(replyMethod) && { replyMethod }),
+                ...(pageId && { pageId }),
                 ...parseInboxFilters({ replied, resolved, needsAttention, actionRequired }),
             };
 

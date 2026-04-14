@@ -593,6 +593,70 @@ test.describe('Dashboard Page', () => {
     await expect(page.getByText('Banner Sender').first()).toBeVisible({ timeout: 5000 });
   });
 
+  test('should dismiss banner via X button and persist across navigation', async ({ page }) => {
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Banner should be visible initially
+    const banner = page.getByRole('button', { name: /items need your attention/i });
+    await expect(banner).toBeVisible({ timeout: 15000 });
+
+    // Click the dismiss button (desktop X)
+    const dismissButton = page.getByRole('button', { name: /dismiss/i });
+    await dismissButton.click();
+
+    // Banner should disappear
+    await expect(banner).not.toBeVisible({ timeout: 5000 });
+
+    // Navigate away and back — banner should stay dismissed
+    await page.goto('/en/settings');
+    await page.goto('/en/dashboard');
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/items need your attention/i)).not.toBeVisible({ timeout: 5000 });
+  });
+
+  test('should re-show banner when item count increases after dismiss', async ({ page }) => {
+    await page.goto('/en/dashboard');
+
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Dismiss the banner
+    const dismissButton = page.getByRole('button', { name: /dismiss/i });
+    await dismissButton.click();
+    await expect(page.getByText(/items need your attention/i)).not.toBeVisible({ timeout: 5000 });
+
+    // Override stats with higher needsAttention counts and reload
+    await page.route('**/api/comments/stats**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...MOCK_COMMENT_STATS, needsAttention: 10 }),
+      });
+    });
+    await page.route('**/api/messages/stats**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ ...MOCK_MESSAGE_STATS, needsAttention: 5 }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Banner should re-appear since count increased (15 > 4)
+    await expect(page.getByText(/items need your attention/i)).toBeVisible({ timeout: 15000 });
+  });
+
   test('should show empty state gracefully when APIs fail', async ({ page }) => {
     // Override API mocks to return errors
     await page.route('**/api/**', async (route) => {
@@ -618,5 +682,39 @@ test.describe('Dashboard Page', () => {
     // Page should have some content (header, nav, etc.)
     const bodyText = await page.locator('body').innerText();
     expect(bodyText.length).toBeGreaterThan(20);
+  });
+
+  test('should show quota badge when usage exceeds limit', async ({ page }) => {
+    await page.route('**/api/subscription/usage**', async (route) => {
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          data: {
+            subscription: { plan: { name: 'Starter' }, status: 'active' },
+            aiReplies: { used: 2380, limit: 1000, percentUsed: 238 },
+            pages: { used: 1, limit: 1, percentUsed: 100 },
+          },
+        }),
+      });
+    });
+
+    await page.goto('/en/dashboard');
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Should show "Over limit" badge in the Command Center
+    await expect(page.getByText(t('dashboard.commandCenter.quotaExceeded')).first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('should not show quota badge when usage is within limit', async ({ page }) => {
+    await page.goto('/en/dashboard');
+    await expect(
+      page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
+    ).toBeVisible({ timeout: 15000 });
+
+    // Default mock has 20% usage — no badge should appear
+    await expect(page.getByText(t('dashboard.commandCenter.quotaExceeded'))).not.toBeVisible();
   });
 });

@@ -58,7 +58,9 @@
   "commandCenter": {
     "repliedToday": "تم الرد اليوم",
     "replyRate": "معدل الرد",
-    "avgSpeed": "متوسط السرعة"
+    "avgSpeed": "متوسط السرعة",
+    "quotaWarning": "{percent}% من الخطة",
+    "quotaExceeded": "تجاوز الحد"
   },
   "smartBanner": {
     "needsAttention": "{count, plural, zero {لا عناصر تحتاج انتباهك} one {عنصر واحد يحتاج انتباهك} two {عنصران يحتاجان انتباهك} few {# عناصر تحتاج انتباهك} many {# عنصر يحتاج انتباهك} other {# عنصر يحتاج انتباهك}}",
@@ -70,7 +72,8 @@
     "messagesCount": "{count, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالة} other {# رسالة}}",
     "goToComments": "انتقل للتعليقات",
     "goToMessages": "انتقل للرسائل",
-    "waitingSince": "بالانتظار {time}"
+    "waitingSince": "بالانتظار {time}",
+    "dismissLabel": "تجاهل مؤقتاً"
   },
   "inbox": {
     "commentsTitle": "التعليقات",

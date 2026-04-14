@@ -1,7 +1,8 @@
 import React from 'react';
 import { CheckCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { useSwipeToDismiss } from '@/hooks/useSwipeToDismiss';
+import { SwipeDismissWrapper } from '@/components/ui/SwipeDismissWrapper';
+import { SwipeBothSidesLabel } from '@/components/ui/SwipeBothSidesLabel';
 import { CommentCard, type CommentCardProps } from './CommentCard';
 
 type SwipeableCommentCardProps = CommentCardProps;
@@ -20,50 +21,21 @@ export const SwipeableCommentCard = React.memo(function SwipeableCommentCard(
   const t = useTranslations('comments');
   const swipeEnabled = !!props.onResolve;
 
-  const { ref, isDismissing, shouldSuppressClick } = useSwipeToDismiss({
-    onDismiss: () => props.onResolve?.(),
-    enabled: swipeEnabled,
-  });
-
-  const handleClickCapture = (e: React.MouseEvent) => {
-    if (shouldSuppressClick()) {
-      e.stopPropagation();
-      e.preventDefault();
-    }
-  };
-
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl"
-      style={isDismissing ? { pointerEvents: 'none' } : undefined}
+    <SwipeDismissWrapper
+      onDismiss={() => props.onResolve?.()}
+      enabled={swipeEnabled}
+      className="rounded-2xl"
+      foregroundClassName="z-10 rounded-2xl bg-card"
+      background={
+        <SwipeBothSidesLabel
+          icon={<CheckCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+          label={t('resolve')}
+          className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 sm:hidden"
+        />
+      }
     >
-      {/* Background revealed during swipe — shown on both sides, mobile only */}
-      {swipeEnabled && (
-        <div className="absolute inset-0 flex items-center justify-between px-5 bg-emerald-50 dark:bg-emerald-950/40 sm:hidden">
-          <div className="flex items-center gap-2">
-            <CheckCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-              {t('resolve')}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
-              {t('resolve')}
-            </span>
-            <CheckCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-        </div>
-      )}
-
-      {/* Foreground — swipeable layer; bg-card ensures semi-transparent attention
-          cards don't show the swipe hint background at rest */}
-      <div
-        ref={ref}
-        onClickCapture={handleClickCapture}
-        className="relative z-10 rounded-2xl bg-card"
-      >
-        <CommentCard {...props} />
-      </div>
-    </div>
+      <CommentCard {...props} />
+    </SwipeDismissWrapper>
   );
 });

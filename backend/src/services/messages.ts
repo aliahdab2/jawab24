@@ -31,6 +31,7 @@ export class MessagesService {
         resolved?: boolean;
         needsAttention?: boolean;
         actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
+        pageId?: string;  // Filter by specific page
     }): Promise<{
         data: Message[];
         pagination: { hasMore: boolean; nextCursor: string | null; limit: number };
@@ -52,7 +53,13 @@ export class MessagesService {
             };
         }
 
-        const pageIds = workspacePages.map(p => p.id);
+        let pageIds = workspacePages.map(p => p.id);
+        if (options?.pageId) {
+            pageIds = pageIds.filter(id => id === options.pageId);
+            if (pageIds.length === 0) {
+                return { data: [], pagination: { hasMore: false, nextCursor: null, limit } };
+            }
+        }
 
         // Build conditions
         const conditions = [

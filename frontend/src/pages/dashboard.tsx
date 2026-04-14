@@ -38,6 +38,7 @@ const CommentDetailModal = dynamic(() => import('@/components/comments').then(m 
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useConversationActions } from '@/hooks';
 import { useWorkspaceRole } from '@/hooks';
+import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { useIsDemoUser } from '@/features/demo';
 
 function SectionError({ onRetry }: { onRetry: () => void }) {
@@ -131,13 +132,9 @@ const DashboardPage: NextPageWithLayout = () => {
   const queryClient = useQueryClient();
 
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [kbNudgeDismissed, setKbNudgeDismissed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    const dismissedAt = localStorage.getItem('kbNudgeDismissedAt');
-    if (!dismissedAt) return false;
-    // Re-show after 3 days
-    const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000;
-    return Date.now() - Number(dismissedAt) < THREE_DAYS_MS;
+  const { dismissed: kbNudgeDismissed, dismiss: dismissKbNudge } = useTimedDismiss({
+    key: 'kbNudgeDismissedAt',
+    durationMs: 3 * 24 * 60 * 60 * 1000, // 3 days
   });
 
   // Selected Comment State
@@ -563,12 +560,16 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Command Center — consolidated metrics */}
       <CommandCenter
-        smartReplies={statsData.aiReplies}
+        smartReplies={analytics?.byMethod?.ai ?? statsData.aiReplies}
         repliedToday={statsData.repliedToday}
         replyRate={analytics?.totals?.replyRate ?? '0'}
         avgSpeedSeconds={analytics?.responseTime?.avgSeconds ?? null}
         hasError={sectionErrors.comments && sectionErrors.messages && sectionErrors.analytics}
         onRetry={refetchAll}
+        quota={usage?.aiReplies ? {
+          percentUsed: usage.aiReplies.percentUsed,
+          limit: usage.aiReplies.limit,
+        } : undefined}
       />
 
       {/* Inbox: Comments + Messages side by side */}
@@ -908,8 +909,7 @@ const DashboardPage: NextPageWithLayout = () => {
             const isEcomVariant = hasEcommerce;
 
             const handleDismiss = () => {
-              localStorage.setItem('kbNudgeDismissedAt', String(Date.now()));
-              setKbNudgeDismissed(true);
+              dismissKbNudge();
             };
 
             return (

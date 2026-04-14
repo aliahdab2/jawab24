@@ -1,6 +1,7 @@
 import clsx from 'clsx';
 import { Sparkles, CheckCircle, Gauge, Timer } from 'lucide-react';
 import { Card } from '@/components/ui';
+import { Badge } from '@/components/ui/Badge';
 import { useTranslations } from 'next-intl';
 import { formatDuration } from '@/lib/formatDuration';
 
@@ -11,6 +12,10 @@ interface CommandCenterProps {
   avgSpeedSeconds: number | null;
   hasError?: boolean;
   onRetry?: () => void;
+  quota?: {
+    percentUsed: number;
+    limit: number | null;
+  };
 }
 
 interface MetricCell {
@@ -20,6 +25,7 @@ interface MetricCell {
   borderColor: string;
   iconBg: string;
   iconColor: string;
+  badge?: React.ReactNode;
 }
 
 export function CommandCenter({
@@ -29,6 +35,7 @@ export function CommandCenter({
   avgSpeedSeconds,
   hasError,
   onRetry,
+  quota,
 }: CommandCenterProps) {
   const tDash = useTranslations('dashboard');
   const tErrors = useTranslations('errors');
@@ -38,14 +45,36 @@ export function CommandCenter({
     ? formatDuration(avgSpeedSeconds, tTime)
     : '—';
 
+  // Determine quota severity for the Smart Replies metric
+  const quotaPercent = quota?.limit ? quota.percentUsed : 0;
+  const isOverLimit = quotaPercent >= 100;
+  const isWarning = quotaPercent > 75 && !isOverLimit;
+
+  // Build quota badge for Smart Replies cell
+  let quotaBadge: React.ReactNode = null;
+  if (quota?.limit && quotaPercent > 75) {
+    quotaBadge = (
+      <Badge
+        variant={isOverLimit ? 'error' : 'warning'}
+        size="sm"
+        className="mt-1"
+      >
+        {isOverLimit
+          ? tDash('commandCenter.quotaExceeded')
+          : tDash('commandCenter.quotaWarning', { percent: Math.round(quotaPercent) })}
+      </Badge>
+    );
+  }
+
   const metrics: MetricCell[] = [
     {
       label: tDash('aiReplies'),
       value: smartReplies.toLocaleString(),
       icon: Sparkles,
-      borderColor: 'border-s-brand-500',
-      iconBg: 'icon-bg-brand-light',
+      borderColor: isOverLimit ? 'border-s-red-500' : isWarning ? 'border-s-amber-500' : 'border-s-brand-500',
+      iconBg: isOverLimit ? 'icon-bg-red-light' : isWarning ? 'icon-bg-amber-light' : 'icon-bg-brand-light',
       iconColor: '',
+      badge: quotaBadge,
     },
     {
       label: tDash('commandCenter.repliedToday'),
@@ -128,6 +157,7 @@ export function CommandCenter({
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5">
                       {metric.label}
                   </p>
+                  {metric.badge}
                 </div>
                 <div className={clsx(
                   'w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex-shrink-0 flex items-center justify-center',

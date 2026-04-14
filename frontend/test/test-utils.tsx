@@ -63,9 +63,11 @@ vi.mock('@/lib/store', () => ({
 vi.mock('next/router', () => ({
   useRouter: () => ({
     push: vi.fn(),
+    replace: vi.fn(),
     pathname: '/',
     query: {},
     asPath: '/',
+    isReady: true,
     events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
   }),
 }));

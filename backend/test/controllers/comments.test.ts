@@ -66,6 +66,15 @@ describe('CommentsController', () => {
             expect(mockReply.send).toHaveBeenCalledWith(mockResult);
         });
 
+        it('should forward pageId filter to service', async () => {
+            mockRequest.query = { pageId: 'page_42' };
+            vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 50 } });
+
+            await commentsController.getAll(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentsService.getCommentsByWorkspace).toHaveBeenCalledWith('test_workspace_id', expect.objectContaining({ pageId: 'page_42' }));
+        });
+
         it('should clamp limit to max 100', async () => {
             mockRequest.query = { limit: '999' };
             vi.mocked(commentsService.getCommentsByWorkspace).mockResolvedValue({ data: [], pagination: { hasMore: false, nextCursor: null, limit: 100 } });

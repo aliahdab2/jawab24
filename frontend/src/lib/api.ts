@@ -194,6 +194,7 @@ export interface CommentsQueryParams {
   needsAttention?: boolean;  // Filter by needsAttention flag
   resolved?: boolean;        // Filter by resolved status
   actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
+  pageId?: string;           // Filter by specific page
 }
 
 // Comments Stats Interface
@@ -423,6 +424,7 @@ export interface MessagesQueryParams {
   resolved?: boolean;
   needsAttention?: boolean;
   actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
+  pageId?: string;           // Filter by specific page
 }
 
 // Admin API - Protected routes for admin users only
