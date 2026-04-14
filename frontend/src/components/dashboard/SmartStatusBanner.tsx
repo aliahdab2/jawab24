@@ -169,9 +169,9 @@ export function SmartStatusBanner({
             'overflow-hidden transition-all duration-300',
             // Explicit utilities override Card's .card base class reliably
             // (alert-warning @apply class would depend on CSS source order)
-            'bg-amber-50 text-amber-900 border border-amber-200',
-            'dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-700',
-            'border-s-4 border-s-amber-500'
+            'bg-rose-50 text-rose-900 border border-rose-200',
+            'dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-700',
+            'border-s-4 border-s-rose-500'
           )}
           padding="none"
         >
@@ -187,7 +187,7 @@ export function SmartStatusBanner({
               {/* Warning icon */}
               <div className={clsx(
                 'w-8 h-8 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0',
-                'bg-amber-200/50 text-amber-600 dark:bg-amber-800/40 dark:text-amber-400'
+                'bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400'
               )}>
                 <AlertTriangle className="w-4 h-4 sm:w-5 sm:h-5" aria-hidden="true" />
               </div>
@@ -198,7 +198,7 @@ export function SmartStatusBanner({
                   {tDash('smartBanner.needsAttention', { count: totalCount })}
                 </p>
                 {breakdown && (
-                  <p className="text-xs sm:text-sm text-amber-700/80 dark:text-amber-400/70 mt-0.5 truncate">
+                  <p className="text-xs sm:text-sm text-rose-700/80 dark:text-rose-400/70 mt-0.5 truncate">
                     {breakdown}
                   </p>
                 )}
@@ -208,7 +208,7 @@ export function SmartStatusBanner({
               <div className="shrink-0 p-1">
                 <ChevronDown
                   className={clsx(
-                    'w-5 h-5 text-amber-600 dark:text-amber-400 transition-transform duration-300',
+                    'w-5 h-5 text-rose-600 dark:text-rose-400 transition-transform duration-300',
                     expanded && 'rotate-180'
                   )}
                 />
@@ -219,7 +219,7 @@ export function SmartStatusBanner({
             <button
               type="button"
               onClick={handleDismiss}
-              className="shrink-0 p-1.5 rounded-lg text-amber-600/60 dark:text-amber-400/60 hover:text-amber-800 dark:hover:text-amber-300 hover:bg-amber-200/40 dark:hover:bg-amber-700/30 transition-colors hidden sm:flex items-center justify-center"
+              className="shrink-0 p-1.5 rounded-lg text-rose-600/60 dark:text-rose-400/60 hover:text-rose-800 dark:hover:text-rose-300 hover:bg-rose-200/40 dark:hover:bg-rose-700/30 transition-colors hidden sm:flex items-center justify-center"
               aria-label={tDash('smartBanner.dismissLabel')}
             >
               <X className="w-4 h-4" />
@@ -232,9 +232,9 @@ export function SmartStatusBanner({
             className="transition-[max-height] duration-300 ease-in-out overflow-hidden"
           >
             <div ref={contentRef}>
-              <div className="border-t border-amber-200/60 dark:border-amber-700/40">
+              <div className="border-t border-rose-200/60 dark:border-rose-700/40">
                 {visibleItems.length > 0 ? (
-                  <ul className="divide-y divide-amber-100/80 dark:divide-amber-700/30">
+                  <ul className="divide-y divide-rose-100/80 dark:divide-rose-700/30">
                     {visibleItems.map((item) => {
                       const ItemIcon = item.type === 'comment' ? MessageSquare : MessageCircle;
                       const snippet = item.text.length > 60
@@ -257,7 +257,7 @@ export function SmartStatusBanner({
                         <>
                           {/* Type icon */}
                           <div className="shrink-0 mt-0.5">
-                            <ItemIcon className="w-4 h-4 text-amber-600 dark:text-amber-400" aria-hidden="true" />
+                            <ItemIcon className="w-4 h-4 text-rose-600 dark:text-rose-400" aria-hidden="true" />
                           </div>
 
                           {/* Content */}
@@ -266,20 +266,20 @@ export function SmartStatusBanner({
                               <span className="text-sm font-semibold truncate">
                                 {item.senderName || tc('unknownUser')}
                                 {hasMultiple && (
-                                  <span className="text-amber-700/70 dark:text-amber-400/60 font-bold"> ({item.messageCount})</span>
+                                  <span className="text-rose-700/70 dark:text-rose-400/60 font-bold"> ({item.messageCount})</span>
                                 )}
                               </span>
-                              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-amber-700/70 dark:text-amber-400/60">
+                              <span className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold text-rose-700/70 dark:text-rose-400/60">
                                 <Clock className="w-3 h-3" aria-hidden="true" />
                                 {displayTime}
                               </span>
                             </div>
-                            <p className="text-xs text-amber-800/70 dark:text-amber-300/60 truncate leading-relaxed">
+                            <p className="text-xs text-rose-800/70 dark:text-rose-300/60 truncate leading-relaxed">
                               {snippet}
                             </p>
                             {/* Reason tag — only for notable reasons (not default SLA) */}
                             {showReasonTag && (
-                              <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-200/60 text-amber-800/80 dark:bg-amber-800/40 dark:text-amber-300/80">
+                              <span className="inline-block mt-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-rose-200/60 text-rose-800/80 dark:bg-rose-800/40 dark:text-rose-300/80">
                                 {reason}
                               </span>
                             )}
@@ -287,7 +287,7 @@ export function SmartStatusBanner({
                         </>
                       );
 
-                      const sharedClassName = "flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-amber-100/50 dark:hover:bg-amber-800/30 transition-colors group w-full text-start";
+                      const sharedClassName = "flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-rose-100/50 dark:hover:bg-rose-800/30 transition-colors group w-full text-start";
 
                       return (
                         <li key={`${item.type}-${item.id}`}>
@@ -312,19 +312,19 @@ export function SmartStatusBanner({
                     })}
                   </ul>
                 ) : (
-                  <div className="px-4 py-3 text-xs text-amber-700/70 dark:text-amber-400/60">
+                  <div className="px-4 py-3 text-xs text-rose-700/70 dark:text-rose-400/60">
                     {tc('loading')}
                   </div>
                 )}
 
                 {/* View all link(s) */}
                 {viewAllLinks.length > 0 && (
-                  <div className="flex items-center gap-4 px-4 py-3 sm:px-5 border-t border-amber-200/60 dark:border-amber-700/40">
+                  <div className="flex items-center gap-4 px-4 py-3 sm:px-5 border-t border-rose-200/60 dark:border-rose-700/40">
                     {viewAllLinks.map((link) => (
                       <Link
                         key={link.href}
                         href={link.href}
-                        className="text-xs sm:text-sm font-bold text-amber-700 hover:text-amber-900 dark:text-amber-400 dark:hover:text-amber-300 transition-colors"
+                        className="text-xs sm:text-sm font-bold text-rose-700 hover:text-rose-900 dark:text-rose-400 dark:hover:text-rose-300 transition-colors"
                       >
                         {link.label} <span aria-hidden="true" className="rtl:inline-block rtl:rotate-180">→</span>
                       </Link>
