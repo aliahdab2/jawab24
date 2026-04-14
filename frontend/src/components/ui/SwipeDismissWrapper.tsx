@@ -12,6 +12,8 @@ interface SwipeDismissWrapperProps {
   className?: string;
   /** Classes for the foreground layer holding children */
   foregroundClassName?: string;
+  /** localStorage key for one-time peek animation hinting at swipe gesture */
+  peekStorageKey?: string;
 }
 
 /**
@@ -31,10 +33,12 @@ export function SwipeDismissWrapper({
   background,
   className,
   foregroundClassName,
+  peekStorageKey,
 }: SwipeDismissWrapperProps) {
   const { ref, isDismissing, shouldSuppressClick } = useSwipeToDismiss({
     onDismiss,
     enabled,
+    peekStorageKey,
   });
 
   const handleClickCapture = (e: React.MouseEvent) => {

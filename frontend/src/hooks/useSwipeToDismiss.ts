@@ -7,6 +7,8 @@ interface UseSwipeToDismissOptions {
   threshold?: number;
   /** Whether swiping is enabled. Default: true */
   enabled?: boolean;
+  /** localStorage key for one-time peek animation. If set and not yet seen, plays a subtle peek on mount to hint at swipe. */
+  peekStorageKey?: string;
 }
 
 interface UseSwipeToDismissReturn {
@@ -33,6 +35,15 @@ const SNAP_BACK_MS = 250;
 const SLIDE_OUT_MS = 200;
 const COLLAPSE_MS = 200;
 
+// Peek animation constants
+const PEEK_DELAY_MS = 800;
+const PEEK_SLIDE_MS = 350;
+const PEEK_HOLD_MS = 700;   // delay before snap-back (PEEK_DELAY_MS + PEEK_HOLD_MS)
+const PEEK_CLEANUP_MS = 400; // extra buffer after snap-back for transition cleanup
+const PEEK_DISTANCE_PX = 25;
+const PEEK_OPACITY = 0.85;
+const PEEK_EASING = `transform ${PEEK_SLIDE_MS}ms cubic-bezier(0.25,0.46,0.45,0.94), opacity ${PEEK_SLIDE_MS}ms ease`;
+
 /**
  * useSwipeToDismiss — ref-based hook for smooth 60fps swipe-to-dismiss gestures.
  * Uses pointer events for unified touch + mouse support.
@@ -42,6 +53,7 @@ export function useSwipeToDismiss({
   onDismiss,
   threshold = 0.35,
   enabled = true,
+  peekStorageKey,
 }: UseSwipeToDismissOptions): UseSwipeToDismissReturn {
   const ref = useRef<HTMLDivElement | null>(null);
   const [isDismissing, setIsDismissing] = useState(false);
@@ -61,6 +73,67 @@ export function useSwipeToDismiss({
   const shouldSuppressClick = useCallback(() => {
     return clickSuppressedRef.current;
   }, []);
+
+  // One-time peek animation: reveals background briefly to hint at swipe gesture.
+  // Respects prefers-reduced-motion and yields to drag if user interacts mid-peek.
+  useEffect(() => {
+    if (!peekStorageKey || !enabled || isDismissing) return;
+    const el = ref.current;
+    if (!el) return;
+
+    // Respect reduced-motion preference (WCAG 2.3.3)
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    try {
+      if (localStorage.getItem(peekStorageKey)) return;
+      localStorage.setItem(peekStorageKey, '1');
+    } catch {
+      return;
+    }
+
+    let cancelled = false;
+    const drag = dragRef.current;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const schedule = (fn: () => void, ms: number) => {
+      timers.push(setTimeout(() => {
+        // Yield to active drag — don't fight over transform
+        if (cancelled || drag.isDragging) return;
+        fn();
+      }, ms));
+    };
+
+    const isRTL = document.documentElement.dir === 'rtl';
+    const peekPx = isRTL ? PEEK_DISTANCE_PX : -PEEK_DISTANCE_PX;
+
+    // Phase 1: slide to reveal background
+    schedule(() => {
+      el.style.transition = PEEK_EASING;
+      el.style.transform = `translateX(${peekPx}px)`;
+      el.style.opacity = String(PEEK_OPACITY);
+    }, PEEK_DELAY_MS);
+
+    // Phase 2: snap back
+    schedule(() => {
+      el.style.transition = PEEK_EASING;
+      el.style.transform = 'translateX(0px)';
+      el.style.opacity = '1';
+    }, PEEK_DELAY_MS + PEEK_HOLD_MS);
+
+    // Phase 3: clean up inline styles
+    schedule(() => {
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.opacity = '';
+    }, PEEK_DELAY_MS + PEEK_HOLD_MS + PEEK_CLEANUP_MS);
+
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+      el.style.transition = '';
+      el.style.transform = '';
+      el.style.opacity = '';
+    };
+  }, [peekStorageKey, enabled, isDismissing]);
 
   useEffect(() => {
     const element = ref.current;

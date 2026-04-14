@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import type { Comment } from '@jawab24/shared';
 import {
   AlertTriangle,
+  Check,
   ChevronDown,
   MessageSquare,
   MessageCircle,
@@ -150,10 +151,13 @@ export function SmartStatusBanner({
   }
 
   const swipeBackground = (
-    <div className="flex items-center justify-center bg-surface-100 dark:bg-surface-200 rounded-[1.5rem] h-full">
-      <span className="text-sm font-medium text-muted-foreground">
-        {tDash('smartBanner.dismissLabel')}
-      </span>
+    <div className="flex items-center justify-between px-6 bg-surface-100 dark:bg-surface-200 rounded-[1.5rem] h-full">
+      <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+        <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+      </div>
+      <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
+        <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+      </div>
     </div>
   );
 
@@ -163,6 +167,7 @@ export function SmartStatusBanner({
       enabled={!shouldHide}
       className="mb-8 rounded-[1.5rem]"
       background={swipeBackground}
+      peekStorageKey="smartBannerPeekSeen"
     >
       <Card
           className={clsx(

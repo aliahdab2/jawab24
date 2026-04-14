@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act } from '@testing-library/react';
-import React, { useRef, useEffect } from 'react';
+import React from 'react';
 import { useSwipeToDismiss } from '@/hooks/useSwipeToDismiss';
 
 // jsdom doesn't have PointerEvent — polyfill it
@@ -30,12 +30,14 @@ function TestComponent({
   onDismiss,
   enabled = true,
   threshold,
+  peekStorageKey,
 }: {
   onDismiss: () => void;
   enabled?: boolean;
   threshold?: number;
+  peekStorageKey?: string;
 }) {
-  const { ref, isDismissing } = useSwipeToDismiss({ onDismiss, enabled, threshold });
+  const { ref, isDismissing } = useSwipeToDismiss({ onDismiss, enabled, threshold, peekStorageKey });
 
   return (
     <div data-testid="outer" style={{ width: 300 }}>
@@ -307,5 +309,134 @@ describe('useSwipeToDismiss', () => {
 
     // Transform should track finger
     expect(el.style.transform).toBe('translateX(100px)');
+  });
+});
+
+describe('useSwipeToDismiss — peek animation', () => {
+  const PEEK_KEY = 'test_peek_seen';
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    localStorage.clear();
+    // Default: no reduced-motion preference
+    window.matchMedia = vi.fn().mockReturnValue({ matches: false });
+    // Default: LTR
+    Object.defineProperty(document.documentElement, 'dir', { value: 'ltr', writable: true, configurable: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('should animate the peek on first view', () => {
+    const onDismiss = vi.fn();
+    const { getByTestId } = render(
+      React.createElement(TestComponent, { onDismiss, peekStorageKey: PEEK_KEY })
+    );
+    const el = getByTestId('swipeable');
+    el.getBoundingClientRect = vi.fn(() => ({
+      width: 300, height: 60, top: 80, left: 0, right: 300, bottom: 140, x: 0, y: 80, toJSON: () => ({}),
+    }));
+
+    // Before delay: no animation yet
+    expect(el.style.transform).toBe('');
+
+    // Phase 1: slide reveals background (after 800ms)
+    act(() => { vi.advanceTimersByTime(800); });
+    expect(el.style.transform).toBe('translateX(-25px)');
+    expect(el.style.opacity).toBe('0.85');
+
+    // Phase 2: snap back (after 800 + 700 = 1500ms)
+    act(() => { vi.advanceTimersByTime(700); });
+    expect(el.style.transform).toBe('translateX(0px)');
+    expect(el.style.opacity).toBe('1');
+
+    // Phase 3: clean up (after 1500 + 400 = 1900ms)
+    act(() => { vi.advanceTimersByTime(400); });
+    expect(el.style.transform).toBe('');
+    expect(el.style.opacity).toBe('');
+  });
+
+  it('should set localStorage key so peek only plays once', () => {
+    const onDismiss = vi.fn();
+
+    // First render: peek plays
+    const { unmount } = render(
+      React.createElement(TestComponent, { onDismiss, peekStorageKey: PEEK_KEY })
+    );
+    expect(localStorage.getItem(PEEK_KEY)).toBe('1');
+    unmount();
+
+    // Second render: peek does NOT play
+    const { getByTestId } = render(
+      React.createElement(TestComponent, { onDismiss, peekStorageKey: PEEK_KEY })
+    );
+    const el = getByTestId('swipeable');
+
+    act(() => { vi.advanceTimersByTime(2000); });
+    // No animation was applied
+    expect(el.style.transform).toBe('');
+  });
+
+  it('should skip animation when prefers-reduced-motion is enabled', () => {
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+
+    const onDismiss = vi.fn();
+    const { getByTestId } = render(
+      React.createElement(TestComponent, { onDismiss, peekStorageKey: PEEK_KEY })
+    );
+    const el = getByTestId('swipeable');
+
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(el.style.transform).toBe('');
+    // Should NOT set localStorage (so it can play if preference changes)
+    expect(localStorage.getItem(PEEK_KEY)).toBeNull();
+  });
+
+  it('should peek in RTL direction when dir="rtl"', () => {
+    Object.defineProperty(document.documentElement, 'dir', { value: 'rtl', writable: true, configurable: true });
+
+    const onDismiss = vi.fn();
+    const { getByTestId } = render(
+      React.createElement(TestComponent, { onDismiss, peekStorageKey: PEEK_KEY })
+    );
+    const el = getByTestId('swipeable');
+    el.getBoundingClientRect = vi.fn(() => ({
+      width: 300, height: 60, top: 80, left: 0, right: 300, bottom: 140, x: 0, y: 80, toJSON: () => ({}),
+    }));
+
+    act(() => { vi.advanceTimersByTime(800); });
+    // RTL: positive direction
+    expect(el.style.transform).toBe('translateX(25px)');
+  });
+
+  it('should not animate when peekStorageKey is not provided', () => {
+    const onDismiss = vi.fn();
+    const { getByTestId } = render(
+      React.createElement(TestComponent, { onDismiss })
+    );
+    const el = getByTestId('swipeable');
+
+    act(() => { vi.advanceTimersByTime(2000); });
+    expect(el.style.transform).toBe('');
+  });
+
+  it('should clean up timers on unmount during animation', () => {
+    const onDismiss = vi.fn();
+    const { getByTestId, unmount } = render(
+      React.createElement(TestComponent, { onDismiss, peekStorageKey: PEEK_KEY })
+    );
+    const el = getByTestId('swipeable');
+
+    // Start animation
+    act(() => { vi.advanceTimersByTime(800); });
+    expect(el.style.transform).toBe('translateX(-25px)');
+
+    // Unmount mid-animation
+    unmount();
+
+    // Remaining timers should not throw
+    act(() => { vi.advanceTimersByTime(2000); });
   });
 });

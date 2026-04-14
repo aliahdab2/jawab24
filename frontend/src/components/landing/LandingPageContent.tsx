@@ -18,7 +18,6 @@ import {
   LandingFAQ,
   LandingFooter,
   IntegrationShowcase,
-  AnnouncementBanner,
 } from '@/components/landing';
 
 function StatsSection({ statsList }: { statsList: { value: string; label: string }[] }) {
@@ -180,15 +179,6 @@ export default function LandingPageContent() {
 
       {/* Spacer for fixed nav */}
       <div className="h-16 sm:h-20" />
-
-      <AnnouncementBanner
-        title={t('banner.title')}
-        description={t('banner.description')}
-        feature="launch"
-        placeholder={t('comingSoon.placeholder')}
-        buttonLabel={t('comingSoon.notify')}
-        successMessage={t('comingSoon.notified')}
-      />
 
       <LandingHero isAuthenticated={isAuthenticated} />
 
