@@ -68,7 +68,7 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
         className="inline-flex items-baseline gap-1 text-muted-foreground hover:text-foreground transition-colors group"
       >
         <span dir="auto" className="text-sm sm:text-base font-semibold max-w-[55vw] sm:max-w-[300px] truncate">
-          {selectedPage?.name ?? ''}
+          {selectedPage?.name ?? tc('allPages')}
         </span>
         <ChevronDown className={clsx(
           'w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform flex-shrink-0 translate-y-[1px]',
