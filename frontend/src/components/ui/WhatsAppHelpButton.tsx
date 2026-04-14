@@ -14,46 +14,38 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const locale = useLocale();
   const { pathname } = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [isVisible, setIsVisible] = useState(true);
-  const [lastScrollY, setLastScrollY] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
   const [shouldPulse, setShouldPulse] = useState(false);
 
   // Hide on internal action screens where FAB overlaps with primary actions or content
   const HIDDEN_ROUTES = ['/messages', '/comments', '/notifications', '/settings', '/leads'];
   const isHiddenRoute = HIDDEN_ROUTES.some(r => pathname.startsWith(r));
 
-  // Pulse once on mount
-  useEffect(() => {
-    const timer = setTimeout(() => setShouldPulse(true), 1200);
-    const stopTimer = setTimeout(() => setShouldPulse(false), 3200);
-    return () => { clearTimeout(timer); clearTimeout(stopTimer); };
-  }, []);
   const isLandscape = useLandscape();
   const isRTL = isRTLLocale(locale);
 
-  // Auto-hide on scroll down, show on scroll up
+  // Show only near bottom of page — pulse once on first appearance
   useEffect(() => {
     const handleScroll = () => {
-      const currentScrollY = window.scrollY;
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = document.documentElement.clientHeight;
+      const distanceFromBottom = scrollHeight - window.scrollY - clientHeight;
 
-      // Show if at top of page
-      if (currentScrollY < 10) {
-        setIsVisible(true);
-      }
-      // Hide when scrolling down, show when scrolling up
-      else if (currentScrollY > lastScrollY) {
-        setIsVisible(false);
-        setIsOpen(false); // Close popup when hiding
+      if (distanceFromBottom < 150) {
+        setIsVisible(prev => {
+          if (!prev) setShouldPulse(true);
+          return true;
+        });
       } else {
-        setIsVisible(true);
+        setIsVisible(false);
+        setIsOpen(false);
+        setShouldPulse(false);
       }
-
-      setLastScrollY(currentScrollY);
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [lastScrollY]);
+  }, []);
 
   const handleWhatsAppClick = () => {
     const message = encodeURIComponent(

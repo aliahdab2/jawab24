@@ -25,7 +25,6 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
   const tc = useTranslations('common');
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedPage = activePages.find(p => p.id === pageId);
   const showSelector = activePages.length > 1;
@@ -42,25 +41,6 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
     return () => document.removeEventListener('mousedown', handler);
   }, [isOpen]);
 
-  // Position dropdown
-  useEffect(() => {
-    if (isOpen && dropdownRef.current && containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const dropdownHeight = dropdownRef.current.offsetHeight;
-      const spaceBelow = window.innerHeight - rect.bottom;
-      if (spaceBelow < dropdownHeight && rect.top > spaceBelow) {
-        dropdownRef.current.style.bottom = '100%';
-        dropdownRef.current.style.top = 'auto';
-        dropdownRef.current.style.marginBottom = '4px';
-        dropdownRef.current.style.marginTop = '0';
-      } else {
-        dropdownRef.current.style.top = '100%';
-        dropdownRef.current.style.bottom = 'auto';
-        dropdownRef.current.style.marginTop = '4px';
-        dropdownRef.current.style.marginBottom = '0';
-      }
-    }
-  }, [isOpen]);
 
   const handleSelect = (value: string) => {
     onPageChange(value);
@@ -87,7 +67,7 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
         aria-label={tc('allPages')}
         className="inline-flex items-baseline gap-1 text-muted-foreground hover:text-foreground transition-colors group"
       >
-        <span className="text-sm sm:text-base font-semibold max-w-[140px] sm:max-w-[200px] truncate">
+        <span className="text-sm sm:text-base font-semibold max-w-[55vw] sm:max-w-[300px] truncate">
           {selectedPage ? `· ${selectedPage.name}` : ''}
         </span>
         <ChevronDown className={clsx(
@@ -97,30 +77,35 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
       </button>
 
       {isOpen && (
-        <div
-          ref={dropdownRef}
-          className="absolute start-0 z-[100] min-w-[220px] bg-card border-2 border-brand-500/30 rounded-xl shadow-2xl shadow-black/30 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5 max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150"
-        >
-          {options.map((option, idx) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => handleSelect(option.value)}
-              className={clsx(
-                'w-full px-4 py-3 text-start text-sm flex items-center justify-between gap-2 transition-colors',
-                option.value === pageId
-                  ? 'status-brand font-semibold'
-                  : 'text-foreground/80 hover:bg-muted',
-                idx > 0 && 'border-t border-theme-border/50'
-              )}
-            >
-              <span className="truncate">{option.label}</span>
-              {option.value === pageId && (
-                <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
-              )}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="fixed inset-0 z-[99] bg-black/30" onClick={() => setIsOpen(false)} />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 pointer-events-none">
+            <div className="bg-card border border-theme-border rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden pointer-events-auto animate-in fade-in zoom-in-95 duration-150">
+              <p className="px-4 pt-4 pb-2 text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                {tc('allPages')}
+              </p>
+              {options.map((option, idx) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => handleSelect(option.value)}
+                  className={clsx(
+                    'w-full px-4 py-3.5 text-start text-sm flex items-center justify-between gap-2 transition-colors',
+                    option.value === pageId
+                      ? 'status-brand font-semibold'
+                      : 'text-foreground/80 hover:bg-muted',
+                    idx > 0 && 'border-t border-theme-border/50'
+                  )}
+                >
+                  <span className="truncate">{option.label}</span>
+                  {option.value === pageId && (
+                    <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
       )}
     </span>
   );

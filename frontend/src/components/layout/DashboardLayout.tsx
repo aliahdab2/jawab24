@@ -345,7 +345,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
         {/* Version badge - subtle indicator in corner */}
         <VersionBadge />
 
-        {/* WhatsApp help button - floating (hidden during modals and onboarding) */}
+        {/* WhatsApp help button - floating (hidden on list pages) */}
         <WhatsAppHelpButton hidden={mobileMenuOpen || showLogoutCheck || isOnboardingVisible} />
       </div>
     </>
