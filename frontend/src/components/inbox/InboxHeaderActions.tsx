@@ -4,50 +4,65 @@ import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
 import type { Page } from '@jawab24/shared';
 
-interface InboxHeaderActionsProps {
+// ─── Page selector (renders between header and filter chips) ────
+
+interface InboxPageSelectorProps {
   activePages: Page[];
   pageId: string;
   onPageChange: (pageId: string) => void;
+}
+
+/**
+ * Page filter dropdown for /comments and /messages — same style as Leads.
+ * Full-width on mobile, auto-width on desktop. Hidden when ≤1 active page.
+ */
+export function InboxPageSelector({ activePages, pageId, onPageChange }: InboxPageSelectorProps) {
+  const tc = useTranslations('common');
+
+  if (activePages.length <= 1) return null;
+
+  return (
+    <div className="mb-3 sm:mb-4 w-full sm:w-auto sm:min-w-[220px]">
+      <Select
+        value={pageId}
+        onChange={onPageChange}
+        aria-label={tc('allPages')}
+        options={[
+          { value: '', label: tc('allPages') },
+          ...activePages.map(p => ({ value: p.id, label: p.name })),
+        ]}
+      />
+    </div>
+  );
+}
+
+// ─── Export button (renders in PageHeader action slot) ───────────
+
+interface InboxExportButtonProps {
   onExport: () => void;
   exporting: boolean;
 }
 
 /**
- * Shared header actions for /comments and /messages pages.
- * Page filter dropdown (hidden when ≤1 active page) + export button.
- * Renders in PageHeader action slot — same row as the title, no extra vertical space.
+ * Export CSV button for PageHeader action slot.
+ * Hidden on native platforms (Capacitor).
  */
-export function InboxHeaderActions({ activePages, pageId, onPageChange, onExport, exporting }: InboxHeaderActionsProps) {
+export function InboxExportButton({ onExport, exporting }: InboxExportButtonProps) {
   const tc = useTranslations('common');
 
+  if (isNativePlatform()) return null;
+
   return (
-    <div className="flex items-center gap-2">
-      {activePages.length > 1 && (
-        <div className="min-w-[150px] sm:min-w-[180px]">
-          <Select
-            value={pageId}
-            onChange={onPageChange}
-            aria-label={tc('allPages')}
-            options={[
-              { value: '', label: tc('allPages') },
-              ...activePages.map(p => ({ value: p.id, label: p.name })),
-            ]}
-          />
-        </div>
-      )}
-      {!isNativePlatform() && (
-        <button
-          onClick={onExport}
-          disabled={exporting}
-          className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
-          aria-label={tc('export')}
-        >
-          {exporting
-            ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
-            : <Download className="w-5 h-5" aria-hidden="true" />
-          }
-        </button>
-      )}
-    </div>
+    <button
+      onClick={onExport}
+      disabled={exporting}
+      className="p-2 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors disabled:opacity-50"
+      aria-label={tc('export')}
+    >
+      {exporting
+        ? <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+        : <Download className="w-5 h-5" aria-hidden="true" />
+      }
+    </button>
   );
 }

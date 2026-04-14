@@ -5,7 +5,7 @@ import { useRouter } from 'next/router';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
-import { InboxHeaderActions } from '@/components/inbox/InboxHeaderActions';
+import { InboxPageSelector, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
 import { MessageCard, type Conversation } from '@/components/messages';
 import dynamic from 'next/dynamic';
 
@@ -407,16 +407,10 @@ const MessagesPage: NextPageWithLayout = () => {
       <PageHeader
         title={t('title')}
         description={t('description')}
-        action={(
-          <InboxHeaderActions
-            activePages={activePages}
-            pageId={pageId}
-            onPageChange={updatePageId}
-            onExport={exportToCSV}
-            exporting={exporting}
-          />
-        )}
+        action={<InboxExportButton onExport={exportToCSV} exporting={exporting} />}
       />
+
+      <InboxPageSelector activePages={activePages} pageId={pageId} onPageChange={updatePageId} />
 
       {/* Filter Chips + Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-5">
