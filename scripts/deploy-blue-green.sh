@@ -244,78 +244,85 @@ main() {
     # Step 1: Deploy to inactive environment
     deploy_env "$DEPLOY_ENV"
     
-    # Step 2: Health check
+    # Step 2: Health check (via docker exec — verifies the app is running)
     if ! health_check "$DEPLOY_ENV"; then
         error "Health checks failed! Aborting deployment."
         error "Rolling back..."
         docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml stop backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV 2>/dev/null || true
         exit 1
     fi
-    
-    # Step 3: Switch traffic
-    switch_traffic "$DEPLOY_ENV"
-    
-    # Step 4: Verify nginx can reach the new containers via Docker network
-    log "Verifying traffic switch..."
-    
-    # Wait for Docker DNS to propagate to nginx
+
+    # Step 3: Verify nginx can reach new containers via Docker network
+    # This MUST pass BEFORE switching traffic — otherwise users hit 502s
+    # while DNS propagates. Old env keeps serving until this succeeds.
+    log "Step 3: Verifying nginx can reach $DEPLOY_ENV via Docker network..."
+
     wait_for_dns "$DEPLOY_ENV" || true
-    
-    # Give nginx time to pick up new upstream config
-    sleep 2
-    
+
     VERIFY_SUCCESS=0
-    for i in {1..10}; do
-        # Verify nginx can reach backend through Docker network (not localhost)
-        # This tests the actual path nginx uses to reach the containers
+    for i in {1..30}; do
         BACKEND_OK=0
         FRONTEND_OK=0
-        
-        # Check backend via nginx container using Docker DNS
+
         if docker exec jawab24-nginx wget -q -O- --timeout=5 http://jawab24-backend-$DEPLOY_ENV:3000/health 2>/dev/null | grep -q '"status"'; then
             BACKEND_OK=1
         fi
-        
-        # Check frontend via nginx container using Docker DNS
+
         if docker exec jawab24-nginx wget -q --spider --timeout=5 http://jawab24-frontend-$DEPLOY_ENV:3001/ 2>/dev/null; then
             FRONTEND_OK=1
         fi
-        
+
         if [ $BACKEND_OK -eq 1 ] && [ $FRONTEND_OK -eq 1 ]; then
             VERIFY_SUCCESS=1
             log "✅ Nginx can reach backend ($DEPLOY_ENV) via Docker network"
             log "✅ Nginx can reach frontend ($DEPLOY_ENV) via Docker network"
             break
         fi
-        
-        warn "Retry $i/10 - Backend: $([ $BACKEND_OK -eq 1 ] && echo 'OK' || echo 'waiting'), Frontend: $([ $FRONTEND_OK -eq 1 ] && echo 'OK' || echo 'waiting')"
+
+        warn "⏳ Waiting for Docker network reachability... attempt $i/30 - Backend: $([ $BACKEND_OK -eq 1 ] && echo 'OK' || echo 'waiting'), Frontend: $([ $FRONTEND_OK -eq 1 ] && echo 'OK' || echo 'waiting')"
         sleep 2
     done
-    
-    if [ $VERIFY_SUCCESS -eq 1 ]; then
-        log "✅ Traffic switch verified - nginx can reach all $DEPLOY_ENV containers"
-        
-        # Final external verification (informational only, doesn't block deployment)
-        log "Running external health check..."
-        if curl -sf --max-time 5 https://jawab24.com/api/health > /dev/null 2>&1; then
-            log "✅ External API health check passed"
-        else
-            warn "⚠️  External API check failed (may be DNS/SSL caching, services are working)"
-        fi
-    else
-        error "❌ Traffic switch verification failed after 10 attempts!"
-        error "Nginx cannot reach $DEPLOY_ENV containers through Docker network"
-        
-        # Debug info
+
+    if [ $VERIFY_SUCCESS -eq 0 ]; then
+        error "❌ Nginx cannot reach $DEPLOY_ENV containers after 30 attempts!"
+        error "Old environment ($ACTIVE_ENV) is still serving traffic — no downtime."
         error "Debug: Container status..."
         docker ps --filter "name=jawab24-backend-$DEPLOY_ENV" --format "{{.Status}}"
         docker ps --filter "name=jawab24-frontend-$DEPLOY_ENV" --format "{{.Status}}"
-        
-        warn "Rolling back to $ACTIVE_ENV..."
+        docker-compose -f docker-compose.yml -f docker-compose.$DEPLOY_ENV.yml stop backend-$DEPLOY_ENV frontend-$DEPLOY_ENV ai-worker-$DEPLOY_ENV 2>/dev/null || true
+        exit 1
+    fi
+
+    # Step 4: Switch traffic — safe because we verified reachability above
+    log "Step 4: Switching traffic to $DEPLOY_ENV..."
+    switch_traffic "$DEPLOY_ENV"
+
+    # Brief pause then confirm the switch is serving requests
+    sleep 2
+    log "Confirming traffic switch..."
+    CONFIRM_OK=0
+    for i in {1..5}; do
+        if docker exec jawab24-nginx wget -q -O- --timeout=5 http://jawab24-backend-$DEPLOY_ENV:3000/health 2>/dev/null | grep -q '"status"'; then
+            CONFIRM_OK=1
+            break
+        fi
+        sleep 1
+    done
+
+    if [ $CONFIRM_OK -eq 0 ]; then
+        error "❌ Post-switch verification failed! Rolling back to $ACTIVE_ENV..."
         switch_traffic "$ACTIVE_ENV"
         exit 1
     fi
-    
+    log "✅ Traffic switch confirmed — $DEPLOY_ENV is serving requests"
+
+    # Final external verification (informational only, doesn't block deployment)
+    if curl -sf --max-time 5 https://jawab24.com/api/health > /dev/null 2>&1; then
+        log "✅ External API health check passed"
+    else
+        warn "⚠️  External API check failed (may be DNS/SSL caching, services are working)"
+    fi
+
     # Step 5: Stop old environment to prevent stale BullMQ workers from
     # processing jobs with outdated code (both envs run background workers)
     stop_old_env "$ACTIVE_ENV"

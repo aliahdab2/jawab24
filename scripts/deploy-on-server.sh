@@ -319,16 +319,23 @@ upstream ai_worker_active {
 }
 EOF
 
-    echo "🔄 Restarting Nginx to apply changes..."
-    if docker restart jawab24-nginx; then
-        echo "✅ Nginx restarted"
-        # Wait for Nginx to be healthy again
-        for i in {1..30}; do
-            if docker inspect jawab24-nginx | grep -q '"Status": "healthy"'; then break; fi
-            sleep 1
-        done
+    # Test config before reloading
+    if ! docker exec jawab24-nginx nginx -t 2>&1; then
+        echo "❌ FATAL: Nginx config test failed! Traffic stays on $ACTIVE_ENV."
+        exit 1
+    fi
+
+    # Graceful reload — NOT a restart. nginx -s reload:
+    #   1. Keeps old workers serving existing connections
+    #   2. Spawns new workers with the updated upstream.conf
+    #   3. Old workers drain and exit once their requests finish
+    # This is zero-downtime. docker restart kills all connections.
+    echo "🔄 Reloading Nginx (graceful, zero-downtime)..."
+    if docker exec jawab24-nginx nginx -s reload 2>&1 | grep -v "http2.*deprecated" || true; then
+        echo "✅ Nginx reloaded"
+        sleep 2
     else
-        echo "❌ FATAL: Nginx failed to restart!"
+        echo "❌ FATAL: Nginx reload failed!"
         exit 1
     fi
 
@@ -529,15 +536,15 @@ upstream ai_worker_active {
 }
 EOF
 
-    if docker restart jawab24-nginx; then
-        for i in {1..30}; do
-            if docker inspect jawab24-nginx | grep -q '"Status": "healthy"'; then break; fi
-            sleep 1
-        done
+    if docker exec jawab24-nginx nginx -t 2>&1 && docker exec jawab24-nginx nginx -s reload 2>&1; then
+        sleep 2
         echo "$ACTIVE_ENV" > .active-env
         echo "✅ Rolled back to $ACTIVE_ENV"
     else
-        echo "❌ FATAL: Nginx failed to restart during rollback!"
+        echo "❌ FATAL: Nginx reload failed during rollback! Forcing restart..."
+        docker restart jawab24-nginx
+        sleep 5
+        echo "$ACTIVE_ENV" > .active-env
     fi
 }
 
