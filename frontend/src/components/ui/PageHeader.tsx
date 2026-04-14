@@ -9,7 +9,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, action, className }: PageHeaderProps) {
   return (
-    <div className={`mb-3 landscape:mb-2 sm:mb-8 lg:mb-10 animate-slide-up ${className || ''}`}>
+    <div className={`mb-3 landscape:mb-2 sm:mb-8 lg:mb-10 animate-slide-up relative z-10 ${className || ''}`}>
       <div className="flex items-start justify-between gap-3 sm:gap-6">
         <div className="flex-1 min-w-0 text-start">
           <h1 className="text-xl sm:text-3xl lg:text-4xl font-display font-extrabold text-foreground tracking-tight">

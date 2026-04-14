@@ -15,6 +15,7 @@ interface InboxHeaderActionsProps {
 /**
  * Shared header actions for /comments and /messages pages.
  * Page filter dropdown (hidden when ≤1 active page) + export button.
+ * Renders in PageHeader action slot — same row as the title, no extra vertical space.
  */
 export function InboxHeaderActions({ activePages, pageId, onPageChange, onExport, exporting }: InboxHeaderActionsProps) {
   const tc = useTranslations('common');
@@ -22,12 +23,11 @@ export function InboxHeaderActions({ activePages, pageId, onPageChange, onExport
   return (
     <div className="flex items-center gap-2">
       {activePages.length > 1 && (
-        <div className="min-w-[140px] sm:min-w-[160px]">
+        <div className="min-w-[150px] sm:min-w-[180px]">
           <Select
             value={pageId}
             onChange={onPageChange}
             aria-label={tc('allPages')}
-            compact
             options={[
               { value: '', label: tc('allPages') },
               ...activePages.map(p => ({ value: p.id, label: p.name })),
