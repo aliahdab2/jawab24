@@ -67,8 +67,8 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
         aria-label={tc('allPages')}
         className="inline-flex items-baseline gap-1 text-muted-foreground hover:text-foreground transition-colors group"
       >
-        <span className="text-sm sm:text-base font-semibold max-w-[55vw] sm:max-w-[300px] truncate">
-          {selectedPage ? `· ${selectedPage.name}` : ''}
+        <span dir="auto" className="text-sm sm:text-base font-semibold max-w-[55vw] sm:max-w-[300px] truncate">
+          {selectedPage?.name ?? ''}
         </span>
         <ChevronDown className={clsx(
           'w-3.5 h-3.5 sm:w-4 sm:h-4 transition-transform flex-shrink-0 translate-y-[1px]',
@@ -97,7 +97,7 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
                     idx > 0 && 'border-t border-theme-border/50'
                   )}
                 >
-                  <span className="truncate">{option.label}</span>
+                  <span dir="auto" className="truncate">{option.label}</span>
                   {option.value === pageId && (
                     <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                   )}
