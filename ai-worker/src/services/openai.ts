@@ -59,9 +59,6 @@ export interface GenerateRequest {
         conversationHistory?: ConversationMessage[];
         replyStyle?: string;
         brandVoiceNotes?: string;
-        /** Customer's display name — personalization only, never affects cache keys. */
-        senderName?: string;
-        /** Substantive customer context (history, returning-customer summary, etc.). */
         customerContext?: string;
     };
 }
@@ -294,22 +291,19 @@ export class OpenAIService {
         // Sanitize to prevent prompt injection via page name
         const pageName = rawPageName.replace(/["\n\r\t\\]/g, '').slice(0, 100);
         // When the message has no detectable language (e.g. "..." or emoji-only), infer from
-        // conversation history, then post language, then KB language, before defaulting to English.
+        // conversation history, then KB language, before defaulting to English.
         // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
-        const commentLang = this.detectLanguageOrNull(request.comment);
         const language = request.language
             || request.context?.conversationHistory
                 ?.filter(m => m.role === 'user' && /[a-zA-Z\u0600-\u06FF]/.test(m.content))
                 .reverse()
                 .map(m => this.detectLanguage(m.content))
                 .find(Boolean)
-            || commentLang
-            || this.detectLanguageOrNull(request.context?.postMessage || '')
+            || this.detectLanguageOrNull(request.comment)
             || this.detectLanguageOrNull(this.getKBText(request) || '')
             || 'en';
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
         const languageName = languageNames[language] || 'English';
-        const languageInstruction = `The customer wrote in ${languageName}. You MUST reply in ${languageName}.`;
         const retrievedChunks = request.context?.retrievedChunks;
         const knowledgeBase = request.context?.knowledgeBase;
         const channel = request.context?.channel
@@ -368,10 +362,10 @@ Intent classification examples:
 
 - IMPORTANT: Watch for SARCASM. Sarcastic messages use positive words with negative intent. Indicators: eye-roll emoji (🙄), 😏, exaggerated praise ("واو شو هالخدمة الرائعة"), or positive words contradicted by context. Classify sarcastic "compliments" as COMPLAINT, not COMPLIMENT.
 - IMPORTANT: Messages consisting ONLY of punctuation (., ?, !), ONLY emojis, a single character, or very long unrelated text (not about the business) → classify as SPAM_OR_IRRELEVANT when there is no post context, NOT GREETING. A GREETING must contain an actual greeting word (hello, hi, مرحبا, السلام عليكم, etc.). Exception: if a post message is provided and suggests a call-to-action (e.g. "comment to receive details/prices"), treat the punctuation/emoji as a valid engagement response and reply using the KB.
+- CRITICAL OVERRIDE: When the post is labeled "engagement post — evaluate comment in context of this post", you MUST NOT classify the comment as SPAM_OR_IRRELEVANT — no matter what the comment says (emoji, dot, single character, etc.). The pipeline has already determined this is an intentional engagement response. Classify as QUESTION or OTHER and reply using <business_knowledge>.
 
 STEP 2 - RESPOND BASED ON INTENT:
 - QUESTION → Search <business_knowledge> thoroughly. If found, answer directly — no need to pad with pleasantries. If NOT found, naturally say you'll check on it.
-- IMPORTANT: If the KB contains both general information AND a "contact us for specifics" note on the same topic, ALWAYS provide the general information first, THEN direct to contact for the specifics. Never say "I don't have details" when partial information exists in the KB. Example: if KB lists schedule days but says "contact for morning/evening preference", reply with the days AND direct to contact for the timing detail.
 - COMPLIMENT → Thank them genuinely — keep it short and real, not over-the-top.
 - COMPLAINT → Apologize sincerely, acknowledge their concern, and offer to help resolve the issue.
 - PURCHASE_INTENT → Guide them on how to order or connect with the business. Share any contact info from <business_knowledge> if available.
@@ -383,9 +377,9 @@ STEP 2 - RESPOND BASED ON INTENT:
 RESPONSE GUIDELINES:
 - Be ${styleDirective}, helpful, and attentive to the customer
 ${isDM
-    ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- When a customer asks about pricing, plans, packages, or what you offer: list ALL available options from <business_knowledge>, not just one. Customers expect to see their full range of choices.\n- Keep responses concise but thorough (up to 4 sentences, maximum 1500 characters). Summarize knowledge base content into key points — never quote it verbatim. If the customer wants more details, they will ask.\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.\n- CRITICAL: When conversation history is present and the customer\'s message is a vague follow-up, you MUST search <business_knowledge> for the SPECIFIC topic from the last exchange. If KB has relevant info about that topic, use it and set confidence to "high" or "medium". Do NOT default to low confidence just because the customer\'s message alone is vague — the conversation context resolves the ambiguity.\n- NO REPEATED HEDGING: Before saying "I\'ll check and get back to you", "let me confirm", "let me check" (or any Arabic equivalent: أتحقق، سأتابع، خليني أسأل، سأرجعلك، etc.), scan the conversation history. If a PREVIOUS assistant reply already contains a check/follow-up promise, do NOT repeat it. Instead, acknowledge the wait with empathy — e.g. "بعتذر على التأخير، لسا ما وصلتني المعلومات. بأبلغك فور ما أعرف." or "آسف على الانتظار، بتابع معك بأسرع وقت." One check promise per topic per conversation. Repeating it signals a bot — real agents don\'t promise the same thing twice.'
+    ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- When a customer asks about pricing, plans, packages, or what you offer: list ALL available options from <business_knowledge>, not just one. Customers expect to see their full range of choices.\n- Keep responses concise but thorough (up to 4 sentences, maximum 1500 characters). Summarize knowledge base content into key points — never quote it verbatim. If the customer wants more details, they will ask.\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.\n- CRITICAL: When conversation history is present and the customer\'s message is a vague follow-up, you MUST search <business_knowledge> for the SPECIFIC topic from the last exchange. If KB has relevant info about that topic, use it and set confidence to "high" or "medium". Do NOT default to low confidence just because the customer\'s message alone is vague — the conversation context resolves the ambiguity.\n- NO REPEATED HEDGING: Before saying "I\'ll check and get back to you" (or any Arabic equivalent: أتحقق، سأتابع، خليني أسأل، سأرجعلك، etc.), scan the conversation history. If a PREVIOUS assistant reply already contains a check/follow-up promise, do NOT repeat it. Instead, acknowledge the wait with empathy — e.g. "بعتذر على التأخير، لسا ما وصلتني المعلومات. بأبلغك فور ما أعرف." or "آسف على الانتظار، بتابع معك بأسرع وقت." One check promise per topic per conversation. Repeating it signals a bot — real agents don\'t promise the same thing twice.'
     : '- Public comment replies must be concise: 1-3 sentences max.\n- DO include key facts from <business_knowledge> (prices, hours, availability) — customers expect direct answers.\n- Only suggest DM when the answer is NOT in <business_knowledge> or requires private info (order details, personal data).\n- For COMPLIMENT and GREETING: a short warm reply is enough.'}
-- CRITICAL: ${languageInstruction} (language code: ${language}). Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying.
+- CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).
 - Never be defensive or argumentative
 - Use emojis naturally — match the customer's emoji usage. If they send emojis, mirror that energy. If they don't, keep it minimal. Vary which emojis you use.
 - Do NOT start every reply with a greeting. After the first exchange, skip "مرحباً" / "أهلاً" / "Hi" — go straight to the answer. Real agents don't greet on every message.
@@ -394,14 +388,13 @@ ${isDM
 - When you don't have the answer, say it naturally — "خليني أسأل الفريق وأرجعلك" or "Let me check on that for you" — not the same phrase every time.
 - NEVER repeat something already said in the conversation history. If a prior assistant reply already mentioned an offer, promotion, price, or brand note (e.g. "free trial class", "حصة مجانية"), do NOT mention it again — even if brand voice notes say "always mention X". The no-repetition rule wins over "always".
 - NEVER end your reply with generic offer-to-help closings. These phrases are a dead giveaway of a bot and must NOT appear: "إذا لزمك شي خبرني", "إذا احتجت شي أنا هنا", "لا تتردد بالتواصل", "أنا هنا لمساعدتك", "لا تتردد إذا عندك أسئلة", "feel free to ask", "let me know if you need anything", "don't hesitate to reach out", "I'm here to help", or any variation of these. Just answer and stop. If the customer needs more, they'll ask.
-- After listing prices or plans, do NOT append a prompt asking which one they want details about — e.g. do NOT add "بدك تفاصيل عن أي باقة؟" / "which plan would you like more info on?" End at the last item. Real sales agents list the options and let the customer respond naturally.
 - For Arabic messages: Reply in the SAME dialect the customer used. Match their style naturally (Egyptian, Levantine, Gulf, Maghrebi, Iraqi, or formal). Do NOT use formal Arabic when they use colloquial dialect.
 ${isDM
     ? '- IMPORTANT: You ARE the business\'s page assistant talking to customers via DM. When you say "contact us" or "message us", you ARE the contact point. Do NOT tell customers to "contact us directly" or "send a DM" when they are ALREADY talking to you in a DM. Instead, ask them for the details you need right here in the conversation.'
     : '- For public comments: keep it brief but answer the question directly from <business_knowledge>.\n- Example good comment reply (English): "We have 3 plans starting from $15/month! Check our website for full details 😊"\n- Example good comment reply (Arabic): "عنا 3 باقات تبدأ من 56 ريال/شهر! تفاصيل أكثر على موقعنا 😊"'}
 - If a customer asks for contact info (phone, email, address) and it IS in <business_knowledge>, share it. If it is NOT, say you'll get that info for them and someone from the team will follow up.
-${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (guidelines from the business owner — incorporate naturally):\n${sanitizeForPrompt(request.context.brandVoiceNotes).slice(0, 500)}\n${isDM && request.context?.conversationHistory?.length ? 'IMPORTANT: Check the conversation history before applying any brand voice note. If a point (offer, promotion, price, phrase) was already stated by the assistant in this conversation, do NOT repeat it — even if the note says "always mention". The no-repeat rule overrides "always".\n' : ''}` : ''}
-${(request.context?.senderName || request.context?.customerContext) ? `\nCUSTOMER CONTEXT: ${[request.context.senderName ? `Customer name: ${sanitizeForPrompt(request.context.senderName)}.` : '', request.context.customerContext ? sanitizeForPrompt(request.context.customerContext).slice(0, 260) : ''].filter(Boolean).join(' ')}\n` : ''}
+${request.context?.brandVoiceNotes ? `\nBRAND VOICE NOTES (${isDM && request.context?.conversationHistory?.length ? 'guidelines from the business owner — incorporate naturally. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below' : 'follow these additional guidelines from the business owner'}):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}\n` : ''}
+${request.context?.customerContext ? `\nCUSTOMER CONTEXT: ${request.context.customerContext.replace(/[<>]/g, '').slice(0, 300)}\n` : ''}
 CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER use your training knowledge to answer. The ONLY valid source is <business_knowledge>. If it is not in <business_knowledge>, you do not know it — even if you "know" it from your training data. This applies to ALL topics: products, prices, policies, hours, locations, and anything else.
 - NEVER invent or guess prices, costs, or fees unless explicitly stated in <business_knowledge>
@@ -409,7 +402,7 @@ CRITICAL SAFETY RULES (NEVER BREAK THESE):
 - NEVER make up availability, stock levels, or delivery dates
 - IMPORTANT: Inventory data in <business_knowledge> reflects the last sync and may not be real-time. When answering stock/availability questions, share what the data says but add: "Please verify availability before ordering" (or Arabic equivalent). Never guarantee current stock.
 - NEVER invent dates, deadlines, schedules, or time-limited offers (e.g., "registration ends tomorrow") unless explicitly stated
-- NEVER invent payment terms, payment methods (bank transfer, cash, credit card, مدى, Apple Pay, online payment, etc.), installment plans, or included items (e.g., "books included", "transport provided") unless explicitly stated in <business_knowledge>. If the customer asks how to pay and it is not in <business_knowledge>, say you will check and get back to them.
+- NEVER invent payment terms, installment plans, or included items (e.g., "books included", "transport provided") unless explicitly stated
 - NEVER provide specific numbers (quantities, percentages, dimensions) unless given in context
 - NEVER promise refunds, exchanges, or returns unless the policy is explicitly in <business_knowledge>
 - NEVER confirm warranty terms, tax invoice availability, or return policies unless explicitly stated in <business_knowledge>
@@ -584,7 +577,7 @@ Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}`;
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}`;
 
         return prompt;
     }
@@ -638,7 +631,14 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
         if (request.context?.postMessage) {
             const safePost = sanitizeForPrompt(request.context.postMessage).replace(/"/g, "'").slice(0, 500);
             // When a punctuation/emoji-only comment arrives with a post, the pipeline already
-            prompt = `Post: "${safePost}"\n\n${prompt}`;
+            // determined it's worth replying (the post may be an engagement CTA). Signal this
+            // to the AI so it evaluates in context rather than defaulting to SPAM_OR_IRRELEVANT.
+            const commentOnly = request.comment.trim();
+            const isPunctuationOnly = /^[^\p{L}\p{N}]+$/u.test(commentOnly) && commentOnly.length > 0;
+            const postLabel = isPunctuationOnly
+                ? `Post (engagement post — evaluate comment in context of this post): "${safePost}"`
+                : `Post: "${safePost}"`;
+            prompt = `${postLabel}\n\n${prompt}`;
         }
 
         return prompt;
@@ -720,21 +720,45 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
                         .replace(/#\d+|ORD-?\d+/gi, '')                                    // order IDs
                         .replace(/\d+%/g, '');                                              // percentages
 
-                    const priceCues = /(?:price|cost|costs|only|starts?\s*at|starting|for just|valued at|سعر|السعر|بسعر|فقط|قيمت[هة]|تكلفة|يبدأ من)/gi;
+                    const priceCues = /(?:price|cost|costs|only|starts?\s*at|starting|for just|valued at|سعر|السعر|بسعر|قيمت[هة]|تكلفة|فقط|يبدأ من)/gi;
                     let cueMatch: RegExpExecArray | null;
                     while ((cueMatch = priceCues.exec(sanitized)) !== null) {
                         const window = sanitized.slice(cueMatch.index, cueMatch.index + cueMatch[0].length + 30);
                         const numberInWindow = window.match(/\d+(?:[,.\u066B]\d+)*/);
                         if (numberInWindow) {
                             const num = numberInWindow[0];
-                            // Skip single-digit numbers ("3 أيام", "2 days") — not prices
-                            if (num && num.replace(/[,.\u066B]/g, '').length >= 2 && !kbNums.has(num)) {
+                            if (num && !kbNums.has(num)) {
                                 flags.push('price_not_in_kb');
                                 break;
                             }
                         }
                     }
                 }
+            }
+        }
+
+        // Check 2: Comment too long — public comments should be brief
+        const channel = request.context?.channel
+            || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
+        if (channel === 'comment' && reply) {
+            const wordCount = reply.split(/\s+/).filter(Boolean).length;
+            if (wordCount > 50 && !flags.includes('comment_too_long')) {
+                flags.push('comment_too_long');
+            }
+        }
+
+        // Check 3: Language mismatch — reply language differs from input
+        // Uses the same fallback chain as buildSystemPrompt: message → KB → 'en'
+        if (reply) {
+            const inputLang = request.language
+                || this.detectLanguageOrNull(request.comment)
+                || this.detectLanguageOrNull(this.getKBText(request) || '')
+                || 'en';
+            const replyLang = this.detectLanguage(reply);
+            if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
+                flags.push('language_mismatch');
+                flags.push(`expected_lang:${inputLang}`);
+                flags.push(`reply_lang:${replyLang}`);
             }
         }
 

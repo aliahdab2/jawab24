@@ -836,7 +836,7 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
 
         const systemPrompt = capture.messages[0].content;
         expect(systemPrompt).toContain('You may provide full detailed answers');
-        expect(systemPrompt).toContain('direct message');
+        expect(systemPrompt).toContain('DM conversation');
         expect(systemPrompt).not.toContain('Public comment replies MUST be 1 sentence');
     });
 
@@ -854,7 +854,7 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
         });
 
         const systemPrompt = capture.messages[0].content;
-        expect(systemPrompt).toContain('direct message');
+        expect(systemPrompt).toContain('DM conversation');
     });
 
     it('should wrap user comment in <customer_message> tags', async () => {

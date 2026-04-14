@@ -20,7 +20,7 @@ export const config = {
         apiKey: process.env.OPENAI_API_KEY || '',
         // Fixed model - not configurable for cost control
         model: DEFAULT_AI_MODEL,
-        maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '300', 10),
+        maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '500', 10),
         temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.3'),
         timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),
     },

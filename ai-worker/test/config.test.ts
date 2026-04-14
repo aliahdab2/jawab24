@@ -48,10 +48,10 @@ describe('Config', () => {
         expect(config.openai.model).toBe('gpt-4.1-mini');
     });
 
-    it('should parse OPENAI_MAX_TOKENS with default 300', async () => {
+    it('should parse OPENAI_MAX_TOKENS with default 500', async () => {
         delete process.env.OPENAI_MAX_TOKENS;
         const { config } = await import('../src/config');
-        expect(config.openai.maxTokens).toBe(300);
+        expect(config.openai.maxTokens).toBe(500);
     });
 
     it('should parse OPENAI_TEMPERATURE as float with default 0.3', async () => {
