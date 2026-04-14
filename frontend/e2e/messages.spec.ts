@@ -63,6 +63,9 @@ test.describe('Messages Page', () => {
       if (url.includes('/auth/profile')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
       }
+      if (url.includes('/pages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [{ id: 'page_1', facebookPageId: 'fb_123', name: 'Test Page', autoReplyEnabled: true }] }) });
+      }
       if (url.includes('/subscription/usage')) {
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
       }

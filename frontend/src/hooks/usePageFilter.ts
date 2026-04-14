@@ -11,7 +11,7 @@ export function usePageFilter(pages: Page[]) {
   const [pageId, setPageId] = useState('');
 
   const activePages = useMemo(() =>
-    pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled),
+    Array.isArray(pages) ? pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled) : [],
   [pages]);
 
   const updatePageId = useCallback((newPageId: string) => {
