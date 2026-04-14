@@ -6,7 +6,7 @@ import { useRouter } from 'next/router';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
-import { InboxPageSelector, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
+import { InboxTitle, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
 import dynamic from 'next/dynamic';
 import { SwipeableCommentCard } from '@/components/comments';
 
@@ -422,12 +422,17 @@ const CommentsPage: NextPageWithLayout = () => {
   return (
     <>
       <PageHeader
-        title={t('title')}
+        title={
+          <InboxTitle
+            title={t('title')}
+            activePages={activePages}
+            pageId={pageId}
+            onPageChange={updatePageId}
+          />
+        }
         description={t('description')}
         action={<InboxExportButton onExport={exportToCSV} exporting={exporting} />}
       />
-
-      <InboxPageSelector activePages={activePages} pageId={pageId} onPageChange={updatePageId} />
 
       {/* Filter Chips + Search */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-5">
