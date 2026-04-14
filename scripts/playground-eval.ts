@@ -2386,6 +2386,115 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'English follow-up after English check promise — no second "I\'ll check"',
     },
+
+    // ===== Category 41: Language Mismatch Guard =====
+    // Verifies the system does NOT flag language_mismatch for emoji-only, punctuation-only,
+    // or Latin-acronym comments from Arabic-speaking customers. These are false positives
+    // because emojis/punctuation have no language, and Latin acronyms (IELTS, PMP) are
+    // commonly used in Arabic conversations.
+    {
+        id: 290, category: 41, categoryName: 'Language Mismatch Guard', channel: 'comment',
+        message: '👍',
+        page: 'training',
+        expected: {
+            flagsAbsent: ['language_mismatch'],
+        },
+        notes: 'Emoji-only comment on Arabic page — no detectable language, must NOT flag language_mismatch',
+    },
+    {
+        id: 291, category: 41, categoryName: 'Language Mismatch Guard', channel: 'comment',
+        message: '...',
+        page: 'training',
+        expected: {
+            flagsAbsent: ['language_mismatch'],
+        },
+        notes: 'Punctuation-only comment on Arabic page — no language to detect, must NOT flag',
+    },
+    {
+        id: 292, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: 'كم سعر دورة IELTS؟',
+        page: 'training',
+        expected: {
+            intent: ['QUESTION'],
+            flagsAbsent: ['language_mismatch'],
+        },
+        notes: 'Arabic message with Latin acronym (IELTS) — must NOT flag language_mismatch just because of the English word',
+    },
+    {
+        id: 293, category: 41, categoryName: 'Language Mismatch Guard', channel: 'comment',
+        message: '🔥🔥🔥',
+        page: 'training',
+        postMessage: 'سجل الآن في دورة اللغة الإنجليزية! علق بنار 🔥',
+        expected: {
+            flagsAbsent: ['language_mismatch'],
+        },
+        notes: 'Fire emojis on Arabic engagement post — reply should be Arabic, no language_mismatch flag',
+    },
+
+    // ===== Category 42: Brand Voice No Repetition =====
+    // Verifies the AI does NOT repeat brand voice notes (offers, promotions, phrases)
+    // that were already stated in a prior assistant reply within the same conversation.
+    {
+        id: 294, category: 42, categoryName: 'Brand Voice No Repetition', channel: 'dm',
+        message: 'طيب كم المدة؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'كم سعر دورة الإنجليزي؟' },
+            { role: 'assistant', content: 'سعر الدورة 1500 ريال 😊 وعندنا حصة تجريبية مجانية!' },
+        ],
+        brandVoiceNotes: 'Always mention the free trial class in every reply.',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['حصة تجريبية مجانية', 'free trial', 'حصة مجانية'],
+        },
+        notes: 'Brand voice says "always mention free trial" but it was already said — must NOT repeat it',
+    },
+    {
+        id: 295, category: 42, categoryName: 'Brand Voice No Repetition', channel: 'dm',
+        message: 'وهل فيه خصم؟',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'ابي أسجل بدورة الإنجليزي' },
+            { role: 'assistant', content: 'أهلاً! الدورة 1500 ريال وعندنا خصم 10% للتسجيل المبكر 😊' },
+        ],
+        brandVoiceNotes: 'Always mention the 10% early registration discount.',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['خصم 10%', '10% discount', 'خصم التسجيل المبكر'],
+        },
+        notes: 'Discount already mentioned in prior reply — brand voice "always mention" must be overridden by no-repeat rule',
+    },
+
+    // ===== Category 43: Competitor Comparison Intent =====
+    // Verifies that saying a competitor is BETTER = COMPLAINT, while asking about
+    // differences = QUESTION.
+    {
+        id: 296, category: 43, categoryName: 'Competitor Comparison Intent', channel: 'comment',
+        message: 'معهد بيرلتز أحسن منكم',
+        page: 'training',
+        expected: {
+            intent: ['COMPLAINT'],
+        },
+        notes: 'Competitor is better than you = dissatisfaction = COMPLAINT',
+    },
+    {
+        id: 297, category: 43, categoryName: 'Competitor Comparison Intent', channel: 'dm',
+        message: "What's the difference between you and Berlitz?",
+        page: 'training',
+        expected: {
+            intent: ['QUESTION'],
+        },
+        notes: 'Asking about differences = genuine question, not complaint',
+    },
+    {
+        id: 298, category: 43, categoryName: 'Competitor Comparison Intent', channel: 'comment',
+        message: 'المعهد الثاني أفضل بكثير والله',
+        page: 'training',
+        expected: {
+            intent: ['COMPLAINT'],
+        },
+        notes: 'Arabic — the other institute is much better = COMPLAINT',
+    },
 ];
 
 // ---------------------------------------------------------------------------
