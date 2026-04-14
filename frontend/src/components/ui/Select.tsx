@@ -112,8 +112,10 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
         <div
           ref={dropdownRef}
           className={clsx(
-            "absolute z-[100] bg-card rounded-xl border border-theme-border shadow-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150",
-            compact ? "end-0 min-w-[200px]" : "inset-x-0"
+            "absolute z-[100] rounded-xl max-h-60 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-150",
+            compact
+              ? "end-0 min-w-[200px] bg-card border-2 border-brand-500/30 shadow-2xl shadow-black/30 dark:shadow-black/60 ring-1 ring-black/5 dark:ring-white/5"
+              : "inset-x-0 bg-card border border-theme-border shadow-xl"
           )}
         >
           {options.length === 0 ? (
@@ -121,7 +123,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
               No options available
             </div>
           ) : (
-            options.map((option) => (
+            options.map((option, idx) => (
               <button
                 key={option.value}
                 type="button"
@@ -130,7 +132,8 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
                   "w-full px-4 py-3 text-start text-sm flex items-center justify-between gap-2 transition-colors",
                   option.value === value
                     ? "status-brand font-semibold"
-                    : "text-foreground/80 hover:bg-muted"
+                    : "text-foreground/80 hover:bg-muted",
+                  idx > 0 && "border-t border-theme-border/50"
                 )}
               >
                 <span className="truncate">{option.label}</span>
