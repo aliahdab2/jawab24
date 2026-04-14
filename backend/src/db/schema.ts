@@ -912,7 +912,21 @@ export const waitlistEmails = pgTable('waitlist_emails', {
     phone: varchar('phone', { length: 30 }),
     feature: varchar('feature', { length: 50 }).notNull(),
     createdAt: timestamp('created_at').defaultNow(),
+    unsubscribedAt: timestamp('unsubscribed_at'),
 }, (table) => ({
     emailFeatureUnique: uniqueIndex('idx_waitlist_email_feature').on(table.email, table.feature),
     phoneFeatureUnique: uniqueIndex('idx_waitlist_phone_feature').on(table.phone, table.feature),
 }));
+
+// Waitlist Email Sends — audit log for emails sent to waitlist subscribers
+export const waitlistEmailSends = pgTable('waitlist_email_sends', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    subject: varchar('subject', { length: 500 }).notNull(),
+    body: text('body').notNull(),
+    recipientCount: integer('recipient_count').notNull().default(0),
+    successCount: integer('success_count').notNull().default(0),
+    failureCount: integer('failure_count').notNull().default(0),
+    feature: varchar('feature', { length: 50 }),
+    sentBy: uuid('sent_by').notNull().references(() => users.id),
+    sentAt: timestamp('sent_at').defaultNow(),
+});

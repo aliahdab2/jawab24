@@ -1,0 +1,11 @@
+{
+  "title": "Unsubscribe",
+  "description": "You will no longer receive waitlist emails from Jawab24.",
+  "confirmButton": "Unsubscribe",
+  "processing": "Processing...",
+  "success": "You have been unsubscribed successfully.",
+  "error": "Something went wrong. Please try again.",
+  "invalidLink": "This unsubscribe link is invalid or has expired.",
+  "alreadyUnsubscribed": "You are already unsubscribed.",
+  "backToHome": "Back to Home"
+}

@@ -534,6 +534,16 @@ export const adminApi = {
     const response = await api.get(`/admin/waitlist?${params.toString()}`);
     return response.data;
   },
+
+  // Waitlist — send email to subscribers
+  sendWaitlistEmail: async (data: {
+    subject: string;
+    body: string;
+    feature?: string;
+  }) => {
+    const response = await api.post('/admin/waitlist/send-email', data);
+    return response.data;
+  },
 };
 
 // KB File Upload API — extract text from PDF, Word, image

@@ -125,6 +125,13 @@ export const config = {
         senderId: process.env.VONAGE_SENDER_ID || 'Jawab24',
     },
 
+    // Resend — transactional email (waitlist campaigns, future transactional emails)
+    resend: {
+        apiKey: process.env.RESEND_API_KEY || '',
+        fromEmail: process.env.RESEND_FROM_EMAIL || 'info@jawab24.com',
+        fromName: process.env.RESEND_FROM_NAME || 'Jawab24',
+    },
+
     // Circuit Breaker (ai-worker HTTP calls)
     circuitBreaker: {
         /** Consecutive failures before opening the circuit (default: 5) */

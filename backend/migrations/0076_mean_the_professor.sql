@@ -1,0 +1,1 @@
+ALTER TABLE "waitlist_emails" ADD COLUMN "unsubscribed_at" timestamp;

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-import { Search, ChevronLeft, ChevronRight, Mail } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Mail, Send } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
-import { Card } from '@/components/ui';
+import { Card, Button, Input, Textarea, Modal, ConfirmationModal } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -43,6 +43,19 @@ export default function AdminWaitlistPage() {
     // Debounced search
     const [debouncedSearch, setDebouncedSearch] = useState('');
 
+    // Subscriber counts (email vs phone-only)
+    const [emailCount, setEmailCount] = useState(0);
+    const [phoneOnlyCount, setPhoneOnlyCount] = useState(0);
+
+    // Email compose state
+    const [showCompose, setShowCompose] = useState(false);
+    const [emailSubject, setEmailSubject] = useState('');
+    const [emailBody, setEmailBody] = useState('');
+    const [sending, setSending] = useState(false);
+    const [sendResult, setSendResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
+    const [sendError, setSendError] = useState<string | null>(null);
+    const [showConfirm, setShowConfirm] = useState(false);
+
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(search);
@@ -65,19 +78,21 @@ export default function AdminWaitlistPage() {
             if (response.success) {
                 setEntries(response.data);
                 setPagination(response.pagination);
+                setEmailCount(response.emailCount ?? 0);
+                setPhoneOnlyCount(response.phoneOnlyCount ?? 0);
                 if (response.features) {
                     setFeatures(response.features);
                 }
             } else {
-                setError('Failed to load waitlist');
+                setError(t('waitlist.loadError'));
             }
         } catch (err) {
-            setError('Failed to load waitlist');
+            setError(t('waitlist.loadError'));
             captureError(err, 'Failed to load waitlist', { tags: { page: 'admin-waitlist' } });
         } finally {
             setLoading(false);
         }
-    }, [pagination.page, pagination.limit, debouncedSearch, featureFilter]);
+    }, [pagination.page, pagination.limit, debouncedSearch, featureFilter, t]);
 
     useEffect(() => {
         loadEntries();
@@ -106,6 +121,38 @@ export default function AdminWaitlistPage() {
         return (translated === key || translated === `admin.${key}`) ? feature : translated;
     };
 
+    const handleSendEmail = async () => {
+        setShowConfirm(false);
+        setSending(true);
+        setSendError(null);
+        setSendResult(null);
+        try {
+            const response = await adminApi.sendWaitlistEmail({
+                subject: emailSubject,
+                body: emailBody,
+                feature: featureFilter || undefined,
+            });
+            if (response.success) {
+                setSendResult({ sent: response.sent, failed: response.failed, total: response.total });
+                setEmailSubject('');
+                setEmailBody('');
+            } else {
+                setSendError(response.error || t('waitlist.emailError'));
+            }
+        } catch (err) {
+            setSendError(t('waitlist.emailError'));
+            captureError(err, 'Failed to send waitlist email', { tags: { page: 'admin-waitlist' } });
+        } finally {
+            setSending(false);
+        }
+    };
+
+    const closeCompose = () => {
+        setShowCompose(false);
+        setSendResult(null);
+        setSendError(null);
+    };
+
     return (
         <AdminLayout title={t('waitlist.title')}>
             <div className="space-y-6">
@@ -119,8 +166,17 @@ export default function AdminWaitlistPage() {
                             {t('waitlist.subtitle')}
                         </p>
                     </div>
-                    <div className="text-sm text-muted-foreground">
-                        {pagination.total} {t('waitlist.totalSignups')}
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm text-muted-foreground">
+                            {pagination.total} {t('waitlist.totalSignups')}
+                        </span>
+                        <Button
+                            size="sm"
+                            icon={<Send className="w-4 h-4" />}
+                            onClick={() => setShowCompose(true)}
+                        >
+                            {t('waitlist.sendEmail')}
+                        </Button>
                     </div>
                 </div>
 
@@ -252,6 +308,90 @@ export default function AdminWaitlistPage() {
                     )}
                 </Card>
             </div>
+
+            {/* Compose Email Modal */}
+            <Modal
+                isOpen={showCompose}
+                onClose={closeCompose}
+                title={t('waitlist.composeEmail')}
+                size="lg"
+            >
+                <div className="space-y-4">
+                    {/* Recipients indicator */}
+                    <div className="text-sm text-muted-foreground">
+                        <span className="font-medium">{t('waitlist.emailRecipients')}:</span>{' '}
+                        {featureFilter
+                            ? t('waitlist.emailRecipientsFeature', { feature: getFeatureLabel(featureFilter) })
+                            : t('waitlist.emailRecipientsAll')}
+                        {' '}({emailCount})
+                    </div>
+
+                    {/* Phone-only warning */}
+                    {phoneOnlyCount > 0 && (
+                        <div className="p-3 rounded-lg border alert-warning text-sm">
+                            {t('waitlist.emailPhoneOnly', { count: phoneOnlyCount })}
+                        </div>
+                    )}
+
+                    <Input
+                        label={t('waitlist.emailSubject')}
+                        placeholder={t('waitlist.emailSubjectPlaceholder')}
+                        value={emailSubject}
+                        onChange={(e) => setEmailSubject(e.target.value)}
+                    />
+
+                    <Textarea
+                        label={t('waitlist.emailBody')}
+                        placeholder={t('waitlist.emailBodyPlaceholder')}
+                        value={emailBody}
+                        onChange={(e) => setEmailBody(e.target.value)}
+                        rows={8}
+                    />
+
+                    {/* Success message */}
+                    {sendResult && (
+                        <div className="p-3 rounded-lg border alert-success text-sm">
+                            {t('waitlist.emailSentDetails', {
+                                sent: sendResult.sent,
+                                total: sendResult.total,
+                                failed: sendResult.failed,
+                            })}
+                        </div>
+                    )}
+
+                    {/* Error message */}
+                    {sendError && (
+                        <div className="p-3 rounded-lg border alert-error text-sm">
+                            {sendError}
+                        </div>
+                    )}
+
+                    <div className="flex justify-end gap-3 pt-2">
+                        <Button variant="secondary" onClick={closeCompose}>
+                            {tc('cancel')}
+                        </Button>
+                        <Button
+                            onClick={() => setShowConfirm(true)}
+                            loading={sending}
+                            disabled={!emailSubject.trim() || !emailBody.trim() || sending}
+                        >
+                            {sending ? t('waitlist.emailSending') : t('waitlist.emailSend')}
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Confirmation dialog */}
+            <ConfirmationModal
+                isOpen={showConfirm}
+                onClose={() => setShowConfirm(false)}
+                onConfirm={handleSendEmail}
+                title={t('waitlist.emailConfirmTitle')}
+                message={t('waitlist.emailConfirmMessage', { count: emailCount })}
+                confirmText={t('waitlist.emailSend')}
+                variant="warning"
+                loading={sending}
+            />
         </AdminLayout>
     );
 }

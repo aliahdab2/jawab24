@@ -23,6 +23,8 @@ export const PAGE_NAMESPACES = {
   blog:               ['blog', 'landing'],
   ecommerce:          ['ecommerce'],
 
+  unsubscribe:        ['unsubscribe'],
+
   // ── Legal pages ───────────────────────────────────────────────
   terms:              ['terms'],
   privacy:            ['privacy'],

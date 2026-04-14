@@ -53,6 +53,7 @@ import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { smsService } from "./services/sms";
+import { emailService } from "./services/email";
 import { createRequestLogger } from "./types";
 import { config } from "./config";
 import demoPlugin from "./plugins/demo";
@@ -287,6 +288,7 @@ const start = async () => {
     // Start escalation cron (checks for stale unreplied comments/messages every 5 min)
     setEscalationLogger(workerLogger);
     smsService.setLogger(workerLogger);
+    emailService.setLogger(workerLogger);
     startEscalationCron();
 
     // Start Facebook token refresh cron (refreshes tokens expiring within 7 days, every 6h)
