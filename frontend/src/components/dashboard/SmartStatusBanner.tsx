@@ -170,7 +170,7 @@ export function SmartStatusBanner({
             // Explicit utilities override Card's .card base class reliably
             // (alert-warning @apply class would depend on CSS source order)
             'bg-rose-50 text-rose-900 border border-rose-200',
-            'dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-700',
+            'dark:bg-rose-950 dark:text-rose-300 dark:border-rose-800',
             'border-s-4 border-s-rose-500'
           )}
           padding="none"
@@ -215,11 +215,11 @@ export function SmartStatusBanner({
               </div>
             </button>
 
-            {/* Dismiss button — desktop fallback, in flow next to chevron */}
+            {/* Dismiss button */}
             <button
               type="button"
               onClick={handleDismiss}
-              className="shrink-0 p-1.5 rounded-lg text-rose-600/60 dark:text-rose-400/60 hover:text-rose-800 dark:hover:text-rose-300 hover:bg-rose-200/40 dark:hover:bg-rose-700/30 transition-colors hidden sm:flex items-center justify-center"
+              className="shrink-0 p-1.5 rounded-lg text-rose-600/60 dark:text-rose-400/60 hover:text-rose-800 dark:hover:text-rose-300 hover:bg-rose-200/40 dark:hover:bg-rose-700/30 transition-colors flex items-center justify-center"
               aria-label={tDash('smartBanner.dismissLabel')}
             >
               <X className="w-4 h-4" />
