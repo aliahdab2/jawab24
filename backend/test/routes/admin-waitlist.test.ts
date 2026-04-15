@@ -49,7 +49,8 @@ vi.mock('../../src/db/schema', () => ({
     usage: {},
     kbChunks: {},
     kbGaps: {},
-    waitlistEmails: { feature: 'feature', email: 'email', createdAt: 'created_at' },
+    waitlistEmails: { feature: 'feature', email: 'email', createdAt: 'created_at', unsubscribedAt: 'unsubscribed_at' },
+    waitlistEmailSends: {},
 }));
 
 // Mock drizzle-orm operators
@@ -61,6 +62,8 @@ vi.mock('drizzle-orm', () => ({
     gte: vi.fn(),
     lte: vi.fn(),
     sql: vi.fn(),
+    isNotNull: vi.fn(),
+    isNull: vi.fn(),
 }));
 
 // Mock config
@@ -81,6 +84,9 @@ vi.mock('../../src/services/reply/generator', () => ({ shouldSkipReply: vi.fn(),
 vi.mock('@jawab24/shared', () => ({ normalizeAiIntent: vi.fn() }));
 vi.mock('../../src/utils/language', () => ({ detectLanguageCode: vi.fn() }));
 vi.mock('../../src/utils/swagger', () => ({ auth: [] }));
+vi.mock('../../src/services/email', () => ({ emailService: { send: vi.fn(), setLogger: vi.fn() } }));
+vi.mock('../../src/utils/emailTemplates', () => ({ waitlistEmailTemplate: vi.fn().mockReturnValue('<html></html>') }));
+vi.mock('../../src/routes/waitlist', () => ({ generateUnsubscribeToken: vi.fn().mockReturnValue('mock_token') }));
 
 describe('Admin Waitlist Route', () => {
     let app: ReturnType<typeof Fastify>;
