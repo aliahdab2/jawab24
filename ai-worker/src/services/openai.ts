@@ -172,6 +172,19 @@ export class OpenAIService {
                 clearTimeout(timeout);
             }
 
+            // Structured-output refusal — model declined the request (policy violation).
+            // When strict json_schema is active, OpenAI may return `refusal` instead of content.
+            // Log to Sentry for observability and fall back to a safe canned reply.
+            const refusal = completion.choices[0]?.message?.refusal;
+            if (refusal) {
+                Sentry.captureMessage('openai_structured_refusal', {
+                    level: 'warning',
+                    tags: { service: 'openai' },
+                    extra: { refusal, model: config.openai.model },
+                });
+                return this.getFallbackReply(request);
+            }
+
             const content = completion.choices[0]?.message?.content?.trim() || '';
             const detectedLanguage = this.detectLanguage(request.comment);
 
