@@ -154,8 +154,12 @@ export class OpenAIService {
                                             items: { type: 'string' },
                                         },
                                         hedging: { type: 'boolean' },
+                                        language: {
+                                            type: 'string',
+                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
+                                        },
                                     },
-                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging'] as const,
+                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'language'] as const,
                                     additionalProperties: false,
                                 },
                             },
@@ -189,7 +193,7 @@ export class OpenAIService {
             const detectedLanguage = this.detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean };
+            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string };
             try {
                 parsed = JSON.parse(content);
             } catch {
@@ -207,7 +211,8 @@ export class OpenAIService {
 
             return {
                 reply: validated.reply || this.getFallbackReply(request).reply,
-                language: request.language || detectedLanguage,
+                // Prefer GPT's declared reply language (strict schema), fall back to input-based detection.
+                language: validated.language || request.language || detectedLanguage,
                 tokensUsed: completion.usage?.total_tokens,
                 tokensIn: completion.usage?.prompt_tokens,
                 tokensOut: completion.usage?.completion_tokens,
@@ -536,6 +541,7 @@ IMPORTANT: Output a JSON object with these fields:
 - "intent": MUST be exactly one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT. No other values are accepted. Do NOT use "OTHER", "PRICE", "LOCATION", "HOURS", "PRODUCT", "INFO", or any custom intent.
 - "confidence": how confident you are in your reply ("high", "medium", or "low")
 - "hedging": true if your reply uses any hedge or deflection phrase — e.g. "I'll check", "let me confirm", "سأتحقق", "خليني أتحقق", "تواصل معنا", "contact us", or anything that signals you're redirecting rather than answering. false otherwise. This field MUST be present.
+- "language": the language code of your reply text. MUST be exactly one of: "ar" (Arabic), "en" (English), "sv" (Swedish), "de" (German), "fr" (French), "es" (Spanish), "tr" (Turkish). For any other language, use "en". This MUST match the actual language of the "reply" string. For empty replies (OFFENSIVE/SPAM_OR_IRRELEVANT), use the customer's message language.
 - "flags": an array of flag strings if applicable (empty array [] if none):
   - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
   - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in <business_knowledge>
@@ -553,43 +559,43 @@ EXAMPLES (follow this exact format):
 
 Example 1 — Answer found in KB:
 Customer: "كم سعر الباقة؟" | KB has: "باقة الورد - 150 ريال"
-{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}
+{"reply":"سعر الباقة 150 ريال 😊","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}
 
 Example 2 — Answer NOT in KB:
 Customer: "Do you deliver to Jeddah?" | KB has no delivery info
-{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","hedging":true,"flags":["info_not_in_kb"]}
+{"reply":"Let me check with the team and get back to you!","intent":"QUESTION","confidence":"low","hedging":true,"language":"en","flags":["info_not_in_kb"]}
 
 Example 3 — Offensive message:
 Customer: "يا حمير"
-{"reply":"","intent":"OFFENSIVE","confidence":"high","hedging":false,"flags":["offensive_or_abusive"]}
+{"reply":"","intent":"OFFENSIVE","confidence":"high","hedging":false,"language":"ar","flags":["offensive_or_abusive"]}
 
 Example 4 — WHO question not in KB:
 Customer: "مين صاحب المعهد؟" | KB has courses & prices but NO owner info
-{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","hedging":true,"flags":["info_not_in_kb"]}
+{"reply":"خليني أتحقق من هالمعلومة وأرجعلك 😊","intent":"QUESTION","confidence":"low","hedging":true,"language":"ar","flags":["info_not_in_kb"]}
 
 Example 5 — Sarcasm (CRITICAL — positive words + negative meaning):
 Customer: "واو شو هالخدمة الرائعة 🙄"
-{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"flags":[]}
+{"reply":"نعتذر إذا الخدمة ما كانت بالمستوى المطلوب. كيف نقدر نساعدك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":[]}
 
 Example 6 — Angry customer:
 Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً"
-{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"flags":["angry_customer","refund_request"]}
+{"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":["angry_customer","refund_request"]}
 
 Example 6b — Cancellation request (calm tone):
 Customer: "ابي الغي طلبي رقم 5678"
-{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","hedging":false,"flags":["cancellation_request"]}
+{"reply":"نأسف لسماع ذلك! خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت 😊","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":["cancellation_request"]}
 
 Example 7 — Geographic specificity (partial KB match):
 Customer: "هل التوصيل مجاني لجدة؟" | KB says "توصيل مجاني لمناطق الرياض"
-{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","hedging":true,"flags":["info_not_in_kb"]}
+{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة، خليني أتحقق وأرجعلك 😊","intent":"QUESTION","confidence":"medium","hedging":true,"language":"ar","flags":["info_not_in_kb"]}
 
 Example 8 — Related but DIFFERENT concept (certificate vs accreditation):
 Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation) but NOT certificates
-{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","hedging":true,"flags":["info_not_in_kb"]}
+{"reply":"Let me check on certificate availability and get back to you!","intent":"QUESTION","confidence":"low","hedging":true,"language":"en","flags":["info_not_in_kb"]}
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"flags":[]}`;
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}`;
 
         return prompt;
     }
@@ -695,9 +701,9 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
      */
     /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
     validateReply(
-        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean },
+        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string },
         request: GenerateRequest,
-    ): { reply: string; intent?: string; confidence?: string; flags?: string[] } {
+    ): { reply: string; intent?: string; confidence?: string; flags?: string[]; language?: string } {
         const flags = [...(parsed.flags || [])];
         const reply = parsed.reply || '';
 
@@ -759,18 +765,31 @@ Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pr
             }
         }
 
-        // Check 3: Language mismatch — reply language differs from input
-        // Uses the same fallback chain as buildSystemPrompt: message → KB → 'en'
+        // Check 3: Language mismatch — reply language differs from input.
+        // Prefers GPT's declared `language` field (from strict json_schema) as the source of truth;
+        // falls back to heuristic detection when absent (invalid_json fallback path).
+        // Also flags `declared_lang_mismatch` when GPT's claim diverges from what the reply looks like.
         if (reply) {
             const inputLang = request.language
                 || this.detectLanguageOrNull(request.comment)
                 || this.detectLanguageOrNull(this.getKBText(request) || '')
                 || 'en';
-            const replyLang = this.detectLanguage(reply);
+            const detectedLang = this.detectLanguage(reply);
+            const replyLang = parsed.language || detectedLang;
             if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
                 flags.push('language_mismatch');
                 flags.push(`expected_lang:${inputLang}`);
                 flags.push(`reply_lang:${replyLang}`);
+            }
+            // Cross-check: GPT declared one language but reply text looks like another.
+            // Only flag when reply has enough script content to detect reliably.
+            if (
+                parsed.language
+                && parsed.language !== detectedLang
+                && /[a-zA-Z\u0600-\u06FF]{3,}/.test(reply)
+                && !flags.includes('declared_lang_mismatch')
+            ) {
+                flags.push('declared_lang_mismatch');
             }
         }
 
