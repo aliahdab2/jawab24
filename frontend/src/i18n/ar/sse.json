@@ -1,8 +1,10 @@
 {
   "newComment": "تعليق جديد من {name}",
   "newMessage": "رسالة جديدة من {name}",
-  "aiRepliedComment": "رد الذكاء الاصطناعي على تعليق",
-  "aiRepliedMessage": "رد الذكاء الاصطناعي على رسالة",
+  "aiRepliedComment": "تم الرد التلقائي على تعليق",
+  "aiRepliedCommentNamed": "تم الرد التلقائي على تعليق {name}",
+  "aiRepliedMessage": "تم الرد التلقائي على رسالة",
+  "aiRepliedMessageNamed": "تم الرد التلقائي على {name}",
   "newLead": "عميل محتمل جديد من {name}",
   "view": "عرض"
 }

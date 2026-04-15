@@ -1,8 +1,10 @@
 {
   "newComment": "New comment from {name}",
   "newMessage": "New message from {name}",
-  "aiRepliedComment": "AI replied to a comment",
-  "aiRepliedMessage": "AI replied to a message",
+  "aiRepliedComment": "Auto-replied to a comment",
+  "aiRepliedCommentNamed": "Auto-replied to {name}'s comment",
+  "aiRepliedMessage": "Auto-replied to a message",
+  "aiRepliedMessageNamed": "Auto-replied to {name}",
   "newLead": "New lead from {name}",
   "view": "View"
 }

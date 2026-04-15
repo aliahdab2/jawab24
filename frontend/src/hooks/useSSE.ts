@@ -169,7 +169,8 @@ export function useSSE(): void {
                     },
                 );
                 if (!isOnPage('/comments') && replyMethod === 'ai') {
-                    showToast(t('aiRepliedComment'));
+                    const name = event.data.senderName?.trim();
+                    showToast(name ? t('aiRepliedCommentNamed', { name }) : t('aiRepliedComment'));
                 }
             } catch { /* malformed event — ignore */ }
         });
@@ -217,7 +218,8 @@ export function useSSE(): void {
                 const replyMsg = event.data.message as Message | undefined;
                 appendToConversationCache(queryClient, replyMsg, replyMsg?.senderId ?? '');
                 if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
-                    showToast(t('aiRepliedMessage'));
+                    const name = event.data.senderName?.trim();
+                    showToast(name ? t('aiRepliedMessageNamed', { name }) : t('aiRepliedMessage'));
                 }
             } catch { /* malformed event — ignore */ }
         });

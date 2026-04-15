@@ -488,6 +488,7 @@ export class MessageProcessor {
                 replyMethod: replyMethod as 'template' | 'ai',
                 replyText,
                 message: outgoingMessage,
+                senderName: senderName ?? null,
             });
             // SSE: update usage counter if AI reply
             if (replyMethod === 'ai') {

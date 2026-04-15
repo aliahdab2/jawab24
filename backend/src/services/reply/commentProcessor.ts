@@ -460,6 +460,7 @@ export class CommentProcessor {
             pageId,
             replyMethod: replyMethod as 'template' | 'ai',
             replyText,
+            senderName: fromName ?? null,
         });
 
         if (replyMethod === 'ai') {
