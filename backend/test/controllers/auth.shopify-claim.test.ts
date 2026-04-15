@@ -45,6 +45,7 @@ const mockGetUserProfile = vi.fn().mockResolvedValue({
 });
 const mockVerifyAccessToken = vi.fn().mockResolvedValue({
     scopes: ['pages_show_list', 'instagram_basic'],
+    granularScopes: [],
 });
 const mockGetLongLivedToken = vi.fn().mockResolvedValue({
     token: 'long_lived_token',

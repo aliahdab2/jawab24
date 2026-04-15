@@ -17,6 +17,7 @@ vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         getUserPages: vi.fn(),
         subscribePageToWebhooks: vi.fn().mockResolvedValue(true),
+        setLogger: vi.fn(),
     }
 }));
 

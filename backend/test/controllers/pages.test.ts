@@ -200,7 +200,13 @@ describe('Pages Controller', () => {
 
             await pagesController.sync(mockRequest as any, mockReply as FastifyReply);
 
-            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user-123', 'fb-token-abc', 'user-123');
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith(
+                'test_workspace_id',
+                'user-123',
+                'fb-token-abc',
+                'user-123',
+                expect.objectContaining({ info: expect.any(Function) }),
+            );
             const sent = (mockReply.send as any).mock.calls[0][0];
             expect(sent.synced).toBe(1);
             expect(sent.pages[0]).toEqual(expect.objectContaining({ id: 'page-1', isConnected: true }));

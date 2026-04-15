@@ -43,3 +43,12 @@ export interface FacebookPagesResponse {
     };
 }
 
+/**
+ * Granular scope entry from Facebook's /debug_token endpoint.
+ * Each permission can be scoped to specific resources (pages, Instagram accounts, etc.).
+ */
+export interface FacebookGranularScope {
+    scope: string;
+    target_ids?: string[];
+}
+

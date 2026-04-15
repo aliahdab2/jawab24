@@ -2,7 +2,8 @@ import axios from 'axios';
 import { config } from '../config';
 import { tracedExternalCall } from '../utils/tracing';
 import { fbAxios, GRAPH_API_BASE } from '../lib/fbAxios';
-import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, Logger } from '../types';
+import * as Sentry from '@sentry/node';
+import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, FacebookPage, FacebookGranularScope, Logger } from '../types';
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 
@@ -48,7 +49,7 @@ export class FacebookService {
     /**
      * Verify access token validity and metadata
      */
-    async verifyAccessToken(accessToken: string): Promise<{ isValid: boolean; userId: string; expiresAt: number; scopes: string[] }> {
+    async verifyAccessToken(accessToken: string): Promise<{ isValid: boolean; userId: string; expiresAt: number; scopes: string[]; granularScopes: FacebookGranularScope[] }> {
         try {
             const appAccessToken = `${config.facebook.appId}|${config.facebook.appSecret}`;
             const response = await traced('verifyAccessToken', () =>
@@ -75,7 +76,8 @@ export class FacebookService {
                 isValid: data.is_valid,
                 userId: data.user_id,
                 expiresAt: data.expires_at,
-                scopes: data.scopes,
+                scopes: data.scopes || [],
+                granularScopes: data.granular_scopes || [],
             };
         } catch (error) {
             if (axios.isAxiosError(error)) {
@@ -114,11 +116,24 @@ export class FacebookService {
     }
 
     /**
-     * Get user's Facebook pages with access tokens
+     * Get user's Facebook pages with access tokens.
+     *
+     * Primary path: GET /me/accounts. For most users this returns all pages they admin.
+     *
+     * Fallback path: For pages owned by a Meta Business Portfolio, /me/accounts may return
+     * empty even when the user has "Facebook access with Full control". In that case we
+     * inspect `granular_scopes` from /debug_token to discover the page IDs the user
+     * authorized, then fetch each page individually via GET /{page-id}.
+     *
+     * The `tasks` field is only requestable on /me/accounts — Graph API rejects it on
+     * /{page-id} — so fallback pages have `tasks` undefined. Downstream code already
+     * treats that field as optional.
      */
     async getUserPages(accessToken: string): Promise<FacebookPagesResponse> {
+        // --- Primary path: /me/accounts ---
+        let primaryResponse: FacebookPagesResponse;
         try {
-            this.logger.debug('[Facebook] Fetching user pages');
+            this.logger.debug('[Facebook] Fetching user pages via /me/accounts');
             const response = await traced('getUserPages', () =>
                 fbAxios.get<FacebookPagesResponse>(`${FACEBOOK_GRAPH_API}/me/accounts`, {
                     params: {
@@ -127,23 +142,135 @@ export class FacebookService {
                     },
                 }),
             );
-
-            const pageCount = response.data.data?.length || 0;
-            this.logger.info('[Facebook] Found pages', { count: pageCount });
-            if (response.data.data?.length) {
-                this.logger.debug('[Facebook] Page names', { pages: response.data.data.map(p => p.name) });
-            }
-
-            return response.data;
+            primaryResponse = response.data;
         } catch (error) {
             if (axios.isAxiosError(error)) {
                 this.logger.error('[Facebook] API Error fetching pages', {
-                    error: error.response?.data?.error?.message || error.message
+                    error: error.response?.data?.error?.message || error.message,
                 });
                 throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
             }
             throw error;
         }
+
+        const primaryPages = primaryResponse.data ?? [];
+        if (primaryPages.length > 0) {
+            this.logger.info('[Facebook] /me/accounts returned pages', { count: primaryPages.length });
+            this.logger.debug('[Facebook] Page names', { pages: primaryPages.map(p => p.name) });
+            Sentry.addBreadcrumb({
+                category: 'facebook',
+                message: 'getUserPages: primary /me/accounts path',
+                data: { count: primaryPages.length },
+                level: 'info',
+            });
+            return primaryResponse;
+        }
+
+        // --- Fallback path: granular_scopes from /debug_token ---
+        // /me/accounts is empty but the user may still have Business-Portfolio-owned pages
+        // authorized via Facebook's per-page granular permission model.
+        this.logger.info('[Facebook] /me/accounts empty, entering granular_scopes fallback');
+        Sentry.addBreadcrumb({
+            category: 'facebook',
+            message: 'getUserPages: /me/accounts empty, entering fallback',
+            level: 'info',
+        });
+
+        const pageIds = await this.extractAuthorizedPageIds(accessToken);
+        if (pageIds.length === 0) {
+            this.logger.info('[Facebook] No page IDs in granular_scopes — user authorized 0 pages');
+            Sentry.addBreadcrumb({
+                category: 'facebook',
+                message: 'getUserPages: fallback found no granular_scopes target_ids',
+                level: 'info',
+            });
+            return { data: [] };
+        }
+
+        this.logger.info('[Facebook] Found page IDs in granular_scopes', { count: pageIds.length, pageIds });
+
+        // Fetch each page individually in parallel. Per-page failures are isolated so a
+        // single bad page doesn't block the rest of the sync.
+        const results = await Promise.allSettled(
+            pageIds.map(pageId => this.fetchPageById(pageId, accessToken)),
+        );
+
+        const recoveredPages: FacebookPage[] = [];
+        for (let i = 0; i < results.length; i++) {
+            const result = results[i];
+            const pageId = pageIds[i];
+            if (result.status === 'fulfilled' && result.value) {
+                recoveredPages.push(result.value);
+                this.logger.info('[Facebook] Recovered page via fallback', {
+                    pageId,
+                    name: result.value.name,
+                });
+            } else if (result.status === 'rejected') {
+                this.logger.warn('[Facebook] Failed to fetch page via fallback', {
+                    pageId,
+                    error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+                });
+                Sentry.addBreadcrumb({
+                    category: 'facebook',
+                    message: `getUserPages: fallback failed for page ${pageId}`,
+                    level: 'warning',
+                });
+            }
+        }
+
+        if (recoveredPages.length > 0) {
+            this.logger.info('[Facebook] Recovered pages via granular_scopes fallback', {
+                count: recoveredPages.length,
+            });
+            Sentry.addBreadcrumb({
+                category: 'facebook',
+                message: 'getUserPages: fallback success',
+                data: { count: recoveredPages.length },
+                level: 'info',
+            });
+        } else {
+            this.logger.warn('[Facebook] granular_scopes had page IDs but all fetches failed');
+            Sentry.addBreadcrumb({
+                category: 'facebook',
+                message: 'getUserPages: fallback could not recover any page',
+                level: 'warning',
+            });
+        }
+
+        return { data: recoveredPages };
+    }
+
+    /**
+     * Extract unique Page IDs authorized in the user's token via granular_scopes.
+     * Business Portfolio-owned pages often only appear here, not in /me/accounts.
+     */
+    private async extractAuthorizedPageIds(accessToken: string): Promise<string[]> {
+        const tokenInfo = await this.verifyAccessToken(accessToken);
+        const pageIds = new Set<string>();
+        for (const scope of tokenInfo.granularScopes) {
+            if (scope.scope.startsWith('pages_') && Array.isArray(scope.target_ids)) {
+                for (const id of scope.target_ids) {
+                    if (id) pageIds.add(id);
+                }
+            }
+        }
+        return [...pageIds];
+    }
+
+    /**
+     * Fetch a single page by ID with user token. The `tasks` field is intentionally
+     * omitted — Graph API rejects it on /{page-id}. It's optional on FacebookPage.
+     */
+    private async fetchPageById(pageId: string, accessToken: string): Promise<FacebookPage> {
+        const response = await traced('getUserPages.fallback', () =>
+            fbAxios.get<FacebookPage>(`${FACEBOOK_GRAPH_API}/${pageId}`, {
+                params: {
+                    access_token: accessToken,
+                    fields: 'id,name,access_token,category,about,phone,single_line_address,hours,website',
+                },
+            }),
+        );
+        return response.data;
     }
 
     /**

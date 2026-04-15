@@ -6,7 +6,7 @@ import { facebookService } from '../services/facebook';
 import { pagesService } from '../services/pages';
 import { settingsService } from '../services/settings';
 import { integrationRegistry } from '../integrations';
-import { AuthRequest, AuthResponse, PhoneOtpRequest, PhoneOtpVerifyRequest } from '../types';
+import { AuthRequest, AuthResponse, PhoneOtpRequest, PhoneOtpVerifyRequest, createRequestLogger } from '../types';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, ecommerceStores } from '../db/schema';
@@ -82,7 +82,7 @@ export class AuthController {
             const syncWorkspaceId = workspaces.find(w => w.role === 'owner')?.id;
             if (syncWorkspaceId) {
                 try {
-                    const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
+                    const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken, undefined, createRequestLogger(request.log));
                     if (syncResult && syncResult.skippedCount > 0) {
                         request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
                     }
@@ -198,7 +198,7 @@ export class AuthController {
             const syncWorkspaceId = workspaces.find(w => w.role === 'owner')?.id;
             if (syncWorkspaceId) {
                 try {
-                    await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
+                    await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken, undefined, createRequestLogger(request.log));
                 } catch (err) {
                     request.log.warn({ err }, 'mobileFacebookCallback: page sync failed (non-fatal)');
                 }
@@ -305,7 +305,7 @@ export class AuthController {
             const syncWorkspaceId = workspaces.find(w => w.role === 'owner')?.id;
             if (syncWorkspaceId) {
                 try {
-                    const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken);
+                    const syncResult = await pagesService.syncFromFacebook(syncWorkspaceId, user.id, longLivedToken, undefined, createRequestLogger(request.log));
                     if (syncResult && syncResult.skippedCount > 0) {
                         request.log.info(`Auto-sync: ${syncResult.skippedCount} page(s) created but auto-reply disabled (plan limit)`);
                     }
@@ -687,7 +687,7 @@ export class AuthController {
             const workspaceId = workspaces[0]?.id;
             if (workspaceId) {
                 try {
-                    await pagesService.syncFromFacebook(workspaceId, userId, longLivedToken);
+                    await pagesService.syncFromFacebook(workspaceId, userId, longLivedToken, undefined, createRequestLogger(request.log));
                 } catch (err) {
                     request.log.error({ err }, 'Page sync after Facebook link failed (non-fatal)');
                 }

@@ -136,7 +136,13 @@ describe('AuthController - linkFacebook', () => {
 
         await authController.linkFacebook(req, mockReply as FastifyReply);
 
-        expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('ws-1', 'user-1', 'long-lived');
+        expect(pagesService.syncFromFacebook).toHaveBeenCalledWith(
+            'ws-1',
+            'user-1',
+            'long-lived',
+            undefined,
+            expect.objectContaining({ info: expect.any(Function) }),
+        );
     });
 
     it('returns auth response on success', async () => {

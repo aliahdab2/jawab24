@@ -220,6 +220,16 @@ This is handled automatically by the backend when users connect pages.
 2. Verify `pages_manage_engagement` permission
 3. Check backend logs for errors
 
+### Pages not appearing after login (Business Portfolio)
+Facebook's `/me/accounts` returns an empty list for Pages owned by a Meta Business Portfolio, even when the user has "Facebook access with Full control" and all permissions are granted. Jawab24 handles this automatically: when `/me/accounts` is empty, `getUserPages` falls back to reading `granular_scopes` from `/debug_token` and fetches each authorized Page individually via `GET /{page-id}`.
+
+If pages still don't appear, check backend logs for `[Facebook]` entries:
+- `/me/accounts returned N pages` → primary path succeeded
+- `/me/accounts empty, entering granular_scopes fallback` → fallback ran
+- `Recovered page via fallback` (per page) → fallback succeeded
+- `No page IDs in granular_scopes` → user didn't grant any Page during OAuth (reconnect + select pages)
+- `Failed to fetch page via fallback` → per-page failure (check the `error` field)
+
 ---
 
 ## Useful Links

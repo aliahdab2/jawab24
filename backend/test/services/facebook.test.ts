@@ -215,21 +215,30 @@ describe('Facebook Service', () => {
             expect(pages.data[1].name).toBe('My Blog');
         });
 
-        it('should handle empty pages list', async () => {
-            const mockResponse = {
-                data: {
-                    data: [],
-                },
-            };
-
-            vi.mocked(fbAxios.get).mockResolvedValue(mockResponse);
+        it('should handle truly empty pages (no /me/accounts and no granular_scopes)', async () => {
+            // /me/accounts returns empty, /debug_token has no pages_* granular_scopes
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { data: [] } }) // /me/accounts
+                .mockResolvedValueOnce({
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['public_profile'],
+                            granular_scopes: [{ scope: 'public_profile' }],
+                        },
+                    },
+                }); // /debug_token
 
             const pages = await service.getUserPages('access_token_123');
 
             expect(pages.data).toHaveLength(0);
+            expect(fbAxios.get).toHaveBeenCalledTimes(2);
         });
 
-        it('should throw error on API failure', async () => {
+        it('should throw error on API failure (primary /me/accounts)', async () => {
             const mockError = {
                 isAxiosError: true,
                 response: {
@@ -245,6 +254,164 @@ describe('Facebook Service', () => {
             vi.mocked(axios.isAxiosError).mockReturnValue(true);
 
             await expect(service.getUserPages('invalid_token')).rejects.toThrow('Facebook API error');
+        });
+    });
+
+    describe('getUserPages — Business Portfolio fallback', () => {
+        it('falls back to granular_scopes when /me/accounts is empty', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { data: [] } }) // /me/accounts
+                .mockResolvedValueOnce({
+                    // /debug_token — same page ID across two pages_* scopes
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list', 'pages_messaging'],
+                            granular_scopes: [
+                                { scope: 'pages_show_list', target_ids: ['page_bm_1'] },
+                                { scope: 'pages_messaging', target_ids: ['page_bm_1'] },
+                                { scope: 'instagram_basic', target_ids: ['ig_1'] },
+                            ],
+                        },
+                    },
+                })
+                .mockResolvedValueOnce({
+                    // GET /page_bm_1
+                    data: {
+                        id: 'page_bm_1',
+                        name: 'BM Owned Page',
+                        access_token: 'page_token_bm_1',
+                        category: 'Business',
+                    },
+                });
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(1);
+            expect(pages.data[0].id).toBe('page_bm_1');
+            expect(pages.data[0].name).toBe('BM Owned Page');
+            expect(pages.data[0].access_token).toBe('page_token_bm_1');
+            // 1 (/me/accounts) + 1 (/debug_token) + 1 (/page_bm_1) = 3
+            expect(fbAxios.get).toHaveBeenCalledTimes(3);
+        });
+
+        it('returns empty when granular_scopes has no pages_* target_ids', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { data: [] } })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['instagram_basic'],
+                            granular_scopes: [
+                                { scope: 'instagram_basic', target_ids: ['ig_1'] },
+                                // No pages_* entry with target_ids
+                            ],
+                        },
+                    },
+                });
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(0);
+            // 1 (/me/accounts) + 1 (/debug_token) — no page fetches
+            expect(fbAxios.get).toHaveBeenCalledTimes(2);
+        });
+
+        it('handles partial page fetch failures gracefully', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { data: [] } }) // /me/accounts
+                .mockResolvedValueOnce({
+                    // /debug_token with 2 page IDs
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list'],
+                            granular_scopes: [
+                                { scope: 'pages_show_list', target_ids: ['page_ok', 'page_fail'] },
+                            ],
+                        },
+                    },
+                })
+                .mockResolvedValueOnce({
+                    // GET /page_ok — success
+                    data: { id: 'page_ok', name: 'Good Page', access_token: 'tok_ok' },
+                })
+                .mockRejectedValueOnce(new Error('403 Forbidden')); // GET /page_fail — failure
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(1);
+            expect(pages.data[0].id).toBe('page_ok');
+            // No exception bubbled up
+        });
+
+        it('deduplicates target_ids appearing across multiple scopes', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { data: [] } })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list', 'pages_messaging', 'pages_manage_engagement'],
+                            granular_scopes: [
+                                // Same 2 page IDs repeated across 3 different scopes
+                                { scope: 'pages_show_list', target_ids: ['page_a', 'page_b'] },
+                                { scope: 'pages_messaging', target_ids: ['page_a', 'page_b'] },
+                                { scope: 'pages_manage_engagement', target_ids: ['page_a', 'page_b'] },
+                            ],
+                        },
+                    },
+                })
+                .mockResolvedValueOnce({
+                    data: { id: 'page_a', name: 'Page A', access_token: 'tok_a' },
+                })
+                .mockResolvedValueOnce({
+                    data: { id: 'page_b', name: 'Page B', access_token: 'tok_b' },
+                });
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(2);
+            // 1 (/me/accounts) + 1 (/debug_token) + 2 page fetches (NOT 6)
+            expect(fbAxios.get).toHaveBeenCalledTimes(4);
+        });
+
+        it('verifyAccessToken returns granularScopes alongside scopes', async () => {
+            vi.mocked(fbAxios.get).mockResolvedValue({
+                data: {
+                    data: {
+                        is_valid: true,
+                        app_id: 'test_app_id',
+                        user_id: 'user_1',
+                        expires_at: 1234567890,
+                        scopes: ['pages_show_list'],
+                        granular_scopes: [
+                            { scope: 'pages_show_list', target_ids: ['page_x'] },
+                        ],
+                    },
+                },
+            });
+
+            const result = await service.verifyAccessToken('access_token_123');
+
+            expect(result.isValid).toBe(true);
+            expect(result.scopes).toEqual(['pages_show_list']);
+            expect(result.granularScopes).toEqual([
+                { scope: 'pages_show_list', target_ids: ['page_x'] },
+            ]);
         });
     });
 

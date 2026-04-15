@@ -38,12 +38,16 @@
     - `message_reads` - read receipts
 
 - **Key Endpoints Used**:
-  - `/me/pages` - list connected pages
+  - `/me/accounts` - list connected pages (primary page discovery path)
+  - `/debug_token` - verify token + extract `granular_scopes.target_ids` (used as fallback when `/me/accounts` is empty for Business-Portfolio-owned Pages)
+  - `/{page-id}?fields=id,name,access_token,category,about,phone,single_line_address,hours,website` - fetch individual page data in the fallback path (the `tasks` field is NOT requestable here — only on `/me/accounts`)
   - `/me/instagram_accounts` - list connected Instagram accounts
   - `/me/messages` with `recipient.comment_id` - send private reply to a comment (DM linked to the comment)
   - `/me/messages` with `recipient.id` - send DM to a user (requires prior conversation)
   - `/{comment_id}/comments` - post a public reply to a comment
   - `/{post_id}?fields=message,story` - fetch post content (used for shared post context enrichment)
+
+- **Business Portfolio Fallback (2026-04-15)**: Facebook's `/me/accounts` returns an empty array for Pages owned by a Meta Business Portfolio, even when the user has "Facebook access with Full control" and all permissions granted. `facebookService.getUserPages` handles this by falling back to `/debug_token` `granular_scopes` discovery and fetching each authorized Page individually. See `backend/src/services/facebook.ts:getUserPages` and tests in `backend/test/services/facebook.test.ts` describe block `getUserPages — Business Portfolio fallback`.
 
 - **Reply Modes (Comments)**:
   - `public` - reply as a public comment
