@@ -3,7 +3,7 @@ import axios from 'axios';
 import { fbAxios } from '../../src/lib/fbAxios';
 import { FacebookService } from '../../src/services/facebook';
 
-// Mock axios, fbAxios, and tracing
+// Mock axios, fbAxios, Sentry, and tracing
 vi.mock('axios');
 vi.mock('../../src/lib/fbAxios', () => ({
     fbAxios: {
@@ -12,6 +12,9 @@ vi.mock('../../src/lib/fbAxios', () => ({
         delete: vi.fn(),
     },
     GRAPH_API_BASE: 'https://graph.facebook.com/v18.0',
+}));
+vi.mock('@sentry/node', () => ({
+    addBreadcrumb: vi.fn(),
 }));
 vi.mock('../../src/utils/tracing', () => ({
     tracedExternalCall: (_service: string, _method: string, fn: () => unknown) => fn(),
@@ -387,6 +390,51 @@ describe('Facebook Service', () => {
             expect(pages.data).toHaveLength(2);
             // 1 (/me/accounts) + 1 (/debug_token) + 2 page fetches (NOT 6)
             expect(fbAxios.get).toHaveBeenCalledTimes(4);
+        });
+
+        it('propagates errors from /debug_token when it fails during fallback', async () => {
+            // /me/accounts returns empty, then /debug_token rejects (e.g., token expired between calls)
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { data: [] } })
+                .mockRejectedValueOnce({
+                    isAxiosError: true,
+                    response: { data: { error: { message: 'Token expired' } } },
+                });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+
+            await expect(service.getUserPages('access_token_123')).rejects.toThrow('Token Verification failed');
+        });
+
+        it('skips fallback pages missing access_token (e.g., pages_read_engagement gap)', async () => {
+            vi.mocked(fbAxios.get)
+                .mockResolvedValueOnce({ data: { data: [] } })
+                .mockResolvedValueOnce({
+                    data: {
+                        data: {
+                            is_valid: true,
+                            app_id: 'test_app_id',
+                            user_id: 'user_1',
+                            expires_at: 9999999999,
+                            scopes: ['pages_show_list'],
+                            granular_scopes: [
+                                { scope: 'pages_show_list', target_ids: ['page_with_token', 'page_without_token'] },
+                            ],
+                        },
+                    },
+                })
+                .mockResolvedValueOnce({
+                    // page_with_token — has access_token
+                    data: { id: 'page_with_token', name: 'Page A', access_token: 'tok_a' },
+                })
+                .mockResolvedValueOnce({
+                    // page_without_token — no access_token returned by Graph API
+                    data: { id: 'page_without_token', name: 'Page B' },
+                });
+
+            const pages = await service.getUserPages('access_token_123');
+
+            expect(pages.data).toHaveLength(1);
+            expect(pages.data[0].id).toBe('page_with_token');
         });
 
         it('verifyAccessToken returns granularScopes alongside scopes', async () => {
