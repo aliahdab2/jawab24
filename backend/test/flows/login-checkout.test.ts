@@ -589,6 +589,8 @@ describe('Integration: Login → Checkout Flow', () => {
                 'ws_sync_test',
                 'user_sync_test',
                 'fb_token',
+                undefined,
+                expect.objectContaining({ info: expect.any(Function) }),
             );
         });
 

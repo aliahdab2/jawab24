@@ -344,7 +344,13 @@ describe('Auth Routes - Login Flow', () => {
             // Page sync is called async, give it a moment
             await new Promise((resolve) => setTimeout(resolve, 10));
 
-            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user_123', 'long_lived_sync_token');
+            expect(pagesService.syncFromFacebook).toHaveBeenCalledWith(
+                'test_workspace_id',
+                'user_123',
+                'long_lived_sync_token',
+                undefined,
+                expect.objectContaining({ info: expect.any(Function) }),
+            );
         });
 
         it('should handle login without email (privacy setting)', async () => {

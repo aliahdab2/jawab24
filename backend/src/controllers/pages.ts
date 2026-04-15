@@ -3,7 +3,7 @@ import { pagesService, isPageDisconnected } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { gapDetectorService } from '../services/kb/gap-detector';
-import { CreatePageDTO, UpdatePageDTO } from '../types';
+import { CreatePageDTO, UpdatePageDTO, createRequestLogger } from '../types';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
@@ -232,7 +232,7 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, takenCount, revokedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId);
+            const { syncedPages, skippedCount, takenCount, revokedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
 
             if (syncedPages.length === 0 && takenCount === 0) {
                 return reply.send({

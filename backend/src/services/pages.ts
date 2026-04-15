@@ -459,6 +459,11 @@ export class PagesService {
     async syncFromFacebook(workspaceId: string, userId: string, userAccessToken: string, billingUserId?: string, logger: Logger = noopLogger) {
         logger.info(`[Pages] Starting sync for workspace ${workspaceId}`);
 
+        // Propagate the request-scoped logger to facebookService so its internal
+        // [Facebook] log lines (including the granular_scopes fallback path) surface
+        // in production logs for support diagnosis.
+        facebookService.setLogger(logger);
+
         const fbPages = await facebookService.getUserPages(userAccessToken);
         const syncedPages = [];
 

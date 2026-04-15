@@ -100,8 +100,8 @@ describe('AuthController - Native Login', () => {
     it('should successfully login with valid native token', async () => {
         // Setup Mocks
         const expiresAt = new Date();
-        vi.mocked(facebookService.verifyAccessToken).mockResolvedValue({ 
-            isValid: true, userId: 'fb-user', expiresAt: 123456, scopes: ['pages_show_list', 'email'] 
+        vi.mocked(facebookService.verifyAccessToken).mockResolvedValue({
+            isValid: true, userId: 'fb-user', expiresAt: 123456, scopes: ['pages_show_list', 'email'], granularScopes: []
         });
         vi.mocked(facebookService.getLongLivedToken).mockResolvedValue({ 
             token: 'long-lived-token', expiresAt 
@@ -137,7 +137,13 @@ describe('AuthController - Native Login', () => {
         expect(authService.findOrCreateUser).toHaveBeenCalledWith(
             'fb-user-id', 'Test User', 'test@example.com', 'long-lived-token', expiresAt, 'https://example.com/photo.jpg'
         );
-        expect(pagesService.syncFromFacebook).toHaveBeenCalledWith('test_workspace_id', 'user-id', 'long-lived-token');
+        expect(pagesService.syncFromFacebook).toHaveBeenCalledWith(
+            'test_workspace_id',
+            'user-id',
+            'long-lived-token',
+            undefined,
+            expect.objectContaining({ info: expect.any(Function), warn: expect.any(Function), error: expect.any(Function), debug: expect.any(Function) }),
+        );
         expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
             token: 'session-jwt'
         }));
