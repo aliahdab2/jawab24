@@ -2495,6 +2495,62 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Arabic — the other institute is much better = COMPLAINT',
     },
+
+    // ===== Category 44: No False Follow-Up Promises =====
+    // The AI is an automated assistant — it CANNOT follow up later. When info is not in KB,
+    // the AI must NOT promise "I'll check and get back to you" / "خليني أتحقق وأرجعلك".
+    // Instead it should be honest (info not available) and optionally share contact info from KB.
+    // This is different from Cat 38 (No Repeated Hedging) which tests the SECOND hedge in a
+    // conversation. Cat 44 tests that the FIRST response to a missing-info question avoids
+    // false follow-up promises entirely.
+    {
+        id: 299, category: 44, categoryName: 'No False Follow-Up Promises', channel: 'dm',
+        message: 'عندكم دورة برمجة؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            confidence: ['low'],
+            flags: ['info_not_in_kb'],
+            replyNotContains: ['أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'أتابع معك', 'سأتابع', 'get back to you', "I'll get back"],
+        },
+        notes: 'Programming course not in KB — AI must NOT promise to check and get back. Should be honest or redirect to contact.',
+    },
+    {
+        id: 300, category: 44, categoryName: 'No False Follow-Up Promises', channel: 'dm',
+        message: 'Do you offer online classes?',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            confidence: ['low'],
+            flags: ['info_not_in_kb'],
+            replyNotContains: ['get back to you', "I'll get back", 'let me check and get', 'check with the team and get back', 'follow up'],
+        },
+        notes: 'Online classes not in KB — English DM must not promise follow-up',
+    },
+    {
+        id: 301, category: 44, categoryName: 'No False Follow-Up Promises', channel: 'dm',
+        message: 'هل عندكم أقساط؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            confidence: ['low'],
+            flags: ['info_not_in_kb'],
+            replyNotContains: ['أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'سأتابع'],
+        },
+        notes: 'Installments not in KB — must not promise to check and follow up',
+    },
+    {
+        id: 302, category: 44, categoryName: 'No False Follow-Up Promises', channel: 'dm',
+        message: 'مين بيدرّس دورة المكياج؟',
+        page: 'training',
+        expected: {
+            replyMethod: ['ai'],
+            confidence: ['low'],
+            flags: ['info_not_in_kb'],
+            replyNotContains: ['أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'سأتابع'],
+        },
+        notes: 'Instructor name not in KB — WHO question should not get a false follow-up promise',
+    },
 ];
 
 // ---------------------------------------------------------------------------
