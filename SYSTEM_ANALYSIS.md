@@ -1,7 +1,7 @@
 # Jawab24 - Complete System Analysis / تحليل النظام الكامل
 
 > **System Reference Document / وثيقة مرجعية للنظام**
-> Generated: 2026-02-28 | Updated: 2026-04-09 (v27 — Preset Replies: merged Templates+Rules into unified `/preset-replies` endpoint with transactional CRUD; store routing skips preset replies for pages with connected stores; WhatsApp Cloud API backend)
+> Generated: 2026-02-28 | Updated: 2026-04-15 (v30 — Email service via Resend; waitlist with admin management; all Facebook+Instagram permissions approved 2026-04-07; prompt v30)
 >
 > **Terminology note:** The UI now calls Templates+Rules "Preset Replies" (ردود جاهزة). The backend still uses `templates` and `rules` tables/services internally. This doc uses backend terminology.
 
@@ -67,7 +67,7 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 
 **External Integrations:**
 - Facebook Graph API (comments + DMs) — Live (App ID: 774211662298446)
-- Instagram Graph API (comments + DMs) — backend complete; Instagram permissions pending Meta App Review
+- Instagram Graph API (comments + DMs) — Live (all permissions approved 2026-04-07)
 - WhatsApp Cloud API (DMs) — backend complete; Meta Tech Provider Embedded Signup approval pending
 - Shopify API (products + policies)
 - Salla API (products + policies)
@@ -75,6 +75,7 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 - OpenAI API (reply generation + embeddings + translation)
 - Stripe API (subscriptions + billing; Embedded Checkout with PaymentElement, monthly + yearly billing intervals, Billing Portal for plan changes)
 - Vonage SMS API (phone OTP authentication + team invites)
+- Resend Email API (transactional emails — waitlist notifications, customer communications)
 
 ## عربي
 
@@ -88,7 +89,7 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 
 **التكاملات الخارجية:**
 - Facebook Graph API (التعليقات + الرسائل المباشرة) — مباشر (App ID: 774211662298446)
-- Instagram Graph API (التعليقات + الرسائل المباشرة) — الكود مكتمل؛ صلاحيات Instagram قيد مراجعة Meta
+- Instagram Graph API (التعليقات + الرسائل المباشرة) — مباشر (جميع الصلاحيات مُوافَق عليها 2026-04-07)
 - WhatsApp Cloud API (الرسائل المباشرة) — الكود مكتمل؛ موافقة Meta Tech Provider Embedded Signup قيد الانتظار
 - Shopify API (المنتجات + السياسات)
 - Salla API (المنتجات + السياسات)
@@ -96,6 +97,7 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 - OpenAI API (توليد الردود + التضمينات + الترجمة)
 - Stripe API (الاشتراكات + الفواتير؛ Embedded Checkout مع PaymentElement، دوري شهري وسنوي)
 - Vonage SMS API (رمز OTP عبر SMS + دعوة الفريق)
+- Resend Email API (بريد إلكتروني للمعاملات — إشعارات قائمة الانتظار، تواصل العملاء)
 
 ---
 
@@ -772,6 +774,7 @@ After OpenAI returns, the system runs **6 automated checks**:
 | **v20** | 2026-03-06 | Made `angry_customer` trigger list non-exhaustive — added catch-all point (6): "any expression of strong dissatisfaction — use your judgment". Added Arabic colloquial examples (زفت/فشل). Clarified: polite complaint alone ≠ angry_customer. | 99.6% |
 | **v21** | 2026-03-15 | Prompt tuning for eval accuracy and edge case handling. Workspace-scoped context. | 99.6% |
 | **v22–v26** | 2026-03-29 – 2026-04-03 | Iterative prompt refinements and edge case tuning. | 99.6% (last measured at v19) |
+| **v27–v30** | 2026-04-03 – 2026-04-15 | Continued prompt refinements, edge case coverage, and tuning. | 97.6% (226 test cases) |
 
 ### Fallback Classifier (when AI Worker is down)
 
@@ -1656,21 +1659,21 @@ AI: "خليني أتحقق من توفر Samsung Tab S9 وبرجعلك!"
 | Comment Reply Length | AI prompt: 40 words, flag: >50 words, hard truncate: >280 chars (public only) |
 | Worker Concurrency | 5 jobs |
 | Cache TTL | 30 days |
-| Prompt Version | v26 |
+| Prompt Version | v30 |
 | Pipeline Outcomes | 20 types x 4 pipelines |
-| Eval Accuracy | 99.6% (measured at v19; current prompt is v26) |
+| Eval Accuracy | 97.6% (226 test cases at v27; current prompt is v30) |
 | Scheduled Product Sync | Every 6 hours |
 | Queue Retries | 3 (exponential backoff) |
 | Handoff Pause | 15 minutes default |
 | Reply Lock TTL | 60 seconds (Redis SET NX EX) |
 | Reply Lock Key (DMs) | `reply_lock:{pageId}:{senderId}` |
 | Reply Lock Key (comments) | `reply_lock:comment:{pageId}:{commentId}` |
-| DB Migrations | 50 SQL files |
+| DB Migrations | 81 SQL files |
 | DB Index | Composite: `(page_id, sender_id, direction, replied, created_at)` |
 | Price Detection | Two-tier: Tier A (currency-adjacent) + Tier B (price-cue phrases) |
 | Workspace Roles | owner (level 3), admin (level 2), member (level 1) |
 | Page Token Encryption | AES-256-GCM at rest |
-| E2E Spec Files | 19 Playwright spec files |
+| E2E Spec Files | 21 Playwright spec files |
 
 ## عربي
 
@@ -2060,7 +2063,7 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | Parameter | Default | Source |
 |-----------|---------|--------|
 | **AI Model** | `gpt-4.1-mini` | `packages/shared` `DEFAULT_AI_MODEL` |
-| **Prompt Version** | `v26` | `packages/shared` `PROMPT_VERSION` |
+| **Prompt Version** | `v30` | `packages/shared` `PROMPT_VERSION` |
 | **Temperature** | `0.3` | `ai-worker/config.ts` |
 | **Max Output Tokens** | `300` | `ai-worker/config.ts` |
 | **Comments Auto-Reply** | `true` | `workspaceSettings.ts` |
@@ -2462,10 +2465,10 @@ Redis key `leads:extraction:{workspaceId}:{YYYY-MM-DD}` — 50 AI calls/day per 
 ║  • Cache: 30-day TTL, version-scoped                             ║
 ║                                                                  ║
 ║  PORTS: Frontend=3001 | Backend=3000 | AI Worker=3002            ║
-║  MODEL: gpt-4.1-mini | PROMPT: v26 | TEMP: 0.3                  ║
+║  MODEL: gpt-4.1-mini | PROMPT: v30 | TEMP: 0.3                  ║
 ║                                                                  ║
 ║  RBAC ROLES: owner (full) | admin (manage) | member (read-only) ║
 ║  ENCRYPTION: Page tokens AES-256-GCM at rest                     ║
-║  MIGRATIONS: 50 SQL files                                        ║
+║  MIGRATIONS: 81 SQL files                                        ║
 ╚══════════════════════════════════════════════════════════════════╝
 ```

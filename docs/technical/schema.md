@@ -1,5 +1,7 @@
 # Database Schema — Jawab24
 
+> **WARNING: This document is significantly outdated (last updated ~2025).** The database now has 37+ tables. Missing tables: workspaces, workspaceMembers, workspaceInvites, otpCodes, refreshTokens, instagramMedia, instagramComments, conversationPauses, plans, subscriptions, ecommerceStores, leads, waitlistSubscribers, and more. Many existing tables have 10+ new fields (escalation, intent detection, workspace isolation, multilingual messages). See `backend/src/db/schema.ts` for the authoritative schema.
+
 ## PostgreSQL Tables
 
 ---

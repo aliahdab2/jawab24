@@ -15,7 +15,7 @@ The project uses **npm workspaces** for dependency management and build orchestr
 ```
 root/
 ├── frontend/           # Next.js 15 web + Capacitor mobile app
-├── backend/            # Express + Fastify API server
+├── backend/            # Fastify 5 API server
 ├── ai-worker/          # AI generation worker (OpenAI/Anthropic)
 ├── packages/shared/    # Shared TypeScript types, constants, interfaces
 └── package.json        # Workspace configuration
@@ -37,7 +37,7 @@ Each service is independently deployable but shares:
                          │ Webhooks
                          ▼
         ┌────────────────────────────────┐
-        │   Backend (Express + Fastify)  │ :3000
+        │       Backend (Fastify 5)      │ :3000
         │  - Route/Controller/Service    │
         │  - DB (PostgreSQL + Drizzle)   │
         │  - Redis (BullMQ queues)       │
@@ -177,7 +177,7 @@ Each service is independently deployable but shares:
    - `requestId.ts` — unique request ID for tracing
 
 3. **Route Organization** (`src/routes/`):
-   - **25 route files** (auth, messages, comments, rules, templates, payments, etc.)
+   - **31 route files** (auth, messages, comments, rules, templates, payments, admin, waitlist, health, voice, customerNotifications, version, etc.)
    - Each route file imports a controller and registers endpoints
    - Routes grouped by feature/domain
 
@@ -241,9 +241,9 @@ Each service is independently deployable but shares:
 |------|-------|
 | Entry point | `src/index.ts` |
 | Fastify server config | `src/index.ts` (lines 66–120) |
-| Routes | `src/routes/[25 files]` |
+| Routes | `src/routes/[31 files]` |
 | Controllers | `src/controllers/` |
-| Services | `src/services/[30+ files]` |
+| Services | `src/services/[45+ root files, 75+ total with subdirs]` |
 | DB schema | `src/db/schema.ts` |
 | Drizzle client | `src/db/index.ts` |
 | Middleware | `src/middleware/` |

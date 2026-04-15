@@ -4,7 +4,7 @@ Backend API service for Jawab24 - part of the monorepo.
 
 ## Tech Stack
 
-- **Runtime:** Node.js 18
+- **Runtime:** Node.js 22+
 - **Framework:** Fastify
 - **Language:** TypeScript
 - **Database:** PostgreSQL 15 + Drizzle ORM
@@ -16,13 +16,15 @@ Backend API service for Jawab24 - part of the monorepo.
 backend/
 ├── src/
 │   ├── controllers/   # Request handlers
-│   ├── services/      # Business logic
-│   ├── routes/        # API route definitions
+│   ├── services/      # Business logic (45+ root files)
+│   ├── routes/        # API route definitions (31 files)
 │   ├── db/            # Database schema & connection
-│   ├── middleware/    # Auth middleware
+│   ├── middleware/    # Auth, CSRF, rate-limit, workspace isolation
+│   ├── integrations/  # Shopify, Salla, Zid adapters
+│   ├── utils/         # Helpers, email templates, i18n
 │   └── types/         # TypeScript types
-├── test/              # 95 test files
-├── migrations/        # SQL migration files
+├── test/              # 189 test files
+├── migrations/        # 81 SQL migration files
 └── Dockerfile         # Production container
 ```
 
@@ -63,23 +65,25 @@ import type { Message, Comment, Page, Template, Rule } from '@jawab24/shared';
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| POST | `/auth/facebook` | Facebook OAuth login |
-| GET | `/pages` | List connected pages |
-| POST | `/pages/sync` | Sync pages from Facebook |
-| GET | `/templates` | List templates |
-| POST | `/templates` | Create template |
-| GET | `/rules` | List rules |
-| POST | `/rules` | Create rule |
-| GET | `/comments` | List comments |
-| GET | `/messages` | List messages |
-| GET | `/settings` | Get user settings |
-| PUT | `/settings` | Update settings |
-| GET/POST | `/webhook` | Facebook webhooks |
+**31 route files** covering auth, pages, comments, messages, settings, templates, rules, payments, integrations, admin, waitlist, leads, analytics, subscriptions, notifications, voice, health, SSE, and more.
 
-See [API_SPEC.md](../API_SPEC.md) for full documentation.
+Key endpoint groups:
+
+| Group | Endpoints | Description |
+|-------|-----------|-------------|
+| Auth | `/auth/*` | Facebook OAuth, phone OTP, account linking |
+| Pages | `/pages/*` | Connected pages, sync, KB gaps |
+| Comments | `/comments/*` | Comment listing, resolution, escalation |
+| Messages | `/messages/*` | DM listing, media attachments |
+| Settings | `/settings/*` | Workspace settings, business hours, reply style |
+| Payment | `/payment/*` | Stripe checkout, subscriptions, billing portal, webhooks |
+| Webhook | `/webhook` | Facebook/Instagram/WhatsApp incoming events |
+| Admin | `/admin/*` | Admin dashboard, playground, waitlist management |
+| E-commerce | `/shopify/*`, `/salla/*`, `/zid/*` | Store connect, product sync |
+| Leads | `/leads/*` | AI-powered lead extraction |
+| Health | `/health` | Health check, metrics, cleanup |
+
+See `docs/technical/api.md` for detailed endpoint documentation.
 
 ## Testing
 
@@ -94,7 +98,7 @@ npm test -- --coverage
 npm test -- test/services/reply.test.ts
 ```
 
-**Current Status:** 95 tests passing ✅
+**Current Status:** 189 test files ✅
 
 ## Production
 
@@ -116,6 +120,13 @@ Required in `env/backend.env`:
 | `FACEBOOK_APP_SECRET` | Facebook App Secret |
 | `FACEBOOK_WEBHOOK_VERIFY_TOKEN` | Webhook verification token |
 | `AI_SERVICE_URL` | AI Worker URL (default: http://ai-worker:3002) |
+| `STRIPE_SECRET_KEY` | Stripe API secret key |
+| `STRIPE_WEBHOOK_SECRET` | Stripe webhook endpoint secret |
+| `RESEND_API_KEY` | Resend email API key |
+| `SHOPIFY_API_KEY` | Shopify app API key |
+| `SHOPIFY_API_SECRET` | Shopify app secret |
+| `SALLA_CLIENT_ID` | Salla OAuth client ID |
+| `ZID_API_KEY` | Zid integration API key |
 
 ## Docker
 

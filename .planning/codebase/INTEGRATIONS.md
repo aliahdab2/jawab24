@@ -10,18 +10,21 @@
 - **OAuth Flow**:
   - User connects via Facebook Login
   - Access token stored encrypted (AES-256-GCM) in database
-  - Token refresh: on-demand via `/refresh-token` endpoint
+  - Token refresh: automatic background cron job every 6 hours (`/backend/src/services/tokenRefresh.ts`) — verifies tokens via Facebook debug_token API, re-fetches fresh page tokens if valid
 
 - **Meta App Review — Permission Status**:
   - ✅ `pages_messaging` — Approved (2026-03-21) — send/receive Messenger DMs
   - ✅ `pages_manage_metadata` — Approved (2026-03-21) — webhook subscription for pages
   - ✅ `pages_show_list` — Approved (2026-03-21) — list user's pages in dashboard
   - ✅ `public_profile`, `email` — Always approved
-  - 🔄 `pages_read_engagement` — Pending submission — read comments (feed webhooks)
-  - 🔄 `pages_manage_engagement` — Pending submission — reply to comments
-  - ⏳ `instagram_basic`, `instagram_business_basic` — Deferred (needs IG Business account demo)
-  - ⏳ `instagram_manage_comments` — Deferred (needs IG Business account demo)
-  - ⏳ `instagram_manage_messages`, `instagram_business_manage_messages` — Deferred
+  - ✅ `pages_read_user_content` — Approved (2026-04-07) — read page posts and comments
+  - ✅ `pages_read_engagement` — Approved (2026-04-07) — read comments (feed webhooks)
+  - ✅ `pages_manage_engagement` — Approved (2026-04-07) — reply to comments
+  - ✅ `instagram_basic` — Approved (2026-04-07) — Instagram account access
+  - ✅ `instagram_manage_comments` — Approved (2026-04-07) — reply to Instagram comments
+  - ✅ `instagram_manage_messages` — Approved (2026-04-07) — Instagram DMs
+  - ⏳ `instagram_business_basic` — Not yet submitted
+  - ⏳ `instagram_business_manage_messages` — Not yet submitted
 
 - **Webhook Setup** (for incoming messages/comments):
   - Endpoint: `/webhook` (POST)
@@ -346,7 +349,7 @@ Voice-to-text for KB content via microphone:
   3. **Billing Portal** (plan changes, cancellation, invoices):
      - `POST /payment/billing-portal` → redirects user to Stripe Billing Portal
      - Sanctions check applied before portal creation
-  4. Webhook at `/webhook` receives `checkout.session.completed` → subscription record created
+  4. Webhook at `POST /payment/webhook` receives `checkout.session.completed` → subscription record created
 
 - **Webhook Events**:
   - `checkout.session.completed` - subscription started
@@ -382,7 +385,7 @@ Voice-to-text for KB content via microphone:
   - Service: `/backend/src/services/stripe.ts`
   - Controller: `/backend/src/controllers/payment.ts`
   - Routes: `/backend/src/routes/payment.ts`
-  - Webhook Handler: `/backend/src/controllers/webhook.ts` (Stripe webhook processing)
+  - Webhook Handler: `/backend/src/controllers/payment.ts` (`handleWebhook` method — Stripe webhook processing)
 
 ---
 
@@ -700,6 +703,24 @@ All webhooks use HMAC-SHA256 signature verification:
 | Salla | 100 req/min | Rolling | Exponential backoff on 429 |
 | OpenAI | 500k tokens/min | Rolling | Handled by SDK, errors trigger fallback |
 | Stripe | 100 req/sec | Sliding | Automatic retry with jitter |
+
+---
+
+### Resend Email Service
+- **Purpose**: Transactional emails — waitlist notifications, customer communications
+- **API**: Resend REST API (`https://api.resend.com/emails`) via native `fetch` (no SDK)
+- **From**: `info@jawab24.com` (configurable via `RESEND_FROM_EMAIL` / `RESEND_FROM_NAME`)
+- **Graceful degradation**: In development, logs email payload without sending. If `RESEND_API_KEY` is not set, returns error without crashing.
+
+- **Configuration**:
+  - `RESEND_API_KEY` — Resend API key
+  - `RESEND_FROM_EMAIL` — Sender email (default: `info@jawab24.com`)
+  - `RESEND_FROM_NAME` — Sender name (default: `Jawab24`)
+
+- **Implementation Location**:
+  - Service: `/backend/src/services/email.ts` (singleton `emailService`)
+  - Templates: `/backend/src/utils/emailTemplates.ts`
+  - Tests: `/backend/test/services/email.test.ts`, `/backend/test/utils/emailTemplates.test.ts`
 
 ---
 

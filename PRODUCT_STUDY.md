@@ -1,13 +1,13 @@
 # Jawab24 - Complete Product Study
 
-> **Last updated**: 2026-02-18
+> **Last updated**: 2026-04-15
 > **Purpose**: Comprehensive reference for the entire Jawab24 product — architecture, features, data flow, and capabilities.
 
 ---
 
 ## What It Is
 
-Jawab24 is an **AI-powered auto-reply platform for Facebook & Instagram**. It automatically responds to customer comments and messages 24/7 in Arabic and English, using a sophisticated 3-layer reply system.
+Jawab24 is an **AI-powered auto-reply platform for Facebook, Instagram, WhatsApp, and e-commerce stores (Shopify, Salla, Zid)**. It automatically responds to customer comments and messages 24/7 in Arabic and English, using a sophisticated 3-layer reply system. The platform also provides AI-powered lead extraction, a knowledge base with RAG, and transactional email notifications.
 
 ---
 
@@ -299,11 +299,49 @@ Merchant writes business info
 - Webhook-driven subscription lifecycle
 - Sanctions compliance (geo-blocking before ANY Stripe call)
 
+### Salla
+
+- OAuth flow (read products, policies)
+- Product sync with structured summaries
+- Auto-enrichment of KB context during retrieval
+- Webhook registration for inventory updates
+
+### Zid
+
+- OAuth flow + token management (X-MANAGER-TOKEN auth header)
+- Product sync with structured summaries
+- Auto-enrichment of KB context during retrieval
+- Webhook registration for inventory updates
+
+### WhatsApp
+
+- Meta WhatsApp Cloud API integration (Tech Provider model)
+- Text message sending via phone_number_id
+- Message read status tracking ("mark as read")
+- Backend reply adapter fully implemented
+- Status: Backend complete, Meta Embedded Signup approval pending
+
+### Resend Email
+
+- Transactional email delivery via Resend REST API
+- Bilingual email templates (Arabic/English)
+- Waitlist notifications, customer communications
+- Graceful degradation (logs in development, error if unconfigured)
+
 ### Firebase
 
 - FCM push notifications (Android, iOS, Web)
 - Device token registration/removal
 - Bilingual notification content (titleAr/titleEn, bodyAr/bodyEn)
+
+### Additional Features (since 2026-02-18)
+
+- **Leads Module**: AI-powered lead extraction from conversations (phone/email capture, intent summary, daily limits per workspace)
+- **Waitlist**: Feature waitlist signup with HMAC-based unsubscribe tokens
+- **Blog**: 13+ bilingual blog posts (Arabic/English) covering e-commerce guides, setup tutorials
+- **Preset Replies**: Merged Templates + Rules into unified "Preset Replies" page (keyword-triggered, < 6 words, comments-only)
+- **Admin Panel**: Playground (AI testing), waitlist management, customer management, observability dashboard
+- **Unsubscribe Page**: Email unsubscribe management
 
 ---
 

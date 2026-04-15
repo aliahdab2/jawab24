@@ -104,7 +104,7 @@ Zero errors AND zero warnings required: `npm run lint` / `npm run lint:fix`
 
 ### 8. Lighthouse CI
 
-Runs on every push. Audits `/landing`, `/pricing`, `/login`. **Hard failures:** accessibility < 90, CLS > 0.1. Config: `.lighthouserc.json`.
+Runs on every push. Audits `/landing`, `/pricing`, `/login`, `/blog`, `/what-is-jawab24`. **Hard failures:** accessibility < 90, CLS > 0.1. Config: `.lighthouserc.json`.
 
 Rules: never remove `alt` attrs, use semantic HTML, avoid layout-shifting elements, keep `<title>` and `<meta description>` on public pages.
 

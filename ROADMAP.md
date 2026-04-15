@@ -1,13 +1,13 @@
 # Jawab24 — Product Roadmap
 
-> **Last updated**: 2026-02-22
+> **Last updated**: 2026-04-15
 > **Purpose**: Strategic feature roadmap based on competitive analysis and product study.
 
 ---
 
 ## Current Position
 
-**Jawab24** is an Arabic-first AI auto-reply platform for Facebook & Instagram, targeting individual merchants and small teams in the MENA region.
+**Jawab24** is an Arabic-first AI auto-reply platform for Facebook, Instagram, WhatsApp (backend), and e-commerce stores (Shopify, Salla, Zid), targeting individual merchants and small teams in the MENA region.
 
 ### Competitive Strengths (Already Built)
 - 3-layer reply system (Rules → AI with RAG → Human)
@@ -24,14 +24,26 @@
 - Conversation pause/resume (handoff)
 - Multi-tenant workspace infrastructure (invisible to users, ready for team features)
 
-### Competitive Gaps
-- No WhatsApp channel
+### Competitive Gaps (updated 2026-04-15)
+- ~~No WhatsApp channel~~ — Backend complete (2026-04-04), UI pending
 - No chatbot flow builder
 - Limited analytics (basic overview only)
 - No customer profiles/CRM
 - No AI suggested replies in inbox
-- Frontend doesn't fully reflect backend capabilities
 - Team features: backend ready, UI not yet exposed (see Phase 6)
+
+### Completed Since Last Update (2026-02-22 → 2026-04-15)
+- WhatsApp Cloud API backend integration
+- Salla e-commerce integration (OAuth, product sync, webhooks)
+- Zid e-commerce integration (OAuth, product sync, webhooks)
+- Resend email service (transactional emails)
+- Leads module (AI-powered extraction from conversations)
+- Waitlist feature with email notifications + unsubscribe
+- Blog (13+ bilingual posts)
+- Preset Replies (merged Templates + Rules)
+- Admin panel (playground, waitlist management, customer management, observability)
+- All Facebook + Instagram permissions approved (2026-04-07)
+- Prompt upgraded from v22 to v30
 
 ---
 
@@ -234,9 +246,9 @@ Backend infrastructure is fully built and running in production (see Completed W
 | Facebook Messenger | ✅ | ✅ | ✅ | **✅** |
 | Instagram Comments | ✅ | ❌ | ❌ | **✅** |
 | Instagram DM | ✅ | ❌ | ✅ | **✅** |
-| WhatsApp | ✅ | ✅ | ✅ | ❌ (Phase 5) |
+| WhatsApp | ✅ | ✅ | ✅ | ✅ (Backend) / ❌ (UI) |
 | Web Chat | ✅ | ✅ | ✅ | ❌ |
-| Email | ✅ | ✅ | ✅ | ❌ |
+| Email | ✅ | ✅ | ✅ | ✅ (Transactional via Resend) |
 | SMS | ✅ | ❌ | ❌ | ❌ |
 
 ### Direct Competitors (Same niche)
@@ -249,7 +261,7 @@ Backend infrastructure is fully built and running in production (see Completed W
 | Knowledge Base | ❌ | ❌ | **✅** + semantic search |
 | Gap detection | ❌ | ❌ | **✅** |
 | Mobile app | ❌ | ❌ | **✅** |
-| Multi-channel | ❌ | ❌ | **✅** (FB + IG) |
+| Multi-channel | ❌ | ❌ | **✅** (FB + IG + WhatsApp + Shopify + Salla + Zid) |
 
 ### Larger Competitors (Feature comparison)
 
@@ -257,7 +269,7 @@ Backend infrastructure is fully built and running in production (see Completed W
 |---|---|---|---|---|
 | Arabic AI | Weak | No | No | **Strong** |
 | Chatbot flows | ✅ | ✅ | ✅ | ❌ |
-| WhatsApp | ✅ | ✅ | ✅ | ❌ (Phase 5) |
+| WhatsApp | ✅ | ✅ | ✅ | ✅ (Backend) / UI pending |
 | Team features | ✅ | ✅ | ✅ | Backend ✅, UI pending (Phase 6) |
 | AI suggested replies | ✅ | ✅ (Fin) | ✅ (MagicReply) | Partial (Smart Reply button, Phase 2 for multi-suggestion chips) |
 | Customer profiles / CRM | ✅ | ✅ | ✅ | ❌ (Phase 3) |
@@ -266,7 +278,7 @@ Backend infrastructure is fully built and running in production (see Completed W
 | KB gap detection | ❌ | ❌ | ❌ | **✅ Unique** |
 | Semantic caching | ❌ | ❌ | ❌ | **✅ Unique** |
 | Bilingual auto-translation | ❌ | ❌ | ❌ | **✅ Unique** |
-| E-commerce AI (Shopify) | ✅ | ❌ | ❌ | **✅** |
+| E-commerce AI (Shopify/Salla/Zid) | ✅ | ❌ | ❌ | **✅** (3 platforms) |
 
 ### Jawab24 Strengths (what no competitor has)
 
@@ -278,19 +290,19 @@ Backend infrastructure is fully built and running in production (see Completed W
 | Semantic Caching | pgvector cosine similarity, 70-80% cache hit rate, reduces AI costs significantly | No competitor has this |
 | Bilingual Auto-Translation | User writes in one language, system auto-translates to Arabic + English | No competitor does this transparently |
 | 3 Reply Modes | Public comment, private message, or both (dual reply) — user configurable per-workspace | Unique flexibility |
-| Shopify-Aware AI | AI reads product catalog (name, price, stock) to answer customer questions accurately | Only ManyChat has e-commerce, but not with RAG |
+| E-commerce-Aware AI | AI reads product catalog (name, price, stock) from Shopify, Salla, and Zid to answer customer questions accurately | Only ManyChat has e-commerce, but not with RAG |
 
 ### Jawab24 Weaknesses (gaps to close)
 
 | Weakness | Impact | Fix | Priority |
 |----------|--------|-----|----------|
-| Only 2 channels (FB + IG) | Competitors have 4-6 channels. Missing WhatsApp = missing biggest MENA channel | Phase 5: WhatsApp | **High** |
+| ~~Only 2 channels~~ | ~~Competitors have 4-6 channels~~ | WhatsApp backend done, UI in Phase 5 | ~~**High**~~ ✅ Partially resolved |
 | No web chat widget | Industry standard for websites. Missing = lost leads from website visitors | Future phase | Medium |
 | No chatbot flow builder | ManyChat's core product. Complex to build, but Rules + AI covers 90% of use cases | Not planned (intentional) | Low |
 | Limited analytics | Only basic overview dashboard. Competitors have deep insights | Phase 4: Smart Analytics | Medium |
 | No customer profiles / CRM | No customer history view, tags, or notes. Competitors surface this | Phase 3: Customer Profiles | Medium |
 | No AI suggested replies in inbox | Smart Reply button exists (comments), but competitors show 2-3 AI suggestion chips for agents to pick from | Phase 2: AI Suggestions | **High** |
-| No email channel | Standard for support platforms. Not critical for social-first merchants | Future phase | Low |
+| ~~No email channel~~ | ~~Standard for support platforms~~ | Resend transactional email implemented | ~~Low~~ ✅ Resolved |
 | Team UI not exposed | Backend ready but no team management page, invite UI, or role indicators | Phase 6: Team UI (~5-7 days) | Low (on demand) |
 
 ### Jawab24's Unique Differentiator

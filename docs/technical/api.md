@@ -1,5 +1,7 @@
 # API Specification — Jawab24
 
+> **WARNING: This document is significantly outdated (last updated ~2025).** The backend now has 31 route files with 20+ endpoint groups not listed here. Missing: phone OTP auth, workspace management, e-commerce integrations (Shopify/Salla/Zid), leads, admin panel, waitlist, voice, customer notifications, SSE, analytics, subscriptions, and more. New response fields (needsAttention, flagReason, aiIntent, resolved) exist on comments and messages. See `backend/src/routes/` for current endpoints.
+
 ## Base URL
 ```
 Production: https://jawab24.com/api

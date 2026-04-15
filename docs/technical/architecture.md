@@ -1,4 +1,6 @@
-# 🎯 Best Practices Implementation
+# Best Practices Implementation
+
+> **NOTE: This is not the main architecture document.** This file describes specific best-practice improvements. For system architecture, see `.planning/codebase/ARCHITECTURE.md`.
 
 This document describes the best practices improvements added to the Jawab24 backend.
 

@@ -76,18 +76,26 @@ The dashboard supports Arabic and English:
 
 ```
 src/i18n/
-├── locales/
-│   ├── ar.json    # Arabic translations
-│   └── en.json    # English translations
-└── index.ts       # i18n configuration
+├── en/                # English translations (44 namespace files)
+│   ├── common.json
+│   ├── dashboard.json
+│   ├── settings.json
+│   ├── comments.json
+│   └── ...            # 44 namespace files total
+├── ar/                # Arabic translations (44 namespace files)
+│   └── ...            # mirrors en/ structure
+├── getMessages.ts     # Static imports + NS lookup table
+├── namespaces.ts      # PAGE_NAMESPACES mapping
+├── hooks.ts           # useLanguage() for switching + dateLocale
+└── index.ts           # Re-exports
 ```
 
-Usage in components:
+Usage in components (next-intl v4):
 ```typescript
-import { useTranslation } from '@/i18n';
+import { useTranslations } from 'next-intl';
 
-const { t, language } = useTranslation();
-const isRTL = language === 'ar';
+const t = useTranslations('settings');   // namespace-scoped
+t('title');                               // no dot prefix needed
 ```
 
 ## Production
