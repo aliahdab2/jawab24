@@ -68,7 +68,13 @@ vi.mock('drizzle-orm', () => ({
 
 // Mock config
 vi.mock('../../src/config', () => ({
-    config: { ADMIN_EMAILS: ['admin@test.com'] },
+    config: { ADMIN_EMAILS: ['admin@test.com'], redis: { host: 'localhost', port: 6379, password: '' } },
+}));
+
+// Mock redis (workspaceSettings imports it at module level)
+vi.mock('../../src/lib/redis', () => ({
+    redis: { get: vi.fn(), set: vi.fn(), del: vi.fn(), pipeline: vi.fn() },
+    redisScanDelete: vi.fn(),
 }));
 
 // Mock services used by other admin routes (they get imported at module level)
@@ -81,7 +87,7 @@ vi.mock('../../src/services/settings', () => ({ settingsService: {} }));
 vi.mock('../../src/services/pages', () => ({ getIngestionService: vi.fn() }));
 vi.mock('../../src/services/ecommerce', () => ({ getEnrichedKnowledgeBase: vi.fn(), getStoreContextForAI: vi.fn() }));
 vi.mock('../../src/services/reply/generator', () => ({ shouldSkipReply: vi.fn(), shouldUseFallback: vi.fn(), PRICE_FALLBACK: 'price_fallback' }));
-vi.mock('@jawab24/shared', () => ({ normalizeAiIntent: vi.fn() }));
+vi.mock('@jawab24/shared', async (importOriginal) => ({ ...await importOriginal() as object, normalizeAiIntent: vi.fn() }));
 vi.mock('../../src/utils/language', () => ({ detectLanguageCode: vi.fn() }));
 vi.mock('../../src/utils/swagger', () => ({ auth: [] }));
 vi.mock('../../src/services/email', () => ({ emailService: { send: vi.fn(), setLogger: vi.fn() } }));
