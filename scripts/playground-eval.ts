@@ -2554,7 +2554,7 @@ const TEST_CASES: TestCase[] = [
         postMessage: 'دورة IELTS الجديدة وصلت! علق بنقطة لتصلك التفاصيل والأسعار 👇',
         expected: {
             replyMethod: ['ai'],
-            replyNotContains: ['Hello', 'Hi there', 'Good day'],
+            replyNotContains: ['Hello', 'Hi there', 'Good day', 'Thank you', 'thank you', 'Let me', 'interest', 'pricing', 'shortly', 'get back'],
         },
         notes: 'Same scenario — reply must not be in English despite the English course name in the post',
     },
@@ -2814,6 +2814,44 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['أرجعلك', 'وأرجعلك', 'سأرجعلك', 'أتحقق وأرجع', 'سأتابع'],
         },
         notes: 'Instructor name not in KB — WHO question should not get a false follow-up promise',
+    },
+
+    // ===== Category 45: Punctuation Comment Language — Arabic Post =====
+    // Bug: customer comments "." on an Arabic post and AI replies in English.
+    // Root cause: language detection returns 'unknown' for punctuation, but the AI
+    // must use the post language (Arabic) as fallback — not default to English.
+    {
+        id: 303, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',
+        message: '.',
+        page: 'training',
+        postMessage: '#جديد\n#دورة ICDL & اعداد مدرب ببرنامج الامين\nبعد الدورة ستصبح قادرا على تدريب البرامج',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Thank you', 'thank you', 'Let me', 'let me', 'pricing', 'details', 'shortly', 'interest', 'get back'],
+        },
+        notes: 'Dot on Arabic ICDL post — reply MUST be in Arabic, not English. Bug: AI replied "Thank you for your interest! Let me confirm the pricing details"',
+    },
+    {
+        id: 304, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',
+        message: '👍',
+        page: 'training',
+        postMessage: '#جديد\n#دورة ICDL & اعداد مدرب ببرنامج الامين\nبعد الدورة ستصبح قادرا على تدريب البرامج',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Thank you', 'thank you', 'Let me', 'let me', 'pricing', 'interest'],
+        },
+        notes: 'Thumbs-up emoji on Arabic post — same as dot, reply must be Arabic',
+    },
+    {
+        id: 305, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',
+        message: '...',
+        page: 'training',
+        postMessage: 'دورات تدريبية متنوعة مثل المكياج والحلاقة والإسعافات الأولية والتمريض\nعلق بنقطة لتصلك التفاصيل 👇',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Thank you', 'thank you', 'Hello', 'hello', 'Hi ', 'interest', 'details and get back'],
+        },
+        notes: 'Ellipsis on Arabic CTA post — reply must be Arabic with actual KB info',
     },
 ];
 
