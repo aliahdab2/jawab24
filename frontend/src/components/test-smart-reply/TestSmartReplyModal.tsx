@@ -37,8 +37,6 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
     setError(null);
     setShowPostContext(false);
     setPostContext('');
-    // Re-focus input after channel switch to keep keyboard open
-    setTimeout(() => inputRef.current?.focus(), 50);
   };
   const [postContext, setPostContext] = useState('');
   const [showPostContext, setShowPostContext] = useState(false);
@@ -115,7 +113,6 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
       }
     } finally {
       setLoading(false);
-      inputRef.current?.focus();
     }
   };
 
@@ -171,7 +168,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
       <div
         role="dialog"
         aria-modal="true"
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -181,6 +178,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
             <h3 className="text-base font-semibold text-foreground flex-shrink-0">{t('testSmartReply')}</h3>
             <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg flex-shrink-0">
               <button
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setChannel('dm')}
                 className={clsx(
                   'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all',
@@ -193,6 +191,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                 {t('testSmartReplyDm')}
               </button>
               <button
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setChannel('comment')}
                 className={clsx(
                   'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all',
@@ -295,7 +294,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
         </div>
 
         {/* Fixed footer */}
-        <div className="px-4 pt-3 pb-6 md:px-6 md:pt-4 md:pb-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
+        <div className="px-4 pt-3 pb-4 md:px-6 md:pt-4 md:pb-5 border-t border-theme-border bg-card flex-shrink-0">
           {/* Error */}
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400 mb-2">{error}</p>
@@ -353,6 +352,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
               className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-colors outline-none h-[42px]"
             />
             <button
+              onMouseDown={(e) => e.preventDefault()}
               onClick={handleSend}
               disabled={!question.trim() || loading}
               className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
@@ -364,16 +364,20 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
             </button>
           </div>
 
-          {/* Clear button */}
-          {messages.length > 0 && (
-            <button
-              onClick={handleClear}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto mt-2"
-            >
-              <Trash2 className="w-3 h-3" />
-              {t('testSmartReplyClear')}
-            </button>
-          )}
+          {/* Clear button — always rendered to prevent layout shift */}
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={handleClear}
+            className={clsx(
+              'flex items-center gap-1.5 text-xs font-medium text-muted-foreground',
+              'hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20',
+              'rounded-full px-3 py-1 mx-auto mt-1.5 transition-colors',
+              messages.length === 0 && 'invisible'
+            )}
+          >
+            <Trash2 className="w-3 h-3" />
+            {t('testSmartReplyClear')}
+          </button>
         </div>
       </div>
     </div>
