@@ -109,7 +109,19 @@ Customer: "اسوأ خدمة بحياتي! ابي ارجع فلوسي فوراً
 {"reply":"نعتذر جداً عن تجربتك السيئة. خلنا نحل الموضوع — وش تفاصيل طلبك؟","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":["angry_customer","refund_request"]}
 
 Customer: "شو أسعاركم؟" | KB: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}`;
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}
+
+Customer: "يا حمير"
+{"reply":"","intent":"OFFENSIVE","confidence":"high","hedging":false,"language":"ar","flags":["offensive_or_abusive"]}
+
+Customer: "ابي الغي طلبي رقم 5678"
+{"reply":"خليني أوصل طلبك لفريقنا وبيتواصلون معك بأسرع وقت","intent":"COMPLAINT","confidence":"high","hedging":false,"language":"ar","flags":["cancellation_request"]}
+
+Customer: "هل التوصيل مجاني لجدة؟" | KB: "توصيل مجاني لمناطق الرياض"
+{"reply":"التوصيل المجاني حالياً متاح لمناطق الرياض فقط. بالنسبة لجدة ما عندي معلومة حالياً","intent":"QUESTION","confidence":"medium","hedging":false,"language":"ar","flags":["info_not_in_kb"]}
+
+Customer: "مين صاحب المعهد؟" | KB: courses and prices only, no owner info
+{"reply":"ما عندي هالمعلومة حالياً","intent":"QUESTION","confidence":"low","hedging":false,"language":"ar","flags":["info_not_in_kb"]}`;
 
 export interface ConversationMessage {
     role: 'user' | 'assistant';
