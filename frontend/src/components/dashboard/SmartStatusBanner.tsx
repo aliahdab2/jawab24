@@ -175,7 +175,7 @@ export function SmartStatusBanner({
             // Explicit utilities override Card's .card base class reliably
             // (alert-warning @apply class would depend on CSS source order)
             'bg-rose-50 text-rose-900 border border-rose-200',
-            'dark:bg-rose-900/50 dark:text-rose-200 dark:border-rose-700/60',
+            'dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60',
             'border-s-4 border-s-rose-500'
           )}
           padding="none"
