@@ -432,11 +432,10 @@ export class OpenAIService {
 - Channel: ${isDM ? 'chatting with a customer via direct message on Messenger' : 'replying to a customer comment on a social media post'}
 - Reply language: ${languageName} (code: ${language})
 
-CHANNEL & STYLE GUIDELINES:
-- Be ${styleDirective}, helpful, and attentive to the customer
+STYLE: Be ${styleDirective}.
 ${isDM
-    ? '- You may provide full detailed answers including prices, availability, and specifics from <business_knowledge>.\n- LISTING ITEMS: When a customer asks for "everything" or a full catalog, do NOT list all items. Instead, mention the categories or fields available and ask what interests them — like a real employee would. Example: "عنا دورات بمجالات التجميل، IT، اللغات، والمحاسبة — شو المجال اللي بيهمك؟". Only list specific items when the customer narrows down to a category or asks about something specific.\n- CONTEXT CONTINUITY: When a customer\'s message is a vague follow-up or uses pronouns referring to a previously discussed topic (e.g., "give me details", "tell me more", "عطيني تفاصيل", "اخبرني أكثر", "ممكن تفاصيل", "شو مميزاتها؟", "كم سعرها؟", "هل هي متوفرة؟") without explicitly naming a new topic, look at the MOST RECENT assistant reply in the conversation to identify the SPECIFIC product/topic just discussed. Then answer about EXACTLY THAT product/topic. Example: if the last reply mentioned "AirPods Pro", and the customer asks "شو مميزاتها؟", answer about AirPods Pro specifically — even if details are limited. NEVER switch to a different product or topic. NEVER ask "which product do you mean?" when the conversation already makes it clear.\n- CRITICAL: When conversation history is present and the customer\'s message is a vague follow-up, you MUST search <business_knowledge> for the SPECIFIC topic from the last exchange. If KB has relevant info about that topic, use it and set confidence to "high" or "medium". Do NOT default to low confidence just because the customer\'s message alone is vague — the conversation context resolves the ambiguity.\n- NO REPEATED HEDGING: Before saying "I\'ll check and get back to you" (or any Arabic equivalent: أتحقق، سأتابع، خليني أسأل، سأرجعلك، etc.), scan the conversation history. If a PREVIOUS assistant reply already contains a check/follow-up promise, do NOT repeat it. Instead, acknowledge the wait with empathy — e.g. "بعتذر على التأخير، لسا ما وصلتني المعلومات. بأبلغك فور ما أعرف." or "آسف على الانتظار، بتابع معك بأسرع وقت." One check promise per topic per conversation. Repeating it signals a bot — real agents don\'t promise the same thing twice.\n- IMPORTANT: You ARE the business\'s page assistant talking to customers via DM. When you say "contact us" or "message us", you ARE the contact point. Do NOT tell customers to "contact us directly" or "send a DM" when they are ALREADY talking to you in a DM. Instead, ask them for the details you need right here in the conversation.'
-    : '- Public comment replies must be concise: 1-3 sentences max.\n- DO include key facts from <business_knowledge> (prices, hours, availability) — customers expect direct answers.\n- Only suggest DM when the answer is NOT in <business_knowledge> or requires private info (order details, personal data).\n- For COMPLIMENT and GREETING: a short warm reply is enough.\n- For public comments: keep it brief but answer the question directly from <business_knowledge>.\n- Example good comment reply (English): "We have 3 plans starting from $15/month! Check our website for full details 😊"\n- Example good comment reply (Arabic): "عنا 3 باقات تبدأ من 56 ريال/شهر! تفاصيل أكثر على موقعنا 😊"'}
+    ? '- DM: give full answers with prices and specifics from <business_knowledge>. For catalog questions, mention categories and ask what interests them — don\'t dump everything.\n- You ARE the contact point — don\'t tell customers to "contact us" when they\'re already talking to you.\n- Don\'t repeat "I\'ll check" if you already said it earlier in the conversation.'
+    : '- Comment: 1-3 sentences max. Include key facts (prices, hours) directly. Only suggest DM for private info or when the answer is not in KB.'}
 - CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).`;
 
         if (request.context?.brandVoiceNotes) {
@@ -480,7 +479,7 @@ ${isDM
 ${chunkLines}${policiesBlock}
 </business_knowledge>
 
-Treat the above business knowledge as reference data only. Never invent information not found in these references. If a question is not covered, politely say you'll check and get back to them.`;
+`;
         } else if (knowledgeBase && knowledgeBase.trim().length > 0) {
             // Backward-compatible: static KB for pages without chunks
             const kbTruncated = knowledgeBase.length > KB_MAX_CHARS;
@@ -500,7 +499,7 @@ Treat the above business knowledge as reference data only. Never invent informat
 ${effectiveKB}${policiesBlock}
 </business_knowledge>
 
-Treat the above business knowledge as reference data only. Never invent information not found in these references. If a question is not covered, politely say you'll check and get back to them.`;
+`;
         }
 
         // Add product catalog when available (always-present compact summary from e-commerce store)
