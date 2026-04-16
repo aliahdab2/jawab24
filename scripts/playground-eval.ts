@@ -216,6 +216,96 @@ const TEST_CASES: TestCase[] = [
     { id: 62, category: 6, categoryName: 'Channel Differences', channel: 'dm', message: 'كم عندكم دورة؟', page: 'training', conversationHistory: [{ role: 'user', content: 'السلام عليكم' }, { role: 'assistant', content: 'وعليكم السلام!' }], expected: { intent: ['QUESTION'] } },
     { id: 63, category: 6, categoryName: 'Channel Differences', channel: 'dm', message: 'مرحبا', page: 'training', expected: { intent: ['GREETING'] } },
 
+    // 6.4 — Must not re-ask for info already provided in history (Bug B — data memory)
+    {
+        id: 305, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'سجلني بالإنجليزي',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'بدي اسجل' },
+            { role: 'assistant', content: 'ممكن اسمك ورقم تلفونك؟' },
+            { role: 'user', content: 'محدين ٠٩٨٧٧٦٢١١٢' },
+            { role: 'assistant', content: 'شكراً! سجلنا رقمك ٠٩٨٧٧٦٢١١٢. ممكن اسمك الكامل؟' },
+            { role: 'user', content: 'محدين أبو محمد إبراهيم' },
+            { role: 'assistant', content: 'تم تسجيلك باسم محدين أبو محمد إبراهيم.' },
+        ],
+        expected: {
+            // Must NOT ask for name/phone again — both visible in history
+            replyNotContains: [
+                'ممكن تعطيني اسمك',
+                'ممكن اسمك',
+                'ممكن رقمك',
+                'رقم تلفونك',
+                'اسمك الكامل',
+                'اسمك ورقمك',
+                'اسمك ورقم',
+            ],
+        },
+        notes: 'Name and phone provided earlier in history. Asking again is a critical bot tell.',
+    },
+
+    // 6.6 — Long history must not make bot re-ask for customer-provided data (Bug B regression guard)
+    // Replicates the real-world failing conversation: name/phone given early, the bot
+    // used to re-ask many turns later because keyword-compression destroyed the
+    // structural context. Fix: forward history verbatim (no compression).
+    {
+        id: 307, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'سجلني',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'شو دوراتكم؟' },
+            { role: 'assistant', content: 'عنا دورات باللغة الإنجليزية، الحاسب الآلي، المحاسبة، PMP، وIELTS' },
+            { role: 'user', content: 'بدي اسجل' },
+            { role: 'assistant', content: 'ممكن اسمك ورقم تلفونك؟' },
+            { role: 'user', content: 'محدين ٠٩٨٧٧٦٢١١٢' },
+            { role: 'assistant', content: 'شكراً! سجلنا رقمك ٠٩٨٧٧٦٢١١٢. ممكن اسمك الكامل؟' },
+            { role: 'user', content: 'محدين أبو محمد إبراهيم' },
+            { role: 'assistant', content: 'تم تسجيلك باسم محدين أبو محمد إبراهيم. بأي دورة حابب تسجل؟' },
+            { role: 'user', content: 'كم سعر الإنجليزي؟' },
+            { role: 'assistant', content: '1500 ريال/شهر' },
+            { role: 'user', content: 'تمام' },
+            { role: 'assistant', content: 'ممتاز! جاهز للتسجيل؟' },
+        ],
+        expected: {
+            // Name (محدين أبو محمد إبراهيم) and phone (٠٩٨٧٧٦٢١١٢) are in early history.
+            // Bot must NOT ask again when finalizing registration.
+            replyNotContains: [
+                'ممكن تعطيني اسمك',
+                'ممكن اسمك',
+                'ممكن رقمك',
+                'رقم تلفونك',
+                'اسمك الكامل',
+                'اسمك ورقمك',
+                'اسمك ورقم',
+            ],
+        },
+        notes: 'Real-world reproduction of the data-memory bug. Name+phone in early turns — bot must not re-ask when finalizing registration.',
+    },
+
+    // 6.5 — Same data-memory bug in a different industry (Bug B — cross-domain proof)
+    {
+        id: 306, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'متى يوصل الطلب؟',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'ابي اطلب لابتوب' },
+            { role: 'assistant', content: 'أكيد! ممكن اسمك ورقم تلفونك للطلب؟' },
+            { role: 'user', content: 'سارة ٠٥٠٧٨٩١٢٣٤' },
+            { role: 'assistant', content: 'تمام سارة! سجلنا طلبك ورقمك ٠٥٠٧٨٩١٢٣٤' },
+        ],
+        expected: {
+            // Must NOT re-ask for name/phone — already in history and explicitly acknowledged by bot
+            replyNotContains: [
+                'ممكن اسمك',
+                'ممكن رقمك',
+                'رقم تلفونك',
+                'اسمك ورقمك',
+                'ممكن تعطيني اسمك',
+            ],
+        },
+        notes: 'Cross-industry proof: same data-memory bug in e-commerce. Bot must not re-ask for name/phone when answering unrelated follow-up.',
+    },
+
     // ===== Category 7: Language Edge Cases =====
     { id: 64, category: 7, categoryName: 'Language', channel: 'comment', message: 'What courses do you offer?', page: 'training', expected: { replyMethod: ['ai'] }, notes: 'Reply in English' },
     { id: 65, category: 7, categoryName: 'Language', channel: 'comment', message: 'كم سعر الدورة؟', page: 'training', expected: { replyMethod: ['ai'] }, notes: 'Reply in Arabic' },
@@ -361,6 +451,54 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['كورس برمجة', 'كورس تصميم', 'كورس Excel', 'كورس Python', 'Python', 'Excel', 'Photoshop'],
         },
         notes: 'Electronics store has no courses in KB — must not invent course names',
+    },
+
+    // 11.8 — Direct ask for course NOT in KB (Bug A — hallucinated options)
+    // KB exhaustively lists courses, so bot can be high-confidence when correctly denying — matching test #9 pattern.
+    {
+        id: 303, category: 11, categoryName: 'Platform Safety', channel: 'dm',
+        message: 'بدي اسجل بدورة الرسم',
+        page: 'training',
+        expected: {
+            confidence: ['high', 'medium'],
+            flags: ['info_not_in_kb'],
+            // Must NOT confirm drawing course exists (training KB has only English, Office, Accounting, PMP, IELTS)
+            replyNotContains: [
+                'دورة الرسم متاحة',
+                'دورة الرسم موجودة',
+                'نعم عندنا دورة الرسم',
+                'أكيد دورة الرسم',
+                'تمام سجلتك بدورة الرسم',
+                'رح اسجلك بدورة الرسم',
+            ],
+        },
+        notes: 'Drawing course not in training KB. Bot must deny it exists. KB is exhaustive, so high confidence denial is acceptable.',
+    },
+
+    // 11.9 — Must not fabricate specific item names in a different industry (Bug A — cross-domain proof)
+    {
+        id: 304, category: 11, categoryName: 'Platform Safety', channel: 'dm',
+        message: 'ابي اشتري',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'شو عندكم؟' },
+            { role: 'assistant', content: 'عنا جوالات تبدأ من 500 ريال، لابتوبات من 2000 ريال، واكسسوارات من 50 ريال' },
+            { role: 'user', content: 'تمام' },
+        ],
+        expected: {
+            // Electronics KB has categories only — no specific brand/model names
+            replyNotContains: [
+                'ايفون 16',
+                'iPhone 16',
+                'Samsung Galaxy',
+                'سامسونج جالاكسي',
+                'ماك بوك',
+                'MacBook',
+                'شاومي',
+                'هواوي',
+            ],
+        },
+        notes: 'Cross-industry proof: same hallucination pattern in e-commerce. KB has product categories but no brand names — bot must not invent them.',
     },
 
     // ---------------------------------------------------------------------------
