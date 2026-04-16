@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
+import { getLocaleDirection } from '@/utils/locale';
 import clsx from 'clsx';
 import { Send, Loader2, Sparkles, Zap, Ban, Trash2, AlertTriangle, MessageSquare, MessageCircle, X, FileText, ChevronDown } from 'lucide-react';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
@@ -27,6 +28,8 @@ interface TestSmartReplyModalProps {
 
 export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps) {
   const t = useTranslations('pages');
+  const locale = useLocale();
+  const dir = getLocaleDirection(locale);
   const [mounted, setMounted] = useState(false);
 
   const [channel, setChannelRaw] = useState<'comment' | 'dm'>('dm');
@@ -168,6 +171,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
       <div
         role="dialog"
         aria-modal="true"
+        dir={dir}
         className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
