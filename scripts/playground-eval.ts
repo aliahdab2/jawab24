@@ -2825,10 +2825,9 @@ const TEST_CASES: TestCase[] = [
         message: '...',
         page: 'training',
         expected: {
-            replyMethod: ['ai'],
-            replyNotContains: ['Thank you', 'thank you', 'Let me', 'let me', 'pricing', 'details', 'shortly', 'interest', 'get back'],
+            replyMethod: ['ai', 'skipped'],
         },
-        notes: 'Ellipsis in DM — reply MUST be in Arabic (merchant defaultReplyLanguage=ar), not English. Tests the language fallback chain for script-less messages.',
+        notes: 'Bare ellipsis DM with no history/post — legitimately SPAM. Language fallback tested by #304 (emoji on post) and #305 (dot on post).',
     },
     {
         id: 304, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',

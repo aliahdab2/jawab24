@@ -530,7 +530,11 @@ export class OpenAIService {
         let prompt = `CONTEXT FOR THIS REPLY:
 - Business name: "${pageName}"
 - Your tone: ${styleDirective}
-- Channel: ${isDM ? 'chatting with a customer via direct message on Messenger' : 'replying to a customer comment on a social media post'}
+- Channel: ${isDM
+            ? (request.context?.postMessage
+                ? 'sending a DM to a customer who commented on a post — use the post content (in [current_post]) as authoritative business info to answer their question'
+                : 'chatting with a customer via direct message on Messenger')
+            : 'replying to a customer comment on a social media post'}
 - Reply language: ${languageName} (code: ${language})
 
 STYLE: Be ${styleDirective}.

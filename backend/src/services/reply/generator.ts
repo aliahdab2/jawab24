@@ -237,7 +237,7 @@ export class ReplyGenerator {
         // (e.g. "@Ali Ahdab" or "https://example.com" on an Arabic page → incorrectly 'en').
         // They also carry no message content the AI should respond to.
         const hadMention = /@[\w\u0600-\u06FF]/.test(text);
-        const commentForAI = this.stripCommentNoise(text);
+        let commentForAI = this.stripCommentNoise(text);
 
         // Friend-tagging: "@Ali check this" → after stripping = "check this" (≤3 words).
         // The person is talking to their friend, not to the page. Skip silently.
@@ -282,6 +282,14 @@ export class ReplyGenerator {
             // so use 'dm' channel to get a detailed answer (with prices, specs, etc.)
             // instead of the brief "message us" comment-style reply.
             const effectiveChannel: 'comment' | 'dm' = (commentReplyMode === 'dual' || commentReplyMode === 'private') ? 'dm' : 'comment';
+
+            // Dual-mode DM with punctuation-only comment (e.g. "." on a CTA post):
+            // Replace with a synthetic question so the AI answers with post/KB details
+            // instead of classifying as SPAM_OR_IRRELEVANT.
+            if (effectiveChannel === 'dm' && postMessage && this.isPunctuationOnly(commentForAI || text)) {
+                const postLang = /[\u0600-\u06FF]/.test(postMessage) ? 'ar' : 'en';
+                commentForAI = postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
+            }
 
             // Build gap source context for merchant insights
             const gapSource: GapSource = { type: 'comment', context: postMessage };
@@ -546,8 +554,17 @@ export class ReplyGenerator {
 
         const ragMode = config.ragMode || 'off';
 
-        // 2. For comments: strip noise, check for spam, detect language with postMessage fallback
+        // 2. Pre-process: strip noise, check for spam, detect language
         let questionForAI = question;
+
+        // Dual-mode DM with punctuation-only input (e.g. "." on a CTA post):
+        // Replace with a synthetic question so the AI has something meaningful to answer.
+        // The post says "comment . to get details" → customer commented "." → DM should deliver those details.
+        if (channel === 'dm' && postMessage && this.isPunctuationOnly(question.trim())) {
+            const postLang = /[\u0600-\u06FF]/.test(postMessage) ? 'ar' : 'en';
+            questionForAI = postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
+        }
+
         if (channel === 'comment') {
             const hadMentionPG = /@[\w\u0600-\u06FF]/.test(question);
             questionForAI = this.stripCommentNoise(question);
@@ -637,7 +654,11 @@ export class ReplyGenerator {
         }
 
         const needsAttention = computeNeedsAttention(flags, normalizedIntent);
-        const skipped = shouldSkipReply(flags.join(','), normalizedIntent);
+        // Don't skip DM replies that originated from a post comment (dual mode) —
+        // the customer engaged with a CTA post and deserves a response
+        const skipped = (channel === 'dm' && postMessage)
+            ? false
+            : shouldSkipReply(flags.join(','), normalizedIntent);
         const useFallback = shouldUseFallback(flags.join(','));
 
         // Gap recording (fire-and-forget, same triggers as processAiResponse)
