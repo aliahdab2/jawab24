@@ -601,7 +601,7 @@ export class ReplyGenerator {
                 channel,
                 kbActiveVersion,
                 queryEmbedding,
-                ...(channel === 'comment' && postMessage ? { postMessage } : {}),
+                ...(postMessage ? { postMessage } : {}),
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
                 ...(replyStyle ? { replyStyle } : {}),
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),

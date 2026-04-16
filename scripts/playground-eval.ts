@@ -135,7 +135,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 273 total (271 previous + 2 production data-memory regression guards)
+// Test cases — 277 total (273 previous + 4 post-as-KB-source tests)
 // ---------------------------------------------------------------------------
 
 const TEST_CASES: TestCase[] = [
@@ -2315,6 +2315,68 @@ const TEST_CASES: TestCase[] = [
             replyNotContains: ['iPhone', 'لابتوب'],
         },
         notes: 'Same ambiguous price Q but post context anchors it to AirPods — must not answer about other products',
+    },
+
+    // 35.5 — Post has info NOT in KB — model should answer from post
+    // The post announces a special offer price that the KB doesn't have.
+    // With [current_post] injected inside <business_knowledge>, the model should
+    // answer confidently from the post content.
+    {
+        id: 310, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'كم السعر؟',
+        page: 'training',
+        postMessage: 'عرض خاص لفترة محدودة! دورة التصوير الفوتوغرافي بـ 50 ألف ليرة بدل 75 ألف',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            confidence: ['high', 'medium'],
+            replyContainsAny: ['50', '٥٠'],
+        },
+        notes: 'Post has promo price (50k) not in KB (KB says 75k). Model should answer from post content.',
+    },
+
+    // 35.6 — Post mentions event date not in KB
+    {
+        id: 311, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'متى يبدأ التسجيل؟',
+        page: 'training',
+        postMessage: 'التسجيل مفتوح من يوم الأحد 20 أبريل - الأماكن محدودة!',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['20', '٢٠', 'أبريل', 'الأحد'],
+        },
+        notes: 'Registration date only in post, not KB. Model should use post as source.',
+    },
+
+    // 35.7 — Post info should NOT override KB facts
+    // KB says course is 75k. Post says nothing about price. Model must use KB price, not invent.
+    {
+        id: 312, category: 35, categoryName: 'Comment Post Context', channel: 'comment',
+        message: 'كم سعر دورة التصوير؟',
+        page: 'training',
+        postMessage: 'دورة التصوير الفوتوغرافي - سجل الآن!',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['75', '٧٥'],
+        },
+        notes: 'Post mentions the course but no price. KB has the price (75k). Model must use KB price.',
+    },
+
+    // 35.8 — DM in dual mode should also use post context
+    // Simulates dual mode: channel=dm but postMessage is present (comment triggered the DM).
+    {
+        id: 313, category: 35, categoryName: 'Comment Post Context', channel: 'dm',
+        message: 'كم السعر؟',
+        page: 'training',
+        postMessage: 'عرض خاص! دورة المكياج بـ 40 ألف ليرة لفترة محدودة',
+        expected: {
+            replyMethod: ['ai'],
+            intent: ['QUESTION'],
+            replyContainsAny: ['40', '٤٠', 'مكياج'],
+        },
+        notes: 'Dual mode: DM reply for a comment on a promo post. Post has the promo price — model should use it.',
     },
 
     // ===== Category 36: Comment Sender Name =====
