@@ -135,7 +135,7 @@ async function resolvePageIds(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Test cases — 271 total (263 previous + 4 comment post context + 4 comment sender name)
+// Test cases — 273 total (271 previous + 2 production data-memory regression guards)
 // ---------------------------------------------------------------------------
 
 const TEST_CASES: TestCase[] = [
@@ -304,6 +304,70 @@ const TEST_CASES: TestCase[] = [
             ],
         },
         notes: 'Cross-industry proof: same data-memory bug in e-commerce. Bot must not re-ask for name/phone when answering unrelated follow-up.',
+    },
+
+    // 6.7 — Exact reproduction of real production conversation (2026-04-16)
+    // Customer registered for photography with name+phone, then later asks to register
+    // for a DIFFERENT course ("سجل"). Bot must reuse name+phone from earlier, not re-ask.
+    // Also tests: "ماعندك الرقم" must be interpreted as "you already have MY number",
+    // NOT as a request for business contact info.
+    {
+        id: 308, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'سجل',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'بدي سجل بدورة الرسم' },
+            { role: 'assistant', content: 'حالياً ما عنا دورة رسم. عنا دورات بمجالات المكياج، الحلاقة، التصوير الفوتوغرافي، وغيرها.' },
+            { role: 'user', content: 'طيب سجل تصوير' },
+            { role: 'assistant', content: 'تمام! عطيني اسمك ورقم تلفونك عشان أسجلّك بدورة التصوير الفوتوغرافي' },
+            { role: 'user', content: 'محمد علي ٠٩٣٢٣٤٣٢٢' },
+            { role: 'assistant', content: 'تم تسجيلك بدورة التصوير الفوتوغرافي، محمد علي. رح نتواصل معك قريباً للتفاصيل.' },
+            { role: 'user', content: 'في دورة امين' },
+            { role: 'assistant', content: 'نعم، عنا دورة الأمين للمحاسبة بثلاث مستويات: مبتدئ، متقدم، محترف' },
+            { role: 'user', content: 'انا بعرف امين شوي' },
+            { role: 'assistant', content: 'إذا بتحب تبدأ من المستوى المتقدم أو المحترف' },
+            { role: 'user', content: 'بتنصحني شو اعمل' },
+            { role: 'assistant', content: 'أنصح تبدأ بالمستوى المتقدم لتقوية مهاراتك' },
+        ],
+        expected: {
+            // Name (محمد علي) and phone (٠٩٣٢٣٤٣٢٢) are in history from photography registration.
+            // Bot must reuse them for the new Amin registration — NOT re-ask.
+            replyNotContains: [
+                'اسمك',
+                'رقمك',
+                'رقم تلفونك',
+                'تلفونك',
+                'عطيني',
+            ],
+        },
+        notes: 'Production bug 2026-04-16: customer registered for photography then asked to register for Amin. Bot re-asked for name+phone despite having them in history.',
+    },
+
+    // 6.8 — "ماعندك الرقم" must be read as "you already have my number"
+    // NOT as "do you have a phone number [for the business]"
+    {
+        id: 309, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'ماعندك الرقم',
+        page: 'training',
+        conversationHistory: [
+            { role: 'user', content: 'محمد علي ٠٩٣٢٣٤٣٢٢' },
+            { role: 'assistant', content: 'تم تسجيلك بدورة التصوير الفوتوغرافي، محمد علي.' },
+            { role: 'user', content: 'سجلني بدورة الأمين' },
+            { role: 'assistant', content: 'تمام، عطيني اسمك ورقم تلفونك لنكمل التسجيل' },
+        ],
+        expected: {
+            // Must NOT give business phone numbers — customer means "you already have MY number"
+            replyNotContains: [
+                '0935924472',
+                '0112124472',
+                '0937549674',
+                'أرقامنا',
+                'للتواصل',
+                'عطيني رقمك',
+                'ممكن رقمك',
+            ],
+        },
+        notes: 'Production bug 2026-04-16: customer said "ماعندك الرقم" meaning "you have my number already" but bot returned business contact numbers.',
     },
 
     // ===== Category 7: Language Edge Cases =====

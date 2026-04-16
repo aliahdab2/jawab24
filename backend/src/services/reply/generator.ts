@@ -64,6 +64,50 @@ export function computeNeedsAttention(flags: string[], normalizedIntent: string 
 
 import { t } from '../../utils/i18n';
 
+/**
+ * Extract customer-provided data (name, phone) from conversation history.
+ * Returns a short structured string for the model's CUSTOMER CONTEXT, or null.
+ *
+ * This is a CODE-LEVEL fix for the data-memory bug: gpt-4.1-mini with a large
+ * system prompt doesn't reliably track data buried in conversation history.
+ * Instead of adding prompt rules, we extract the signal and surface it explicitly.
+ */
+function extractConversationData(history: { role: string; content: string }[]): string | null {
+    // Match 7+ consecutive digits (Arabic-Indic ٠-٩ or Western 0-9), allowing spaces/dashes
+    const phonePattern = /[\d\u0660-\u0669][\d\u0660-\u0669\s-]{5,}[\d\u0660-\u0669]/;
+    // Patterns indicating bot confirmed a registration/order
+    const confirmPattern = /تم تسجيلك|تم الطلب|سجلنا طلبك|سجلنا رقمك|registered|order confirmed/i;
+
+    let customerPhone: string | null = null;
+    let customerName: string | null = null;
+    const confirmed: string[] = [];
+
+    for (const msg of history) {
+        if (msg.role === 'user' && !customerPhone) {
+            const match = msg.content.match(phonePattern);
+            if (match) {
+                customerPhone = match[0].replace(/[\s-]/g, '');
+                // Text before the phone is likely the name (e.g. "محمد علي ٠٩٣٢٣٤٣٢٢")
+                const before = msg.content.slice(0, msg.content.indexOf(match[0])).trim();
+                if (before.length >= 2 && before.length < 60) {
+                    customerName = before;
+                }
+            }
+        } else if (msg.role === 'assistant' && confirmPattern.test(msg.content)) {
+            // Keep the last confirmed action (most recent)
+            confirmed.push(msg.content.slice(0, 120));
+        }
+    }
+
+    if (!customerPhone && !customerName) return null;
+
+    const parts: string[] = [];
+    if (customerName) parts.push(`Customer shared their name: ${customerName}`);
+    if (customerPhone) parts.push(`Customer shared their phone: ${customerPhone}`);
+    if (confirmed.length > 0) parts.push(`Already confirmed: "${confirmed[confirmed.length - 1]}"`);
+    return parts.join('. ');
+}
+
 /** Safe fallback replies when AI hallucinates pricing */
 export const PRICE_FALLBACK: Record<string, string> = {
     ar: t('priceFallback', 'ar'),
@@ -189,7 +233,17 @@ export class ReplyGenerator {
         // Both @mentions and URLs contain Latin chars that pollute language detection
         // (e.g. "@Ali Ahdab" or "https://example.com" on an Arabic page → incorrectly 'en').
         // They also carry no message content the AI should respond to.
+        const hadMention = /@[\w\u0600-\u06FF]/.test(text);
         const commentForAI = this.stripCommentNoise(text);
+
+        // Friend-tagging: "@Ali check this" → after stripping = "check this" (≤3 words).
+        // The person is talking to their friend, not to the page. Skip silently.
+        if (hadMention && commentForAI) {
+            const wordCount = commentForAI.split(/\s+/).filter(w => w.length > 0).length;
+            if (wordCount <= 3) {
+                return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
+            }
+        }
 
         // Punctuation/emoji-only comment (dots, emojis, symbols) with no post context = spam.
         // If postMessage is present, pass to AI — it has the full post text to judge whether
@@ -300,7 +354,12 @@ export class ReplyGenerator {
                 // senderName is passed separately — never merged into customerContext.
                 // customerContext holds substantive info only (returning-customer summary, etc.)
                 // so it can safely participate in cache-key scoping without fragmenting by name.
-                const customerContext = customerSummary || undefined;
+                //
+                // Append extracted conversation data (name, phone, confirmed actions) so the
+                // model sees it as structured context — fixes the data-memory bug where
+                // gpt-4.1-mini ignores customer data buried in conversation history.
+                const extractedData = extractConversationData(conversationHistory);
+                const customerContext = [customerSummary, extractedData].filter(Boolean).join('. ') || undefined;
 
                 // Build gap source: last customer message before the current one
                 const prevUserMsg = conversationHistory
@@ -487,10 +546,15 @@ export class ReplyGenerator {
         // 2. For comments: strip noise, check for spam, detect language with postMessage fallback
         let questionForAI = question;
         if (channel === 'comment') {
+            const hadMentionPG = /@[\w\u0600-\u06FF]/.test(question);
             questionForAI = this.stripCommentNoise(question);
             const isEmptyQ = !questionForAI;
             const isPunctuationQ = questionForAI ? this.isPunctuationOnly(questionForAI) : false;
-            if (isEmptyQ || (isPunctuationQ && !postMessage)) {
+
+            // Friend-tagging: "@Ali check this" → stripped = "check this" (≤3 words). Skip.
+            const isFriendTag = hadMentionPG && questionForAI && questionForAI.split(/\s+/).filter(w => w.length > 0).length <= 3;
+
+            if (isEmptyQ || (isPunctuationQ && !postMessage) || isFriendTag) {
                 return {
                     reply: null, replyMethod: 'skipped', templateName: null, ragMode,
                     chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
@@ -517,6 +581,11 @@ export class ReplyGenerator {
             && /^[a-zA-Z0-9\s]+$/.test(questionForAI.trim())
             && kbLang === 'ar';
         const resolvedLang = isAmbiguousLatin ? 'ar' : effectiveLang;
+
+        // Merge caller-provided customerContext with extracted conversation data (same as DM pipeline)
+        const playgroundExtracted = conversationHistory?.length ? extractConversationData(conversationHistory) : null;
+        const mergedCustomerCtx = [customerContext, playgroundExtracted].filter(Boolean).join('. ') || undefined;
+
         const aiResponse = await aiService.generateReply({
             comment: questionForAI,
             language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
@@ -536,7 +605,7 @@ export class ReplyGenerator {
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
                 ...(replyStyle ? { replyStyle } : {}),
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
-                ...(customerContext ? { customerContext } : {}),
+                ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
             },
         });
 
