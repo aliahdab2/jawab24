@@ -29,7 +29,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
   const t = useTranslations('pages');
   const [mounted, setMounted] = useState(false);
 
-  const [channel, setChannelRaw] = useState<'comment' | 'dm'>('comment');
+  const [channel, setChannelRaw] = useState<'comment' | 'dm'>('dm');
   const setChannel = (ch: 'comment' | 'dm') => {
     if (ch === channel) return;
     setChannelRaw(ch);
@@ -37,6 +37,8 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
     setError(null);
     setShowPostContext(false);
     setPostContext('');
+    // Re-focus input after channel switch to keep keyboard open
+    setTimeout(() => inputRef.current?.focus(), 50);
   };
   const [postContext, setPostContext] = useState('');
   const [showPostContext, setShowPostContext] = useState(false);
@@ -162,6 +164,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
   const modalContent = (
     <div
       className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
+      style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
@@ -178,18 +181,6 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
             <h3 className="text-base font-semibold text-foreground flex-shrink-0">{t('testSmartReply')}</h3>
             <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg flex-shrink-0">
               <button
-                onClick={() => setChannel('comment')}
-                className={clsx(
-                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all',
-                  channel === 'comment'
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <MessageSquare className="w-3 h-3" />
-                {t('testSmartReplyComment')}
-              </button>
-              <button
                 onClick={() => setChannel('dm')}
                 className={clsx(
                   'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all',
@@ -200,6 +191,18 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
               >
                 <MessageCircle className="w-3 h-3" />
                 {t('testSmartReplyDm')}
+              </button>
+              <button
+                onClick={() => setChannel('comment')}
+                className={clsx(
+                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all',
+                  channel === 'comment'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <MessageSquare className="w-3 h-3" />
+                {t('testSmartReplyComment')}
               </button>
             </div>
           </div>
@@ -292,7 +295,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
         </div>
 
         {/* Fixed footer */}
-        <div className="px-4 pt-3 pb-4 md:px-6 md:pt-4 md:pb-5 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
+        <div className="px-4 pt-3 pb-6 md:px-6 md:pt-4 md:pb-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
           {/* Error */}
           {error && (
             <p className="text-sm text-red-600 dark:text-red-400 mb-2">{error}</p>
