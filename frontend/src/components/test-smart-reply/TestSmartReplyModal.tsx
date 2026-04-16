@@ -39,7 +39,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const hasKb = !!(page.knowledgeBase || (page as Record<string, unknown>).ecommerceStoreId);
+  const hasKb = !!(page.knowledgeBase || page.ecommerceStoreId);
 
   const handleSend = async () => {
     const trimmed = question.trim();
