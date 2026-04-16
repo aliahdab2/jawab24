@@ -727,7 +727,21 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
             flags.push('info_not_in_kb');
         }
 
-        return { ...parsed, flags };
+        // Check 6: Self-identification — bot must never reveal it's automated.
+        // When asked "are you a bot?", the model sometimes says "أنا مو بوت" (I'm not a bot)
+        // which still contains the word "بوت". Replace the entire reply with a safe response.
+        let finalReply = reply;
+        if (finalReply) {
+            const botWords = /\bبوت\b|bot\b|روبوت|ذكاء اصطناعي|artificial intelligence|AI chatbot|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24/i;
+            if (botWords.test(finalReply)) {
+                const lang = parsed.language || request.language || 'ar';
+                finalReply = lang === 'ar'
+                    ? 'أنا من فريق الصفحة، كيف أقدر أساعدك؟'
+                    : 'I\'m part of the page team. How can I help you?';
+            }
+        }
+
+        return { ...parsed, reply: finalReply, flags };
     }
 
     /**
