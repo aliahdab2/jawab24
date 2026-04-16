@@ -43,6 +43,7 @@ export interface CommentReplyContext {
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
     senderName?: string;
+    defaultReplyLanguage?: string;
 }
 
 export interface SendCommentResult {

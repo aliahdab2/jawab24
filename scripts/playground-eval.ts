@@ -2821,26 +2821,25 @@ const TEST_CASES: TestCase[] = [
     // Root cause: language detection returns 'unknown' for punctuation, but the AI
     // must use the post language (Arabic) as fallback — not default to English.
     {
-        id: 303, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',
-        message: '.',
+        id: 303, category: 45, categoryName: 'Punctuation Comment Language', channel: 'dm',
+        message: '...',
         page: 'training',
-        postMessage: '#جديد\n#دورة ICDL & اعداد مدرب ببرنامج الامين\nبعد الدورة ستصبح قادرا على تدريب البرامج',
         expected: {
             replyMethod: ['ai'],
             replyNotContains: ['Thank you', 'thank you', 'Let me', 'let me', 'pricing', 'details', 'shortly', 'interest', 'get back'],
         },
-        notes: 'Dot on Arabic ICDL post — reply MUST be in Arabic, not English. Bug: AI replied "Thank you for your interest! Let me confirm the pricing details"',
+        notes: 'Ellipsis in DM — reply MUST be in Arabic (merchant defaultReplyLanguage=ar), not English. Tests the language fallback chain for script-less messages.',
     },
     {
         id: 304, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',
         message: '👍',
         page: 'training',
-        postMessage: '#جديد\n#دورة ICDL & اعداد مدرب ببرنامج الامين\nبعد الدورة ستصبح قادرا على تدريب البرامج',
+        postMessage: '#جديد\n#دورة ICDL & اعداد مدرب ببرنامج الامين\nبعد الدورة ستصبح قادرا على تدريب البرامج\nعلق لتصلك التفاصيل 👇',
         expected: {
             replyMethod: ['ai'],
             replyNotContains: ['Thank you', 'thank you', 'Let me', 'let me', 'pricing', 'interest'],
         },
-        notes: 'Thumbs-up emoji on Arabic post — same as dot, reply must be Arabic',
+        notes: 'Thumbs-up emoji on Arabic CTA post — same as dot, reply must be Arabic',
     },
     {
         id: 305, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',

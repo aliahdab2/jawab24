@@ -139,6 +139,8 @@ export interface GenerateReplyContext {
     brandVoiceNotes?: string;
     // E-commerce tools (DMs only)
     ecommerceStoreId?: string;
+    // Language fallback
+    defaultReplyLanguage?: string;
 }
 
 export type CommentReplyMode = 'public' | 'private' | 'dual';
@@ -170,6 +172,7 @@ export interface PlaygroundInput {
     brandVoiceNotes?: string;
     customerContext?: string;
     model?: string;
+    defaultReplyLanguage?: string;
 }
 
 export interface PlaygroundResult {
@@ -315,7 +318,7 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -384,7 +387,7 @@ export class ReplyGenerator {
                 const aiRequest = {
                     comment: text,
                     language: msgLang !== 'unknown' ? msgLang : undefined,
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage },
                 };
 
                 // When an e-commerce store is linked, use the tool loop
@@ -538,7 +541,7 @@ export class ReplyGenerator {
         const {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
-            replyStyle, brandVoiceNotes, customerContext, model,
+            replyStyle, brandVoiceNotes, customerContext, model, defaultReplyLanguage,
         } = input;
 
         const ragMode = config.ragMode || 'off';
@@ -606,6 +609,7 @@ export class ReplyGenerator {
                 ...(replyStyle ? { replyStyle } : {}),
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
                 ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
+                ...(defaultReplyLanguage ? { defaultReplyLanguage } : {}),
             },
         });
 

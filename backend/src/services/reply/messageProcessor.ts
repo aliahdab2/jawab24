@@ -331,6 +331,7 @@ export class MessageProcessor {
                         replyStyle: userSettings.replyStyle,
                         brandVoiceNotes,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
+                        defaultReplyLanguage: userSettings.defaultReplyLanguage,
                     },
                     userSettings.aiEnabled ?? false,
                 );

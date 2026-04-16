@@ -1,4 +1,5 @@
 import { settingsService } from '../settings';
+import { workspaceSettingsService } from '../workspaceSettings';
 import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
 import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
@@ -41,9 +42,10 @@ export interface PlaygroundContext {
 export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Promise<PlaygroundContext> {
     const { page, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = opts;
 
-    // 1. Fetch owner settings for comment reply mode
+    // 1. Fetch owner settings for comment reply mode + workspace settings for language fallback
     let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
     let nudgeText: string | null = null;
+    let defaultReplyLanguage: string | undefined;
     if (page.userId) {
         try {
             const ownerSettings = await settingsService.getSettings(page.userId);
@@ -57,6 +59,14 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
             }
         } catch {
             // Non-critical — fall back to defaults
+        }
+    }
+    if (page.workspaceId) {
+        try {
+            const wsSettings = await workspaceSettingsService.getSettings(page.workspaceId);
+            defaultReplyLanguage = wsSettings.defaultReplyLanguage;
+        } catch {
+            // Non-critical — fall back to default
         }
     }
 
@@ -98,6 +108,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         brandVoiceNotes,
         customerContext,
         model,
+        defaultReplyLanguage,
     };
 
     return { playgroundInput, commentReplyMode, nudgeText };

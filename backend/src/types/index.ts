@@ -51,6 +51,8 @@ export interface AiGenerateRequest {
         customerContext?: string;
         ecommerceStoreId?: string;
         ecommerceToolsEnabled?: boolean;
+        /** Merchant's configured fallback language — used when all detection signals fail. */
+        defaultReplyLanguage?: string;
     };
 }
 
