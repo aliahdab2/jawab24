@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { Send, Loader2, Sparkles, Zap, Ban, Trash2, AlertTriangle, MessageSquare, MessageCircle, X } from 'lucide-react';
+import { Send, Loader2, Sparkles, Zap, Ban, Trash2, AlertTriangle, MessageSquare, MessageCircle, X, FileText, ChevronDown } from 'lucide-react';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
@@ -31,12 +31,13 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
 
   const [channel, setChannel] = useState<'comment' | 'dm'>('comment');
   const [postContext, setPostContext] = useState('');
+  const [showPostContext, setShowPostContext] = useState(false);
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<TestMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
@@ -44,11 +45,21 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
   useEscapeKey(onClose, true);
   useModalBackHandler(true, onClose);
 
+  // Auto-scroll to bottom when messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, loading]);
+
+  // Auto-focus input on open
+  useEffect(() => {
+    const timer = setTimeout(() => { inputRef.current?.focus(); }, 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   const hasKb = !!(page.knowledgeBase || page.ecommerceStoreId);
+  const hasMessages = messages.length > 0 || loading;
 
   const handleSend = async () => {
     const trimmed = question.trim();
@@ -143,145 +154,181 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
   const modalContent = (
     <div
       className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
+      onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
+      onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
-      <div className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-theme-border flex-shrink-0">
-          <h3 className="text-lg font-bold text-foreground">{t('testSmartReply')}</h3>
+      {/* Dialog: full height on mobile minus a small top gap for bottom-sheet feel */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        style={{ height: 'calc(100% - 2rem)', maxHeight: 'calc(100% - 2rem)' }}
+        onTouchMove={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+      >
+        {/* Compact header with channel toggle */}
+        <div className="flex items-center justify-between px-4 md:px-6 py-2.5 md:py-3 border-b border-theme-border flex-shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <h3 className="text-base font-semibold text-foreground flex-shrink-0">{t('testSmartReply')}</h3>
+            <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg flex-shrink-0">
+              <button
+                onClick={() => setChannel('comment')}
+                className={clsx(
+                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all',
+                  channel === 'comment'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <MessageSquare className="w-3 h-3" />
+                {t('testSmartReplyComment')}
+              </button>
+              <button
+                onClick={() => setChannel('dm')}
+                className={clsx(
+                  'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition-all',
+                  channel === 'dm'
+                    ? 'bg-card text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <MessageCircle className="w-3 h-3" />
+                {t('testSmartReplyDm')}
+              </button>
+            </div>
+          </div>
           <button
             onClick={onClose}
-            className="p-2 -me-2 rounded-xl text-muted-foreground hover:bg-muted hover:text-foreground transition-all"
+            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-4 min-h-0">
-          {/* KB hint */}
-          {!hasKb && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
-              <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0" />
-              <p className="text-sm text-amber-700 dark:text-amber-300">{t('testSmartReplyAddKbHint')}</p>
-            </div>
-          )}
-
-          {/* Channel toggle */}
-          <div className="flex items-center gap-2 p-1 bg-muted rounded-xl w-fit">
-            <button
-              onClick={() => setChannel('comment')}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                channel === 'comment'
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              {t('testSmartReplyComment')}
-            </button>
-            <button
-              onClick={() => setChannel('dm')}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                channel === 'dm'
-                  ? 'bg-card text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              {t('testSmartReplyDm')}
-            </button>
-          </div>
-
-          {/* Post context (comment mode only) */}
-          {channel === 'comment' && (
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">
-                {t('testSmartReplyPostContext')}
-              </label>
-              <textarea
-                dir="auto"
-                value={postContext}
-                onChange={e => setPostContext(e.target.value)}
-                placeholder={t('testSmartReplyPostContextPlaceholder')}
-                maxLength={1000}
-                rows={2}
-                className="w-full px-3 py-2 text-sm bg-background border border-theme-border rounded-xl resize-none placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
-              />
-            </div>
-          )}
-
-          {/* Messages area — grows to fill available space */}
-          <div className="flex-1 flex flex-col gap-3 min-h-[200px]">
-            {messages.length === 0 && !loading && (
-              <p className="text-sm text-muted-foreground text-center py-8">{t('testSmartReplyDescription')}</p>
-            )}
-
-            {messages.map(msg => (
-              <div
-                key={msg.id}
-                className={clsx(
-                  'flex flex-col gap-1 max-w-[85%]',
-                  msg.role === 'user' ? 'self-end items-end' : 'self-start items-start'
-                )}
-              >
-                {/* Dual mode: show nudge (public comment) */}
-                {msg.role === 'assistant' && msg.commentReplyMode === 'dual' && msg.nudgeText && (
-                  <div className="flex flex-col gap-1">
-                    <span className="text-xs font-medium text-muted-foreground">{t('testSmartReplyNudge')}</span>
-                    <div className="px-4 py-2.5 rounded-2xl rounded-ss-sm bg-muted text-sm text-foreground" dir="auto">
-                      {msg.nudgeText}
-                    </div>
-                    <span className="text-xs font-medium text-muted-foreground mt-1">{t('testSmartReplyPrivate')}</span>
-                  </div>
-                )}
-
-                <div
-                  className={clsx(
-                    'px-4 py-2.5 rounded-2xl text-sm',
-                    msg.role === 'user'
-                      ? 'bg-brand-500 text-white rounded-ee-sm'
-                      : 'bg-muted text-foreground rounded-ss-sm'
-                  )}
-                  dir="auto"
-                >
-                  {msg.role === 'assistant' && msg.replyMethod === 'skipped'
-                    ? <span className="italic text-muted-foreground">{t('testSmartReplyNoReply')}</span>
-                    : msg.content}
+        {/* Chat area — takes all remaining space */}
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50 min-h-0">
+          {/* Empty state — centered in the full chat area */}
+          {!hasMessages && (
+            <div className="h-full flex flex-col items-center justify-center gap-3">
+              <div className="w-14 h-14 rounded-2xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center">
+                <Sparkles className="w-7 h-7 text-brand-500" />
+              </div>
+              <p className="text-sm text-muted-foreground text-center max-w-[250px] leading-relaxed">
+                {t('testSmartReplyDescription')}
+              </p>
+              {!hasKb && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-300">{t('testSmartReplyAddKbHint')}</p>
                 </div>
+              )}
+            </div>
+          )}
 
-                {/* Method badge + latency */}
-                {msg.role === 'assistant' && (
-                  <div className="flex items-center gap-2 px-1">
-                    {getMethodBadge(msg.replyMethod)}
-                    {msg.latencyMs != null && (
-                      <span className="text-xs text-muted-foreground">
-                        {t('testSmartReplyResponseTime', { ms: msg.latencyMs })}
-                      </span>
+          {/* Messages — stack from top, auto-scroll keeps latest visible */}
+          {hasMessages && (
+            <div className="flex flex-col gap-3">
+              {messages.map(msg => (
+                <div
+                  key={msg.id}
+                  className={clsx(
+                    'flex flex-col gap-1',
+                    msg.role === 'user' ? 'items-end' : 'items-start'
+                  )}
+                >
+                  {/* Dual mode: show nudge (public comment) */}
+                  {msg.role === 'assistant' && msg.commentReplyMode === 'dual' && msg.nudgeText && (
+                    <div className="flex flex-col gap-1 max-w-[90%] sm:max-w-[85%]">
+                      <span className="text-xs font-medium text-muted-foreground">{t('testSmartReplyNudge')}</span>
+                      <div className="px-4 py-2.5 rounded-2xl rounded-bs-none bg-card text-sm text-foreground border border-theme-border shadow-sm" dir="auto">
+                        {msg.nudgeText}
+                      </div>
+                      <span className="text-xs font-medium text-muted-foreground mt-1">{t('testSmartReplyPrivate')}</span>
+                    </div>
+                  )}
+
+                  <div
+                    className={clsx(
+                      'max-w-[90%] sm:max-w-[85%] px-4 py-2.5 rounded-2xl text-sm shadow-sm',
+                      msg.role === 'user'
+                        ? 'bg-brand-600 text-white rounded-be-none'
+                        : 'bg-card text-foreground border border-theme-border rounded-bs-none'
                     )}
+                    dir="auto"
+                  >
+                    {msg.role === 'assistant' && msg.replyMethod === 'skipped'
+                      ? <span className="italic text-muted-foreground">{t('testSmartReplyNoReply')}</span>
+                      : msg.content}
                   </div>
-                )}
-              </div>
-            ))}
 
-            {loading && (
-              <div className="self-start flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-ss-sm bg-muted text-sm text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                {t('testSmartReplyTesting')}
-              </div>
-            )}
+                  {/* Method badge + latency */}
+                  {msg.role === 'assistant' && (
+                    <div className="flex items-center gap-2 mt-1 text-[10px] font-bold uppercase tracking-tighter">
+                      {getMethodBadge(msg.replyMethod)}
+                      {msg.latencyMs != null && (
+                        <span className="text-muted-foreground">
+                          {t('testSmartReplyResponseTime', { ms: msg.latencyMs })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
 
-            <div ref={messagesEndRef} />
-          </div>
+              {loading && (
+                <div className="flex items-center gap-2 max-w-[90%] sm:max-w-[85%] px-4 py-2.5 rounded-2xl rounded-bs-none bg-card text-sm text-muted-foreground border border-theme-border shadow-sm">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {t('testSmartReplyTesting')}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Fixed footer: error + input + clear */}
-        <div className="border-t border-theme-border p-4 sm:p-5 pb-safe sm:pb-5 flex flex-col gap-3 flex-shrink-0">
+        {/* Fixed footer */}
+        <div className="px-4 pt-3 pb-4 md:px-6 md:pt-4 md:pb-5 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
           {/* Error */}
           {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <p className="text-sm text-red-600 dark:text-red-400 mb-2">{error}</p>
+          )}
+
+          {/* Collapsible post context (comment mode only) */}
+          {channel === 'comment' && (
+            <div className="mb-2">
+              {!showPostContext ? (
+                <button
+                  onClick={() => setShowPostContext(true)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <FileText className="w-3 h-3" />
+                  {t('testSmartReplyAddPostContext')}
+                  <ChevronDown className="w-3 h-3" />
+                </button>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-muted-foreground">{t('testSmartReplyPostContext')}</label>
+                    <button
+                      onClick={() => { setShowPostContext(false); setPostContext(''); }}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  <textarea
+                    dir="auto"
+                    value={postContext}
+                    onChange={e => setPostContext(e.target.value)}
+                    placeholder={t('testSmartReplyPostContextPlaceholder')}
+                    maxLength={1000}
+                    rows={2}
+                    className="w-full px-3 py-2 text-sm bg-background border border-theme-border rounded-xl resize-none placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                    autoFocus
+                  />
+                </div>
+              )}
+            </div>
           )}
 
           {/* Input area */}
@@ -295,19 +342,18 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
               placeholder={t('testSmartReplyPlaceholder')}
               maxLength={500}
               rows={1}
-              className="flex-1 px-4 py-2.5 text-sm bg-background border border-theme-border rounded-xl resize-none placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+              className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+              style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
             />
             <button
               onClick={handleSend}
               disabled={!question.trim() || loading}
-              className={clsx(
-                'p-2.5 rounded-xl transition-all flex-shrink-0',
-                question.trim() && !loading
-                  ? 'bg-brand-500 text-white hover:bg-brand-600 shadow-sm'
-                  : 'bg-muted text-muted-foreground cursor-not-allowed'
-              )}
+              className="flex-shrink-0 w-[42px] h-[42px] rounded-full btn-primary flex items-center justify-center disabled:opacity-40 transition-all"
             >
-              <Send className="w-4 h-4" />
+              {loading
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : <Send className="w-4 h-4" />
+              }
             </button>
           </div>
 
@@ -315,7 +361,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
           {messages.length > 0 && (
             <button
               onClick={handleClear}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors self-center"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mx-auto mt-2"
             >
               <Trash2 className="w-3 h-3" />
               {t('testSmartReplyClear')}
@@ -326,6 +372,5 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
     </div>
   );
 
-  const target = typeof document !== 'undefined' ? document.getElementById('modal-root') : null;
-  return target ? createPortal(modalContent, target) : modalContent;
+  return createPortal(modalContent, document.body);
 }

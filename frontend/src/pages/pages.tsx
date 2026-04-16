@@ -502,9 +502,9 @@ const PagesPage: NextPageWithLayout = () => {
                   </div>
                 </div>
 
-                {/* E-commerce Connected Badge — always rendered to keep card heights equal */}
+                {/* E-commerce Connected Badge — hidden on mobile when no store, invisible on desktop to keep card heights equal */}
                 <div
-                  className={`w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl mb-3 bg-gradient-to-br from-[#96BF48] to-[#5A8A1F] shadow-md ${page.ecommerceStoreId ? 'visible' : 'invisible'}`}
+                  className={`w-full flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl mb-3 bg-gradient-to-br from-[#96BF48] to-[#5A8A1F] shadow-md ${page.ecommerceStoreId ? 'visible' : 'hidden lg:flex lg:invisible'}`}
                   aria-hidden={!page.ecommerceStoreId}
                 >
                   <ShoppingBag className="w-4 h-4 text-white" aria-hidden="true" />
