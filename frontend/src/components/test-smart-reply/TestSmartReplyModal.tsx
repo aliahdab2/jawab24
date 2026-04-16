@@ -29,7 +29,15 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
   const t = useTranslations('pages');
   const [mounted, setMounted] = useState(false);
 
-  const [channel, setChannel] = useState<'comment' | 'dm'>('comment');
+  const [channel, setChannelRaw] = useState<'comment' | 'dm'>('comment');
+  const setChannel = (ch: 'comment' | 'dm') => {
+    if (ch === channel) return;
+    setChannelRaw(ch);
+    setMessages([]);
+    setError(null);
+    setShowPostContext(false);
+    setPostContext('');
+  };
   const [postContext, setPostContext] = useState('');
   const [showPostContext, setShowPostContext] = useState(false);
   const [question, setQuestion] = useState('');
@@ -154,16 +162,13 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
   const modalContent = (
     <div
       className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
-      style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
-      {/* Dialog: full height on mobile minus a small top gap for bottom-sheet feel */}
       <div
         role="dialog"
         aria-modal="true"
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
-        style={{ height: 'calc(100% - 2rem)', maxHeight: 'calc(100% - 2rem)' }}
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -342,8 +347,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
               placeholder={t('testSmartReplyPlaceholder')}
               maxLength={500}
               rows={1}
-              className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
-              style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
+              className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-colors outline-none h-[42px]"
             />
             <button
               onClick={handleSend}
