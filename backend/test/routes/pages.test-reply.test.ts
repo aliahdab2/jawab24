@@ -1,0 +1,213 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fastify from 'fastify';
+import pagesRoutes from '../../src/routes/pages';
+import { pagesService } from '../../src/services/pages';
+
+// Mock services
+vi.mock('../../src/services/pages');
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        canAddPage: vi.fn().mockResolvedValue({ allowed: true }),
+        canEnablePage: vi.fn().mockResolvedValue({ allowed: true }),
+        canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true, limit: 100, used: 5, remaining: 95 }),
+    }
+}));
+vi.mock('../../src/middleware/auth', () => ({
+    authenticate: async (req: any) => {
+        req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
+    }
+}));
+vi.mock('../../src/middleware/workspace', () => ({
+    resolveWorkspace: async (req: any) => {
+        req.workspaceId = 'test_workspace_id';
+        req.workspaceOwnerId = 'test_owner_id';
+        req.workspaceRole = 'owner';
+    },
+    requireRole: () => async () => {},
+}));
+
+vi.mock('../../src/services/reply/generator', () => ({
+    replyGenerator: {
+        setLogger: vi.fn(),
+        generateForPlayground: vi.fn().mockResolvedValue({
+            reply: 'Our prices start from $10.',
+            replyMethod: 'ai',
+            templateName: null,
+            ragMode: 'off',
+            chunksRetrieved: 0,
+            chunks: [],
+            intent: 'PRODUCT_INQUIRY',
+            confidence: 'high',
+            flags: [],
+            needsAttention: false,
+            cached: false,
+            detectedLanguage: 'en',
+            tokensUsed: 150,
+            model: 'gpt-4.1-mini',
+            gapRecorded: false,
+        }),
+    },
+}));
+
+vi.mock('../../src/services/reply/playgroundContext', () => ({
+    buildPlaygroundContext: vi.fn().mockResolvedValue({
+        playgroundInput: { pageId: 'page_1', question: 'test', channel: 'comment' },
+        commentReplyMode: 'public',
+        nudgeText: null,
+    }),
+}));
+
+const mockPage = {
+    id: 'page_1',
+    name: 'Test Page',
+    userId: 'test_user_id',
+    workspaceId: 'test_workspace_id',
+    knowledgeBase: 'We sell products starting from $10.',
+    kbActiveVersion: 1,
+    ecommerceStoreId: null,
+    accessToken: 'tok',
+};
+
+describe('POST /pages/:id/test-reply', () => {
+    let app: any;
+
+    beforeEach(async () => {
+        app = fastify();
+        app.register(pagesRoutes);
+        await app.ready();
+        vi.clearAllMocks();
+
+        vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+    });
+
+    it('should return a stripped reply for valid input', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'What are your prices?', channel: 'comment' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.payload);
+        expect(body.success).toBe(true);
+        expect(body.data.reply).toBe('Our prices start from $10.');
+        expect(body.data.replyMethod).toBe('ai');
+        expect(body.data.latencyMs).toBeTypeOf('number');
+        expect(body.data.commentReplyMode).toBe('public');
+
+        // Verify internal metadata is NOT exposed
+        expect(body.data.chunks).toBeUndefined();
+        expect(body.data.intent).toBeUndefined();
+        expect(body.data.confidence).toBeUndefined();
+        expect(body.data.flags).toBeUndefined();
+        expect(body.data.tokensUsed).toBeUndefined();
+        expect(body.data.model).toBeUndefined();
+        expect(body.data.cached).toBeUndefined();
+        expect(body.data.ragMode).toBeUndefined();
+        expect(body.data.gapRecorded).toBeUndefined();
+    });
+
+    it('should return 400 if question is missing', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: '', channel: 'comment' },
+        });
+
+        expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 if question exceeds 500 chars', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'x'.repeat(501), channel: 'comment' },
+        });
+
+        expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 if channel is invalid', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'test', channel: 'invalid' },
+        });
+
+        expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 404 if page not found', async () => {
+        vi.mocked(pagesService.getPage).mockResolvedValue(null);
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'test', channel: 'comment' },
+        });
+
+        expect(response.statusCode).toBe(404);
+    });
+
+    it('should return 403 if AI quota exceeded', async () => {
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValueOnce({
+            allowed: false,
+            reason: 'Monthly AI reply limit reached',
+            limit: 100,
+            used: 100,
+            remaining: 0,
+        });
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'test', channel: 'comment' },
+        });
+
+        expect(response.statusCode).toBe(403);
+        const body = JSON.parse(response.payload);
+        expect(body.code).toBe('AI_QUOTA_EXCEEDED');
+    });
+
+    it('should accept DM channel', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'Hello, I need help', channel: 'dm' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.payload);
+        expect(body.data.commentReplyMode).toBeNull();
+        expect(body.data.nudgeText).toBeNull();
+    });
+
+    it('should accept optional postMessage for comment mode', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: {
+                question: 'How much?',
+                channel: 'comment',
+                postMessage: 'Check out our new product!',
+            },
+        });
+
+        expect(response.statusCode).toBe(200);
+    });
+
+    it('should return 400 if postMessage exceeds 1000 chars', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: {
+                question: 'test',
+                channel: 'comment',
+                postMessage: 'x'.repeat(1001),
+            },
+        });
+
+        expect(response.statusCode).toBe(400);
+    });
+});

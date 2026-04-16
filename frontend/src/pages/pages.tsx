@@ -21,7 +21,8 @@ import {
   ExternalLink,
   AlertTriangle,
   LinkIcon,
-  Info
+  Info,
+  FlaskConical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
@@ -29,6 +30,7 @@ import type { Page } from '@jawab24/shared';
 import dynamic from 'next/dynamic';
 
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
+const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { captureError } from '@/lib/sentryHelpers';
 import type { ApiError } from '@/lib/api-utils';
 import { useWorkspaceRole } from '@/hooks';
@@ -55,6 +57,7 @@ const PagesPage: NextPageWithLayout = () => {
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
+  const [testSmartReplyPage, setTestSmartReplyPage] = useState<Page | null>(null);
 
   // ESC key handled inside KnowledgeBaseModal
 
@@ -541,6 +544,27 @@ const PagesPage: NextPageWithLayout = () => {
                 </button>
               </div>
 
+              {/* Test Smart Reply */}
+              <div className="px-6 landscape:px-4">
+                <button
+                  onClick={() => setTestSmartReplyPage(page)}
+                  className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400 transition-colors">
+                        <FlaskConical className="w-5 h-5" />
+                      </div>
+                      <div className="text-start">
+                        <p className="text-sm font-bold text-foreground/70">{t('testSmartReply')}</p>
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-tight mt-0.5">{t('testSmartReplyDescription')}</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />
+                  </div>
+                </button>
+              </div>
+
               {/* Status Footer */}
               <div className="px-6 py-4 bg-background/50 border-t border-theme-border flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -630,6 +654,11 @@ const PagesPage: NextPageWithLayout = () => {
           saving={saving}
           saved={saved}
         />
+      )}
+
+      {/* Test Smart Reply Modal */}
+      {testSmartReplyPage && (
+        <TestSmartReplyModal page={testSmartReplyPage} onClose={() => setTestSmartReplyPage(null)} />
       )}
 
       {/* Connect Page confirmation dialog */}

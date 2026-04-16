@@ -19,6 +19,15 @@ vi.mock('../../src/config', () => ({
             port: 6379,
             password: undefined,
         },
+        circuitBreaker: {
+            failureThreshold: 5,
+            openDurationSeconds: 30,
+        },
+        ai: {
+            model: 'gpt-4.1-mini',
+            workerUrl: 'http://localhost:3002',
+        },
+        ragMode: 'off',
     },
 }));
 

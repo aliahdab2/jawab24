@@ -33,6 +33,15 @@ export default async function pagesRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, pagesController.getKbGaps);
+
+        readRoutes.post('/pages/:id/test-reply', {
+            schema: {
+                tags: ['Pages'],
+                summary: 'Test smart reply generation for a page',
+                security: auth,
+            },
+            config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+        }, pagesController.testReply);
     });
 
     // --- Write: admin+ only ---

@@ -2,15 +2,11 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends } from '../db/schema';
-import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../services/ecommerce';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
 import { replyGenerator } from '../services/reply/generator';
-import type { PlaygroundInput } from '../services/reply/generator';
-import { pickNudgeVariation } from '../services/reply/nudge';
-import { settingsService } from '../services/settings';
-import { detectLanguageCode } from '../utils/language';
+import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 import { config } from '../config';
 import { emailService } from '../services/email';
 import { waitlistEmailTemplate } from '../utils/emailTemplates';
@@ -844,64 +840,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     return reply.status(404).send({ success: false, error: 'Page not found' });
                 }
 
-                // 1b. Fetch page owner's reply mode settings
-                let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
-                let nudgeText: string | null = null;
-                if (page.userId) {
-                    try {
-                        const ownerSettings = await settingsService.getSettings(page.userId);
-                        commentReplyMode = ownerSettings.commentReplyMode || 'public';
-                        if (commentReplyMode === 'dual') {
-                            const qLang = detectLanguageCode(question);
-                            nudgeText = pickNudgeVariation(
-                                ownerSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined,
-                                qLang,
-                            );
-                        }
-                    } catch {
-                        // Non-critical — fall back to defaults
-                    }
-                }
-
-                // 2. Enrich KB with e-commerce product/policy data
-                let pageKB = page.knowledgeBase || undefined;
-                let storePolicies: string | undefined;
-                let productCatalog: string | undefined;
-                if (page.ecommerceStoreId) {
-                    try {
-                        pageKB = await getEnrichedKnowledgeBase(pageKB, page.ecommerceStoreId);
-                        const storeCtx = await getStoreContextForAI(page.ecommerceStoreId);
-                        storePolicies = storeCtx.storePolicies;
-                        productCatalog = storeCtx.productCatalog;
-                    } catch {
-                        // Non-critical — fall back to raw KB
-                    }
-                }
-
-                // 3. When comment mode is dual or private, use DM channel for detailed AI reply
-                const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
-                    ? 'dm'
-                    : channel;
+                // 1b–3. Build playground context (shared helper)
+                const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
+                    page, question, channel, postMessage,
+                    conversationHistory, replyStyle, brandVoiceNotes, customerContext, model,
+                });
 
                 // 4. Delegate to replyGenerator — single source of truth for the pipeline
-                const playgroundInput: PlaygroundInput = {
-                    pageId,
-                    userId: page.userId ?? undefined,
-                    workspaceId: page.workspaceId,
-                    question,
-                    channel: effectiveChannel,
-                    knowledgeBase: pageKB,
-                    kbActiveVersion: page.kbActiveVersion,
-                    pageName: page.name ?? undefined,
-                    productCatalog,
-                    storePolicies,
-                    postMessage: channel === 'comment' ? postMessage : undefined,
-                    conversationHistory: channel === 'dm' ? conversationHistory : undefined,
-                    replyStyle,
-                    brandVoiceNotes,
-                    customerContext,
-                    model,
-                };
                 replyGenerator.setLogger(request.log);
                 const result = await replyGenerator.generateForPlayground(playgroundInput);
 

@@ -8,6 +8,8 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
 import { authService } from '../services/auth';
 import { BusinessProfileSchema, validateSchema } from '../utils/validation';
+import { replyGenerator } from '../services/reply/generator';
+import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 
 /** Add isConnected flag and strip accessToken from page response */
 function serializePage<T extends { accessToken?: string | null }>(page: T) {
@@ -323,6 +325,78 @@ export class PagesController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to dismiss KB gap' });
+        }
+    }
+
+    /**
+     * Test smart reply generation for a page
+     * POST /pages/:id/test-reply
+     */
+    async testReply(request: FastifyRequest<{ Params: { id: string }; Body: { question: string; channel: 'comment' | 'dm'; postMessage?: string } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { workspaceOwnerId } = req;
+        const { id } = request.params;
+        const { question, channel, postMessage } = request.body;
+        const startTime = Date.now();
+
+        // 1. Validate input
+        if (!question?.trim()) {
+            return reply.status(400).send({ error: 'question is required' });
+        }
+        if (question.length > 500) {
+            return reply.status(400).send({ error: 'question must be 500 characters or less' });
+        }
+        if (channel !== 'comment' && channel !== 'dm') {
+            return reply.status(400).send({ error: 'channel must be "comment" or "dm"' });
+        }
+        if (postMessage && postMessage.length > 1000) {
+            return reply.status(400).send({ error: 'postMessage must be 1000 characters or less' });
+        }
+
+        // 2. Check AI quota
+        const quotaCheck = await subscriptionsService.canUseAiReplies(workspaceOwnerId);
+        if (!quotaCheck.allowed) {
+            return reply.status(403).send({
+                error: quotaCheck.reason || 'AI reply limit reached',
+                code: 'AI_QUOTA_EXCEEDED',
+                limit: quotaCheck.limit,
+                used: quotaCheck.used,
+            });
+        }
+
+        try {
+            // 3. Fetch page (workspace-scoped — tenant isolation)
+            const page = await pagesService.getPage(req.workspaceId, id);
+            if (!page) {
+                return reply.status(404).send({ error: 'Page not found' });
+            }
+
+            // 4–6. Build playground context (shared with admin playground)
+            const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
+                page, question, channel, postMessage,
+            });
+
+            // 7. Generate reply via the same pipeline as production
+            replyGenerator.setLogger(request.log);
+            const result = await replyGenerator.generateForPlayground(playgroundInput);
+
+            // 8. Strip internal metadata — return only customer-safe fields
+            return reply.send({
+                success: true,
+                data: {
+                    reply: result.reply,
+                    replyMethod: result.replyMethod,
+                    latencyMs: Date.now() - startTime,
+                    commentReplyMode: channel === 'comment' ? commentReplyMode : null,
+                    nudgeText: channel === 'comment' ? nudgeText : null,
+                },
+            });
+        } catch (error) {
+            request.log.error(error, 'Test smart reply failed');
+            return reply.status(500).send({ error: 'Failed to generate reply' });
         }
     }
 }

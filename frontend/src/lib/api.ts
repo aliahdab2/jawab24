@@ -140,6 +140,8 @@ export const pagesApi = {
   sync: () => api.post('/pages/sync'),
   getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
   dismissGap: (pageId: string, gapId: string) => api.post(`/pages/${pageId}/kb-gaps/${gapId}/dismiss`),
+  testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string }) =>
+    api.post(`/pages/${pageId}/test-reply`, data),
 };
 
 // Posts API
