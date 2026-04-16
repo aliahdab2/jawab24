@@ -420,42 +420,33 @@ export class OpenAIService {
 
     /**
      * Build messages array including conversation history, trimmed to token budget.
-     * When history > 8 messages, older messages (all except the last 4) are compressed
-     * into a short summary line to preserve context while saving tokens.
+     *
+     * History is forwarded verbatim — we used to keyword-compress older turns to save
+     * tokens, but that made the bot re-ask for customer-provided data (names, phones,
+     * etc.) because compression destroyed the structural context. For realistic
+     * conversation lengths, even long WhatsApp threads up to ~500 turns, token cost
+     * stays well under the 24k cap. The trim-oldest loop further down is the sole
+     * safety net for the rare extreme case.
      */
     buildMessages(request: GenerateRequest, systemPrompt: string): { messages: OpenAI.ChatCompletionMessageParam[]; tokenInfo: TokenInfo } {
         const messages: OpenAI.ChatCompletionMessageParam[] = [
             { role: 'system', content: systemPrompt },
         ];
 
-        // Collect history messages separately so we can trim them
+        // Conversation history flows through verbatim — preserves the natural
+        // alternating user/assistant rhythm GPT expects. We used to compress older
+        // turns to save tokens, but compression (any form — keyword summary, per-turn
+        // injection, or bundled summary) confused GPT into re-asking for data the
+        // customer already provided. For realistic conversation lengths (even long
+        // WhatsApp threads up to ~500 turns), token cost stays well under the 24k cap.
+        // The trim-oldest loop below is the sole safety net for extreme cases.
         const historyMessages: OpenAI.ChatCompletionMessageParam[] = [];
         if (request.context?.conversationHistory && request.context.conversationHistory.length > 0) {
-            const history = request.context.conversationHistory;
-            const COMPRESS_THRESHOLD = 8;
-            const KEEP_RECENT = 4;
-
-            if (history.length > COMPRESS_THRESHOLD) {
-                // Compress older messages into a summary, keep last 4 verbatim
-                const olderMessages = history.slice(0, history.length - KEEP_RECENT);
-                const recentMessages = history.slice(history.length - KEEP_RECENT);
-
-                const summary = this.compressHistory(olderMessages);
-                historyMessages.push({ role: 'user', content: summary });
-
-                for (const msg of recentMessages) {
-                    historyMessages.push({
-                        role: msg.role === 'user' ? 'user' : 'assistant',
-                        content: msg.content,
-                    });
-                }
-            } else {
-                for (const msg of history) {
-                    historyMessages.push({
-                        role: msg.role === 'user' ? 'user' : 'assistant',
-                        content: msg.content,
-                    });
-                }
+            for (const msg of request.context.conversationHistory) {
+                historyMessages.push({
+                    role: msg.role === 'user' ? 'user' : 'assistant',
+                    content: msg.content,
+                });
             }
         }
 
@@ -635,43 +626,6 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         }
 
         return prompt;
-    }
-
-    /**
-     * Compress older conversation messages into a brief summary line.
-     * Extracts key topics from user messages and summarizes assistant responses.
-     * This is a local text heuristic — no LLM call.
-     */
-    private compressHistory(messages: ConversationMessage[]): string {
-        const userTopics: string[] = [];
-        const assistantTopics: string[] = [];
-
-        for (const msg of messages) {
-            // Extract meaningful words (3+ chars, skip common stop words)
-            const words = msg.content
-                .replace(/[^\w\u0600-\u06FF\s]/g, ' ')
-                .split(/\s+/)
-                .filter(w => w.length >= 3);
-
-            // Take up to 5 key words per message as topic indicators
-            const keywords = words.slice(0, 5).join(', ');
-            if (!keywords) continue;
-
-            if (msg.role === 'user') {
-                userTopics.push(keywords);
-            } else {
-                assistantTopics.push(keywords);
-            }
-        }
-
-        const userPart = userTopics.length > 0
-            ? `customer asked about: ${userTopics.join('; ')}`
-            : 'customer sent messages';
-        const assistantPart = assistantTopics.length > 0
-            ? `You responded about: ${assistantTopics.join('; ')}`
-            : '';
-
-        return `[Earlier conversation summary] ${userPart}. ${assistantPart}`.trim();
     }
 
     /**
