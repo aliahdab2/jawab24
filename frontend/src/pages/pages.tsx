@@ -545,7 +545,7 @@ const PagesPage: NextPageWithLayout = () => {
               </div>
 
               {/* Test Smart Reply */}
-              <div className="px-6 landscape:px-4">
+              <div className="px-6 landscape:px-4 pb-4 landscape:pb-3">
                 <button
                   onClick={() => setTestSmartReplyPage(page)}
                   className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
