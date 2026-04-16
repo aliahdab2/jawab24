@@ -233,7 +233,17 @@ export class ReplyGenerator {
         // Both @mentions and URLs contain Latin chars that pollute language detection
         // (e.g. "@Ali Ahdab" or "https://example.com" on an Arabic page → incorrectly 'en').
         // They also carry no message content the AI should respond to.
+        const hadMention = /@[\w\u0600-\u06FF]/.test(text);
         const commentForAI = this.stripCommentNoise(text);
+
+        // Friend-tagging: "@Ali check this" → after stripping = "check this" (≤3 words).
+        // The person is talking to their friend, not to the page. Skip silently.
+        if (hadMention && commentForAI) {
+            const wordCount = commentForAI.split(/\s+/).filter(w => w.length > 0).length;
+            if (wordCount <= 3) {
+                return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
+            }
+        }
 
         // Punctuation/emoji-only comment (dots, emojis, symbols) with no post context = spam.
         // If postMessage is present, pass to AI — it has the full post text to judge whether
@@ -536,10 +546,15 @@ export class ReplyGenerator {
         // 2. For comments: strip noise, check for spam, detect language with postMessage fallback
         let questionForAI = question;
         if (channel === 'comment') {
+            const hadMentionPG = /@[\w\u0600-\u06FF]/.test(question);
             questionForAI = this.stripCommentNoise(question);
             const isEmptyQ = !questionForAI;
             const isPunctuationQ = questionForAI ? this.isPunctuationOnly(questionForAI) : false;
-            if (isEmptyQ || (isPunctuationQ && !postMessage)) {
+
+            // Friend-tagging: "@Ali check this" → stripped = "check this" (≤3 words). Skip.
+            const isFriendTag = hadMentionPG && questionForAI && questionForAI.split(/\s+/).filter(w => w.length > 0).length <= 3;
+
+            if (isEmptyQ || (isPunctuationQ && !postMessage) || isFriendTag) {
                 return {
                     reply: null, replyMethod: 'skipped', templateName: null, ragMode,
                     chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
