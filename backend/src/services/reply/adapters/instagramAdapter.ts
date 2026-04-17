@@ -1,6 +1,6 @@
 import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
-import { messagesService } from '../../messages';
+import { conversationsService } from '../../conversations';
 import { fbAxios, GRAPH_API_BASE } from '../../../lib/fbAxios';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied, fetchNameFromConversationsApi } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
@@ -24,10 +24,10 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
     }
 
     async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined> {
-        // 1. Check DB first: reuse name from a previous message
+        // 1. Canonical source: conversations table
         if (pageId) {
-            const cached = await messagesService.getSenderNameBySenderId(pageId, senderId);
-            if (cached) return cached;
+            const canonical = await conversationsService.getSenderName(pageId, senderId);
+            if (canonical) return canonical;
         }
 
         // 2. Call Instagram Graph API to get sender profile
@@ -36,15 +36,20 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
                 params: { fields: 'name,username', access_token: accessToken },
             });
             const name = res.data.username || res.data.name;
-            if (name) return name;
+            if (name) {
+                if (pageId) conversationsService.setSenderName(pageId, senderId, name).catch(() => {});
+                return name;
+            }
         } catch {
             // fall through to conversations API fallback
         }
 
-        // 3. Fallback: Conversations API — returns participant names even when direct lookup is restricted
+        // 3. Fallback: Graph Conversations API — returns participant names even when direct lookup is restricted
         if (platformPageId) {
             try {
-                return await fetchNameFromConversationsApi(platformPageId, senderId, accessToken, 'instagram');
+                const name = await fetchNameFromConversationsApi(platformPageId, senderId, accessToken, 'instagram');
+                if (name && pageId) conversationsService.setSenderName(pageId, senderId, name).catch(() => {});
+                return name;
             } catch {
                 // Both approaches failed — return undefined
             }

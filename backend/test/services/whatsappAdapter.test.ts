@@ -9,9 +9,15 @@ vi.mock('../../src/services/pages', () => ({
 
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
-        getSenderNameBySenderId: vi.fn(),
         findOrCreateFromWebhook: vi.fn(),
         markAsReplied: vi.fn(),
+    },
+}));
+
+vi.mock('../../src/services/conversations', () => ({
+    conversationsService: {
+        getSenderName: vi.fn(),
+        setSenderName: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -23,6 +29,7 @@ vi.mock('../../src/services/whatsapp', () => ({
 
 import { pagesService } from '../../src/services/pages';
 import { messagesService } from '../../src/services/messages';
+import { conversationsService } from '../../src/services/conversations';
 import { whatsappService } from '../../src/services/whatsapp';
 
 const mockDbPage = {
@@ -97,16 +104,16 @@ describe('WhatsAppMessageAdapter.fetchSenderName', () => {
     beforeEach(() => vi.clearAllMocks());
 
     it('returns cached name from DB when pageId provided', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue('أحمد محمد');
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue('أحمد محمد');
 
         const name = await adapter.fetchSenderName('+966500000000', 'token', 'page-uuid');
 
         expect(name).toBe('أحمد محمد');
-        expect(messagesService.getSenderNameBySenderId).toHaveBeenCalledWith('page-uuid', '+966500000000');
+        expect(conversationsService.getSenderName).toHaveBeenCalledWith('page-uuid', '+966500000000');
     });
 
     it('returns undefined when no cached name and no profile API', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
 
         const name = await adapter.fetchSenderName('+966500000000', 'token', 'page-uuid');
 
@@ -117,7 +124,7 @@ describe('WhatsAppMessageAdapter.fetchSenderName', () => {
         const name = await adapter.fetchSenderName('+966500000000', 'token');
 
         expect(name).toBeUndefined();
-        expect(messagesService.getSenderNameBySenderId).not.toHaveBeenCalled();
+        expect(conversationsService.getSenderName).not.toHaveBeenCalled();
     });
 });
 

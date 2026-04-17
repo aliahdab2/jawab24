@@ -6,9 +6,10 @@ vi.mock('../services/pages', () => ({
     },
 }));
 
-vi.mock('../services/messages', () => ({
-    messagesService: {
-        getSenderNameBySenderId: vi.fn(),
+vi.mock('../services/conversations', () => ({
+    conversationsService: {
+        getSenderName: vi.fn(),
+        setSenderName: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -27,7 +28,7 @@ vi.mock('../lib/redis', () => ({
 
 import { facebookMessageAdapter } from '../services/reply/adapters/facebookAdapter';
 import { pagesService } from '../services/pages';
-import { messagesService } from '../services/messages';
+import { conversationsService } from '../services/conversations';
 import { facebookService } from '../services/facebook';
 
 const mockDbPage = {
@@ -46,7 +47,7 @@ const mockDbPage = {
 
 beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+    vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
 });
 
 describe('facebookMessageAdapter.getPage', () => {
@@ -119,7 +120,7 @@ describe('facebookMessageAdapter.fetchSenderName — Conversations API fallback'
     });
 
     it('returns cached DB name without calling getSenderProfile', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue('Cached Name');
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue('Cached Name');
 
         const name = await facebookMessageAdapter.fetchSenderName(
             'sender-psid',

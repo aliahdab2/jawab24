@@ -327,12 +327,38 @@ export const settings = pgTable('settings', {
 });
 
 // 10. Messages Table (for storing DMs - Facebook & Instagram)
+// Conversations Table — canonical source of truth for per-sender state on a page.
+// A conversation is one thread between a page and a single platform user (sender_id).
+// Today only sender_name lives here; future conversation-level fields (last_message_at,
+// resolved, unread_count, assignee, labels, etc.) migrate here incrementally.
+// See docs/comment-and-message-handling.md → "Conversations normalization".
+export const conversations = pgTable('conversations', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
+    senderId: varchar('sender_id', { length: 255 }).notNull(),
+    platform: varchar('platform', { length: 20 }).notNull(), // 'facebook' | 'instagram' | 'whatsapp'
+    senderName: varchar('sender_name', { length: 255 }),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => {
+    return {
+        // Unique constraint — one conversation per (page, sender). Enables ON CONFLICT upsert.
+        pageSenderUnique: uniqueIndex('uq_conversations_page_sender').on(table.pageId, table.senderId),
+        pageIdIdx: index('idx_conversations_page_id').on(table.pageId),
+    };
+});
+
 export const messages = pgTable('messages', {
     id: uuid('id').defaultRandom().primaryKey(),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }),
+    // FK to conversations. Nullable during Tier A transition — will be NOT NULL after
+    // backfill + a safety period (Tier B/C). New writes always set it.
+    conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
     platformMessageId: varchar('platform_message_id', { length: 255 }).notNull(),
     platform: varchar('platform', { length: 20 }).default('facebook'), // 'facebook' or 'instagram'
     senderId: varchar('sender_id', { length: 255 }).notNull(),
+    // Legacy denormalized copy of conversations.sender_name. Kept during Tier A transition
+    // as a fallback; dropped in Tier B/C once all callers read from the conversation.
     senderName: varchar('sender_name', { length: 255 }),
     message: text('message').notNull(),
     direction: varchar('direction', { length: 10 }).default('incoming'), // 'incoming' or 'outgoing'
@@ -352,6 +378,7 @@ export const messages = pgTable('messages', {
 }, (table) => {
     return {
         pageIdIdx: index('idx_messages_page_id').on(table.pageId),
+        conversationIdIdx: index('idx_messages_conversation_id').on(table.conversationId),
         senderIdIdx: index('idx_messages_sender_id').on(table.senderId),
         platformMessageIdIdx: index('idx_messages_platform_message_id').on(table.platformMessageId),
         directionIdx: index('idx_messages_direction').on(table.direction),

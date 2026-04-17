@@ -1,9 +1,10 @@
 import { eq, desc, asc, and, or, sql, ne, isNotNull, count, max } from 'drizzle-orm';
 import { db } from '../db';
-import { messages, pages } from '../db/schema';
+import { messages, pages, conversations } from '../db/schema';
 import { ConversationMessage } from '../types';
 import { Message } from '@jawab24/shared';
 import { conversationPauseService } from './conversationPause';
+import { conversationsService, type Platform } from './conversations';
 
 /** DB connection or transaction — methods accepting this can participate in a transaction. */
 type DbConn = typeof db;
@@ -102,58 +103,89 @@ export class MessagesService {
             }
         }
 
-        const result = await db.query.messages.findMany({
-            where: and(...conditions),
-            orderBy: [desc(messages.createdAt)],
-            limit: limit + 1,
-        });
+        // LEFT JOIN conversations so we surface the canonical sender_name. COALESCE
+        // against the legacy per-message column keeps things working during the Tier A
+        // transition even if a row isn't yet linked (pre-backfill / partial migration).
+        const rows = await db
+            .select({
+                msg: messages,
+                convSenderName: conversations.senderName,
+            })
+            .from(messages)
+            .leftJoin(conversations, eq(messages.conversationId, conversations.id))
+            .where(and(...conditions))
+            .orderBy(desc(messages.createdAt))
+            .limit(limit + 1);
 
-        const hasMore = result.length > limit;
-        const data = hasMore ? result.slice(0, limit) : result;
-        const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : null;
+        const hasMore = rows.length > limit;
+        const data = hasMore ? rows.slice(0, limit) : rows;
+        const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].msg.id : null;
 
         return {
-            data: data.map(this.mapToMessage),
+            data: data.map(r => this.mapJoinedToMessage(r.msg, r.convSenderName)),
             pagination: { hasMore, nextCursor, limit }
         };
     }
 
     /**
-     * Get messages for a specific page
+     * Get messages for a specific page (with conversation sender_name hydrated)
      */
     async getMessagesByPage(pageId: string, limit: number = 50): Promise<Message[]> {
-        const result = await db.query.messages.findMany({
-            where: eq(messages.pageId, pageId),
-            orderBy: [desc(messages.createdAt)],
-            limit,
-        });
+        const rows = await db
+            .select({
+                msg: messages,
+                convSenderName: conversations.senderName,
+            })
+            .from(messages)
+            .leftJoin(conversations, eq(messages.conversationId, conversations.id))
+            .where(eq(messages.pageId, pageId))
+            .orderBy(desc(messages.createdAt))
+            .limit(limit);
 
-        return result.map(this.mapToMessage);
+        return rows.map(r => this.mapJoinedToMessage(r.msg, r.convSenderName));
     }
 
     /**
-     * Get conversation with a specific sender
+     * Get conversation with a specific sender (with canonical sender_name)
      */
     async getConversation(pageId: string, senderId: string, limit: number = 50): Promise<Message[]> {
-        const result = await db.query.messages.findMany({
-            where: and(
+        const rows = await db
+            .select({
+                msg: messages,
+                convSenderName: conversations.senderName,
+            })
+            .from(messages)
+            .leftJoin(conversations, eq(messages.conversationId, conversations.id))
+            .where(and(
                 eq(messages.pageId, pageId),
-                eq(messages.senderId, senderId)
-            ),
-            orderBy: [desc(messages.createdAt)],
-            limit,
-        });
+                eq(messages.senderId, senderId),
+            ))
+            .orderBy(desc(messages.createdAt))
+            .limit(limit);
 
-        return result.map(this.mapToMessage);
+        return rows.map(r => this.mapJoinedToMessage(r.msg, r.convSenderName));
     }
 
     /**
-     * Create a new message record
+     * Create a new message record.
+     *
+     * Also upserts a conversation row for (pageId, senderId) and links the message
+     * to it via conversation_id. The conversation is the canonical source of truth
+     * for senderName — see docs/comment-and-message-handling.md → "Conversations".
+     *
+     * senderName is still written onto the message row as a legacy fallback during
+     * the Tier A transition period; Tier B/C will drop that column.
      */
     async createMessage(data: CreateMessageDTO): Promise<Message> {
+        const platform: Platform = (data.platform as Platform) || 'facebook';
+        const conversation = await conversationsService.findOrCreate(
+            data.pageId, data.senderId, platform, data.senderName,
+        );
+
         const [newMessage] = await db.insert(messages)
             .values({
                 pageId: data.pageId,
+                conversationId: conversation.id,
                 platformMessageId: data.platformMessageId,
                 senderId: data.senderId,
                 senderName: data.senderName,
@@ -318,10 +350,13 @@ export class MessagesService {
     /**
      * Store outgoing reply as a message.
      *
-     * Also copies the last known senderName for this (pageId, senderId) onto the
-     * outgoing row. Without this, conversation grouping in the UI shows "Unknown
-     * User" whenever a sender has only outgoing messages in the current fetch page
-     * (the frontend groups by senderId and picks the first non-null name it sees).
+     * Looks up (or creates) the conversation for (pageId, senderId) and links the
+     * message to it via conversation_id. The conversation carries the canonical
+     * senderName — we copy it onto the message row too for legacy-compat during
+     * Tier A; Tier B/C drops that duplication.
+     *
+     * Without this, the UI's conversation grouping used to show "Unknown User" for
+     * senders whose recent fetch page contained only outgoing messages.
      */
     async storeOutgoingMessage(
         pageId: string,
@@ -330,14 +365,21 @@ export class MessagesService {
         replyMethod: 'template' | 'ai' | 'manual',
         conn: DbConn = db,
     ): Promise<Message> {
-        const senderName = await this.getSenderNameBySenderId(pageId, senderId);
+        // Platform unknown in this call — inherit from existing conversation if present,
+        // default to 'facebook' otherwise. This is safe because we never overwrite the
+        // platform of an existing conversation via findOrCreate.
+        const existing = await conversationsService.findByPageAndSender(pageId, senderId);
+        const platform: Platform = existing?.platform ?? 'facebook';
+        const senderName = existing?.senderName ?? await this.getSenderNameBySenderId(pageId, senderId);
+        const conversation = await conversationsService.findOrCreate(pageId, senderId, platform, senderName);
 
         const [newMessage] = await conn.insert(messages)
             .values({
                 pageId,
+                conversationId: conversation.id,
                 platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 senderId,
-                ...(senderName ? { senderName } : {}),
+                ...(conversation.senderName ? { senderName: conversation.senderName } : {}),
                 message: replyText,
                 direction: 'outgoing',
                 replied: true,
@@ -718,6 +760,14 @@ export class MessagesService {
     /**
      * Map database record to Message interface
      */
+    /**
+     * Map a row that already carries a joined conversations.sender_name, preferring
+     * that value (canonical source) and falling back to the denormalized message column.
+     */
+    private mapJoinedToMessage(record: typeof messages.$inferSelect, convSenderName: string | null): Message {
+        return this.mapToMessage({ ...record, senderName: convSenderName ?? record.senderName });
+    }
+
     private mapToMessage(record: typeof messages.$inferSelect): Message {
         return {
             id: record.id,

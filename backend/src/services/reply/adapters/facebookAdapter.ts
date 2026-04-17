@@ -1,6 +1,6 @@
 import { pagesService } from '../../pages';
 import { facebookService } from '../../facebook';
-import { messagesService } from '../../messages';
+import { conversationsService } from '../../conversations';
 import { redis } from '../../../lib/redis';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
@@ -27,16 +27,20 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
     }
 
     async fetchSenderName(senderId: string, accessToken: string, pageId?: string, platformPageId?: string): Promise<string | undefined> {
-        // 1. Check DB first: reuse name from a previous message with this sender
+        // 1. Canonical source: conversations table
         if (pageId) {
-            const cached = await messagesService.getSenderNameBySenderId(pageId, senderId);
-            if (cached) return cached;
+            const canonical = await conversationsService.getSenderName(pageId, senderId);
+            if (canonical) return canonical;
         }
 
-        // 2. Check Redis cache (avoids Facebook API call for recently-looked-up senders)
+        // 2. Redis cache (avoids Facebook API call for recently-looked-up senders)
         try {
             const redisCached = await redis.get(senderNameCacheKey(senderId));
-            if (redisCached) return redisCached;
+            if (redisCached) {
+                // Keep the canonical store in sync when we learn a name via cache
+                if (pageId) conversationsService.setSenderName(pageId, senderId, redisCached).catch(() => {});
+                return redisCached;
+            }
         } catch {
             // Redis unavailable — fall through
         }
@@ -47,6 +51,7 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
             const name = profile?.name;
             if (name) {
                 redis.set(senderNameCacheKey(senderId), name, 'EX', SENDER_NAME_CACHE_TTL).catch(() => {});
+                if (pageId) conversationsService.setSenderName(pageId, senderId, name).catch(() => {});
             }
             return name;
         } catch {

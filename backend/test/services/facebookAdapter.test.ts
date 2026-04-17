@@ -10,12 +10,19 @@ vi.mock('../../src/services/facebook', () => ({
     },
 }));
 
-// Mock messages service DB cache
+// Mock messages service (used for markAsReplied / findOrCreateFromWebhook in other tests)
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
-        getSenderNameBySenderId: vi.fn(),
         findOrCreateFromWebhook: vi.fn(),
         markAsReplied: vi.fn(),
+    },
+}));
+
+// Mock conversations service — the canonical source for sender names.
+vi.mock('../../src/services/conversations', () => ({
+    conversationsService: {
+        getSenderName: vi.fn(),
+        setSenderName: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -28,7 +35,7 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 
 import { facebookService } from '../../src/services/facebook';
-import { messagesService } from '../../src/services/messages';
+import { conversationsService } from '../../src/services/conversations';
 import { redis } from '../../src/lib/redis';
 
 describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
@@ -43,7 +50,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('returns name from Facebook API on cache miss', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'Ali Ahdab' });
 
         const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID, FB_PAGE_ID);
@@ -53,7 +60,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('returns undefined when Facebook API returns null (both APIs failed)', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(facebookService.getSenderProfile).mockResolvedValue(null);
 
         const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
@@ -62,7 +69,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('returns undefined when Facebook API throws', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(facebookService.getSenderProfile).mockRejectedValue(new Error('Network error'));
 
         const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
@@ -71,7 +78,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('skips API call and returns cached name immediately', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue('Cached Name');
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue('Cached Name');
 
         const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
 
@@ -86,13 +93,13 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
 
         expect(name).toBe('No Cache Name');
         // getSenderNameBySenderId should NOT be called (no pageId)
-        expect(messagesService.getSenderNameBySenderId).not.toHaveBeenCalled();
+        expect(conversationsService.getSenderName).not.toHaveBeenCalled();
         // getSenderProfile called without pageId (no Conversations API fallback)
         expect(facebookService.getSenderProfile).toHaveBeenCalledWith(SENDER_ID, ACCESS_TOKEN, undefined);
     });
 
     it('returns name from Redis cache on DB miss (skips Facebook API)', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(redis.get).mockResolvedValue('Redis Cached Name');
 
         const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
@@ -103,7 +110,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('writes name to Redis after Facebook API fetch', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(redis.get).mockResolvedValue(null);
         vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'From API' });
 
@@ -116,7 +123,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('falls through to API when Redis throws', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(redis.get).mockRejectedValue(new Error('Redis down'));
         vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'Fallback API' });
 
@@ -127,7 +134,7 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('passes platformPageId (not internal pageId) to getSenderProfile for Conversations API', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'Via Conversations API' });
 
         const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID, FB_PAGE_ID);
@@ -139,13 +146,13 @@ describe('FacebookMessageAdapter.fetchSenderName — API path', () => {
     });
 
     it('uses internal pageId for DB cache but platformPageId for API', async () => {
-        vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+        vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
         vi.mocked(facebookService.getSenderProfile).mockResolvedValue({ name: 'API Name' });
 
         await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID, FB_PAGE_ID);
 
         // DB lookup uses internal pageId
-        expect(messagesService.getSenderNameBySenderId).toHaveBeenCalledWith(PAGE_ID, SENDER_ID);
+        expect(conversationsService.getSenderName).toHaveBeenCalledWith(PAGE_ID, SENDER_ID);
         // Facebook API uses platformPageId
         expect(facebookService.getSenderProfile).toHaveBeenCalledWith(SENDER_ID, ACCESS_TOKEN, FB_PAGE_ID);
     });

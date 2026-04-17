@@ -26,12 +26,19 @@ vi.mock('../../src/services/instagram', () => ({
     },
 }));
 
-// Mock messages service
+// Mock messages service (used for markAsReplied / findOrCreateFromWebhook)
 vi.mock('../../src/services/messages', () => ({
     messagesService: {
-        getSenderNameBySenderId: vi.fn(),
         markAsReplied: vi.fn(),
         findOrCreateFromWebhook: vi.fn(),
+    },
+}));
+
+// Mock conversations service — canonical sender-name store.
+vi.mock('../../src/services/conversations', () => ({
+    conversationsService: {
+        getSenderName: vi.fn(),
+        setSenderName: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -39,6 +46,7 @@ const mockedAxios = vi.mocked(axios, true);
 
 import { InstagramMessageAdapter } from '../../src/services/reply/adapters/instagramAdapter';
 import { messagesService } from '../../src/services/messages';
+import { conversationsService } from '../../src/services/conversations';
 
 describe('InstagramMessageAdapter', () => {
     let adapter: InstagramMessageAdapter;
@@ -55,18 +63,18 @@ describe('InstagramMessageAdapter', () => {
 
     describe('fetchSenderName', () => {
         it('returns cached name from DB when available', async () => {
-            vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue('CachedUser');
+            vi.mocked(conversationsService.getSenderName).mockResolvedValue('CachedUser');
 
             const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
 
             expect(name).toBe('CachedUser');
-            expect(messagesService.getSenderNameBySenderId).toHaveBeenCalledWith(PAGE_ID, SENDER_ID);
+            expect(conversationsService.getSenderName).toHaveBeenCalledWith(PAGE_ID, SENDER_ID);
             // Should NOT call the API when DB cache hits
             expect(mockedAxios.get).not.toHaveBeenCalled();
         });
 
         it('returns username from Instagram Graph API on DB cache miss', async () => {
-            vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+            vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
             mockedAxios.get.mockResolvedValue({
                 data: { username: 'cool_user', name: 'Cool User' },
             });
@@ -80,7 +88,7 @@ describe('InstagramMessageAdapter', () => {
         });
 
         it('returns name when username is not available from API', async () => {
-            vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+            vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
             mockedAxios.get.mockResolvedValue({
                 data: { name: 'Just A Name' },
             });
@@ -91,7 +99,7 @@ describe('InstagramMessageAdapter', () => {
         });
 
         it('returns undefined when API call fails', async () => {
-            vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+            vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
             mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
             const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);
@@ -107,11 +115,11 @@ describe('InstagramMessageAdapter', () => {
             const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN);
 
             expect(name).toBe('no_page_user');
-            expect(messagesService.getSenderNameBySenderId).not.toHaveBeenCalled();
+            expect(conversationsService.getSenderName).not.toHaveBeenCalled();
         });
 
         it('returns undefined when API returns empty data', async () => {
-            vi.mocked(messagesService.getSenderNameBySenderId).mockResolvedValue(null);
+            vi.mocked(conversationsService.getSenderName).mockResolvedValue(null);
             mockedAxios.get.mockResolvedValue({ data: {} });
 
             const name = await adapter.fetchSenderName(SENDER_ID, ACCESS_TOKEN, PAGE_ID);

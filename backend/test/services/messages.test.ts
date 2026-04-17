@@ -1,6 +1,4 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { messagesService } from '../../src/services/messages';
-import { db } from '../../src/db';
 
 vi.mock('../../src/db', () => ({
     db: {
@@ -8,6 +6,7 @@ vi.mock('../../src/db', () => ({
         query: {
             pages: { findMany: vi.fn() },
             messages: { findMany: vi.fn(), findFirst: vi.fn() },
+            conversations: { findFirst: vi.fn() },
             conversationPauses: { findFirst: vi.fn() },
         },
         insert: vi.fn(),
@@ -16,6 +15,44 @@ vi.mock('../../src/db', () => ({
         execute: vi.fn(),
     }
 }));
+
+// Stub the conversations service — messages.ts delegates to it for the canonical
+// sender_name + upsert. Returning a stable fake conversation lets us assert the
+// message side of the write without testing conversations internals here.
+vi.mock('../../src/services/conversations', () => ({
+    conversationsService: {
+        findOrCreate: vi.fn(async (pageId: string, senderId: string, platform: string, senderName?: string | null) => ({
+            id: 'conv-fixture',
+            pageId,
+            senderId,
+            platform,
+            senderName: senderName ?? null,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        })),
+        findByPageAndSender: vi.fn(async () => null),
+        getSenderName: vi.fn(async () => null),
+        setSenderName: vi.fn(async () => undefined),
+    },
+}));
+
+import { messagesService } from '../../src/services/messages';
+import { db } from '../../src/db';
+import { conversationsService } from '../../src/services/conversations';
+
+// Helper: stub the db.select().from().leftJoin().where().orderBy().limit() chain.
+// Returns rows in the { msg, convSenderName } shape the service now expects.
+function stubSelectJoin(rows: Array<Record<string, any>>, convName: string | null = null): void {
+    const finalAwait = Promise.resolve(rows.map(r => ({ msg: r, convSenderName: convName })));
+    const chain: any = {
+        from: vi.fn(() => chain),
+        leftJoin: vi.fn(() => chain),
+        where: vi.fn(() => chain),
+        orderBy: vi.fn(() => chain),
+        limit: vi.fn(() => finalAwait),
+    };
+    vi.mocked(db.select).mockReturnValue(chain as any);
+}
 
 // Helper: build a mock DB message row
 function mockDbRow(overrides: Record<string, any> = {}) {
@@ -63,7 +100,7 @@ describe('MessagesService', () => {
         it('should return messages with pagination', async () => {
             vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
             const rows = [mockDbRow({ id: 'msg-1' }), mockDbRow({ id: 'msg-2' })];
-            vi.mocked(db.query.messages.findMany).mockResolvedValue(rows as any);
+            stubSelectJoin(rows);
 
             const result = await messagesService.getMessages('user-1', { limit: 10 });
 
@@ -74,13 +111,12 @@ describe('MessagesService', () => {
 
         it('should detect hasMore when results exceed limit', async () => {
             vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
-            // Return 3 rows when limit is 2 (service fetches limit+1)
             const rows = [
                 mockDbRow({ id: 'msg-1' }),
                 mockDbRow({ id: 'msg-2' }),
                 mockDbRow({ id: 'msg-3' }),
             ];
-            vi.mocked(db.query.messages.findMany).mockResolvedValue(rows as any);
+            stubSelectJoin(rows);
 
             const result = await messagesService.getMessages('user-1', { limit: 2 });
 
@@ -94,12 +130,33 @@ describe('MessagesService', () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(
                 mockDbRow({ id: 'msg-cursor', createdAt: new Date('2026-01-15') }) as any
             );
-            vi.mocked(db.query.messages.findMany).mockResolvedValue([]);
+            stubSelectJoin([]);
 
             await messagesService.getMessages('user-1', { cursor: 'msg-cursor' });
 
             expect(db.query.messages.findFirst).toHaveBeenCalled();
-            expect(db.query.messages.findMany).toHaveBeenCalled();
+            expect(db.select).toHaveBeenCalled();
+        });
+
+        it('should prefer conversations.sender_name over messages.sender_name', async () => {
+            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
+            // message.sender_name is the stale legacy value; conversation.sender_name is canonical
+            const rows = [mockDbRow({ id: 'msg-1', senderName: 'Old Name' })];
+            stubSelectJoin(rows, 'New Canonical Name');
+
+            const result = await messagesService.getMessages('user-1');
+
+            expect(result.data[0].senderName).toBe('New Canonical Name');
+        });
+
+        it('should fall back to messages.sender_name when no conversation is linked', async () => {
+            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
+            const rows = [mockDbRow({ id: 'msg-1', senderName: 'Legacy Name' })];
+            stubSelectJoin(rows, null);
+
+            const result = await messagesService.getMessages('user-1');
+
+            expect(result.data[0].senderName).toBe('Legacy Name');
         });
     });
 
@@ -109,7 +166,7 @@ describe('MessagesService', () => {
     describe('getMessagesByPage', () => {
         it('should return messages for a page', async () => {
             const rows = [mockDbRow(), mockDbRow({ id: 'msg-2' })];
-            vi.mocked(db.query.messages.findMany).mockResolvedValue(rows as any);
+            stubSelectJoin(rows);
 
             const result = await messagesService.getMessagesByPage('page-1');
 
@@ -118,7 +175,7 @@ describe('MessagesService', () => {
         });
 
         it('should return empty array when no messages', async () => {
-            vi.mocked(db.query.messages.findMany).mockResolvedValue([]);
+            stubSelectJoin([]);
 
             const result = await messagesService.getMessagesByPage('page-empty');
 
@@ -135,7 +192,7 @@ describe('MessagesService', () => {
                 mockDbRow({ direction: 'incoming' }),
                 mockDbRow({ id: 'msg-2', direction: 'outgoing', senderId: 'sender-1' }),
             ];
-            vi.mocked(db.query.messages.findMany).mockResolvedValue(rows as any);
+            stubSelectJoin(rows);
 
             const result = await messagesService.getConversation('page-1', 'sender-1');
 

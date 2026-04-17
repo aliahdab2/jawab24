@@ -1,5 +1,5 @@
 import { pagesService } from '../../pages';
-import { messagesService } from '../../messages';
+import { conversationsService } from '../../conversations';
 import { whatsappService } from '../../whatsapp';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
@@ -24,11 +24,11 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
     }
 
     async fetchSenderName(senderId: string, _accessToken: string, pageId?: string): Promise<string | undefined> {
-        // WhatsApp has no profile API — sender name comes from webhook contacts[].profile.name
-        // Only check DB cache from previous messages
+        // WhatsApp has no profile API — sender name comes from webhook contacts[].profile.name.
+        // Only the canonical conversations table; no Graph API lookup exists to fall back to.
         if (pageId) {
-            const cached = await messagesService.getSenderNameBySenderId(pageId, senderId);
-            if (cached) return cached;
+            const canonical = await conversationsService.getSenderName(pageId, senderId);
+            if (canonical) return canonical;
         }
         return undefined;
     }
