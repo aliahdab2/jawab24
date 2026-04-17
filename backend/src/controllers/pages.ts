@@ -383,7 +383,11 @@ export class PagesController {
             replyGenerator.setLogger(request.log);
             const result = await replyGenerator.generateForPlayground(playgroundInput);
 
-            // 8. Strip internal metadata — return only customer-safe fields
+            // 8. Strip internal metadata — return only customer-safe fields.
+            // When the generator returned 'skipped' (friend-tag, spam, punctuation w/o post
+            // context), production posts NOTHING — not the full reply, not the nudge. Match
+            // that here: nudgeText is null on skipped so the UI doesn't show a phantom nudge.
+            const isSkipped = result.replyMethod === 'skipped';
             return reply.send({
                 success: true,
                 data: {
@@ -391,7 +395,7 @@ export class PagesController {
                     replyMethod: result.replyMethod,
                     latencyMs: Date.now() - startTime,
                     commentReplyMode: channel === 'comment' ? commentReplyMode : null,
-                    nudgeText: channel === 'comment' ? nudgeText : null,
+                    nudgeText: channel === 'comment' && !isSkipped ? nudgeText : null,
                 },
             });
         } catch (error) {

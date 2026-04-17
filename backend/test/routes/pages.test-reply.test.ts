@@ -210,4 +210,51 @@ describe('POST /pages/:id/test-reply', () => {
 
         expect(response.statusCode).toBe(400);
     });
+
+    // Regression: playground must match production. When the generator returns 'skipped'
+    // (SPAM_OR_IRRELEVANT — pure @mention, punctuation-only w/o post context, etc.),
+    // production's commentProcessor posts nothing — not the full reply, not the nudge.
+    // The playground used to surface a phantom nudge in that case; the UI displayed it
+    // under "Public comment" which misled the merchant into thinking it would actually post.
+    it('should return nudgeText=null when generator returns replyMethod=skipped', async () => {
+        const { replyGenerator } = await import('../../src/services/reply/generator');
+        const { buildPlaygroundContext } = await import('../../src/services/reply/playgroundContext');
+
+        vi.mocked(replyGenerator.generateForPlayground).mockResolvedValueOnce({
+            reply: null,
+            replyMethod: 'skipped',
+            templateName: null,
+            ragMode: 'off',
+            chunksRetrieved: 0,
+            chunks: [],
+            intent: 'SPAM_OR_IRRELEVANT',
+            confidence: null,
+            flags: [],
+            needsAttention: false,
+            cached: false,
+            detectedLanguage: null,
+            tokensUsed: 0,
+            model: null,
+            gapRecorded: false,
+        } as any);
+
+        vi.mocked(buildPlaygroundContext).mockResolvedValueOnce({
+            playgroundInput: { pageId: 'page_1', question: '.', channel: 'comment' },
+            commentReplyMode: 'dual',
+            nudgeText: 'شيّك الرسائل الخاصة للتفاصيل 💬',
+        } as any);
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: '.', channel: 'comment' },
+        });
+
+        expect(response.statusCode).toBe(200);
+        const body = JSON.parse(response.payload);
+        expect(body.data.replyMethod).toBe('skipped');
+        expect(body.data.reply).toBeNull();
+        // Counter-assertion: no phantom nudge, matches production behavior.
+        expect(body.data.nudgeText).toBeNull();
+    });
 });

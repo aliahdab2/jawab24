@@ -248,8 +248,11 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                     msg.role === 'user' ? 'items-end' : 'items-start'
                   )}
                 >
-                  {/* Dual mode: show nudge (public comment) */}
-                  {msg.role === 'assistant' && msg.commentReplyMode === 'dual' && msg.nudgeText && (
+                  {/* Dual mode: show nudge (public comment).
+                      Skipped replies get neither a nudge nor a reply in production —
+                      the commentProcessor short-circuits on SPAM_OR_IRRELEVANT, so
+                      don't render a phantom nudge that would never actually be posted. */}
+                  {msg.role === 'assistant' && msg.commentReplyMode === 'dual' && msg.replyMethod !== 'skipped' && msg.nudgeText && (
                     <div className="flex flex-col gap-1 max-w-[90%] sm:max-w-[85%]">
                       <span className="text-xs font-medium text-muted-foreground">{t('testSmartReplyNudge')}</span>
                       <div className="px-4 py-2.5 rounded-2xl rounded-bs-none bg-card text-sm text-foreground border border-theme-border shadow-sm" dir="auto">
