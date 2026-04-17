@@ -172,7 +172,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
         role="dialog"
         aria-modal="true"
         dir={dir}
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl h-full sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-3xl h-full sm:h-[70vh] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
