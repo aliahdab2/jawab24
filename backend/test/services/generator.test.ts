@@ -828,3 +828,85 @@ describe('shouldSkipReply', () => {
     });
 });
 
+
+describe('ReplyGenerator - Mention/tag skip behavior', () => {
+    let generator: ReplyGenerator;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        generator = new ReplyGenerator();
+    });
+
+    const baseContext = {
+        userId: 'user-123',
+        pageName: 'Test Page',
+    };
+
+    it('skips silently when comment is a pure Facebook structured tag', async () => {
+        const { aiService } = await import('../../src/services/ai');
+
+        const result = await generator.generateForComment(
+            { ...baseContext, text: '@[100012345:Hanaa Kanaan]', postMessage: 'منشور عربي' },
+            true,
+        );
+
+        expect(result.replyText).toBeNull();
+        expect(result.aiIntent).toBe('SPAM_OR_IRRELEVANT');
+        expect(vi.mocked(aiService.generateReply)).not.toHaveBeenCalled();
+    });
+
+    it('skips silently when comment is a pure plain @mention', async () => {
+        const { aiService } = await import('../../src/services/ai');
+
+        const result = await generator.generateForComment(
+            { ...baseContext, text: '@hadi', postMessage: 'Some post' },
+            true,
+        );
+
+        expect(result.replyText).toBeNull();
+        expect(result.aiIntent).toBe('SPAM_OR_IRRELEVANT');
+        expect(vi.mocked(aiService.generateReply)).not.toHaveBeenCalled();
+    });
+
+    it('skips silently when comment is a mention + ≤3 words of chatter', async () => {
+        const { aiService } = await import('../../src/services/ai');
+
+        const result = await generator.generateForComment(
+            { ...baseContext, text: '@Ali check this', postMessage: 'Some post' },
+            true,
+        );
+
+        expect(result.replyText).toBeNull();
+        expect(result.aiIntent).toBe('SPAM_OR_IRRELEVANT');
+        expect(vi.mocked(aiService.generateReply)).not.toHaveBeenCalled();
+    });
+
+    it('proceeds to AI when comment is a tag + real question (>3 words)', async () => {
+        const { aiService } = await import('../../src/services/ai');
+
+        vi.mocked(aiService.generateReply).mockResolvedValue({
+            reply: 'سعر الدورة 500 ريال',
+            language: 'ar',
+            cached: false,
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        });
+
+        const result = await generator.generateForComment(
+            {
+                ...baseContext,
+                text: '@[100:Ali] كيف يمكنني التسجيل في الدورة القادمة؟',
+                postMessage: 'منشور عربي',
+            },
+            true,
+        );
+
+        expect(result.replyText).toBe('سعر الدورة 500 ريال');
+        expect(vi.mocked(aiService.generateReply)).toHaveBeenCalled();
+        // The comment passed to AI should be the stripped version, not the raw tag.
+        const callArg = vi.mocked(aiService.generateReply).mock.calls[0][0];
+        expect(callArg.comment).toBe('كيف يمكنني التسجيل في الدورة القادمة؟');
+    });
+});
+

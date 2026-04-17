@@ -265,6 +265,45 @@ describe('FacebookCommentAdapter', () => {
             );
         });
 
+        it('should strip @mentions before language detection (structured tag)', async () => {
+            // Raw "@[id:Hanaa Kanaan]" has Latin characters that would falsely detect as English.
+            // After stripping, detectCommentLanguage sees "" and falls back to postMessage.
+            mockDetectLanguageCode.mockReturnValue('ar');
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'شكرا!',
+                commentMessage: '@[100012345:Hanaa Kanaan]',
+                postMessage: 'منشور عربي',
+                accessToken: 'token_abc',
+                userSettings: { commentReplyMode: 'dual' },
+            });
+
+            // First arg to detectCommentLanguage must be stripped (empty), not the raw tag.
+            expect(mockDetectLanguageCode).toHaveBeenCalledWith('');
+            expect(mockDetectLanguageCode).not.toHaveBeenCalledWith('@[100012345:Hanaa Kanaan]');
+        });
+
+        it('should strip @mentions before language detection (plain tag)', async () => {
+            mockDetectLanguageCode.mockReturnValue('ar');
+            mockSendCommentReply.mockResolvedValue({ success: true });
+
+            await adapter.sendReply({
+                platformCommentId: 'fb_comment_123',
+                platformPageId: 'fb_page_123',
+                replyText: 'شكرا!',
+                commentMessage: '@Ali Ahdab شو السعر؟',
+                postMessage: 'منشور عربي',
+                accessToken: 'token_abc',
+                userSettings: { commentReplyMode: 'dual' },
+            });
+
+            // "@Ali Ahdab" stripped → "شو السعر؟" should reach detector, not the full raw comment.
+            expect(mockDetectLanguageCode).toHaveBeenCalledWith('شو السعر؟');
+        });
+
         it('should pass undefined variations when none in settings', async () => {
             mockSendCommentReply.mockResolvedValue({ success: true });
 

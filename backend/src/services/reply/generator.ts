@@ -9,6 +9,7 @@ import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
+import { stripCommentNoise, hasMention, isPunctuationOnly } from '../../utils/commentText';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
  *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
@@ -236,11 +237,14 @@ export class ReplyGenerator {
         // Both @mentions and URLs contain Latin chars that pollute language detection
         // (e.g. "@Ali Ahdab" or "https://example.com" on an Arabic page → incorrectly 'en').
         // They also carry no message content the AI should respond to.
-        const hadMention = /@[\w\u0600-\u06FF]/.test(text);
-        let commentForAI = this.stripCommentNoise(text);
+        const hadMention = hasMention(text);
+        let commentForAI = stripCommentNoise(text);
 
-        // Friend-tagging: "@Ali check this" → after stripping = "check this" (≤3 words).
-        // The person is talking to their friend, not to the page. Skip silently.
+        // Friend-tagging: pure @mention (stripped to empty) OR @mention + ≤3 words of chatter.
+        // The commenter is talking to their tagged friend, not to the page. Skip silently.
+        if (hadMention && !commentForAI) {
+            return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
+        }
         if (hadMention && commentForAI) {
             const wordCount = commentForAI.split(/\s+/).filter(w => w.length > 0).length;
             if (wordCount <= 3) {
@@ -255,7 +259,7 @@ export class ReplyGenerator {
         if (!commentForAI && !contextPostMessage) {
             return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
         }
-        if (commentForAI && this.isPunctuationOnly(commentForAI) && !contextPostMessage) {
+        if (commentForAI && isPunctuationOnly(commentForAI) && !contextPostMessage) {
             return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
         }
 
@@ -286,7 +290,7 @@ export class ReplyGenerator {
             // Dual-mode DM with punctuation-only comment (e.g. "." on a CTA post):
             // Replace with a synthetic question so the AI answers with post/KB details
             // instead of classifying as SPAM_OR_IRRELEVANT.
-            if (effectiveChannel === 'dm' && postMessage && this.isPunctuationOnly(commentForAI || text)) {
+            if (effectiveChannel === 'dm' && postMessage && isPunctuationOnly(commentForAI || text)) {
                 const postLang = /[\u0600-\u06FF]/.test(postMessage) ? 'ar' : 'en';
                 commentForAI = postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
             }
@@ -560,16 +564,16 @@ export class ReplyGenerator {
         // Dual-mode DM with punctuation-only input (e.g. "." on a CTA post):
         // Replace with a synthetic question so the AI has something meaningful to answer.
         // The post says "comment . to get details" → customer commented "." → DM should deliver those details.
-        if (channel === 'dm' && postMessage && this.isPunctuationOnly(question.trim())) {
+        if (channel === 'dm' && postMessage && isPunctuationOnly(question.trim())) {
             const postLang = /[\u0600-\u06FF]/.test(postMessage) ? 'ar' : 'en';
             questionForAI = postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
         }
 
         if (channel === 'comment') {
-            const hadMentionPG = /@[\w\u0600-\u06FF]/.test(question);
-            questionForAI = this.stripCommentNoise(question);
+            const hadMentionPG = hasMention(question);
+            questionForAI = stripCommentNoise(question);
             const isEmptyQ = !questionForAI;
-            const isPunctuationQ = questionForAI ? this.isPunctuationOnly(questionForAI) : false;
+            const isPunctuationQ = questionForAI ? isPunctuationOnly(questionForAI) : false;
 
             // Friend-tagging: "@Ali check this" → stripped = "check this" (≤3 words). Skip.
             const isFriendTag = hadMentionPG && questionForAI && questionForAI.split(/\s+/).filter(w => w.length > 0).length <= 3;
@@ -702,38 +706,6 @@ export class ReplyGenerator {
      * asks about the same topic again. When true, the pipeline skips the template
      * and lets AI handle the follow-up with full conversation context.
      */
-
-    /**
-     * Returns true when a comment consists entirely of punctuation, symbols, or emojis
-     * (no real words in any script). Used to detect engagement-style dots/emojis.
-     */
-    private isPunctuationOnly(text: string): boolean {
-        // Matches text with no letters (\p{L}) and no numbers (\p{N}).
-        // Avoids \p{Emoji} which incorrectly includes ASCII digits 0-9 in ECMAScript.
-        return text.length > 0 && /^[^\p{L}\p{N}]+$/u.test(text);
-    }
-
-
-    /**
-     * Strips @mentions and URLs from a comment — platform noise that pollutes
-     * language detection and carries no message content for the AI.
-     *
-     * Two formats handled:
-     * - Facebook structured: @[userid:Display Name]
-     *   Brackets bound the full name exactly — safe to strip regardless of length or language.
-     * - Plain @mention: @word + optionally one more word (2 words max).
-     *   We cap at 2 words because we cannot tell where a name ends and actual message content
-     *   begins (e.g. "@Ahmad Ali كيف أسجل؟" — "Ali" is the surname, "كيف أسجل؟" is the question).
-     *   Names longer than 2 words in real Facebook tags always arrive in the structured format,
-     *   so 2 words is sufficient for plain mentions (which are typically single-word handles).
-     */
-    private stripCommentNoise(text: string): string {
-        return text
-            .replace(/@\[\d+:[^\]]*\]/g, '')                                    // @[id:Name] — Facebook structured mention
-            .replace(/@[\w\u0600-\u06FF]+(\s+[A-Z][\w]*)*/g, '')               // @name — plain mention, optional capitalized words
-            .replace(/https?:\/\/\S+|www\.\S+/gi, '')
-            .trim();
-    }
 
     /**
      * Process AI response — shared flagging, usage tracking, and cost logging
