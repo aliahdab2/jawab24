@@ -328,6 +328,44 @@ describe('MessagesService', () => {
             expect(stored.getTime()).toBeGreaterThanOrEqual(before);
             expect(stored.getTime()).toBeLessThanOrEqual(after);
         });
+
+        // Regression: without this, UI shows "Unknown User" for conversations whose
+        // latest messages are all outgoing. The frontend groups messages by senderId
+        // and picks the first senderName it finds — so if the recent outgoing row is
+        // null-named, the whole conversation displays nameless.
+        it('should copy last known senderName onto the outgoing row', async () => {
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(
+                { senderName: 'Nahed Hasan Allaw' } as any,
+            );
+            const inserted = mockDbRow({ id: 'out-3', direction: 'outgoing', replied: true });
+            let capturedValues: Record<string, unknown> = {};
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((vals) => {
+                    capturedValues = vals;
+                    return { returning: vi.fn().mockResolvedValue([inserted]) };
+                }),
+            } as any);
+
+            await messagesService.storeOutgoingMessage('page-1', 'sender-1', 'Reply', 'ai');
+
+            expect(capturedValues.senderName).toBe('Nahed Hasan Allaw');
+        });
+
+        it('should omit senderName field when no prior name is known', async () => {
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
+            const inserted = mockDbRow({ id: 'out-4', direction: 'outgoing', replied: true });
+            let capturedValues: Record<string, unknown> = {};
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((vals) => {
+                    capturedValues = vals;
+                    return { returning: vi.fn().mockResolvedValue([inserted]) };
+                }),
+            } as any);
+
+            await messagesService.storeOutgoingMessage('page-1', 'sender-1', 'Reply', 'ai');
+
+            expect(capturedValues).not.toHaveProperty('senderName');
+        });
     });
 
     // ───────────────────────────────────────────

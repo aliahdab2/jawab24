@@ -316,7 +316,12 @@ export class MessagesService {
     }
 
     /**
-     * Store outgoing reply as a message
+     * Store outgoing reply as a message.
+     *
+     * Also copies the last known senderName for this (pageId, senderId) onto the
+     * outgoing row. Without this, conversation grouping in the UI shows "Unknown
+     * User" whenever a sender has only outgoing messages in the current fetch page
+     * (the frontend groups by senderId and picks the first non-null name it sees).
      */
     async storeOutgoingMessage(
         pageId: string,
@@ -325,11 +330,14 @@ export class MessagesService {
         replyMethod: 'template' | 'ai' | 'manual',
         conn: DbConn = db,
     ): Promise<Message> {
+        const senderName = await this.getSenderNameBySenderId(pageId, senderId);
+
         const [newMessage] = await conn.insert(messages)
             .values({
                 pageId,
                 platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 senderId,
+                ...(senderName ? { senderName } : {}),
                 message: replyText,
                 direction: 'outgoing',
                 replied: true,
