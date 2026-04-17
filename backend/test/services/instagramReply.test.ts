@@ -53,6 +53,7 @@ vi.mock('../../src/services/reply/generator', () => ({
     SAFE_FALLBACK_FLAGS: ['price_not_in_kb'],
     SKIP_REPLY_INTENTS: ['OFFENSIVE'],
     PRICE_FALLBACK: { ar: 'شكراً لاهتمامك!', en: 'Thank you for your interest!' },
+    resolveFallbackLanguage: vi.fn().mockReturnValue('en'),
 }));
 
 vi.mock('../../src/services/protection/rate-limiter', () => ({
