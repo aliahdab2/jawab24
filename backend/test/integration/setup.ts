@@ -109,16 +109,34 @@ export async function insertMessage(
     senderId: string,
     overrides: Partial<typeof schema.messages.$inferInsert> = {},
 ) {
+    // Upsert a conversation first so the message has a linked canonical record —
+    // matches production (createMessage / storeOutgoingMessage both upsert).
+    // The conversation carries the canonical senderName; the messages row keeps
+    // a legacy copy during the Tier A transition.
+    const platform = overrides.platform ?? 'facebook';
+    const senderName = overrides.senderName ?? null;
+    const [conv] = await testDb
+        .insert(schema.conversations)
+        .values({ pageId, senderId, platform, senderName })
+        .onConflictDoUpdate({
+            target: [schema.conversations.pageId, schema.conversations.senderId],
+            set: senderName
+                ? { senderName, updatedAt: new Date() }
+                : { updatedAt: new Date() },
+        })
+        .returning();
+
     const [msg] = await testDb
         .insert(schema.messages)
         .values({
             pageId,
+            conversationId: conv.id,
             senderId,
             platformMessageId: overrides.platformMessageId ?? `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             message: overrides.message ?? 'Test message',
             direction: overrides.direction ?? 'incoming',
             replied: overrides.replied ?? false,
-            platform: overrides.platform ?? 'facebook',
+            platform,
             ...overrides,
         })
         .returning();
