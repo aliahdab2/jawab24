@@ -24,7 +24,7 @@
 • يفهم العربية بلهجاتها الست (خليجية، مصرية، شامية، مغاربية، سودانية، عراقية)
 • يرد بالعربية أو الإنجليزية حسب لغة العميل
 • نظام أمان مدمج يمنع اختلاق الأسعار والمعلومات الخاطئة
-• دقة 99.6% في الردود (مُختبَر على 125 سيناريو حقيقي)
+• مُختبَر على 226 سيناريو حقيقي لضمان دقة الردود
 
 🔹 تكامل مع متجرك الإلكتروني
 
@@ -33,11 +33,12 @@
 • يرد بالسعر الصحيح والوصف والتوفر
 • يقترح منتجات مناسبة حسب سؤال العميل
 
-🔹 نظام رد ثلاثي الطبقات
+🔹 نوعان من الردود
 
-1. ردود القوالب — سريعة ومجانية من تكلفة الذكاء الاصطناعي
-2. الردود الذكية — تفهم السياق وترد من قاعدة المعرفة ومنتجات متجرك
-3. رسائل الغياب — رسائل ودية خارج ساعات العمل
+1. الردود الذكية — ذكاء اصطناعي يفهم السياق ويرد من قاعدة المعرفة ومنتجات متجرك
+2. رد البوست — اختر منشوراً وحدد كلمات مفتاحية، ترد عليها بالرسائل الخاصة تلقائياً
+
+بالإضافة إلى رسائل الترحيب ورسائل خارج ساعات العمل.
 
 🔹 لوحة تحكم متكاملة
 
@@ -52,7 +53,7 @@
 2. أضف معلومات نشاطك ومنتجاتك
 3. خلّ جواب يتكفّل بالباقي
 
-شريك Meta الرسمي — معتمد من Meta للربط الآمن مع حساباتك.
+مزوّد تقني معتمد من Meta — تطبيق مُراجَع وموافَق عليه للربط الآمن مع فيسبوك وإنستغرام.
 
 جواب24 — حوّل صفحتك إلى آلة رد ذكية 24/7.
 ```
@@ -79,7 +80,7 @@ Save time and boost sales with instant, accurate responses to every message and 
 • Understands 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghreb, Sudanese, Iraqi)
 • Replies in Arabic or English based on the customer's language
 • Built-in safety system prevents price hallucination and misinformation
-• 99.6% accuracy (tested on 125 real-world scenarios)
+• Extensively tested across 226 real-world scenarios to ensure reply accuracy
 
 🔹 E-Commerce Integration
 
@@ -88,11 +89,12 @@ Save time and boost sales with instant, accurate responses to every message and 
 • Replies with correct price, description, and stock status
 • Suggests relevant products based on customer questions
 
-🔹 3-Layer Reply System
+🔹 Two Reply Types
 
-1. Template Replies — fast, predictable, zero AI cost
-2. Smart Replies — AI-powered, context-aware responses from your knowledge base and product catalog
-3. Away Messages — friendly messages outside business hours
+1. Smart Replies — AI-powered, context-aware responses from your knowledge base and product catalog
+2. Post Replies — pick any post, set keywords, and Jawab auto-DMs anyone who comments with a match
+
+Plus greeting messages and out-of-hours replies.
 
 🔹 Full Dashboard
 
@@ -107,7 +109,7 @@ Save time and boost sales with instant, accurate responses to every message and 
 2. Add your business info and products
 3. Let Jawab handle the rest
 
-Official Meta Business Partner — verified by Meta to safely connect with your Facebook & Instagram accounts.
+Meta Tech Provider — reviewed and approved by Meta to securely connect with your Facebook & Instagram accounts.
 
 Jawab24 — Turn your page into a smart 24/7 sales machine.
 ```

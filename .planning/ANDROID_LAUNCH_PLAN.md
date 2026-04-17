@@ -1,7 +1,7 @@
 # Android App Launch Plan
 
 > **Created:** 2026-04-04
-> **Status:** Phase 5 in progress — Play Console account created, identity verification pending (submitted 2026-04-04)
+> **Status:** Phase 5 identity verification complete (approved 2026-04-17). Blocker is now Play Store listing assets (screenshots + feature graphic).
 > **Goal:** Launch Jawab24 on Google Play Store while waiting for Meta FB/IG approval
 > **Companion plans:** `WHATSAPP_PLAN.md` (WhatsApp frontend), `ECOMMERCE_POWER_FEATURES_PLAN.md` (e-commerce features)
 
@@ -183,15 +183,15 @@ Test on at minimum:
 
 ---
 
-## Phase 5: Google Play Console Setup (Day 5-6) — IN PROGRESS
+## Phase 5: Google Play Console Setup (Day 5-6) — UNBLOCKED
 
 ### 5a. Developer Account ✅
 
 1. ✅ Play Console account created (Individual, aliahdab@gmail.com, Account ID: 911237902090522480)
 2. ✅ $25 registration fee paid
-3. ✅ Identity document uploaded (pending Google review, submitted 2026-04-04)
+3. ✅ Identity document approved (verified 2026-04-17)
 4. ✅ Android device verified via Play Console mobile app
-5. ⏳ Phone number verification — unlocks after identity approval (2-7 days)
+5. ✅ Phone number verification complete
 
 ### 5b. App Creation (after verification)
 
@@ -278,15 +278,18 @@ This is the highest-value feature to ship alongside the Android launch. See `WHA
 |-----|-------|--------|
 | 1-2 | Fix gradle properties, version bump, release build verification | ✅ Done |
 | 2-3 | Landscape layout fixes, edge-to-edge nav bar, login page scroll | ✅ Done |
-| 3-4 | Play Console account setup, identity verification | ✅ Submitted, awaiting approval |
-| 4-7 | ⏳ **BLOCKED** — waiting for Google identity verification (2-7 days) |  |
-| 7-8 | Create app, complete data safety + content rating, upload AAB to Internal Testing | Next |
-| 8-9 | Store listing assets (screenshots, descriptions, feature graphic) | Next |
+| 3-4 | Play Console account setup, identity verification | ✅ Approved 2026-04-17 |
+| 7-8 | Create app, complete data safety + content rating, upload AAB to Internal Testing | **Next** |
+| 8-9 | Store listing assets (screenshots, descriptions, feature graphic) | **Current blocker** |
 | 9-10 | Device testing via Internal Testing track | Next |
 | 10+ | Staged production rollout, monitoring | Future |
 | Parallel | WhatsApp frontend (4 days, independent track) | Not started |
 
-**Current blocker: Google identity verification (submitted 2026-04-04, ETA 2-7 days).**
+**Current blocker: Play Store listing assets** — 512×512 icon export, 1024×500 feature graphic, 6+ phone screenshots (AR + EN). Descriptions drafted in `.planning/play-store-listing.md`.
+
+**Also pending (non-blocking for Internal Testing, blocking for production):**
+- Keystore backup to secure off-machine location (irreplaceable — Phase 1d)
+- Internal Testing pass on device matrix in Phase 4a
 
 ---
 
