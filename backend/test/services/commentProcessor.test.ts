@@ -138,6 +138,9 @@ describe('CommentProcessor', () => {
             replyDelay: 0,
         } as any);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        // storeOutgoingMessage is called fire-and-forget in dual/private mode — give
+        // it a resolved promise by default so the .catch() chain doesn't throw in tests.
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Thank you!',
@@ -1156,6 +1159,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
         await pipelineMetrics.reset();
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        // Default mock so fire-and-forget .catch() chain doesn't blow up
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
 
         // Template match returns the price redirect text (old-style template)
@@ -1227,6 +1232,44 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 userSettings: expect.objectContaining({ commentReplyMode: 'dual' }),
             }),
         );
+    });
+
+    // Regression: comment-triggered DMs (dual/private mode) used to create conversations
+    // with null senderName because fromName — known at webhook time — wasn't passed to
+    // storeOutgoingMessage. Surfaced as "Unknown User" in the dashboard inbox.
+    it('dual mode — storeOutgoingMessage receives fromName so conversation gets the commenter name', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter({
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-12345' }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم السعر؟', 'from-id-7', 'Ali Ahdab',
+        );
+
+        expect(messagesService.storeOutgoingMessage).toHaveBeenCalledWith(
+            'page-uuid',
+            'psid-12345',
+            expect.any(String),
+            'ai',
+            undefined,
+            'Ali Ahdab',
+        );
+    });
+
+    it('dual mode — passes undefined fromName through when the webhook did not supply one', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter({
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-99999' }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم السعر؟', 'from-id-7',
+        );
+
+        const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        // 6th positional arg is senderName; missing → undefined
+        expect(call[5]).toBeUndefined();
     });
 
     it('all 3 modes — generateForComment is called with the correct commentReplyMode', async () => {

@@ -423,6 +423,55 @@ describe('MessagesService', () => {
 
             expect(capturedValues).not.toHaveProperty('senderName');
         });
+
+        // Regression: comment-triggered DMs used to create conversations with null
+        // senderName because the commenter's fromName (known at webhook time) was
+        // never propagated. Surfaced as "Unknown User" in the dashboard.
+        it('uses caller-supplied senderName (comment fromName) for conversation + legacy row', async () => {
+            // No prior name in the DB — simulate a first-contact comment-triggered DM
+            vi.mocked(db.query.messages.findFirst).mockResolvedValue(null as any);
+            const inserted = mockDbRow({ id: 'out-5', direction: 'outgoing', replied: true });
+            let capturedValues: Record<string, unknown> = {};
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((vals) => {
+                    capturedValues = vals;
+                    return { returning: vi.fn().mockResolvedValue([inserted]) };
+                }),
+            } as any);
+            // conversationsService.findOrCreate should be called with the supplied name
+            const { conversationsService } = await import('../../src/services/conversations');
+
+            await messagesService.storeOutgoingMessage(
+                'page-1', 'sender-1', 'Reply', 'ai', undefined, 'Ali Ahdab',
+            );
+
+            expect(conversationsService.findOrCreate).toHaveBeenCalledWith(
+                'page-1', 'sender-1', 'facebook', 'Ali Ahdab',
+            );
+            // Legacy messages.sender_name is also written
+            expect(capturedValues.senderName).toBe('Ali Ahdab');
+        });
+
+        it('prefers caller-supplied senderName over existing conversation name', async () => {
+            // Existing conversation has a stale name; caller has the freshest one (from FB webhook)
+            const { conversationsService } = await import('../../src/services/conversations');
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValueOnce({
+                id: 'c1', pageId: 'page-1', senderId: 'sender-1', platform: 'facebook',
+                senderName: 'Old Name', createdAt: new Date(), updatedAt: new Date(),
+            } as any);
+            const inserted = mockDbRow({ id: 'out-6', direction: 'outgoing', replied: true });
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([inserted]) }),
+            } as any);
+
+            await messagesService.storeOutgoingMessage(
+                'page-1', 'sender-1', 'Reply', 'ai', undefined, 'Fresh Name',
+            );
+
+            expect(conversationsService.findOrCreate).toHaveBeenCalledWith(
+                'page-1', 'sender-1', 'facebook', 'Fresh Name',
+            );
+        });
     });
 
     // ───────────────────────────────────────────

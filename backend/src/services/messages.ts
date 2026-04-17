@@ -364,14 +364,24 @@ export class MessagesService {
         replyText: string,
         replyMethod: 'template' | 'ai' | 'manual',
         conn: DbConn = db,
+        senderName?: string,
     ): Promise<Message> {
         // Platform unknown in this call — inherit from existing conversation if present,
         // default to 'facebook' otherwise. This is safe because we never overwrite the
         // platform of an existing conversation via findOrCreate.
+        //
+        // Name resolution priority:
+        //   1. Caller-supplied senderName (comment webhook's fromName) — freshest truth
+        //   2. Existing conversation's senderName — previously-resolved
+        //   3. Legacy scan of messages.sender_name — transitional fallback
+        //
+        // Without (1), comment-triggered DMs create conversations with null senderName
+        // because there's no prior incoming message for this sender — the customer only
+        // commented, never DM'd. That showed as "Unknown User" in the dashboard.
         const existing = await conversationsService.findByPageAndSender(pageId, senderId);
         const platform: Platform = existing?.platform ?? 'facebook';
-        const senderName = existing?.senderName ?? await this.getSenderNameBySenderId(pageId, senderId);
-        const conversation = await conversationsService.findOrCreate(pageId, senderId, platform, senderName);
+        const resolvedName = senderName ?? existing?.senderName ?? await this.getSenderNameBySenderId(pageId, senderId);
+        const conversation = await conversationsService.findOrCreate(pageId, senderId, platform, resolvedName);
 
         const [newMessage] = await conn.insert(messages)
             .values({
@@ -379,7 +389,7 @@ export class MessagesService {
                 conversationId: conversation.id,
                 platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 senderId,
-                ...(conversation.senderName ? { senderName: conversation.senderName } : {}),
+                ...(conversation.senderName ?? resolvedName ? { senderName: conversation.senderName ?? resolvedName } : {}),
                 message: replyText,
                 direction: 'outgoing',
                 replied: true,

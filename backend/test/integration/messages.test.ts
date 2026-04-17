@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { messagesService } from '../../src/services/messages';
 import { createTestUser, createTestPage, insertMessage, insertPause, testDb } from './setup';
 import { eq, and } from 'drizzle-orm';
-import { messages } from '../../src/db/schema';
+import { messages, conversations } from '../../src/db/schema';
 
 describe('Messages Service — Integration (real Postgres)', () => {
     let pageId: string;
@@ -351,6 +351,66 @@ describe('Messages Service — Integration (real Postgres)', () => {
 
             const [updated] = await testDb.select().from(messages).where(eq(messages.id, msg.id));
             expect(updated.resolved).toBe(false);
+        });
+    });
+
+    // Regression: comment-triggered DM path used to create conversations with null
+    // senderName because fromName wasn't propagated. End-to-end via real Postgres.
+    describe('storeOutgoingMessage — canonical senderName wiring', () => {
+        it('creates a conversation with the caller-supplied senderName (first contact)', async () => {
+            // No prior message for this sender — simulate a customer who only commented
+            // and never DM'd us first. Caller supplies fromName from the comment webhook.
+            await messagesService.storeOutgoingMessage(
+                pageId, senderId, 'Welcome aboard!', 'ai', undefined, 'Ali Ahdab',
+            );
+
+            const [conv] = await testDb
+                .select()
+                .from(conversations)
+                .where(and(
+                    eq(conversations.pageId, pageId),
+                    eq(conversations.senderId, senderId),
+                ));
+            expect(conv).toBeDefined();
+            expect(conv.senderName).toBe('Ali Ahdab');
+        });
+
+        it('links the outgoing message to the newly-created conversation', async () => {
+            const outgoing = await messagesService.storeOutgoingMessage(
+                pageId, senderId, 'Details sent', 'ai', undefined, 'Nahed Hasan',
+            );
+
+            const [row] = await testDb.select().from(messages).where(eq(messages.id, outgoing.id));
+            expect(row.conversationId).not.toBeNull();
+            expect(row.senderName).toBe('Nahed Hasan'); // legacy column also written
+
+            // The conversation_id points at the conversations row for this sender
+            const [conv] = await testDb
+                .select()
+                .from(conversations)
+                .where(eq(conversations.id, row.conversationId!));
+            expect(conv.senderName).toBe('Nahed Hasan');
+        });
+
+        it('does NOT overwrite an existing conversation name with an empty/undefined one', async () => {
+            // Seed a named conversation via a prior incoming message
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-in',
+                senderName: 'Original Name',
+                direction: 'incoming',
+            });
+
+            // Store outgoing without supplying a name — should keep Original Name
+            await messagesService.storeOutgoingMessage(pageId, senderId, 'Reply', 'ai');
+
+            const [conv] = await testDb
+                .select()
+                .from(conversations)
+                .where(and(
+                    eq(conversations.pageId, pageId),
+                    eq(conversations.senderId, senderId),
+                ));
+            expect(conv.senderName).toBe('Original Name');
         });
     });
 });

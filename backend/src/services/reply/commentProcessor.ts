@@ -437,9 +437,16 @@ export class CommentProcessor {
             return { success: false, commentId: comment.id, error: sendResult.error };
         }
 
-        // Store outgoing DM so conversation history exists for future messages from this sender
+        // Store outgoing DM so conversation history exists for future messages from this sender.
+        // Pass fromName — the commenter's display name from the webhook — so the conversation's
+        // senderName is filled in even when the customer only commented (never DM'd us first).
+        // Without this, comment-triggered DMs surfaced as "Unknown User" in the inbox.
         if (sendResult.dmRecipientId) {
-            messagesService.storeOutgoingMessage(pageId, sendResult.dmRecipientId, replyText, replyMethod as 'template' | 'ai' | 'manual')
+            messagesService.storeOutgoingMessage(
+                pageId, sendResult.dmRecipientId, replyText,
+                replyMethod as 'template' | 'ai' | 'manual',
+                undefined, fromName,
+            )
                 .catch(err => this.logger.error('[CommentProcessor] Failed to store outgoing DM', { err, pageId, fromId }));
         }
 
