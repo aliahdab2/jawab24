@@ -701,13 +701,28 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
     /**
      * Extract the effective KB text from the request context.
      * Returns combined chunk content if RAG, otherwise static KB, or null.
+     *
+     * Includes postMessage when present — the prompt injects the post as
+     * `[current_post]` inside <business_knowledge>, so prices the AI quotes
+     * from the post are legitimate (the business's own published content).
+     * Excluding it here would misflag those prices as hallucinated and
+     * trigger PRICE_FALLBACK.
      */
     private getKBText(request: GenerateRequest): string | null {
+        const parts: string[] = [];
         const chunks = request.context?.retrievedChunks;
         if (chunks && chunks.length > 0) {
-            return chunks.map(c => `${c.title || ''} ${c.content}`).join(' ');
+            parts.push(chunks.map(c => `${c.title || ''} ${c.content}`).join(' '));
+        } else if (request.context?.knowledgeBase) {
+            parts.push(request.context.knowledgeBase);
         }
-        return request.context?.knowledgeBase || null;
+        if (request.context?.postMessage) {
+            parts.push(request.context.postMessage);
+        }
+        if (request.context?.storePolicies) {
+            parts.push(request.context.storePolicies);
+        }
+        return parts.length > 0 ? parts.join(' ') : null;
     }
 
     /**

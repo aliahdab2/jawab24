@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { shouldSkipReply, shouldUseFallback, SKIP_REPLY_FLAGS, SAFE_FALLBACK_FLAGS, PRICE_FALLBACK } from '../../src/services/reply/generator';
+import { shouldSkipReply, shouldUseFallback, SKIP_REPLY_FLAGS, SAFE_FALLBACK_FLAGS, PRICE_FALLBACK, resolveFallbackLanguage } from '../../src/services/reply/generator';
 
 describe('ReplyGenerator - Skip/Fallback helpers', () => {
     describe('shouldSkipReply', () => {
@@ -63,6 +63,31 @@ describe('ReplyGenerator - Skip/Fallback helpers', () => {
             expect(PRICE_FALLBACK.en).toBeTruthy();
             expect(typeof PRICE_FALLBACK.ar).toBe('string');
             expect(typeof PRICE_FALLBACK.en).toBe('string');
+        });
+    });
+
+    describe('resolveFallbackLanguage', () => {
+        it('returns detected language when text has a detectable script', () => {
+            expect(resolveFallbackLanguage({ text: 'مرحبا' })).toBe('ar');
+            expect(resolveFallbackLanguage({ text: 'hello there' })).toBe('en');
+        });
+
+        it('falls through to postMessage when text is script-less', () => {
+            expect(resolveFallbackLanguage({ text: '...', postMessage: '#عروض 25 الف' })).toBe('ar');
+            expect(resolveFallbackLanguage({ text: '...', postMessage: 'Big sale today' })).toBe('en');
+        });
+
+        it('falls through to knowledgeBase when text and post are script-less', () => {
+            expect(resolveFallbackLanguage({ text: '...', postMessage: '', knowledgeBase: 'دورات ICDL' })).toBe('ar');
+        });
+
+        it('falls through to defaultReplyLanguage when all text sources are script-less', () => {
+            expect(resolveFallbackLanguage({ text: '...', defaultReplyLanguage: 'ar' })).toBe('ar');
+        });
+
+        it('defaults to en when nothing is provided', () => {
+            expect(resolveFallbackLanguage({})).toBe('en');
+            expect(resolveFallbackLanguage({ text: '...' })).toBe('en');
         });
     });
 

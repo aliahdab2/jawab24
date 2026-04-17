@@ -1966,6 +1966,50 @@ describe('Price Detection — Golden Fixture', () => {
             }
         });
     }
+
+    it('does not flag prices quoted from postMessage — the post is part of business context', async () => {
+        vi.resetModules();
+        setupMock(JSON.stringify({
+            reply: 'الدورة بكلفة 25 الف ريال',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: '...',
+            context: {
+                postMessage: 'دورات بكلفة 25 الف ريال فقط',
+                knowledgeBase: '',
+            },
+        });
+
+        expect(result.flags).not.toContain('price_not_in_kb');
+    });
+
+    it('does not flag prices quoted from storePolicies', async () => {
+        vi.resetModules();
+        setupMock(JSON.stringify({
+            reply: 'Shipping is 15 SAR',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'how much shipping?',
+            context: {
+                storePolicies: 'Shipping within Riyadh: 15 SAR. Other cities: 25 SAR.',
+                knowledgeBase: '',
+            },
+        });
+
+        expect(result.flags).not.toContain('price_not_in_kb');
+    });
 });
 
 describe('Brand Voice Notes — DM prompt differentiation', () => {

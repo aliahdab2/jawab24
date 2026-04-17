@@ -115,6 +115,30 @@ export const PRICE_FALLBACK: Record<string, string> = {
     en: t('priceFallback', 'en'),
 };
 
+/**
+ * Pick a language for canned fallback text (PRICE_FALLBACK, etc.).
+ * The customer message is often script-less ("..."/emoji) when fallback fires,
+ * so fall through to post → KB → merchant default before defaulting to English.
+ * Mirrors the chain in openai.ts buildDynamicSystemSuffix.
+ */
+export function resolveFallbackLanguage(opts: {
+    text?: string;
+    postMessage?: string;
+    knowledgeBase?: string;
+    defaultReplyLanguage?: string;
+}): 'ar' | 'en' {
+    const sources = [opts.text, opts.postMessage, opts.knowledgeBase];
+    for (const s of sources) {
+        if (!s) continue;
+        const lang = detectLanguageCode(s);
+        if (lang !== 'unknown') return lang === 'ar' ? 'ar' : 'en';
+    }
+    if (opts.defaultReplyLanguage) {
+        return opts.defaultReplyLanguage === 'ar' ? 'ar' : 'en';
+    }
+    return 'en';
+}
+
 export interface GenerateReplyContext {
     workspaceId: string;
     userId: string;       // kept for billing (subscription checks)
@@ -677,8 +701,13 @@ export class ReplyGenerator {
         if (skipped) {
             finalReply = null;
         } else if (useFallback) {
-            const lang = aiResponse.language === 'ar' ? 'ar' : 'en';
-            finalReply = PRICE_FALLBACK[lang] || PRICE_FALLBACK.en;
+            const lang = resolveFallbackLanguage({
+                text: question,
+                postMessage,
+                knowledgeBase,
+                defaultReplyLanguage,
+            });
+            finalReply = PRICE_FALLBACK[lang];
         }
 
         return {

@@ -3,7 +3,7 @@ import { messagesService } from '../messages';
 import { commentsService } from '../comments';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
-import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK } from './generator';
+import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
@@ -257,9 +257,13 @@ export class CommentProcessor {
 
             // 8b. Replace with safe fallback if AI hallucinated a price
             if (shouldUseFallback(flagReason)) {
-                const detectedLang = detectLanguageCode(commentMessage);
-                const lang = detectedLang === 'unknown' ? 'en' : detectedLang;
-                generatedText = PRICE_FALLBACK[lang] || PRICE_FALLBACK['en'];
+                const lang = resolveFallbackLanguage({
+                    text: commentMessage,
+                    postMessage: content.message || undefined,
+                    knowledgeBase: generatorContext.knowledgeBase,
+                    defaultReplyLanguage: userSettings.defaultReplyLanguage,
+                });
+                generatedText = PRICE_FALLBACK[lang];
             }
 
             // 8c. Skip reply — silent for spam/tags, flagged for offensive content
