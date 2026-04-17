@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { facebookService } from '../../src/services/facebook';
 import { fbAxios } from '../../src/lib/fbAxios';
 import { detectLanguageCode } from '../../src/utils/language';
+import { DmSendError } from '../../src/utils/fbGraphErrors';
 
 vi.mock('../../src/lib/fbAxios');
 vi.mock('../../src/services/facebook');
@@ -14,6 +15,13 @@ vi.mock('../../src/config', () => ({
 
 // Import after mocks are set up
 import { ReplySender } from '../../src/services/reply/sender';
+
+// Helpers: build DmSendErrors that classify into each bucket.
+const makeCustomerRefusedError = () => new DmSendError('blocked', { code: 10, subcode: 2534014 });
+const makeWindowExpiredError = () => new DmSendError('window expired', { code: 10, subcode: 2018278 });
+const makeOurFaultError = () => new DmSendError('bad token', { code: 190 });
+const makeTransientError = () => new DmSendError('rate limit', { code: 613 });
+const makeUnknownError = () => new DmSendError('huh', { code: 99999 });
 
 const GRAPH_API = 'https://graph.facebook.com/v18.0';
 
@@ -127,26 +135,64 @@ describe('ReplySender', () => {
             expect(result.dmRecipientId).toBe('user_456');
         });
 
-        it('should fall back to public reply when fromId is missing', async () => {
-            const result = await sender.sendCommentReply({
-                ...privateOptions,
-                fromId: undefined,
-            });
-
-            // private_replies uses comment ID not fromId, so it still works
-            expect(result.success).toBe(true);
-            expect(result.error).toBeUndefined();
+        it('DM succeeds → no public comment is posted', async () => {
+            await sender.sendCommentReply(privateOptions);
+            expect(fbAxios.post).not.toHaveBeenCalled();
         });
 
-        it('should fall back to public reply when DM throws', async () => {
-            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(
-                new Error('DM blocked')
-            );
+        // Privacy-first: when DM fails, we DO NOT post the full reply publicly.
+        // The reply was generated for DM (channel=dm) and may contain prices/offers.
+
+        it('customer_refused → no public post, suppressedPublic, dmFailure populated', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeCustomerRefusedError());
 
             const result = await sender.sendCommentReply(privateOptions);
 
-            // Falls back to public reply which succeeds (fbAxios.post is mocked to succeed)
-            expect(result).toEqual({ success: true });
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('customer_refused');
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('window_expired → no public post in private mode (nudge is dual-only)', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeWindowExpiredError());
+
+            const result = await sender.sendCommentReply(privateOptions);
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('window_expired');
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('our_fault → no public post, dmFailure populated', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeOurFaultError());
+
+            const result = await sender.sendCommentReply(privateOptions);
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('our_fault');
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('transient → rethrows so BullMQ retries the job', async () => {
+            const err = makeTransientError();
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(err);
+
+            await expect(sender.sendCommentReply(privateOptions)).rejects.toBe(err);
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('unknown bucket → no public post (safe default)', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeUnknownError());
+
+            const result = await sender.sendCommentReply(privateOptions);
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('unknown');
+            expect(fbAxios.post).not.toHaveBeenCalled();
         });
     });
 
@@ -200,27 +246,99 @@ describe('ReplySender', () => {
             expect(result.error).toBeUndefined();
         });
 
-        it('should still post nudge (not full reply) when DM fails', async () => {
-            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(
-                new Error('DM blocked')
-            );
+        // Privacy-first dual-mode fallback: full reply NEVER appears publicly on DM failure.
+        // The only public post on failure is the short nudge, and only for window_expired.
+
+        it('customer_refused → no public post, suppressedPublic, dmFailure populated', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeCustomerRefusedError());
 
             const result = await sender.sendCommentReply(dualOptions);
 
-            // DM failed, but dual mode still posts the nudge — never the full AI reply
-            expect(result.success).toBe(true);
-            const axiosCall = vi.mocked(fbAxios.post).mock.calls[0];
-            expect(axiosCall[1]).toEqual({ message: 'تحقق من رسائلك!' });
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('customer_refused');
+            expect(fbAxios.post).not.toHaveBeenCalled();
         });
 
-        it('should log warning when public reply fails in dual mode', async () => {
+        it('window_expired → posts nudge only (never the full reply)', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeWindowExpiredError());
+
+            const result = await sender.sendCommentReply(dualOptions);
+
+            expect(result.success).toBe(false);
+            expect(result.dmFailure?.bucket).toBe('window_expired');
+            // The nudge string was posted publicly — not the DM text
+            const axiosCall = vi.mocked(fbAxios.post).mock.calls[0];
+            expect(axiosCall[1]).toEqual({ message: 'تحقق من رسائلك!' });
+            // Counter-assertion: full reply never appears publicly
+            expect(axiosCall[1]).not.toEqual({ message: dualOptions.replyText });
+        });
+
+        it('window_expired without a dualReplyNudge → no public post (safer than posting default)', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeWindowExpiredError());
+
+            const result = await sender.sendCommentReply({ ...dualOptions, dualReplyNudge: undefined });
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('our_fault → no public post (merchant integration issue)', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeOurFaultError());
+
+            const result = await sender.sendCommentReply(dualOptions);
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('our_fault');
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('transient → rethrows so BullMQ retries', async () => {
+            const err = makeTransientError();
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(err);
+
+            await expect(sender.sendCommentReply(dualOptions)).rejects.toBe(err);
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('unknown bucket → no public post (safe default)', async () => {
+            vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(makeUnknownError());
+
+            const result = await sender.sendCommentReply(dualOptions);
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(fbAxios.post).not.toHaveBeenCalled();
+        });
+
+        it('REGRESSION GUARD: full replyText never appears in any public post call across all failure buckets', async () => {
+            const buckets = [
+                makeCustomerRefusedError(),
+                makeWindowExpiredError(),
+                makeOurFaultError(),
+                makeUnknownError(),
+            ];
+            for (const err of buckets) {
+                vi.mocked(fbAxios.post).mockClear();
+                vi.mocked(facebookService.sendPrivateReplyToComment).mockRejectedValue(err);
+                await sender.sendCommentReply(dualOptions).catch(() => void 0);
+                for (const call of vi.mocked(fbAxios.post).mock.calls) {
+                    const body = call[1] as { message?: string } | undefined;
+                    expect(body?.message).not.toBe(dualOptions.replyText);
+                }
+            }
+        });
+
+        it('should log warning when nudge post fails (happy-path DM succeeded)', async () => {
             vi.mocked(fbAxios.post).mockRejectedValue(new Error('API error'));
 
             await sender.sendCommentReply(dualOptions);
 
             expect(mockLogger.warn).toHaveBeenCalledWith(
-                'Dual mode: Public reply failed',
-                { commentId: 'fb_comment_123' }
+                '[Sender] Dual mode: nudge post failed',
+                { facebookCommentId: 'fb_comment_123' }
             );
         });
     });

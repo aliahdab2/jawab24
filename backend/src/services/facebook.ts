@@ -6,6 +6,7 @@ import * as Sentry from '@sentry/node';
 import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, FacebookPage, FacebookGranularScope, Logger } from '../types';
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
+import { DmSendError } from '../utils/fbGraphErrors';
 
 const traced = <T>(method: string, fn: () => Promise<T>) =>
     tracedExternalCall('facebook', method, fn);
@@ -338,7 +339,13 @@ export class FacebookService {
                 const detail = fbError
                     ? `${fbError.message} (code=${fbError.code}, subcode=${fbError.error_subcode ?? 'n/a'}, type=${fbError.type})`
                     : error.message;
-                throw new Error(`Facebook API error: ${detail}`);
+                const isTransport = !error.response || (error.response.status >= 500 && error.response.status < 600);
+                throw new DmSendError(`Facebook API error: ${detail}`, {
+                    code: typeof fbError?.code === 'number' ? fbError.code : undefined,
+                    subcode: typeof fbError?.error_subcode === 'number' ? fbError.error_subcode : undefined,
+                    type: typeof fbError?.type === 'string' ? fbError.type : undefined,
+                    isTransport,
+                });
             }
             throw error;
         }

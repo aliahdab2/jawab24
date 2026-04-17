@@ -463,15 +463,155 @@ describe('InstagramCommentAdapter', () => {
             expect(result.error).toContain('commenter ID not available');
         });
 
-        it('dual mode: falls back to full public reply when DM fails', async () => {
-            mockSendDirectMessage.mockRejectedValue(new Error('DM blocked'));
+        // Privacy-first dual-mode fallback: full reply NEVER appears publicly on DM failure.
+        // The only public post on failure is the short nudge, and only for window_expired.
+
+        it('dual mode: customer_refused (10/2534014) → no public post, dmFailure populated', async () => {
+            const { DmSendError } = await import('../../../src/utils/fbGraphErrors');
+            mockSendDirectMessage.mockRejectedValue(new DmSendError('blocked', { code: 10, subcode: 2534014 }));
             const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
+
             const result = await adapter.sendReply(opts);
 
-            // DM failed — dual mode posts full reply as public comment (not the nudge)
-            expect(result.success).toBe(true);
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('customer_refused');
+            expect(mockReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('dual mode: window_expired (10/2018278) → posts nudge only (never full reply)', async () => {
+            const { DmSendError } = await import('../../../src/utils/fbGraphErrors');
+            mockSendDirectMessage.mockRejectedValue(new DmSendError('window', { code: 10, subcode: 2018278 }));
+            const opts = {
+                ...baseOpts,
+                userSettings: {
+                    commentReplyMode: 'dual',
+                    dualReplyNudgeVariations: { ar: ['تم إرسال التفاصيل بالخاص'] },
+                },
+            };
+
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(false);
+            expect(result.dmFailure?.bucket).toBe('window_expired');
+            // Nudge posted — full reply NOT posted
+            expect(mockReplyToComment).toHaveBeenCalledWith('ig-comment-1', 'تم إرسال التفاصيل بالخاص', 'token-123');
+            expect(mockReplyToComment).not.toHaveBeenCalledWith('ig-comment-1', opts.replyText, 'token-123');
+        });
+
+        it('dual mode: our_fault (190 token) → no public post', async () => {
+            const { DmSendError } = await import('../../../src/utils/fbGraphErrors');
+            mockSendDirectMessage.mockRejectedValue(new DmSendError('bad token', { code: 190 }));
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
+
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(false);
+            expect(result.dmFailure?.bucket).toBe('our_fault');
+            expect(result.suppressedPublic).toBe(true);
+            expect(mockReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('dual mode: transient (613 rate limit) → rethrows so BullMQ retries', async () => {
+            const { DmSendError } = await import('../../../src/utils/fbGraphErrors');
+            const err = new DmSendError('rate', { code: 613 });
+            mockSendDirectMessage.mockRejectedValue(err);
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
+
+            await expect(adapter.sendReply(opts)).rejects.toBe(err);
+            expect(mockReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('dual mode: unknown bucket → no public post (safe default)', async () => {
+            const { DmSendError } = await import('../../../src/utils/fbGraphErrors');
+            mockSendDirectMessage.mockRejectedValue(new DmSendError('huh', { code: 99999 }));
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
+
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(mockReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('private mode: DM fails → no public fallback (privacy-first)', async () => {
+            const { DmSendError } = await import('../../../src/utils/fbGraphErrors');
+            mockSendDirectMessage.mockRejectedValue(new DmSendError('blocked', { code: 10, subcode: 2534014 }));
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'private' } };
+
+            const result = await adapter.sendReply(opts);
+
+            expect(result.success).toBe(false);
+            expect(result.suppressedPublic).toBe(true);
+            expect(result.dmFailure?.bucket).toBe('customer_refused');
+            expect(mockReplyToComment).not.toHaveBeenCalled();
+        });
+
+        it('REGRESSION GUARD: full replyText never appears in any public post call across all failure buckets', async () => {
+            const { DmSendError } = await import('../../../src/utils/fbGraphErrors');
+            const buckets = [
+                new DmSendError('blocked', { code: 10, subcode: 2534014 }),
+                new DmSendError('window', { code: 10, subcode: 2018278 }),
+                new DmSendError('bad token', { code: 190 }),
+                new DmSendError('huh', { code: 99999 }),
+            ];
+            const opts = { ...baseOpts, userSettings: { commentReplyMode: 'dual' } };
+
+            for (const err of buckets) {
+                mockReplyToComment.mockClear();
+                mockSendDirectMessage.mockRejectedValue(err);
+                await adapter.sendReply(opts).catch(() => void 0);
+                for (const call of mockReplyToComment.mock.calls) {
+                    expect(call[1]).not.toBe(opts.replyText);
+                }
+            }
+        });
+
+        it('dual mode: picks Arabic nudge when comment is a pure structured tag on Arabic post', async () => {
+            // Before fix: raw "@[id:Name]" has Latin characters → detects English → EN nudge on Arabic page.
+            // After fix: stripped text is empty → falls back to post language (Arabic) → AR nudge.
+            const opts = {
+                ...baseOpts,
+                commentMessage: '@[100012345:Hanaa Kanaan]',
+                postMessage: 'منشور عربي عن الدورة',
+                userSettings: {
+                    commentReplyMode: 'dual',
+                    dualReplyNudgeVariations: {
+                        ar: ['تم إرسال التفاصيل بالخاص'],
+                        en: ['Details sent via DM'],
+                    },
+                },
+            };
+
+            await adapter.sendReply(opts);
+
             expect(mockReplyToComment).toHaveBeenCalledWith(
-                opts.platformCommentId, opts.replyText, opts.accessToken,
+                'ig-comment-1',
+                'تم إرسال التفاصيل بالخاص',
+                'token-123',
+            );
+        });
+
+        it('dual mode: picks Arabic nudge when comment is tag + Arabic question', async () => {
+            const opts = {
+                ...baseOpts,
+                commentMessage: '@Ali Ahdab كيف يمكنني التسجيل في الدورة القادمة؟',
+                postMessage: 'منشور عربي',
+                userSettings: {
+                    commentReplyMode: 'dual',
+                    dualReplyNudgeVariations: {
+                        ar: ['تم إرسال التفاصيل بالخاص'],
+                        en: ['Details sent via DM'],
+                    },
+                },
+            };
+
+            await adapter.sendReply(opts);
+
+            expect(mockReplyToComment).toHaveBeenCalledWith(
+                'ig-comment-1',
+                'تم إرسال التفاصيل بالخاص',
+                'token-123',
             );
         });
 

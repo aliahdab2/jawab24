@@ -3,6 +3,7 @@ import { fbAxios } from '../../lib/fbAxios';
 import { Logger, noopLogger } from '../../types';
 import { config } from '../../config';
 import { t } from '../../utils/i18n';
+import { classifyDmError, type DmFailure } from '../../utils/fbGraphErrors';
 
 const FACEBOOK_GRAPH_API = `https://graph.facebook.com/${config.facebook.graphApiVersion}`;
 
@@ -25,6 +26,18 @@ export interface SendReplyResult {
     error?: string;
     /** PSID of the DM recipient, present when a private message was successfully sent */
     dmRecipientId?: string;
+    /**
+     * Structured info about a DM failure — set by the catch branch in dual/private modes.
+     * Consumed by commentProcessor to decide page-level integration alerts (never per-comment flags).
+     * See docs/comment-and-message-handling.md → "DM-failure-aware fallback".
+     */
+    dmFailure?: DmFailure;
+    /**
+     * True when the public-comment fallback was intentionally suppressed because the
+     * failure bucket forbids leaking DM content publicly (e.g. customer_refused, our_fault).
+     * Callers use this to avoid logging "public post failed" when we never attempted one.
+     */
+    suppressedPublic?: boolean;
 }
 
 /**
@@ -39,10 +52,17 @@ export class ReplySender {
     }
 
     /**
-     * Send a reply to a comment based on the reply mode
-     * - public: Reply as a comment
-     * - private: Send as a DM
-     * - dual: Send DM + short public nudge
+     * Send a reply to a comment based on the reply mode:
+     * - public: Reply as a public comment.
+     * - private: Send as a DM. On DM failure: no public fallback — privacy first.
+     *            The full reply was generated for DM ("channel=dm") and may contain
+     *            prices/specs/customer-specific info that shouldn't leak publicly.
+     * - dual: Send DM + short public nudge. On DM failure, still only the nudge is
+     *         posted for `window_expired`; all other failure buckets post NOTHING.
+     *
+     * DM-failure behavior is classified into 5 buckets via classifyDmError().
+     * See docs/comment-and-message-handling.md → "DM-failure-aware fallback".
+     * `transient` errors are rethrown so BullMQ retries the whole job (replyQueue.ts).
      */
     async sendCommentReply(options: SendCommentReplyOptions): Promise<SendReplyResult> {
         const {
@@ -54,72 +74,83 @@ export class ReplySender {
             isDemo = false
         } = options;
 
-        // Demo mode: Skip Facebook API calls, simulate success
         if (isDemo) {
             this.logger.info('[Sender] Demo mode - skipping Facebook API', { facebookCommentId });
             return { success: true };
         }
 
-        let success = false;
-        let errorMsg = '';
         let dmRecipientId: string | undefined;
+        let dmFailure: DmFailure | undefined;
 
-        // Private or Dual mode: Send DM via /me/messages with comment_id
+        // DM send (private + dual modes)
         if (replyMode === 'private' || replyMode === 'dual') {
             try {
                 const dm = await facebookService.sendPrivateReplyToComment(accessToken, facebookCommentId, replyText);
-                success = true;
                 dmRecipientId = dm.recipientId;
                 this.logger.info('[Sender] Private reply sent', { facebookCommentId, replyMode, recipientId: dmRecipientId });
             } catch (error) {
-                this.logger.error('[Sender] Failed to send private reply', {
-                    facebookCommentId,
-                    replyMode,
-                    error: error instanceof Error ? error.message : String(error)
-                });
+                dmFailure = classifyDmError(error, 'facebook');
+                this.logFailure(facebookCommentId, replyMode, dmFailure);
 
-                if (replyMode === 'private') {
-                    // Private-only: fall back to public comment so user always gets a response
-                    this.logger.warn('[Sender] Private mode failed — falling back to public comment', { facebookCommentId });
-                    const pubSuccess = await this.postPublicReply(facebookCommentId, replyText, accessToken);
-                    return pubSuccess
-                        ? { success: true }
-                        : { success: false, error: 'Failed to send private and public reply' };
-                }
-                // Dual mode: DM failed — still post nudge, not the full reply.
-                // The user chose dual mode specifically to avoid full replies in public.
-                errorMsg = 'Private message failed';
-            }
-        }
-
-        // Public mode: post full reply as comment
-        // Dual mode: always post nudge (respects user's setting regardless of DM outcome)
-        if (replyMode === 'public' || replyMode === 'dual') {
-            let publicText = replyText;
-
-            if (replyMode === 'dual') {
-                publicText = dualReplyNudge || t('dualNudgeDefault', 'ar');
-            }
-
-            const pubSuccess = await this.postPublicReply(
-                facebookCommentId,
-                publicText,
-                accessToken
-            );
-
-            if (pubSuccess) {
-                success = true;
-            } else {
-                if (replyMode === 'public') {
-                    errorMsg = 'Failed to post public reply to Facebook';
-                }
-                if (replyMode === 'dual') {
-                    this.logger.warn('Dual mode: Public reply failed', { commentId: facebookCommentId });
+                // Transient failures propagate up so BullMQ retries the whole comment job.
+                // No public post either way — we never leak DM content on retry-worthy errors.
+                if (dmFailure.bucket === 'transient') {
+                    throw error;
                 }
             }
         }
 
-        return { success, dmRecipientId, error: errorMsg || undefined };
+        // Public send (public mode, or dual-mode nudge when DM succeeded/window_expired)
+        if (replyMode === 'public') {
+            const ok = await this.postPublicReply(facebookCommentId, replyText, accessToken);
+            return ok
+                ? { success: true }
+                : { success: false, error: 'Failed to post public reply to Facebook' };
+        }
+
+        if (replyMode === 'private') {
+            if (!dmFailure) {
+                return { success: true, dmRecipientId };
+            }
+            // DM failed in private mode → DO NOT fall back to public.
+            // The reply was generated for DM; posting it publicly would leak content.
+            return { success: false, dmFailure, suppressedPublic: true, error: `DM failed: ${dmFailure.bucket}` };
+        }
+
+        // Dual mode
+        if (!dmFailure) {
+            // DM succeeded → post the nudge publicly
+            const publicText = dualReplyNudge || t('dualNudgeDefault', 'ar');
+            const ok = await this.postPublicReply(facebookCommentId, publicText, accessToken);
+            if (!ok) this.logger.warn('[Sender] Dual mode: nudge post failed', { facebookCommentId });
+            return { success: true, dmRecipientId };
+        }
+
+        // DM failed in dual mode — only window_expired gets a short nudge.
+        // All other buckets (customer_refused / our_fault / unknown): post nothing.
+        if (dmFailure.bucket === 'window_expired' && dualReplyNudge) {
+            const ok = await this.postPublicReply(facebookCommentId, dualReplyNudge, accessToken);
+            if (!ok) this.logger.warn('[Sender] Dual mode: window_expired nudge post failed', { facebookCommentId });
+            return { success: false, dmFailure, error: `DM failed: ${dmFailure.bucket}` };
+        }
+        return { success: false, dmFailure, suppressedPublic: true, error: `DM failed: ${dmFailure.bucket}` };
+    }
+
+    private logFailure(facebookCommentId: string, replyMode: ReplyMode, failure: DmFailure): void {
+        const ctx = {
+            facebookCommentId,
+            replyMode,
+            bucket: failure.bucket,
+            code: failure.code,
+            subcode: failure.subcode,
+            fbMessage: failure.fbMessage,
+        };
+        // customer_refused / window_expired are expected outcomes — warn, not error.
+        if (failure.bucket === 'customer_refused' || failure.bucket === 'window_expired') {
+            this.logger.warn('[Sender] DM not delivered (expected)', ctx);
+        } else {
+            this.logger.error('[Sender] DM send failed', ctx);
+        }
     }
 
     /**

@@ -10,6 +10,7 @@ import {
 } from '../types';
 
 import { GRAPH_API_BASE } from '../lib/fbAxios';
+import { DmSendError } from '../utils/fbGraphErrors';
 
 const INSTAGRAM_GRAPH_API = GRAPH_API_BASE;
 
@@ -287,8 +288,16 @@ export class InstagramService {
             return response.data.message_id;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                this.logger.error('[Instagram] API Error sending DM', { error: error.response?.data?.error?.message || error.message });
-                throw new Error(`Instagram API error: ${error.response?.data?.error?.message || error.message}`);
+                const fbError = error.response?.data?.error;
+                const detail = fbError?.message || error.message;
+                this.logger.error('[Instagram] API Error sending DM', { error: detail });
+                const isTransport = !error.response || (error.response.status >= 500 && error.response.status < 600);
+                throw new DmSendError(`Instagram API error: ${detail}`, {
+                    code: typeof fbError?.code === 'number' ? fbError.code : undefined,
+                    subcode: typeof fbError?.error_subcode === 'number' ? fbError.error_subcode : undefined,
+                    type: typeof fbError?.type === 'string' ? fbError.type : undefined,
+                    isTransport,
+                });
             }
             throw error;
         }

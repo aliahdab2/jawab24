@@ -2,6 +2,8 @@ import { pagesService } from '../../pages';
 import { instagramService } from '../../instagram';
 import { pickNudgeVariation } from '../nudge';
 import { detectLanguageCode, detectCommentLanguage } from '../../../utils/language';
+import { stripCommentNoise } from '../../../utils/commentText';
+import { classifyDmError, type DmFailure } from '../../../utils/fbGraphErrors';
 import { t } from '../../../utils/i18n';
 import { db } from '../../../db';
 import { instagramMedia, instagramComments } from '../../../db/schema';
@@ -118,54 +120,76 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         postMessage?: string;
     }): Promise<SendCommentResult> {
         const replyMode = (opts.userSettings.commentReplyMode || 'public') as ReplyMode;
-        const effectiveLang = detectCommentLanguage(opts.commentMessage, opts.postMessage);
+        // Strip @mentions/URLs before language detection — their Latin characters
+        // otherwise force an English nudge on Arabic pages.
+        const effectiveLang = detectCommentLanguage(stripCommentNoise(opts.commentMessage), opts.postMessage);
         const variationsMulti = opts.userSettings.dualReplyNudgeVariations as Record<string, string[]> | undefined;
         const dualReplyNudge = pickNudgeVariation(variationsMulti, effectiveLang);
 
-        let success = false;
-        let errorMsg = '';
+        let dmFailure: DmFailure | undefined;
 
-        // Private or Dual: send DM first
+        // DM send (private + dual modes)
         if (replyMode === 'private' || replyMode === 'dual') {
             if (!opts.fromId) {
+                // Not a DM-send failure (we never called IG API) — pre-flight validation error.
                 return { success: false, error: 'Cannot send DM: commenter ID not available' };
             }
             try {
                 await instagramService.sendDirectMessage(
                     opts.platformPageId, opts.fromId, opts.replyText, opts.accessToken,
                 );
-                success = true;
             } catch (error) {
-                const detail = error instanceof Error ? error.message : String(error);
-                if (replyMode === 'private') {
-                    return { success: false, error: `Failed to send Instagram DM: ${detail}` };
+                dmFailure = classifyDmError(error, 'instagram');
+                if (dmFailure.bucket === 'customer_refused' || dmFailure.bucket === 'window_expired') {
+                    // Expected outcomes — warn, not error
+                    // (logger not wired into this adapter today; rely on sender-style logging in step 10)
                 }
-                errorMsg = 'DM failed';
+                // Transient errors propagate up so BullMQ retries the job.
+                if (dmFailure.bucket === 'transient') {
+                    throw error;
+                }
             }
         }
 
-        // Public mode: post full reply
-        // Dual mode: post nudge if DM succeeded, or full reply if DM failed
-        if (replyMode === 'public' || replyMode === 'dual') {
-            let publicText = opts.replyText;
-            if (replyMode === 'dual' && !errorMsg) {
-                // Nudge already truncated by pickNudgeVariation
-                publicText = dualReplyNudge || t('dualNudgeDefault', effectiveLang as 'ar' | 'en');
-            }
+        // Public mode: post the full reply as a comment
+        if (replyMode === 'public') {
             try {
-                await instagramService.replyToComment(
-                    opts.platformCommentId, publicText, opts.accessToken,
-                );
-                success = true;
+                await instagramService.replyToComment(opts.platformCommentId, opts.replyText, opts.accessToken);
+                return { success: true };
             } catch (error) {
                 const detail = error instanceof Error ? error.message : String(error);
-                if (replyMode === 'public') {
-                    errorMsg = `Failed to post reply to Instagram: ${detail}`;
-                }
+                return { success: false, error: `Failed to post reply to Instagram: ${detail}` };
             }
         }
 
-        return { success, error: errorMsg || undefined };
+        // Private mode: on DM failure, DO NOT fall back to public (privacy-first).
+        if (replyMode === 'private') {
+            if (!dmFailure) return { success: true };
+            return { success: false, dmFailure, suppressedPublic: true, error: `DM failed: ${dmFailure.bucket}` };
+        }
+
+        // Dual mode
+        if (!dmFailure) {
+            // DM succeeded → post nudge publicly
+            const nudgeText = dualReplyNudge || t('dualNudgeDefault', effectiveLang as 'ar' | 'en');
+            try {
+                await instagramService.replyToComment(opts.platformCommentId, nudgeText, opts.accessToken);
+            } catch {
+                // nudge failure is logged at higher levels; DM already succeeded
+            }
+            return { success: true };
+        }
+
+        // DM failed in dual mode — nudge only for window_expired, nothing otherwise.
+        if (dmFailure.bucket === 'window_expired' && dualReplyNudge) {
+            try {
+                await instagramService.replyToComment(opts.platformCommentId, dualReplyNudge, opts.accessToken);
+            } catch {
+                // nudge post failure is non-fatal here
+            }
+            return { success: false, dmFailure, error: `DM failed: ${dmFailure.bucket}` };
+        }
+        return { success: false, dmFailure, suppressedPublic: true, error: `DM failed: ${dmFailure.bucket}` };
     }
 
     async markAsReplied(

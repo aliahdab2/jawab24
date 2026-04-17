@@ -51,6 +51,14 @@ export interface SendCommentResult {
     error?: string;
     /** PSID of the DM recipient, present when a private message was successfully sent */
     dmRecipientId?: string;
+    /**
+     * Structured info about a DM failure, if any. Consumed by commentProcessor
+     * to decide page-level integration alerts (never per-comment flags).
+     * See docs/comment-and-message-handling.md → "DM-failure-aware fallback".
+     */
+    dmFailure?: import('../utils/fbGraphErrors').DmFailure;
+    /** True when the public fallback was intentionally suppressed by the failure bucket. */
+    suppressedPublic?: boolean;
 }
 
 export interface CommentPlatformAdapter {
