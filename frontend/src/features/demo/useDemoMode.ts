@@ -18,7 +18,8 @@ export function useDemoMode() {
   const t = useTranslations('auth');
   const locale = useLocale();
   const setAuth = useAuthStore((state) => state.setAuth);
-  
+  const setWorkspaces = useAuthStore((state) => state.setWorkspaces);
+
   const [isEnabled, setIsEnabled] = useState(false);
   const [isChecking, setIsChecking] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,23 +44,27 @@ export function useDemoMode() {
     setIsLoading(true);
     try {
       const response = await publicApi.post('/auth/demo');
-      const { user, token } = response.data;
-      
+      const { user, token, workspaces, settings } = response.data;
+
       setAuth(user, token, 'demo_token');
-      
-      // Use the locale the user was browsing in, not the backend default
-      useUIStore.getState().setLanguage(locale as Language);
+      if (workspaces?.length) {
+        setWorkspaces(workspaces);
+      }
+
+      // Match real login: prefer user's dashboardLanguage, fall back to browsing locale
+      const finalLocale = (settings?.dashboardLanguage || locale) as Language;
+      useUIStore.getState().setLanguage(finalLocale);
 
       const returnUrl = router.query.redirect as string || '/dashboard';
-      await router.push(returnUrl, returnUrl, { locale });
-      
+      await router.push(returnUrl, returnUrl, { locale: finalLocale });
+
     } catch (error: unknown) {
       captureError(error, 'Demo login error', { level: 'warning', tags: { context: 'demo' } });
       toast.error(t('demoError'));
     } finally {
       setIsLoading(false);
     }
-  }, [router, t, locale, setAuth]);
+  }, [router, t, locale, setAuth, setWorkspaces]);
 
   return {
     isEnabled,

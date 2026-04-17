@@ -17,6 +17,8 @@ import { cookiesService } from '../../services/cookies';
 import { refreshTokenService } from '../../services/refreshToken';
 import { settingsService } from '../../services/settings';
 import { workspaceService } from '../../services/workspace';
+import { integrationRegistry } from '../../integrations';
+import type { AuthResponse } from '../../types';
 import { seedDemoData } from './seedData';
 
 async function demoPlugin(fastify: FastifyInstance) {
@@ -58,23 +60,35 @@ async function demoPlugin(fastify: FastifyInstance) {
             // 3. Seed demo data for this user (pages, comments, templates)
             await seedDemoData(user.id, workspaceId, request.log);
 
-            // 3. Generate JWT token
+            // 4. Generate JWT token
             const token = authService.generateToken(user);
 
-            // 4. Fetch user settings
+            // 5. Fetch user settings
             const userSettings = await settingsService.getSettings(user.id);
 
-            // 5. Generate refresh token
+            // 6. Generate refresh token
             const refreshToken = await refreshTokenService.createRefreshToken(user.id);
 
-            // 6. Set cookies
+            // 7. Set cookies
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 7. Return response with demo flag
-            const response = authService.createAuthResponse(user, token, 'demo_token', {
-                dashboardLanguage: userSettings.dashboardLanguage,
-            });
+            // 8. Build response — mirror the real Facebook login (workspaces + requiresPhone)
+            const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
+            const response: AuthResponse = authService.createAuthResponse(
+                user,
+                token,
+                'demo_token',
+                { dashboardLanguage: userSettings.dashboardLanguage },
+                workspaces,
+                requiresPhone,
+            );
+
+            // 9. Claim any pending e-commerce integration installs (parity with real login)
+            for (const integration of integrationRegistry.getEnabled()) {
+                const claim = await integration.claimPendingInstall(request, reply, user.id);
+                if (claim) Object.assign(response, claim);
+            }
 
             return reply.send({
                 ...response,
