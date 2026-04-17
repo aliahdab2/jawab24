@@ -77,6 +77,9 @@ export async function generateReplyWithProvider(
             })),
             maxTokens: config.openai.maxTokens,
             temperature: config.openai.temperature,
+            topP: config.openai.topP,
+            frequencyPenalty: config.openai.frequencyPenalty,
+            presencePenalty: config.openai.presencePenalty,
             timeoutMs: config.openai.timeoutMs,
         });
 

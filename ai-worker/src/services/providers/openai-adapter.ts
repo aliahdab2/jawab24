@@ -36,6 +36,9 @@ export class OpenAIAdapter implements LLMProvider {
                     messages: params.messages as OpenAI.ChatCompletionMessageParam[],
                     max_tokens: params.maxTokens,
                     temperature: params.temperature,
+                    ...(params.topP !== undefined && { top_p: params.topP }),
+                    ...(params.frequencyPenalty !== undefined && { frequency_penalty: params.frequencyPenalty }),
+                    ...(params.presencePenalty !== undefined && { presence_penalty: params.presencePenalty }),
                     response_format: {
                         type: 'json_schema',
                         json_schema: {

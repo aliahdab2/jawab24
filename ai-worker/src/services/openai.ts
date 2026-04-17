@@ -205,7 +205,15 @@ Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
-{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}`;
+{"reply":"عنا 3 باقات:\\n• المبتدئ – 15$ شهرياً\\n• الأعمال – 39$ شهرياً\\n• الاحترافية – 79$ شهرياً\\nبدك تفاصيل عن أي وحدة؟","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}
+
+Example 10 — Conversational answer with contractions and a short aside (shows natural tone, varied sentence length):
+Customer: "do you ship same day?" | KB has: "Same-day shipping for orders placed before 2pm"
+{"reply":"Yep — if you order before 2pm, it ships the same day. After that it goes out the next morning, still pretty quick.","intent":"QUESTION","confidence":"high","hedging":false,"language":"en","flags":[]}
+
+Example 11 — Short clarifying question back when the customer is terse (don't guess — ask):
+Customer: "السعر؟" | KB has multiple services with different prices
+{"reply":"أكيد 🙌 قصدك أي خدمة بالضبط؟ عنا أكثر من باقة والأسعار تختلف.","intent":"QUESTION","confidence":"high","hedging":false,"language":"ar","flags":[]}`;
 
 export interface ConversationMessage {
     role: 'user' | 'assistant';
@@ -309,6 +317,9 @@ export class OpenAIService {
                         messages,
                         max_tokens: config.openai.maxTokens,
                         temperature: config.openai.temperature,
+                        top_p: config.openai.topP,
+                        frequency_penalty: config.openai.frequencyPenalty,
+                        presence_penalty: config.openai.presencePenalty,
                         response_format: {
                             type: 'json_schema',
                             json_schema: {
@@ -516,11 +527,13 @@ export class OpenAIService {
             || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
         const isDM = channel === 'dm';
 
-        // Reply style — maps setting to prompt personality directive
+        // Reply style — maps setting to prompt personality directive.
+        // Each directive covers: sentence-length variation, contraction use, clarifying-question permission,
+        // emoji cadence, and one concrete anti-pattern. Changes here bump PROMPT_VERSION.
         const styleMap: Record<string, string> = {
-            professional: 'professional yet approachable — like a knowledgeable colleague, not a corporate FAQ',
-            casual: 'casual and relaxed — like texting a helpful friend who knows the business well',
-            enthusiastic: 'upbeat and enthusiastic — genuinely excited to help, uses more emojis',
+            professional: 'warm but precise — like a knowledgeable colleague, not a corporate FAQ. Mix short and medium sentences; use natural contractions ("don\'t", "we\'ll", "مو" / "ما عنا"). Ask a brief clarifying question when their message is ambiguous instead of guessing. Emojis sparingly — 0–1 per reply, and only when they fit. Avoid corporate filler like "we appreciate your inquiry" or "kindly be informed".',
+            casual: 'relaxed and conversational — like texting a helpful friend who knows the business. Vary sentence length: sometimes one short line, sometimes a longer answer with a brief aside. Contractions always ("I\'m", "it\'s", "مو مشكلة", "أيوه"). When the customer is terse, a quick question-back is fine. Emojis when they feel natural, not every reply. Never sound stiff or overly formal ("Dear customer", "السيد/ة العميل").',
+            enthusiastic: 'upbeat and warmly engaged — genuinely happy to help. Short punchy openers work well ("Awesome!", "يسعدني!"). Still vary length — don\'t pile on exclamation marks in every sentence. Contractions always. Ask back naturally when more info would help. Emojis more freely (1–2 per reply), but vary which ones — don\'t use 😊 in every reply. Avoid sounding fake-cheerful or over-the-top ("AMAZING!!! ❤️❤️❤️").',
         };
         const replyStyle = request.context?.replyStyle;
         const styleDirective = styleMap[replyStyle || ''] || styleMap.professional;
@@ -822,16 +835,31 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         }
 
         // Check 6: Self-identification — bot must never reveal it's automated.
-        // When asked "are you a bot?", the model sometimes says "أنا مو بوت" (I'm not a bot)
-        // which still contains the word "بوت". Replace the entire reply with a safe response.
+        // Strip only the offending sentence(s) and keep the rest of the reply.
+        // Fall back to a canned response only if nothing useful remains.
         let finalReply = reply;
         if (finalReply) {
             const botWords = /\bبوت\b|bot\b|روبوت|ذكاء اصطناعي|artificial intelligence|AI chatbot|chat\s*bot|Jawab24|jawab24|جواب٢٤|جواب 24/i;
             if (botWords.test(finalReply)) {
-                const lang = parsed.language || request.language || 'ar';
-                finalReply = lang === 'ar'
-                    ? 'أنا من فريق الصفحة، كيف أقدر أساعدك؟'
-                    : 'I\'m part of the page team. How can I help you?';
+                // Split while preserving sentence delimiters so we can rejoin naturally.
+                const parts = finalReply.split(/([.!?؟\n]+)/);
+                const kept: string[] = [];
+                for (let i = 0; i < parts.length; i += 2) {
+                    const sentence = parts[i];
+                    const delimiter = parts[i + 1] || '';
+                    if (!sentence) continue;
+                    if (botWords.test(sentence)) continue;
+                    kept.push(sentence + delimiter);
+                }
+                const filtered = kept.join('').trim();
+                if (filtered.length < 10) {
+                    const lang = parsed.language || request.language || 'ar';
+                    finalReply = lang === 'ar'
+                        ? 'أنا من فريق الصفحة، كيف أقدر أساعدك؟'
+                        : 'I\'m part of the page team. How can I help you?';
+                } else {
+                    finalReply = filtered;
+                }
             }
         }
 

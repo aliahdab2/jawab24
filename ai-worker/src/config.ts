@@ -21,7 +21,10 @@ export const config = {
         // Fixed model - not configurable for cost control
         model: DEFAULT_AI_MODEL,
         maxTokens: parseInt(process.env.OPENAI_MAX_TOKENS || '500', 10),
-        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.3'),
+        temperature: parseFloat(process.env.OPENAI_TEMPERATURE || '0.5'),
+        topP: parseFloat(process.env.OPENAI_TOP_P || '0.9'),
+        frequencyPenalty: parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0.3'),
+        presencePenalty: parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0.2'),
         timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),
     },
 
@@ -52,6 +55,15 @@ export function validateConfig(): void {
     }
     if (isNaN(config.openai.temperature) || config.openai.temperature < 0 || config.openai.temperature > 2) {
         errors.push(`OPENAI_TEMPERATURE must be 0-2, got: ${process.env.OPENAI_TEMPERATURE}`);
+    }
+    if (isNaN(config.openai.topP) || config.openai.topP < 0 || config.openai.topP > 1) {
+        errors.push(`OPENAI_TOP_P must be 0-1, got: ${process.env.OPENAI_TOP_P}`);
+    }
+    if (isNaN(config.openai.frequencyPenalty) || config.openai.frequencyPenalty < -2 || config.openai.frequencyPenalty > 2) {
+        errors.push(`OPENAI_FREQUENCY_PENALTY must be -2..2, got: ${process.env.OPENAI_FREQUENCY_PENALTY}`);
+    }
+    if (isNaN(config.openai.presencePenalty) || config.openai.presencePenalty < -2 || config.openai.presencePenalty > 2) {
+        errors.push(`OPENAI_PRESENCE_PENALTY must be -2..2, got: ${process.env.OPENAI_PRESENCE_PENALTY}`);
     }
     if (isNaN(config.openai.timeoutMs) || config.openai.timeoutMs < 1000) {
         errors.push(`OPENAI_TIMEOUT_MS must be >= 1000, got: ${process.env.OPENAI_TIMEOUT_MS}`);

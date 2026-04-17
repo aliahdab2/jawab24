@@ -42,6 +42,8 @@ export class ClaudeAdapter implements LLMProvider {
                     messages: conversationMessages,
                     max_tokens: params.maxTokens,
                     temperature: params.temperature,
+                    ...(params.topP !== undefined && { top_p: params.topP }),
+                    // Note: Anthropic API does not support frequency_penalty / presence_penalty
                 }, { signal: controller.signal }),
             );
 

@@ -54,9 +54,27 @@ describe('Config', () => {
         expect(config.openai.maxTokens).toBe(500);
     });
 
-    it('should parse OPENAI_TEMPERATURE as float with default 0.3', async () => {
+    it('should parse OPENAI_TEMPERATURE as float with default 0.5', async () => {
         delete process.env.OPENAI_TEMPERATURE;
         const { config } = await import('../src/config');
-        expect(config.openai.temperature).toBe(0.3);
+        expect(config.openai.temperature).toBe(0.5);
+    });
+
+    it('should parse OPENAI_TOP_P as float with default 0.9', async () => {
+        delete process.env.OPENAI_TOP_P;
+        const { config } = await import('../src/config');
+        expect(config.openai.topP).toBe(0.9);
+    });
+
+    it('should parse OPENAI_FREQUENCY_PENALTY as float with default 0.3', async () => {
+        delete process.env.OPENAI_FREQUENCY_PENALTY;
+        const { config } = await import('../src/config');
+        expect(config.openai.frequencyPenalty).toBe(0.3);
+    });
+
+    it('should parse OPENAI_PRESENCE_PENALTY as float with default 0.2', async () => {
+        delete process.env.OPENAI_PRESENCE_PENALTY;
+        const { config } = await import('../src/config');
+        expect(config.openai.presencePenalty).toBe(0.2);
     });
 });

@@ -13,6 +13,9 @@ export interface LLMChatParams {
     maxTokens: number;
     temperature: number;
     timeoutMs: number;
+    topP?: number;
+    frequencyPenalty?: number;
+    presencePenalty?: number;
 }
 
 export interface LLMChatResult {
