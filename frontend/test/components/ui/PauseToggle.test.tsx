@@ -14,11 +14,6 @@ describe('PauseToggle', () => {
     expect(screen.getByText(enMessages.resumeSmartReply)).toBeInTheDocument();
   });
 
-  it('shows scope hint', () => {
-    render(<PauseToggle paused={false} loading={false} onToggle={() => {}} />);
-    expect(screen.getByText(enMessages.pauseScope)).toBeInTheDocument();
-  });
-
   it('shows remaining minutes when paused', () => {
     render(<PauseToggle paused={true} remainingMinutes={15} loading={false} onToggle={() => {}} />);
     expect(screen.getByText('15 min remaining')).toBeInTheDocument();

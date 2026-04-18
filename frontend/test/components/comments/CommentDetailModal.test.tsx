@@ -11,6 +11,10 @@ vi.mock('next/link', () => ({
   ),
 }));
 
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({ data: undefined, isLoading: false }),
+}));
+
 vi.mock('@/hooks/useEscapeKey', () => ({ useEscapeKey: vi.fn() }));
 vi.mock('@/hooks/useBodyScrollLock', () => ({ useBodyScrollLock: vi.fn() }));
 vi.mock('@/hooks/useModalBackHandler', () => ({ useModalBackHandler: vi.fn() }));
@@ -26,6 +30,7 @@ vi.mock('@/hooks/useAiGeneration', () => ({
 vi.mock('@/lib/api', () => ({
   commentsApi: { sendReply: vi.fn(), resolveComment: vi.fn() },
   messagesApi: { getPauseStatus: vi.fn().mockResolvedValue({ data: null }) },
+  settingsApi: { get: vi.fn().mockResolvedValue({ data: { handoffPauseDurationMinutes: 15 } }) },
 }));
 vi.mock('@/lib/openExternalUrl', () => ({ openExternalUrl: vi.fn() }));
 vi.mock('@/lib/sentryHelpers', () => ({ captureError: vi.fn() }));
