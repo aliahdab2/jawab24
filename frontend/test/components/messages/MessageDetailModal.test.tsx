@@ -71,7 +71,10 @@ function makeConversation(lastMessage: Message, overrides: Partial<Conversation>
     senderName: 'Test User',
     messages: [lastMessage],
     lastMessage,
-    needsHumanAttention: false,
+    // A KB-flagged message inherently needs human attention (the AI couldn't answer).
+    // The NeedsAttentionBanner, which hosts the "Add to Business Info" link, only
+    // renders when this is true — so default accordingly.
+    needsHumanAttention: !!lastMessage.flagReason,
     ...overrides,
   };
 }

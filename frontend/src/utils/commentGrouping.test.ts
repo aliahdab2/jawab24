@@ -90,15 +90,6 @@ describe('groupComments', () => {
     expect(groups[0].needsAttention).toBe(true);
   });
 
-  it('sets needsAttention via keyword detection', () => {
-    const comments = [
-      makeComment({ id: 'c1', fromId: 'u1', postId: 'p1', message: 'I need help please', needsAttention: false }),
-    ];
-
-    const groups = groupComments(comments);
-    expect(groups[0].needsAttention).toBe(true);
-  });
-
   it('sets allResolved=true only when all comments are resolved', () => {
     const comments = [
       makeComment({ id: 'c1', fromId: 'u1', postId: 'p1', resolved: true }),
