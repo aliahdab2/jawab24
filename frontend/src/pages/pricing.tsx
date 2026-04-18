@@ -18,6 +18,7 @@ import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { buildWebUrl } from '@/lib/webUrl';
 import type { NextPageWithLayout } from './_app';
 import { isRTLLocale } from '@/utils/locale';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
@@ -399,10 +400,9 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     // The in-app browser doesn't share the app's auth session, so we
     // route through login with a redirect to checkout after auth.
     if (isNativePlatform()) {
-      const locale = router.locale === 'en' ? '/en' : '';
       const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
       const checkoutPath = `/checkout?planId=${planId}&interval=${billingInterval}&theme=${theme}`;
-      await openExternalUrl(`https://jawab24.com${locale}/login?redirect=${encodeURIComponent(checkoutPath)}`);
+      await openExternalUrl(buildWebUrl(`/login?redirect=${encodeURIComponent(checkoutPath)}`, router.locale));
       return;
     }
 

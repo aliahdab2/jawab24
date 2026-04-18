@@ -23,6 +23,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
+import { isNativePlatform } from '@/lib/capacitor';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -124,7 +125,17 @@ export function resolveNavKey(
     return key;
 }
 
-export function getNavigationGroups() {
+export function getNavigationGroups(options: { isNative?: boolean } = {}) {
+  const accountItems = [
+    // Pricing is intentionally hidden on native (iOS/Android) — mature B2B SaaS
+    // apps (Slack, Notion, HubSpot) do not expose plan purchase from the mobile
+    // app. Users manage subscriptions on the web.
+    ...(options.isNative
+      ? []
+      : [{ key: 'pricing.title', href: '/pricing', icon: CreditCard }]),
+    { key: 'nav.settings', href: '/settings', icon: Settings },
+  ];
+
   return [
     {
       labelKey: 'sidebar.overview',
@@ -143,10 +154,7 @@ export function getNavigationGroups() {
     },
     {
       labelKey: 'sidebar.account',
-      items: [
-        { key: 'pricing.title', href: '/pricing', icon: CreditCard },
-        { key: 'nav.settings', href: '/settings', icon: Settings },
-      ],
+      items: accountItems,
     },
   ];
 }
@@ -303,7 +311,7 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const navigationGroups = getNavigationGroups();
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform() });
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing);
 

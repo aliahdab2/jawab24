@@ -17,7 +17,6 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { isNativePlatform } from '@/lib/capacitor';
-import { openExternalUrl } from '@/lib/openExternalUrl';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
 
 interface DashboardLayoutProps {
@@ -167,20 +166,12 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
 
                 {/* Actions - matches landing page */}
                 <div className="flex items-center gap-1 sm:gap-4">
-                  {/* Pricing link - hidden on mobile and on the pricing page itself */}
-                  {router.pathname !== '/pricing' && (
-                    isNativePlatform() ? (
-                      <button
-                        onClick={() => openExternalUrl(`https://jawab24.com${locale === 'en' ? '/en' : ''}/pricing`)}
-                        className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
-                      >
-                        {tLanding('nav.pricing')}
-                      </button>
-                    ) : (
-                      <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
-                        {tLanding('nav.pricing')}
-                      </Link>
-                    )
+                  {/* Pricing link - hidden on mobile, on the pricing page itself,
+                      and on native apps (subscription purchases happen on the web). */}
+                  {router.pathname !== '/pricing' && !isNativePlatform() && (
+                    <Link href="/pricing" className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all">
+                      {tLanding('nav.pricing')}
+                    </Link>
                   )}
                   <button
                     onClick={toggleLanguage}
@@ -421,7 +412,7 @@ function MobileMenuOverlay({
   const isLandscape = useLandscape();
   useBodyScrollLock(isOpen);
 
-  const navigationGroups = getNavigationGroups();
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform() });
   const menuItems = navigationGroups.flatMap((group) =>
     group.items.map((item) => ({
       path: item.href,
@@ -431,13 +422,6 @@ function MobileMenuOverlay({
   );
 
   const handleNavigate = (path: string) => {
-    // On native, open pricing on the web (Google Play policy)
-    if (path === '/pricing' && isNativePlatform()) {
-      const locale = router.locale === 'en' ? '/en' : '';
-      openExternalUrl(`https://jawab24.com${locale}/pricing`);
-      onClose();
-      return;
-    }
     router.push(path);
     onClose();
   };

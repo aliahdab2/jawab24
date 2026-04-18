@@ -23,6 +23,7 @@ import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
+import { buildWebUrl } from '@/lib/webUrl';
 import type { Plan } from '@jawab24/shared';
 import { getDisplayPrice, getMonthlyEquivalent } from '@/utils/pricing';
 
@@ -214,8 +215,7 @@ function CheckoutPage() {
 
   useEffect(() => {
     if (isNativePlatform()) {
-      const locale = router.locale === 'en' ? '/en' : '';
-      openExternalUrl(`https://jawab24.com${locale}/pricing`);
+      openExternalUrl(buildWebUrl('/pricing', router.locale));
     }
   }, [router.locale]);
 

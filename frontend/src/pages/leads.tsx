@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef, type ReactElement } from 'react';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import Link from 'next/link';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { PageHeader, EmptyState, ConfirmationModal, Select } from '@/components/ui';
+import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
@@ -23,7 +22,6 @@ import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
 import { downloadCSV, formatDateForExport } from '@/utils/csvExport';
 import { captureError } from '@/lib/sentryHelpers';
-import { isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import type { NextPageWithLayout } from './_app';
 import { makeGetStaticProps } from '@/i18n/getMessages';
@@ -538,24 +536,14 @@ const LeadsPage: NextPageWithLayout = () => {
                     : <Download className="w-5 h-5" aria-hidden="true" />
                   }
                 </button>
-              ) : isNativePlatform() ? (
-                <button
-                  onClick={() => openExternalUrl('https://jawab24.com/pricing')}
-                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
-                  aria-label={t('exportCsv')}
-                >
-                  <Lock className="w-4 h-4" aria-hidden="true" />
-                  <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
-                </button>
               ) : (
-                <Link
-                  href="/pricing"
+                <UpgradeCTA
+                  nativeVariant="inline"
                   className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
-                  aria-label={t('exportCsv')}
                 >
                   <Lock className="w-4 h-4" aria-hidden="true" />
                   <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>
-                </Link>
+                </UpgradeCTA>
               )}
             </div>
           ) : undefined

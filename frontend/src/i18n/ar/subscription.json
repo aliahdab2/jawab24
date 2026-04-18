@@ -17,5 +17,7 @@
   "resumePlan": "استئناف الاشتراك",
   "limitReached": "تم الوصول للحد الأقصى",
   "upgradeToUnlock": "قم بترقية باقتك للحصول على مميزات إضافية",
-  "usagePercent": "تم استهلاك {percent}% من الرصيد"
+  "usagePercent": "تم استهلاك {percent}% من الرصيد",
+  "upgradeOnWeb": "لترقية باقتك أو إدارتها، يرجى زيارة jawab24.com من جهاز الكمبيوتر.",
+  "availableOnHigherPlan": "متاحة في باقة أعلى. يمكنك الترقية عبر jawab24.com."
 }
