@@ -245,3 +245,64 @@ describe('requestAndRegisterPush', () => {
         expect(shouldShow).toBe(false);
     });
 });
+
+describe('registerPushListeners — listener order (prevents FCM token loss)', () => {
+    beforeEach(() => {
+        mockIsNative = true;
+        localStorage.clear();
+        nativeStore.clear();
+        vi.clearAllMocks();
+        vi.resetModules();
+        mockRegister.mockResolvedValue(undefined);
+        mockAddListener.mockReturnValue({ remove: vi.fn() });
+    });
+
+    afterEach(() => {
+        mockIsNative = false;
+    });
+
+    it('attaches the registration listener before calling register()', async () => {
+        mockRequestPermissions.mockResolvedValue({ receive: 'granted' });
+        const { requestAndRegisterPush } = await import('./notifications');
+        await requestAndRegisterPush('test-token');
+
+        // register() emits the FCM token event with no replay — every
+        // addListener call must happen first, or the token is lost and
+        // the backend never records a device token.
+        const [firstRegisterOrder] = mockRegister.mock.invocationCallOrder;
+        expect(firstRegisterOrder).toBeDefined();
+        for (const order of mockAddListener.mock.invocationCallOrder) {
+            expect(order).toBeLessThan(firstRegisterOrder);
+        }
+
+        const events = mockAddListener.mock.calls.map(args => args[0]);
+        expect(events).toContain('registration');
+        expect(events).toContain('registrationError');
+        expect(events).toContain('pushNotificationReceived');
+    });
+
+    it('is idempotent — a second call does not re-register listeners or re-call register()', async () => {
+        mockRequestPermissions.mockResolvedValue({ receive: 'granted' });
+        const { requestAndRegisterPush } = await import('./notifications');
+
+        await requestAndRegisterPush('test-token');
+        const addCalls = mockAddListener.mock.calls.length;
+        const registerCalls = mockRegister.mock.calls.length;
+
+        await requestAndRegisterPush('test-token');
+        expect(mockAddListener.mock.calls.length).toBe(addCalls);
+        expect(mockRegister.mock.calls.length).toBe(registerCalls);
+    });
+
+    it('initPushNotifications attaches listeners for returning users (permission already granted)', async () => {
+        nativeStore.set(PERM_GRANTED_KEY, 'true');
+        const { initPushNotifications } = await import('./notifications');
+
+        await initPushNotifications('test-token');
+
+        expect(mockRequestPermissions).not.toHaveBeenCalled(); // no system dialog
+        expect(mockRegister).toHaveBeenCalledTimes(1);
+        const events = mockAddListener.mock.calls.map(args => args[0]);
+        expect(events).toContain('registration');
+    });
+});

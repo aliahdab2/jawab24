@@ -45,23 +45,19 @@ async function prefSet(key: string, value: string): Promise<void> {
  */
 async function migrateFromLocalStorage(): Promise<void> {
     if (!Capacitor.isNativePlatform()) return;
-    const { Preferences } = await import('@capacitor/preferences');
 
     // Already migrated?
-    const { value: granted } = await Preferences.get({ key: PERM_GRANTED_KEY });
-    if (granted) return;
+    if (await prefGet(PERM_GRANTED_KEY)) return;
 
-    // Migrate granted flag
     const lsGranted = localStorage.getItem(PERM_GRANTED_KEY);
     if (lsGranted) {
-        await Preferences.set({ key: PERM_GRANTED_KEY, value: lsGranted });
+        await prefSet(PERM_GRANTED_KEY, lsGranted);
         localStorage.removeItem(PERM_GRANTED_KEY);
     }
 
-    // Migrate dismissed timestamp
     const lsDismissed = localStorage.getItem(PERM_DISMISSED_KEY);
     if (lsDismissed) {
-        await Preferences.set({ key: PERM_DISMISSED_KEY, value: lsDismissed });
+        await prefSet(PERM_DISMISSED_KEY, lsDismissed);
         localStorage.removeItem(PERM_DISMISSED_KEY);
     }
 }
@@ -170,25 +166,30 @@ export async function registerNotificationTapListener(): Promise<void> {
 
 /**
  * Internal: register for push and set up all listeners (except tap — handled early).
+ *
+ * Listeners MUST be attached before calling register() — the Capacitor plugin
+ * fires the `registration` event as soon as FCM/APNs returns a token, and there
+ * is no replay. Attaching late means the token is lost and the backend never
+ * receives it, so push notifications silently stop working.
  */
+let pushListenersRegistered = false;
 async function registerPushListeners(authToken: string): Promise<void> {
-    await PushNotifications.register();
+    if (pushListenersRegistered) return;
+    pushListenersRegistered = true;
 
-    PushNotifications.addListener('registration', async (tokenData: Token) => {
+    await PushNotifications.addListener('registration', async (tokenData: Token) => {
         await registerTokenWithBackend(authToken, tokenData.value);
     });
 
-    PushNotifications.addListener('registrationError', (error) => {
+    await PushNotifications.addListener('registrationError', (error) => {
         captureError(error, 'Push registration error', { tags: { context: 'push-registration' } });
     });
 
-    PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
+    await PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
         handleForegroundNotification(notification);
     });
 
-    // Tap listener is registered early via registerNotificationTapListener()
-    // to avoid cold-start flash. Ensure it's registered here too as a safety net.
-    await registerNotificationTapListener();
+    await PushNotifications.register();
 }
 
 /**

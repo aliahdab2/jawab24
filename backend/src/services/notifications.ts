@@ -168,6 +168,20 @@ function translateFlagReason(reason: string, lang: string): string {
  * Replace template placeholders in a localized string map.
  * Arabic gets special handling for `reason` (translated) and `senderName` ('Unknown' → مجهول).
  */
+function buildTemplatePayload(
+    type: NotificationType,
+    variables: Record<string, string>,
+    data?: Record<string, unknown>,
+): NotificationPayload {
+    const template = NOTIFICATION_TEMPLATES[type];
+    return {
+        type,
+        titles: replaceVariables(template.titles, variables),
+        bodies: replaceVariables(template.bodies, variables),
+        data,
+    };
+}
+
 function replaceVariables(
     templateMap: Record<string, string>,
     variables: Record<string, string>,
@@ -316,14 +330,7 @@ class NotificationService {
         variables: Record<string, string> = {},
         data?: Record<string, unknown>
     ): Promise<string> {
-        const template = NOTIFICATION_TEMPLATES[type];
-
-        return this.sendNotification(userId, {
-            type,
-            titles: replaceVariables(template.titles, variables),
-            bodies: replaceVariables(template.bodies, variables),
-            data,
-        });
+        return this.sendNotification(userId, buildTemplatePayload(type, variables, data));
     }
 
     /**
@@ -562,13 +569,7 @@ class NotificationService {
         variables: Record<string, string> = {},
         data?: Record<string, unknown>,
     ): Promise<void> {
-        const template = NOTIFICATION_TEMPLATES[type];
-        return this.sendNotificationToWorkspace(workspaceId, {
-            type,
-            titles: replaceVariables(template.titles, variables),
-            bodies: replaceVariables(template.bodies, variables),
-            data,
-        });
+        return this.sendNotificationToWorkspace(workspaceId, buildTemplatePayload(type, variables, data));
     }
 }
 
