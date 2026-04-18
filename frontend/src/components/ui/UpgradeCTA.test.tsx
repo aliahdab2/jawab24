@@ -55,7 +55,7 @@ describe('UpgradeCTA', () => {
       expect(btn).toHaveClass('badge');
     });
 
-    it('opens the embedded pricing URL via openExternalUrl when clicked', () => {
+    it('opens the embedded pricing URL with the current theme forwarded', () => {
       render(
         <UpgradeCTA>
           <span>Upgrade Plan</span>
@@ -64,8 +64,22 @@ describe('UpgradeCTA', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Upgrade Plan' }));
       expect(mockOpenExternalUrl).toHaveBeenCalledTimes(1);
       expect(mockOpenExternalUrl).toHaveBeenCalledWith(
-        'https://jawab24.com/en/pricing?embedded=1',
+        'https://jawab24.com/en/pricing?embedded=1&theme=light',
       );
+    });
+
+    it('forwards dark theme when the app is in dark mode', () => {
+      document.documentElement.classList.add('dark');
+      render(
+        <UpgradeCTA>
+          <span>Upgrade Plan</span>
+        </UpgradeCTA>
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Upgrade Plan' }));
+      expect(mockOpenExternalUrl).toHaveBeenCalledWith(
+        'https://jawab24.com/en/pricing?embedded=1&theme=dark',
+      );
+      document.documentElement.classList.remove('dark');
     });
 
     it('activates on Enter key for keyboard users', () => {

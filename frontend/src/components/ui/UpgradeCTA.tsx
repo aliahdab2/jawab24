@@ -31,7 +31,14 @@ export function UpgradeCTA({ children, className }: UpgradeCTAProps) {
 
   if (isNativePlatform()) {
     const handleActivate = () => {
-      void openExternalUrl(buildWebUrl('/pricing?embedded=1', locale));
+      // Forward the in-app theme so the web pricing page matches — otherwise
+      // a light-mode user would see jawab24.com render in dark (no shared
+      // localStorage between the native web view and Capacitor Browser).
+      const isDark = document.documentElement.classList.contains('dark');
+      const theme = isDark ? 'dark' : 'light';
+      void openExternalUrl(
+        buildWebUrl(`/pricing?embedded=1&theme=${theme}`, locale),
+      );
     };
     return (
       <div

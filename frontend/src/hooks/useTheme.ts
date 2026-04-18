@@ -13,6 +13,19 @@ export function useTheme() {
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
 
+  // One-shot: if the URL carries `?theme=light|dark` (e.g. the native app
+  // opening the web in Capacitor Browser wants the new tab to match the
+  // in-app theme), honor it and persist to the store for the rest of the
+  // session. Runs only on initial mount.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const param = new URLSearchParams(window.location.search).get('theme');
+    if (param === 'light' || param === 'dark') {
+      setTheme(param);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const root = document.documentElement;
 
