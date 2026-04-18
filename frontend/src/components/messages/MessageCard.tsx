@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
 import { renderMessageText } from '@/utils/renderMessageText';
+import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Message } from '@/lib/api';
 
 export interface Conversation {
@@ -87,12 +88,7 @@ export const MessageCard = React.memo(function MessageCard({
     </span>
   ) : null;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onClick();
-    }
-  };
+  const handleKeyDown = useCardKeyboard(onClick);
 
   return (
     <div
@@ -104,7 +100,7 @@ export const MessageCard = React.memo(function MessageCard({
         'border border-transparent hover:border-theme-border',
         'hover:shadow-md hover:shadow-surface-200/30 dark:hover:shadow-surface-900/20',
         'transition-all duration-200',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        CLICKABLE_CARD_FOCUS,
         conv.needsHumanAttention && 'border-s-[3px] border-s-red-400 dark:border-s-red-500 bg-red-50/30 dark:bg-red-950/10',
         !conv.needsHumanAttention && 'hover:bg-muted/40 dark:hover:bg-muted/20',
         className

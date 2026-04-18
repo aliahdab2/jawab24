@@ -2,12 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { PlatformIcon, FlagTag, PauseToggle } from '@/components/ui';
-import { isKbRelatedFlag } from '@/utils/flagReason';
+import { PlatformIcon, PauseToggle, NeedsAttentionBanner } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
-import { useTranslations, useLocale } from 'next-intl';
-import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { commentsApi, messagesApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -23,7 +21,6 @@ import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import {
   Sparkles,
   Bot,
-  AlertTriangle,
   X,
   Send,
   Loader2,
@@ -62,9 +59,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const tDashboard = useTranslations('dashboard');
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
-  const locale = useLocale();
-
-  const isKbFlag = isKbRelatedFlag(comment.flagReason);
 
   useEscapeKey(onClose);
   useBodyScrollLock(true);
@@ -289,21 +283,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="px-4 pt-4 md:px-6 md:pt-4 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
           {/* Needs attention banner */}
           {needsAttention && (
-            <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-lg status-warning border text-xs font-medium">
-              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>{t('needsAttention')}</span>
-              <FlagTag flagReason={comment.flagReason} />
-              {isKbFlag && (
-                <Link
-                  href={`/${locale}/pages?openKb=true`}
-                  onClick={onClose}
-                  className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
-                >
-                  <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
-                  <span>{t('addToBusinessInfo')}</span>
-                </Link>
-              )}
-            </div>
+            <NeedsAttentionBanner flagReason={comment.flagReason} onKbLinkClick={onClose} />
           )}
 
           {/* Held reply banner */}

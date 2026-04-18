@@ -18,6 +18,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { formatMessageTime } from '@/utils/dateUtils';
+import { useCardKeyboard, CLICKABLE_CARD_FOCUS } from '@/hooks/useCardKeyboard';
 import type { Comment } from '@jawab24/shared';
 
 export interface CommentCardProps {
@@ -132,12 +133,7 @@ export const CommentCard = React.memo(function CommentCard({
     </span>
   ) : null;
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      onClick();
-    }
-  };
+  const handleKeyDown = useCardKeyboard(onClick);
 
   return (
     <div
@@ -148,7 +144,7 @@ export const CommentCard = React.memo(function CommentCard({
         "relative rounded-2xl bg-card border border-theme-border/60 hover:border-theme-border",
         "hover:shadow-lg hover:shadow-surface-200/40 dark:hover:shadow-surface-900/30",
         "active:scale-[0.99] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        CLICKABLE_CARD_FOCUS,
         needsAttention && 'border-s-[3px] border-s-red-400 dark:border-s-red-500 bg-red-50/20 dark:bg-red-950/10',
         className
       )}

@@ -2,10 +2,8 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { FlagTag, PlatformIcon, PauseToggle } from '@/components/ui';
-import { useTranslations, useLocale } from 'next-intl';
-import Link from 'next/link';
-import { isKbRelatedFlag } from '@/utils/flagReason';
+import { PlatformIcon, PauseToggle, NeedsAttentionBanner } from '@/components/ui';
+import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
@@ -19,7 +17,6 @@ import {
   X,
   Send,
   Bot,
-  AlertTriangle,
   Sparkles,
   CheckCircle,
   Undo2,
@@ -71,10 +68,6 @@ export function MessageDetailModal({
   const tc = useTranslations('common');
   const tComments = useTranslations('comments');
   const tDashboard = useTranslations('dashboard');
-  const locale = useLocale();
-
-  const isKbFlag = isKbRelatedFlag(conversation.lastMessage.flagReason);
-
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
   // was used to find this conversation. Tabs control which conversations appear in the list,
@@ -388,21 +381,10 @@ export function MessageDetailModal({
           className="px-4 pt-4 md:px-6 md:pt-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
           {conversation.needsHumanAttention && (
-            <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-lg status-warning border text-xs font-medium">
-              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-              <span>{tComments('needsAttention')}</span>
-              <FlagTag flagReason={conversation.lastMessage.flagReason} />
-              {isKbFlag && (
-                <Link
-                  href={`/${locale}/pages?openKb=true`}
-                  onClick={onClose}
-                  className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
-                >
-                  <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
-                  <span>{tComments('addToBusinessInfo')}</span>
-                </Link>
-              )}
-            </div>
+            <NeedsAttentionBanner
+              flagReason={conversation.lastMessage.flagReason}
+              onKbLinkClick={onClose}
+            />
           )}
 
           {heldMessage && (

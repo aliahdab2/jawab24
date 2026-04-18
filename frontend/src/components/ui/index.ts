@@ -21,6 +21,7 @@ export { NotificationBell } from './NotificationBell';
 export { ConfirmationModal } from './ConfirmationModal';
 export { CharCounter } from './CharCounter';
 export { FlagTag } from './FlagTag';
+export { NeedsAttentionBanner } from './NeedsAttentionBanner';
 export { PauseToggle } from './PauseToggle';
 export { ThemeToggleButton } from './ThemeToggleButton';
 export { KeywordChipInput } from './KeywordChipInput';
