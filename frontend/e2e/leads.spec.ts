@@ -161,7 +161,9 @@ test.describe('Leads — Export gating', () => {
     await mockAPIs(page, { planSlug: 'starter' });
     await gotoLeads(page);
 
-    const lockedLink = page.getByRole('link', { name: new RegExp(t('leads.exportCsv')) });
+    // Locked variant renders an UpgradeCTA (Lock icon + "Business+" badge) that
+    // links to /pricing — the accessible name is "Business+", not "Export CSV".
+    const lockedLink = page.getByRole('link', { name: /Business\+/i });
     await expect(lockedLink).toBeVisible({ timeout: 5000 });
     await expect(lockedLink).toHaveAttribute('href', /\/pricing/);
   });
