@@ -202,7 +202,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('Mark as handled')).toBeInTheDocument();
+    expect(screen.getByText('Resolve')).toBeInTheDocument();
   });
 
   it('shows resolve button on a replied, needs-attention conversation (regression: unresolvable DM)', () => {
@@ -219,7 +219,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('Mark as handled')).toBeInTheDocument();
+    expect(screen.getByText('Resolve')).toBeInTheDocument();
   });
 
   it('hides resolve button when all messages are resolved', () => {
@@ -236,7 +236,7 @@ describe('MessageDetailModal', () => {
     );
 
     // The clickable resolve button should not appear (only the resolved badge)
-    expect(screen.queryByText('Mark as handled')).not.toBeInTheDocument();
+    expect(screen.queryByText('Resolve')).not.toBeInTheDocument();
     expect(screen.getByText('Handled')).toBeInTheDocument();
   });
 
@@ -256,7 +256,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Mark as handled'));
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
     expect(onResolve).toHaveBeenCalledWith('sender1', 'page1');
   });
 
@@ -294,7 +294,8 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('10 min remaining')).toBeInTheDocument();
+    // Shown in both the PauseBanner (header) and the PauseToggle (footer).
+    expect(screen.getAllByText('10 min remaining').length).toBeGreaterThan(0);
   });
 
   it('calls onClose when close button is clicked', () => {
