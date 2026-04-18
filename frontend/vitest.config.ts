@@ -9,6 +9,11 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./test/setup.ts'],
     include: ['test/**/*.test.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    // V8 coverage instrumentation slows tests ~20×, making the 5s default
+    // flake on fast tests during `test:coverage`. 20s is well clear of real
+    // hangs while absorbing the instrumentation overhead.
+    testTimeout: 20000,
+    hookTimeout: 20000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
