@@ -14,7 +14,6 @@ import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useHandoffPauseDuration } from '@/hooks';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { getCommentExternalUrl } from '@/utils/pageUrl';
@@ -62,7 +61,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
   useEscapeKey(onClose);
   useBodyScrollLock(true);
-  useModalBackHandler(true, onClose);
 
   const needsAttention = checkNeedsAttention(comment);
   const isHeldReply = !comment.replied && !!comment.aiOriginalReply && comment.flagReason?.includes('held_low_confidence');

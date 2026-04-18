@@ -262,4 +262,39 @@ test.describe('Message Detail Modal', () => {
 
     await expect(page.locator(`button:has-text("${t('messages.pauseSmartReply')}")`).first()).toBeVisible({ timeout: 5000 });
   });
+
+  test('opening a conversation adds ?conversation= to the URL', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=Bob Wilson').first().click();
+
+    // Modal opens — then URL reflects the selection
+    await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 8000 });
+    await expect(page).toHaveURL(/\?conversation=sender_1/);
+  });
+
+  test('browser back closes the modal without leaving /messages', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=Bob Wilson').first().click();
+
+    await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 8000 });
+    await expect(page).toHaveURL(/\?conversation=sender_1/);
+
+    await page.goBack();
+
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 });
+    await expect(page).toHaveURL(/\/en\/messages(\?|$)/);
+    await expect(page).not.toHaveURL(/conversation=/);
+  });
+
+  test('X button closes the modal and strips the query param', async ({ page }) => {
+    await setupPage(page);
+    await page.locator('text=Bob Wilson').first().click();
+
+    await expect(page.locator('.modal-overlay')).toBeVisible({ timeout: 8000 });
+
+    await page.locator(`.modal-overlay button[aria-label="${t('comments.close')}"]`).click();
+
+    await expect(page.locator('.modal-overlay')).not.toBeVisible({ timeout: 5000 });
+    await expect(page).not.toHaveURL(/conversation=/);
+  });
 });

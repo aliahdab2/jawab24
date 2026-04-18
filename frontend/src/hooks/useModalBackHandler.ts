@@ -6,6 +6,11 @@ import { useEffect } from 'react';
  * entry first. Only if the stack is empty does it fall through to
  * router.back() / App.exitApp().
  *
+ * For "view-like" modals that represent a piece of content (conversation,
+ * comment), prefer URL-based routing (e.g. `?conversation=<id>`) over this
+ * hook — back navigation, deep-linking, and bfcache all work naturally.
+ * This hook is for transient dialogs that don't belong in the URL.
+ *
  * Usage — call inside any modal component:
  *   useModalBackHandler(isOpen, onClose);
  */

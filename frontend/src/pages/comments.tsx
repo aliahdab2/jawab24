@@ -251,18 +251,54 @@ const CommentsPage: NextPageWithLayout = () => {
     syncFromUrl(router.query.page as string | undefined);
   }, [router.isReady, router.query.filter, router.query.page, router.query.commentId, router, syncFromUrl]);
 
+  // URL-driven modal open: ?comment=<id> — back button / swipe-back pops the
+  // entry naturally, which clears selectedComment via the sync effect below.
+  const pushedModalRef = useRef(false);
+  const openComment = useCallback((comment: Comment) => {
+    pushedModalRef.current = true;
+    router.push(
+      { pathname: router.pathname, query: { ...router.query, comment: comment.id } },
+      undefined,
+      { shallow: true },
+    );
+  }, [router]);
+  const closeComment = useCallback(() => {
+    if (pushedModalRef.current) {
+      pushedModalRef.current = false;
+      router.back();
+    } else {
+      const { comment: _c, ...rest } = router.query;
+      void _c;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
+  }, [router]);
+
   // Deep-link: auto-select comment after "all" data loads
   useEffect(() => {
     if (!pendingDeepLinkRef.current || isLoading || filter !== 'all') return;
     const targetId = pendingDeepLinkRef.current;
     const found = allComments.find(c => c.id === targetId);
     if (found) {
-      setSelectedComment(found);
+      openComment(found);
     } else if (allComments.length > 0) {
       toast.info(t('deepLinkNotFound'));
     }
     pendingDeepLinkRef.current = null;
-  }, [allComments, isLoading, filter, t]);
+  }, [allComments, isLoading, filter, t, openComment]);
+
+  // Sync modal state from URL (?comment=<id>). Drives open via click/deep-link
+  // AND close via browser back / swipe-back / hardware back.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const commentIdParam = router.query.comment as string | undefined;
+    if (!commentIdParam) {
+      if (selectedComment) setSelectedComment(null);
+      return;
+    }
+    if (selectedComment?.id === commentIdParam) return;
+    const found = allComments.find(c => c.id === commentIdParam);
+    if (found) setSelectedComment(found);
+  }, [router.isReady, router.query.comment, allComments, selectedComment]);
 
   // Update Page Title — use server stats counts to match chip badges
   useEffect(() => {
@@ -284,8 +320,8 @@ const CommentsPage: NextPageWithLayout = () => {
     document.title = `${t('title')}${filterLabel}${countLabel}`;
   }, [filter, stats, t]);
 
-  // ESC key to close modal
-  useEscapeKey(() => setSelectedComment(null), !!selectedComment);
+  // ESC key to close modal (goes through closeComment so URL stays in sync)
+  useEscapeKey(() => closeComment(), !!selectedComment);
 
   const handleResolve = useCallback(async (commentId: string) => {
     try {
@@ -513,8 +549,8 @@ const CommentsPage: NextPageWithLayout = () => {
                     pageName={page?.name}
                     showPlatformIcon={showPlatformIcon}
                     animationDelay={i < 10 ? i * 0.05 : 0}
-                    onClick={() => setSelectedComment(comment)}
-                    onQuickReply={() => setSelectedComment(comment)}
+                    onClick={() => openComment(comment)}
+                    onQuickReply={() => openComment(comment)}
                     onResolve={!comment.resolved ? () => handleResolve(comment.id) : undefined}
                     onUnresolve={comment.resolved ? () => handleUnresolve(comment.id) : undefined}
                     groupCount={group.count}
@@ -578,7 +614,7 @@ const CommentsPage: NextPageWithLayout = () => {
         <CommentDetailModal
           key={selectedComment.id}
           comment={selectedComment}
-          onClose={() => setSelectedComment(null)}
+          onClose={closeComment}
           onReplySuccess={() => refetch()}
           onResolve={!selectedComment.resolved ? () => handleResolve(selectedComment.id) : undefined}
           onUnresolve={selectedComment.resolved ? () => handleUnresolve(selectedComment.id) : undefined}

@@ -6,7 +6,6 @@ import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySour
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
-import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
@@ -110,7 +109,6 @@ export function MessageDetailModal({
 
   useEscapeKey(() => onClose(), true);
   useBodyScrollLock(true);
-  useModalBackHandler(true, onClose);
 
   // Check if user is scrolled near the bottom (within 100px)
   const checkIfNearBottom = useCallback(() => {

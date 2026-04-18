@@ -111,6 +111,30 @@ const MessagesPage: NextPageWithLayout = () => {
     syncFromUrl(router.query.page as string | undefined);
   }, [router.isReady, router.query.filter, router.query.messageId, router.query.page, router, syncFromUrl]);
 
+  // URL-driven modal open: ?conversation=<senderId> — back button / swipe-back pops
+  // the entry naturally, which triggers setSelectedConversation(null) via the sync
+  // effect below. Open adds a history entry via router.push; close uses router.back
+  // if we pushed it, otherwise router.replace to strip the param (deep-link case).
+  const pushedModalRef = useRef(false);
+  const openConversation = useCallback((conv: Conversation) => {
+    pushedModalRef.current = true;
+    router.push(
+      { pathname: router.pathname, query: { ...router.query, conversation: conv.senderId } },
+      undefined,
+      { shallow: true },
+    );
+  }, [router]);
+  const closeConversation = useCallback(() => {
+    if (pushedModalRef.current) {
+      pushedModalRef.current = false;
+      router.back();
+    } else {
+      const { conversation: _c, ...rest } = router.query;
+      void _c;
+      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
+    }
+  }, [router]);
+
   // API params derived from current filter + page
   const apiParams = useMemo(() => ({
     ...getApiParams(filter),
@@ -131,8 +155,8 @@ const MessagesPage: NextPageWithLayout = () => {
     isResuming,
   } = useConversationActions({ extraInvalidateKeys: [['messages']] });
 
-  // ESC key to close modal
-  useEscapeKey(() => setSelectedConversation(null), !!selectedConversation);
+  // ESC key to close modal (goes through closeConversation so URL stays in sync)
+  useEscapeKey(() => closeConversation(), !!selectedConversation);
 
   // Fetch Stats
   const { data: statsData } = useQuery({
@@ -279,12 +303,26 @@ const MessagesPage: NextPageWithLayout = () => {
       c.messages.some(m => m.id === targetId)
     );
     if (found) {
-      setSelectedConversation(found);
+      openConversation(found);
     } else if (allMessages.length > 0) {
       toast.info(t('deepLinkNotFound'));
     }
     pendingDeepLinkRef.current = null;
-  }, [conversations, allMessages, isLoading, filter, t, setSelectedConversation]);
+  }, [conversations, allMessages, isLoading, filter, t, openConversation]);
+
+  // Sync modal state from URL (?conversation=<senderId>). Drives open via
+  // click/deep-link AND close via browser back / swipe-back / hardware back.
+  useEffect(() => {
+    if (!router.isReady) return;
+    const senderId = router.query.conversation as string | undefined;
+    if (!senderId) {
+      if (selectedConversation) setSelectedConversation(null);
+      return;
+    }
+    if (selectedConversation?.senderId === senderId) return;
+    const found = conversations.find(c => c.senderId === senderId);
+    if (found) setSelectedConversation(found);
+  }, [router.isReady, router.query.conversation, conversations, selectedConversation, setSelectedConversation]);
 
   // Live sync: when SSE invalidates the messages query, update the open conversation thread.
   // Only sync when server has MORE messages to avoid reverting optimistic updates from manual replies.
@@ -506,7 +544,7 @@ const MessagesPage: NextPageWithLayout = () => {
                   key={conv.senderId}
                   conversation={conv}
                   animationDelay={i < 10 ? i * 0.05 : 0}
-                  onClick={() => setSelectedConversation(conv)}
+                  onClick={() => openConversation(conv)}
                   onResolve={needsResolve ? () => handleResolve(conv.senderId, conv.lastMessage.pageId) : undefined}
                   onUnresolve={isResolved ? () => handleUnresolve(conv.senderId, conv.lastMessage.pageId) : undefined}
                 />
@@ -557,7 +595,7 @@ const MessagesPage: NextPageWithLayout = () => {
         <MessageDetailModal
           key={selectedConversation.senderId}
           conversation={selectedConversation}
-          onClose={() => setSelectedConversation(null)}
+          onClose={closeConversation}
           onReply={handleReply}
           onResolve={handleResolve}
           onUnresolve={handleUnresolve}
