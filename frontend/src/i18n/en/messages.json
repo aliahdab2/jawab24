@@ -39,5 +39,6 @@
   "unresolveSuccess": "Marked as unhandled",
   "resolved": "Handled",
   "unresolve": "Mark as unhandled",
-  "newMessage": "New message"
+  "newMessage": "New message",
+  "openConversation": "Open conversation with {name}"
 }

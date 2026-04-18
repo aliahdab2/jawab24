@@ -189,13 +189,30 @@ describe('MessageDetailModal', () => {
     expect(onReply).not.toHaveBeenCalled();
   });
 
-  it('shows resolve button when conversation has unresolved unreplied messages', () => {
+  it('shows resolve button when conversation has any unresolved incoming message', () => {
     const incoming = makeMessage({ replied: false, resolved: false });
 
     render(
       <MessageDetailModal
         {...defaultProps}
         conversation={makeConversation({
+          messages: [incoming],
+          lastMessage: incoming,
+        })}
+      />
+    );
+
+    expect(screen.getByText('Mark as handled')).toBeInTheDocument();
+  });
+
+  it('shows resolve button on a replied, needs-attention conversation (regression: unresolvable DM)', () => {
+    const incoming = makeMessage({ replied: true, resolved: false });
+
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        conversation={makeConversation({
+          needsHumanAttention: true,
           messages: [incoming],
           lastMessage: incoming,
         })}
@@ -310,7 +327,7 @@ describe('MessageDetailModal', () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it('shows needs attention badge when flagged', () => {
+  it('shows needs attention banner in the footer when flagged', () => {
     render(
       <MessageDetailModal
         {...defaultProps}
@@ -318,7 +335,7 @@ describe('MessageDetailModal', () => {
       />
     );
 
-    expect(screen.getByText('Needs Human')).toBeInTheDocument();
+    expect(screen.getByText('Needs attention')).toBeInTheDocument();
   });
 
   describe('page name link', () => {

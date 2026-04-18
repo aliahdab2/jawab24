@@ -39,5 +39,6 @@
   "unresolveSuccess": "تم إلغاء علامة المعالجة",
   "resolved": "تمت المعالجة",
   "unresolve": "تحديد كغير معالج",
-  "newMessage": "رسالة جديدة"
+  "newMessage": "رسالة جديدة",
+  "openConversation": "فتح محادثة مع {name}"
 }

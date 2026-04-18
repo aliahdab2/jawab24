@@ -87,18 +87,30 @@ export const MessageCard = React.memo(function MessageCard({
     </span>
   ) : null;
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={tMessages('openConversation', { name: conv.senderName || tc('unknownUser') })}
       className={clsx(
         'group relative flex items-start gap-3 sm:gap-4 px-3.5 sm:px-5 py-3 sm:py-4 bg-card rounded-2xl cursor-pointer',
         'border border-transparent hover:border-theme-border',
         'hover:shadow-md hover:shadow-surface-200/30 dark:hover:shadow-surface-900/20',
         'transition-all duration-200',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
         conv.needsHumanAttention && 'border-s-[3px] border-s-red-400 dark:border-s-red-500 bg-red-50/30 dark:bg-red-950/10',
         !conv.needsHumanAttention && 'hover:bg-muted/40 dark:hover:bg-muted/20',
         className
       )}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       style={animationDelay > 0 ? ({ animationDelay: `${animationDelay}s` } as React.CSSProperties) : undefined}
     >
       {/* Avatar */}

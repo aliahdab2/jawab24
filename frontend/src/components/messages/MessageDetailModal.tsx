@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { Badge, PlatformIcon, PauseToggle } from '@/components/ui';
+import { FlagTag, PlatformIcon, PauseToggle } from '@/components/ui';
 import { useTranslations, useLocale } from 'next-intl';
 import Link from 'next/link';
 import { isKbRelatedFlag } from '@/utils/flagReason';
@@ -209,8 +209,8 @@ export function MessageDetailModal({
     setSendError(null);
   };
 
-  const hasUnresolvedUnreplied = messages.some(
-    m => m.direction === 'incoming' && !m.replied && !m.resolved
+  const hasUnresolvedIncoming = messages.some(
+    m => m.direction === 'incoming' && !m.resolved
   );
   const hasResolvedIncoming = messages.some(
     m => m.direction === 'incoming' && !!m.resolved
@@ -268,22 +268,6 @@ export function MessageDetailModal({
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest text-start">
                   {t('msgCount', { count: messages.filter(m => m.direction === 'incoming').length })}
                 </span>
-                {conversation.needsHumanAttention && (
-                  <Badge variant="warning" size="sm">
-                    <AlertTriangle className="w-3 h-3 me-1" />
-                    {t('needsHuman')}
-                  </Badge>
-                )}
-                {isKbFlag && (
-                  <Link
-                    href={`/${locale}/pages?openKb=true`}
-                    onClick={onClose}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
-                  >
-                    <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
-                    <span>{tComments('addToBusinessInfo')}</span>
-                  </Link>
-                )}
               </div>
               {pageName && (
                 <div className="flex items-center gap-1.5 mt-0.5">
@@ -403,6 +387,24 @@ export function MessageDetailModal({
         <div
           className="px-4 pt-4 md:px-6 md:pt-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
+          {conversation.needsHumanAttention && (
+            <div className="flex items-center gap-2 flex-wrap mb-3 px-3 py-2 rounded-lg status-warning border text-xs font-medium">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>{tComments('needsAttention')}</span>
+              <FlagTag flagReason={conversation.lastMessage.flagReason} />
+              {isKbFlag && (
+                <Link
+                  href={`/${locale}/pages?openKb=true`}
+                  onClick={onClose}
+                  className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
+                >
+                  <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
+                  <span>{tComments('addToBusinessInfo')}</span>
+                </Link>
+              )}
+            </div>
+          )}
+
           {heldMessage && (
             <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
               <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -464,7 +466,7 @@ export function MessageDetailModal({
             />
 
             {/* Resolve / Unresolve — end-aligned */}
-            {hasUnresolvedUnreplied ? (
+            {hasUnresolvedIncoming ? (
               <button
                 onClick={() => onResolve(conversation.senderId, pageId)}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30"

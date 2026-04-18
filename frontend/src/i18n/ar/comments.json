@@ -36,6 +36,7 @@
   "deepLinkNotFound": "ربما تم التعامل مع هذا التعليق أو حذفه بالفعل.",
   "needsAttention": "تحتاج اهتمام",
   "needsAttentionDesc": "تعليقات تحتاج إلى إجراء.",
+  "openComment": "فتح تعليق من {name}",
   "addToBusinessInfo": "أضف للمعلومات التجارية",
   "repliedToday": "تم الرد اليوم",
   "latestComments": "أحدث النشاطات",

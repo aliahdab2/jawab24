@@ -17,21 +17,26 @@ const baseComment: Comment = {
 };
 
 describe('checkNeedsAttention', () => {
-  it('returns true when needsAttention flag is set', () => {
+  it('returns true when backend needsAttention flag is set', () => {
     expect(checkNeedsAttention({ ...baseComment, needsAttention: true })).toBe(true);
   });
 
-  it('returns true when message contains help keywords', () => {
-    expect(checkNeedsAttention({ ...baseComment, message: 'I need help please' })).toBe(true);
-    expect(checkNeedsAttention({ ...baseComment, message: 'أحتاج مساعدة' })).toBe(true);
-  });
-
-  it('returns false for normal unreplied comment', () => {
+  it('returns false for a normal unreplied comment without the flag', () => {
     expect(checkNeedsAttention(baseComment)).toBe(false);
   });
 
-  it('returns false for replied comment even with keywords', () => {
-    expect(checkNeedsAttention({ ...baseComment, replied: true, message: 'I need help' })).toBe(false);
+  it('returns false for replied comments when the flag is not set', () => {
+    expect(checkNeedsAttention({ ...baseComment, replied: true })).toBe(false);
+  });
+
+  it('returns true for replied comments when the backend keeps the flag set', () => {
+    expect(checkNeedsAttention({ ...baseComment, replied: true, needsAttention: true })).toBe(true);
+  });
+
+  it('does not flag comments based on client-side keyword matching', () => {
+    // The client trusts the backend flag only — no local keyword fallback.
+    expect(checkNeedsAttention({ ...baseComment, message: 'I need help please' })).toBe(false);
+    expect(checkNeedsAttention({ ...baseComment, message: 'أحتاج مساعدة' })).toBe(false);
   });
 });
 

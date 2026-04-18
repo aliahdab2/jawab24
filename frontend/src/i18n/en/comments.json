@@ -34,6 +34,7 @@
   "deepLinkNotFound": "This comment may have already been handled or removed.",
   "needsAttention": "Needs attention",
   "needsAttentionDesc": "Comments that require action.",
+  "openComment": "Open comment from {name}",
   "addToBusinessInfo": "Add to Business Info",
   "overview": "Overview of your activity",
   "totalComments": "Total Comments",

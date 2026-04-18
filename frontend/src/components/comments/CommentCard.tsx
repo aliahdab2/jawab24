@@ -45,22 +45,13 @@ export interface CommentCardProps {
   triggerActive?: boolean;
 }
 
-// Keywords that indicate a comment needs human attention
-const ATTENTION_KEYWORDS = [
-  'human', 'agent', 'help', 'support', 'complaint', 'problem', 'issue',
-  'مساعدة', 'بشري', 'شخص', 'موظف', 'مشكلة', 'شكوى'
-];
-
 /**
- * Check if a comment needs human attention.
- * Uses backend flag first, falls back to client-side keyword matching
- * for comments that predate the flagging system.
+ * Whether this comment needs human attention.
+ * The backend is the source of truth via the `needsAttention` flag; the client
+ * does not do keyword matching of its own.
  */
 export function checkNeedsAttention(comment: Comment): boolean {
-  if (comment.needsAttention) return true;
-  if (comment.replied) return false;
-  const messageText = comment.message.toLowerCase();
-  return ATTENTION_KEYWORDS.some(kw => messageText.includes(kw));
+  return !!comment.needsAttention;
 }
 
 // Re-export for backward compatibility (modals and detail views import from here)
@@ -123,42 +114,48 @@ export const CommentCard = React.memo(function CommentCard({
     );
   };
 
+  // Inline status badge — matches MessageCard pattern (no absolute positioning).
+  const statusBadge = comment.resolved ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-success border text-[10px] font-bold uppercase tracking-wide">
+      <CheckCheck className="w-3 h-3" />
+      {t('resolved')}
+    </span>
+  ) : needsAttention ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-error border text-[10px] font-bold uppercase tracking-wide animate-pulse-soft">
+      <AlertTriangle className="w-3 h-3" />
+      {t('needsAttention')}
+    </span>
+  ) : !comment.replied ? (
+    <span className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full status-warning border text-[10px] font-bold uppercase tracking-wide">
+      <Clock className="w-3 h-3" />
+      {t('pending')}
+    </span>
+  ) : null;
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onClick();
+    }
+  };
+
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-label={t('openComment', { name: comment.fromName || tc('unknownUser') })}
       className={clsx(
         "relative rounded-2xl bg-card border border-theme-border/60 hover:border-theme-border",
         "hover:shadow-lg hover:shadow-surface-200/40 dark:hover:shadow-surface-900/30",
         "active:scale-[0.99] active:duration-[80ms] transition-all duration-200 ease-out overflow-hidden cursor-pointer group",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         needsAttention && 'border-s-[3px] border-s-red-400 dark:border-s-red-500 bg-red-50/20 dark:bg-red-950/10',
         className
       )}
       onClick={onClick}
+      onKeyDown={handleKeyDown}
       style={animationDelay > 0 ? { animationDelay: `${animationDelay}s` } as React.CSSProperties : undefined}
     >
-
-      {/* Status Badge */}
-      {comment.resolved ? (
-        <div className="absolute top-3.5 end-3.5 z-10 animate-fade-in">
-           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full status-success border text-[10px] font-bold uppercase tracking-wide">
-             <CheckCheck className="w-3 h-3" />
-             {t('resolved')}
-           </div>
-        </div>
-      ) : needsAttention ? (
-        <div className="absolute top-3.5 end-3.5 z-10 animate-fade-in">
-           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full status-error border text-[10px] font-bold uppercase tracking-wide animate-pulse-soft">
-             <AlertTriangle className="w-3 h-3" />
-             {t('needsAttention')}
-           </div>
-        </div>
-      ) : !comment.replied && (
-        <div className="absolute top-3.5 end-3.5 z-10 animate-fade-in">
-           <div className="flex items-center gap-1 px-2 py-0.5 rounded-full status-warning border text-[10px] font-bold uppercase tracking-wide">
-              <Clock className="w-3 h-3" />
-              {t('pending')}
-           </div>
-        </div>
-      )}
 
       <div className="p-4 sm:p-5 flex flex-col gap-4 sm:gap-5">
 
@@ -177,18 +174,19 @@ export const CommentCard = React.memo(function CommentCard({
           </div>
 
           <div className="flex flex-col items-start gap-1 min-w-0">
-             {/* Name, Count Badge & Time */}
+             {/* Header: name + group-count chip + status badge (inline), then time + platform + page, then flag */}
              <div className="flex flex-col px-1 mb-0.5">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-semibold text-foreground truncate">
                      {comment.fromName || tc('unknownUser')}
                   </span>
                   {isGrouped && (
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-[10px] font-bold">
+                    <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-[10px] font-bold">
                       <MessageSquare className="w-2.5 h-2.5" />
                       {t('commentCount', { count: groupCount ?? 0 })}
                     </span>
                   )}
+                  {statusBadge}
                 </div>
                 <div className="flex items-center gap-2 mt-0.5">
                    <span className="text-[10px] text-subtle">
