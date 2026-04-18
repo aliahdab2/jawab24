@@ -538,8 +538,7 @@ const LeadsPage: NextPageWithLayout = () => {
                 </button>
               ) : (
                 <UpgradeCTA
-                  nativeVariant="inline"
-                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors"
+                  className="flex items-center gap-1.5 px-2 py-1.5 rounded-xl text-muted-foreground hover:text-foreground/70 hover:bg-muted transition-colors cursor-pointer"
                 >
                   <Lock className="w-4 h-4" aria-hidden="true" />
                   <span className="text-[11px] font-bold text-brand-500 bg-brand-50 dark:bg-brand-500/10 px-1.5 py-0.5 rounded-md">Business+</span>

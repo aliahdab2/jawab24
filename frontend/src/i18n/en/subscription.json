@@ -17,7 +17,5 @@
   "resumePlan": "Resume Subscription",
   "limitReached": "Limit Reached",
   "upgradeToUnlock": "Upgrade to unlock more",
-  "usagePercent": "{percent}% used",
-  "upgradeOnWeb": "To upgrade or manage your plan, visit jawab24.com on your computer.",
-  "availableOnHigherPlan": "Available on a higher plan. Upgrade at jawab24.com."
+  "usagePercent": "{percent}% used"
 }

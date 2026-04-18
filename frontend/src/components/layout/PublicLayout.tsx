@@ -7,6 +7,7 @@ import { useAuthStore } from '@/lib/store';
 import { BrandLogo, Button, VersionBadge } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { getNextLocale } from '@/utils/locale';
+import { useIsEmbedded } from '@/hooks';
 
 /**
  * PublicLayout - Unified layout for all public-facing pages
@@ -48,6 +49,12 @@ export function PublicLayout({
   const locale = useLocale();
   const { setLanguage } = useLanguage();
   const { isAuthenticated } = useAuthStore();
+  const isEmbedded = useIsEmbedded();
+
+  // Embedded mode: strip all site chrome. Used when the native app opens
+  // a marketing/pricing URL inside Capacitor Browser — we don't want the
+  // user to navigate to /landing, /blog, etc. from inside that browser.
+  const effectiveVariant = isEmbedded ? 'none' : variant;
 
   const toggleLanguage = () => {
     setLanguage(getNextLocale(locale));
@@ -56,7 +63,7 @@ export function PublicLayout({
   const pageTitle = title ? `${title} | ${BRAND_ASSETS.meta.appName}` : BRAND_ASSETS.meta.appTitle;
 
   // For 'none' variant, just render children with direction
-  if (variant === 'none') {
+  if (effectiveVariant === 'none') {
     return (
       <>
         <Head>
@@ -79,7 +86,7 @@ export function PublicLayout({
 
       <div className="flex-1 overflow-y-auto bg-background">
         {/* Header - Consistent across all public pages */}
-        {variant === 'landing' && (
+        {effectiveVariant === 'landing' && (
           <nav className="fixed top-0 w-full z-50 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16 sm:h-20">
@@ -133,7 +140,7 @@ export function PublicLayout({
           </nav>
         )}
 
-        {variant === 'minimal' && (
+        {effectiveVariant === 'minimal' && (
           <div className="flex items-center justify-between px-6 lg:px-12 h-16 sm:h-20">
             <Link href="/" className="flex items-center gap-2 sm:gap-3 group">
               <BrandLogo
@@ -156,7 +163,7 @@ export function PublicLayout({
         {/* Main Content */}
         <main
           className={`
-            ${variant === 'landing' ? 'pt-header' : ''}
+            ${effectiveVariant === 'landing' ? 'pt-header' : ''}
             ${contentClassName}
           `}
         >

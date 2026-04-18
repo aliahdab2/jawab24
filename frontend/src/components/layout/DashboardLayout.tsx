@@ -16,6 +16,7 @@ import { BRAND_ASSETS } from '@/constants/brand';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useLandscape } from '@/hooks/useLandscape';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useIsEmbedded } from '@/hooks/useIsEmbedded';
 import { isNativePlatform } from '@/lib/capacitor';
 import { isRTLLocale, getNextLocale } from '@/utils/locale';
 
@@ -55,6 +56,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const newLeads = useUIStore((s) => s.newLeads);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
+  const isEmbedded = useIsEmbedded();
 
   // ESC key to close modals (logout confirmation takes priority)
   useEscapeKey(() => setShowLogoutCheck(false), showLogoutCheck);
@@ -143,15 +145,17 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
           <div className="absolute inset-0 bg-[url('/images/cubes.png')] opacity-[0.06]" />
         </div>
 
-        {/* Sidebar - hidden on mobile and on clean layouts */}
-        {!isCleanLayout && (
+        {/* Sidebar - hidden on mobile and on clean layouts.
+            Embedded mode (opened from native app in Capacitor Browser) suppresses
+            all chrome so the user sees only the pricing → checkout funnel. */}
+        {!isCleanLayout && !isEmbedded && (
           <div className="hidden lg:block">
             <Sidebar />
           </div>
         )}
 
         {/* Public header - Matches landing page style */}
-        {isCleanLayout ? (
+        {isEmbedded ? null : isCleanLayout ? (
           <nav className="fixed top-0 w-full z-50 transition-all duration-300 bg-card/80 backdrop-blur-md border-b border-theme-border pt-safe px-safe-landscape">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex items-center justify-between h-16">
@@ -220,8 +224,8 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             'relative z-[1] transition-[margin] duration-500 flex-1',
             // Both layouts use fixed headers — content needs top padding to clear them
             // Desktop (with sidebar) uses its own layout, no top padding needed
-            'pt-header lg:pt-0',
-            !isCleanLayout && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
+            !isEmbedded && 'pt-header lg:pt-0',
+            !isCleanLayout && !isEmbedded && (sidebarOpen ? 'lg:ms-64' : 'lg:ms-20')
           )}
         >
           <div
@@ -253,7 +257,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             
             This ensures system navigation buttons always have a white background
         ═══════════════════════════════════════════════════════════════ */}
-        {!isCleanLayout && (
+        {!isCleanLayout && !isEmbedded && (
           <>
             {/* Bottom navigation - sits ABOVE the safe area in portrait, at bottom in landscape */}
             <nav
