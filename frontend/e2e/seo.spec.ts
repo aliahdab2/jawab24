@@ -32,7 +32,6 @@ const PROTECTED_PAGES = [
   '/en/settings',
   '/en/comments',
   '/en/messages',
-  '/en/preset-replies',
 ];
 
 // --- Pages with JSON-LD structured data ---

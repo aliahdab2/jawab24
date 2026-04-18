@@ -1,3 +1,4 @@
+import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect } from 'vitest';
 import { MessageDetailModal } from './MessageDetailModal';
@@ -566,6 +567,43 @@ describe('MessageDetailModal', () => {
       const modalPanel = document.querySelector('[class*="bg-card"]');
       expect(modalPanel).toBeTruthy();
       expect(modalPanel?.className).toContain('max-h-full');
+    });
+  });
+
+  describe('reply source badge', () => {
+    const renderWithOutgoing = (replyMethod: Message['replyMethod']) => {
+      const incoming = makeMessage({ id: '1', message: 'Q', direction: 'incoming' });
+      const outgoing = makeMessage({
+        id: '2',
+        message: 'A',
+        direction: 'outgoing',
+        replied: true,
+        replyMethod,
+        createdAt: '2026-02-17T10:05:00Z',
+      });
+      return render(
+        <MessageDetailModal
+          {...defaultProps}
+          conversation={makeConversation({ messages: [incoming, outgoing], lastMessage: outgoing })}
+        />,
+      );
+    };
+
+    it('shows Smart Reply badge for AI replies', () => {
+      renderWithOutgoing('ai');
+      expect(screen.getByText('Smart Reply')).toBeInTheDocument();
+    });
+
+    // Regression: manual replies were labeled "Preset Reply" in the thread view.
+    it('shows Manual badge for manually-sent replies (not "Preset Reply")', () => {
+      renderWithOutgoing('manual');
+      expect(screen.getByText('Manual')).toBeInTheDocument();
+      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+    });
+
+    it('shows Preset Reply badge for historical template replies', () => {
+      renderWithOutgoing('template');
+      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
     });
   });
 });

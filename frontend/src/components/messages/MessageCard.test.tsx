@@ -312,5 +312,31 @@ describe('MessageCard', () => {
 
       expect(screen.getByText('Smart Reply')).toBeInTheDocument();
     });
+
+    // Regression: manual replies were being labeled "Preset Reply" in the list card
+    // because the badge logic branched only on 'ai' vs else (treated everything else as template).
+    it('shows MANUAL badge for manually-sent replies (not "Preset Reply")', () => {
+      const incoming = makeMessage({ id: '1', direction: 'incoming', message: 'Q' });
+      const outgoing = makeMessage({
+        id: '2',
+        direction: 'outgoing',
+        message: 'A',
+        replyMethod: 'manual',
+        createdAt: '2026-02-16T06:05:00Z',
+      });
+
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [incoming, outgoing],
+            lastMessage: outgoing,
+          })}
+        />
+      );
+
+      expect(screen.getByText('Manual')).toBeInTheDocument();
+      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+    });
   });
 });

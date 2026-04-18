@@ -2,12 +2,10 @@ import React from 'react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
-import { FlagTag } from '@/components/ui';
+import { FlagTag, ReplySourceBadge } from '@/components/ui';
 import {
   Clock,
   AlertTriangle,
-  Sparkles,
-  Zap,
   CheckCheck,
   User,
   PauseCircle,
@@ -44,7 +42,6 @@ export const MessageCard = React.memo(function MessageCard({
 }: MessageCardProps) {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
-  const tDashboard = useTranslations('dashboard');
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
 
@@ -152,18 +149,7 @@ export const MessageCard = React.memo(function MessageCard({
             <p className="flex-1 min-w-0 text-xs text-muted-foreground truncate leading-snug" dir="auto">
               {renderMessageText(lastOutgoing.message)}
             </p>
-            {lastOutgoing.replyMethod && (
-              <span className={clsx(
-                'flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold',
-                lastOutgoing.replyMethod === 'ai' ? 'reply-source-ai' : 'reply-source-template'
-              )}>
-                {lastOutgoing.replyMethod === 'ai'
-                  ? <Sparkles className="w-2.5 h-2.5" />
-                  : <Zap className="w-2.5 h-2.5" />
-                }
-                {lastOutgoing.replyMethod === 'ai' ? tDashboard('aiReply') : tDashboard('templateReply')}
-              </span>
-            )}
+            <ReplySourceBadge method={lastOutgoing.replyMethod} variant="compact" />
           </div>
         )}
       </div>

@@ -21,6 +21,8 @@ export { NotificationBell } from './NotificationBell';
 export { ConfirmationModal } from './ConfirmationModal';
 export { CharCounter } from './CharCounter';
 export { FlagTag } from './FlagTag';
+export { ReplySourceBadge } from './ReplySourceBadge';
+export type { ReplyMethod, ReplySourceVariant } from './ReplySourceBadge';
 export { NeedsAttentionBanner } from './NeedsAttentionBanner';
 export { PauseToggle } from './PauseToggle';
 export { PauseBanner } from './PauseBanner';

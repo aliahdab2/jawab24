@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -57,7 +57,6 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 }) => {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
-  const tDashboard = useTranslations('dashboard');
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
 
@@ -268,21 +267,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2 mt-1.5 text-[10px] font-bold uppercase tracking-tighter text-brand-500">
                   <span title={formatFullTime(comment.repliedAt, dateLocale)}>{formatMessageTime(comment.repliedAt, dateLocale)}</span>
-                  {comment.replyMethod && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
-                      {comment.replyMethod === 'ai' ? (
-                        <>
-                          <Sparkles className="w-2.5 h-2.5" />
-                          {tDashboard('aiReply')}
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="w-2.5 h-2.5" />
-                          {tDashboard('templateReply')}
-                        </>
-                      )}
-                    </div>
-                  )}
+                  <ReplySourceBadge method={comment.replyMethod} variant="detail" />
                 </div>
                 {comment.replyMethod === 'ai' && <ReplyFeedback commentId={comment.id} />}
               </div>

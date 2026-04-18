@@ -288,7 +288,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 onClick={() => setMobileMenuOpen(true)}
                 icon={<MoreHorizontal className="w-7 h-7" />}
                 label={tNav('more') || 'More'}
-                active={mobileMenuOpen || ['/pages', '/leads', '/templates', '/rules', '/pricing', '/settings'].includes(router.pathname)}
+                active={mobileMenuOpen || ['/pages', '/leads', '/pricing', '/settings'].includes(router.pathname)}
                 badge={newLeads}
                 badgeColor="brand"
               />

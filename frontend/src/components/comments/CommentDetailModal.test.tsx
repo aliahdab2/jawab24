@@ -296,4 +296,30 @@ describe('CommentDetailModal', () => {
       expect(screen.queryByText('My Page')).not.toBeInTheDocument();
     });
   });
+
+  describe('reply source badge', () => {
+    const makeReplied = (replyMethod: Comment['replyMethod']): Comment => ({
+      ...mockComment,
+      replied: true,
+      replyText: 'Sent',
+      replyMethod,
+    });
+
+    it('shows Smart Reply label for AI replies', () => {
+      renderModal({ comment: makeReplied('ai') });
+      expect(screen.getByText('Smart Reply')).toBeInTheDocument();
+    });
+
+    // Regression: manual replies were labeled "Preset Reply" in the detail modal.
+    it('shows Manual label for manually-sent replies (not "Preset Reply")', () => {
+      renderModal({ comment: makeReplied('manual') });
+      expect(screen.getByText('Manual')).toBeInTheDocument();
+      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+    });
+
+    it('shows Preset Reply label for historical template replies', () => {
+      renderModal({ comment: makeReplied('template') });
+      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
+    });
+  });
 });

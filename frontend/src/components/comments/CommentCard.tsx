@@ -1,14 +1,12 @@
 import React from 'react';
 import clsx from 'clsx';
-import { FlagTag, PlatformIcon } from '@/components/ui';
+import { FlagTag, PlatformIcon, ReplySourceBadge } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { renderMessageText } from '@/utils/renderMessageText';
 import {
   Clock,
   AlertTriangle,
-  Sparkles,
-  Zap,
   Hash,
   CheckCircle,
   CheckCheck,
@@ -87,20 +85,10 @@ export const CommentCard = React.memo(function CommentCard({
     ? comment.fromName.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
     : null;
 
-  // Reply Source Indicator Component
-  const ReplySourceIndicator = () => {
-    if (!comment.replied || !comment.replyMethod) return null;
-    const isAI = comment.replyMethod === 'ai';
-
-    return (
-      <div className={clsx(
-        "w-8 h-8 rounded-full flex items-center justify-center shadow-sm border-2 border-card",
-        isAI ? "reply-source-ai" : "reply-source-template"
-      )}>
-        {isAI ? <Sparkles className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
-      </div>
-    );
-  };
+  const ReplySourceIndicator = () =>
+    comment.replied ? (
+      <ReplySourceBadge method={comment.replyMethod} variant="avatar" />
+    ) : null;
 
   const isInstagram = comment.source === 'instagram' || (!comment.source && !comment.facebookCommentId);
 

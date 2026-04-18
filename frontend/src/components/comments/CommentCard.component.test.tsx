@@ -97,6 +97,37 @@ describe('CommentCard', () => {
     expect(screen.getByText('الرسوم 1500 ريال')).toBeInTheDocument();
   });
 
+  describe('reply source indicator', () => {
+    it('shows Smart Reply indicator for AI replies', () => {
+      const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'ai' };
+      render(<CommentCard {...defaultProps} comment={replied} />);
+      expect(screen.getByLabelText('Smart Reply')).toBeInTheDocument();
+    });
+
+    // Regression: manual replies were showing the same Zap+emerald indicator as
+    // preset replies because the branch was `isAI ? ai : template`.
+    it('shows Manual indicator for manually-sent replies (not Preset Reply)', () => {
+      const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'manual' };
+      render(<CommentCard {...defaultProps} comment={replied} />);
+      expect(screen.getByLabelText('Manual')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Preset Reply')).not.toBeInTheDocument();
+    });
+
+    it('shows Preset Reply indicator for historical template replies', () => {
+      const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'template' };
+      render(<CommentCard {...defaultProps} comment={replied} />);
+      expect(screen.getByLabelText('Preset Reply')).toBeInTheDocument();
+    });
+
+    it('renders no indicator when reply has no method', () => {
+      const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: null };
+      render(<CommentCard {...defaultProps} comment={replied} />);
+      expect(screen.queryByLabelText('Smart Reply')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Manual')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Preset Reply')).not.toBeInTheDocument();
+    });
+  });
+
   it('shows post context when postMessage is provided', () => {
     render(<CommentCard {...defaultProps} comment={{ ...baseComment, postMessage: 'عرض خاص على الدورات' }} />);
     expect(screen.getByText('عرض خاص على الدورات')).toBeInTheDocument();

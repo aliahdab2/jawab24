@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -18,10 +18,8 @@ import {
   X,
   Send,
   Bot,
-  Sparkles,
   CheckCircle,
   Undo2,
-  UserCheck,
   Mic,
   ExternalLink,
   ChevronRight,
@@ -68,7 +66,6 @@ export function MessageDetailModal({
   const t = useTranslations('messages');
   const tc = useTranslations('common');
   const tComments = useTranslations('comments');
-  const tDashboard = useTranslations('dashboard');
 
   // Fetch full conversation (including outgoing replies) regardless of which tab filter
   // was used to find this conversation. Tabs control which conversations appear in the list,
@@ -347,25 +344,8 @@ export function MessageDetailModal({
                   msg.direction === 'outgoing' ? 'text-brand-500' : 'text-muted-foreground'
                 )}>
                   <span title={formatFullTime(msg.createdAt, dateLocale)}>{formatMessageTime(msg.createdAt, dateLocale)}</span>
-                  {msg.direction === 'outgoing' && msg.replyMethod && (
-                    <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
-                      {msg.replyMethod === 'ai' ? (
-                        <>
-                          <Sparkles className="w-2.5 h-2.5" />
-                          {tDashboard('aiReply')}
-                        </>
-                      ) : msg.replyMethod === 'template' ? (
-                        <>
-                          <CheckCircle className="w-2.5 h-2.5" />
-                          {tDashboard('templateReply')}
-                        </>
-                      ) : (
-                        <>
-                          <UserCheck className="w-2.5 h-2.5" />
-                          {tc('manual')}
-                        </>
-                      )}
-                    </div>
+                  {msg.direction === 'outgoing' && (
+                    <ReplySourceBadge method={msg.replyMethod} variant="detail" />
                   )}
                 </div>
               </div>
