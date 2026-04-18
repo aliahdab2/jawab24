@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { PlatformIcon, PauseToggle, NeedsAttentionBanner } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -11,6 +11,7 @@ import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import { messagesApi } from '@/lib/api';
+import { useHandoffPauseDuration } from '@/hooks';
 import type { Conversation } from './MessageCard';
 import {
   User,
@@ -210,6 +211,7 @@ export function MessageDetailModal({
   );
 
   const isPaused = conversation.pauseStatus?.paused;
+  const pauseDuration = useHandoffPauseDuration();
 
   return createPortal(
     <div
@@ -294,6 +296,15 @@ export function MessageDetailModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Pause state banner — visible when Smart Reply is paused for this customer */}
+        <PauseBanner
+          paused={!!isPaused}
+          remainingMinutes={conversation.pauseStatus?.remainingMinutes}
+          totalMinutes={pauseDuration}
+          onResumeNow={() => onResume(conversation.senderId, pageId)}
+          isResuming={isResuming}
+        />
 
         {/* Message Thread */}
         <div

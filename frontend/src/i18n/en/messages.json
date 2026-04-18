@@ -23,10 +23,12 @@
   "replyFailed": "Failed to send reply",
   "voiceMessage": "Voice message",
   "pauseSmartReply": "Pause Smart Reply",
-  "pauseScope": "For this customer only",
   "resumeSmartReply": "Resume Smart Reply",
   "smartReplyPaused": "Smart Reply Paused",
   "smartReplyPausedRemaining": "{minutes} min remaining",
+  "pauseBannerBody": "Smart Reply paused for this customer",
+  "pauseBannerBodyWithDuration": "Smart Reply paused for {duration} for this customer",
+  "pauseBannerResumeNow": "Resume now",
   "pauseSuccess": "Smart reply paused",
   "resumeSuccess": "Smart reply resumed",
   "pauseFailed": "Failed to pause smart reply",
@@ -38,7 +40,8 @@
   "resolveSuccess": "Marked as handled",
   "unresolveSuccess": "Marked as unhandled",
   "resolved": "Handled",
-  "unresolve": "Mark as unhandled",
+  "resolve": "Resolve",
+  "unresolve": "Undo",
   "newMessage": "New message",
   "openConversation": "Open conversation with {name}"
 }

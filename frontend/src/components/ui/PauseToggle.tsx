@@ -21,12 +21,14 @@ export function PauseToggle({
 }: PauseToggleProps) {
   const t = useTranslations('messages');
 
-  const scopeLabel = paused && remainingMinutes != null
+  const remainingLabel = paused && remainingMinutes != null
     ? t('smartReplyPausedRemaining', { minutes: remainingMinutes })
-    : t('pauseScope');
+    : null;
 
   return (
     <button
+      type="button"
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onToggle}
       disabled={loading}
       aria-label={paused ? t('resumeSmartReply') : t('pauseSmartReply')}
@@ -43,7 +45,9 @@ export function PauseToggle({
       }
       <span className="flex items-center gap-1.5 text-xs font-medium leading-none min-w-0">
         <span className="whitespace-nowrap">{paused ? t('resumeSmartReply') : t('pauseSmartReply')}</span>
-        <span className="whitespace-nowrap text-[10px] text-muted-foreground font-normal truncate">{scopeLabel}</span>
+        {remainingLabel && (
+          <span className="whitespace-nowrap text-[10px] text-muted-foreground font-normal truncate">{remainingLabel}</span>
+        )}
       </span>
     </button>
   );

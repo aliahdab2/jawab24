@@ -1412,10 +1412,10 @@
 }
 
 /* keyboard-open: keyboard overlays the screen.
-   The safe-area padding inside the modal footer is no longer needed when the keyboard
-   is up — set to 0 so there is no gap. */
+   The safe-area padding is no longer needed, but keep a small 8px gap so the
+   action row (pause / resolve) doesn't sit flush against the keyboard. */
 .is-native.keyboard-open .pb-safe-modal {
-  padding-bottom: 0;
+  padding-bottom: 8px;
 }
 
 /* Android: defence-in-depth fallback using dynamic viewport height.

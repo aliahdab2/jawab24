@@ -23,6 +23,7 @@ export { CharCounter } from './CharCounter';
 export { FlagTag } from './FlagTag';
 export { NeedsAttentionBanner } from './NeedsAttentionBanner';
 export { PauseToggle } from './PauseToggle';
+export { PauseBanner } from './PauseBanner';
 export { ThemeToggleButton } from './ThemeToggleButton';
 export { KeywordChipInput } from './KeywordChipInput';
 export { UpgradeCTA } from './UpgradeCTA';

@@ -23,10 +23,12 @@
   "replyFailed": "فشل إرسال الرد",
   "voiceMessage": "رسالة صوتية",
   "pauseSmartReply": "إيقاف الرد الذكي",
-  "pauseScope": "لهذا العميل فقط",
   "resumeSmartReply": "استئناف الرد الذكي",
   "smartReplyPaused": "الرد الذكي متوقف",
   "smartReplyPausedRemaining": "{minutes} دقيقة متبقية",
+  "pauseBannerBody": "الرد الذكي متوقف لهذا العميل",
+  "pauseBannerBodyWithDuration": "الرد الذكي متوقف لمدة {duration} لهذا العميل",
+  "pauseBannerResumeNow": "استئناف الآن",
   "pauseSuccess": "تم إيقاف الرد الذكي",
   "resumeSuccess": "تم استئناف الرد الذكي",
   "pauseFailed": "فشل إيقاف الرد الذكي",
@@ -38,7 +40,8 @@
   "resolveSuccess": "تم وضع علامة تمت المعالجة",
   "unresolveSuccess": "تم إلغاء علامة المعالجة",
   "resolved": "تمت المعالجة",
-  "unresolve": "تحديد كغير معالج",
+  "resolve": "معالج",
+  "unresolve": "تراجع",
   "newMessage": "رسالة جديدة",
   "openConversation": "فتح محادثة مع {name}"
 }

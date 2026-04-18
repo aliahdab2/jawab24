@@ -6,7 +6,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { InboxTitle, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
-import { MessageCard, type Conversation } from '@/components/messages';
+import { SwipeableMessageCard, type Conversation } from '@/components/messages';
 import dynamic from 'next/dynamic';
 
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
@@ -502,7 +502,7 @@ const MessagesPage: NextPageWithLayout = () => {
                 m => m.direction === 'incoming' && m.resolved
               );
               return (
-                <MessageCard
+                <SwipeableMessageCard
                   key={conv.senderId}
                   conversation={conv}
                   animationDelay={i < 10 ? i * 0.05 : 0}

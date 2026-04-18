@@ -1,5 +1,6 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CommentDetailModal } from '@/components/comments/CommentDetailModal';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { Comment } from '@jawab24/shared';
@@ -18,7 +19,10 @@ vi.mock('@/lib/api', () => ({
     getPauseStatus: vi.fn().mockRejectedValue(new Error('not found')),
     pauseConversation: vi.fn().mockResolvedValue({ data: { pausedUntil: '2026-04-01T12:00:00Z' } }),
     resumeConversation: vi.fn().mockResolvedValue({ data: {} }),
-  }
+  },
+  settingsApi: {
+    get: vi.fn().mockResolvedValue({ data: { handoffPauseDurationMinutes: 15 } }),
+  },
 }));
 
 vi.mock('sonner', () => ({
@@ -44,13 +48,16 @@ const mockComment: Comment = {
 
 describe('CommentDetailModal', () => {
   const renderModal = (override: Partial<React.ComponentProps<typeof CommentDetailModal>> = {}) => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(
-      <CommentDetailModal
-        comment={mockComment}
-        onClose={vi.fn()}
-        onReplySuccess={vi.fn()}
-        {...override}
-      />
+      <QueryClientProvider client={queryClient}>
+        <CommentDetailModal
+          comment={mockComment}
+          onClose={vi.fn()}
+          onReplySuccess={vi.fn()}
+          {...override}
+        />
+      </QueryClientProvider>
     );
   };
 
@@ -86,16 +93,9 @@ describe('CommentDetailModal', () => {
 
   it('shows resolve button when comment needs attention', () => {
     const attentionComment: Comment = { ...mockComment, needsAttention: true };
-    render(
-      <CommentDetailModal
-        comment={attentionComment}
-        onClose={vi.fn()}
-        onReplySuccess={vi.fn()}
-        onResolve={vi.fn()}
-      />
-    );
+    renderModal({ comment: attentionComment, onResolve: vi.fn() });
 
-    expect(screen.getByRole('button', { name: /Mark as handled/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Resolve/i })).toBeInTheDocument();
   });
 
   it('calls onResolve and onClose when resolve button is clicked', () => {
@@ -103,16 +103,9 @@ describe('CommentDetailModal', () => {
     const onClose = vi.fn();
     const attentionComment: Comment = { ...mockComment, needsAttention: true };
 
-    render(
-      <CommentDetailModal
-        comment={attentionComment}
-        onClose={onClose}
-        onReplySuccess={vi.fn()}
-        onResolve={onResolve}
-      />
-    );
+    renderModal({ comment: attentionComment, onClose, onResolve });
 
-    fireEvent.click(screen.getByRole('button', { name: /Mark as handled/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Resolve/i }));
     expect(onResolve).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalled();
   });
@@ -127,21 +120,21 @@ describe('CommentDetailModal', () => {
 
     renderModal({ comment: repliedComment, onResolve: vi.fn() });
 
-    expect(screen.queryByRole('button', { name: /Mark as handled/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Resolve/i })).not.toBeInTheDocument();
   });
 
-  it('renders PauseToggle with scope hint when comment has fromId', () => {
+  it('renders PauseToggle when comment has fromId', () => {
     const commentWithSender: Comment = { ...mockComment, fromId: 'sender123', pageId: 'page1' };
     renderModal({ comment: commentWithSender });
 
-    expect(screen.getByText(enMessages.pauseScope)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: new RegExp(enMessages.pauseSmartReply, 'i') })).toBeInTheDocument();
   });
 
   it('does not render PauseToggle when comment has no fromId', () => {
     const commentWithoutSender: Comment = { ...mockComment, fromId: undefined };
     renderModal({ comment: commentWithoutSender });
 
-    expect(screen.queryByText(enMessages.pauseScope)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: new RegExp(enMessages.pauseSmartReply, 'i') })).not.toBeInTheDocument();
   });
 
   it('shows toast when pause is toggled', async () => {

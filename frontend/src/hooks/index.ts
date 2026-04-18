@@ -26,3 +26,4 @@ export { useNotificationPoller } from './useNotificationPoller';
 export { useCountdown } from './useCountdown';
 export { usePageFilter } from './usePageFilter';
 export { useIsEmbedded } from './useIsEmbedded';
+export { useHandoffPauseDuration } from './useHandoffPauseDuration';

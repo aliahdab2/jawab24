@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { PlatformIcon, PauseToggle, NeedsAttentionBanner } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -12,6 +12,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import type { Comment } from '@jawab24/shared';
 import { parseKeywords } from '@jawab24/shared';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import { useHandoffPauseDuration } from '@/hooks';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { openExternalUrl } from '@/lib/openExternalUrl';
@@ -77,6 +78,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   // Pause state
   const [pauseStatus, setPauseStatus] = useState<{ paused: boolean; pausedUntil: string | null; remainingMinutes: number | null } | null>(null);
   const [pauseLoading, setPauseLoading] = useState(false);
+  const pauseDuration = useHandoffPauseDuration();
 
   // Auto-focus textarea on open (for unreplied / needs-attention comments)
   useEffect(() => {
@@ -209,6 +211,15 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Pause state banner — visible when Smart Reply is paused for this customer */}
+        <PauseBanner
+          paused={!!pauseStatus?.paused}
+          remainingMinutes={pauseStatus?.remainingMinutes}
+          totalMinutes={pauseDuration}
+          onResumeNow={handleTogglePause}
+          isResuming={pauseLoading}
+        />
 
         {/* Chat Thread */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50">
