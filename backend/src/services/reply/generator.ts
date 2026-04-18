@@ -8,7 +8,7 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
-import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
+import { detectLanguage, detectLanguageCode, detectCommentLanguage } from '../../utils/language';
 import { stripCommentNoise, hasMention, isPunctuationOnly } from '../../utils/commentText';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
@@ -419,10 +419,19 @@ export class ReplyGenerator {
                     m => !(m.role === 'user' && m.content === text)
                 );
 
-                const msgLang = detectLanguageCode(text);
+                // Language resolution: for low-confidence Latin detection (short acronyms
+                // like "ICDL", "ok", "yes") mid-conversation, defer to the ai-worker's
+                // history-first chain so a customer chatting in Arabic doesn't get flipped
+                // to English by a single Latin token. High-confidence detection (Arabic
+                // script, or Latin with common English words) still takes effect — preserving
+                // legitimate mid-conversation language switches.
+                const { language: msgLang, confidence: msgConfidence } = detectLanguage(text);
+                const hasPriorUserMessages = historyForAI.some(m => m.role === 'user');
+                const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;
+                const deferToHistory = isLowConfidenceLatin && hasPriorUserMessages;
                 const aiRequest = {
                     comment: text,
-                    language: msgLang !== 'unknown' ? msgLang : undefined,
+                    language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
                     context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage },
                 };
 

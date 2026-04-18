@@ -11,6 +11,7 @@ vi.mock('../../src/services/ai', () => ({
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
     detectCommentLanguage: vi.fn().mockReturnValue('en'),
+    detectLanguage: vi.fn().mockReturnValue({ language: 'en', confidence: 0.9, script: 'Latin', isRTL: false }),
 }));
 
 vi.mock('../../src/services/messages', () => ({
@@ -755,6 +756,109 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.needsAttention).toBe(true);
             expect(result.flagReason).toContain('info_not_in_kb');
             expect(result.flagReason).toContain('low_confidence');
+        });
+
+        it('should defer to conversation history for short Latin acronyms ("ICDL") mid-Arabic chat', async () => {
+            // Regression: customer chatting in Arabic sent "ICDL" → bot replied in English
+            // because Latin-only text was detected as English with low confidence (0.5) but
+            // the generator treated it as definitive. Expected behavior: for low-confidence
+            // Latin detection with Arabic conversation history, let the ai-worker's
+            // history-first language chain pick the established conversation language.
+            const { aiService } = await import('../../src/services/ai');
+            const { messagesService } = await import('../../src/services/messages');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            const language = await import('../../src/utils/language');
+
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+
+            // "ICDL" — Latin letters but low confidence (no common English words, short)
+            vi.mocked(language.detectLanguageCode).mockReturnValue('en');
+            vi.mocked(language.detectLanguage).mockReturnValue({
+                language: 'en', confidence: 0.5, script: 'Latin', isRTL: false,
+            });
+
+            // Customer has been chatting in Arabic; current message is "ICDL"
+            vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+                { role: 'user', content: 'مرحبا' },
+                { role: 'assistant', content: 'أهلاً! كيف يمكنني مساعدتك؟' },
+                { role: 'user', content: 'تفاصيل' },
+                { role: 'assistant', content: 'أكيد! عندنا دورات متنوعة مثل المكياج، ICDL، إدخال البيانات' },
+            ]);
+
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'دورة ICDL مدتها شهر...',
+                language: 'ar',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: false,
+            });
+
+            await generator.generateForMessage({
+                ...baseContext,
+                text: 'ICDL',
+            }, true);
+
+            // Must NOT pass language: 'en' — that would force the ai-worker to reply in English
+            // despite the Arabic conversation context. Accept either undefined (defer to
+            // ai-worker's history-first chain) or 'ar' (resolved here from history).
+            const aiCall = vi.mocked(aiService.generateReply).mock.calls[0][0];
+            expect(aiCall.language).not.toBe('en');
+        });
+
+        it('should still pass language for high-confidence English (user switches language mid-chat)', async () => {
+            // Counter-test: if the customer writes a genuine English sentence mid-Arabic-chat,
+            // we must respect the language switch. High-confidence English detection
+            // (≥0.6) should NOT be deferred to history.
+            const { aiService } = await import('../../src/services/ai');
+            const { messagesService } = await import('../../src/services/messages');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            const language = await import('../../src/utils/language');
+
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+
+            vi.mocked(language.detectLanguageCode).mockReturnValue('en');
+            vi.mocked(language.detectLanguage).mockReturnValue({
+                language: 'en', confidence: 0.8, script: 'Latin', isRTL: false,
+            });
+
+            vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+                { role: 'user', content: 'مرحبا' },
+                { role: 'assistant', content: 'أهلاً!' },
+            ]);
+
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Sure, I can help in English.',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: false,
+            });
+
+            await generator.generateForMessage({
+                ...baseContext,
+                text: 'Can you help me in English please?',
+            }, true);
+
+            const aiCall = vi.mocked(aiService.generateReply).mock.calls[0][0];
+            expect(aiCall.language).toBe('en');
         });
 
         it('should NOT trigger hallucination guard in DM when RAG not attempted (static KB)', async () => {

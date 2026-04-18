@@ -21,7 +21,14 @@ const SPANISH_CHARS = /[áéíóúüñÁÉÍÓÚÜÑ¿¡]/;
 const TURKISH_CHARS = /[çğıöşüÇĞİÖŞÜ]/;
 
 // Common words for additional context
-const ENGLISH_COMMON = ['the', 'is', 'are', 'and', 'or', 'but', 'with', 'for', 'from', 'have', 'has', 'been'];
+const ENGLISH_COMMON = [
+    'the', 'is', 'are', 'and', 'or', 'but', 'with', 'for', 'from', 'have', 'has', 'been',
+    'you', 'me', 'my', 'your', 'we', 'our', 'they', 'their', 'it', 'he', 'she',
+    'can', 'could', 'will', 'would', 'should', 'do', 'does', 'did',
+    'what', 'when', 'where', 'why', 'how', 'who', 'which',
+    'this', 'that', 'these', 'those', 'in', 'on', 'at', 'to', 'of',
+    'please', 'help', 'want', 'need', 'thanks', 'hi', 'hello', 'hey',
+];
 const SWEDISH_COMMON = ['och', 'det', 'att', 'som', 'på', 'är', 'av', 'för', 'med', 'har'];
 
 export type SupportedLanguage = 'ar' | 'en' | 'sv' | 'de' | 'fr' | 'es' | 'tr' | 'unknown';
@@ -231,8 +238,12 @@ export function detectLanguage(text: string): LanguageDetectionResult {
         };
     }
 
-    // Default to English for Latin script
-    const englishMatches = words.filter(w => ENGLISH_COMMON.includes(w)).length;
+    // Default to English for Latin script.
+    // Strip edge punctuation so "please?" matches "please". Callers use confidence to
+    // decide whether to trust this detection (e.g. short Latin acronyms like "ICDL"
+    // stay at 0.5 and let conversation history override).
+    const normalizedWords = words.map(w => w.replace(/^[^a-z]+|[^a-z]+$/g, '')).filter(Boolean);
+    const englishMatches = normalizedWords.filter(w => ENGLISH_COMMON.includes(w)).length;
     const confidence = Math.min(0.5 + (englishMatches * 0.1), 0.9);
 
     return {
