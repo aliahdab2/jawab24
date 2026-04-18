@@ -12,11 +12,13 @@
 3. Enable **Pixelator** or similar to hide the status-bar clock/battery, OR accept the clock shown (Play allows it).
 4. Turn **Do Not Disturb** on to hide notifications.
 
-## Capture sequence (repeat in both languages)
+## Capture sequence
+
+**Order: English first** (faster Google review approval), then Arabic before production rollout.
 
 OnePlus 11: screenshot = **Power + Volume Down**. Screenshots land in `Internal storage/DCIM/Screenshots/`.
 
-### English set (device language: English, app locale: English)
+### English set — capture FIRST (device language: English, app locale: English)
 
 - [ ] `01-dashboard.png` — Dashboard with stats and message counts
 - [ ] `02-messages.png` — Messages inbox with conversation list
@@ -25,9 +27,11 @@ OnePlus 11: screenshot = **Power + Volume Down**. Screenshots land in `Internal 
 - [ ] `05-integrations.png` — Integrations page with connected store
 - [ ] `06-post-reply.png` — Post Reply setup on the comments page (your key differentiator vs LetsBot/ManyChat)
 
-### Arabic set (device language: Arabic OR app locale: Arabic)
+### Arabic set — capture AFTER approval (device language: Arabic OR app locale: Arabic)
 
 Same 6 screens, same filenames, in the `ar/` folder. Verify RTL mirroring looks correct on each.
+
+You can add the Arabic set as a listing update after Internal Testing approval, before staged production rollout.
 
 ## Transfer to Mac
 

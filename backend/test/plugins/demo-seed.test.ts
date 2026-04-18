@@ -72,10 +72,10 @@ describe('seedDemoData', () => {
         vi.mocked(db.delete).mockReturnValue(mockDeleteChain() as any);
         vi.mocked(db.insert).mockReturnValue(mockInsertChain() as any);
 
-        await seedDemoData('user-123');
+        await seedDemoData('user-123', 'ws-123');
 
-        // 4 page name refreshes + 2 e-commerce page link updates (Shopify + Salla)
-        expect(db.update).toHaveBeenCalledTimes(6);
+        // 1 settings dashboardLanguage refresh + 4 page name refreshes + 2 e-commerce page link updates (Shopify + Salla)
+        expect(db.update).toHaveBeenCalledTimes(7);
     });
 
     it('should create pages when no demo data exists', async () => {
@@ -91,7 +91,7 @@ describe('seedDemoData', () => {
         // delete for notifications refresh
         vi.mocked(db.delete).mockReturnValue(mockDeleteChain() as any);
 
-        await seedDemoData('user-123');
+        await seedDemoData('user-123', 'ws-123');
 
         // Should have called insert multiple times (settings + 3 pages + 6 posts + 10 comments + 7 notifications)
         expect(db.insert).toHaveBeenCalled();

@@ -43,7 +43,7 @@ export function useDemoMode() {
   const login = useCallback(async () => {
     setIsLoading(true);
     try {
-      const response = await publicApi.post('/auth/demo');
+      const response = await publicApi.post('/auth/demo', { locale });
       const { user, token, workspaces, settings } = response.data;
 
       setAuth(user, token, 'demo_token');

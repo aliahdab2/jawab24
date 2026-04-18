@@ -6,10 +6,14 @@ import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 
 /**
  * Demo settings configuration
- * Uses 'dual' mode (comment + private message) to showcase full feature set
+ * Uses 'dual' mode (comment + private message) to showcase full feature set.
+ * `dashboardLanguage` is applied at seed time from the visitor's locale so the
+ * demo opens in the language they picked on the landing page.
  */
-const DEMO_SETTINGS = {
-    dashboardLanguage: 'ar',
+const buildDemoSettings = (locale: 'en' | 'ar') => ({
+    dashboardLanguage: locale,
+    // Keep Arabic as the default reply language so AI still auto-detects and
+    // replies in the customer's language — seed data is bilingual regardless.
     defaultReplyLanguage: 'ar',
     supportedLanguages: ['ar', 'en'],
     autoDetectLanguage: true,
@@ -22,11 +26,20 @@ const DEMO_SETTINGS = {
     messagesAutoReply: true,
     businessHoursOnly: false,
     greetingMessage: 'أهلاً بك! كيف يمكنني مساعدتك؟',
-};
+});
 
 /**
- * Demo seed data for testing without Facebook API approval
+ * Demo seed data for testing without Facebook API approval.
+ * Data is intentionally bilingual (~50/50 AR/EN) to showcase auto-detect:
+ * whichever dashboard language the visitor picks, they see both languages
+ * in the inbox, which is how real production inboxes look.
  */
+
+const hasArabic = (s: string | null | undefined): boolean =>
+    !!s && /[\u0600-\u06FF]/.test(s);
+
+const langOf = (s: string | null | undefined): 'ar' | 'en' =>
+    hasArabic(s) ? 'ar' : 'en';
 
 const DEMO_PAGES = [
     {
@@ -214,12 +227,12 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_2',
-        message: 'هل الدورة حضورية أو أونلاين؟',
+        message: 'Are the classes in-person or online?',
         fromId: 'user_2',
-        fromName: 'فاطمة علي',
+        fromName: 'Laila Hassan',
         postIndex: 0,
         replied: true,
-        replyText: 'نعم فاطمة! نقدم الدورات حضورياً وأونلاين حسب رغبتك. تواصلي معنا للتفاصيل 📞',
+        replyText: 'Hi Laila! We offer both in-person and online classes depending on your preference. Contact us for more details 📞',
         replyMethod: 'ai',
     },
     {
@@ -248,9 +261,9 @@ const DEMO_COMMENTS: Array<{
     {
         // Unreplied — shows in "Needs Action"
         facebookCommentId: 'demo_comment_11',
-        message: 'هل يوجد دورات مسائية؟',
+        message: 'Do you have evening classes for working professionals?',
         fromId: 'user_11',
-        fromName: 'ياسر الشهري',
+        fromName: 'David Miller',
         postIndex: 1,
         replied: false,
         replyText: null,
@@ -282,12 +295,12 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_6',
-        message: 'هل يوجد نقل مدرسي؟',
+        message: 'Do you offer school transport?',
         fromId: 'user_6',
-        fromName: 'نورة محمد',
+        fromName: 'Jessica Brown',
         postIndex: 2,
         replied: true,
-        replyText: 'نعم نورة! خدمة النقل المدرسي متاحة لجميع أحياء جدة. للتفاصيل تواصلي مع شؤون الطلاب 🚌',
+        replyText: 'Hi Jessica! Yes, school transport is available across all Jeddah districts. Contact student services for details 🚌',
         replyMethod: 'ai',
     },
     {
@@ -316,9 +329,9 @@ const DEMO_COMMENTS: Array<{
     {
         // Unreplied on congrats post — can be resolved (no reply needed)
         facebookCommentId: 'demo_comment_14',
-        message: 'ما شاء الله، مبروك للطلاب المتفوقين 🎉',
+        message: 'Congratulations to all the top students! 🎉',
         fromId: 'user_14',
-        fromName: 'أم عبدالرحمن',
+        fromName: 'Linda Parker',
         postIndex: 3,
         replied: false,
         replyText: null,
@@ -338,12 +351,12 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_9',
-        message: 'هل يوجد ضمان؟',
+        message: 'Is there a warranty?',
         fromId: 'user_9',
-        fromName: 'فهد السعيد',
+        fromName: 'Michael Scott',
         postIndex: 4,
         replied: true,
-        replyText: 'نعم فهد! جميع منتجاتنا مع ضمان سنة كاملة ✅',
+        replyText: 'Hi Michael! Yes, all our products come with a full 1-year warranty ✅',
         replyMethod: 'template',
     },
     {
@@ -373,12 +386,12 @@ const DEMO_COMMENTS: Array<{
     {
         // Resolved — already handled via DM
         facebookCommentId: 'demo_comment_16',
-        message: 'وش أفضل لابتوب للبرمجة؟',
+        message: 'What is the best laptop for programming?',
         fromId: 'user_16',
-        fromName: 'عمر الدوسري',
+        fromName: 'Kevin Lee',
         postIndex: 5,
         replied: true,
-        replyText: 'أهلاً عمر! ننصح بـ MacBook Pro أو ThinkPad X1 حسب ميزانيتك. تفضل راسلنا للتفاصيل 💻',
+        replyText: 'Hi Kevin! We recommend the MacBook Pro or ThinkPad X1 depending on your budget. DM us for the full specs 💻',
         replyMethod: 'ai',
         resolved: true,
     },
@@ -396,12 +409,12 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_18',
-        message: 'هل عندكم مقاسات كبيرة؟',
+        message: 'Do you carry plus sizes?',
         fromId: 'user_18',
-        fromName: 'أسماء القرني',
+        fromName: 'Amelia Davis',
         postIndex: 6,
         replied: true,
-        replyText: 'نعم أسماء! متوفر جميع المقاسات من S حتى 3XL. راسلينا على الخاص لمساعدتك باختيار المقاس المناسب 👗',
+        replyText: 'Hi Amelia! Yes, we stock sizes from S to 3XL. DM us and we can help you pick the right fit 👗',
         replyMethod: 'ai',
     },
     {
@@ -429,9 +442,9 @@ const DEMO_COMMENTS: Array<{
     },
     {
         facebookCommentId: 'demo_comment_21',
-        message: 'ما شاء الله تشكيلة حلوة! وش أفضل عطر رجالي عندكم؟',
+        message: 'Love the collection! What is the best men\'s perfume you have?',
         fromId: 'user_21',
-        fromName: 'ماجد الحربي',
+        fromName: 'Thomas White',
         postIndex: 7,
         replied: false,
         replyText: null,
@@ -480,6 +493,14 @@ const DEMO_COMMENTS: Array<{
         replyMethod: 'ai',
     },
 ];
+
+// Derive detectedLanguage / replyLanguage once so both the create and refresh
+// paths insert identical rows (avoids drift between the two branches below).
+const DEMO_COMMENTS_SEED = DEMO_COMMENTS.map((c) => ({
+    ...c,
+    detectedLanguage: langOf(c.message),
+    replyLanguage: langOf(c.replyText ?? c.message),
+}));
 
 const DEMO_MESSAGES: Array<{
     platformMessageId: string;
@@ -608,8 +629,8 @@ const DEMO_MESSAGES: Array<{
     {
         platformMessageId: 'demo_msg_4a',
         senderId: 'dm_user_4',
-        senderName: 'فيصل العنزي',
-        message: 'هل عندكم دورة PMP؟',
+        senderName: 'Daniel Roberts',
+        message: 'Do you offer the PMP course?',
         direction: 'incoming',
         pageIndex: 0,
         replied: true,
@@ -621,8 +642,8 @@ const DEMO_MESSAGES: Array<{
     {
         platformMessageId: 'demo_msg_4b',
         senderId: 'dm_user_4',
-        senderName: 'فيصل العنزي',
-        message: 'نعم فيصل! دورة إدارة المشاريع PMP متاحة، مدتها 6 أسابيع بتكلفة 3500 ريال 🌟',
+        senderName: 'Daniel Roberts',
+        message: 'Hi Daniel! Yes, the PMP course is available — 6 weeks for 3,500 SAR 🌟',
         direction: 'outgoing',
         pageIndex: 0,
         replied: false,
@@ -636,8 +657,8 @@ const DEMO_MESSAGES: Array<{
     {
         platformMessageId: 'demo_msg_5a',
         senderId: 'dm_user_5',
-        senderName: 'سعد القرني',
-        message: 'هل توصلون لأبها؟ وكم مدة التوصيل؟',
+        senderName: 'Robert Green',
+        message: 'Do you deliver to Abha? How long does shipping take?',
         direction: 'incoming',
         pageIndex: 2,
         replied: false,
@@ -790,8 +811,8 @@ const DEMO_MESSAGES: Array<{
     {
         platformMessageId: 'demo_msg_12a',
         senderId: 'dm_user_8',
-        senderName: 'خلود المالكي',
-        message: 'مرحبا، استلمت الطلب بس اللون مختلف عن الصورة، أبي أرجعه',
+        senderName: 'Rachel Thompson',
+        message: 'Hi, I received my order but the color is different from the photo. I want to return it.',
         direction: 'incoming',
         pageIndex: 3,
         replied: true,
@@ -804,8 +825,8 @@ const DEMO_MESSAGES: Array<{
     {
         platformMessageId: 'demo_msg_12b',
         senderId: 'dm_user_8',
-        senderName: 'خلود المالكي',
-        message: 'نعتذر خلود! يمكنك الاسترجاع أو الاستبدال خلال 14 يوم. أرسلي رقم الطلب وسنرتب لك الاسترجاع فوراً 🙏',
+        senderName: 'Rachel Thompson',
+        message: 'So sorry Rachel! You can return or exchange within 14 days. Send us your order number and we\'ll arrange the return right away 🙏',
         direction: 'outgoing',
         pageIndex: 3,
         replied: false,
@@ -837,7 +858,7 @@ const DEMO_NOTIFICATIONS = [
     {
         type: 'flagged_reply',
         titles: { en: 'Reply Needs Your Attention', ar: 'رد يحتاج انتباهك' },
-        bodies: { en: 'A Smart Reply to "فهد السعيد" was flagged: low confidence. Please review it.', ar: 'تم وضع علامة على رد ذكي لـ "فهد السعيد": ثقة منخفضة. يرجى مراجعته.' },
+        bodies: { en: 'A Smart Reply to "Michael Scott" was flagged: low confidence. Please review it.', ar: 'تم وضع علامة على رد ذكي لـ "Michael Scott": ثقة منخفضة. يرجى مراجعته.' },
         data: { deepLink: '/comments?filter=needs_action' },
         read: false,
         minutesAgo: 120,
@@ -1070,8 +1091,14 @@ const DEMO_SHOPIFY_PRODUCTS = [
  * Seed demo data for a user
  * This function is idempotent - it won't create duplicates if called multiple times
  */
-export async function seedDemoData(userId: string, workspaceId: string, logger: Logger = noopLogger): Promise<void> {
-    logger.info('[DemoData] Starting demo data seed', { userId });
+export async function seedDemoData(
+    userId: string,
+    workspaceId: string,
+    logger: Logger = noopLogger,
+    locale: 'en' | 'ar' = 'ar',
+): Promise<void> {
+    logger.info('[DemoData] Starting demo data seed', { userId, locale });
+    const DEMO_SETTINGS = buildDemoSettings(locale);
 
     // Check if demo pages already exist for this user
     const existingPages = await db
@@ -1084,6 +1111,12 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
 
     if (hasExistingDemoPages) {
         logger.info('[DemoData] Demo data already exists, refreshing all demo data');
+
+        // Refresh dashboardLanguage so returning demo users open in whichever
+        // language they just picked on the landing page.
+        await db.update(settings)
+            .set({ dashboardLanguage: DEMO_SETTINGS.dashboardLanguage })
+            .where(eq(settings.userId, userId));
 
         // Refresh page names/data in case seed data was updated.
         // Also ensure workspaceId is set — handles pages created before workspace migration.
@@ -1157,7 +1190,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         }
 
         // Re-create comments
-        for (const commentData of DEMO_COMMENTS) {
+        for (const commentData of DEMO_COMMENTS_SEED) {
             const post = refreshedPosts[commentData.postIndex];
             if (!post) continue;
             const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
@@ -1170,8 +1203,8 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
                 replied: commentData.replied,
                 replyText: commentData.replyText,
                 replyMethod: commentData.replyMethod,
-                detectedLanguage: 'ar',
-                replyLanguage: 'ar',
+                detectedLanguage: commentData.detectedLanguage,
+                replyLanguage: commentData.replyLanguage,
                 needsAttention: commentData.needsAttention ?? false,
                 flagReason: commentData.flagReason ?? null,
                 resolved: commentData.resolved ?? false,
@@ -1207,9 +1240,11 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
         });
         logger.debug('[DemoData] Created demo settings with dual reply mode');
     } else {
-        // Update existing settings to demo defaults
+        // Update existing settings to demo defaults, including dashboardLanguage
+        // so returning demo users open in the language they just picked.
         await db.update(settings)
             .set({
+                dashboardLanguage: DEMO_SETTINGS.dashboardLanguage,
                 commentReplyMode: DEMO_SETTINGS.commentReplyMode,
                 dualReplyNudge: DEMO_SETTINGS.dualReplyNudge,
                 aiEnabled: DEMO_SETTINGS.aiEnabled,
@@ -1258,7 +1293,7 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
     }
 
     // Create demo comments
-    for (const commentData of DEMO_COMMENTS) {
+    for (const commentData of DEMO_COMMENTS_SEED) {
         const post = createdPosts[commentData.postIndex];
         const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
         await db.insert(comments).values({
@@ -1270,8 +1305,8 @@ export async function seedDemoData(userId: string, workspaceId: string, logger: 
             replied: commentData.replied,
             replyText: commentData.replyText,
             replyMethod: commentData.replyMethod,
-            detectedLanguage: 'ar',
-            replyLanguage: 'ar',
+            detectedLanguage: commentData.detectedLanguage,
+            replyLanguage: commentData.replyLanguage,
             needsAttention: commentData.needsAttention ?? false,
             flagReason: commentData.flagReason ?? null,
             resolved: commentData.resolved ?? false,

@@ -11,6 +11,7 @@
  */
 
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import { config } from '../../config';
 import { authService } from '../../services/auth';
 import { cookiesService } from '../../services/cookies';
@@ -20,6 +21,10 @@ import { workspaceService } from '../../services/workspace';
 import { integrationRegistry } from '../../integrations';
 import type { AuthResponse } from '../../types';
 import { seedDemoData } from './seedData';
+
+const DemoLoginBodySchema = z.object({
+    locale: z.enum(['en', 'ar']).optional(),
+});
 
 async function demoPlugin(fastify: FastifyInstance) {
     // Only register routes if demo mode is enabled
@@ -40,6 +45,17 @@ async function demoPlugin(fastify: FastifyInstance) {
         try {
             request.log.info('[Demo] Starting demo login');
 
+            const parsed = DemoLoginBodySchema.safeParse(request.body ?? {});
+            if (!parsed.success) {
+                return reply.status(400).send({
+                    success: false,
+                    error: parsed.error.errors[0]?.message ?? 'Invalid request body',
+                });
+            }
+            // Default to Arabic when the client doesn't send a locale — preserves
+            // the prior demo behaviour for older clients / direct API callers.
+            const locale: 'en' | 'ar' = parsed.data.locale ?? 'ar';
+
             // 1. Find or create demo user
             const user = await authService.findOrCreateUser(
                 config.demo.userFacebookId,
@@ -58,7 +74,7 @@ async function demoPlugin(fastify: FastifyInstance) {
             if (!workspaceId) throw new Error('Demo workspace not found after user creation');
 
             // 3. Seed demo data for this user (pages, comments, templates)
-            await seedDemoData(user.id, workspaceId, request.log);
+            await seedDemoData(user.id, workspaceId, request.log, locale);
 
             // 4. Generate JWT token
             const token = authService.generateToken(user);

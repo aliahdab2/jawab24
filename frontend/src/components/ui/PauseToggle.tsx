@@ -41,9 +41,9 @@ export function PauseToggle({
         ? <PlayCircle className="w-4 h-4 flex-shrink-0" />
         : <PauseCircle className="w-4 h-4 flex-shrink-0" />
       }
-      <span className="flex items-center gap-1.5 text-xs font-medium leading-none">
-        <span>{paused ? t('resumeSmartReply') : t('pauseSmartReply')}</span>
-        <span className="text-[10px] text-muted-foreground font-normal">{scopeLabel}</span>
+      <span className="flex items-center gap-1.5 text-xs font-medium leading-none min-w-0">
+        <span className="whitespace-nowrap">{paused ? t('resumeSmartReply') : t('pauseSmartReply')}</span>
+        <span className="whitespace-nowrap text-[10px] text-muted-foreground font-normal truncate">{scopeLabel}</span>
       </span>
     </button>
   );
