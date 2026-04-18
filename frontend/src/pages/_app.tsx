@@ -486,7 +486,14 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           <AppShell className={`${dmSans.variable} ${cairo.variable} ${tajawal.variable} ${outfit.variable} ${jetbrainsMono.variable}`}>
             <ErrorBoundary name="root" resetKeys={router.asPath}>
               {getLayout(<Component {...pageProps} />)}
-              <Toaster richColors position="top-center" closeButton duration={4000} theme="system" />
+              <Toaster
+                richColors
+                position="top-center"
+                closeButton
+                duration={4000}
+                theme="system"
+                offset="calc(env(safe-area-inset-top, 16px) + 32px)"
+              />
               {showPushPrompt && (
                 <NotificationPrePrompt onEnable={handleEnablePush} onDismiss={handleDismissPush} />
               )}
