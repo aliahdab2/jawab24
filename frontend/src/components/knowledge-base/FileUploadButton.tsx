@@ -8,13 +8,14 @@ import { captureError } from '@/lib/sentryHelpers';
 import { useHintDisplay } from '@/hooks/useHintDisplay';
 
 // image/* triggers camera option on mobile (iOS/Android)
-const ACCEPTED_TYPES = '.pdf,.docx,.doc,image/*';
+const ACCEPTED_TYPES = '.pdf,.docx,.doc,.xlsx,image/*';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 const SUPPORTED_MIMES = new Set([
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'application/msword',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'image/jpeg',
   'image/png',
   'image/webp',

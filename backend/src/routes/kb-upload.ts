@@ -5,9 +5,12 @@ import {
     extractFromPDF,
     extractFromWord,
     extractFromImage,
+    extractFromSpreadsheet,
     SUPPORTED_MIME_TYPES,
     VISION_MIME_TYPES,
+    SPREADSHEET_MIME_TYPES,
     MAX_FILE_SIZE_BYTES,
+    type ExtractionResult,
 } from '../services/kb/file-extractor';
 import { auth } from '../utils/swagger';
 import { redis } from '../lib/redis';
@@ -63,7 +66,7 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
             if (!SUPPORTED_MIME_TYPES.has(mimeType)) {
                 return reply.status(400).send({
                     success: false,
-                    error: 'Unsupported file type. Use PDF, Word (.docx), or image (jpg/png/webp)',
+                    error: 'Unsupported file type. Use PDF, Word (.docx), Excel (.xlsx), or image (jpg/png/webp)',
                 });
             }
 
@@ -76,38 +79,48 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 return reply.status(400).send({ success: false, error: 'Empty file data' });
             }
 
+            const respondWith = (result: ExtractionResult, extra?: Record<string, unknown>) => {
+                const data = extra ? { ...result, ...extra } : result;
+                request.log.info({
+                    fileName,
+                    method: result.method,
+                    textLength: result.text.length,
+                    truncated: result.truncated,
+                    pagesTruncated: result.pagesTruncated,
+                }, 'KB file extraction');
+                return reply.send({ success: true, data });
+            };
+
             // Shared Vision flow: check plan + quota → extract → increment counter
-            const runVisionExtraction = async (buf: Buffer, mime: string, extraData?: Record<string, unknown>) => {
+            const runVisionExtraction = async (buf: Buffer, mime: string, extra?: Record<string, unknown>) => {
                 const visionCheck = await checkVisionAccessAndQuota(request);
                 if (!visionCheck.allowed) {
                     return reply.status(visionCheck.status).send(visionCheck.response);
                 }
                 const result = await extractFromImage(buf, mime);
                 await incrementVisionCounter(request);
-                const data = extraData ? { ...result, ...extraData } : result;
-                request.log.info({ fileName, method: 'gpt-vision', textLength: result.text.length }, 'KB file extraction');
-                return reply.send({ success: true, data });
+                return respondWith(result, extra);
             };
 
             try {
                 // --- PDF ---
                 if (mimeType === 'application/pdf') {
                     const pdfResult = await extractFromPDF(buffer);
-
                     if (pdfResult.isScanned) {
                         return runVisionExtraction(buffer, 'application/pdf', { pagesTruncated: pdfResult.pagesTruncated });
                     }
-
-                    request.log.info({ fileName, method: 'pdf-parse', textLength: pdfResult.text.length, truncated: pdfResult.truncated, pagesTruncated: pdfResult.pagesTruncated }, 'KB file extraction');
-                    return reply.send({ success: true, data: pdfResult });
+                    return respondWith(pdfResult);
                 }
 
                 // --- Word (.docx) ---
                 if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
                     mimeType === 'application/msword') {
-                    const wordResult = await extractFromWord(buffer);
-                    request.log.info({ fileName, method: 'mammoth', textLength: wordResult.text.length, truncated: wordResult.truncated }, 'KB file extraction');
-                    return reply.send({ success: true, data: wordResult });
+                    return respondWith(await extractFromWord(buffer));
+                }
+
+                // --- Excel (.xlsx) ---
+                if (SPREADSHEET_MIME_TYPES.has(mimeType)) {
+                    return respondWith(await extractFromSpreadsheet(buffer));
                 }
 
                 // --- Image ---

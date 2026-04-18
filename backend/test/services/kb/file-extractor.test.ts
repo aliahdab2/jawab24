@@ -41,10 +41,22 @@ import {
     extractFromPDF,
     extractFromWord,
     extractFromImage,
+    extractFromSpreadsheet,
     MAX_FILE_SIZE_BYTES,
     MAX_PDF_PAGES,
     MAX_OUTPUT_CHARS,
 } from '../../../src/services/kb/file-extractor';
+import ExcelJS from 'exceljs';
+
+/** Build a real .xlsx buffer the same way a browser upload would. */
+async function buildXlsx(
+    build: (wb: ExcelJS.Workbook) => void,
+): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    build(wb);
+    const arr = await wb.xlsx.writeBuffer();
+    return Buffer.from(arr as ArrayBuffer);
+}
 
 describe('KB File Extractor', () => {
     beforeEach(() => {
@@ -122,6 +134,47 @@ describe('KB File Extractor', () => {
 
             expect(result.isScanned).toBe(true);
             expect(result.text).toBe('');
+        });
+
+        it('escalates to Vision when Arabic table-like output is detected', async () => {
+            // Mirrors the broken pdf-parse output from the user's course schedule
+            const garbled = [
+                'الكورس\tالأيام\tالوقت\tالتاريخ\tالمبلغ',
+                'السبت\t--\tالأربعاء\t3--4\t25/4/2026',
+                'الأحد\t--\tالثلاثاء\t9--10\t28/4/2026',
+                'الخميس فقط\t2--4\t30/4/2026',
+                'إنكليزي متوسط 1\tالأحد--الثلاثاء\t9--10\t29/4/2026\t35,000',
+            ].join('\n');
+            mockPDFParse.getText.mockResolvedValue({ text: garbled, total: 1 });
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(true);
+        });
+
+        it('does not escalate clean Arabic prose', async () => {
+            // Long Arabic paragraph — no tabular structure, should stay on pdf-parse
+            const prose = 'نحن شركة متخصصة في بيع المنتجات الإلكترونية. نعمل منذ عام 2015 ونخدم آلاف العملاء في جميع أنحاء المملكة. ساعات العمل من الأحد إلى الخميس من 9 صباحاً إلى 5 مساءً.';
+            mockPDFParse.getText.mockResolvedValue({ text: prose, total: 1 });
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(false);
+        });
+
+        it('does not escalate English tables', async () => {
+            // English tabular content — pdf-parse handles LTR tables well enough
+            const englishTable = [
+                'Item\tPrice\tStock\tCategory',
+                'Laptop\t999\t12\tElectronics',
+                'Phone\t499\t30\tElectronics',
+                'Book\t25\t100\tMedia',
+            ].join('\n');
+            mockPDFParse.getText.mockResolvedValue({ text: englishTable, total: 1 });
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(false);
         });
 
         it('truncates text exceeding 16,000 chars', async () => {
@@ -267,6 +320,105 @@ describe('KB File Extractor', () => {
 
             // Restore
             if (config.openai) config.openai.apiKey = originalKey || 'sk-test-key';
+        });
+    });
+
+    // --- Spreadsheet extraction (.xlsx) ---
+
+    describe('extractFromSpreadsheet', () => {
+        it('extracts tab-separated rows from a simple sheet', async () => {
+            const buffer = await buildXlsx((wb) => {
+                const sheet = wb.addWorksheet('Prices');
+                sheet.addRow(['Item', 'Price']);
+                sheet.addRow(['Burger', 25]);
+                sheet.addRow(['Pizza', 30]);
+            });
+
+            const result = await extractFromSpreadsheet(buffer);
+
+            expect(result.method).toBe('exceljs');
+            expect(result.text).toBe('Item\tPrice\nBurger\t25\nPizza\t30');
+        });
+
+        it('expands merged cells into every spanned row (the PDF bug fix)', async () => {
+            // Mirrors the real-world Arabic course schedule: one course name
+            // merged across 3 rows with 3 different dates.
+            const buffer = await buildXlsx((wb) => {
+                const sheet = wb.addWorksheet('Courses');
+                sheet.addRow(['Course', 'Date']);
+                sheet.addRow(['إنكليزي مبتدئ', '25/4']);
+                sheet.addRow([null, '28/4']);
+                sheet.addRow([null, '30/4']);
+                sheet.mergeCells('A2:A4');
+            });
+
+            const result = await extractFromSpreadsheet(buffer);
+
+            // Every row must carry the merged course name — this is what
+            // pdf-parse got wrong.
+            const lines = result.text.split('\n');
+            expect(lines).toHaveLength(4);
+            expect(lines[1]).toBe('إنكليزي مبتدئ\t25/4');
+            expect(lines[2]).toBe('إنكليزي مبتدئ\t28/4');
+            expect(lines[3]).toBe('إنكليزي مبتدئ\t30/4');
+        });
+
+        it('separates multiple sheets with a sheet-name header', async () => {
+            const buffer = await buildXlsx((wb) => {
+                wb.addWorksheet('Menu').addRow(['Burger', 25]);
+                wb.addWorksheet('Hours').addRow(['Mon-Fri', '9-17']);
+            });
+
+            const result = await extractFromSpreadsheet(buffer);
+
+            expect(result.text).toContain('=== Menu ===');
+            expect(result.text).toContain('=== Hours ===');
+            expect(result.text).toContain('Burger\t25');
+            expect(result.text).toContain('Mon-Fri\t9-17');
+        });
+
+        it('omits the sheet-name header when there is only one sheet', async () => {
+            const buffer = await buildXlsx((wb) => {
+                wb.addWorksheet('Only').addRow(['a', 'b']);
+            });
+
+            const result = await extractFromSpreadsheet(buffer);
+
+            expect(result.text).not.toContain('===');
+            expect(result.text).toBe('a\tb');
+        });
+
+        it('skips fully empty rows', async () => {
+            const buffer = await buildXlsx((wb) => {
+                const sheet = wb.addWorksheet('S');
+                sheet.addRow(['one']);
+                sheet.addRow([]); // empty
+                sheet.addRow(['two']);
+            });
+
+            const result = await extractFromSpreadsheet(buffer);
+
+            expect(result.text).toBe('one\ntwo');
+        });
+
+        it('truncates text exceeding 16,000 chars', async () => {
+            const buffer = await buildXlsx((wb) => {
+                const sheet = wb.addWorksheet('Big');
+                for (let i = 0; i < 2000; i++) {
+                    sheet.addRow(['X'.repeat(20)]);
+                }
+            });
+
+            const result = await extractFromSpreadsheet(buffer);
+
+            expect(result.text.length).toBe(MAX_OUTPUT_CHARS);
+            expect(result.truncated).toBe(true);
+        });
+
+        it('rejects files larger than 5MB', async () => {
+            const bigBuffer = Buffer.alloc(6 * 1024 * 1024);
+
+            await expect(extractFromSpreadsheet(bigBuffer)).rejects.toThrow('exceeds 5MB limit');
         });
     });
 });
