@@ -8,7 +8,7 @@
  *   - Truncates tables between tests
  *   - Cleans up connections on process exit
  */
-import { beforeEach } from 'vitest';
+import { beforeEach, afterEach } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import { sql, eq } from 'drizzle-orm';
@@ -37,6 +37,40 @@ beforeEach(async () => {
             pages, users
         CASCADE
     `);
+});
+
+// Parity invariant for the workspace_id denormalization (commit 8f5c93bb).
+// Runs after every test, before the next test's beforeEach truncates, so any
+// row inserted through a production code path is checked. Catches the whole
+// class of bug where a new write path forgets to thread workspaceId through —
+// including surfaces the per-test assertions don't explicitly exercise
+// (instagram_comments, webhook.ts, nonTextHandler.ts, future writers).
+//
+// IS DISTINCT FROM treats NULL=NULL as equal, so pages with a NULL workspace_id
+// (legacy demo fixtures) don't trip the check — only real drift does.
+afterEach(async () => {
+    const drift = await testDb.execute<{ table: string; count: string }>(sql`
+        SELECT 'messages' AS table, COUNT(*)::text AS count
+          FROM messages m JOIN pages p ON m.page_id = p.id
+         WHERE m.workspace_id IS DISTINCT FROM p.workspace_id
+        UNION ALL
+        SELECT 'comments', COUNT(*)::text
+          FROM comments c JOIN posts po ON c.post_id = po.id
+                          JOIN pages p  ON po.page_id = p.id
+         WHERE c.workspace_id IS DISTINCT FROM p.workspace_id
+        UNION ALL
+        SELECT 'instagram_comments', COUNT(*)::text
+          FROM instagram_comments ic JOIN instagram_media im ON ic.media_id = im.id
+                                     JOIN pages p             ON im.page_id  = p.id
+         WHERE ic.workspace_id IS DISTINCT FROM p.workspace_id
+    `);
+    const violators = drift.filter(r => Number(r.count) > 0);
+    if (violators.length > 0) {
+        throw new Error(
+            `workspace_id parity violated: ${violators.map(v => `${v.table}=${v.count}`).join(', ')}. ` +
+            `A production write path inserted rows whose workspace_id disagrees with the owning page.`,
+        );
+    }
 });
 
 // Close DB pools on process exit so the pre-deploy script can DROP the database.

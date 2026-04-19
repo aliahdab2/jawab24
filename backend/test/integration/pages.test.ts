@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getTableColumns } from 'drizzle-orm';
-import { createTestUser, createTestPage, createTestWorkspace, testDb } from './setup';
+import { createTestUser, createTestPage, createTestWorkspace, insertPost, insertComment, insertInstagramMedia, insertInstagramComment } from './setup';
 import * as schema from '../../src/db/schema';
 import { pagesService } from '../../src/services/pages';
 
@@ -26,18 +26,12 @@ describe('pagesService.getPages — integration', () => {
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
         // Seed: post → 3 comments (2 replied)
-        const [post] = await testDb.insert(schema.posts).values({
-            pageId: page.id,
-            facebookPostId: `post-${Date.now()}`,
-            message: 'Test post',
-        }).returning();
+        const post = await insertPost(page.id, { facebookPostId: `post-${Date.now()}`, message: 'Test post' });
 
         const now = new Date();
-        await testDb.insert(schema.comments).values([
-            { postId: post.id, facebookCommentId: `c1-${Date.now()}`, message: 'Hello', replied: true, repliedAt: now },
-            { postId: post.id, facebookCommentId: `c2-${Date.now()}`, message: 'Hi', replied: true, repliedAt: new Date(now.getTime() - 60000) },
-            { postId: post.id, facebookCommentId: `c3-${Date.now()}`, message: 'Hey', replied: false },
-        ]);
+        await insertComment(post.id, { facebookCommentId: `c1-${Date.now()}`, message: 'Hello', replied: true, repliedAt: now });
+        await insertComment(post.id, { facebookCommentId: `c2-${Date.now()}`, message: 'Hi', replied: true, repliedAt: new Date(now.getTime() - 60000) });
+        await insertComment(post.id, { facebookCommentId: `c3-${Date.now()}`, message: 'Hey', replied: false });
 
         const pages = await pagesService.getPages(workspace.id);
 
@@ -54,16 +48,10 @@ describe('pagesService.getPages — integration', () => {
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
         // Seed: instagramMedia → 2 IG comments (1 replied)
-        const [media] = await testDb.insert(schema.instagramMedia).values({
-            pageId: page.id,
-            instagramMediaId: `ig-media-${Date.now()}`,
-            mediaType: 'IMAGE',
-        }).returning();
+        const media = await insertInstagramMedia(page.id, { instagramMediaId: `ig-media-${Date.now()}`, mediaType: 'IMAGE' });
 
-        await testDb.insert(schema.instagramComments).values([
-            { mediaId: media.id, instagramCommentId: `ic1-${Date.now()}`, message: 'Nice', replied: true, repliedAt: new Date() },
-            { mediaId: media.id, instagramCommentId: `ic2-${Date.now()}`, message: 'Cool', replied: false },
-        ]);
+        await insertInstagramComment(media.id, { instagramCommentId: `ic1-${Date.now()}`, message: 'Nice', replied: true, repliedAt: new Date() });
+        await insertInstagramComment(media.id, { instagramCommentId: `ic2-${Date.now()}`, message: 'Cool', replied: false });
 
         const pages = await pagesService.getPages(workspace.id);
 
@@ -78,20 +66,12 @@ describe('pagesService.getPages — integration', () => {
         const page = await createTestPage(user.id, { workspaceId: workspace.id });
 
         // FB: 1 comment (replied)
-        const [post] = await testDb.insert(schema.posts).values({
-            pageId: page.id, facebookPostId: `post-${Date.now()}`, message: 'FB post',
-        }).returning();
-        await testDb.insert(schema.comments).values({
-            postId: post.id, facebookCommentId: `c-${Date.now()}`, message: 'FB comment', replied: true, repliedAt: new Date(),
-        });
+        const post = await insertPost(page.id, { facebookPostId: `post-${Date.now()}`, message: 'FB post' });
+        await insertComment(post.id, { facebookCommentId: `c-${Date.now()}`, message: 'FB comment', replied: true, repliedAt: new Date() });
 
         // IG: 1 comment (not replied)
-        const [media] = await testDb.insert(schema.instagramMedia).values({
-            pageId: page.id, instagramMediaId: `ig-${Date.now()}`, mediaType: 'REELS',
-        }).returning();
-        await testDb.insert(schema.instagramComments).values({
-            mediaId: media.id, instagramCommentId: `ic-${Date.now()}`, message: 'IG comment', replied: false,
-        });
+        const media = await insertInstagramMedia(page.id, { instagramMediaId: `ig-${Date.now()}`, mediaType: 'REELS' });
+        await insertInstagramComment(media.id, { instagramCommentId: `ic-${Date.now()}`, message: 'IG comment', replied: false });
 
         const pages = await pagesService.getPages(workspace.id);
 
