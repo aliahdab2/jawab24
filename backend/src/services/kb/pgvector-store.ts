@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { db } from '../../db';
 import { kbChunks } from '../../db/schema';
 import { eq, and, sql } from 'drizzle-orm';
@@ -26,6 +27,10 @@ export class PgVectorStore implements VectorStore {
     async upsertChunks(pageId: string, chunks: ChunkWithEmbedding[]): Promise<void> {
         if (chunks.length === 0) return;
 
+        for (const chunk of chunks) {
+            validateVector(chunk.embedding, EMBEDDING_DIMENSIONS);
+        }
+
         // Use a transaction so partial failures don't leave orphaned rows
         await db.transaction(async (tx) => {
             // Delete existing chunks for this page+version to prevent duplicates
@@ -34,33 +39,44 @@ export class PgVectorStore implements VectorStore {
                 and(eq(kbChunks.pageId, pageId), eq(kbChunks.kbVersion, kbVersion))
             );
 
-            for (const chunk of chunks) {
-                validateVector(chunk.embedding, EMBEDDING_DIMENSIONS);
+            // Pre-generate ids client-side so INSERT and UPDATE can reference
+            // the same id set without depending on RETURNING row order
+            // (PostgreSQL's spec leaves RETURNING order unspecified).
+            const rows = chunks.map((chunk) => ({ id: randomUUID(), chunk }));
 
-                const [inserted] = await tx
-                    .insert(kbChunks)
-                    .values({
-                        pageId: chunk.pageId,
-                        type: chunk.type,
-                        language: chunk.language,
-                        title: chunk.title,
-                        contentOriginal: chunk.contentOriginal,
-                        contentNormalized: chunk.contentNormalized,
-                        titleNormalized: chunk.titleNormalized,
-                        tokenCount: chunk.tokenCount,
-                        metadata: chunk.metadata,
-                        kbVersion: chunk.kbVersion,
-                    })
-                    .returning({ id: kbChunks.id });
+            // Single multi-row INSERT instead of one statement per chunk.
+            // Drizzle doesn't support the pgvector type, so embeddings are set
+            // in a separate pass below.
+            await tx
+                .insert(kbChunks)
+                .values(rows.map(({ id, chunk }) => ({
+                    id,
+                    pageId: chunk.pageId,
+                    type: chunk.type,
+                    language: chunk.language,
+                    title: chunk.title,
+                    contentOriginal: chunk.contentOriginal,
+                    contentNormalized: chunk.contentNormalized,
+                    titleNormalized: chunk.titleNormalized,
+                    tokenCount: chunk.tokenCount,
+                    metadata: chunk.metadata,
+                    kbVersion: chunk.kbVersion,
+                })));
 
-                // Set the embedding via raw SQL (Drizzle doesn't support vector type)
-                if (inserted) {
+            // Single UPDATE ... FROM (VALUES ...) sets every embedding in one
+            // round trip.
+            const pairs = sql.join(
+                rows.map(({ id, chunk }) => {
                     const vectorStr = `[${chunk.embedding.join(',')}]`;
-                    await tx.execute(
-                        sql`UPDATE kb_chunks SET embedding = ${vectorStr}::vector WHERE id = ${inserted.id}`
-                    );
-                }
-            }
+                    return sql`(${id}::uuid, ${vectorStr}::vector)`;
+                }),
+                sql`, `,
+            );
+            await tx.execute(sql`
+                UPDATE kb_chunks SET embedding = v.emb
+                FROM (VALUES ${pairs}) AS v(id, emb)
+                WHERE kb_chunks.id = v.id
+            `);
         });
     }
 
