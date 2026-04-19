@@ -313,6 +313,14 @@ export class WebhookController {
             return;
         }
 
+        // Guard: page.workspaceId is nullable in schema but pages connected since 0073_backfill
+        // always have it. Legacy null-workspace pages were orphans that should have been
+        // cleaned up — skip rather than write a partially-denormalized row.
+        if (!page.workspaceId) {
+            this.log().warn('Page missing workspace_id — skipping message store', { pageId: page.id, messageId });
+            return;
+        }
+
         this.log().info('Enqueueing message for processing', {
             senderId,
             messageId,
@@ -321,9 +329,9 @@ export class WebhookController {
 
         try {
             // Store message immediately so rapid follow-ups build conversation context
-            // page is guaranteed non-null — caller checks !page before calling this method
             await messagesService.findOrCreateFromWebhook(
                 page.id,
+                page.workspaceId,
                 messageId,
                 senderId,
                 messageText

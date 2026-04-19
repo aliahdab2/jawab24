@@ -35,12 +35,13 @@ export class WhatsAppMessageAdapter implements MessagePlatformAdapter {
 
     async storeIncomingMessage(
         pageId: string,
+        workspaceId: string,
         whatsappMessageId: string,
         senderId: string,
         text: string,
         senderName?: string,
     ): Promise<{ message: StoredMessage; isNew: boolean }> {
-        return storeMessage(pageId, whatsappMessageId, senderId, text, senderName, 'whatsapp');
+        return storeMessage(pageId, workspaceId, whatsappMessageId, senderId, text, senderName, 'whatsapp');
     }
 
     getInternalMessageId(whatsappMessageId: string): string {

@@ -848,6 +848,7 @@ describe('Webhook Controller', () => {
     describe('POST /webhook (Non-Text Message Handling)', () => {
         const mockPage = {
             id: 'internal-page-id',
+            workspaceId: 'ws-id',
             accessToken: 'test-token',
             instagramAccountId: 'ig_account_123',
         };
@@ -897,7 +898,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored in DB
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_voice_1', 'user_123', '[رسالة صوتية]', undefined, 'audio',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'user_123', '[رسالة صوتية]', undefined, 'audio',
             );
 
             // Nudge reply sent
@@ -907,7 +908,7 @@ describe('Webhook Controller', () => {
 
             // Outgoing message stored
             expect(mockStoreOutgoingMessage).toHaveBeenCalledWith(
-                mockPage.id, 'user_123', expect.stringContaining('الرسائل النصية'), 'template',
+                mockPage.id, mockPage.workspaceId, 'user_123', expect.stringContaining('الرسائل النصية'), 'template',
             );
         });
 
@@ -942,7 +943,7 @@ describe('Webhook Controller', () => {
 
             // Transcribed text stored in DB (not placeholder)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_voice_transcribed', 'user_123', 'كم سعر الجاكيت الأسود؟', undefined, 'audio',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_transcribed', 'user_123', 'كم سعر الجاكيت الأسود؟', undefined, 'audio',
             );
 
             // Enqueued for AI reply pipeline (pageId = platform ID, not internal UUID)
@@ -992,7 +993,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored (not transcription)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_voice_fail', 'user_123', '[رسالة صوتية]', undefined, 'audio',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_fail', 'user_123', '[رسالة صوتية]', undefined, 'audio',
             );
 
             // Nudge sent as fallback
@@ -1070,7 +1071,7 @@ describe('Webhook Controller', () => {
 
             // English placeholder
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_img_1', 'user_en', '[Image]', undefined, 'image',
+                mockPage.id, mockPage.workspaceId, 'msg_img_1', 'user_en', '[Image]', undefined, 'image',
             );
 
             // English nudge
@@ -1112,7 +1113,7 @@ describe('Webhook Controller', () => {
 
             // Stored as sticker (not image)
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_like_sticker', 'user_123', '[Sticker]', undefined, 'sticker',
+                mockPage.id, mockPage.workspaceId, 'msg_like_sticker', 'user_123', '[Sticker]', undefined, 'sticker',
             );
 
             // No nudge sent
@@ -1183,7 +1184,7 @@ describe('Webhook Controller', () => {
 
             // Placeholder stored
             expect(mockFindOrCreateFromWebhook).toHaveBeenCalledWith(
-                mockPage.id, 'msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video',
+                mockPage.id, mockPage.workspaceId, 'msg_voice_1', 'ig_user_789', '[فيديو]', undefined, 'video',
             );
 
             // Nudge sent via Instagram API

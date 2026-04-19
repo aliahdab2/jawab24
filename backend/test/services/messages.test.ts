@@ -233,7 +233,7 @@ describe('MessagesService', () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(mockDbRow() as any);
 
             const result = await messagesService.findOrCreateFromWebhook(
-                'page-1', 'fb-msg-1', 'sender-1', 'Hello'
+                'page-1', 'ws-1', 'fb-msg-1', 'sender-1', 'Hello'
             );
 
             expect(result.isNew).toBe(false);
@@ -250,7 +250,7 @@ describe('MessagesService', () => {
             vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
 
             const result = await messagesService.findOrCreateFromWebhook(
-                'page-1', 'fb-msg-1', 'sender-1', 'Hello', 'Jane'
+                'page-1', 'ws-1', 'fb-msg-1', 'sender-1', 'Hello', 'Jane'
             );
 
             expect(result.isNew).toBe(false);
@@ -262,7 +262,7 @@ describe('MessagesService', () => {
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(mockDbRow({ senderName: 'John' }) as any);
 
             const result = await messagesService.findOrCreateFromWebhook(
-                'page-1', 'fb-msg-1', 'sender-1', 'Hello', 'Jane'
+                'page-1', 'ws-1', 'fb-msg-1', 'sender-1', 'Hello', 'Jane'
             );
 
             expect(result.isNew).toBe(false);
@@ -279,7 +279,7 @@ describe('MessagesService', () => {
             } as any);
 
             const result = await messagesService.findOrCreateFromWebhook(
-                'page-1', 'fb-new', 'sender-1', 'Hello', 'John'
+                'page-1', 'ws-1', 'fb-new', 'sender-1', 'Hello', 'John'
             );
 
             expect(result.isNew).toBe(true);
@@ -361,7 +361,7 @@ describe('MessagesService', () => {
                 }),
             } as any);
 
-            const result = await messagesService.storeOutgoingMessage('page-1', 'sender-1', 'You are welcome', 'ai');
+            const result = await messagesService.storeOutgoingMessage('page-1', 'ws-1', 'sender-1', 'You are welcome', 'ai');
 
             expect(result.id).toBe('out-1');
             expect(db.insert).toHaveBeenCalled();
@@ -378,7 +378,7 @@ describe('MessagesService', () => {
             } as any);
 
             const before = Date.now();
-            await messagesService.storeOutgoingMessage('page-1', 'sender-1', 'Reply', 'ai');
+            await messagesService.storeOutgoingMessage('page-1', 'ws-1', 'sender-1', 'Reply', 'ai');
             const after = Date.now();
 
             const stored = capturedValues.createdTime as Date;
@@ -403,7 +403,7 @@ describe('MessagesService', () => {
                 }),
             } as any);
 
-            await messagesService.storeOutgoingMessage('page-1', 'sender-1', 'Reply', 'ai');
+            await messagesService.storeOutgoingMessage('page-1', 'ws-1', 'sender-1', 'Reply', 'ai');
 
             expect(capturedValues.senderName).toBe('Nahed Hasan Allaw');
         });
@@ -419,7 +419,7 @@ describe('MessagesService', () => {
                 }),
             } as any);
 
-            await messagesService.storeOutgoingMessage('page-1', 'sender-1', 'Reply', 'ai');
+            await messagesService.storeOutgoingMessage('page-1', 'ws-1', 'sender-1', 'Reply', 'ai');
 
             expect(capturedValues).not.toHaveProperty('senderName');
         });
@@ -442,7 +442,7 @@ describe('MessagesService', () => {
             const { conversationsService } = await import('../../src/services/conversations');
 
             await messagesService.storeOutgoingMessage(
-                'page-1', 'sender-1', 'Reply', 'ai', undefined, 'Ali Ahdab',
+                'page-1', 'ws-1', 'sender-1', 'Reply', 'ai', undefined, 'Ali Ahdab',
             );
 
             expect(conversationsService.findOrCreate).toHaveBeenCalledWith(
@@ -450,6 +450,7 @@ describe('MessagesService', () => {
             );
             // Legacy messages.sender_name is also written
             expect(capturedValues.senderName).toBe('Ali Ahdab');
+            expect(capturedValues.workspaceId).toBe('ws-1');
         });
 
         it('prefers caller-supplied senderName over existing conversation name', async () => {
@@ -465,7 +466,7 @@ describe('MessagesService', () => {
             } as any);
 
             await messagesService.storeOutgoingMessage(
-                'page-1', 'sender-1', 'Reply', 'ai', undefined, 'Fresh Name',
+                'page-1', 'ws-1', 'sender-1', 'Reply', 'ai', undefined, 'Fresh Name',
             );
 
             expect(conversationsService.findOrCreate).toHaveBeenCalledWith(

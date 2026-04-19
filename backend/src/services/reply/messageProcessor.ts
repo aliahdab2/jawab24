@@ -92,6 +92,7 @@ export class MessageProcessor {
                 pipelineMetrics.record(pipeline, 'no_workspace');
                 return { success: false, messageId: platformMessageId, error: 'Page has no associated workspace' };
             }
+            const workspaceId = page.workspaceId;
 
             // 2. Fetch sender name (best-effort) — do this BEFORE auto-reply check
             // so dashboard always shows real names, even when page is OFF
@@ -106,6 +107,7 @@ export class MessageProcessor {
             // 3. Store incoming message (before auto-reply check so name is persisted)
             const { message: storedMessage, isNew } = await adapter.storeIncomingMessage(
                 page.id,
+                workspaceId,
                 platformMessageId,
                 senderId,
                 messageText,
@@ -168,7 +170,6 @@ export class MessageProcessor {
             }
 
             const userId = page.userId;
-            const workspaceId = page.workspaceId;
 
             // 4a. Subscription gate — all automation stops when subscription is inactive
             const isActive = await subscriptionsService.isSubscriptionActive(userId);
@@ -242,7 +243,7 @@ export class MessageProcessor {
                 if (awayMessage && isNew) {
                     try {
                         await adapter.sendAwayMessage(page, senderId, awayMessage);
-                        await messagesService.storeOutgoingMessage(page.id, senderId, awayMessage, 'template');
+                        await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, awayMessage, 'template');
                     } catch {
                         this.logger.debug(`[${platform}] Failed to send away message`);
                     }
@@ -264,7 +265,7 @@ export class MessageProcessor {
                 if (greeting) {
                     try {
                         await adapter.sendReply(page, senderId, greeting);
-                        await messagesService.storeOutgoingMessage(page.id, senderId, greeting, 'template');
+                        await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, greeting, 'template');
                         await messagesService.markAsReplied(storedMessage.id, greeting, 'template');
                         this.logger.info(`[${platform}] Sent greeting message`, { senderId });
                         pipelineMetrics.record(pipeline, 'greeting_sent');
@@ -437,7 +438,7 @@ export class MessageProcessor {
                 await messagesService.markAsReplied(storedMessage.id, replyText, replyMethod, needsAttention, flagReason, aiIntent, tx, aiOriginalReply);
 
                 // 15. Store outgoing message
-                const stored = await messagesService.storeOutgoingMessage(page.id, senderId, replyText, replyMethod, tx);
+                const stored = await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, replyText, replyMethod, tx);
                 outgoingMessage = {
                     id: stored.id,
                     pageId: stored.pageId,

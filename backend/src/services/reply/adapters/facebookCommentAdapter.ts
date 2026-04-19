@@ -43,13 +43,14 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
 
     async storeComment(
         postId: string,
+        workspaceId: string,
         facebookCommentId: string,
         message: string,
         fromId?: string,
         fromName?: string,
     ): Promise<{ comment: StoredComment; isNew: boolean }> {
         const { comment, isNew } = await commentsService.findOrCreateFromWebhook(
-            postId, facebookCommentId, message, fromId, fromName,
+            postId, workspaceId, facebookCommentId, message, fromId, fromName,
         );
         return {
             comment: { id: comment.id, replied: comment.replied ?? false, needsAttention: comment.needsAttention ?? false },

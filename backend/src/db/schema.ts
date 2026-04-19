@@ -205,6 +205,9 @@ export const instagramMedia = pgTable('instagram_media', {
 export const comments = pgTable('comments', {
     id: uuid('id').defaultRandom().primaryKey(),
     postId: uuid('post_id').references(() => posts.id, { onDelete: 'cascade' }),
+    // Denormalized from pages.workspace_id to enable (workspace_id, created_at DESC) index for
+    // workspace-scoped inbox queries. Nullable during backfill (Deploy 1); promoted to NOT NULL in Deploy 3.
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     facebookCommentId: varchar('facebook_comment_id', { length: 255 }).unique().notNull(),
     message: text('message').notNull(),
     fromId: varchar('from_id', { length: 255 }),
@@ -235,6 +238,8 @@ export const comments = pgTable('comments', {
         createdTimeIdx: index('idx_comments_created_time').on(table.createdTime),
         // Composite index for actionRequired filter: (resolved=false AND (replied=false OR needsAttention=true)) ORDER BY createdAt DESC
         actionRequiredIdx: index('idx_comments_action_required').on(table.postId, table.resolved, table.replied, table.needsAttention, table.createdAt),
+        // Drives workspace-scoped "all" inbox — index seek + scan-to-limit instead of join-then-sort
+        workspaceCreatedAtIdx: index('idx_comments_workspace_created_at').on(table.workspaceId, table.createdAt),
     };
 });
 
@@ -242,6 +247,8 @@ export const comments = pgTable('comments', {
 export const instagramComments = pgTable('instagram_comments', {
     id: uuid('id').defaultRandom().primaryKey(),
     mediaId: uuid('media_id').references(() => instagramMedia.id, { onDelete: 'cascade' }),
+    // Denormalized from pages.workspace_id. See comments table for rationale.
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     instagramCommentId: varchar('instagram_comment_id', { length: 255 }).unique().notNull(),
     message: text('message').notNull(),
     fromId: varchar('from_id', { length: 255 }),
@@ -271,6 +278,8 @@ export const instagramComments = pgTable('instagram_comments', {
         createdTimeIdx: index('idx_instagram_comments_created_time').on(table.createdTime),
         // Composite index for actionRequired filter (mirrors comments table)
         actionRequiredIdx: index('idx_ig_comments_action_required').on(table.mediaId, table.resolved, table.replied, table.needsAttention, table.createdAt),
+        // Drives workspace-scoped "all" inbox for IG (mirrors comments table)
+        workspaceCreatedAtIdx: index('idx_ig_comments_workspace_created_at').on(table.workspaceId, table.createdAt),
     };
 });
 
@@ -351,6 +360,8 @@ export const conversations = pgTable('conversations', {
 export const messages = pgTable('messages', {
     id: uuid('id').defaultRandom().primaryKey(),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }),
+    // Denormalized from pages.workspace_id. See comments table for rationale.
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
     // FK to conversations. Nullable during Tier A transition — will be NOT NULL after
     // backfill + a safety period (Tier B/C). New writes always set it.
     conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
@@ -394,6 +405,8 @@ export const messages = pgTable('messages', {
         unrepliedIdx: index('idx_messages_page_unreplied').on(table.pageId, table.replied, table.createdAt),
         // Composite index for escalation SLA queries (replied + needsAttention + direction + time)
         escalationIdx: index('idx_messages_escalation').on(table.replied, table.needsAttention, table.direction, table.createdTime),
+        // Drives workspace-scoped "all" inbox for DMs (mirrors comments tables)
+        workspaceCreatedAtIdx: index('idx_messages_workspace_created_at').on(table.workspaceId, table.createdAt),
     };
 });
 

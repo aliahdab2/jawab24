@@ -72,6 +72,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
 
     async storeComment(
         mediaId: string,
+        workspaceId: string,
         instagramCommentId: string,
         message: string,
         fromId?: string,
@@ -94,6 +95,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             .insert(instagramComments)
             .values({
                 mediaId,
+                workspaceId,
                 instagramCommentId,
                 message,
                 fromId,

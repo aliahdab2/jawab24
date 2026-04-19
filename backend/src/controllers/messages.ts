@@ -158,6 +158,7 @@ export class MessagesController {
             // 5. Store the outgoing message
             const outgoing = await messagesService.storeOutgoingMessage(
                 message.pageId,
+                req.workspaceId,
                 message.senderId,
                 replyText.trim(),
                 'manual'

@@ -139,13 +139,13 @@ describe('InstagramMessageAdapter', () => {
             });
 
             const result = await adapter.storeIncomingMessage(
-                PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'instagram_user',
+                PAGE_ID, 'ws-uuid-1', IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'instagram_user',
             );
 
             expect(result.isNew).toBe(true);
             expect(result.message.id).toBe('new-msg-id');
             expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-                PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'instagram_user', undefined, 'instagram',
+                PAGE_ID, 'ws-uuid-1', IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'instagram_user', undefined, 'instagram',
             );
         });
 
@@ -156,7 +156,7 @@ describe('InstagramMessageAdapter', () => {
             });
 
             const result = await adapter.storeIncomingMessage(
-                PAGE_ID, IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'new_name',
+                PAGE_ID, 'ws-uuid-1', IG_MESSAGE_ID, SENDER_ID, MESSAGE_TEXT, 'new_name',
             );
 
             expect(result.isNew).toBe(false);

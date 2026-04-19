@@ -1146,6 +1146,7 @@ export async function seedDemoData(
             const msgTime = new Date(Date.now() - msgData.minutesAgo * 60 * 1000);
             await db.insert(messages).values({
                 pageId: page.id,
+                workspaceId,
                 platformMessageId: msgData.platformMessageId,
                 senderId: msgData.senderId,
                 senderName: msgData.senderName,
@@ -1196,6 +1197,7 @@ export async function seedDemoData(
             const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
             await db.insert(comments).values({
                 postId: post.id,
+                workspaceId,
                 facebookCommentId: commentData.facebookCommentId,
                 message: commentData.message,
                 fromId: commentData.fromId,
@@ -1298,6 +1300,7 @@ export async function seedDemoData(
         const commentCreatedTime = new Date(Date.now() - Math.random() * 3 * 24 * 60 * 60 * 1000);
         await db.insert(comments).values({
             postId: post.id,
+            workspaceId,
             facebookCommentId: commentData.facebookCommentId,
             message: commentData.message,
             fromId: commentData.fromId,
@@ -1325,6 +1328,7 @@ export async function seedDemoData(
         const msgTime = new Date(Date.now() - msgData.minutesAgo * 60 * 1000);
         await db.insert(messages).values({
             pageId: page.id,
+            workspaceId,
             platformMessageId: msgData.platformMessageId,
             senderId: msgData.senderId,
             senderName: msgData.senderName,

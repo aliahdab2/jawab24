@@ -93,7 +93,7 @@ export class CommentProcessor {
             if (!content.autoReplyEnabled) {
                 pipelineMetrics.record(pipeline, 'post_disabled');
                 // Store comment even if content is disabled (preserves Instagram behavior)
-                await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
+                await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName);
                 return { success: false, commentId: platformCommentId, error: 'Auto-reply disabled for this content' };
             }
 
@@ -113,7 +113,7 @@ export class CommentProcessor {
 
                 if (matchedKeyword) {
                     // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
-                    const { comment } = await adapter.storeComment(content.id, platformCommentId, commentMessage, fromId, fromName);
+                    const { comment } = await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName);
                     invalidateWorkspaceStatsCache(workspaceId);
                     return this.sendAndFinalize({
                         adapter, platform, pipeline,
@@ -141,7 +141,7 @@ export class CommentProcessor {
 
             // 4. Store the comment
             const { comment, isNew } = await adapter.storeComment(
-                content.id, platformCommentId, commentMessage, fromId, fromName,
+                content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName,
             );
 
             // 4a. If fromName is missing, try fetching from the platform API (best-effort)
@@ -447,7 +447,7 @@ export class CommentProcessor {
         // Without this, comment-triggered DMs surfaced as "Unknown User" in the inbox.
         if (sendResult.dmRecipientId) {
             messagesService.storeOutgoingMessage(
-                pageId, sendResult.dmRecipientId, replyText,
+                pageId, workspaceId, sendResult.dmRecipientId, replyText,
                 replyMethod as 'template' | 'ai' | 'manual',
                 undefined, fromName,
             )

@@ -146,6 +146,7 @@ export interface Comment {
 
 export interface CreateCommentDTO {
     postId: string;
+    workspaceId: string;
     facebookCommentId: string;
     message: string;
     fromId?: string;

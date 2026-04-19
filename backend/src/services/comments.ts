@@ -14,6 +14,7 @@ export class CommentsService {
             .insert(comments)
             .values({
                 postId: data.postId,
+                workspaceId: data.workspaceId,
                 facebookCommentId: data.facebookCommentId,
                 message: data.message,
                 fromId: data.fromId,
@@ -386,15 +387,16 @@ export class CommentsService {
     /**
      * Find or create comment from Facebook webhook
      */
-    async findOrCreateFromWebhook(postId: string, facebookCommentId: string, message: string, fromId?: string, fromName?: string) {
+    async findOrCreateFromWebhook(postId: string, workspaceId: string, facebookCommentId: string, message: string, fromId?: string, fromName?: string) {
         const existing = await this.getCommentByFacebookId(facebookCommentId);
-        
+
         if (existing) {
             return { comment: existing, isNew: false };
         }
 
         const newComment = await this.createComment({
             postId,
+            workspaceId,
             facebookCommentId,
             message,
             fromId,

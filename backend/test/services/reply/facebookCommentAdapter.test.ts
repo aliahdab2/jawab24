@@ -165,7 +165,7 @@ describe('FacebookCommentAdapter', () => {
             });
 
             const result = await adapter.storeComment(
-                'post_uuid_1', 'fb_comment_123', 'Great product!', 'from_user_1', 'John',
+                'post_uuid_1', 'ws_uuid_1', 'fb_comment_123', 'Great product!', 'from_user_1', 'John',
             );
 
             expect(result.isNew).toBe(true);
@@ -180,7 +180,7 @@ describe('FacebookCommentAdapter', () => {
             });
 
             const result = await adapter.storeComment(
-                'post_uuid_1', 'fb_comment_123', 'Great product!',
+                'post_uuid_1', 'ws_uuid_1', 'fb_comment_123', 'Great product!',
             );
 
             expect(result.isNew).toBe(false);
@@ -194,12 +194,12 @@ describe('FacebookCommentAdapter', () => {
             });
 
             const result = await adapter.storeComment(
-                'post_uuid_1', 'fb_comment_123', 'Hello',
+                'post_uuid_1', 'ws_uuid_1', 'fb_comment_123', 'Hello',
             );
 
             expect(result.comment.id).toBe('comment_uuid_1');
             expect(mockFindOrCreateComment).toHaveBeenCalledWith(
-                'post_uuid_1', 'fb_comment_123', 'Hello', undefined, undefined,
+                'post_uuid_1', 'ws_uuid_1', 'fb_comment_123', 'Hello', undefined, undefined,
             );
         });
     });

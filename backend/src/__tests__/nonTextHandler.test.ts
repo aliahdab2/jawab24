@@ -84,6 +84,7 @@ import { facebookMessageAdapter } from '../services/reply/adapters/facebookAdapt
 
 const mockPage = {
     id: 'page-uuid-1',
+    workspaceId: 'ws-uuid-1',
     accessToken: 'access-token',
     instagramAccountId: null,
 };
@@ -113,7 +114,7 @@ describe('handleNonTextMessage — sticker', () => {
         );
 
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'msg-1', 'user-1', '[Sticker]', 'Test User', 'sticker',
+            'page-uuid-1', 'ws-uuid-1', 'msg-1', 'user-1', '[Sticker]', 'Test User', 'sticker',
         );
         expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
     });
@@ -129,7 +130,7 @@ describe('handleNonTextMessage — sticker', () => {
         );
 
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'msg-1', 'user-1', '[Sticker]', undefined, 'sticker',
+            'page-uuid-1', 'ws-uuid-1', 'msg-1', 'user-1', '[Sticker]', undefined, 'sticker',
         );
         expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
     });
@@ -164,7 +165,7 @@ describe('handleNonTextMessage — image (sender name)', () => {
         );
 
         expect(messagesService.findOrCreateFromWebhook).toHaveBeenCalledWith(
-            'page-uuid-1', 'msg-3', 'user-1', '[Image]', 'Test User', 'image',
+            'page-uuid-1', 'ws-uuid-1', 'msg-3', 'user-1', '[Image]', 'Test User', 'image',
         );
         expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
     });

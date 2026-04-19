@@ -49,6 +49,7 @@ export interface MessagePlatformAdapter {
     /** Store the incoming message and return { message, isNew } */
     storeIncomingMessage(
         pageId: string,
+        workspaceId: string,
         platformMessageId: string,
         senderId: string,
         text: string,

@@ -73,6 +73,7 @@ export interface CommentPlatformAdapter {
     /** Store the incoming comment, return { comment, isNew } */
     storeComment(
         contentId: string,
+        workspaceId: string,
         platformCommentId: string,
         message: string,
         fromId?: string,

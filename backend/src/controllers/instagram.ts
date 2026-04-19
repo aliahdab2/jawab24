@@ -332,6 +332,7 @@ export class InstagramController {
                                 .insert(instagramComments)
                                 .values({
                                     mediaId,
+                                    workspaceId: req.workspaceId,
                                     instagramCommentId: comment.id,
                                     message: comment.text,
                                     fromId: comment.from?.id,

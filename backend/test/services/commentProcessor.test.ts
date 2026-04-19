@@ -162,7 +162,7 @@ describe('CommentProcessor', () => {
         expect(result.replyMethod).toBe('ai');
         expect(adapter.getPage).toHaveBeenCalledWith('platform-page-1');
         expect(adapter.findOrCreateContent).toHaveBeenCalledWith('page-uuid', 'content-1', 'token-123');
-        expect(adapter.storeComment).toHaveBeenCalledWith('content-uuid', 'comment-1', 'Hello!', 'user-1', 'Alice');
+        expect(adapter.storeComment).toHaveBeenCalledWith('content-uuid', 'test_workspace_id', 'comment-1', 'Hello!', 'user-1', 'Alice');
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.markAsReplied).toHaveBeenCalledWith(
             'comment-uuid', 'Thank you!', 'ai', 'en', false, undefined, undefined, 'Thank you!',
@@ -247,7 +247,7 @@ describe('CommentProcessor', () => {
         expect(result.success).toBe(false);
         expect(result.error).toBe('Auto-reply disabled for this content');
         // Should still store the comment
-        expect(storeComment).toHaveBeenCalledWith('c-id', 'comment-1', 'Hello!', 'from-1', 'Bob');
+        expect(storeComment).toHaveBeenCalledWith('c-id', 'test_workspace_id', 'comment-1', 'Hello!', 'from-1', 'Bob');
     });
 
     it('should return error when comments auto-reply disabled in settings', async () => {
@@ -1249,6 +1249,7 @@ describe('CommentProcessor — template reply mode behavior', () => {
 
         expect(messagesService.storeOutgoingMessage).toHaveBeenCalledWith(
             'page-uuid',
+            'test_workspace_id',
             'psid-12345',
             expect.any(String),
             'ai',

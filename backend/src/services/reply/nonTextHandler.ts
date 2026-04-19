@@ -46,6 +46,13 @@ export async function handleNonTextMessage(
 
         if (!page?.accessToken) return;
 
+        // Guard: pages connected since 0073_backfill always have workspace_id; skip orphans.
+        if (!page.workspaceId) {
+            logger.warn(`[${platform}] Page missing workspace_id — skipping non-text handler`, { pageId: page.id, messageId });
+            return;
+        }
+        const workspaceId = page.workspaceId;
+
         // 2. Fetch sender name (best-effort) — persisted so dashboard always shows real names,
         //    even for non-text messages that bypass the normal AI pipeline.
         let senderName: string | undefined;
@@ -58,7 +65,7 @@ export async function handleNonTextMessage(
         // intent — store silently in DB for chat history context but do NOT send a nudge.
         if (attachmentType === 'sticker') {
             await messagesService.findOrCreateFromWebhook(
-                page.id, messageId, senderId, '[Sticker]', senderName, 'sticker',
+                page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker',
             );
             logger.debug(`[${platform}] Sticker ignored (no nudge)`, { senderId, messageId });
             return;
@@ -85,7 +92,7 @@ export async function handleNonTextMessage(
 
                 // Store transcribed text in DB (not placeholder)
                 await messagesService.findOrCreateFromWebhook(
-                    page.id, messageId, senderId, result.text, senderName, 'audio',
+                    page.id, workspaceId, messageId, senderId, result.text, senderName, 'audio',
                 );
 
                 // Enqueue for the normal AI reply pipeline
@@ -134,7 +141,7 @@ export async function handleNonTextMessage(
             }
 
             await messagesService.findOrCreateFromWebhook(
-                page.id, messageId, senderId, enrichedText, senderName, attachmentType,
+                page.id, workspaceId, messageId, senderId, enrichedText, senderName, attachmentType,
             );
 
             const jobType = platform === 'facebook' ? 'facebook_message' : 'instagram_message';
@@ -156,9 +163,9 @@ export async function handleNonTextMessage(
         // 6. Non-audio or failed transcription: store placeholder + send generic nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
         await messagesService.findOrCreateFromWebhook(
-            page.id, messageId, senderId, placeholder, senderName, attachmentType,
+            page.id, workspaceId, messageId, senderId, placeholder, senderName, attachmentType,
         );
-        await sendNudge(page, senderId, getTextOnlyNudge(lang), platform, logger);
+        await sendNudge(page, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
     } catch (error) {
         logger.error(`[${platform}] Failed to handle non-text message`, {
             messageId, error: String(error),
@@ -172,6 +179,7 @@ export async function handleNonTextMessage(
  */
 async function sendNudge(
     page: { id: string; accessToken: string; instagramAccountId?: string | null },
+    workspaceId: string,
     senderId: string,
     nudgeText: string,
     platform: 'facebook' | 'instagram',
@@ -201,6 +209,6 @@ async function sendNudge(
         }
     }
 
-    await messagesService.storeOutgoingMessage(page.id, senderId, nudgeText, 'template');
+    await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, nudgeText, 'template');
     logger.info(`[${platform}] Nudge sent`, { senderId });
 }

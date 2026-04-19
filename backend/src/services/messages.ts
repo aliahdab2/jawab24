@@ -11,6 +11,7 @@ type DbConn = typeof db;
 
 export interface CreateMessageDTO {
     pageId: string;
+    workspaceId: string;
     platformMessageId: string;
     senderId: string;
     senderName?: string;
@@ -185,6 +186,7 @@ export class MessagesService {
         const [newMessage] = await db.insert(messages)
             .values({
                 pageId: data.pageId,
+                workspaceId: data.workspaceId,
                 conversationId: conversation.id,
                 platformMessageId: data.platformMessageId,
                 senderId: data.senderId,
@@ -205,6 +207,7 @@ export class MessagesService {
      */
     async findOrCreateFromWebhook(
         pageId: string,
+        workspaceId: string,
         platformMessageId: string,
         senderId: string,
         messageText: string,
@@ -231,6 +234,7 @@ export class MessagesService {
         // Create new message
         const newMessage = await this.createMessage({
             pageId,
+            workspaceId,
             platformMessageId,
             senderId,
             senderName,
@@ -360,6 +364,7 @@ export class MessagesService {
      */
     async storeOutgoingMessage(
         pageId: string,
+        workspaceId: string,
         senderId: string,
         replyText: string,
         replyMethod: 'template' | 'ai' | 'manual',
@@ -386,6 +391,7 @@ export class MessagesService {
         const [newMessage] = await conn.insert(messages)
             .values({
                 pageId,
+                workspaceId,
                 conversationId: conversation.id,
                 platformMessageId: `reply_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                 senderId,

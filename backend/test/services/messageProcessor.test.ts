@@ -548,7 +548,7 @@ describe('MessageProcessor — Page OFF behavior', () => {
         // But should have fetched name and stored the message first
         expect(adapter.fetchSenderName).toHaveBeenCalled();
         expect(adapter.storeIncomingMessage).toHaveBeenCalledWith(
-            'page-uuid', 'msg-1', 'sender-1', 'Hello', 'Ahmad',
+            'page-uuid', 'test_workspace_id', 'msg-1', 'sender-1', 'Hello', 'Ahmad',
         );
     });
 
@@ -604,7 +604,7 @@ describe('MessageProcessor — Page OFF behavior', () => {
         expect(result.error).toContain('Auto-reply disabled');
         // Name fetch failed but message still stored (with undefined name)
         expect(adapter.storeIncomingMessage).toHaveBeenCalledWith(
-            'page-uuid', 'msg-1', 'sender-1', 'Hello', undefined,
+            'page-uuid', 'test_workspace_id', 'msg-1', 'sender-1', 'Hello', undefined,
         );
     });
 });

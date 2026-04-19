@@ -61,12 +61,13 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
 
     async storeIncomingMessage(
         pageId: string,
+        workspaceId: string,
         messageId: string,
         senderId: string,
         text: string,
         senderName?: string,
     ): Promise<{ message: StoredMessage; isNew: boolean }> {
-        return storeMessage(pageId, messageId, senderId, text, senderName);
+        return storeMessage(pageId, workspaceId, messageId, senderId, text, senderName);
     }
 
     getInternalMessageId(messageId: string): string {

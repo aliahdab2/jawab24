@@ -72,6 +72,7 @@ export function mapToPlatformPage(
 /** Store incoming message via messagesService — used by all adapters. */
 export async function storeIncomingMessage(
     pageId: string,
+    workspaceId: string,
     platformMessageId: string,
     senderId: string,
     text: string,
@@ -79,7 +80,7 @@ export async function storeIncomingMessage(
     platform?: string,
 ): Promise<{ message: StoredMessage; isNew: boolean }> {
     const { message, isNew } = await messagesService.findOrCreateFromWebhook(
-        pageId, platformMessageId, senderId, text, senderName, undefined, platform,
+        pageId, workspaceId, platformMessageId, senderId, text, senderName, undefined, platform,
     );
     return {
         message: { id: message.id, replied: message.replied, needsAttention: message.needsAttention ?? false },

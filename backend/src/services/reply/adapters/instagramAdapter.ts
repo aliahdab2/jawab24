@@ -60,12 +60,13 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
 
     async storeIncomingMessage(
         pageId: string,
+        workspaceId: string,
         instagramMessageId: string,
         senderId: string,
         text: string,
         senderName?: string,
     ): Promise<{ message: StoredMessage; isNew: boolean }> {
-        return storeMessage(pageId, instagramMessageId, senderId, text, senderName, 'instagram');
+        return storeMessage(pageId, workspaceId, instagramMessageId, senderId, text, senderName, 'instagram');
     }
 
     getInternalMessageId(instagramMessageId: string): string {
