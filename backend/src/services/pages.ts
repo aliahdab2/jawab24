@@ -245,7 +245,7 @@ export class PagesService {
                     db.select({
                         pageId: pages.id,
                         commentsCount: count(),
-                        repliesCount: sql<number>`count(*) FILTER (WHERE ${comments.replied} = true)`,
+                        repliesCount: sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} IN ('ai', 'template'))`,
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${comments.repliedAt}))`,
                     })
                         .from(comments)
@@ -257,7 +257,7 @@ export class PagesService {
                     db.select({
                         pageId: pages.id,
                         commentsCount: count(),
-                        repliesCount: sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true)`,
+                        repliesCount: sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} IN ('ai', 'template'))`,
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${instagramComments.repliedAt}))`,
                     })
                         .from(instagramComments)
@@ -270,7 +270,7 @@ export class PagesService {
                     db.select({
                         pageId: pages.id,
                         commentsCount: count(),
-                        repliesCount: sql<number>`count(*) FILTER (WHERE ${messages.replied} = true)`,
+                        repliesCount: sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} IN ('ai', 'template'))`,
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${messages.repliedAt}))`,
                     })
                         .from(messages)
