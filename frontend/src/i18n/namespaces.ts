@@ -49,9 +49,11 @@ export const PAGE_NAMESPACES = {
 
   // ── Dashboard pages (include DASHBOARD_LAYOUT) ────────────────
   pricing:            [...DASHBOARD_LAYOUT, 'payment', 'subscription'],
-  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'feedback', 'kb', 'messages', 'onboarding', 'pages', 'plans', 'subscription', 'time'],
-  comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback', 'messages'],
-  messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'messages'],
+  dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'feedback', 'kb', 'messages', 'onboarding', 'pages', 'plans', 'settings', 'subscription', 'time'],
+  // 'settings' is needed by PauseBanner (rendered in Comment/MessageDetailModal)
+  // for the duration labels (duration15min, duration30min, …).
+  comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback', 'messages', 'settings'],
+  messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'messages', 'settings'],
   leads:              [...DASHBOARD_LAYOUT, 'leads', 'export'],
 
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
