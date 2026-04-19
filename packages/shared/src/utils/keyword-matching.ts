@@ -7,9 +7,17 @@ function escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Strip alif (ا) from a string — used to compare Arabic root consonants */
-function stripAlif(s: string): string {
-    return s.replace(/\u0627/g, '');
+/**
+ * Strip leading particle + definite article from each word:
+ *   optional و/ف/ب/ك/ل, followed by ال.
+ * So: العنوان → عنوان, والسعر → سعر, بالمنتج → منتج.
+ * Input must already be normalizeArabic()'d.
+ */
+function stripArabicPrefixes(s: string): string {
+    return s
+        .split(/\s+/)
+        .map(w => w.replace(/^(?:و|ف|ب|ك|ل)?ال/, ''))
+        .join(' ');
 }
 
 /**
@@ -17,13 +25,13 @@ function stripAlif(s: string): string {
  *
  * English keywords: word-boundary regex (\b) to avoid "price" matching "surprise".
  *
- * Arabic keywords (two-tier):
- *  1. Substring match (fast path) — works for most cases including prefixed forms.
- *  2. Root-consonant match — handles broken plurals where alif is inserted
- *     between root letters (e.g., سعر ↔ اسعار, ثمن ↔ اثمان).
- *     We strip the definite article "ال" and all alif characters, then
- *     compare consonant skeletons. Requires ≥ 3 root consonants remaining
- *     to avoid false positives.
+ * Arabic keywords: strip ال-family prefixes from both sides, then substring match.
+ * Handles prefixed forms (العنوان ↔ عنوان, والسعر ↔ سعر) without the false-positive
+ * risk of alif-stripping (which would conflate roots like كتاب/كتب, باب/بب).
+ *
+ * Broken plurals (سعر ↔ أسعار) are intentionally NOT matched — users should
+ * configure both forms. Silent false positives are worse than silent misses
+ * in a keyword router since wrong replies go out without review.
  *
  * Both sides are pre-normalized with normalizeArabic() before this is called.
  */
@@ -31,25 +39,13 @@ export function matchesKeyword(normalizedText: string, normalizedKeyword: string
     if (!normalizedKeyword) return false;
 
     if (ARABIC_RE.test(normalizedKeyword)) {
-        // Tier 1: direct substring matching (handles prefixed forms, exact stems)
         if (normalizedText.includes(normalizedKeyword)) return true;
 
-        // Tier 2: root-consonant matching for broken plurals
-        // Only for keywords with ≥ 3 chars (avoids matching very short words)
-        if (normalizedKeyword.length >= 3) {
-            const keywordRoot = stripAlif(normalizedKeyword);
-            // After stripping alif, require ≥ 3 consonants to prevent loose matches
-            if (keywordRoot.length >= 3) {
-                const words = normalizedText.split(/\s+/);
-                for (const word of words) {
-                    // Strip definite article "ال" prefix, then strip alif
-                    const wordRoot = stripAlif(word.replace(/^ال/, ''));
-                    if (wordRoot.includes(keywordRoot)) return true;
-                }
-            }
-        }
+        const strippedKeyword = stripArabicPrefixes(normalizedKeyword);
+        if (strippedKeyword === normalizedKeyword) return false;
+        if (strippedKeyword.length < 3) return false;
 
-        return false;
+        return stripArabicPrefixes(normalizedText).includes(strippedKeyword);
     }
 
     // Non-word keywords (punctuation, symbols, emoji like ".", "...", "❤️"):
