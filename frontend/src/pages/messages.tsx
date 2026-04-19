@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, type ReactElement, useMemo, us
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { useRouter } from 'next/router';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { InboxTitle, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
@@ -206,6 +206,7 @@ const MessagesPage: NextPageWithLayout = () => {
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
     enabled: isAuthenticated,
+    placeholderData: keepPreviousData,
   });
 
   // Flatten messages

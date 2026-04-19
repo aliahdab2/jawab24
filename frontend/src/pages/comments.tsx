@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import clsx from 'clsx';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
-import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, Input, PageHeader, PageSkeleton, EmptyState } from '@/components/ui';
 import { InboxTitle, InboxExportButton } from '@/components/inbox/InboxHeaderActions';
@@ -137,6 +137,7 @@ const CommentsPage: NextPageWithLayout = () => {
     getNextPageParam: (lastPage) => lastPage.pagination.nextCursor ?? undefined,
     initialPageParam: undefined as string | undefined,
     enabled: isAuthenticated,
+    placeholderData: keepPreviousData,
   });
 
   // Flatten all pages of comments
