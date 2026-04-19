@@ -172,7 +172,7 @@ describe('SmartStatusBanner', () => {
     localStorage.setItem('smartBannerDismissedAt', JSON.stringify(stored));
 
     // Re-render — 24h expired, should re-show
-    const { container } = renderBanner([makeMessageItem()]);
+    renderBanner([makeMessageItem()]);
     expect(screen.getByRole('button', { name: /item.*need.*attention/i })).toBeInTheDocument();
   });
 
