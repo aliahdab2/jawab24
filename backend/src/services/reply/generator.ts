@@ -490,45 +490,27 @@ export class ReplyGenerator {
             return { effectiveKB: staticKB, ragAttempted: false };
         }
 
-        // Enrich vague follow-up queries with conversation context for better RAG retrieval.
-        // When a customer says "شو مميزاتها؟" after asking about AirPods, the RAG query
-        // becomes "AirPods Pro شو مميزاتها؟" so it finds the right product chunk.
+        // Enrich vague follow-up queries with the customer's prior message.
+        // When a customer says "كم سعرها؟" after asking about AirPods Pro, the RAG query
+        // becomes "AirPods Pro كم سعرها؟" so retrieval finds the right product chunk.
         //
-        // We use BOTH the last user message AND a short tail of the last assistant reply.
-        // The user message is ground truth (what the customer asked about).
-        // The assistant tail captures topics the AI introduced (e.g., product suggestions,
-        // discounts, store visits) that the customer might reference in a vague follow-up
-        // like "كم سعره" or "وين فيني شوفون".
-        //
-        // Hallucination poisoning mitigation: we only take the LAST 80 chars of the
-        // assistant reply (the tail). Hallucinated facts tend to appear mid-reply as
-        // elaborations, while new topics/offers appear at the end as addendums.
-        // The 80-char cap also limits how much any single hallucinated term can influence
-        // the embedding, keeping user message + current query as the dominant signal.
+        // We use ONLY the last user message — not the assistant reply. The assistant
+        // reply is an unreliable signal: it can carry hallucinated names, post-reply
+        // marketing dumps, or AI-introduced tangents that bias retrieval toward the
+        // wrong topic (e.g. address questions after a course-price post-reply lose
+        // the address chunk because the embedding gets dragged toward "course/price").
+        // The user's own prior message is the truest signal of what they care about.
         let enrichedQuery = query;
         if (conversationHistory && conversationHistory.length > 0) {
             const isVague = query.trim().split(/\s+/).length <= 6;
             if (isVague) {
                 const lastUserMessage = [...conversationHistory].reverse().find(m => m.role === 'user');
-                const lastAssistantMessage = [...conversationHistory].reverse().find(m => m.role === 'assistant');
-
-                const parts: string[] = [];
                 if (lastUserMessage) {
-                    parts.push(lastUserMessage.content.slice(0, 100));
+                    enrichedQuery = `${lastUserMessage.content.slice(0, 100)} ${query}`.slice(0, 400);
+                    this.logger.debug('[Generator] Enriched RAG query with last user message', {
+                        original: query, enriched: enrichedQuery.slice(0, 150),
+                    });
                 }
-                if (lastAssistantMessage) {
-                    // Take the TAIL of the assistant reply — new topics are typically
-                    // appended at the end ("وبالمناسبة عنا خصم...", "وكمان عندنا MacBook...").
-                    const tail = lastAssistantMessage.content.slice(-80);
-                    parts.push(tail);
-                }
-                parts.push(query);
-
-                enrichedQuery = parts.join(' ').slice(0, 400);
-                this.logger.debug('[Generator] Enriched RAG query with conversation context', {
-                    original: query, enriched: enrichedQuery.slice(0, 150),
-                    usedAssistantTail: !!lastAssistantMessage,
-                });
             }
         }
 

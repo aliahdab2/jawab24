@@ -1,14 +1,18 @@
 /**
  * Tests for RAG query enrichment logic in ReplyGenerator.resolveKnowledge.
  *
- * Context: the "باقة الورد" hallucination incident (2026-03-30) showed that
- * using the full assistant reply for enrichment creates a self-reinforcing loop
- * when the AI invents product names.
+ * Current design: enrichment uses ONLY the customer's last user message — never
+ * the assistant tail. The assistant tail proved to be an unreliable signal that
+ * caused multiple bug classes:
+ *   - Hallucination self-reinforcement ("باقة الورد" incident, 2026-03-30)
+ *   - Post-reply marketing dumps biasing retrieval away from off-topic follow-ups
+ *     (Doaa case, 2026-04-19: address question after course-price post-reply
+ *     missed the address chunk)
+ *   - AI mid-reply tangents poisoning subsequent retrievals
  *
- * Current design: enrichment uses BOTH the last user message (ground truth)
- * AND the last 80 chars of the assistant reply (tail). The tail captures new
- * topics the AI introduced (e.g., "وبالمناسبة عندنا MacBook Air M3"), while
- * the 80-char cap limits how much mid-reply hallucinated content can leak in.
+ * The customer's own prior message is the truest signal of what they care about.
+ * When customers do follow up on AI-introduced topics, they almost always re-name
+ * the keyword explicitly — it lands in lastUserMessage on the next turn.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -106,25 +110,21 @@ describe('ReplyGenerator - RAG query enrichment', () => {
         generator = new ReplyGenerator();
     });
 
-    describe('enrichment uses user message and assistant tail', () => {
-        it('enriches vague follow-up with both last USER question and assistant reply tail', async () => {
+    describe('enrichment uses last user message only', () => {
+        it('enriches vague follow-up with last user message (not assistant tail)', async () => {
             mockGetConversationHistory.mockResolvedValue(makeHistory([
-                { role: 'user', content: 'شوفي عندكم باقات' },
-                { role: 'assistant', content: 'عنا باقة الورد وباقة النجوم' },
+                { role: 'user', content: 'عندكم AirPods Pro؟' },
+                { role: 'assistant', content: 'نعم عندنا AirPods Pro' },
             ]));
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'شوفي عندكم باقات', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'كم سعره؟', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
-            expect(mockRetrieve).toHaveBeenCalledOnce();
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
-
-            // Must contain the USER's prior question
-            expect(ragQuery).toContain('شوفي عندكم باقات');
-            // Must contain assistant tail (last 80 chars) for context continuity
-            expect(ragQuery).toContain('باقة الورد');
+            expect(ragQuery).toContain('AirPods Pro');
+            expect(ragQuery).toContain('كم سعره؟');
         });
 
         it('does NOT enrich when there is no conversation history', async () => {
@@ -135,7 +135,6 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            expect(mockRetrieve).toHaveBeenCalledOnce();
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
             expect(ragQuery).toBe('شوفي');
         });
@@ -147,30 +146,22 @@ describe('ReplyGenerator - RAG query enrichment', () => {
             ]));
 
             const longQuery = 'عندكم باقات للاشتراك الشهري وكم تكون التكلفة';
-
             await generator.generateForMessage(
                 { workspaceId: 'ws-1', userId: 'u-1', text: longQuery, pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
-            expect(mockRetrieve).toHaveBeenCalledOnce();
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
-            expect(ragQuery).toBe(longQuery); // sent as-is, no enrichment
+            expect(ragQuery).toBe(longQuery);
         });
 
-        it('hallucinated mid-reply content is excluded when reply is long (only tail used)', async () => {
-            // The AI hallucinated "باقة الورد" and "باقة النجوم" in the middle of a long reply.
-            // Only the last 80 chars (tail) should enter the enrichment query — the hallucinated
-            // names in the middle are excluded.
-            const hallucinated = 'عنا باقة الورد الفاخرة بسعر 500 ريال وباقة النجوم المميزة بسعر 300 ريال';
-            const safeTail = 'تقدر تزورنا بالمعرض وتشوف جميع الخيارات المتاحة عندنا';
-            const longAssistantReply = `${hallucinated}. ${safeTail}`;
-            // Verify our test data: the full reply is longer than 80 chars
-            expect(longAssistantReply.length).toBeGreaterThan(80);
-
+        it('does NOT use assistant tail — even hallucinated content stays out', async () => {
+            // The AI hallucinated product names in the previous reply. These must NOT
+            // leak into the next retrieval embedding. Only the customer's own prior
+            // message is used for enrichment.
             mockGetConversationHistory.mockResolvedValue(makeHistory([
                 { role: 'user', content: 'شوفي عندكم باقات' },
-                { role: 'assistant', content: longAssistantReply },
+                { role: 'assistant', content: 'عنا باقة الورد الفاخرة وباقة النجوم المميزة' },
             ]));
 
             await generator.generateForMessage(
@@ -178,33 +169,33 @@ describe('ReplyGenerator - RAG query enrichment', () => {
                 true,
             );
 
-            expect(mockRetrieve).toHaveBeenCalledOnce();
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
-
-            // Tail content (safe) MUST be in the enriched query
-            expect(ragQuery).toContain('المتاحة عندنا');
-            // Hallucinated names from mid-reply MUST NOT be in the enriched query
+            expect(ragQuery).toContain('شوفي عندكم باقات');
+            expect(ragQuery).toContain('وين ألاقيكم');
             expect(ragQuery).not.toContain('باقة الورد');
             expect(ragQuery).not.toContain('باقة النجوم');
         });
 
-        it('enriches using user question that mentions a real product name', async () => {
+        it('post-reply marketing dump does NOT bias retrieval (Doaa case)', async () => {
+            // Customer received a post-reply about a course, then asks for the address.
+            // The post-reply's course/price content must NOT contaminate the retrieval
+            // query — otherwise the address chunk gets missed.
+            const postReplyText = 'دورة المكياج المبتدئ مدتها شهر، سعرها 25 ألف ليرة سورية بالعملة القديمة خلال فترة العرض. الدروس تقام يومين في الأسبوع.';
             mockGetConversationHistory.mockResolvedValue(makeHistory([
-                { role: 'user', content: 'عندكم AirPods Pro؟' },
-                { role: 'assistant', content: 'نعم عندنا AirPods Pro' },
+                { role: 'assistant', content: postReplyText },
             ]));
 
             await generator.generateForMessage(
-                { workspaceId: 'ws-1', userId: 'u-1', text: 'كم سعره؟', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
+                { workspaceId: 'ws-1', userId: 'u-1', text: 'العنوان اذا سمحت', pageId: 'p-1', kbActiveVersion: 1, senderId: 'sender-1' },
                 true,
             );
 
-            expect(mockRetrieve).toHaveBeenCalledOnce();
             const ragQuery: string = mockRetrieve.mock.calls[0][1];
-
-            // Should contain the user's prior question (which has the product name)
-            expect(ragQuery).toContain('AirPods Pro');
-            expect(ragQuery).toContain('كم سعره؟');
+            // No prior user message exists in this thread → no enrichment at all
+            expect(ragQuery).toBe('العنوان اذا سمحت');
+            expect(ragQuery).not.toContain('المكياج');
+            expect(ragQuery).not.toContain('25 ألف');
+            expect(ragQuery).not.toContain('سعرها');
         });
     });
 });
