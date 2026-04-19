@@ -44,9 +44,11 @@ export class MessagesService {
         // idx_messages_workspace_created_at drives the seek. The pages JOIN is still
         // required to enforce the per-page autoReplyEnabled gate, but it now reduces
         // a much smaller candidate set.
+        // Raw SQL template avoids drizzle's or() returning SQL|undefined (which would
+        // need a non-null assertion the lint rules forbid).
         const conditions = [
             eq(messages.workspaceId, workspaceId),
-            or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true))!,
+            sql`(${pages.autoReplyEnabled} = true OR ${pages.instagramAutoReplyEnabled} = true)`,
         ];
 
         if (options?.pageId) {
