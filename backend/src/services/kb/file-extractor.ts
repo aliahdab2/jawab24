@@ -9,34 +9,53 @@ const MAX_OUTPUT_CHARS = 16_000; // Same as KB character limit
 const ARABIC_SCRIPT = /[\u0600-\u06FF]/;
 
 /**
- * pdf-parse linearizes PDF text and cannot reconstruct tables with merged
- * cells. This is especially bad for Arabic, where RTL column order also
- * gets scrambled. When both signals fire, we escalate to Vision instead of
+ * PDF text streams cannot reconstruct tables with merged cells. This is
+ * especially bad for Arabic, where RTL column order also gets scrambled.
+ * When the document looks tabular, we escalate to Vision instead of
  * returning broken output.
  *
- * Heuristic: Arabic script present + ≥30% of non-empty lines look tabular
- * (2+ tabs or 2+ runs of ≥3 spaces).
+ * A line is treated as a data row when it either:
+ *  - has 2+ tabs / 2+ runs of ≥3 spaces (tab-delimited layouts), OR
+ *  - has ≥3 whitespace-separated tokens AND contains at least one digit
+ *    (typical for schedule / price rows extracted by pdfjs with single
+ *    spaces between fields).
+ *
+ * The table-as-a-whole trigger fires at ≥30% of non-empty lines being data
+ * rows, with a minimum of 3 lines to avoid false positives on short blurbs.
  */
 function looksLikeBrokenArabicTable(text: string): boolean {
     if (!ARABIC_SCRIPT.test(text)) return false;
     const lines = text.split('\n').filter((l) => l.trim().length > 0);
     if (lines.length < 3) return false;
-    const tabular = lines.filter((l) => {
+    const dataRows = lines.filter((l) => {
         const tabs = (l.match(/\t/g) || []).length;
         const gaps = (l.match(/ {3,}/g) || []).length;
-        return tabs >= 2 || gaps >= 2;
+        if (tabs >= 2 || gaps >= 2) return true;
+        const tokens = l.trim().split(/\s+/);
+        return tokens.length >= 3 && /\d/.test(l);
     }).length;
-    return tabular / lines.length >= 0.3;
+    return dataRows / lines.length >= 0.3;
 }
 
 const VISION_MODEL = 'gpt-4o-mini';
 
 const VISION_PROMPT = `Extract ALL text from this image exactly as written.
-Preserve the structure: headings, lists, prices, tables.
-Output plain text only — no markdown, no formatting symbols.
-If the text is in Arabic, preserve Arabic text as-is.`;
+Preserve Arabic text as-is.
 
-export type ExtractionMethod = 'pdf-parse' | 'mammoth' | 'gpt-vision' | 'exceljs';
+For TABLES, follow this format strictly:
+  1. Output the header row ONCE as the first line, with fields separated by " | ".
+  2. Output each data row on ONE SINGLE LINE, with the same " | " separator.
+  3. If a cell is visually merged across multiple rows (e.g. a course name,
+     category, or price that spans a group of rows), REPEAT that value on
+     every single row it covers. Every data row MUST include every column —
+     never leave a row with a missing category, name, or price.
+  4. Do NOT output fields on separate lines. Do NOT drop any row.
+  5. Read the table in its natural reading direction (right-to-left for Arabic).
+
+For non-table content: output plain text, preserving headings and list structure.
+No markdown, no formatting symbols.`;
+
+export type ExtractionMethod = 'pdfjs' | 'mammoth' | 'gpt-vision' | 'exceljs';
 
 export interface ExtractionResult {
     text: string;
@@ -61,30 +80,56 @@ function validateSize(buffer: Buffer): void {
 }
 
 /**
- * Extract text from a PDF buffer.
- * Uses pdf-parse v2 (class-based API). Limits to first MAX_PDF_PAGES pages.
- * Marks `isScanned` (→ Vision fallback) when the extracted text is too short
- * OR when it looks like a broken Arabic table — pdf-parse cannot reconstruct
- * merged cells or RTL column order.
+ * Extract text from a PDF buffer using pdfjs-dist directly.
+ * Limits to first MAX_PDF_PAGES pages. Marks `isScanned` (→ Vision fallback)
+ * when the extracted text is too short OR when it looks like a broken Arabic
+ * table — pdfjs text stream cannot reconstruct merged cells or RTL column order.
+ *
+ * We use pdfjs-dist directly (same version pdf-to-img uses) so there is exactly
+ * one PDF engine in the process.
  */
 export async function extractFromPDF(buffer: Buffer): Promise<ExtractionResult> {
     validateSize(buffer);
 
-    const { PDFParse } = await import('pdf-parse');
-    const parser = new PDFParse({ data: new Uint8Array(buffer) });
-    const result = await parser.getText({ first: MAX_PDF_PAGES });
-    const rawText = result.text?.trim() || '';
-    const totalPages = result.total || 0;
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const doc = await pdfjs.getDocument({
+        data: new Uint8Array(buffer),
+        isEvalSupported: false,
+        useSystemFonts: true,
+    }).promise;
+
+    const totalPages = doc.numPages;
+    const pagesToRead = Math.min(totalPages, MAX_PDF_PAGES);
     const pagesTruncated = totalPages > MAX_PDF_PAGES;
 
-    await parser.destroy();
+    const chunks: string[] = [];
+    for (let i = 1; i <= pagesToRead; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        // Preserve line structure: pdfjs sets hasEOL at natural line breaks.
+        // Without this, tables collapse into one line and the tabular-table
+        // heuristic can't detect them.
+        let pageText = '';
+        for (const item of content.items) {
+            if (!('str' in item)) continue;
+            pageText += item.str;
+            if (item.hasEOL) pageText += '\n';
+            else pageText += ' ';
+        }
+        pageText = pageText.trim();
+        if (pageText) chunks.push(pageText);
+        page.cleanup();
+    }
+    await doc.destroy();
+
+    const rawText = chunks.join('\n\n').trim();
 
     if (rawText.length < SCANNED_PDF_THRESHOLD || looksLikeBrokenArabicTable(rawText)) {
-        return { text: rawText, method: 'pdf-parse', isScanned: true, pagesTruncated };
+        return { text: rawText, method: 'pdfjs', isScanned: true, pagesTruncated };
     }
 
     const { text, truncated } = capText(rawText);
-    return { text, method: 'pdf-parse', isScanned: false, truncated, pagesTruncated };
+    return { text, method: 'pdfjs', isScanned: false, truncated, pagesTruncated };
 }
 
 /**
@@ -141,6 +186,64 @@ export async function extractFromSpreadsheet(buffer: Buffer): Promise<Extraction
     const rawText = blocks.join('\n\n').trim();
     const { text, truncated } = capText(rawText);
     return { text, method: 'exceljs', truncated };
+}
+
+/**
+ * Render up to MAX_PDF_PAGES pages of a PDF into PNG buffers.
+ * Uses pdf-to-img (pdfjs-dist + @napi-rs/canvas). `scale: 2` ≈ 150 DPI,
+ * which is enough for Vision to read 10pt text reliably without burning tokens.
+ */
+async function renderPdfToImages(buffer: Buffer): Promise<Buffer[]> {
+    const { pdf } = await import('pdf-to-img');
+    const doc = await pdf(buffer, { scale: 2 });
+    const pages: Buffer[] = [];
+    for await (const page of doc) {
+        pages.push(page);
+        if (pages.length >= MAX_PDF_PAGES) break;
+    }
+    return pages;
+}
+
+/**
+ * Extract text from a PDF by rasterizing each page and sending to GPT Vision.
+ * Used when pdf-parse output is unreliable (scanned pages, Arabic tables).
+ * Requires OPENAI_API_KEY.
+ */
+export async function extractFromPdfViaVision(buffer: Buffer): Promise<ExtractionResult> {
+    const apiKey = config.openai?.apiKey;
+    if (!apiKey) {
+        throw new Error('OpenAI API key not configured — cannot extract text from PDF via Vision');
+    }
+
+    validateSize(buffer);
+
+    const pages = await renderPdfToImages(buffer);
+    if (pages.length === 0) {
+        return { text: '', method: 'gpt-vision', truncated: false };
+    }
+
+    const openai = new OpenAI({ apiKey });
+    const pageTexts: string[] = [];
+    for (const png of pages) {
+        const base64 = png.toString('base64');
+        const response = await openai.chat.completions.create({
+            model: VISION_MODEL,
+            max_tokens: 4096,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'text', text: VISION_PROMPT },
+                    { type: 'image_url', image_url: { url: `data:image/png;base64,${base64}`, detail: 'high' } },
+                ],
+            }],
+        });
+        const pageText = response.choices[0]?.message?.content?.trim() || '';
+        if (pageText) pageTexts.push(pageText);
+    }
+
+    const rawText = pageTexts.join('\n\n').trim();
+    const { text, truncated } = capText(rawText);
+    return { text, method: 'gpt-vision', truncated };
 }
 
 /**

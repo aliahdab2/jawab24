@@ -9,13 +9,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // --- Mocks ---
 
-const mockPDFParse = {
-    getText: vi.fn(),
-    destroy: vi.fn().mockResolvedValue(undefined),
-};
-
-vi.mock('pdf-parse', () => ({
-    PDFParse: vi.fn().mockImplementation(() => mockPDFParse),
+// pdfjs-dist: mock a document that yields the configured text per page.
+// Each line of `mockPdfjsText()` becomes one item with hasEOL=true, mirroring
+// how pdfjs emits natural line breaks.
+const mockPdfjsText = vi.fn<() => string>(() => '');
+const mockPdfjsPages = vi.fn<() => number>(() => 1);
+vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
+    getDocument: vi.fn(() => ({
+        promise: Promise.resolve({
+            numPages: mockPdfjsPages(),
+            getPage: vi.fn(async () => ({
+                getTextContent: vi.fn(async () => ({
+                    items: mockPdfjsText()
+                        .split('\n')
+                        .map((line, idx, arr) => ({ str: line, hasEOL: idx < arr.length - 1 })),
+                })),
+                cleanup: vi.fn(),
+            })),
+            destroy: vi.fn().mockResolvedValue(undefined),
+        }),
+    })),
 }));
 
 const mockExtractRawText = vi.fn();
@@ -31,6 +44,18 @@ vi.mock('openai', () => ({
     })),
 }));
 
+// pdf-to-img yields Buffers via an async iterable; mock a tiny 2-page doc
+const mockPdfPages = vi.fn<() => Buffer[]>(() => [Buffer.from('png-1'), Buffer.from('png-2')]);
+vi.mock('pdf-to-img', () => ({
+    pdf: vi.fn(async () => {
+        const pages = mockPdfPages();
+        return {
+            length: pages.length,
+            [Symbol.asyncIterator]: async function* () { for (const p of pages) yield p; },
+        };
+    }),
+}));
+
 vi.mock('../../../src/config', () => ({
     config: { openai: { apiKey: 'sk-test-key' } },
 }));
@@ -41,6 +66,7 @@ import {
     extractFromPDF,
     extractFromWord,
     extractFromImage,
+    extractFromPdfViaVision,
     extractFromSpreadsheet,
     MAX_FILE_SIZE_BYTES,
     MAX_PDF_PAGES,
@@ -74,38 +100,32 @@ describe('KB File Extractor', () => {
     // --- PDF extraction ---
 
     describe('extractFromPDF', () => {
+        const setPdf = (text: string, pages = 1) => {
+            mockPdfjsText.mockReturnValue(text);
+            mockPdfjsPages.mockReturnValue(pages);
+        };
+
         it('extracts text from a text-based PDF', async () => {
-            mockPDFParse.getText.mockResolvedValue({
-                text: 'Menu: Burger - 25 SAR, Pizza - 30 SAR, Pasta - 35 SAR, Salad - 20 SAR, Drinks from 10 SAR',
-                total: 1,
-            });
+            setPdf('Menu: Burger - 25 SAR, Pizza - 30 SAR, Pasta - 35 SAR, Salad - 20 SAR, Drinks from 10 SAR');
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
-            expect(result.method).toBe('pdf-parse');
+            expect(result.method).toBe('pdfjs');
             expect(result.isScanned).toBe(false);
             expect(result.text).toContain('Burger');
             expect(result.truncated).toBe(false);
         });
 
         it('limits PDF to first 5 pages', async () => {
-            mockPDFParse.getText.mockResolvedValue({
-                text: 'Page 1 content',
-                total: 12,
-            });
+            setPdf('Page content', 12);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
-            // Verify getText was called with { first: 5 }
-            expect(mockPDFParse.getText).toHaveBeenCalledWith({ first: MAX_PDF_PAGES });
             expect(result.pagesTruncated).toBe(true);
         });
 
         it('does not flag pagesTruncated for small PDFs', async () => {
-            mockPDFParse.getText.mockResolvedValue({
-                text: 'Short PDF content',
-                total: 2,
-            });
+            setPdf('Short PDF content', 2);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
@@ -113,10 +133,7 @@ describe('KB File Extractor', () => {
         });
 
         it('detects scanned PDFs (text < 50 chars)', async () => {
-            mockPDFParse.getText.mockResolvedValue({
-                text: 'abc',
-                total: 1,
-            });
+            setPdf('abc');
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
@@ -125,10 +142,7 @@ describe('KB File Extractor', () => {
         });
 
         it('detects scanned PDFs with empty text', async () => {
-            mockPDFParse.getText.mockResolvedValue({
-                text: '',
-                total: 1,
-            });
+            setPdf('');
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
@@ -136,8 +150,24 @@ describe('KB File Extractor', () => {
             expect(result.text).toBe('');
         });
 
+        it('escalates when Arabic rows are space-separated but clearly tabular (pdfjs output)', async () => {
+            // Matches the real pdfjs output shape for the course schedule: each
+            // row is space-separated with a date/time and no tabs.
+            const spaceTabular = [
+                'الكورس الأيام الوقت التاريخ المبلغ',
+                'الأحد--الثلاثاء 6--7 30/4/2026',
+                'الأحد--الثلاثاء 4--5 30/4/2026',
+                'السبت--الخميس 7--8 18/4/2026',
+                'الخميس فقط 2--4 30/4/2026 50,000',
+            ].join('\n');
+            setPdf(spaceTabular);
+
+            const result = await extractFromPDF(Buffer.from('fake-pdf'));
+
+            expect(result.isScanned).toBe(true);
+        });
+
         it('escalates to Vision when Arabic table-like output is detected', async () => {
-            // Mirrors the broken pdf-parse output from the user's course schedule
             const garbled = [
                 'الكورس\tالأيام\tالوقت\tالتاريخ\tالمبلغ',
                 'السبت\t--\tالأربعاء\t3--4\t25/4/2026',
@@ -145,7 +175,7 @@ describe('KB File Extractor', () => {
                 'الخميس فقط\t2--4\t30/4/2026',
                 'إنكليزي متوسط 1\tالأحد--الثلاثاء\t9--10\t29/4/2026\t35,000',
             ].join('\n');
-            mockPDFParse.getText.mockResolvedValue({ text: garbled, total: 1 });
+            setPdf(garbled);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
@@ -153,9 +183,8 @@ describe('KB File Extractor', () => {
         });
 
         it('does not escalate clean Arabic prose', async () => {
-            // Long Arabic paragraph — no tabular structure, should stay on pdf-parse
             const prose = 'نحن شركة متخصصة في بيع المنتجات الإلكترونية. نعمل منذ عام 2015 ونخدم آلاف العملاء في جميع أنحاء المملكة. ساعات العمل من الأحد إلى الخميس من 9 صباحاً إلى 5 مساءً.';
-            mockPDFParse.getText.mockResolvedValue({ text: prose, total: 1 });
+            setPdf(prose);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
@@ -163,14 +192,13 @@ describe('KB File Extractor', () => {
         });
 
         it('does not escalate English tables', async () => {
-            // English tabular content — pdf-parse handles LTR tables well enough
             const englishTable = [
                 'Item\tPrice\tStock\tCategory',
                 'Laptop\t999\t12\tElectronics',
                 'Phone\t499\t30\tElectronics',
                 'Book\t25\t100\tMedia',
             ].join('\n');
-            mockPDFParse.getText.mockResolvedValue({ text: englishTable, total: 1 });
+            setPdf(englishTable);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
@@ -178,11 +206,7 @@ describe('KB File Extractor', () => {
         });
 
         it('truncates text exceeding 16,000 chars', async () => {
-            const longText = 'A'.repeat(20_000);
-            mockPDFParse.getText.mockResolvedValue({
-                text: longText,
-                total: 3,
-            });
+            setPdf('A'.repeat(20_000), 3);
 
             const result = await extractFromPDF(Buffer.from('fake-pdf'));
 
@@ -191,17 +215,9 @@ describe('KB File Extractor', () => {
         });
 
         it('rejects files larger than 5MB', async () => {
-            const bigBuffer = Buffer.alloc(6 * 1024 * 1024); // 6MB
+            const bigBuffer = Buffer.alloc(6 * 1024 * 1024);
 
             await expect(extractFromPDF(bigBuffer)).rejects.toThrow('exceeds 5MB limit');
-        });
-
-        it('calls destroy on the parser', async () => {
-            mockPDFParse.getText.mockResolvedValue({ text: 'text', total: 1 });
-
-            await extractFromPDF(Buffer.from('fake-pdf'));
-
-            expect(mockPDFParse.destroy).toHaveBeenCalled();
         });
     });
 
@@ -319,6 +335,85 @@ describe('KB File Extractor', () => {
                 .rejects.toThrow('OpenAI API key not configured');
 
             // Restore
+            if (config.openai) config.openai.apiKey = originalKey || 'sk-test-key';
+        });
+    });
+
+    // --- PDF → Vision extraction (rasterize then OCR) ---
+
+    describe('extractFromPdfViaVision', () => {
+        it('rasterizes pages and sends each to Vision, concatenating results', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-1'), Buffer.from('png-2')]);
+            mockOpenAICreate
+                .mockResolvedValueOnce({ choices: [{ message: { content: 'Page 1: ICDL — 25,000 SAR' } }] })
+                .mockResolvedValueOnce({ choices: [{ message: { content: 'Page 2: Photoshop — 50,000 SAR' } }] });
+
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+
+            expect(result.method).toBe('gpt-vision');
+            expect(mockOpenAICreate).toHaveBeenCalledTimes(2);
+            expect(result.text).toContain('ICDL');
+            expect(result.text).toContain('Photoshop');
+            // Pages must be separated (not concatenated back-to-back)
+            expect(result.text).toMatch(/Page 1:[^]*\n\n[^]*Page 2:/);
+        });
+
+        it('caps rendering at MAX_PDF_PAGES', async () => {
+            mockPdfPages.mockReturnValue(
+                Array.from({ length: 10 }, (_, i) => Buffer.from(`png-${i + 1}`)),
+            );
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'page' } }] });
+
+            await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+
+            expect(mockOpenAICreate).toHaveBeenCalledTimes(MAX_PDF_PAGES);
+        });
+
+        it('passes each image to Vision as a PNG data URL', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('png-bytes')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
+
+            await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+
+            const messages = mockOpenAICreate.mock.calls[0][0].messages;
+            const img = messages[0].content.find((c: { type: string }) => c.type === 'image_url');
+            expect(img.image_url.url).toMatch(/^data:image\/png;base64,/);
+            expect(img.image_url.detail).toBe('high');
+        });
+
+        it('truncates concatenated text exceeding 16,000 chars', async () => {
+            mockPdfPages.mockReturnValue([Buffer.from('p1'), Buffer.from('p2')]);
+            mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'X'.repeat(10_000) } }] });
+
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+
+            expect(result.text.length).toBe(MAX_OUTPUT_CHARS);
+            expect(result.truncated).toBe(true);
+        });
+
+        it('returns empty result when the PDF has no pages', async () => {
+            mockPdfPages.mockReturnValue([]);
+
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+
+            expect(result.text).toBe('');
+            expect(mockOpenAICreate).not.toHaveBeenCalled();
+        });
+
+        it('rejects files larger than 5MB before rendering', async () => {
+            const bigBuffer = Buffer.alloc(6 * 1024 * 1024);
+
+            await expect(extractFromPdfViaVision(bigBuffer)).rejects.toThrow('exceeds 5MB limit');
+        });
+
+        it('throws when OpenAI API key is not configured', async () => {
+            const { config } = await import('../../../src/config');
+            const originalKey = config.openai?.apiKey;
+            if (config.openai) config.openai.apiKey = '';
+
+            await expect(extractFromPdfViaVision(Buffer.from('test')))
+                .rejects.toThrow('OpenAI API key not configured');
+
             if (config.openai) config.openai.apiKey = originalKey || 'sk-test-key';
         });
     });

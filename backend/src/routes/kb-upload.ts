@@ -5,6 +5,7 @@ import {
     extractFromPDF,
     extractFromWord,
     extractFromImage,
+    extractFromPdfViaVision,
     extractFromSpreadsheet,
     SUPPORTED_MIME_TYPES,
     VISION_MIME_TYPES,
@@ -97,7 +98,10 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 if (!visionCheck.allowed) {
                     return reply.status(visionCheck.status).send(visionCheck.response);
                 }
-                const result = await extractFromImage(buf, mime);
+                // PDFs need per-page rasterization; images can go straight to Vision.
+                const result = mime === 'application/pdf'
+                    ? await extractFromPdfViaVision(buf)
+                    : await extractFromImage(buf, mime);
                 await incrementVisionCounter(request);
                 return respondWith(result, extra);
             };
