@@ -87,11 +87,14 @@ export function FileUploadButton({
         toast.error(t('extractError'));
       }
     } catch (error: unknown) {
-      const status = (error as { response?: { status?: number } })?.response?.status;
+      const err = error as { response?: { status?: number; data?: { error?: string } } };
+      const status = err?.response?.status;
       if (status === 403) {
         toast.error(t('imageUpgradeRequired'));
       } else if (status === 429) {
         toast.error(t('dailyLimitReached'));
+      } else if (status === 400 && err.response?.data?.error === 'file_content_mismatch') {
+        toast.error(t('fileContentMismatch'));
       } else {
         captureError(error instanceof Error ? error : new Error(String(error)), 'KB file extraction failed');
         toast.error(t('extractError'));

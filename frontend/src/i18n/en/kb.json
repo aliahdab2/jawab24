@@ -54,6 +54,7 @@
   "extractError": "Could not extract text from this file",
   "unsupportedFormat": "Use PDF, Word, Excel, or image files",
   "fileTooLarge": "File too large (max 5 MB)",
+  "fileContentMismatch": "This file can't be read. Try converting it to JPEG, PNG, or WebP.",
   "tooManyPages": "Only the first 5 pages were processed",
   "imageUpgradeRequired": "Image extraction requires the Business plan",
   "dailyLimitReached": "Daily image extraction limit reached. Try again tomorrow."

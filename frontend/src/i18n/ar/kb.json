@@ -54,6 +54,7 @@
   "extractError": "تعذّر استخراج النص من هذا الملف",
   "unsupportedFormat": "استخدم ملفات PDF أو Word أو Excel أو صور",
   "fileTooLarge": "حجم الملف كبير (الحد الأقصى 5 ميجابايت)",
+  "fileContentMismatch": "تعذّر قراءة هذا الملف. جرّب تحويله إلى JPEG أو PNG أو WebP.",
   "tooManyPages": "تمت معالجة أول 5 صفحات فقط",
   "imageUpgradeRequired": "استخراج النص من الصور يتطلب باقة الأعمال",
   "dailyLimitReached": "تم الوصول للحد اليومي لاستخراج النص من الصور. حاول غداً."

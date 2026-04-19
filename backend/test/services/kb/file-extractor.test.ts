@@ -68,6 +68,8 @@ import {
     extractFromImage,
     extractFromPdfViaVision,
     extractFromSpreadsheet,
+    sniffMimeType,
+    bufferMatchesMime,
     MAX_FILE_SIZE_BYTES,
     MAX_PDF_PAGES,
     MAX_OUTPUT_CHARS,
@@ -514,6 +516,88 @@ describe('KB File Extractor', () => {
             const bigBuffer = Buffer.alloc(6 * 1024 * 1024);
 
             await expect(extractFromSpreadsheet(bigBuffer)).rejects.toThrow('exceeds 5MB limit');
+        });
+    });
+
+    // --- Magic-byte sniffing ---
+
+    describe('sniffMimeType', () => {
+        it('detects JPEG from FF D8 FF header', () => {
+            expect(sniffMimeType(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]))).toBe('image/jpeg');
+        });
+
+        it('detects PNG from 89 50 4E 47 0D 0A 1A 0A header', () => {
+            expect(sniffMimeType(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]))).toBe('image/png');
+        });
+
+        it('detects WebP from RIFF....WEBP header', () => {
+            const buf = Buffer.concat([
+                Buffer.from('RIFF'),
+                Buffer.from([0x10, 0x00, 0x00, 0x00]),
+                Buffer.from('WEBP'),
+                Buffer.from([0x00, 0x00]),
+            ]);
+            expect(sniffMimeType(buf)).toBe('image/webp');
+        });
+
+        it('detects PDF from %PDF- header', () => {
+            expect(sniffMimeType(Buffer.from('%PDF-1.4\n'))).toBe('application/pdf');
+        });
+
+        it('detects Office ZIP container from 50 4B 03 04 header', () => {
+            expect(sniffMimeType(Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]))).toBe('application/zip');
+        });
+
+        it('detects legacy OLE .doc from D0 CF 11 E0 A1 B1 1A E1', () => {
+            expect(sniffMimeType(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00]))).toBe(
+                'application/x-ole-storage',
+            );
+        });
+
+        it('returns null for unknown formats (e.g. HEIC renamed to jpg)', () => {
+            // HEIC files start with `....ftypheic` — no JPEG/PNG/WebP magic.
+            const heic = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic')]);
+            expect(sniffMimeType(heic)).toBeNull();
+        });
+
+        it('returns null for tiny buffers', () => {
+            expect(sniffMimeType(Buffer.from([0xff]))).toBeNull();
+        });
+    });
+
+    describe('bufferMatchesMime', () => {
+        it('accepts matching image bytes and declared mime', () => {
+            const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+            expect(bufferMatchesMime(jpeg, 'image/jpeg')).toBe(true);
+        });
+
+        it('rejects JPEG bytes declared as PNG', () => {
+            const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00]);
+            expect(bufferMatchesMime(jpeg, 'image/png')).toBe(false);
+        });
+
+        it('rejects HEIC-like bytes declared as image/jpeg (the real Sentry incident)', () => {
+            const heic = Buffer.concat([Buffer.from([0, 0, 0, 0x18]), Buffer.from('ftypheic')]);
+            expect(bufferMatchesMime(heic, 'image/jpeg')).toBe(false);
+        });
+
+        it('accepts ZIP container for both docx and xlsx', () => {
+            const zip = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x00]);
+            expect(
+                bufferMatchesMime(zip, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
+            ).toBe(true);
+            expect(
+                bufferMatchesMime(zip, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+            ).toBe(true);
+        });
+
+        it('accepts OLE compound doc for legacy application/msword', () => {
+            const ole = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0x00]);
+            expect(bufferMatchesMime(ole, 'application/msword')).toBe(true);
+        });
+
+        it('rejects when no magic bytes are detected', () => {
+            expect(bufferMatchesMime(Buffer.from([0x00, 0x01, 0x02, 0x03]), 'image/jpeg')).toBe(false);
         });
     });
 });

@@ -7,12 +7,14 @@ import {
     extractFromImage,
     extractFromPdfViaVision,
     extractFromSpreadsheet,
+    bufferMatchesMime,
     SUPPORTED_MIME_TYPES,
     VISION_MIME_TYPES,
     SPREADSHEET_MIME_TYPES,
     MAX_FILE_SIZE_BYTES,
     type ExtractionResult,
 } from '../services/kb/file-extractor';
+import OpenAI from 'openai';
 import { auth } from '../utils/swagger';
 import { redis } from '../lib/redis';
 
@@ -80,6 +82,17 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 return reply.status(400).send({ success: false, error: 'Empty file data' });
             }
 
+            // Guard: a client-declared MIME that doesn't match the actual bytes
+            // (HEIC renamed to .jpg, corrupt uploads, wrong extension) would fail
+            // downstream as an opaque 500 — reject early with a 400.
+            if (!bufferMatchesMime(buffer, mimeType)) {
+                return reply.status(400).send({
+                    success: false,
+                    error: 'file_content_mismatch',
+                    message: 'File contents do not match the declared type. The file may be corrupted or in an unsupported format (e.g. HEIC).',
+                });
+            }
+
             const respondWith = (result: ExtractionResult, extra?: Record<string, unknown>) => {
                 const data = extra ? { ...result, ...extra } : result;
                 request.log.info({
@@ -134,6 +147,17 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
 
                 return reply.status(400).send({ success: false, error: 'Unsupported file type' });
             } catch (error) {
+                // OpenAI rejected the file content (e.g. image bytes don't match
+                // a format Vision supports). Surface as 400 so the frontend can
+                // show a user-facing error instead of treating it as a bug.
+                if (error instanceof OpenAI.BadRequestError) {
+                    request.log.warn({ err: error, fileName }, 'KB Vision rejected file');
+                    return reply.status(400).send({
+                        success: false,
+                        error: 'file_content_mismatch',
+                        message: 'The file could not be read as an image. Try converting it to JPEG, PNG, or WebP.',
+                    });
+                }
                 request.log.error(error, 'KB file extraction failed');
                 return reply.status(500).send({ success: false, error: 'Failed to extract text from file' });
             }

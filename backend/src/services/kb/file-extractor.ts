@@ -281,6 +281,83 @@ export async function extractFromImage(buffer: Buffer, mimeType: string): Promis
     return { text, method: 'gpt-vision', truncated };
 }
 
+/**
+ * Sniff the actual MIME type from a buffer's magic bytes.
+ *
+ * Clients sometimes send a file with a misleading MIME (HEIC labeled as jpeg,
+ * renamed extensions, corrupted images). OpenAI Vision then rejects with a
+ * 400 that we'd otherwise surface as an opaque 500. Checking magic bytes up
+ * front lets us return a clear, user-facing error before spending an API call.
+ *
+ * Returns the detected MIME or `null` when the format is unrecognised.
+ */
+export function sniffMimeType(buffer: Buffer): string | null {
+    if (buffer.length < 4) return null;
+
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+        return 'image/jpeg';
+    }
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    if (
+        buffer.length >= 8 &&
+        buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47 &&
+        buffer[4] === 0x0d && buffer[5] === 0x0a && buffer[6] === 0x1a && buffer[7] === 0x0a
+    ) {
+        return 'image/png';
+    }
+    // WEBP: "RIFF"....WEBP
+    if (
+        buffer.length >= 12 &&
+        buffer.toString('ascii', 0, 4) === 'RIFF' &&
+        buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
+        return 'image/webp';
+    }
+    // PDF: %PDF-
+    if (buffer.toString('ascii', 0, 5) === '%PDF-') {
+        return 'application/pdf';
+    }
+    // ZIP container (docx, xlsx): 50 4B 03 04
+    if (buffer[0] === 0x50 && buffer[1] === 0x4b && buffer[2] === 0x03 && buffer[3] === 0x04) {
+        return 'application/zip';
+    }
+    // OLE compound doc (legacy .doc): D0 CF 11 E0 A1 B1 1A E1
+    if (
+        buffer.length >= 8 &&
+        buffer[0] === 0xd0 && buffer[1] === 0xcf && buffer[2] === 0x11 && buffer[3] === 0xe0 &&
+        buffer[4] === 0xa1 && buffer[5] === 0xb1 && buffer[6] === 0x1a && buffer[7] === 0xe1
+    ) {
+        return 'application/x-ole-storage';
+    }
+    return null;
+}
+
+/**
+ * Verify the buffer's actual content matches the declared MIME. Returns true
+ * when the content is consistent with the declared type, false otherwise.
+ *
+ * docx/xlsx both sit inside a ZIP container, so a ZIP magic is accepted for
+ * either — distinguishing the two would require inspecting `[Content_Types].xml`
+ * and the downstream extractors already fail cleanly on a wrong Office variant.
+ */
+export function bufferMatchesMime(buffer: Buffer, declaredMime: string): boolean {
+    const sniffed = sniffMimeType(buffer);
+    if (!sniffed) return false;
+    if (sniffed === declaredMime) return true;
+    // Office containers: both docx and xlsx sit in ZIP; accept either way.
+    if (sniffed === 'application/zip') {
+        return (
+            declaredMime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            declaredMime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        );
+    }
+    if (sniffed === 'application/x-ole-storage' && declaredMime === 'application/msword') {
+        return true;
+    }
+    return false;
+}
+
 /** Supported MIME types for file upload */
 export const SUPPORTED_MIME_TYPES = new Set([
     'application/pdf',
