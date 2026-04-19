@@ -230,8 +230,8 @@ test.describe('Dashboard Page', () => {
       page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Command Center should show Smart Replies count: 20 (comments AI) + 5 (messages AI) = 25
-    await expect(page.getByText('25', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    // Command Center Smart Replies = analytics.byMethod.ai (25) + analytics.byMethod.template (11) = 36
+    await expect(page.getByText('36', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
     // Replied Today should show 8 (5 comments + 3 messages)
     await expect(page.getByText('8', { exact: true }).first()).toBeVisible({ timeout: 15000 });
