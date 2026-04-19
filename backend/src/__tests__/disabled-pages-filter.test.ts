@@ -10,24 +10,26 @@ import { CommentsService } from '../services/comments';
 
 // vi.mock is hoisted before all imports/declarations, so all variables it
 // references MUST come from vi.hoisted().
-const { mockSelectTerminal, mockFindMany } = vi.hoisted(() => {
+const { mockSelectTerminal } = vi.hoisted(() => {
     const mockSelectTerminal = vi.fn().mockResolvedValue([]);
-    const mockFindMany = vi.fn();
-    return { mockSelectTerminal, mockFindMany };
+    return { mockSelectTerminal };
 });
 
 vi.mock('../db', () => {
     // Build a flat self-referential Drizzle select chain.
     // Every step returns `chain`; `limit` is the terminal Promise.
+    // leftJoin is required for getMessages (LEFT JOIN conversations for canonical sender_name).
     const chain: Record<string, ReturnType<typeof vi.fn>> = {
         from:      vi.fn(),
         innerJoin: vi.fn(),
+        leftJoin:  vi.fn(),
         where:     vi.fn(),
         orderBy:   vi.fn(),
         limit:     mockSelectTerminal,
     };
     chain.from.mockReturnValue(chain);
     chain.innerJoin.mockReturnValue(chain);
+    chain.leftJoin.mockReturnValue(chain);
     chain.where.mockReturnValue(chain);
     chain.orderBy.mockReturnValue(chain);
 
@@ -35,7 +37,7 @@ vi.mock('../db', () => {
         db: {
             select: vi.fn().mockReturnValue(chain),
             query: {
-                pages:             { findMany: mockFindMany },
+                pages:             { findMany: vi.fn().mockResolvedValue([]) },
                 messages:          { findMany: vi.fn().mockResolvedValue([]), findFirst: vi.fn().mockResolvedValue(undefined) },
                 comments:          { findFirst: vi.fn().mockResolvedValue(undefined) },
                 instagramComments: { findFirst: vi.fn().mockResolvedValue(undefined) },
@@ -54,22 +56,15 @@ describe('MessagesService — disabled-page filtering', () => {
         mockSelectTerminal.mockResolvedValue([]);
     });
 
-    it('getMessages() returns empty list when no enabled pages exist', async () => {
-        mockFindMany.mockResolvedValue([]);
+    it('getMessages() returns empty list when no rows match the workspace filter', async () => {
+        // getMessages now filters directly on messages.workspace_id and JOINs pages
+        // for the autoReplyEnabled gate — no separate pages.findMany lookup.
+        mockSelectTerminal.mockResolvedValue([]);
 
         const result = await new MessagesService().getMessages('workspace-1');
 
         expect(result.data).toEqual([]);
         expect(result.pagination.hasMore).toBe(false);
-    });
-
-    it('getMessages() passes a where filter when querying pages', async () => {
-        mockFindMany.mockResolvedValue([]);
-
-        await new MessagesService().getMessages('workspace-1');
-
-        expect(mockFindMany).toHaveBeenCalledOnce();
-        expect(mockFindMany.mock.calls[0][0]).toHaveProperty('where');
     });
 
     it('getStats() returns zero counts when the query returns an empty row', async () => {

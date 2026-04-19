@@ -206,8 +206,8 @@ export const comments = pgTable('comments', {
     id: uuid('id').defaultRandom().primaryKey(),
     postId: uuid('post_id').references(() => posts.id, { onDelete: 'cascade' }),
     // Denormalized from pages.workspace_id to enable (workspace_id, created_at DESC) index for
-    // workspace-scoped inbox queries. Nullable during backfill (Deploy 1); promoted to NOT NULL in Deploy 3.
-    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    // workspace-scoped inbox queries. Backfilled and promoted to NOT NULL in migration 0080.
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
     facebookCommentId: varchar('facebook_comment_id', { length: 255 }).unique().notNull(),
     message: text('message').notNull(),
     fromId: varchar('from_id', { length: 255 }),
@@ -248,7 +248,7 @@ export const instagramComments = pgTable('instagram_comments', {
     id: uuid('id').defaultRandom().primaryKey(),
     mediaId: uuid('media_id').references(() => instagramMedia.id, { onDelete: 'cascade' }),
     // Denormalized from pages.workspace_id. See comments table for rationale.
-    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
     instagramCommentId: varchar('instagram_comment_id', { length: 255 }).unique().notNull(),
     message: text('message').notNull(),
     fromId: varchar('from_id', { length: 255 }),
@@ -361,7 +361,7 @@ export const messages = pgTable('messages', {
     id: uuid('id').defaultRandom().primaryKey(),
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }),
     // Denormalized from pages.workspace_id. See comments table for rationale.
-    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
     // FK to conversations. Nullable during Tier A transition — will be NOT NULL after
     // backfill + a safety period (Tier B/C). New writes always set it.
     conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),

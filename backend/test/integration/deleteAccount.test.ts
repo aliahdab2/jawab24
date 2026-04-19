@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createTestUser, createTestPage, insertMessage, testDb } from './setup';
+import { createTestUser, createTestWorkspace, createTestPage, insertMessage, insertPost, insertComment, testDb } from './setup';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../src/db/schema';
 import { authService } from '../../src/services/auth';
@@ -9,15 +9,9 @@ import { authService } from '../../src/services/auth';
 // ---------------------------------------------------------------------------
 
 async function seedFullUserData(userId: string, pageId: string) {
-    // Post + comment
-    const [post] = await testDb.insert(schema.posts).values({
-        pageId, facebookPostId: `post-${Date.now()}`, message: 'Test post',
-    }).returning();
-
-    await testDb.insert(schema.comments).values({
-        postId: post.id, facebookCommentId: `comment-${Date.now()}`,
-        message: 'Hello!',
-    });
+    // Post + comment — use helpers so workspace_id auto-derives from the page.
+    const post = await insertPost(pageId, { facebookPostId: `post-${Date.now()}`, message: 'Test post' });
+    await insertComment(post.id, { facebookCommentId: `comment-${Date.now()}`, message: 'Hello!' });
 
     // Settings
     await testDb.insert(schema.settings).values({ userId });
@@ -48,7 +42,8 @@ describe('deleteUser — explicit ordered deletion', () => {
     it('should delete user and ALL related data in a single transaction', async () => {
         // Arrange: create user with data across many tables
         const user = await createTestUser({ name: 'Delete Me' });
-        const page = await createTestPage(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id });
         await insertMessage(page.id, 'sender-1');
         await seedFullUserData(user.id, page.id);
 
@@ -84,7 +79,8 @@ describe('deleteUser — explicit ordered deletion', () => {
 
     it('should not leave orphaned data if transaction fails midway', async () => {
         const user = await createTestUser({ name: 'Orphan Check' });
-        const page = await createTestPage(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        const page = await createTestPage(user.id, { workspaceId: workspace.id });
         await insertMessage(page.id, 'sender-1');
 
         // The user exists before deletion attempt

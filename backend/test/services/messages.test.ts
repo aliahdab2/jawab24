@@ -40,12 +40,15 @@ import { messagesService } from '../../src/services/messages';
 import { db } from '../../src/db';
 import { conversationsService } from '../../src/services/conversations';
 
-// Helper: stub the db.select().from().leftJoin().where().orderBy().limit() chain.
+// Helper: stub the db.select().from().innerJoin().leftJoin().where().orderBy().limit() chain.
 // Returns rows in the { msg, convSenderName } shape the service now expects.
+// (innerJoin was added when getMessages switched to filter on messages.workspace_id +
+//  enforce per-page autoReplyEnabled via a JOIN.)
 function stubSelectJoin(rows: Array<Record<string, any>>, convName: string | null = null): void {
     const finalAwait = Promise.resolve(rows.map(r => ({ msg: r, convSenderName: convName })));
     const chain: any = {
         from: vi.fn(() => chain),
+        innerJoin: vi.fn(() => chain),
         leftJoin: vi.fn(() => chain),
         where: vi.fn(() => chain),
         orderBy: vi.fn(() => chain),
@@ -88,8 +91,10 @@ describe('MessagesService', () => {
     // getMessages
     // ───────────────────────────────────────────
     describe('getMessages', () => {
-        it('should return empty when user has no pages', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([]);
+        it('should return empty when no messages match the workspace filter', async () => {
+            // After workspace_id denormalization, getMessages filters directly on
+            // messages.workspace_id — no separate page lookup. Empty workspace = empty rows.
+            stubSelectJoin([]);
 
             const result = await messagesService.getMessages('user-1');
 
@@ -98,7 +103,6 @@ describe('MessagesService', () => {
         });
 
         it('should return messages with pagination', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
             const rows = [mockDbRow({ id: 'msg-1' }), mockDbRow({ id: 'msg-2' })];
             stubSelectJoin(rows);
 
@@ -110,7 +114,6 @@ describe('MessagesService', () => {
         });
 
         it('should detect hasMore when results exceed limit', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
             const rows = [
                 mockDbRow({ id: 'msg-1' }),
                 mockDbRow({ id: 'msg-2' }),
@@ -126,7 +129,6 @@ describe('MessagesService', () => {
         });
 
         it('should resolve cursor to timestamp for pagination', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
             vi.mocked(db.query.messages.findFirst).mockResolvedValue(
                 mockDbRow({ id: 'msg-cursor', createdAt: new Date('2026-01-15') }) as any
             );
@@ -139,7 +141,6 @@ describe('MessagesService', () => {
         });
 
         it('should prefer conversations.sender_name over messages.sender_name', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
             // message.sender_name is the stale legacy value; conversation.sender_name is canonical
             const rows = [mockDbRow({ id: 'msg-1', senderName: 'Old Name' })];
             stubSelectJoin(rows, 'New Canonical Name');
@@ -150,7 +151,6 @@ describe('MessagesService', () => {
         });
 
         it('should fall back to messages.sender_name when no conversation is linked', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
             const rows = [mockDbRow({ id: 'msg-1', senderName: 'Legacy Name' })];
             stubSelectJoin(rows, null);
 
@@ -479,8 +479,10 @@ describe('MessagesService', () => {
     // getUnrepliedMessages
     // ───────────────────────────────────────────
     describe('getUnrepliedMessages', () => {
-        it('should return empty when user has no pages', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([]);
+        it('should return empty when no rows match the workspace filter', async () => {
+            // After denormalization, getUnrepliedMessages filters directly on
+            // messages.workspace_id — no separate page lookup.
+            vi.mocked(db.query.messages.findMany).mockResolvedValue([]);
 
             const result = await messagesService.getUnrepliedMessages('user-1');
 
@@ -488,7 +490,6 @@ describe('MessagesService', () => {
         });
 
         it('should return unreplied incoming messages', async () => {
-            vi.mocked(db.query.pages.findMany).mockResolvedValue([{ id: 'page-1' }] as any);
             const rows = [mockDbRow({ replied: false, direction: 'incoming' })];
             vi.mocked(db.query.messages.findMany).mockResolvedValue(rows as any);
 

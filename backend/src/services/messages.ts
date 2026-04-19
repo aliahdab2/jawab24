@@ -40,33 +40,18 @@ export class MessagesService {
     }> {
         const limit = options?.limit || 50;
 
-        const workspacePages = await db.query.pages.findMany({
-            where: and(
-                eq(pages.workspaceId, workspaceId),
-                or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true)),
-            ),
-            columns: { id: true },
-        });
-
-        if (workspacePages.length === 0) {
-            return {
-                data: [],
-                pagination: { hasMore: false, nextCursor: null, limit }
-            };
-        }
-
-        let pageIds = workspacePages.map(p => p.id);
-        if (options?.pageId) {
-            pageIds = pageIds.filter(id => id === options.pageId);
-            if (pageIds.length === 0) {
-                return { data: [], pagination: { hasMore: false, nextCursor: null, limit } };
-            }
-        }
-
-        // Build conditions
+        // Filter on messages.workspace_id (denormalized) so the composite index
+        // idx_messages_workspace_created_at drives the seek. The pages JOIN is still
+        // required to enforce the per-page autoReplyEnabled gate, but it now reduces
+        // a much smaller candidate set.
         const conditions = [
-            sql`${messages.pageId} IN (${sql.join(pageIds.map(id => sql`${id}`), sql`, `)})`
+            eq(messages.workspaceId, workspaceId),
+            or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true))!,
         ];
+
+        if (options?.pageId) {
+            conditions.push(eq(messages.pageId, options.pageId));
+        }
 
         // Filter by direction if specified
         if (options?.direction) {
@@ -107,12 +92,14 @@ export class MessagesService {
         // LEFT JOIN conversations so we surface the canonical sender_name. COALESCE
         // against the legacy per-message column keeps things working during the Tier A
         // transition even if a row isn't yet linked (pre-backfill / partial migration).
+        // INNER JOIN pages enforces the per-page autoReplyEnabled gate (filter is in conditions).
         const rows = await db
             .select({
                 msg: messages,
                 convSenderName: conversations.senderName,
             })
             .from(messages)
+            .innerJoin(pages, eq(messages.pageId, pages.id))
             .leftJoin(conversations, eq(messages.conversationId, conversations.id))
             .where(and(...conditions))
             .orderBy(desc(messages.createdAt))
@@ -413,22 +400,12 @@ export class MessagesService {
      * Get unreplied messages
      */
     async getUnrepliedMessages(workspaceId: string, limit: number = 10): Promise<Message[]> {
-        const workspacePages = await db.query.pages.findMany({
-            where: eq(pages.workspaceId, workspaceId),
-            columns: { id: true },
-        });
-
-        if (workspacePages.length === 0) {
-            return [];
-        }
-
-        const pageIds = workspacePages.map(p => p.id);
-
+        // Direct workspace_id filter — no separate page lookup or IN-clause expansion.
         const result = await db.query.messages.findMany({
             where: and(
-                sql`${messages.pageId} IN (${sql.join(pageIds.map(id => sql`${id}`), sql`, `)})`,
+                eq(messages.workspaceId, workspaceId),
                 eq(messages.replied, false),
-                eq(messages.direction, 'incoming')
+                eq(messages.direction, 'incoming'),
             ),
             orderBy: [desc(messages.createdAt)],
             limit,
@@ -712,7 +689,7 @@ export class MessagesService {
             .from(messages)
             .innerJoin(pages, eq(messages.pageId, pages.id))
             .where(and(
-                eq(pages.workspaceId, workspaceId),
+                eq(messages.workspaceId, workspaceId),
                 eq(messages.direction, 'incoming'),
                 or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true)),
             ));

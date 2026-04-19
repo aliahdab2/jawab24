@@ -49,6 +49,19 @@ function mockSelectFromWhere(returnValue: any) {
     };
 }
 
+// Used by getCommentForWorkspace after the workspace_id denormalization:
+// .select().from(table).where(...).limit(1) — no joins, direct lookup on the
+// denormalized comments.workspace_id / instagram_comments.workspace_id column.
+function mockSelectFromWhereLimit(returnValue: any) {
+    return {
+        from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue(returnValue),
+            }),
+        }),
+    };
+}
+
 function mockSelectWithOrder(returnValue: any) {
     return {
         from: vi.fn().mockReturnValue({
@@ -75,18 +88,6 @@ function mockSelectJoinJoinWhereOrder(returnValue: any) {
     };
 }
 
-function mockSelectJoinJoinWhere(returnValue: any) {
-    return {
-        from: vi.fn().mockReturnValue({
-            innerJoin: vi.fn().mockReturnValue({
-                innerJoin: vi.fn().mockReturnValue({
-                    where: vi.fn().mockResolvedValue(returnValue),
-                }),
-            }),
-        }),
-    };
-}
-
 function mockSelectJoinJoinWhereOrderNoLimit(returnValue: any) {
     return {
         from: vi.fn().mockReturnValue({
@@ -103,7 +104,7 @@ function mockSelectJoinJoinWhereOrderNoLimit(returnValue: any) {
 
 const sampleComment = {
     id: 'comment-1',
-    postId: 'post-1',
+    postId: 'post-1', workspaceId: 'ws-1',
     facebookCommentId: 'fb-comment-1',
     message: 'Nice product!',
     fromId: 'user-fb-1',
@@ -132,7 +133,7 @@ describe('CommentsService — CRUD & core methods', () => {
             vi.mocked(db.insert).mockReturnValue(mockInsertChain(sampleComment) as any);
 
             const result = await commentsService.createComment({
-                postId: 'post-1',
+                postId: 'post-1', workspaceId: 'ws-1',
                 facebookCommentId: 'fb-comment-1',
                 message: 'Nice product!',
                 fromId: 'user-fb-1',
@@ -148,7 +149,7 @@ describe('CommentsService — CRUD & core methods', () => {
             vi.mocked(db.insert).mockReturnValue(mockInsertChain({ ...sampleComment, detectedLanguage: 'ar' }) as any);
 
             await commentsService.createComment({
-                postId: 'post-1',
+                postId: 'post-1', workspaceId: 'ws-1',
                 facebookCommentId: 'fb-comment-2',
                 message: 'بيشتغل بسوريا زكاتك',
             });
@@ -164,7 +165,7 @@ describe('CommentsService — CRUD & core methods', () => {
             vi.mocked(db.insert).mockReturnValue(mockInsertChain({ ...sampleComment, detectedLanguage: null }) as any);
 
             await commentsService.createComment({
-                postId: 'post-1',
+                postId: 'post-1', workspaceId: 'ws-1',
                 facebookCommentId: 'fb-comment-3',
                 message: '😊👍',
             });
@@ -179,7 +180,7 @@ describe('CommentsService — CRUD & core methods', () => {
             vi.mocked(db.insert).mockReturnValue(mockInsertChain({ ...sampleComment, detectedLanguage: null }) as any);
 
             await commentsService.createComment({
-                postId: 'post-1',
+                postId: 'post-1', workspaceId: 'ws-1',
                 facebookCommentId: 'fb-comment-4',
                 message: '',
             });
@@ -239,7 +240,7 @@ describe('CommentsService — CRUD & core methods', () => {
     describe('getCommentForWorkspace', () => {
         it('should return FB comment when found in workspace', async () => {
             vi.mocked(db.select)
-                .mockReturnValueOnce(mockSelectJoinJoinWhere([{ comment: sampleComment }]) as any);
+                .mockReturnValueOnce(mockSelectFromWhereLimit([sampleComment]) as any);
 
             const result = await commentsService.getCommentForWorkspace('comment-1', 'ws-1');
 
@@ -249,8 +250,8 @@ describe('CommentsService — CRUD & core methods', () => {
         it('should fall back to Instagram comment when FB not found', async () => {
             const igComment = { ...sampleComment, id: 'ig-comment-1' };
             vi.mocked(db.select)
-                .mockReturnValueOnce(mockSelectJoinJoinWhere([]) as any)
-                .mockReturnValueOnce(mockSelectJoinJoinWhere([{ comment: igComment }]) as any);
+                .mockReturnValueOnce(mockSelectFromWhereLimit([]) as any)
+                .mockReturnValueOnce(mockSelectFromWhereLimit([igComment]) as any);
 
             const result = await commentsService.getCommentForWorkspace('ig-comment-1', 'ws-1');
 
@@ -259,8 +260,8 @@ describe('CommentsService — CRUD & core methods', () => {
 
         it('should return null when not found in either platform', async () => {
             vi.mocked(db.select)
-                .mockReturnValueOnce(mockSelectJoinJoinWhere([]) as any)
-                .mockReturnValueOnce(mockSelectJoinJoinWhere([]) as any);
+                .mockReturnValueOnce(mockSelectFromWhereLimit([]) as any)
+                .mockReturnValueOnce(mockSelectFromWhereLimit([]) as any);
 
             const result = await commentsService.getCommentForWorkspace('missing', 'ws-1');
 
@@ -379,7 +380,7 @@ describe('CommentsService — CRUD & core methods', () => {
         it('should return existing comment with isNew false', async () => {
             vi.mocked(db.select).mockReturnValue(mockSelectFromWhere([sampleComment]) as any);
 
-            const result = await commentsService.findOrCreateFromWebhook('post-1', 'fb-comment-1', 'Nice!');
+            const result = await commentsService.findOrCreateFromWebhook('post-1', 'ws-1', 'fb-comment-1', 'Nice!');
 
             expect(result.comment).toEqual(sampleComment);
             expect(result.isNew).toBe(false);
@@ -390,7 +391,7 @@ describe('CommentsService — CRUD & core methods', () => {
             vi.mocked(db.select).mockReturnValue(mockSelectFromWhere([]) as any);
             vi.mocked(db.insert).mockReturnValue(mockInsertChain(sampleComment) as any);
 
-            const result = await commentsService.findOrCreateFromWebhook('post-1', 'fb-comment-new', 'New comment');
+            const result = await commentsService.findOrCreateFromWebhook('post-1', 'ws-1', 'fb-comment-new', 'New comment');
 
             expect(result.comment).toEqual(sampleComment);
             expect(result.isNew).toBe(true);

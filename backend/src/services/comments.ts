@@ -69,7 +69,10 @@ export class CommentsService {
         }
 
         // --- Facebook comments query ---
-        const fbConditions = [eq(pages.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)];
+        // Filter on comments.workspace_id (denormalized) so the composite index
+        // idx_comments_workspace_created_at drives the initial seek instead of starting
+        // at pages and joining outward.
+        const fbConditions = [eq(comments.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)];
         if (options?.pageId) fbConditions.push(eq(pages.id, options.pageId));
         if (options?.actionRequired) {
             fbConditions.push(eq(comments.resolved, false));
@@ -115,7 +118,8 @@ export class CommentsService {
             .limit(limit + 1);
 
         // --- Instagram comments query ---
-        const igConditions = [eq(pages.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true)];
+        // Same denormalized filter pattern as the FB branch above.
+        const igConditions = [eq(instagramComments.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true)];
         if (options?.pageId) igConditions.push(eq(pages.id, options.pageId));
         if (options?.actionRequired) {
             igConditions.push(eq(instagramComments.resolved, false));
@@ -190,7 +194,7 @@ export class CommentsService {
      * @deprecated Use getCommentsByUser with pagination instead
      */
     async getAllCommentsByWorkspace(workspaceId: string, options?: { replied?: boolean }) {
-        const conditions = [eq(pages.workspaceId, workspaceId)];
+        const conditions = [eq(comments.workspaceId, workspaceId)];
 
         if (options?.replied !== undefined) {
             conditions.push(eq(comments.replied, options.replied));
@@ -253,25 +257,23 @@ export class CommentsService {
      * Returns null if the comment does not exist or belongs to a different workspace.
      */
     async getCommentForWorkspace(commentId: string, workspaceId: string) {
-        // Try Facebook comments first (comments → posts → pages)
+        // Direct PK + workspace_id lookup on each table — no joins needed since
+        // workspace_id is denormalized onto comments and instagram_comments.
         const fbResult = await db
-            .select({ comment: comments })
+            .select()
             .from(comments)
-            .innerJoin(posts, eq(comments.postId, posts.id))
-            .innerJoin(pages, eq(posts.pageId, pages.id))
-            .where(and(eq(comments.id, commentId), eq(pages.workspaceId, workspaceId)));
+            .where(and(eq(comments.id, commentId), eq(comments.workspaceId, workspaceId)))
+            .limit(1);
 
-        if (fbResult[0]) return fbResult[0].comment;
+        if (fbResult[0]) return fbResult[0];
 
-        // Try Instagram comments (instagramComments → instagramMedia → pages)
         const igResult = await db
-            .select({ comment: instagramComments })
+            .select()
             .from(instagramComments)
-            .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
-            .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-            .where(and(eq(instagramComments.id, commentId), eq(pages.workspaceId, workspaceId)));
+            .where(and(eq(instagramComments.id, commentId), eq(instagramComments.workspaceId, workspaceId)))
+            .limit(1);
 
-        return igResult[0]?.comment || null;
+        return igResult[0] || null;
     }
 
     /**
@@ -431,7 +433,7 @@ export class CommentsService {
                 .from(comments)
                 .innerJoin(posts, eq(comments.postId, posts.id))
                 .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(eq(pages.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true))),
+                .where(and(eq(comments.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true))),
 
             // Instagram comments — single query with FILTER
             db.select({
@@ -448,7 +450,7 @@ export class CommentsService {
                 .from(instagramComments)
                 .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
                 .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(eq(pages.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true))),
+                .where(and(eq(instagramComments.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true))),
         ]);
 
         const fb = fbStats[0];
