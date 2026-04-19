@@ -29,8 +29,8 @@ describe('pagesService.getPages — integration', () => {
         const post = await insertPost(page.id, { facebookPostId: `post-${Date.now()}`, message: 'Test post' });
 
         const now = new Date();
-        await insertComment(post.id, { facebookCommentId: `c1-${Date.now()}`, message: 'Hello', replied: true, repliedAt: now });
-        await insertComment(post.id, { facebookCommentId: `c2-${Date.now()}`, message: 'Hi', replied: true, repliedAt: new Date(now.getTime() - 60000) });
+        await insertComment(post.id, { facebookCommentId: `c1-${Date.now()}`, message: 'Hello', replied: true, repliedAt: now, replyMethod: 'ai' });
+        await insertComment(post.id, { facebookCommentId: `c2-${Date.now()}`, message: 'Hi', replied: true, repliedAt: new Date(now.getTime() - 60000), replyMethod: 'ai' });
         await insertComment(post.id, { facebookCommentId: `c3-${Date.now()}`, message: 'Hey', replied: false });
 
         const pages = await pagesService.getPages(workspace.id);
@@ -50,7 +50,7 @@ describe('pagesService.getPages — integration', () => {
         // Seed: instagramMedia → 2 IG comments (1 replied)
         const media = await insertInstagramMedia(page.id, { instagramMediaId: `ig-media-${Date.now()}`, mediaType: 'IMAGE' });
 
-        await insertInstagramComment(media.id, { instagramCommentId: `ic1-${Date.now()}`, message: 'Nice', replied: true, repliedAt: new Date() });
+        await insertInstagramComment(media.id, { instagramCommentId: `ic1-${Date.now()}`, message: 'Nice', replied: true, repliedAt: new Date(), replyMethod: 'ai' });
         await insertInstagramComment(media.id, { instagramCommentId: `ic2-${Date.now()}`, message: 'Cool', replied: false });
 
         const pages = await pagesService.getPages(workspace.id);
@@ -67,7 +67,7 @@ describe('pagesService.getPages — integration', () => {
 
         // FB: 1 comment (replied)
         const post = await insertPost(page.id, { facebookPostId: `post-${Date.now()}`, message: 'FB post' });
-        await insertComment(post.id, { facebookCommentId: `c-${Date.now()}`, message: 'FB comment', replied: true, repliedAt: new Date() });
+        await insertComment(post.id, { facebookCommentId: `c-${Date.now()}`, message: 'FB comment', replied: true, repliedAt: new Date(), replyMethod: 'ai' });
 
         // IG: 1 comment (not replied)
         const media = await insertInstagramMedia(page.id, { instagramMediaId: `ig-${Date.now()}`, mediaType: 'REELS' });
