@@ -32,9 +32,9 @@ function createMockAdapter(
                 message: post.message,
             };
         }),
-        storeComment: vi.fn(async (postId, commentId, message, fromId, fromName) => {
+        storeComment: vi.fn(async (postId, workspaceId, commentId, message, fromId, fromName) => {
             const { comment, isNew } = await commentsService.findOrCreateFromWebhook(
-                postId, commentId, message, fromId, fromName,
+                postId, workspaceId, commentId, message, fromId, fromName,
             );
             return {
                 comment: { id: comment.id, replied: comment.replied ?? false, needsAttention: comment.needsAttention ?? false },

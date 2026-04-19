@@ -1,17 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { messagesService } from '../../src/services/messages';
-import { createTestUser, createTestPage, insertMessage, insertPause, testDb } from './setup';
+import { createTestUser, createTestWorkspace, createTestPage, insertMessage, insertPause, testDb } from './setup';
 import { eq, and } from 'drizzle-orm';
 import { messages, conversations } from '../../src/db/schema';
 
 describe('Messages Service — Integration (real Postgres)', () => {
     let pageId: string;
+    let workspaceId: string;
     const senderId = 'sender-123';
 
     beforeEach(async () => {
         // Truncation is handled by global setup; create fresh fixtures here
         const user = await createTestUser();
-        const page = await createTestPage(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        workspaceId = workspace.id;
+        const page = await createTestPage(user.id, { workspaceId });
         pageId = page.id;
     });
 
@@ -361,7 +364,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
             // No prior message for this sender — simulate a customer who only commented
             // and never DM'd us first. Caller supplies fromName from the comment webhook.
             await messagesService.storeOutgoingMessage(
-                pageId, senderId, 'Welcome aboard!', 'ai', undefined, 'Ali Ahdab',
+                pageId, workspaceId, senderId, 'Welcome aboard!', 'ai', undefined, 'Ali Ahdab',
             );
 
             const [conv] = await testDb
@@ -377,7 +380,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
 
         it('links the outgoing message to the newly-created conversation', async () => {
             const outgoing = await messagesService.storeOutgoingMessage(
-                pageId, senderId, 'Details sent', 'ai', undefined, 'Nahed Hasan',
+                pageId, workspaceId, senderId, 'Details sent', 'ai', undefined, 'Nahed Hasan',
             );
 
             const [row] = await testDb.select().from(messages).where(eq(messages.id, outgoing.id));
@@ -401,7 +404,7 @@ describe('Messages Service — Integration (real Postgres)', () => {
             });
 
             // Store outgoing without supplying a name — should keep Original Name
-            await messagesService.storeOutgoingMessage(pageId, senderId, 'Reply', 'ai');
+            await messagesService.storeOutgoingMessage(pageId, workspaceId, senderId, 'Reply', 'ai');
 
             const [conv] = await testDb
                 .select()

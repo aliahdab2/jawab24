@@ -2,17 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { FacebookMessageAdapter } from '../../src/services/reply/adapters/facebookAdapter';
 import { InstagramMessageAdapter } from '../../src/services/reply/adapters/instagramAdapter';
 import { messagesService } from '../../src/services/messages';
-import { createTestUser, createTestPage, insertMessage, testDb } from './setup';
+import { createTestUser, createTestWorkspace, createTestPage, insertMessage, testDb } from './setup';
 import { eq } from 'drizzle-orm';
 import { messages } from '../../src/db/schema';
 
 describe('Platform Adapters — Integration (real Postgres)', () => {
     let pageId: string;
+    let workspaceId: string;
     const senderId = 'sender-adapter-test';
 
     beforeEach(async () => {
         const user = await createTestUser();
-        const page = await createTestPage(user.id);
+        const workspace = await createTestWorkspace(user.id);
+        workspaceId = workspace.id;
+        const page = await createTestPage(user.id, { workspaceId });
         pageId = page.id;
     });
 
@@ -24,7 +27,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
 
         it('creates a message with correct fields', async () => {
             const { message, isNew } = await adapter.storeIncomingMessage(
-                pageId, 'fb-msg-001', senderId, 'Hello from Facebook', 'Ali',
+                pageId, workspaceId, 'fb-msg-001', senderId, 'Hello from Facebook', 'Ali',
             );
 
             expect(isNew).toBe(true);
@@ -43,10 +46,10 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
 
         it('returns existing message on duplicate (isNew=false)', async () => {
             const first = await adapter.storeIncomingMessage(
-                pageId, 'fb-msg-dup', senderId, 'First', 'Ali',
+                pageId, workspaceId, 'fb-msg-dup', senderId, 'First', 'Ali',
             );
             const second = await adapter.storeIncomingMessage(
-                pageId, 'fb-msg-dup', senderId, 'First', 'Ali',
+                pageId, workspaceId, 'fb-msg-dup', senderId, 'First', 'Ali',
             );
 
             expect(first.isNew).toBe(true);
@@ -57,12 +60,12 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
         it('updates senderName on duplicate when original was null', async () => {
             // First store without senderName
             await adapter.storeIncomingMessage(
-                pageId, 'fb-msg-name', senderId, 'Hi', undefined,
+                pageId, workspaceId, 'fb-msg-name', senderId, 'Hi', undefined,
             );
 
             // Second store with senderName
             await adapter.storeIncomingMessage(
-                pageId, 'fb-msg-name', senderId, 'Hi', 'Ali Ahdab',
+                pageId, workspaceId, 'fb-msg-name', senderId, 'Hi', 'Ali Ahdab',
             );
 
             // Verify senderName was updated
@@ -75,12 +78,12 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
 
         it('does NOT overwrite existing senderName with a different value', async () => {
             await adapter.storeIncomingMessage(
-                pageId, 'fb-msg-keep', senderId, 'Hi', 'Original Name',
+                pageId, workspaceId, 'fb-msg-keep', senderId, 'Hi', 'Original Name',
             );
 
             // Try to overwrite with different name
             await adapter.storeIncomingMessage(
-                pageId, 'fb-msg-keep', senderId, 'Hi', 'New Name',
+                pageId, workspaceId, 'fb-msg-keep', senderId, 'Hi', 'New Name',
             );
 
             const [row] = await testDb
@@ -117,7 +120,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
 
         it('creates a message with Instagram-specific fields', async () => {
             const { message, isNew } = await adapter.storeIncomingMessage(
-                pageId, 'ig-msg-001', senderId, 'Hello from Instagram',
+                pageId, workspaceId, 'ig-msg-001', senderId, 'Hello from Instagram',
             );
 
             expect(isNew).toBe(true);
@@ -132,10 +135,10 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
 
         it('returns existing message on duplicate Instagram message ID', async () => {
             const first = await adapter.storeIncomingMessage(
-                pageId, 'ig-msg-dup', senderId, 'Hello',
+                pageId, workspaceId, 'ig-msg-dup', senderId, 'Hello',
             );
             const second = await adapter.storeIncomingMessage(
-                pageId, 'ig-msg-dup', senderId, 'Hello',
+                pageId, workspaceId, 'ig-msg-dup', senderId, 'Hello',
             );
 
             expect(first.isNew).toBe(true);
