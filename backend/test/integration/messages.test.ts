@@ -386,6 +386,8 @@ describe('Messages Service — Integration (real Postgres)', () => {
             const [row] = await testDb.select().from(messages).where(eq(messages.id, outgoing.id));
             expect(row.conversationId).not.toBeNull();
             expect(row.senderName).toBe('Nahed Hasan'); // legacy column also written
+            // Denormalized workspace_id must be populated on outgoing messages too.
+            expect(row.workspaceId).toBe(workspaceId);
 
             // The conversation_id points at the conversations row for this sender
             const [conv] = await testDb

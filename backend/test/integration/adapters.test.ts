@@ -37,6 +37,9 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
             // Verify all fields in DB
             const [row] = await testDb.select().from(messages).where(eq(messages.id, message.id));
             expect(row.pageId).toBe(pageId);
+            // Denormalized workspace_id must be populated — this is the whole point
+            // of Deploy 1 of the workspace_id expand/migrate/contract migration.
+            expect(row.workspaceId).toBe(workspaceId);
             expect(row.senderId).toBe(senderId);
             expect(row.senderName).toBe('Ali');
             expect(row.message).toBe('Hello from Facebook');
@@ -131,6 +134,7 @@ describe('Platform Adapters — Integration (real Postgres)', () => {
             expect(row.platform).toBe('instagram');
             expect(row.direction).toBe('incoming');
             expect(row.message).toBe('Hello from Instagram');
+            expect(row.workspaceId).toBe(workspaceId);
         });
 
         it('returns existing message on duplicate Instagram message ID', async () => {

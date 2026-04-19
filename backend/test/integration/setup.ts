@@ -11,7 +11,7 @@
 import { beforeEach } from 'vitest';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { sql } from 'drizzle-orm';
+import { sql, eq } from 'drizzle-orm';
 import * as schema from '../../src/db/schema';
 
 const connectionString =
@@ -126,10 +126,17 @@ export async function insertMessage(
         })
         .returning();
 
+    // Deploy 1 of the workspace_id denormalization: messages.workspace_id mirrors
+    // pages.workspace_id. Column is nullable today but promotes to NOT NULL in
+    // Deploy 3 — derive here so tests exercise the real wiring and don't break
+    // when the constraint tightens. Callers can still override explicitly.
+    const workspaceId = overrides.workspaceId ?? await resolvePageWorkspaceId(pageId);
+
     const [msg] = await testDb
         .insert(schema.messages)
         .values({
             pageId,
+            workspaceId,
             conversationId: conv.id,
             senderId,
             platformMessageId: overrides.platformMessageId ?? `msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -141,6 +148,15 @@ export async function insertMessage(
         })
         .returning();
     return msg;
+}
+
+async function resolvePageWorkspaceId(pageId: string): Promise<string | null> {
+    const [page] = await testDb
+        .select({ workspaceId: schema.pages.workspaceId })
+        .from(schema.pages)
+        .where(eq(schema.pages.id, pageId))
+        .limit(1);
+    return page?.workspaceId ?? null;
 }
 
 export async function insertPause(pageId: string, senderId: string, pausedUntil: Date) {
@@ -172,10 +188,13 @@ export async function insertComment(
     postId: string,
     overrides: Partial<typeof schema.comments.$inferInsert> = {},
 ) {
+    // See insertMessage — mirror pages.workspace_id so Deploy 3 NOT NULL doesn't surprise us.
+    const workspaceId = overrides.workspaceId ?? await resolvePostWorkspaceId(postId);
     const [comment] = await testDb
         .insert(schema.comments)
         .values({
             postId,
+            workspaceId,
             facebookCommentId: overrides.facebookCommentId ?? `comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             message: overrides.message ?? 'Test comment',
             replied: overrides.replied ?? false,
@@ -183,6 +202,16 @@ export async function insertComment(
         })
         .returning();
     return comment;
+}
+
+async function resolvePostWorkspaceId(postId: string): Promise<string | null> {
+    const [row] = await testDb
+        .select({ workspaceId: schema.pages.workspaceId })
+        .from(schema.posts)
+        .innerJoin(schema.pages, eq(schema.posts.pageId, schema.pages.id))
+        .where(eq(schema.posts.id, postId))
+        .limit(1);
+    return row?.workspaceId ?? null;
 }
 
 export async function insertInstagramMedia(
@@ -205,10 +234,13 @@ export async function insertInstagramComment(
     mediaId: string,
     overrides: Partial<typeof schema.instagramComments.$inferInsert> = {},
 ) {
+    // See insertMessage — mirror pages.workspace_id so Deploy 3 NOT NULL doesn't surprise us.
+    const workspaceId = overrides.workspaceId ?? await resolveMediaWorkspaceId(mediaId);
     const [comment] = await testDb
         .insert(schema.instagramComments)
         .values({
             mediaId,
+            workspaceId,
             instagramCommentId: overrides.instagramCommentId ?? `ig-comment-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
             message: overrides.message ?? 'Test Instagram comment',
             replied: overrides.replied ?? false,
@@ -216,4 +248,14 @@ export async function insertInstagramComment(
         })
         .returning();
     return comment;
+}
+
+async function resolveMediaWorkspaceId(mediaId: string): Promise<string | null> {
+    const [row] = await testDb
+        .select({ workspaceId: schema.pages.workspaceId })
+        .from(schema.instagramMedia)
+        .innerJoin(schema.pages, eq(schema.instagramMedia.pageId, schema.pages.id))
+        .where(eq(schema.instagramMedia.id, mediaId))
+        .limit(1);
+    return row?.workspaceId ?? null;
 }

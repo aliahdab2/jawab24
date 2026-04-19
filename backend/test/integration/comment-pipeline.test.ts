@@ -199,6 +199,8 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
         expect(row.replyText).toBe('Mocked AI reply');
         expect(row.replyMethod).toBe('ai');
         expect(row.repliedAt).toBeTruthy();
+        // Denormalized workspace_id must land on stored comments — Deploy 1 goal.
+        expect(row.workspaceId).toBe(workspaceId);
 
         // Verify adapter.sendReply was called once
         expect(adapter.sendReply).toHaveBeenCalledOnce();
