@@ -110,3 +110,37 @@ export function hasMention(text: string): boolean {
 export function isPunctuationOnly(text: string): boolean {
     return text.length > 0 && /^[^\p{L}\p{N}]+$/u.test(text);
 }
+
+/**
+ * Returns true when we have strong reasons to believe the comment is NOT a
+ * bare structured user-tag (and therefore no need to reach out to the Graph
+ * API to verify). Inverted framing on purpose — if we're not confident the
+ * text is a question / has content / carries price or URL signals, we return
+ * false and let the caller enrich via Graph API. Bias: fail toward fetching
+ * rather than toward replying, because a false "is a tag" (skip reply) is
+ * recoverable, while a false "not a tag" (reply) is visible to the customer.
+ *
+ * Signals that prove NOT-a-tag:
+ *   - Question marks (?, ؟) — questions are the opposite of bare name tags
+ *   - Length > 50 chars — structured tags render as plain names, usually short
+ *   - Digits — prices, phones, dates are not tags
+ *   - Currency tokens (ريال, ر.س, $, SAR, SR, €, £, د.إ, ج.م) — price queries
+ *   - URLs — shared links are not tags
+ *   - Punctuation-only content — covered separately (no letters at all)
+ *
+ * Called ONLY for Facebook comments with no webhook-provided message_tags.
+ * Instagram never carries tags, so callers gate this by platform first.
+ */
+export function isConfidentlyNotATag(text: string): boolean {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return true;
+    if (trimmed.length > 50) return true;
+    if (/[?؟]/.test(trimmed)) return true;
+    if (/\d/.test(trimmed)) return true;
+    if (/https?:\/\/|www\./i.test(trimmed)) return true;
+    // Currency tokens commonly used in MENA + EU — covers the overwhelming
+    // majority of price questions merchants see. Keep conservative; false
+    // negatives here cost us an API call, not correctness.
+    if (/(ريال|ر\.س|درهم|د\.إ|جنيه|ج\.م|\$|€|£|\bSAR\b|\bSR\b|\bAED\b|\bEGP\b|\bUSD\b|\bEUR\b)/i.test(trimmed)) return true;
+    return false;
+}

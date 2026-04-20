@@ -1624,6 +1624,121 @@ describe('CommentProcessor — template reply mode behavior', () => {
         });
     });
 
+    describe('Graph API enrichment — recover tags the webhook dropped', () => {
+        // Facebook Page feed webhooks inconsistently omit message_tags for
+        // comments that DO carry a structured user tag. The pipeline falls
+        // back to Graph API when the webhook is silent AND the text is not
+        // confidently not-a-tag (short bare name, no punctuation). Confirmed
+        // on prod 2026-04-20 with the Ali-Ahdab case on Graph API v23.0.
+
+        const graphTags = [
+            { type: 'user' as const, id: 'tagged-user-1', name: 'Ali Ahdab', offset: 0, length: 9 },
+        ];
+
+        it('fetches tags from Graph API when webhook omitted them for a bare-name comment', async () => {
+            const fetchCommentWithTags = vi.fn().mockResolvedValue({
+                message: 'Ali Ahdab', message_tags: graphTags,
+            });
+            const adapter = createMockAdapter({
+                fetchCommentWithTags,
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid', autoReplyEnabled: true, message: 'Post body',
+                    triggerKeyword: 'تفاصيل', triggerReply: 'تم الإرسال',
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1',
+                'Ali Ahdab', 'noor-psid', 'Noor',
+                // no messageTags from webhook
+            );
+
+            expect(result.success).toBe(true);
+            expect(fetchCommentWithTags).toHaveBeenCalledWith('comment-1', 'token-123');
+            // Guard uses the fetched tags → silent skip → no reply
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            const skippedCall = vi.mocked(publishSSEEvent).mock.calls
+                .find(c => c[1] === 'comment:skipped' && (c[2] as any)?.reason === 'friend_tag');
+            expect(skippedCall).toBeDefined();
+        });
+
+        it('does NOT fetch when webhook already included tags (short-circuit)', async () => {
+            const fetchCommentWithTags = vi.fn();
+            const adapter = createMockAdapter({ fetchCommentWithTags });
+
+            await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1',
+                'Ali Ahdab تفاصيل', 'noor-psid', 'Noor', undefined,
+                graphTags,
+            );
+
+            expect(fetchCommentWithTags).not.toHaveBeenCalled();
+        });
+
+        it('does NOT fetch when the comment is confidently not a tag (has a question)', async () => {
+            const fetchCommentWithTags = vi.fn();
+            const adapter = createMockAdapter({ fetchCommentWithTags });
+
+            await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1',
+                'شو السعر؟', 'noor-psid', 'Noor',
+            );
+
+            expect(fetchCommentWithTags).not.toHaveBeenCalled();
+            // Normal AI flow continues
+            expect(replyGenerator.generateForComment).toHaveBeenCalled();
+        });
+
+        it('does NOT fetch for Instagram comments (platform gate)', async () => {
+            const fetchCommentWithTags = vi.fn();
+            const adapter = createMockAdapter({ platform: 'instagram', fetchCommentWithTags });
+
+            await commentProcessor.processComment(
+                adapter, 'ig-page-1', 'media-1', 'comment-1',
+                'Ali Ahdab', 'user-1', 'Alice',
+            );
+
+            expect(fetchCommentWithTags).not.toHaveBeenCalled();
+        });
+
+        it('gracefully continues when Graph API fetch fails (fail-open for the reply decision)', async () => {
+            // Per product decision: if enrichment fails we let the comment
+            // proceed through the normal AI path rather than block. The AI
+            // preprocess has its own tag/mention handling.
+            const fetchCommentWithTags = vi.fn().mockResolvedValue(null);
+            const adapter = createMockAdapter({ fetchCommentWithTags });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1',
+                'Ali Ahdab', 'noor-psid', 'Noor',
+            );
+
+            expect(result.success).toBe(true);
+            expect(fetchCommentWithTags).toHaveBeenCalled();
+            // Guard can't fire (no tags) → pipeline continues to AI
+            expect(replyGenerator.generateForComment).toHaveBeenCalled();
+        });
+
+        it('uses Graph API tags when they return empty (genuine non-tag comment)', async () => {
+            // Bare-name comment that isn't actually tagged — Graph returns
+            // no message_tags. The friend-tag guard should not fire.
+            const fetchCommentWithTags = vi.fn().mockResolvedValue({
+                message: 'Sarah', message_tags: [],
+            });
+            const adapter = createMockAdapter({ fetchCommentWithTags });
+
+            await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1',
+                'Sarah', 'user-1', 'Customer',
+            );
+
+            expect(fetchCommentWithTags).toHaveBeenCalled();
+            // No tag → continues to AI path
+            expect(replyGenerator.generateForComment).toHaveBeenCalled();
+        });
+    });
+
     describe('Silent skip — SPAM_OR_IRRELEVANT comments are resolved, not left pending', () => {
         it('should call resolveComment and not flagComment when AI returns SPAM_OR_IRRELEVANT', async () => {
             const adapter = createMockAdapter();

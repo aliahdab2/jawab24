@@ -6,6 +6,7 @@ import {
     stripTagsByOffsets,
     hasUserTag,
     hasOwnPageTag,
+    isConfidentlyNotATag,
     type FacebookMessageTag,
 } from '../../src/utils/commentText';
 
@@ -260,5 +261,59 @@ describe('hasOwnPageTag', () => {
         expect(hasOwnPageTag(tags, null)).toBe(false);
         expect(hasOwnPageTag(tags, undefined)).toBe(false);
         expect(hasOwnPageTag([], 'page_mine')).toBe(false);
+    });
+});
+
+describe('isConfidentlyNotATag', () => {
+    // Returns TRUE when we're certain the text is not a bare user tag —
+    // i.e. when the caller can safely skip the Graph API tag fetch. Short
+    // bare-name strings must return FALSE so the caller enriches via Graph.
+
+    it('returns false for short bare Latin name (the Ali Ahdab case)', () => {
+        expect(isConfidentlyNotATag('Ali Ahdab')).toBe(false);
+    });
+
+    it('returns false for short bare Arabic name', () => {
+        expect(isConfidentlyNotATag('أحمد')).toBe(false);
+    });
+
+    it('returns false for two-word Arabic name', () => {
+        expect(isConfidentlyNotATag('خديجة الرفاعي')).toBe(false);
+    });
+
+    it('returns true for comment with a question mark', () => {
+        expect(isConfidentlyNotATag('شو السعر؟')).toBe(true);
+        expect(isConfidentlyNotATag('what is the price?')).toBe(true);
+    });
+
+    it('returns true for long text (> 50 chars)', () => {
+        expect(isConfidentlyNotATag('This is a long comment that definitely is not a tag it goes on'))
+            .toBe(true);
+    });
+
+    it('returns true for text containing digits (prices, phones, dates)', () => {
+        expect(isConfidentlyNotATag('100 ريال')).toBe(true);
+        expect(isConfidentlyNotATag('call me on 0501234567')).toBe(true);
+    });
+
+    it('returns true for text containing currency tokens without digits', () => {
+        expect(isConfidentlyNotATag('كم السعر بالريال')).toBe(true);
+        expect(isConfidentlyNotATag('price in USD')).toBe(true);
+    });
+
+    it('returns true for text containing a URL', () => {
+        expect(isConfidentlyNotATag('check https://example.com')).toBe(true);
+        expect(isConfidentlyNotATag('www.example.com')).toBe(true);
+    });
+
+    it('returns true for empty/whitespace text (nothing to tag)', () => {
+        expect(isConfidentlyNotATag('')).toBe(true);
+        expect(isConfidentlyNotATag('   ')).toBe(true);
+    });
+
+    it('returns false for single-word bare token (ambiguous — could be a name)', () => {
+        // Arabic single word that's also a common name — must let caller
+        // verify via Graph API rather than decide from text alone.
+        expect(isConfidentlyNotATag('Sarah')).toBe(false);
     });
 });

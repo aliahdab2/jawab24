@@ -147,6 +147,10 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
             return undefined;
         }
     }
+
+    async fetchCommentWithTags(platformCommentId: string, accessToken: string) {
+        return facebookService.getCommentWithTags(platformCommentId, accessToken);
+    }
 }
 
 export const facebookCommentAdapter = new FacebookCommentAdapter();

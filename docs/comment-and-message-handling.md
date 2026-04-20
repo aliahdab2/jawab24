@@ -21,6 +21,17 @@ Maintainers: if you change behavior here, update this doc in the same commit.
   step 3a, **before** the trigger-keyword branch — needed because trigger matches
   send a reply immediately and bypass the AI path; (b) `preprocessCommentText`
   for the AI path itself. Both must agree for future rule changes.
+- ✅ **Graph API tag enrichment (2026-04-20):** Facebook Page feed webhooks
+  inconsistently omit `message_tags` for comments that DO carry a structured
+  user tag — confirmed on Graph API v23.0 in production (webhook empty, same
+  comment id returns tags via `GET /{comment_id}?fields=message_tags`). When
+  the webhook is silent AND `isConfidentlyNotATag(text)` returns false (short
+  text, no `?` / `؟`, no digits, no currency, no URL), we fetch authoritative
+  tags from Graph API before the friend-tag guard runs. Inverted gate on
+  purpose — "plausibly a tag" heuristics had false-negative rates on Arabic
+  names. Lives inline in `commentProcessor.ts` step 3a (the logic is ~10
+  lines; a separate module would be ceremony). BullMQ's per-comment lock
+  makes this effectively once-per-comment without a dedicated cache layer.
 - ✅ Nudge language derives from stripped text — no more English nudge on Arabic
   pages with tagged commenters
 - ✅ CTA-boost scoping documented correctly (dual/private only, not public)

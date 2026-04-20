@@ -5,7 +5,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { hasUserTag, hasOwnPageTag } from '../../utils/commentText';
+import { hasUserTag, hasOwnPageTag, isConfidentlyNotATag } from '../../utils/commentText';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -108,6 +108,31 @@ export class CommentProcessor {
             // Exception: if one of the tags points at our own page, the commenter IS
             // addressing us (alongside a friend) — let the normal pipeline handle it.
             // Instagram webhooks don't carry message_tags, so this is a no-op there.
+
+            // Facebook webhooks inconsistently deliver `message_tags` even when the
+            // comment carries a real structured user tag (confirmed on Graph API v23
+            // in prod). When the webhook is silent AND the text doesn't clearly rule
+            // out a tag (questions, prices, long messages — see isConfidentlyNotATag),
+            // fetch authoritative tags from Graph API before the guard runs. Bias:
+            // fail toward fetching rather than toward replying — a wrong reply is
+            // visible, a wasted fetch is cheap. BullMQ dedup upstream already makes
+            // this effectively once-per-comment, so no extra caching layer needed.
+            if (
+                platform === 'facebook'
+                && (!messageTags || messageTags.length === 0)
+                && !isConfidentlyNotATag(commentMessage)
+                && page.accessToken
+                && adapter.fetchCommentWithTags
+            ) {
+                const fetched = await adapter.fetchCommentWithTags(platformCommentId, page.accessToken);
+                if (fetched?.message_tags?.length) {
+                    messageTags = fetched.message_tags;
+                    this.logger.info(`[${platform}] message_tags recovered from Graph API`, {
+                        platformCommentId, tagCount: fetched.message_tags.length,
+                    });
+                }
+            }
+
             if (platform === 'facebook'
                 && hasUserTag(messageTags)
                 && !hasOwnPageTag(messageTags, platformPageId)) {

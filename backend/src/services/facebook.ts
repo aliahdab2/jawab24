@@ -439,6 +439,39 @@ export class FacebookService {
             return null;
         }
     }
+
+    /**
+     * Fetch a comment's authoritative metadata including `message_tags`. Used
+     * when the Page feed webhook omitted the tag array — a documented FB
+     * consistency gap we hit in production with real structured user tags.
+     * Returns null on any error so the caller can fail-closed without throwing.
+     */
+    async getCommentWithTags(commentId: string, pageAccessToken: string): Promise<{
+        message: string;
+        message_tags?: Array<{ id: string; name: string; type: 'user' | 'page'; offset: number; length: number }>;
+        from?: { id: string; name: string };
+        parent?: { id: string };
+    } | null> {
+        try {
+            const response = await traced('getCommentWithTags', () =>
+                fbAxios.get(`${FACEBOOK_GRAPH_API}/${commentId}`, {
+                    params: {
+                        fields: 'message,message_tags,from,parent',
+                        access_token: pageAccessToken,
+                    },
+                }),
+            );
+            return response.data;
+        } catch (error) {
+            if (axios.isAxiosError(error)) {
+                this.logger.error('[Facebook] Error fetching comment with tags', {
+                    commentId,
+                    error: error.response?.data?.error?.message || error.message,
+                });
+            }
+            return null;
+        }
+    }
     /**
      * Fetch a Messenger sender's name using the page access token.
      * Tries User Profile API first, then falls back to Conversations API.

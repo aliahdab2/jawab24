@@ -134,4 +134,17 @@ export interface CommentPlatformAdapter {
      * Optional — platforms that don't support this can omit it.
      */
     fetchCommenterName?(platformCommentId: string, accessToken: string): Promise<string | undefined>;
+
+    /**
+     * Fetch authoritative `message_tags` from the platform's API when the
+     * webhook didn't deliver them. Only Facebook implements this — IG webhooks
+     * don't carry tag data at all, and WhatsApp/Shopify don't have the concept.
+     * Returns null on any error (network, permission, missing comment) so the
+     * caller can fail-closed without throwing.
+     */
+    fetchCommentWithTags?(platformCommentId: string, accessToken: string): Promise<{
+        message: string;
+        message_tags?: Array<{ id: string; name: string; type: 'user' | 'page'; offset: number; length: number }>;
+        from?: { id: string; name: string };
+    } | null>;
 }
