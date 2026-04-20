@@ -151,7 +151,8 @@ export interface GenerateReplyContext {
     kbActiveVersion?: number | null;
     storePolicies?: string;
     productCatalog?: string;
-    // For comments
+    // For comments — also populated for DMs whose conversation originated from a
+    // comment (dual/private mode). See messageProcessor.resolveOriginPostMessage.
     postId?: string;
     postMessage?: string;
     pageId?: string;

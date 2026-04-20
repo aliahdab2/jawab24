@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "origin_content_id" uuid;

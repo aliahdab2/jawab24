@@ -2,13 +2,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { messageProcessor } from '../../src/services/reply/messageProcessor';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
+import { conversationsService } from '../../src/services/conversations';
 import { replyGenerator } from '../../src/services/reply/generator';
 import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
+import { db } from '../../src/db';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../src/interfaces';
 
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
+vi.mock('../../src/services/conversations', () => ({
+    conversationsService: {
+        findByPageAndSender: vi.fn().mockResolvedValue(null),
+        findOrCreate: vi.fn(),
+        setSenderName: vi.fn(),
+        getSenderName: vi.fn().mockResolvedValue(null),
+    },
+}));
 vi.mock('../../src/services/pages', () => ({
     pagesService: {},
     invalidateWorkspaceStatsCache: vi.fn(),
@@ -55,6 +65,14 @@ vi.mock('../../src/services/subscriptions', () => ({
 vi.mock('../../src/db', () => ({
     db: {
         transaction: vi.fn(async (cb: (tx: unknown) => Promise<void>) => cb({})),
+        // select chain used by messageProcessor.resolveOriginPostMessage. Default:
+        // returns empty array (row-not-found → origin post not resolved, no postMessage).
+        // Individual tests can override via vi.mocked(db.select).mockReturnValueOnce(...).
+        select: vi.fn(() => ({
+            from: vi.fn(() => ({
+                where: vi.fn().mockResolvedValue([]),
+            })),
+        })),
     },
 }));
 vi.mock('../../src/lib/eventBus', () => ({
@@ -637,5 +655,233 @@ describe('MessageProcessor — subscription inactive', () => {
         expect(result.error).toBe('Subscription inactive');
         expect(adapter.sendReply).not.toHaveBeenCalled();
         expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
+    });
+});
+
+// Follow-up DMs on conversations that originated from a comment should carry the
+// originating post text into the AI context — otherwise short/ambiguous follow-ups
+// like "تكلفة" or "اوقات الدوام" are classified as SPAM_OR_IRRELEVANT and silently
+// skipped. See commentProcessor for the producer side (sets origin_content_id).
+describe('MessageProcessor — origin post context inheritance', () => {
+    function stubOriginContentRow(row: { message: string; createdAt: Date } | null) {
+        vi.mocked(db.select).mockReturnValueOnce({
+            from: vi.fn(() => ({
+                where: vi.fn().mockResolvedValue(row ? [row] : []),
+            })),
+        } as any);
+    }
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+
+        // Re-establish the default db.select mock cleared by vi.clearAllMocks.
+        // Without this, resolveOriginPostMessage calls db.select() → undefined.from() → throw.
+        vi.mocked(db.select).mockReturnValue({
+            from: vi.fn(() => ({
+                where: vi.fn().mockResolvedValue([]),
+            })),
+        } as any);
+
+        // Prior describe blocks set isSubscriptionActive=false; restore the default.
+        const { subscriptionsService } = await import('../../src/services/subscriptions');
+        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(true);
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'تكلفة', createdTime: new Date() } as any,
+        ]);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Thanks!',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+    });
+
+    it('passes postMessage when conversation has a fresh originContentId', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-42',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow({
+            message: 'الفريق الدمشقي — دورة TOT الجديدة!',
+            createdAt: new Date(), // today — well within staleness window
+        });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'تكلفة', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toBe('الفريق الدمشقي — دورة TOT الجديدة!');
+    });
+
+    it('does NOT pass postMessage when conversation has no originContentId (off-comment DM)', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: null,
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'hello', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toBeUndefined();
+    });
+
+    it('does NOT pass postMessage when origin post is older than 60 days (staleness guard)', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-old',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        // 90 days old — beyond the guard
+        const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+        stubOriginContentRow({
+            message: 'الدورة تبدأ غدا!',
+            createdAt: ninetyDaysAgo,
+        });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'متى تبدأ', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toBeUndefined();
+    });
+
+    it('does NOT pass postMessage when origin row was deleted (graceful degrade)', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-deleted',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow(null); // post row no longer exists
+
+        const result = await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'hi', 'msg-1',
+        );
+
+        expect(result.success).toBe(true); // no throw
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toBeUndefined();
+    });
+
+    it('does NOT pass postMessage when origin post has null message (image-only post)', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-image-only',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow({ message: null as any, createdAt: new Date() });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'hi', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toBeUndefined();
+    });
+
+    it('does NOT pass postMessage when origin post has null createdAt (can\'t age-check)', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-no-date',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow({ message: 'post body', createdAt: null as any });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'hi', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        // Without a date we can't verify freshness; degrade to no context
+        // rather than risk inheriting arbitrarily old copy.
+        expect(contextArg.postMessage).toBeUndefined();
+    });
+
+    it('staleness guard — boundary: post exactly 60 days old is treated as stale', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-boundary',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        const exactly60d = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+        stubOriginContentRow({ message: 'old post body', createdAt: exactly60d });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'hi', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        // Boundary is exclusive (`>=` excludes 60d exactly) — prefer safety.
+        expect(contextArg.postMessage).toBeUndefined();
+    });
+
+    it('staleness guard — 59 days old is still fresh (inside the window)', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'facebook', senderName: 'Alice',
+            originContentId: 'post-fresh-boundary',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        const fiftyNineD = new Date(Date.now() - 59 * 24 * 60 * 60 * 1000);
+        stubOriginContentRow({ message: 'still-fresh post body', createdAt: fiftyNineD });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'hi', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toBe('still-fresh post body');
+    });
+
+    it('uses instagram_media table when the conversation platform is instagram', async () => {
+        vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue({
+            id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1',
+            platform: 'instagram', senderName: 'Alice',
+            originContentId: 'media-99',
+            createdAt: new Date(), updatedAt: new Date(),
+        });
+        stubOriginContentRow({
+            message: 'Instagram reel caption',
+            createdAt: new Date(),
+        });
+
+        await messageProcessor.processMessage(
+            createMockAdapter(), 'page-1', 'sender-1', 'كم', 'msg-1',
+        );
+
+        const contextArg = vi.mocked(replyGenerator.generateForMessage).mock.calls[0][0];
+        expect(contextArg.postMessage).toBe('Instagram reel caption');
     });
 });

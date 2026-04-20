@@ -1255,6 +1255,7 @@ describe('CommentProcessor — template reply mode behavior', () => {
             'ai',
             undefined,
             'Ali Ahdab',
+            'content-uuid',
         );
     });
 
@@ -1271,6 +1272,38 @@ describe('CommentProcessor — template reply mode behavior', () => {
         const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
         // 6th positional arg is senderName; missing → undefined
         expect(call[5]).toBeUndefined();
+    });
+
+    // Regression: follow-up DMs on a comment-originated conversation used to lose post
+    // context because conversations had no link back to the post. See messageProcessor
+    // path for the consumer side. Here we verify the link is persisted on every comment→DM.
+    it('dual mode — storeOutgoingMessage receives contentId so follow-up DMs can inherit post context', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+        const adapter = createMockAdapter({
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-12345' }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم السعر؟', 'from-id-7', 'Ali Ahdab',
+        );
+
+        const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        // 8th positional arg is originContentId
+        expect(call[7]).toBe('content-uuid');
+    });
+
+    it('private mode — storeOutgoingMessage also receives contentId (same rule)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('private'));
+        const adapter = createMockAdapter({
+            sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-private' }),
+        });
+
+        await commentProcessor.processComment(
+            adapter, 'page-1', 'content-1', 'comment-1', 'كم السعر؟', 'from-id-7', 'Ali Ahdab',
+        );
+
+        const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+        expect(call[7]).toBe('content-uuid');
     });
 
     it('all 3 modes — generateForComment is called with the correct commentReplyMode', async () => {
@@ -1339,6 +1372,27 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
             expect(result.success).toBe(true);
             expect(result.replyText).toBe('مرحباً! سجّل عبر الرابط...');
+        });
+
+        it('trigger path — storeOutgoingMessage receives contentId for follow-up DM context', async () => {
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سجّل',
+                    triggerReply: 'مرحباً!',
+                }),
+                sendReply: vi.fn().mockResolvedValue({ success: true, dmRecipientId: 'psid-trigger' }),
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+
+            const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+            expect(call[7]).toBe('content-uuid');
         });
     });
 

@@ -20,6 +20,7 @@ function mockConvRow(overrides: Record<string, any> = {}) {
         senderId: 'sender-1',
         platform: 'facebook',
         senderName: 'Alice',
+        originContentId: null,
         createdAt: new Date('2026-04-01'),
         updatedAt: new Date('2026-04-01'),
         ...overrides,
@@ -100,6 +101,61 @@ describe('ConversationsService', () => {
                 const result = await conversationsService.findOrCreate('p', 's', platform, 'n');
                 expect(result.platform).toBe(platform);
             }
+        });
+
+        describe('originContentId (comment→DM origin linking)', () => {
+            it('writes the supplied originContentId on insert', async () => {
+                const captured: { v?: any; set?: any } = {};
+                stubInsertReturning(mockConvRow({ originContentId: 'post-42' }), captured);
+
+                await conversationsService.findOrCreate(
+                    'page-1', 'sender-1', 'facebook', 'Alice', 'post-42',
+                );
+
+                expect(captured.v.originContentId).toBe('post-42');
+            });
+
+            it('writes null originContentId when undefined is supplied', async () => {
+                const captured: { v?: any; set?: any } = {};
+                stubInsertReturning(mockConvRow({ originContentId: null }), captured);
+
+                await conversationsService.findOrCreate('page-1', 'sender-1', 'facebook', 'Alice');
+
+                expect(captured.v.originContentId).toBeNull();
+            });
+
+            it('does NOT include originContentId in ON CONFLICT SET when not supplied (preserve existing)', async () => {
+                const captured: { v?: any; set?: any } = {};
+                stubInsertReturning(mockConvRow(), captured);
+
+                await conversationsService.findOrCreate('page-1', 'sender-1', 'facebook', 'Alice');
+
+                expect(captured.set).not.toHaveProperty('originContentId');
+            });
+
+            it('includes originContentId in ON CONFLICT SET (first-write-wins via COALESCE) when supplied', async () => {
+                const captured: { v?: any; set?: any } = {};
+                stubInsertReturning(mockConvRow({ originContentId: 'post-42' }), captured);
+
+                await conversationsService.findOrCreate(
+                    'page-1', 'sender-1', 'facebook', 'Alice', 'post-42',
+                );
+
+                // On conflict the COALESCE expression keeps the existing value if already set,
+                // and only fills it in when the stored row has NULL — never overwrites.
+                expect(captured.set).toHaveProperty('originContentId');
+            });
+
+            it('returns originContentId from the DB row in the mapped Conversation', async () => {
+                const captured: { v?: any; set?: any } = {};
+                stubInsertReturning(mockConvRow({ originContentId: 'post-42' }), captured);
+
+                const result = await conversationsService.findOrCreate(
+                    'page-1', 'sender-1', 'facebook', 'Alice', 'post-42',
+                );
+
+                expect(result.originContentId).toBe('post-42');
+            });
         });
     });
 

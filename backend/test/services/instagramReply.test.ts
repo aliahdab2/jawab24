@@ -23,9 +23,21 @@ vi.mock('../../src/db', () => ({
 }));
 
 vi.mock('../../src/db/schema', () => ({
-    instagramMedia: { id: 'id', instagramMediaId: 'instagramMediaId' },
+    instagramMedia: { id: 'id', instagramMediaId: 'instagramMediaId', caption: 'caption', createdAt: 'createdAt' },
     instagramComments: { id: 'id', instagramCommentId: 'instagramCommentId' },
     messages: { id: 'id', platformMessageId: 'platformMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction', message: 'message' },
+    posts: { id: 'id', message: 'message', createdTime: 'createdTime' },
+}));
+
+// messageProcessor imports conversationsService for origin-post lookup. These tests
+// never exercise comment-originated DMs, so stub findByPageAndSender to return null.
+vi.mock('../../src/services/conversations', () => ({
+    conversationsService: {
+        findByPageAndSender: vi.fn().mockResolvedValue(null),
+        findOrCreate: vi.fn(),
+        setSenderName: vi.fn(),
+        getSenderName: vi.fn().mockResolvedValue(null),
+    },
 }));
 
 vi.mock('../../src/services/subscriptions', () => ({

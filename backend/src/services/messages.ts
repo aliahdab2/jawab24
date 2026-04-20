@@ -359,6 +359,7 @@ export class MessagesService {
         replyMethod: 'template' | 'ai' | 'manual',
         conn: DbConn = db,
         senderName?: string,
+        originContentId?: string,
     ): Promise<Message> {
         // Platform unknown in this call — inherit from existing conversation if present,
         // default to 'facebook' otherwise. This is safe because we never overwrite the
@@ -372,10 +373,13 @@ export class MessagesService {
         // Without (1), comment-triggered DMs create conversations with null senderName
         // because there's no prior incoming message for this sender — the customer only
         // commented, never DM'd. That showed as "Unknown User" in the dashboard.
+        //
+        // `originContentId` records the post/media that triggered this DM (comment→DM).
+        // First-write-wins at the conversation layer so follow-up DMs keep the post context.
         const existing = await conversationsService.findByPageAndSender(pageId, senderId);
         const platform: Platform = existing?.platform ?? 'facebook';
         const resolvedName = senderName ?? existing?.senderName ?? await this.getSenderNameBySenderId(pageId, senderId);
-        const conversation = await conversationsService.findOrCreate(pageId, senderId, platform, resolvedName);
+        const conversation = await conversationsService.findOrCreate(pageId, senderId, platform, resolvedName, originContentId);
 
         const [newMessage] = await conn.insert(messages)
             .values({

@@ -568,6 +568,13 @@
       "when": 1776587082440,
       "tag": "0080_dazzling_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "5",
+      "when": 1776645379903,
+      "tag": "0081_breezy_shaman",
+      "breakpoints": true
     }
   ]
 }

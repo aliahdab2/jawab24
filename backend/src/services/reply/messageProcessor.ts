@@ -1,5 +1,6 @@
 import { workspaceSettingsService } from '../workspaceSettings';
 import { messagesService } from '../messages';
+import { conversationsService } from '../conversations';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
@@ -8,6 +9,8 @@ import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
+import { posts, instagramMedia } from '../../db/schema';
+import { eq } from 'drizzle-orm';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { enrichPageContext } from './contextEnricher';
 import { publishSSEEvent } from '../../lib/eventBus';
@@ -20,6 +23,13 @@ import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
 import { leadExtractorService } from '../leadExtractor';
 import { extractPostId } from '../../utils/instagram';
+
+/** Max age of the origin post to inherit into a follow-up DM's AI context.
+ *  Older posts often contain relative-time claims ("tomorrow we start X") that
+ *  would mislead the AI. Above this threshold we degrade to context-free —
+ *  better no context than stale context. Pre-existing comments on old posts
+ *  have the same issue and are out of scope for this pass. */
+const MAX_ORIGIN_POST_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
 /**
  * Unified Message Processor
@@ -305,6 +315,13 @@ export class MessageProcessor {
                 try { await adapter.sendTypingIndicator(page, senderId); } catch { /* cosmetic */ }
             }
 
+            // 11c. If this DM thread originated from a comment on a post, carry the
+            // post text into the generator context (same field the comment pipeline
+            // uses). Without this, short follow-ups like "تكلفة" or "اوقات الدوام"
+            // are classified as SPAM_OR_IRRELEVANT because the AI sees them out of context.
+            const originPostMessage = await this.resolveOriginPostMessage(page.id, senderId);
+            lap('11c-originPost');
+
             // 12. Generate reply (enrich KB with e-commerce data if linked)
             const enriched = await enrichPageContext(
                 page as unknown as Record<string, unknown>,
@@ -327,6 +344,7 @@ export class MessageProcessor {
                         productCatalog,
                         kbActiveVersion: page.kbActiveVersion,
                         pageId: page.id,
+                        postMessage: originPostMessage,
                         senderId,
                         senderName,
                         replyStyle: userSettings.replyStyle,
@@ -554,6 +572,36 @@ export class MessageProcessor {
 
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Resolve the originating post/media text for a conversation when the DM
+     * thread started from a comment (dual or private mode). Returns undefined
+     * when there is no origin link, the referenced row is missing (deleted), or
+     * the post is older than MAX_ORIGIN_POST_AGE_MS (staleness guard).
+     *
+     * Looks up in `posts` (facebook) or `instagram_media` (instagram) based on
+     * the conversation's platform. No FK on `origin_content_id` — if the row
+     * was deleted, we silently degrade to no context rather than erroring.
+     */
+    private async resolveOriginPostMessage(pageId: string, senderId: string): Promise<string | undefined> {
+        const conversation = await conversationsService.findByPageAndSender(pageId, senderId);
+        if (!conversation?.originContentId) return undefined;
+
+        const lookup = conversation.platform === 'instagram'
+            ? db.select({ message: instagramMedia.caption, createdAt: instagramMedia.createdAt })
+                .from(instagramMedia).where(eq(instagramMedia.id, conversation.originContentId))
+            : db.select({ message: posts.message, createdAt: posts.createdTime })
+                .from(posts).where(eq(posts.id, conversation.originContentId));
+
+        const [row] = await lookup;
+        if (!row?.message) return undefined;
+
+        const postedAt = row.createdAt ?? null;
+        if (!postedAt || Date.now() - postedAt.getTime() >= MAX_ORIGIN_POST_AGE_MS) {
+            return undefined;
+        }
+        return row.message;
     }
 }
 

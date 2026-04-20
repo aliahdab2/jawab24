@@ -123,6 +123,7 @@ export class CommentProcessor {
                         accessToken: page.accessToken, fromId, fromName,
                         userSettings: userSettings as unknown as Record<string, unknown>,
                         postMessage: content.message || undefined,
+                        contentId: content.id,
                         triggerKeyword: matchedKeyword,
                     });
                 }
@@ -360,6 +361,7 @@ export class CommentProcessor {
                 accessToken: page.accessToken, fromId, fromName,
                 userSettings: userSettings as unknown as Record<string, unknown>,
                 postMessage: content.message || undefined,
+                contentId: content.id,
                 needsAttention, flagReason, aiIntent, aiOriginalReply,
                 confidence,
             });
@@ -405,6 +407,9 @@ export class CommentProcessor {
         fromName?: string;
         userSettings: Record<string, unknown>;
         postMessage?: string;
+        /** The originating post/media UUID. Persisted on the conversation so
+         *  follow-up DMs can inherit post context (see messageProcessor). */
+        contentId: string;
         needsAttention?: boolean;
         flagReason?: string;
         aiIntent?: string;
@@ -416,7 +421,7 @@ export class CommentProcessor {
             adapter, platform, pipeline, pageId, userId, workspaceId,
             comment, replyText, replyMethod, commentMessage,
             platformCommentId, platformPageId, accessToken, fromId, fromName, userSettings,
-            needsAttention, flagReason, aiIntent, aiOriginalReply,
+            contentId, needsAttention, flagReason, aiIntent, aiOriginalReply,
             confidence, triggerKeyword,
         } = opts;
 
@@ -449,7 +454,7 @@ export class CommentProcessor {
             messagesService.storeOutgoingMessage(
                 pageId, workspaceId, sendResult.dmRecipientId, replyText,
                 replyMethod as 'template' | 'ai' | 'manual',
-                undefined, fromName,
+                undefined, fromName, contentId,
             )
                 .catch(err => this.logger.error('[CommentProcessor] Failed to store outgoing DM', { err, pageId, fromId }));
         }

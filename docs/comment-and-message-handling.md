@@ -470,6 +470,50 @@ isPunctuationOnly  true
 → same as Example 6/7 depending on postMessage
 ```
 
+### Example 8b — Comment-originated DM follow-up inherits post context
+
+When a customer's DM thread started from a comment→DM (dual or private mode), the
+conversation row stores `origin_content_id` pointing at the post. Every follow-up
+DM is processed with `postMessage = origin post text`, exactly like the original
+comment had.
+
+```
+Scenario:     customer commented "." on TOT course post → dual-mode DM sent.
+              Customer then DMs "تكلفة" in Messenger.
+Stored state: conversations.origin_content_id = <post_uuid>
+messageProcessor (step 11c):
+  conversation.origin_content_id → posts.message = "دورة TOT ..."
+  → context.postMessage = "دورة TOT ..."
+AI pipeline:  classifier sees "تكلفة" + [current_post] → intent=QUESTION
+Result:       customer gets a real pricing reply instead of silent-skip.
+```
+
+**Staleness guard:** if the origin post is older than 60 days, `postMessage` is
+omitted. Old posts often contain relative-time claims ("tomorrow we start X") that
+would mislead the AI; degrading to no context is safer than confident-but-wrong
+echoes of stale copy. The underlying staleness issue also affects comments on old
+posts and is tracked as a separate change.
+
+**First-write-wins:** `origin_content_id` is only ever set when the stored value
+is NULL. A customer who later DMs off-comment keeps the original post link — but
+the field is never overwritten. If the customer's first DM was off-comment the
+field stays NULL and the DM pipeline behaves exactly as before this change.
+
+**Graceful degrade:** no FK on `origin_content_id` (it targets either `posts` or
+`instagram_media` resolved via the conversation's platform). If the referenced
+row was deleted, the lookup silently returns no `postMessage`.
+
+### Example 8c — Example 8b, old post (staleness guard)
+```
+Scenario:     same as 8b, but the TOT post is 90 days old.
+messageProcessor (step 11c):
+  conversation.origin_content_id → posts, posts.created_time = 90d ago
+  → AGE > 60 days → context.postMessage = undefined
+AI pipeline:  classifier sees "تكلفة" with no post context
+Result:       same behavior as pre-fix (possibly SPAM_OR_IRRELEVANT);
+              merchant can still reply manually.
+```
+
 ### Example 9 — DM voice note (Arabic)
 ```
 Webhook:      attachment type=audio, url=<mp3>

@@ -347,6 +347,14 @@ export const conversations = pgTable('conversations', {
     senderId: varchar('sender_id', { length: 255 }).notNull(),
     platform: varchar('platform', { length: 20 }).notNull(), // 'facebook' | 'instagram' | 'whatsapp'
     senderName: varchar('sender_name', { length: 255 }),
+    // Post or media that triggered this DM conversation (via comment→DM in dual/private mode).
+    // UUID points to either posts.id (Facebook) or instagram_media.id (Instagram); resolved
+    // via the conversation's platform field. No FK because it targets two tables —
+    // messageProcessor degrades gracefully if the referenced row was deleted.
+    // First-write-wins: set once when the comment pipeline creates the outgoing DM,
+    // never overwritten. Lets messageProcessor inherit the originating post context for
+    // follow-up DMs — otherwise AI classifies short follow-ups as SPAM_OR_IRRELEVANT.
+    originContentId: uuid('origin_content_id'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {

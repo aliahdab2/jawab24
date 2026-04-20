@@ -446,7 +446,7 @@ describe('MessagesService', () => {
             );
 
             expect(conversationsService.findOrCreate).toHaveBeenCalledWith(
-                'page-1', 'sender-1', 'facebook', 'Ali Ahdab',
+                'page-1', 'sender-1', 'facebook', 'Ali Ahdab', undefined,
             );
             // Legacy messages.sender_name is also written
             expect(capturedValues.senderName).toBe('Ali Ahdab');
@@ -470,7 +470,24 @@ describe('MessagesService', () => {
             );
 
             expect(conversationsService.findOrCreate).toHaveBeenCalledWith(
-                'page-1', 'sender-1', 'facebook', 'Fresh Name',
+                'page-1', 'sender-1', 'facebook', 'Fresh Name', undefined,
+            );
+        });
+
+        it('forwards originContentId to findOrCreate (comment→DM origin linking)', async () => {
+            const { conversationsService } = await import('../../src/services/conversations');
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValueOnce(null);
+            const inserted = mockDbRow({ id: 'out-7', direction: 'outgoing', replied: true });
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([inserted]) }),
+            } as any);
+
+            await messagesService.storeOutgoingMessage(
+                'page-1', 'ws-1', 'sender-1', 'Reply', 'ai', undefined, 'Ali', 'post-42',
+            );
+
+            expect(conversationsService.findOrCreate).toHaveBeenCalledWith(
+                'page-1', 'sender-1', 'facebook', 'Ali', 'post-42',
             );
         });
     });

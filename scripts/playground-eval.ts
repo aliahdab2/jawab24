@@ -216,6 +216,36 @@ const TEST_CASES: TestCase[] = [
     { id: 62, category: 6, categoryName: 'Channel Differences', channel: 'dm', message: 'كم عندكم دورة؟', page: 'training', conversationHistory: [{ role: 'user', content: 'السلام عليكم' }, { role: 'assistant', content: 'وعليكم السلام!' }], expected: { intent: ['QUESTION'] } },
     { id: 63, category: 6, categoryName: 'Channel Differences', channel: 'dm', message: 'مرحبا', page: 'training', expected: { intent: ['GREETING'] } },
 
+    // 6.8 — Comment-originated DMs inherit post context (fix for Zayd Hlal regression, 2026-04-19).
+    // Short follow-ups in a DM that started from comment→DM used to classify as SPAM_OR_IRRELEVANT
+    // because `postMessage` was only populated in the comment pipeline. Fix: messageProcessor now
+    // resolves conversations.origin_content_id → post.message and passes it as `postMessage`.
+    {
+        id: 310, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'اوقات الدوام والعنوان', page: 'training',
+        postMessage: 'الفريق الدمشقي للتدريب والتأهيل — دورة TOT الجديدة! سجل الآن',
+        conversationHistory: [
+            { role: 'assistant', content: 'تمام! إذا حابب تعرف أوقات الدوام، خبرني وأنا أخبرك 😊' },
+        ],
+        expected: { intent: ['QUESTION', 'BUSINESS_INQUIRY'], replyMethod: ['ai'] },
+        notes: 'Regression: without origin post context the AI classified this as SPAM_OR_IRRELEVANT and silently skipped.',
+    },
+    {
+        id: 311, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'تكلفة', page: 'training',
+        postMessage: 'دورة TOT — إعداد المدربين المحترفين. سجل اليوم',
+        expected: { intent: ['QUESTION', 'BUSINESS_INQUIRY'], replyMethod: ['ai'] },
+        notes: 'Bare one-word pricing inquiry — needs post context to avoid SPAM classification.',
+    },
+    // Control: same bare keyword WITHOUT post context. Proves the fix is gated on postMessage
+    // presence, not a blanket relaxation of spam classification.
+    {
+        id: 312, category: 6, categoryName: 'Channel Differences', channel: 'dm',
+        message: 'تكلفة', page: 'training',
+        expected: { intent: ['SPAM_OR_IRRELEVANT', 'QUESTION'] },
+        notes: 'Control — off-comment DM with no post context; either classification is acceptable.',
+    },
+
     // 6.4 — Must not re-ask for info already provided in history (Bug B — data memory)
     {
         id: 305, category: 6, categoryName: 'Channel Differences', channel: 'dm',
