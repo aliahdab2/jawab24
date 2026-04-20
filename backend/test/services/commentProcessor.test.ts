@@ -1481,6 +1481,30 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(result.replyText).toBe('مرحباً! سجّل عبر الرابط...');
         });
 
+        it('trigger match emits comment:received before reply_sent so frontend cache stays in sync', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سجّل',
+                    triggerReply: 'مرحباً!',
+                }),
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+
+            // Both events should fire, and comment:received must come first so the
+            // comment is in the cache when reply_sent tries to patch it.
+            const calls = vi.mocked(publishSSEEvent).mock.calls;
+            const receivedIdx = calls.findIndex(c => c[1] === 'comment:received');
+            const replySentIdx = calls.findIndex(c => c[1] === 'comment:reply_sent');
+            expect(receivedIdx).toBeGreaterThanOrEqual(0);
+            expect(replySentIdx).toBeGreaterThan(receivedIdx);
+        });
+
         it('trigger path — storeOutgoingMessage receives contentId for follow-up DM context', async () => {
             vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode('dual'));
             const adapter = createMockAdapter({

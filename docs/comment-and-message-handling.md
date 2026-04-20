@@ -31,6 +31,14 @@ Maintainers: if you change behavior here, update this doc in the same commit.
   "Resolved" in real time and the "Needs Action" counter decrements, without a
   page reload. Offensive comments do NOT emit this event (they stay flagged for
   merchant attention via the existing notification pipeline).
+- ✅ **Trigger-keyword replies emit `comment:received` before `comment:reply_sent`:**
+  previously the trigger-match path stored the comment and went straight to
+  `sendAndFinalize`, skipping the `comment:received` SSE event. The downstream
+  `comment:reply_sent` handler's `setQueriesData` patch was then a no-op because
+  the comment wasn't in the cache, and if the send later failed the merchant
+  saw the comment stuck as "Waiting to reply" on the next refetch. Both paths
+  (trigger match AND AI fallthrough) now emit `comment:received` immediately
+  after `storeComment`, keeping the frontend cache consistent.
 
 **In progress — DM-failure-aware fallback** ([plan](#dm-failure-aware-fallback)):
 - ✅ Step 1: `backend/src/utils/fbGraphErrors.ts` — error classifier utility

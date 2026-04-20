@@ -117,6 +117,17 @@ export class CommentProcessor {
                     // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
                     const { comment } = await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
                     invalidateWorkspaceStatsCache(workspaceId);
+                    // Mirror the non-trigger path: announce the new comment so the frontend
+                    // adds it to its list cache. Without this, the subsequent
+                    // `comment:reply_sent` from sendAndFinalize patches a cache entry that
+                    // doesn't exist yet (no-op), and if the send later fails the merchant
+                    // sees a ghost comment stuck as "Waiting to reply" on the next refetch.
+                    publishSSEEvent(userId, 'comment:received', {
+                        commentId: comment.id,
+                        pageId: page.id,
+                        fromName: fromName ?? null,
+                        message: commentMessage,
+                    });
                     return this.sendAndFinalize({
                         adapter, platform, pipeline,
                         pageId: page.id, userId, workspaceId,
