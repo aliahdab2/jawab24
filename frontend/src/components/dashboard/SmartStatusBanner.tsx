@@ -13,9 +13,9 @@ import {
 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { SwipeDismissWrapper } from '@/components/ui/SwipeDismissWrapper';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { formatRelativeTime } from '@/utils/dateUtils';
-import { getPrimaryFlag } from '@/utils/flagReason';
+import { getPrimaryFlag, translateFlagReason, type FlagMetaShape } from '@/utils/flagReason';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 
 // Unified item type for both comments and messages needing attention
@@ -26,6 +26,7 @@ export interface NeedsAttentionItem {
   text: string;
   createdAt: string | Date | null;
   flagReason: string | null;
+  flagMeta?: import('@jawab24/shared').FlagMeta | null;
   /** Link path, e.g. "/comments?filter=needs_action" */
   href: string;
   /** For comments: full comment object needed to open detail modal */
@@ -61,14 +62,15 @@ function isNotableFlagReason(flagReason: string | null): boolean {
 
 function getReasonTag(
   flagReason: string | null,
-  tFlagReason: (key: string) => string,
+  flagMeta: FlagMetaShape | null | undefined,
+  tFlagReason: (key: string, params?: Record<string, string>) => string,
   tDash: (key: string) => string,
+  locale: string,
 ): string {
   const primaryFlag = getPrimaryFlag(flagReason);
   if (primaryFlag) {
-    const translated = tFlagReason(primaryFlag);
-    if (translated !== primaryFlag) return translated;
-    return primaryFlag.replace(/_/g, ' ');
+    const translated = translateFlagReason(primaryFlag, tFlagReason, locale, flagMeta);
+    return translated === primaryFlag ? primaryFlag.replace(/_/g, ' ') : translated;
   }
   return tDash('smartBanner.reasonNoReply');
 }
@@ -83,6 +85,7 @@ export function SmartStatusBanner({
   const tc = useTranslations('common');
   const tFlagReason = useTranslations('flagReason');
   const tTime = useTranslations('time');
+  const locale = useLocale();
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const [contentHeight, setContentHeight] = useState(0);
@@ -245,7 +248,7 @@ export function SmartStatusBanner({
                       const snippet = item.text.length > 60
                         ? `${item.text.slice(0, 60)}…`
                         : item.text;
-                      const reason = getReasonTag(item.flagReason, tFlagReason, tDash);
+                      const reason = getReasonTag(item.flagReason, item.flagMeta, tFlagReason, tDash, locale);
 
                       const useInlineClick = !!onItemClick && (
                         (item.type === 'message' && !!item.senderId) ||

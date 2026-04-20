@@ -2,36 +2,36 @@
  * FlagTag — displays a translated flag reason badge on message/comment cards.
  *
  * Isolated component: all flag display logic lives here.
- * Cards just pass `flagReason` and get a styled tag back.
+ * Cards just pass `flagReason` (and optional `flagMeta` for structured params).
  */
 import React from 'react';
 import clsx from 'clsx';
 import { Tag } from 'lucide-react';
-import { useTranslations } from 'next-intl';
-import { getPrimaryFlag, getFlagTagStyle } from '@/utils/flagReason';
+import { useLocale, useTranslations } from 'next-intl';
+import {
+  getPrimaryFlag,
+  getFlagTagStyle,
+  translateFlagReason,
+  type FlagMetaShape,
+} from '@/utils/flagReason';
 
 interface FlagTagProps {
   flagReason: string | null | undefined;
+  flagMeta?: FlagMetaShape | null;
   className?: string;
 }
 
-export const FlagTag = React.memo(function FlagTag({ flagReason, className }: FlagTagProps) {
+export const FlagTag = React.memo(function FlagTag({ flagReason, flagMeta, className }: FlagTagProps) {
   const tf = useTranslations('flagReason');
+  const locale = useLocale();
   const primaryFlag = getPrimaryFlag(flagReason);
 
   if (!primaryFlag) return null;
 
   const { cssClass, urgent } = getFlagTagStyle(primaryFlag);
-
-  // Handle structured SLA format: "sla_no_reply:60"
-  const slaMatch = primaryFlag.match(/^sla_no_reply:(\d+)$/);
-  let label: string;
-  if (slaMatch) {
-    label = tf('slaNoReply', { minutes: slaMatch[1] });
-  } else {
-    const translated = tf(primaryFlag);
-    label = translated === primaryFlag ? primaryFlag.replace(/_/g, ' ') : translated;
-  }
+  const translated = translateFlagReason(primaryFlag, tf, locale, flagMeta);
+  // If the key was unknown, translateFlagReason returns the raw key — humanize it for display.
+  const label = translated === primaryFlag ? primaryFlag.replace(/_/g, ' ') : translated;
 
   return (
     <div

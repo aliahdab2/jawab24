@@ -133,7 +133,7 @@ export const MessageCard = React.memo(function MessageCard({
         {statusBadge}
 
         {/* Flag tag (if any) */}
-        <FlagTag flagReason={conv.lastMessage.flagReason} />
+        <FlagTag flagReason={conv.lastMessage.flagReason} flagMeta={conv.lastMessage.flagMeta} />
 
         {/* Row 2: Last customer message */}
         {lastIncoming && (

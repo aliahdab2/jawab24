@@ -17,7 +17,14 @@
   "cancellation_request": "Cancellation request",
   "refund_request": "Refund request",
   "exchange_request": "Exchange request",
-  "slaNoReply": "No reply after {minutes} min",
+  "sla_no_reply": "No reply after {minutes} min",
   "delivery_failed": "Reply not delivered",
+  "send_failed": "Failed to send reply",
+  "dm_failed": "DM failed",
+  "dm_failed_customer_refused": "DM failed — customer can't receive messages",
+  "dm_failed_window_expired": "DM failed — 24-hour window expired",
+  "dm_failed_transient": "DM failed — temporary error",
+  "dm_failed_our_fault": "DM failed — permission issue",
+  "dm_failed_unknown": "DM failed",
   "AI flagged this reply": "AI flagged this reply"
 }

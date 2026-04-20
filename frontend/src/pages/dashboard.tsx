@@ -322,6 +322,7 @@ const DashboardPage: NextPageWithLayout = () => {
           text: c.message || '',
           createdAt: c.createdTime || c.createdAt || null,
           flagReason: c.flagReason ?? null,
+          flagMeta: c.flagMeta ?? null,
           href: '/comments?filter=needs_action',
           commentData: c,
         });
@@ -362,6 +363,7 @@ const DashboardPage: NextPageWithLayout = () => {
           text: latest.message || '',
           createdAt: latest.createdTime || latest.createdAt || null,
           flagReason: latest.flagReason ?? null,
+          flagMeta: latest.flagMeta ?? null,
           href: '/messages?filter=needs_action',
           senderId: latest.senderId,
           pageId: latest.pageId,

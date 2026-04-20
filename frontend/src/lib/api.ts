@@ -175,6 +175,7 @@ export interface CommentData {
   pageName: string | null;
   needsAttention?: boolean;
   flagReason?: string | null;
+  flagMeta?: import('@jawab24/shared').FlagMeta | null;
   aiIntent?: string | null;
   source?: 'facebook' | 'instagram';
 }
@@ -402,6 +403,7 @@ export interface Message {
   createdAt: string;
   needsAttention?: boolean;
   flagReason?: string | null;
+  flagMeta?: import('@jawab24/shared').FlagMeta | null;
   aiIntent?: string | null;
   aiOriginalReply?: string | null;
   resolved?: boolean;

@@ -277,7 +277,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="px-4 pt-4 md:px-6 md:pt-4 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
           {/* Needs attention banner */}
           {needsAttention && (
-            <NeedsAttentionBanner flagReason={comment.flagReason} onKbLinkClick={onClose} />
+            <NeedsAttentionBanner flagReason={comment.flagReason} flagMeta={comment.flagMeta} onKbLinkClick={onClose} />
           )}
 
           {/* Held reply banner */}

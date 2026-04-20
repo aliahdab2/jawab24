@@ -58,38 +58,79 @@ export function getPrimaryFlag(flagReason: string | null | undefined): string | 
 }
 
 /**
+ * Flag metadata keyed by reason code. Mirrors backend FlagMeta in @jawab24/shared.
+ * Only reasons that carry params need an entry here.
+ */
+export interface FlagMetaShape {
+    sla_no_reply?: { minutes: number };
+    dm_failed?: { bucket?: string };
+    [key: string]: Record<string, unknown> | undefined;
+}
+
+/**
  * Translate a comma-separated flagReason string using i18n keys.
- * Falls back to the raw reason if no translation exists.
  *
- * @param flagReason - Backend flagReason string (e.g. "cancellation_request,low_confidence")
+ * For reasons that carry params (sla_no_reply minutes, dm_failed bucket),
+ * flagMeta is the source of truth. Legacy string encodings (`sla_no_reply:60`,
+ * `DM failed: unknown`) are recognized as a fallback for rows written before
+ * the flag_meta column existed; new writes should always populate flagMeta.
+ *
+ * @param flagReason - Backend flagReason (comma-separated keys, e.g. "dm_failed,low_confidence")
  * @param t - Translation function from useTranslations('flagReason')
  * @param locale - Current locale (for separator: Arabic uses ، )
+ * @param flagMeta - Structured params/debug info keyed by reason code
  */
 export function translateFlagReason(
     flagReason: string | null | undefined,
     t: (key: string, params?: Record<string, string>) => string,
     locale: string,
+    flagMeta?: FlagMetaShape | null,
 ): string {
     if (!flagReason) return '';
     const separator = locale === 'ar' ? '، ' : ', ';
     return flagReason
         .split(',')
-        .map(f => {
-            const trimmed = f.trim();
-            // Structured SLA format: "sla_no_reply:60"
-            const slaMatch = trimmed.match(/^sla_no_reply:(\d+)$/);
-            if (slaMatch) {
-                return t('slaNoReply', { minutes: slaMatch[1] });
-            }
-            // Legacy SLA format: "SLA: no reply after 60 min"
-            const legacySlaMatch = trimmed.match(/^SLA: no reply after (\d+) min$/);
-            if (legacySlaMatch) {
-                return t('slaNoReply', { minutes: legacySlaMatch[1] });
-            }
-            // Standard flag key
-            const translated = t(trimmed);
-            // next-intl returns the key path when no translation found
-            return translated === trimmed ? trimmed : translated;
-        })
+        .map(f => translateSingleFlag(f.trim(), t, flagMeta))
         .join(separator);
+}
+
+function translateSingleFlag(
+    key: string,
+    t: (k: string, params?: Record<string, string>) => string,
+    flagMeta?: FlagMetaShape | null,
+): string {
+    // Structured path: flag_reason is a bare key and params live in flag_meta.
+    if (key === 'sla_no_reply') {
+        const minutes = flagMeta?.sla_no_reply?.minutes;
+        if (typeof minutes === 'number') {
+            return t('sla_no_reply', { minutes: String(minutes) });
+        }
+        // Fall through to plain translation (renders the generic label if no meta)
+    }
+    if (key === 'dm_failed') {
+        const bucket = flagMeta?.dm_failed?.bucket;
+        if (typeof bucket === 'string') {
+            const bucketKey = `dm_failed_${bucket}`;
+            const bucketLabel = t(bucketKey);
+            if (bucketLabel !== bucketKey) return bucketLabel;
+        }
+        // Fall through to generic "dm_failed" label
+    }
+
+    // Legacy encodings — pre-flag_meta rows. Remove once backfill migration has
+    // run in all environments and no legacy rows remain.
+    const slaLegacy = key.match(/^sla_no_reply:(\d+)$/);
+    if (slaLegacy) return t('sla_no_reply', { minutes: slaLegacy[1] });
+    const slaLegacyLong = key.match(/^SLA: no reply after (\d+) min$/);
+    if (slaLegacyLong) return t('sla_no_reply', { minutes: slaLegacyLong[1] });
+    const dmLegacy = key.match(/^DM failed: (\w+)$/);
+    if (dmLegacy) {
+        const bucketKey = `dm_failed_${dmLegacy[1]}`;
+        const bucketLabel = t(bucketKey);
+        return bucketLabel !== bucketKey ? bucketLabel : t('dm_failed');
+    }
+
+    // Plain key
+    const translated = t(key);
+    return translated === key ? key : translated;
 }

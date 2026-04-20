@@ -183,7 +183,7 @@ export const CommentCard = React.memo(function CommentCard({
                      </span>
                    )}
                 </div>
-                <FlagTag flagReason={comment.flagReason} className="mt-0.5" />
+                <FlagTag flagReason={comment.flagReason} flagMeta={comment.flagMeta} className="mt-0.5" />
              </div>
 
              {/* Post Context + Trigger Button */}

@@ -86,7 +86,10 @@ describe('translateFlagReason', () => {
     const translations: Record<string, string> = {
       'cancellation_request': 'Cancellation request',
       'low_confidence': 'Needs your review',
-      'slaNoReply': `No reply after ${params?.minutes || '?'} min`,
+      'sla_no_reply': `No reply after ${params?.minutes || '?'} min`,
+      'dm_failed': 'DM failed',
+      'dm_failed_unknown': 'DM failed',
+      'dm_failed_window_expired': 'DM failed — 24-hour window expired',
     };
     return translations[key] || key;
   });
@@ -114,11 +117,31 @@ describe('translateFlagReason', () => {
     expect(translateFlagReason('some_unknown_flag', mockT, 'en')).toBe('some_unknown_flag');
   });
 
-  it('handles structured SLA format', () => {
+  it('uses flagMeta.sla_no_reply.minutes for SLA interpolation', () => {
+    expect(translateFlagReason('sla_no_reply', mockT, 'en', { sla_no_reply: { minutes: 60 } }))
+      .toBe('No reply after 60 min');
+  });
+
+  it('uses flagMeta.dm_failed.bucket for per-bucket DM failure label', () => {
+    expect(translateFlagReason('dm_failed', mockT, 'en', { dm_failed: { bucket: 'window_expired' } }))
+      .toBe('DM failed — 24-hour window expired');
+  });
+
+  it('falls back to generic dm_failed label when bucket has no translation', () => {
+    expect(translateFlagReason('dm_failed', mockT, 'en', { dm_failed: { bucket: 'exotic_new_bucket' } }))
+      .toBe('DM failed');
+  });
+
+  it('recognizes legacy sla_no_reply:NN encoding (pre-flag_meta rows)', () => {
     expect(translateFlagReason('sla_no_reply:60', mockT, 'en')).toBe('No reply after 60 min');
   });
 
-  it('handles legacy SLA format', () => {
+  it('recognizes legacy "SLA: no reply after NN min" encoding', () => {
     expect(translateFlagReason('SLA: no reply after 45 min', mockT, 'en')).toBe('No reply after 45 min');
+  });
+
+  it('recognizes legacy "DM failed: bucket" encoding (pre-flag_meta rows)', () => {
+    expect(translateFlagReason('DM failed: window_expired', mockT, 'en'))
+      .toBe('DM failed — 24-hour window expired');
   });
 });

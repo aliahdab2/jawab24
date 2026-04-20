@@ -17,7 +17,14 @@
   "cancellation_request": "طلب إلغاء",
   "refund_request": "طلب استرجاع",
   "exchange_request": "طلب استبدال",
-  "slaNoReply": "لم يتم الرد خلال {minutes} دقيقة",
+  "sla_no_reply": "لم يتم الرد خلال {minutes} دقيقة",
   "delivery_failed": "لم يتم تسليم الرد",
+  "send_failed": "فشل إرسال الرد",
+  "dm_failed": "فشل إرسال الرسالة",
+  "dm_failed_customer_refused": "فشل إرسال الرسالة — العميل لا يستقبل الرسائل",
+  "dm_failed_window_expired": "فشل إرسال الرسالة — انتهت نافذة الـ 24 ساعة",
+  "dm_failed_transient": "فشل إرسال الرسالة — خطأ مؤقت",
+  "dm_failed_our_fault": "فشل إرسال الرسالة — مشكلة في الصلاحيات",
+  "dm_failed_unknown": "فشل إرسال الرسالة",
   "AI flagged this reply": "تم تمييز هذا الرد بواسطة الذكاء الاصطناعي"
 }
