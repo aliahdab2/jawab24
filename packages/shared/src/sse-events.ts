@@ -5,6 +5,7 @@ export type SSEEventType =
     | 'comment:received'
     | 'comment:reply_sent'
     | 'comment:reply_failed'
+    | 'comment:skipped'
     | 'message:received'
     | 'message:reply_sent'
     | 'message:reply_failed'
@@ -48,6 +49,19 @@ export interface SSEEventDataMap {
         commentId: string;
         pageId: string;
         error: string;
+    };
+    /** Comment was intentionally not replied to (friend-tag, spam, offensive).
+     *  Backend already marked the comment as resolved; frontend should patch
+     *  the cache to reflect that and refresh stats. Distinct from `reply_failed`
+     *  because this is by-design, not an error. */
+    'comment:skipped': {
+        commentId: string;
+        pageId: string;
+        /** High-level reason: 'friend_tag' for peer-to-peer user tags,
+         *  'spam' for other silent-skip cases. `flagReason` carries the
+         *  generator-level reason when present. */
+        reason: 'friend_tag' | 'spam' | 'offensive';
+        flagReason?: string;
     };
     'message:received': {
         messageId: string;

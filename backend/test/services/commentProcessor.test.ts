@@ -7,6 +7,7 @@ import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } fr
 import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { notificationService } from '../../src/services/notifications';
+import { publishSSEEvent } from '../../src/lib/eventBus';
 import type { CommentPlatformAdapter, PlatformPage, ContentEntity, StoredComment, CommentReplyContext, SendCommentResult } from '../../src/interfaces';
 
 vi.mock('../../src/services/workspaceSettings');
@@ -58,6 +59,9 @@ vi.mock('../../src/services/subscriptions', () => ({
 vi.mock('../../src/lib/replyLock', () => ({
     acquireReplyLock: vi.fn().mockResolvedValue('mock-lock-token'),
     releaseReplyLock: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock('../../src/lib/eventBus', () => ({
+    publishSSEEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 // In-memory pipelineMetrics mock (Redis-backed in production; use counters map in tests)
@@ -515,6 +519,51 @@ describe('CommentProcessor', () => {
         expect(adapter.storeComment).toHaveBeenCalledWith(
             'content-uuid', 'test_workspace_id', 'comment-1', 'Khadeja Alrefae',
             'from-1', 'Commenter', tags,
+        );
+    });
+
+    it('emits comment:skipped with reason=friend_tag when a user-tag triggers silent skip', async () => {
+        // Generator returns the silent-skip shape the user-tag rule produces today.
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false,
+        });
+        const adapter = createMockAdapter();
+        const tags = [
+            { id: 'u1', name: 'Khadeja Alrefae', type: 'user' as const, offset: 0, length: 15 },
+        ];
+
+        await commentProcessor.processComment(
+            adapter, 'fb-page-1', 'content-1', 'comment-1',
+            'Khadeja Alrefae', 'from-1', 'Commenter', undefined, tags,
+        );
+
+        expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+        expect(publishSSEEvent).toHaveBeenCalledWith(
+            'user-uuid',
+            'comment:skipped',
+            expect.objectContaining({
+                commentId: 'comment-uuid',
+                pageId: 'page-uuid',
+                reason: 'friend_tag',
+            }),
+        );
+    });
+
+    it('emits comment:skipped with reason=spam when no user-tag is present (generic SPAM)', async () => {
+        vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
+            replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false,
+        });
+        const adapter = createMockAdapter();
+
+        await commentProcessor.processComment(
+            adapter, 'fb-page-1', 'content-1', 'comment-1',
+            '.', 'from-1', 'Commenter',
+        );
+
+        expect(publishSSEEvent).toHaveBeenCalledWith(
+            'user-uuid',
+            'comment:skipped',
+            expect.objectContaining({ reason: 'spam' }),
         );
     });
 

@@ -23,6 +23,14 @@ Maintainers: if you change behavior here, update this doc in the same commit.
 - ✅ Shared preprocess module `backend/src/services/reply/commentPreprocess.ts`
   is the single source of truth for skip rules + language resolution, used by
   both `generateForComment` (production) and `generateForPlayground` (admin/eval).
+- ✅ **Live UI reflection of silent-skip:** on silent-skip, backend emits
+  `comment:skipped` SSE event (`{ commentId, pageId, reason: 'friend_tag' | 'spam',
+  flagReason? }`) and invalidates the workspace stats cache. Frontend
+  (`useSSE.ts`) patches the comment in the React Query cache to `resolved: true`
+  and refetches stats. Result: a friend-tagged comment flips from "Pending" →
+  "Resolved" in real time and the "Needs Action" counter decrements, without a
+  page reload. Offensive comments do NOT emit this event (they stay flagged for
+  merchant attention via the existing notification pipeline).
 
 **In progress — DM-failure-aware fallback** ([plan](#dm-failure-aware-fallback)):
 - ✅ Step 1: `backend/src/utils/fbGraphErrors.ts` — error classifier utility
@@ -151,7 +159,9 @@ detection on identical repeated comments.
 | `backend/src/utils/commentText.ts` | `stripCommentNoise(text)`, `hasMention(text)`, `isPunctuationOnly(text)`, `stripTagsByOffsets`, `hasUserTag`, `hasOwnPageTag`, `FacebookMessageTag` type |
 | `backend/src/services/reply/commentPreprocess.ts` | **Single source of truth** for skip classification + language resolution: `preprocessCommentText`, `resolveCommentLanguage`, `rewritePunctuationForDualDm`. Used by generator and playground — do not duplicate these rules. |
 | `backend/src/controllers/webhook.ts` | Ingest FB/IG webhook, capture `message_tags`, enqueue job with tags, normalise attachment types |
-| `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag. Threads `messageTags` + `ourFacebookPageId` into the generator context. |
+| `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag. Threads `messageTags` + `ourFacebookPageId` into the generator context. Emits `comment:skipped` SSE event on silent-skip so the frontend can patch the comment to `resolved` in real time. |
+| `frontend/src/hooks/useSSE.ts` | Listens for `comment:received`, `comment:reply_sent`, `comment:reply_failed`, `comment:skipped`. On `comment:skipped`, patches the cache to flip the card from "Pending" to "Resolved" without a round-trip and refreshes stats. |
+| `packages/shared/src/sse-events.ts` | Typed SSE event contract. `comment:skipped` payload carries `{ commentId, pageId, reason: 'friend_tag' \| 'spam' \| 'offensive', flagReason? }`. |
 | `backend/src/services/reply/generator.ts` | Decide if/how to reply; AI call; CTA boost — delegates skip/language to `commentPreprocess.ts` |
 | `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag |
 | `backend/src/services/reply/adapters/facebookCommentAdapter.ts` | Pick nudge language (FB comments) |

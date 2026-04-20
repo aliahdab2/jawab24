@@ -184,6 +184,33 @@ export function useSSE(): void {
             }
         });
 
+        // Comment intentionally not replied to (friend-tag, spam, offensive).
+        // Backend has already resolved the comment; we patch the cache so the
+        // card flips from "Pending" → "Resolved" without a round-trip, and
+        // refresh stats so the "Needs Action" count decrements.
+        es.addEventListener('comment:skipped', (e) => {
+            try {
+                const event: SSEEvent<'comment:skipped'> = JSON.parse(e.data);
+                const { commentId } = event.data;
+                queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+                queryClient.setQueriesData<InfiniteData<{ data: Comment[]; pagination: { nextCursor?: string | null } }>>(
+                    { queryKey: ['comments'] },
+                    (old) => {
+                        if (!old) return old;
+                        return {
+                            ...old,
+                            pages: old.pages.map(page => ({
+                                ...page,
+                                data: page.data.map(c =>
+                                    c.id === commentId ? { ...c, resolved: true } : c
+                                ),
+                            })),
+                        };
+                    },
+                );
+            } catch { /* malformed event — ignore */ }
+        });
+
         // --- Message events ---
         es.addEventListener('message:received', (e) => {
             try {

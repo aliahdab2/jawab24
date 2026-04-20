@@ -5,6 +5,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
+import { hasUserTag } from '../../utils/commentText';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -285,13 +286,28 @@ export class CommentProcessor {
                     // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no notification.
                     // Resolve so the comment doesn't remain as "pending" in the merchant's view.
                     await commentsService.resolveComment(comment.id);
+                    // Reason classification drives the frontend label ("Friend tag" vs
+                    // generic "Skipped"). User-tag skips are the common case post-2026-04-20;
+                    // other SPAM_OR_IRRELEVANT classifications fall through as 'spam'.
+                    const skipReason: 'friend_tag' | 'spam' = hasUserTag(messageTags) ? 'friend_tag' : 'spam';
+                    invalidateWorkspaceStatsCache(workspaceId);
+                    publishSSEEvent(userId, 'comment:skipped', {
+                        commentId: comment.id,
+                        pageId: page.id,
+                        reason: skipReason,
+                        ...(flagReason ? { flagReason } : {}),
+                    });
                     pipelineMetrics.record(pipeline, 'skipped_spam');
                     this.logger.info(`[${platform}] Comment silently skipped as spam/irrelevant`, {
-                        commentId: comment.id, platformCommentId, aiIntent, commentMessage,
+                        commentId: comment.id, platformCommentId, aiIntent, commentMessage, skipReason,
                     });
                     return { success: true, commentId: comment.id };
                 }
 
+                // Offensive: flag for merchant attention (needsAttention=true, NOT resolved).
+                // Do NOT emit comment:skipped — the frontend handler would mark the comment
+                // resolved, contradicting the flagged state. The existing notification
+                // pipeline handles the merchant's inbox update.
                 await adapter.flagComment(comment.id, flagReason, aiIntent);
 
                 notificationService.sendTemplateNotificationToWorkspace(
