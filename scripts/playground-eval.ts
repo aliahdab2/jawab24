@@ -2949,6 +2949,59 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'User-tag + short thanks → friend-directed, skip.',
     },
+
+    // ===== Category 47: Post Reply (trigger keyword) fall-through =====
+    // When a post has a triggerKeyword configured, non-matching comments fall through
+    // to AI. The AI sees the trigger CTA in the post context and must still answer
+    // real customer questions substantively — NOT redirect back to the trigger keyword
+    // or classify unrelated questions as spam. (Pipeline-level trigger-match/lock
+    // behavior is covered by unit tests in commentProcessor.test.ts.)
+    {
+        id: 310, category: 47, categoryName: 'Trigger Post Fall-through', channel: 'comment',
+        message: 'كيف أسجل في الدورة؟',
+        page: 'training',
+        postMessage: 'دورة ICDL الجديدة 🔥\nعلق بكلمة "تفاصيل" وراح توصلك كل المعلومات على الخاص',
+        expected: {
+            intent: ['QUESTION'],
+            replyMethod: ['ai'],
+            replyNotContains: ['علق بكلمة', 'اكتب تفاصيل', 'comment تفاصيل'],
+        },
+        notes: 'Real question on a trigger-configured post — AI must answer the question, not redirect to the trigger keyword.',
+    },
+    {
+        id: 311, category: 47, categoryName: 'Trigger Post Fall-through', channel: 'comment',
+        message: 'شكراً يا شباب',
+        page: 'training',
+        postMessage: 'علق بـ "١" لتصلك تفاصيل الدورة 👇',
+        expected: {
+            intent: ['COMPLIMENT', 'GREETING', 'SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Thanks message on trigger-CTA post — should not be forced into a fake QUESTION just because the post has a trigger.',
+    },
+    {
+        id: 312, category: 47, categoryName: 'Trigger Post Fall-through', channel: 'comment',
+        message: 'هل الدورة أونلاين ولا حضوري؟',
+        page: 'training',
+        postMessage: 'كورس PMP 🎓\nعلق بـ "سعر" لتصلك الأسعار على الخاص',
+        expected: {
+            intent: ['QUESTION'],
+            replyMethod: ['ai'],
+            replyNotContains: ['علق بـ', 'اكتب سعر', 'اكتب كلمة'],
+        },
+        notes: 'Delivery-mode question on a price-trigger post — answer the actual question without redirecting to the trigger.',
+    },
+    {
+        id: 313, category: 47, categoryName: 'Trigger Post Fall-through', channel: 'comment',
+        message: 'متى موعد الدورة القادمة؟',
+        page: 'training',
+        postMessage: 'علق بكلمة "موعد" ليصلك الجدول الكامل على الخاص 📩',
+        expected: {
+            intent: ['QUESTION'],
+            replyMethod: ['ai'],
+            replyNotContains: ['علق بكلمة', 'اكتب موعد'],
+        },
+        notes: 'Customer asks the same thing the trigger promises ("موعد") but uses a full sentence — AI should answer from KB, not loop them back to the trigger word.',
+    },
 ];
 
 // ---------------------------------------------------------------------------
