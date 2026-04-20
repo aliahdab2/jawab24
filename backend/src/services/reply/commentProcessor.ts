@@ -50,6 +50,29 @@ export class CommentProcessor {
         replyGenerator.setLogger(logger);
     }
 
+    /**
+     * Resolve the comment, refresh dashboard stats, and emit `comment:skipped`
+     * so the frontend flips the card from "Pending" to "Resolved" in real time.
+     * Caller is responsible for the pipeline metric + log — those differ per exit.
+     */
+    private async silentlyResolveAndSkip(
+        comment: { id: string },
+        pageId: string,
+        userId: string,
+        workspaceId: string,
+        reason: 'friend_tag' | 'spam' | 'offensive',
+        flagReason?: string,
+    ): Promise<void> {
+        await commentsService.resolveComment(comment.id);
+        invalidateWorkspaceStatsCache(workspaceId);
+        publishSSEEvent(userId, 'comment:skipped', {
+            commentId: comment.id,
+            pageId,
+            reason,
+            ...(flagReason ? { flagReason } : {}),
+        });
+    }
+
     async processComment(
         adapter: CommentPlatformAdapter,
         platformPageId: string,
@@ -160,9 +183,11 @@ export class CommentProcessor {
             }
 
             // 3b. Per-post trigger check — fires before template/AI pipeline.
-            // When a post has a triggerKeyword set, ONLY comments matching that keyword
-            // get a reply (using triggerReply). Non-matching comments are silently skipped.
-            // This mirrors the "comment X to get details" engagement tactic (ManyChat-style).
+            // When a post has a triggerKeyword set, matching comments get the configured
+            // triggerReply immediately (template path). Non-matching comments FALL THROUGH
+            // to the AI pipeline — real questions on a trigger-configured post still deserve
+            // an answer. This mirrors the "comment X to get details" engagement tactic
+            // (ManyChat-style) without silencing off-keyword customers.
             // Respects isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
             // Triggers fire on both top-level comments AND sub-comments (replies to pinned comments
             // are common in engagement posts like "comment . to get details").
@@ -175,7 +200,7 @@ export class CommentProcessor {
 
                 if (matchedKeyword) {
                     // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
-                    const { comment } = await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
+                    const { comment, isNew: triggerIsNew } = await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
                     invalidateWorkspaceStatsCache(workspaceId);
                     // Mirror the non-trigger path: announce the new comment so the frontend
                     // adds it to its list cache. Without this, the subsequent
@@ -188,17 +213,37 @@ export class CommentProcessor {
                         fromName: fromName ?? null,
                         message: commentMessage,
                     });
-                    return this.sendAndFinalize({
-                        adapter, platform, pipeline,
-                        pageId: page.id, userId, workspaceId,
-                        comment, replyText: content.triggerReply, replyMethod: 'template',
-                        commentMessage, platformCommentId, platformPageId,
-                        accessToken: page.accessToken, fromId, fromName,
-                        userSettings: userSettings as unknown as Record<string, unknown>,
-                        postMessage: content.message || undefined,
-                        contentId: content.id,
-                        triggerKeyword: matchedKeyword,
-                    });
+                    // Idempotency guard: if we've already processed this comment (replied
+                    // or flagged), a duplicate webhook would otherwise race with itself.
+                    if (!triggerIsNew && (comment.replied || comment.needsAttention)) {
+                        pipelineMetrics.record(pipeline, 'already_replied');
+                        return { success: false, commentId: comment.id, error: 'Comment already replied' };
+                    }
+                    // Acquire per-comment lock — prevents duplicate webhook races from
+                    // issuing two Graph API replies (Facebook rejects the second as a
+                    // duplicate and we'd return success:false, leaving the comment stuck
+                    // as Pending even though the real reply was delivered).
+                    const triggerLockToken = await acquireReplyLock(`comment:${page.id}`, platformCommentId);
+                    if (!triggerLockToken) {
+                        pipelineMetrics.record(pipeline, 'lock_contention');
+                        this.logger.info(`[${platform}] Trigger comment lock held — another worker handling`, { platformCommentId });
+                        return { success: false, commentId: comment.id, error: 'Lock held by another worker' };
+                    }
+                    try {
+                        return await this.sendAndFinalize({
+                            adapter, platform, pipeline,
+                            pageId: page.id, userId, workspaceId,
+                            comment, replyText: content.triggerReply, replyMethod: 'template',
+                            commentMessage, platformCommentId, platformPageId,
+                            accessToken: page.accessToken, fromId, fromName,
+                            userSettings: userSettings as unknown as Record<string, unknown>,
+                            postMessage: content.message || undefined,
+                            contentId: content.id,
+                            triggerKeyword: matchedKeyword,
+                        });
+                    } finally {
+                        await releaseReplyLock(`comment:${page.id}`, platformCommentId, triggerLockToken).catch(() => { /* TTL will auto-expire */ });
+                    }
                 }
                 // No match — fall through to AI
                 this.logger.info(`[${platform}] Trigger keywords set but comment did not match — falling through to AI`, {
@@ -242,9 +287,13 @@ export class CommentProcessor {
             // Invalidate dashboard stats so next load reflects the new comment
             invalidateWorkspaceStatsCache(workspaceId);
 
-            // Early exit: settings disabled (after storing so the comment is persisted)
+            // Early exit: settings disabled (after storing so the comment is persisted).
+            // Resolve so the comment doesn't sit as Pending forever — auto-reply is off,
+            // no pipeline will ever act on it. Merchant can still reply manually from the
+            // inbox; resolving just keeps the "needs action" count honest.
             if (!isCommentsEnabled) {
                 pipelineMetrics.record(pipeline, 'settings_disabled');
+                await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'spam', 'comments_auto_reply_disabled');
                 return { success: false, commentId: comment.id, error: 'Comments auto-reply disabled' };
             }
 
@@ -292,6 +341,9 @@ export class CommentProcessor {
                 if (!rateCheck.allowed) {
                     pipelineMetrics.record(pipeline, 'rate_limited');
                     this.logger.info(`[${platform}] Comment rate limited`, { fromId, count: rateCheck.count });
+                    // Resolve — we intentionally won't reply to rate-limited spam, and we
+                    // don't want the comment sitting as Pending in the merchant's view.
+                    await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'spam', 'rate_limited');
                     return { success: false, commentId: comment.id, error: 'Rate limited' };
                 }
             } else {
@@ -354,19 +406,10 @@ export class CommentProcessor {
             // 8c. Skip reply — silent for spam/tags, flagged for offensive content
             if (shouldSkipReply(flagReason, aiIntent)) {
                 if (shouldSilentlySkip(aiIntent)) {
-                    // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no notification.
-                    // Resolve so the comment doesn't remain as "pending" in the merchant's view.
-                    await commentsService.resolveComment(comment.id);
-                    // `friend_tag` skips are handled upstream in step 3a before the trigger
-                    // and AI paths — anything reaching this silent-skip is AI-classified
-                    // spam/irrelevant, so the reason is always `spam` here.
-                    invalidateWorkspaceStatsCache(workspaceId);
-                    publishSSEEvent(userId, 'comment:skipped', {
-                        commentId: comment.id,
-                        pageId: page.id,
-                        reason: 'spam',
-                        ...(flagReason ? { flagReason } : {}),
-                    });
+                    // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no
+                    // notification. `friend_tag` skips are handled upstream in step 3a, so
+                    // anything reaching here is AI-classified spam — reason is always `spam`.
+                    await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'spam', flagReason);
                     pipelineMetrics.record(pipeline, 'skipped_spam');
                     this.logger.info(`[${platform}] Comment silently skipped as spam/irrelevant`, {
                         commentId: comment.id, platformCommentId, aiIntent, commentMessage,
@@ -415,7 +458,12 @@ export class CommentProcessor {
                 if (fallback) {
                     replyText = fallback;
                 } else {
-                    // Notify user about pending comment
+                    // No reply text, no adapter fallback — flag for merchant review so
+                    // the comment surfaces in "Needs Attention" instead of sitting as
+                    // Pending forever. Merchant still gets the notification so they can
+                    // reply manually from the inbox.
+                    await adapter.flagComment(comment.id, 'no_reply_generated', aiIntent)
+                        .catch(err => this.logger.error('[CommentProcessor] flagComment after no-reply threw', { err, commentId: comment.id }));
                     notificationService.sendTemplateNotificationToWorkspace(
                         workspaceId,
                         'new_comment',
@@ -536,6 +584,12 @@ export class CommentProcessor {
 
         if (!sendResult.success) {
             pipelineMetrics.record(pipeline, 'send_failed');
+            // Flag the comment so it surfaces in "Needs Attention" — previously it stayed
+            // replied=false/needsAttention=false/resolved=false, i.e. Pending forever.
+            // Swallow a secondary DB error here: we already failed to send, the SSE event
+            // below still fires, and the outer catch would otherwise mask sendResult.error.
+            await adapter.flagComment(comment.id, sendResult.error || 'send_failed')
+                .catch(err => this.logger.error('[CommentProcessor] flagComment after send-failed threw', { err, commentId: comment.id }));
             publishSSEEvent(userId, 'comment:reply_failed', {
                 commentId: comment.id,
                 pageId,

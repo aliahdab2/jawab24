@@ -1,7 +1,8 @@
 # Reply Flow
 
-> **Last updated:** 2026-02-16
+> **Last updated:** 2026-04-20
 > **How to read this:** Follow the flowcharts to understand the path a message takes. Each step has an **Improve** note where relevant — these are the places to focus when making the flow better.
+> **See also:** [`comment-and-message-handling.md`](../comment-and-message-handling.md) for the full behavior reference (friend-tag skip, trigger-keyword / Post Reply, pending-state invariants).
 
 ---
 
@@ -137,15 +138,20 @@ flowchart TD
     S1 -- Yes --> S2[Check comments setting]
     S2 --> S3{Post/media<br/>auto-reply ON?}
     S3 -- No --> STORE1[Store comment, exit]
-    S3 -- Yes --> S4[Store comment]
+    S3 -- Yes --> TAG{User-tag friend<br/>without own page?}
+    TAG -- Yes --> SKIP_TAG[Store + resolve + skipped SSE]
+    TAG -- No --> TRIG{Post has<br/>trigger keyword?}
+    TRIG -- Match --> T_SEND[Store + lock + send triggerReply]
+    T_SEND --> MARK
+    TRIG -- No match or no trigger --> S4[Store comment]
     S4 --> SETTINGS{Comments setting<br/>enabled?}
-    SETTINGS -- No --> DROP2[Exit]
+    SETTINGS -- No --> RESOLVE_OFF[Resolve + skipped SSE]
     SETTINGS -- Yes --> S4B{Already replied<br/>or flagged?}
     S4B -- Yes --> DROP3[Exit]
     S4B -- No --> S5{Handoff pause?}
     S5 -- Yes --> DROP4[⚠ Exit: dropped]
     S5 -- No --> S6{Rate limit OK?}
-    S6 -- No --> DROP5[Exit]
+    S6 -- No --> RESOLVE_RL[Resolve + skipped SSE]
     S6 -- Yes --> S7[Wait reply delay]
     S7 --> GEN[Generate Reply]
     GEN --> S8B{Price hallucination?}
@@ -155,13 +161,15 @@ flowchart TD
     FLAG --> DROP6[Exit]
     S8C -- No --> NOREPLY{Has reply?}
     FALLBACK --> TRUNCATE
-    NOREPLY -- No --> NOTIFY_NONE[Notify owner: no reply]
+    NOREPLY -- No --> FLAG_NOREPLY[Flag needsAttention + notify owner]
     NOREPLY -- Yes --> TRUNCATE[Truncate to 280 chars]
     TRUNCATE --> CTA{Question or<br/>purchase intent?}
     CTA -- Yes --> APPEND[Append DM CTA]
     CTA -- No --> SEND
     APPEND --> SEND[Send reply via API]
-    SEND --> MARK[Mark as replied]
+    SEND --> SENDOK{Send OK?}
+    SENDOK -- No --> FLAG_SEND[Flag needsAttention + reply_failed SSE]
+    SENDOK -- Yes --> MARK[Mark as replied]
     MARK --> FLAGCHECK{Flagged?}
     FLAGCHECK -- Yes --> PUSH[Push notification]
     FLAGCHECK -- No --> DONE([Done])

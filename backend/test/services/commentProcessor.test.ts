@@ -8,6 +8,7 @@ import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { notificationService } from '../../src/services/notifications';
 import { publishSSEEvent } from '../../src/lib/eventBus';
+import { acquireReplyLock } from '../../src/lib/replyLock';
 import type { CommentPlatformAdapter, PlatformPage, ContentEntity, StoredComment, CommentReplyContext, SendCommentResult } from '../../src/interfaces';
 
 vi.mock('../../src/services/workspaceSettings');
@@ -1803,6 +1804,141 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 expect.anything(),
                 expect.anything(),
             );
+        });
+    });
+
+    describe('Pending-state invariants — no comment left as Pending silently', () => {
+        // Regression guards for the class of bugs where a pipeline exit returned
+        // { success: false } without touching the DB, leaving comments stuck as
+        // "Waiting to reply" in the merchant UI. Every exit below must either
+        // resolve or flag the comment.
+
+        it('trigger-match acquires per-comment lock and bails on contention', async () => {
+            // Duplicate webhook race: worker A holds the lock; worker B must bail
+            // BEFORE calling Graph API so we don't send a duplicate reply that
+            // Facebook rejects (leaving the comment stuck at replied=false).
+            vi.mocked(acquireReplyLock).mockResolvedValueOnce(null);
+
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid', autoReplyEnabled: true, message: 'Post body',
+                    triggerKeyword: 'سجّل', triggerReply: 'مرحباً!',
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result).toMatchObject({ success: false, error: 'Lock held by another worker' });
+            expect((await pipelineMetrics.getMetrics()).counters['facebook_comment.lock_contention']).toBe(1);
+        });
+
+        it('trigger-match short-circuits when comment already replied', async () => {
+            // A delayed duplicate or BullMQ retry must not re-send the reply.
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid', autoReplyEnabled: true, message: 'Post body',
+                    triggerKeyword: 'سجّل', triggerReply: 'مرحباً!',
+                }),
+                storeComment: vi.fn().mockResolvedValue({
+                    comment: { id: 'comment-uuid', replied: true, needsAttention: false },
+                    isNew: false,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'سجّل', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result).toMatchObject({ success: false, error: 'Comment already replied' });
+        });
+
+        it('sendAndFinalize flags needsAttention when Graph API send fails', async () => {
+            // Previously: send fails → comment stays replied=false/needsAttention=false
+            // → shows as Pending forever. Now: flagComment surfaces it in Needs Attention.
+            const adapter = createMockAdapter({
+                sendReply: vi.fn().mockResolvedValue({ success: false, error: 'rate limited by Graph API' }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello', 'user-1', 'Alice',
+            );
+
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'rate limited by Graph API');
+            expect(result.success).toBe(false);
+            const failedCall = vi.mocked(publishSSEEvent).mock.calls
+                .find(c => c[1] === 'comment:reply_failed');
+            expect(failedCall).toBeDefined();
+        });
+
+        it('empty AI reply with no adapter fallback flags for attention', async () => {
+            vi.mocked(replyGenerator.generateForComment).mockResolvedValueOnce({
+                replyText: null as unknown as string,
+                replyMethod: 'ai',
+                needsAttention: false,
+            });
+            const adapter = createMockAdapter({
+                getFallbackReply: vi.fn().mockReturnValue(null),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'ping', 'user-1', 'Alice',
+            );
+
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'no_reply_generated', undefined);
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result).toMatchObject({ success: false, error: 'No reply generated' });
+        });
+
+        it('rate-limited comment resolves silently + emits comment:skipped', async () => {
+            // Spammer protection: don't reply, don't leave the comment sitting in
+            // the merchant's "Needs Action" bucket — rate limit exists to prevent
+            // that noise in the first place.
+            vi.mocked(rateLimiter.check).mockResolvedValueOnce({ allowed: false, count: 11 });
+
+            const adapter = createMockAdapter();
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'spam', 'spammer-psid', 'Spammer',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            const skippedCall = vi.mocked(publishSSEEvent).mock.calls
+                .find(c => c[1] === 'comment:skipped');
+            expect(skippedCall).toBeDefined();
+            expect(skippedCall?.[2]).toMatchObject({
+                reason: 'spam',
+                flagReason: 'rate_limited',
+            });
+            expect(result).toMatchObject({ success: false, error: 'Rate limited' });
+        });
+
+        it('workspace auto-reply disabled after store resolves + emits comment:skipped', async () => {
+            // Comment is stored so the merchant can still see it in the inbox,
+            // but the pipeline exit must resolve — not leave it as "Pending".
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValueOnce(false);
+
+            const adapter = createMockAdapter();
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello', 'user-1', 'Alice',
+            );
+
+            expect(adapter.storeComment).toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            const skippedCall = vi.mocked(publishSSEEvent).mock.calls
+                .find(c => c[1] === 'comment:skipped');
+            expect(skippedCall).toBeDefined();
+            expect(skippedCall?.[2]).toMatchObject({
+                reason: 'spam',
+                flagReason: 'comments_auto_reply_disabled',
+            });
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(result).toMatchObject({ success: false, error: 'Comments auto-reply disabled' });
         });
     });
 });

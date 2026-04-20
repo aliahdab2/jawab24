@@ -175,6 +175,54 @@ detection on identical repeated comments.
 
 ---
 
+## Post Reply (per-post trigger keyword)
+
+Separate from the three reply modes above. A merchant can attach a
+`triggerKeyword` + `triggerReply` to any single post (ManyChat-style
+"comment X to get details" engagement tactic).
+
+**Rules:**
+
+1. If the comment **matches** one of the trigger keywords, the configured
+   `triggerReply` is sent as a template reply (skipping the AI path entirely).
+   Match rules follow the shared keyword matcher (Arabic substring, English
+   word-boundary, diacritics normalized; punctuation-only keywords require
+   full-string match — `^\.+$` for `.`, so `.` never matches a real message).
+2. If the comment **does not match**, it falls through to the normal AI
+   pipeline. A post having trigger keywords does NOT silence off-keyword
+   questions — real customer questions on the same post still get answered.
+3. If `triggerReply` is empty, or workspace-level `commentsAutoReply` is off,
+   the trigger block is skipped and the AI pipeline runs.
+4. The trigger path acquires the same per-comment Redis lock as the AI path
+   before calling the platform API. Without it, a duplicate webhook delivery
+   could race: the second attempt is rejected by Facebook as a duplicate
+   reply, returns `success:false`, and the comment would sit as Pending in
+   the merchant's view even though the real reply had already been posted.
+5. Send failures on either path flag the comment as `needsAttention=true`
+   (surfaces in "Needs Attention"). The comment is never left as silently
+   Pending — if the pipeline cannot deliver, the merchant must be told.
+
+**Pending-state invariants** (enforced across every pipeline exit):
+
+| Exit condition                          | DB state              | UI bucket         |
+|-----------------------------------------|-----------------------|-------------------|
+| Friend-tag silent skip                  | `resolved=true`       | Resolved          |
+| AI-classified spam / irrelevant         | `resolved=true`       | Resolved          |
+| Workspace auto-reply disabled           | `resolved=true`       | Resolved          |
+| Rate-limited                            | `resolved=true`       | Resolved          |
+| Send to Graph API failed                | `needsAttention=true` | Needs Attention   |
+| AI returned no reply + no fallback      | `needsAttention=true` | Needs Attention   |
+| Offensive content                       | `needsAttention=true` | Needs Attention   |
+| Low-confidence reply held               | `needsAttention=true` | Needs Attention   |
+| Subscription inactive / handoff active  | `replied=false` (intentional) | Pending   |
+
+The only states that legitimately remain Pending are ones the system will
+retry (handoff re-enqueue) or ones the merchant is expected to resolve by
+reactivating subscription. Every other failure resolves or flags — never
+leaves a ghost "Waiting to reply" card.
+
+---
+
 ## Where the logic lives
 
 | File | Responsibility |

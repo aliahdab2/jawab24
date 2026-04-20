@@ -25,6 +25,9 @@ vi.mock('../../src/db', () => ({
 vi.mock('../../src/db/schema', () => ({
     instagramMedia: { id: 'id', instagramMediaId: 'instagramMediaId', caption: 'caption', createdAt: 'createdAt' },
     instagramComments: { id: 'id', instagramCommentId: 'instagramCommentId' },
+    // commentsService.resolveComment tries Facebook then Instagram — both tables must
+    // be defined here even if the test only exercises the IG path.
+    comments: { id: 'id' },
     messages: { id: 'id', platformMessageId: 'platformMessageId', pageId: 'pageId', senderId: 'senderId', platform: 'platform', createdTime: 'createdTime', direction: 'direction', message: 'message' },
     posts: { id: 'id', message: 'message', createdTime: 'createdTime' },
 }));
@@ -127,6 +130,16 @@ vi.mock('../../src/services/messages', () => ({
         markOlderMessagesAsReplied: vi.fn(),
         markAsReplied: vi.fn(),
         flagMessage: vi.fn(),
+    },
+}));
+
+// commentProcessor now calls resolveComment on several silent-skip paths
+// (rate-limited, settings-disabled, AI-spam). Mock at the service layer so
+// tests don't need to stub the full db.update(...).returning() chain.
+vi.mock('../../src/services/comments', () => ({
+    commentsService: {
+        updateComment: vi.fn().mockResolvedValue(undefined),
+        resolveComment: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
