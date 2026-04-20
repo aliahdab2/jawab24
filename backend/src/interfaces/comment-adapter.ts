@@ -44,6 +44,12 @@ export interface CommentReplyContext {
     brandVoiceNotes?: string;
     senderName?: string;
     defaultReplyLanguage?: string;
+    /** Facebook `message_tags` array — present for Facebook comments only. Feeds the
+     *  user-tag / page-tag classification in commentPreprocess.preprocessCommentText. */
+    messageTags?: import('../utils/commentText').FacebookMessageTag[];
+    /** Our own Facebook page id — required to distinguish a page-tag pointing at us
+     *  (a real question) from a page-tag pointing at another page (skip). */
+    ourFacebookPageId?: string;
 }
 
 export interface SendCommentResult {
@@ -78,6 +84,7 @@ export interface CommentPlatformAdapter {
         message: string,
         fromId?: string,
         fromName?: string,
+        messageTags?: import('../utils/commentText').FacebookMessageTag[],
     ): Promise<{ comment: StoredComment; isNew: boolean }>;
 
     /** Send the reply to the platform */

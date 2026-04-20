@@ -1,4 +1,78 @@
 /**
+ * Facebook Graph API `message_tags` entry — the structured record of a user
+ * or page tag inside a comment message. Given as offset/length into the raw
+ * `message` string so we can strip tagged spans precisely, even when the tag
+ * renders without a leading `@` character.
+ */
+export interface FacebookMessageTag {
+    id: string;
+    name: string;
+    type: 'user' | 'page';
+    offset: number;
+    length: number;
+}
+
+/**
+ * Returns true when the comment contains at least one user-type tag — the
+ * commenter is addressing a tagged friend (peer-to-peer), so the page has no
+ * standing to jump in. Friend tags must skip even when trailing text is present.
+ */
+export function hasUserTag(tags: FacebookMessageTag[] | null | undefined): boolean {
+    if (!tags || tags.length === 0) return false;
+    return tags.some(t => t.type === 'user');
+}
+
+/**
+ * Returns true when one of the tags points at our own Facebook page — in that
+ * case the commenter IS addressing us and the comment should be answered even
+ * if other (user) tags are also present.
+ */
+export function hasOwnPageTag(
+    tags: FacebookMessageTag[] | null | undefined,
+    ourFacebookPageId: string | null | undefined,
+): boolean {
+    if (!tags || tags.length === 0 || !ourFacebookPageId) return false;
+    return tags.some(t => t.type === 'page' && t.id === ourFacebookPageId);
+}
+
+/**
+ * Strip tagged spans from a comment by offset/length. Facebook delivers tags
+ * as plain text with no `@` prefix, so regex stripping misses them — the only
+ * reliable signal is the structured offsets.
+ *
+ * Tags are removed in descending-offset order so earlier offsets remain valid
+ * while slicing. Malformed tags (non-integer, negative, zero-length,
+ * out-of-range, or overlapping a tag we already accepted) are skipped rather
+ * than throwing — webhook payloads are untrusted input.
+ *
+ * Note on units: Facebook's `offset`/`length` are UTF-16 code units, which
+ * matches JavaScript's `string.slice`. Arabic / Latin BMP characters are one
+ * unit each; emoji and surrogate-pair characters are two. The Graph API
+ * guarantees non-overlapping tags for a single message, but we filter
+ * overlaps defensively anyway.
+ */
+export function stripTagsByOffsets(
+    text: string,
+    tags: FacebookMessageTag[] | null | undefined,
+): string {
+    if (!tags || tags.length === 0) return text;
+    const sorted = [...tags]
+        .filter(t => Number.isInteger(t.offset) && Number.isInteger(t.length)
+            && t.offset >= 0 && t.length > 0 && t.offset + t.length <= text.length)
+        .sort((a, b) => b.offset - a.offset);
+    let out = text;
+    let minAcceptedOffset = text.length;
+    for (const t of sorted) {
+        // Overlap guard: since we slice right-to-left, reject any tag whose span
+        // overlaps a tag we've already sliced out (its end passes `minAcceptedOffset`).
+        if (t.offset + t.length > minAcceptedOffset) continue;
+        out = out.slice(0, t.offset) + out.slice(t.offset + t.length);
+        minAcceptedOffset = t.offset;
+    }
+    return out.replace(/\s+/g, ' ').trim();
+}
+
+/**
  * Strips @mentions and URLs from a comment — platform noise that pollutes
  * language detection and carries no message content for the AI.
  *

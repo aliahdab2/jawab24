@@ -51,11 +51,12 @@ export class ReplyService {
         commentMessage: string,
         fromId?: string,
         fromName?: string,
-        parentId?: string
+        parentId?: string,
+        messageTags?: import('../../utils/commentText').FacebookMessageTag[],
     ): Promise<CommentResult> {
         return commentProcessor.processComment(
             facebookCommentAdapter, pageId, postId, facebookCommentId,
-            commentMessage, fromId, fromName, parentId,
+            commentMessage, fromId, fromName, parentId, messageTags,
         );
     }
 

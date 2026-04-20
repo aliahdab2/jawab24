@@ -58,6 +58,7 @@ export class CommentProcessor {
         fromId?: string,
         fromName?: string,
         parentId?: string,
+        messageTags?: import('../../utils/commentText').FacebookMessageTag[],
     ): Promise<CommentResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_comment` as Pipeline;
@@ -93,7 +94,7 @@ export class CommentProcessor {
             if (!content.autoReplyEnabled) {
                 pipelineMetrics.record(pipeline, 'post_disabled');
                 // Store comment even if content is disabled (preserves Instagram behavior)
-                await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName);
+                await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
                 return { success: false, commentId: platformCommentId, error: 'Auto-reply disabled for this content' };
             }
 
@@ -113,7 +114,7 @@ export class CommentProcessor {
 
                 if (matchedKeyword) {
                     // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
-                    const { comment } = await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName);
+                    const { comment } = await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
                     invalidateWorkspaceStatsCache(workspaceId);
                     return this.sendAndFinalize({
                         adapter, platform, pipeline,
@@ -142,7 +143,7 @@ export class CommentProcessor {
 
             // 4. Store the comment
             const { comment, isNew } = await adapter.storeComment(
-                content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName,
+                content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags,
             );
 
             // 4a. If fromName is missing, try fetching from the platform API (best-effort)
@@ -248,6 +249,17 @@ export class CommentProcessor {
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
             // Pass commenter name so the AI addresses the actual commenter, not a tagged person
             generatorContext.senderName = fromName ?? undefined;
+            // Facebook `message_tags` + our page id — feeds the user-tag skip rule
+            // (see commentPreprocess.preprocessCommentText). Only Facebook comments
+            // carry tags; Instagram webhooks don't provide them, so both fields stay
+            // undefined and the skip rule becomes a no-op for non-FB platforms.
+            // Coupling: assumes `platformPageId` is the Facebook numeric page id for
+            // the facebook platform — true today for the webhook path (see
+            // webhook.ts#processNewComment) and the worker path (replyWorker.ts).
+            // If a new FB-like platform reuses the `'facebook'` platform tag but
+            // passes a different id shape, revisit this assignment.
+            generatorContext.messageTags = messageTags;
+            generatorContext.ourFacebookPageId = platform === 'facebook' ? platformPageId : undefined;
 
             const commentReplyMode = (userSettings.commentReplyMode as 'public' | 'private' | 'dual') || 'public';
             let { replyText: generatedText, replyMethod, needsAttention, flagReason, aiIntent, confidence } =

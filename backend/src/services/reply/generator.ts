@@ -8,8 +8,9 @@ import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
 import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
-import { detectLanguage, detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { stripCommentNoise, hasMention, isPunctuationOnly } from '../../utils/commentText';
+import { detectLanguage, detectLanguageCode } from '../../utils/language';
+import type { FacebookMessageTag } from '../../utils/commentText';
+import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
  *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
@@ -167,6 +168,13 @@ export interface GenerateReplyContext {
     ecommerceStoreId?: string;
     // Language fallback
     defaultReplyLanguage?: string;
+    /** Facebook `message_tags` array from the Graph webhook — used to detect friend
+     *  tags (peer-to-peer) vs page tags (real questions). Only populated for
+     *  Facebook comments; undefined for DMs, Instagram, and older rows. */
+    messageTags?: FacebookMessageTag[];
+    /** Our own Facebook page ID — needed to distinguish a page-tag pointing at US
+     *  (a real question) from a page-tag pointing at some other page (skip). */
+    ourFacebookPageId?: string;
 }
 
 export type CommentReplyMode = 'public' | 'private' | 'dual';
@@ -199,6 +207,10 @@ export interface PlaygroundInput {
     customerContext?: string;
     model?: string;
     defaultReplyLanguage?: string;
+    /** See GenerateReplyContext.messageTags. */
+    messageTags?: FacebookMessageTag[];
+    /** See GenerateReplyContext.ourFacebookPageId. */
+    ourFacebookPageId?: string;
 }
 
 export interface PlaygroundResult {
@@ -256,37 +268,19 @@ export class ReplyGenerator {
         aiEnabled: boolean,
         commentReplyMode: CommentReplyMode = 'public',
     ): Promise<GenerateReplyResult> {
-        const { userId, text, pageName, knowledgeBase, postId, pageId, accessToken, postMessage: contextPostMessage } = context;
+        const { userId, text, pageName, knowledgeBase, postId, pageId, accessToken, postMessage: contextPostMessage, messageTags, ourFacebookPageId } = context;
 
-        // Strip platform noise from comment text before language detection and AI processing.
-        // Both @mentions and URLs contain Latin chars that pollute language detection
-        // (e.g. "@Ali Ahdab" or "https://example.com" on an Arabic page → incorrectly 'en').
-        // They also carry no message content the AI should respond to.
-        const hadMention = hasMention(text);
-        let commentForAI = stripCommentNoise(text);
-
-        // Friend-tagging: pure @mention (stripped to empty) OR @mention + ≤3 words of chatter.
-        // The commenter is talking to their tagged friend, not to the page. Skip silently.
-        if (hadMention && !commentForAI) {
+        // Shared pre-processing: Facebook user-tag rule, regex @mention skip, and
+        // punctuation-only-no-context skip. Single source of truth between this path
+        // and the admin playground.
+        const pre = preprocessCommentText({
+            text, messageTags, ourFacebookPageId,
+            hasPostContext: !!contextPostMessage,
+        });
+        if (pre.skipReason) {
             return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
         }
-        if (hadMention && commentForAI) {
-            const wordCount = commentForAI.split(/\s+/).filter(w => w.length > 0).length;
-            if (wordCount <= 3) {
-                return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
-            }
-        }
-
-        // Punctuation/emoji-only comment (dots, emojis, symbols) with no post context = spam.
-        // If postMessage is present, pass to AI — it has the full post text to judge whether
-        // this was an intentional engagement response. The exact-match cache means the AI call
-        // only happens once per (comment, post) pair regardless of how many people comment the same dot.
-        if (!commentForAI && !contextPostMessage) {
-            return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
-        }
-        if (commentForAI && isPunctuationOnly(commentForAI) && !contextPostMessage) {
-            return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
-        }
+        let commentForAI = pre.commentForAI;
 
         // 1. Use AI if enabled
         if (aiEnabled) {
@@ -312,13 +306,9 @@ export class ReplyGenerator {
             // instead of the brief "message us" comment-style reply.
             const effectiveChannel: 'comment' | 'dm' = (commentReplyMode === 'dual' || commentReplyMode === 'private') ? 'dm' : 'comment';
 
-            // Dual-mode DM with punctuation-only comment (e.g. "." on a CTA post):
-            // Replace with a synthetic question so the AI answers with post/KB details
-            // instead of classifying as SPAM_OR_IRRELEVANT.
-            if (effectiveChannel === 'dm' && postMessage && isPunctuationOnly(commentForAI || text)) {
-                const postLang = /[\u0600-\u06FF]/.test(postMessage) ? 'ar' : 'en';
-                commentForAI = postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
-            }
+            commentForAI = rewritePunctuationForDualDm({
+                commentForAI, rawText: text, postMessage, effectiveChannel,
+            });
 
             // Build gap source context for merchant insights
             const gapSource: GapSource = { type: 'comment', context: postMessage };
@@ -339,18 +329,7 @@ export class ReplyGenerator {
                 pageId, ragQuery, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
             );
 
-            // Language detection: use stripped text only — never fall back to raw text.
-            // Empty commentForAI (mention/URL-only comment) returns 'unknown', which correctly
-            // triggers the post-content fallback below instead of locking in 'en'.
-            // Short Latin-only tokens (≤3 words, e.g. "Icdl", "Excel") are commonly typed by
-            // Arabic speakers. When KB is Arabic, treat them as Arabic to avoid English replies.
-            const effectiveLang = detectCommentLanguage(commentForAI, postMessage);
-            const kbLang = detectLanguageCode(effectiveKB || '');
-            const isAmbiguousLatin = effectiveLang === 'en'
-                && commentForAI.trim().split(/\s+/).length <= 3
-                && /^[a-zA-Z0-9\s]+$/.test(commentForAI.trim())
-                && kbLang === 'ar';
-            const resolvedLang = isAmbiguousLatin ? 'ar' : effectiveLang;
+            const resolvedLang = resolveCommentLanguage(commentForAI, postMessage, effectiveKB);
 
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
@@ -570,31 +549,20 @@ export class ReplyGenerator {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
             replyStyle, brandVoiceNotes, customerContext, model, defaultReplyLanguage,
+            messageTags, ourFacebookPageId,
         } = input;
 
         const ragMode = config.ragMode || 'off';
 
-        // 2. Pre-process: strip noise, check for spam, detect language
+        // Shared comment pre-processing — single source of truth with generateForComment.
+        // Only applies to comment inputs; DM inputs skip directly to the dual-DM rewrite.
         let questionForAI = question;
-
-        // Dual-mode DM with punctuation-only input (e.g. "." on a CTA post):
-        // Replace with a synthetic question so the AI has something meaningful to answer.
-        // The post says "comment . to get details" → customer commented "." → DM should deliver those details.
-        if (channel === 'dm' && postMessage && isPunctuationOnly(question.trim())) {
-            const postLang = /[\u0600-\u06FF]/.test(postMessage) ? 'ar' : 'en';
-            questionForAI = postLang === 'ar' ? 'أريد التفاصيل' : 'I want the details';
-        }
-
         if (channel === 'comment') {
-            const hadMentionPG = hasMention(question);
-            questionForAI = stripCommentNoise(question);
-            const isEmptyQ = !questionForAI;
-            const isPunctuationQ = questionForAI ? isPunctuationOnly(questionForAI) : false;
-
-            // Friend-tagging: "@Ali check this" → stripped = "check this" (≤3 words). Skip.
-            const isFriendTag = hadMentionPG && questionForAI && questionForAI.split(/\s+/).filter(w => w.length > 0).length <= 3;
-
-            if (isEmptyQ || (isPunctuationQ && !postMessage) || isFriendTag) {
+            const pre = preprocessCommentText({
+                text: question, messageTags, ourFacebookPageId,
+                hasPostContext: !!postMessage,
+            });
+            if (pre.skipReason) {
                 return {
                     reply: null, replyMethod: 'skipped', templateName: null, ragMode,
                     chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
@@ -602,7 +570,15 @@ export class ReplyGenerator {
                     detectedLanguage: null, tokensUsed: 0, model: null, gapRecorded: false,
                 };
             }
+            questionForAI = pre.commentForAI;
         }
+
+        // Dual-mode DM with punctuation-only input (e.g. "." on a CTA post): replace with
+        // a synthetic question so the AI has something meaningful to answer.
+        questionForAI = rewritePunctuationForDualDm({
+            commentForAI: questionForAI, rawText: question, postMessage,
+            effectiveChannel: channel,
+        });
 
         // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production)
         const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
@@ -611,16 +587,9 @@ export class ReplyGenerator {
         );
 
         // 4. Call AI
-        const effectiveLang = channel === 'comment'
-            ? detectCommentLanguage(questionForAI, postMessage)
+        const resolvedLang = channel === 'comment'
+            ? resolveCommentLanguage(questionForAI, postMessage, effectiveKB)
             : detectLanguageCode(question);
-        const kbLang = detectLanguageCode(effectiveKB || '');
-        const isAmbiguousLatin = channel === 'comment'
-            && effectiveLang === 'en'
-            && questionForAI.trim().split(/\s+/).length <= 3
-            && /^[a-zA-Z0-9\s]+$/.test(questionForAI.trim())
-            && kbLang === 'ar';
-        const resolvedLang = isAmbiguousLatin ? 'ar' : effectiveLang;
 
         // Merge caller-provided customerContext with extracted conversation data (same as DM pipeline)
         const playgroundExtracted = conversationHistory?.length ? extractConversationData(conversationHistory) : null;

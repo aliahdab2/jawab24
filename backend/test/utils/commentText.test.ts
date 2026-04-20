@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { stripCommentNoise, hasMention, isPunctuationOnly } from '../../src/utils/commentText';
+import {
+    stripCommentNoise,
+    hasMention,
+    isPunctuationOnly,
+    stripTagsByOffsets,
+    hasUserTag,
+    hasOwnPageTag,
+    type FacebookMessageTag,
+} from '../../src/utils/commentText';
 
 describe('stripCommentNoise', () => {
     it('strips Facebook structured mention (alone)', () => {
@@ -118,5 +126,139 @@ describe('isPunctuationOnly', () => {
     it('returns false for text with digits', () => {
         expect(isPunctuationOnly('123')).toBe(false);
         expect(isPunctuationOnly('. 5')).toBe(false);
+    });
+});
+
+describe('stripTagsByOffsets', () => {
+    const userTag = (name: string, offset: number): FacebookMessageTag => ({
+        id: '1', name, type: 'user', offset, length: name.length,
+    });
+
+    it('strips a single user tag covering the whole message', () => {
+        expect(stripTagsByOffsets('Khadeja Alrefae', [userTag('Khadeja Alrefae', 0)])).toBe('');
+    });
+
+    it('strips a user tag prefix and keeps trailing Arabic', () => {
+        expect(stripTagsByOffsets('Khadeja Alrefae شو السعر؟', [userTag('Khadeja Alrefae', 0)]))
+            .toBe('شو السعر؟');
+    });
+
+    it('strips multiple tags in descending-offset order (offsets stay valid)', () => {
+        const text = 'Ahmad Said and Khadeja Alrefae شو رأيكم؟';
+        const tags: FacebookMessageTag[] = [
+            userTag('Ahmad Said', 0),
+            userTag('Khadeja Alrefae', 15),
+        ];
+        expect(stripTagsByOffsets(text, tags)).toBe('and شو رأيكم؟');
+    });
+
+    it('returns input unchanged when tags is null or empty', () => {
+        expect(stripTagsByOffsets('hello', null)).toBe('hello');
+        expect(stripTagsByOffsets('hello', [])).toBe('hello');
+        expect(stripTagsByOffsets('hello', undefined)).toBe('hello');
+    });
+
+    it('skips malformed tags (offset beyond message length) without throwing', () => {
+        const tags: FacebookMessageTag[] = [{
+            id: '1', name: 'Ghost', type: 'user', offset: 100, length: 5,
+        }];
+        expect(stripTagsByOffsets('hi', tags)).toBe('hi');
+    });
+
+    it('skips tags with negative offset or zero length', () => {
+        const tags: FacebookMessageTag[] = [
+            { id: '1', name: 'X', type: 'user', offset: -1, length: 3 },
+            { id: '2', name: 'Y', type: 'user', offset: 0, length: 0 },
+        ];
+        expect(stripTagsByOffsets('hello', tags)).toBe('hello');
+    });
+
+    it('collapses resulting whitespace', () => {
+        expect(stripTagsByOffsets('hi   Khadeja Alrefae   شكرا', [userTag('Khadeja Alrefae', 5)]))
+            .toBe('hi شكرا');
+    });
+
+    it('rejects overlapping tags (keeps the first-seen in descending order)', () => {
+        // Text layout:        "AAAAAAABBBBBBBB"
+        // Tag 1 (user@0/10):  "AAAAAAAAAA"         covers 0..9
+        // Tag 2 (user@5/10):  "     BBBBBBBBBB"    covers 5..14 — overlaps tag 1 by 5 chars
+        // After sorting desc-by-offset, tag 2 is processed first and slices 5..14.
+        // Tag 1's range (0..9) now extends past the new minOffset (5) → overlap → skipped.
+        // Without the overlap guard we'd slice out of-sync chars, producing garbage.
+        const text = 'AAAAABBBBBCCCCC'; // 15 chars
+        const tags: FacebookMessageTag[] = [
+            { id: '1', name: 'first', type: 'user', offset: 0, length: 10 },
+            { id: '2', name: 'second', type: 'user', offset: 5, length: 10 },
+        ];
+        // Descending-by-offset: tag 2 first (removes 5..14), tag 1 overlaps → skipped.
+        // Result: 'AAAAA' (chars 0..4 remain).
+        expect(stripTagsByOffsets(text, tags)).toBe('AAAAA');
+    });
+
+    it('handles emoji in tag span (UTF-16 surrogate pair correctness)', () => {
+        // "🎉" is one emoji, two UTF-16 code units. Tag offset/length must match FB's
+        // UTF-16 counting — we don't transform, just slice, so this is a direct check.
+        const text = '🎉 hello';         // code units: 🎉=0,1 ' '=2 h=3 e=4 l=5 l=6 o=7
+        const tags: FacebookMessageTag[] = [
+            { id: '1', name: '🎉', type: 'user', offset: 0, length: 2 },
+        ];
+        expect(stripTagsByOffsets(text, tags)).toBe('hello');
+    });
+
+    it('skips NaN/Infinity offsets', () => {
+        const tags: FacebookMessageTag[] = [
+            { id: '1', name: 'X', type: 'user', offset: NaN, length: 5 },
+            { id: '2', name: 'Y', type: 'user', offset: 0, length: Infinity },
+        ];
+        expect(stripTagsByOffsets('hello world', tags)).toBe('hello world');
+    });
+});
+
+describe('hasUserTag', () => {
+    it('returns true when at least one user-type tag is present', () => {
+        const tags: FacebookMessageTag[] = [
+            { id: '1', name: 'A', type: 'user', offset: 0, length: 1 },
+            { id: '2', name: 'B', type: 'page', offset: 2, length: 1 },
+        ];
+        expect(hasUserTag(tags)).toBe(true);
+    });
+
+    it('returns false when only page-type tags are present', () => {
+        const tags: FacebookMessageTag[] = [
+            { id: '1', name: 'P', type: 'page', offset: 0, length: 1 },
+        ];
+        expect(hasUserTag(tags)).toBe(false);
+    });
+
+    it('returns false for null / empty', () => {
+        expect(hasUserTag(null)).toBe(false);
+        expect(hasUserTag(undefined)).toBe(false);
+        expect(hasUserTag([])).toBe(false);
+    });
+});
+
+describe('hasOwnPageTag', () => {
+    const tags: FacebookMessageTag[] = [
+        { id: 'user_x', name: 'X', type: 'user', offset: 0, length: 1 },
+        { id: 'page_mine', name: 'Mine', type: 'page', offset: 2, length: 4 },
+    ];
+
+    it('returns true when a page tag matches our page id', () => {
+        expect(hasOwnPageTag(tags, 'page_mine')).toBe(true);
+    });
+
+    it('returns false when no page tag matches', () => {
+        expect(hasOwnPageTag(tags, 'page_other')).toBe(false);
+    });
+
+    it('returns false when a user tag id coincidentally matches our page id', () => {
+        expect(hasOwnPageTag(tags, 'user_x')).toBe(false);
+    });
+
+    it('returns false for null / empty / missing page id', () => {
+        expect(hasOwnPageTag(null, 'page_mine')).toBe(false);
+        expect(hasOwnPageTag(tags, null)).toBe(false);
+        expect(hasOwnPageTag(tags, undefined)).toBe(false);
+        expect(hasOwnPageTag([], 'page_mine')).toBe(false);
     });
 });

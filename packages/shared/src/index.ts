@@ -309,6 +309,16 @@ export interface ReplyJobData {
   senderName?: string;      // Display name of sender
   text: string;             // The actual comment/message content
 
+  // Facebook Graph API `message_tags` — structured record of each user/page tag
+  // inside a comment (offset, length, type, id). Used to skip peer-to-peer friend
+  // tagging and precisely strip tagged spans before language detection. Undefined
+  // for Instagram, DMs, and pre-upgrade jobs.
+  //
+  // Shape mirrors `backend/src/utils/commentText.ts#FacebookMessageTag`. Kept
+  // inline here because the shared package is the base layer and cannot import
+  // from `backend/`. If you change one, change both.
+  messageTags?: { id: string; name: string; type: 'user' | 'page'; offset: number; length: number }[];
+
   // Metadata
   receivedAt: string;       // ISO timestamp when webhook received
   replyDelay?: number;      // Delay in seconds before processing (from user settings)

@@ -4,6 +4,7 @@ import { getEnrichedKnowledgeBase, getStoreContextForAI } from '../ecommerce';
 import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
+import type { FacebookMessageTag } from '../../utils/commentText';
 
 /** Minimal page shape needed to build playground context */
 export interface PlaygroundPageData {
@@ -21,6 +22,12 @@ interface PlaygroundContextOptions {
     question: string;
     channel: 'comment' | 'dm';
     postMessage?: string;
+    /** Facebook `message_tags` array for comment tests — used to reproduce the
+     *  friend-tag skip rule in the playground. Only meaningful when channel === 'comment'. */
+    messageTags?: FacebookMessageTag[];
+    /** Our own Facebook page ID — required to distinguish page-tags pointing at us
+     *  (reply) from page-tags pointing elsewhere (skip). */
+    ourFacebookPageId?: string;
     /** Admin-only overrides (not available in customer-facing test) */
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
     replyStyle?: string;
@@ -40,7 +47,7 @@ export interface PlaygroundContext {
  * Shared between the admin playground route and the customer-facing test-reply endpoint.
  */
 export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Promise<PlaygroundContext> {
-    const { page, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = opts;
+    const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = opts;
 
     // 1. Fetch owner settings for comment reply mode + workspace settings for language fallback
     let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
@@ -109,6 +116,8 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         customerContext,
         model,
         defaultReplyLanguage,
+        messageTags: channel === 'comment' ? messageTags : undefined,
+        ourFacebookPageId: channel === 'comment' ? ourFacebookPageId : undefined,
     };
 
     return { playgroundInput, commentReplyMode, nudgeText };

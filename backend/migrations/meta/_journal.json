@@ -575,6 +575,13 @@
       "when": 1776645379903,
       "tag": "0081_breezy_shaman",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "5",
+      "when": 1776692571394,
+      "tag": "0082_abandoned_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

@@ -12,9 +12,17 @@ Maintainers: if you change behavior here, update this doc in the same commit.
 
 **Shipped (mention/tag handling):**
 - ✅ `@[id:Name]` and `@hadi`-only comments silent-skip
+- ✅ **Facebook `message_tags` user-tag rule (2026-04-20):** any comment whose
+  webhook payload contains a `type: 'user'` entry is silent-skipped — including
+  plain-name tags that render without `@` (e.g. `"Khadeja Alrefae"`). Skip applies
+  even with trailing real text (peer-to-peer talk, not for the page). Overridden
+  only when a `type: 'page'` entry matches our own Facebook page id.
 - ✅ Nudge language derives from stripped text — no more English nudge on Arabic
   pages with tagged commenters
 - ✅ CTA-boost scoping documented correctly (dual/private only, not public)
+- ✅ Shared preprocess module `backend/src/services/reply/commentPreprocess.ts`
+  is the single source of truth for skip rules + language resolution, used by
+  both `generateForComment` (production) and `generateForPlayground` (admin/eval).
 
 **In progress — DM-failure-aware fallback** ([plan](#dm-failure-aware-fallback)):
 - ✅ Step 1: `backend/src/utils/fbGraphErrors.ts` — error classifier utility
@@ -140,9 +148,11 @@ detection on identical repeated comments.
 
 | File | Responsibility |
 |------|----------------|
-| `backend/src/utils/commentText.ts` | `stripCommentNoise(text)`, `hasMention(text)`, `isPunctuationOnly(text)` |
-| `backend/src/controllers/webhook.ts` | Ingest FB/IG webhook, normalise attachment types |
-| `backend/src/services/reply/generator.ts` | Decide if/how to reply; AI call; friend-tag skip; CTA boost — all using helpers from `commentText.ts` |
+| `backend/src/utils/commentText.ts` | `stripCommentNoise(text)`, `hasMention(text)`, `isPunctuationOnly(text)`, `stripTagsByOffsets`, `hasUserTag`, `hasOwnPageTag`, `FacebookMessageTag` type |
+| `backend/src/services/reply/commentPreprocess.ts` | **Single source of truth** for skip classification + language resolution: `preprocessCommentText`, `resolveCommentLanguage`, `rewritePunctuationForDualDm`. Used by generator and playground — do not duplicate these rules. |
+| `backend/src/controllers/webhook.ts` | Ingest FB/IG webhook, capture `message_tags`, enqueue job with tags, normalise attachment types |
+| `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag. Threads `messageTags` + `ourFacebookPageId` into the generator context. |
+| `backend/src/services/reply/generator.ts` | Decide if/how to reply; AI call; CTA boost — delegates skip/language to `commentPreprocess.ts` |
 | `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag |
 | `backend/src/services/reply/adapters/facebookCommentAdapter.ts` | Pick nudge language (FB comments) |
 | `backend/src/services/reply/adapters/instagramCommentAdapter.ts` | Pick nudge language (IG comments) |
@@ -158,14 +168,27 @@ detection on identical repeated comments.
 ### Comments (text-only)
 
 Facebook's webhook delivers `comment.message` as raw text. A commenter who tags
-a friend produces one of two formats:
+someone produces one of three formats:
 
 | Format      | Example                                      | Origin                             |
 |-------------|----------------------------------------------|------------------------------------|
-| Structured  | `@[100012345678901:Hanaa Kanaan]`            | Picked a profile from suggestions  |
+| Structured  | `@[100012345678901:Hanaa Kanaan]`            | Older clients; typed `@` then picked a profile |
 | Plain       | `@hadi`                                      | Typed `@handle` manually           |
+| Bare name   | `Khadeja Alrefae` (no `@` in text)           | Modern clients; picked a friend from the tag suggester |
 
-Both are stripped before anything else sees the text.
+The first two are stripped by regex in `stripCommentNoise`. The third has no
+regex signal — it arrives in the webhook's structured `message_tags` array
+alongside the raw message, with `offset`/`length`/`type`/`id` for each tagged
+span. We handle it via `stripTagsByOffsets(text, message_tags)`.
+
+Classification uses `message_tags` — not the text:
+
+- any `type: 'user'` tag → **silent skip** (friend-directed, peer-to-peer).
+- `type: 'page'` matching our own `facebookPageId` → treat as real question,
+  strip the tag span, continue to AI.
+- `type: 'page'` for some other page → skip (not our business).
+
+See `preprocessCommentText` for the implementation.
 
 ### DMs (can carry attachments)
 
@@ -191,15 +214,29 @@ The Facebook 👍 Like button arrives as `type=image` with `payload.sticker_id` 
 ┌──────────────────────────────────────────────────────────────────────┐
 │ New comment from webhook OR playground test                          │
 │ rawText = comment.message                                            │
+│ messageTags = comment.message_tags (FB only, undefined on IG)        │
 │ postMessage = parent post text (may be undefined for orphan/ad)      │
 └─────────────────────┬────────────────────────────────────────────────┘
                       │
                       ▼
-              stripCommentNoise(rawText)  → strippedText
-              hasMention(rawText)         → mention?
+    ┌─────────────────┴─────────────────────────────────────────────┐
+    │ USER-TAG FILTER (message_tags-based, Facebook only)           │
+    │                                                               │
+    │ hasUserTag(messageTags)                                       │
+    │   && !hasOwnPageTag(messageTags, ourFacebookPageId)           │
+    │                                     → SILENT SKIP             │
+    │   ( bare friend tag "Khadeja Alrefae", with OR without text;  │
+    │     overridden when a page-tag matches our own page id )      │
+    └───────────────────────────────────────────────────────────────┘
+                      │
+                      ▼
+              stripTagsByOffsets(rawText, messageTags)
+                → textAfterTags
+              stripCommentNoise(textAfterTags)  → strippedText
+              hasMention(textAfterTags)         → mention?
                       │
     ┌─────────────────┼─────────────────────────────────────────────┐
-    │ FRIEND-TAG FILTER                                             │
+    │ REGEX FRIEND-TAG FILTER (fallback for payloads w/o tags)      │
     │                                                               │
     │ mention? && strippedText == ""     → SILENT SKIP              │
     │   ( pure @tag, nothing else )                                 │
@@ -311,23 +348,26 @@ Key differences from comments:
 
 Arabic page, post in Arabic, dual mode unless noted.
 
-| Comment input                            | Mention? | Stripped             | Skip? | Public output              | DM output |
-|------------------------------------------|----------|----------------------|-------|----------------------------|-----------|
-| `@[id:Hanaa Kanaan]`                     | yes      | `""`                 | YES   | —                          | —         |
-| `@hadi`                                  | yes      | `""`                 | YES   | —                          | —         |
-| `@Ali check this`                        | yes      | `check this` (2 w)   | YES   | —                          | —         |
-| `@[id:Ali] شكراً`                        | yes      | `شكراً` (1 w)        | YES   | —                          | —         |
-| `@[id:Ali] شو سعر الدورة؟`               | yes      | `شو سعر الدورة؟` (3)† | YES*  | —                          | —         |
-| `@Ali كيف أسجل في الدورة القادمة؟`        | yes      | `كيف أسجل في الدورة القادمة؟` (5) | NO | AR nudge               | full AR reply |
-| `شو السعر؟`                              | no       | `شو السعر؟`           | NO    | AR nudge                   | full AR reply |
-| `.` (no post context)                    | no       | `.`                   | YES   | —                          | —         |
-| `.` (on CTA post "Comment . for price")  | no       | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
-| `🎉` (no post context)                   | no       | `🎉`                  | YES   | —                          | —         |
-| `https://spam.com`                       | no       | `""` + no post → YES | YES   | —                          | —         |
-| `مرحبا` (public mode)                    | no       | `مرحبا`               | NO    | full AR reply              | —         |
-| `مرحبا` (private mode)                   | no       | `مرحبا`               | NO    | — (fallback only)          | full AR reply |
-| `مرحبا` (private, DM fails)              | no       | `مرحبا`               | NO    | full AR reply (fallback)   | failed    |
-| `مرحبا` (dual, DM fails)                 | no       | `مرحبا`               | NO    | full AR reply (no nudge)   | failed    |
+| Comment input                            | message_tags         | Stripped             | Skip? | Public output              | DM output |
+|------------------------------------------|----------------------|----------------------|-------|----------------------------|-----------|
+| `Khadeja Alrefae` (bare friend tag)      | `[user@0/15]`        | `""`                 | YES   | —                          | —         |
+| `Khadeja Alrefae شو السعر؟` (tag + text) | `[user@0/15]`        | `شو السعر؟`           | YES   | — (user-tag rule)          | —         |
+| `Jawab كم السعر؟` (tags our page)        | `[page@0/5, id=us]`  | `كم السعر؟`           | NO    | AR nudge                   | full AR reply |
+| `@[id:Hanaa Kanaan]` (structured)        | none                 | `""`                 | YES   | —                          | —         |
+| `@hadi`                                  | none                 | `""`                 | YES   | —                          | —         |
+| `@Ali check this`                        | none                 | `check this` (2 w)   | YES   | —                          | —         |
+| `@[id:Ali] شكراً`                        | none                 | `شكراً` (1 w)        | YES   | —                          | —         |
+| `@[id:Ali] شو سعر الدورة؟`               | none                 | `شو سعر الدورة؟` (3)† | YES*  | —                          | —         |
+| `@Ali كيف أسجل في الدورة القادمة؟`        | none                 | `كيف أسجل في الدورة القادمة؟` (5) | NO | AR nudge               | full AR reply |
+| `شو السعر؟`                              | none                 | `شو السعر؟`           | NO    | AR nudge                   | full AR reply |
+| `.` (no post context)                    | none                 | `.`                   | YES   | —                          | —         |
+| `.` (on CTA post "Comment . for price")  | none                 | `.` (→ synthetic)    | NO    | AR nudge                   | full AR reply (from post) |
+| `🎉` (no post context)                   | none                 | `🎉`                  | YES   | —                          | —         |
+| `https://spam.com`                       | none                 | `""` + no post → YES | YES   | —                          | —         |
+| `مرحبا` (public mode)                    | none                 | `مرحبا`               | NO    | full AR reply              | —         |
+| `مرحبا` (private mode)                   | none                 | `مرحبا`               | NO    | — (fallback only)          | full AR reply |
+| `مرحبا` (private, DM fails)              | none                 | `مرحبا`               | NO    | full AR reply (fallback)   | failed    |
+| `مرحبا` (dual, DM fails)                 | none                 | `مرحبا`               | NO    | full AR reply (no nudge)   | failed    |
 
 † Current word count is whitespace-based; `شو سعر الدورة؟` is 3 tokens (≤ 3).
  * Known limitation — short Arabic real questions collide with the friend-tag
@@ -607,17 +647,24 @@ with `@name` Latin characters.
 Keep these tests green. Add new ones here when behavior changes.
 
 - `backend/test/utils/commentText.test.ts` — strip + mention-detection +
-  `isPunctuationOnly` across both mention formats, URLs, edge cases.
+  `isPunctuationOnly` across both mention formats, URLs, edge cases. Plus
+  `stripTagsByOffsets` / `hasUserTag` / `hasOwnPageTag` covering bare-name tags,
+  multiple tags, malformed offsets, page-tag exception.
+- `backend/test/services/reply/commentPreprocess.test.ts` — the shared module's
+  behavior matrix: user-tag skip (with and without trailing text), page-tag
+  exception, regex fallback, punctuation skip, language resolution edge cases,
+  dual-DM synthetic rewrite.
 - `backend/test/services/generator.test.ts` — `ReplyGenerator - Mention/tag skip
-  behavior` describe block: pure structured tag, pure plain `@mention`, mention
-  + ≤3-word chatter (all silent-skip), and tag + real question (continues to AI
-  with stripped text).
+  behavior` describe block (regex fallback path).
 - `backend/test/services/reply/facebookCommentAdapter.test.ts` — stripped input
   reaches `detectCommentLanguage` (structured + plain tag cases).
 - `backend/test/services/reply/instagramCommentAdapter.test.ts` — Arabic nudge
   selected for tagged comment on Arabic post (two cases).
 - `backend/test/services/commentProcessor.test.ts` — `SPAM_OR_IRRELEVANT` from
-  generator → `resolveComment` called, no `sendReply`.
+  generator → `resolveComment` called, no `sendReply`. Plus plumbing tests
+  asserting `messageTags` + `ourFacebookPageId` flow into `generateForComment`.
+- `scripts/playground-eval.ts` Category 46 — end-to-end eval cases for user-tag
+  skip, user-tag + text skip, no-tag normal reply.
 
 **Regression-test trigger**: any time you see an English nudge on an Arabic
 page, a bot replying to `@tag` comments, or a DM bot that keeps sending "please

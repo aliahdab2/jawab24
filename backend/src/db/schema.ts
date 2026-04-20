@@ -1,6 +1,7 @@
 import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import type { FacebookMessageTag } from '../utils/commentText';
 
 // 1. Users Table
 export const users = pgTable('users', {
@@ -210,6 +211,11 @@ export const comments = pgTable('comments', {
     workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }).notNull(),
     facebookCommentId: varchar('facebook_comment_id', { length: 255 }).unique().notNull(),
     message: text('message').notNull(),
+    // Facebook Graph `message_tags` — structured record of user/page tags in the
+    // comment (offset, length, type, id). Stored so we can reprocess old comments
+    // via the playground or audit why a reply was sent/skipped. Nullable because
+    // Instagram comments don't carry this field and pre-upgrade rows have no data.
+    messageTags: jsonb('message_tags').$type<FacebookMessageTag[]>(),
     fromId: varchar('from_id', { length: 255 }),
     fromName: varchar('from_name', { length: 255 }),
     replied: boolean('replied').default(false),

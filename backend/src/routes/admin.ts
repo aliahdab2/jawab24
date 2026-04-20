@@ -808,12 +808,25 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
         /**
          * POST /admin/ai/playground - Test AI reply with full metadata
-         * Body: { pageId, question, channel }
+         * Body: { pageId, question, channel, [postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model] }
          */
-        adminProtected.post<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string; model?: string } }>('/ai/playground', {
+        type PlaygroundRequestBody = {
+            pageId: string;
+            question: string;
+            channel: 'comment' | 'dm';
+            postMessage?: string;
+            messageTags?: import('../utils/commentText').FacebookMessageTag[];
+            ourFacebookPageId?: string;
+            conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
+            replyStyle?: string;
+            brandVoiceNotes?: string;
+            customerContext?: string;
+            model?: string;
+        };
+        adminProtected.post<{ Body: PlaygroundRequestBody }>('/ai/playground', {
             schema: { tags: ['Admin'], summary: 'Test AI reply generation with full metadata', security: auth },
-        }, async (request: FastifyRequest<{ Body: { pageId: string; question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[]; replyStyle?: string; brandVoiceNotes?: string; customerContext?: string; model?: string } }>, reply: FastifyReply) => {
-            const { pageId, question, channel, postMessage, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = request.body;
+        }, async (request: FastifyRequest<{ Body: PlaygroundRequestBody }>, reply: FastifyReply) => {
+            const { pageId, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = request.body;
             const startTime = Date.now();
 
             if (!pageId || !question?.trim()) {
@@ -842,7 +855,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
                 // 1b–3. Build playground context (shared helper)
                 const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
-                    page, question, channel, postMessage,
+                    page, question, channel, postMessage, messageTags, ourFacebookPageId,
                     conversationHistory, replyStyle, brandVoiceNotes, customerContext, model,
                 });
 

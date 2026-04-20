@@ -162,7 +162,7 @@ describe('CommentProcessor', () => {
         expect(result.replyMethod).toBe('ai');
         expect(adapter.getPage).toHaveBeenCalledWith('platform-page-1');
         expect(adapter.findOrCreateContent).toHaveBeenCalledWith('page-uuid', 'content-1', 'token-123');
-        expect(adapter.storeComment).toHaveBeenCalledWith('content-uuid', 'test_workspace_id', 'comment-1', 'Hello!', 'user-1', 'Alice');
+        expect(adapter.storeComment).toHaveBeenCalledWith('content-uuid', 'test_workspace_id', 'comment-1', 'Hello!', 'user-1', 'Alice', undefined);
         expect(adapter.sendReply).toHaveBeenCalled();
         expect(adapter.markAsReplied).toHaveBeenCalledWith(
             'comment-uuid', 'Thank you!', 'ai', 'en', false, undefined, undefined, 'Thank you!',
@@ -247,7 +247,7 @@ describe('CommentProcessor', () => {
         expect(result.success).toBe(false);
         expect(result.error).toBe('Auto-reply disabled for this content');
         // Should still store the comment
-        expect(storeComment).toHaveBeenCalledWith('c-id', 'test_workspace_id', 'comment-1', 'Hello!', 'from-1', 'Bob');
+        expect(storeComment).toHaveBeenCalledWith('c-id', 'test_workspace_id', 'comment-1', 'Hello!', 'from-1', 'Bob', undefined);
     });
 
     it('should return error when comments auto-reply disabled in settings', async () => {
@@ -472,6 +472,64 @@ describe('CommentProcessor', () => {
 
         expect(result.success).toBe(true);
         expect((await pipelineMetrics.getMetrics()).counters['instagram_comment.success']).toBe(1);
+    });
+
+    // --- Facebook message_tags plumbing ---
+
+    it('passes messageTags + ourFacebookPageId to generator for Facebook user-tag comments', async () => {
+        const buildGeneratorContext = vi.fn().mockReturnValue({
+            workspaceId: 'test_workspace_id', userId: 'user-uuid', text: '', pageName: 'Test', pageId: 'page-uuid',
+        });
+        const adapter = createMockAdapter({ buildGeneratorContext });
+
+        const tags = [
+            { id: 'u1', name: 'Khadeja Alrefae', type: 'user' as const, offset: 0, length: 15 },
+        ];
+
+        await commentProcessor.processComment(
+            adapter, 'fb-page-1', 'content-1', 'comment-1',
+            'Khadeja Alrefae', 'from-1', 'Commenter', undefined, tags,
+        );
+
+        expect(replyGenerator.generateForComment).toHaveBeenCalledWith(
+            expect.objectContaining({
+                messageTags: tags,
+                ourFacebookPageId: 'fb-page-1',
+            }),
+            expect.any(Boolean),
+            expect.any(String),
+        );
+    });
+
+    it('persists messageTags on the stored comment', async () => {
+        const adapter = createMockAdapter();
+        const tags = [
+            { id: 'u1', name: 'Khadeja Alrefae', type: 'user' as const, offset: 0, length: 15 },
+        ];
+
+        await commentProcessor.processComment(
+            adapter, 'fb-page-1', 'content-1', 'comment-1',
+            'Khadeja Alrefae', 'from-1', 'Commenter', undefined, tags,
+        );
+
+        expect(adapter.storeComment).toHaveBeenCalledWith(
+            'content-uuid', 'test_workspace_id', 'comment-1', 'Khadeja Alrefae',
+            'from-1', 'Commenter', tags,
+        );
+    });
+
+    it('leaves ourFacebookPageId undefined for Instagram comments (no tag classification)', async () => {
+        const adapter = createMockAdapter({ platform: 'instagram' as any });
+
+        await commentProcessor.processComment(
+            adapter, 'ig-1', 'media-1', 'comment-1', 'Nice!', 'from-1',
+        );
+
+        expect(replyGenerator.generateForComment).toHaveBeenCalledWith(
+            expect.objectContaining({ ourFacebookPageId: undefined }),
+            expect.any(Boolean),
+            expect.any(String),
+        );
     });
 
     // --- Offensive skip tests ---

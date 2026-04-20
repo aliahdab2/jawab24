@@ -77,6 +77,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         message: string,
         fromId?: string,
         fromUsername?: string,
+        _messageTags?: import('../../../utils/commentText').FacebookMessageTag[],
     ): Promise<{ comment: StoredComment; isNew: boolean }> {
         const existing = await db
             .select()

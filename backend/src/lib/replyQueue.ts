@@ -47,6 +47,7 @@ export async function enqueueComment(data: {
     text: string;
     senderId?: string;
     senderName?: string;
+    messageTags?: NonNullable<ReplyJobData['messageTags']>;
     requestId?: string;
     replyDelay?: number;
     handoffRetries?: number;
@@ -60,6 +61,7 @@ export async function enqueueComment(data: {
         text: data.text,
         senderId: data.senderId,
         senderName: data.senderName,
+        messageTags: data.messageTags,
         requestId: data.requestId,
         receivedAt: new Date().toISOString(),
         handoffRetries: data.handoffRetries,

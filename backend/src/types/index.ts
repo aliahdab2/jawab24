@@ -151,6 +151,8 @@ export interface CreateCommentDTO {
     message: string;
     fromId?: string;
     fromName?: string;
+    /** Facebook Graph `message_tags` — see comments.messageTags schema column. */
+    messageTags?: import('../utils/commentText').FacebookMessageTag[];
     createdTime?: Date;
     repliedAt?: Date;
 }

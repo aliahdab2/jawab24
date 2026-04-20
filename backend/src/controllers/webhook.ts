@@ -90,6 +90,10 @@ interface WebhookChange {
         post_id?: string;
         parent_id?: string;
         message?: string;
+        /** Facebook Graph: structured record of each user/page tag in the message.
+         *  Present even when the tag renders without an `@` prefix. Instagram does
+         *  not deliver this field. See `utils/commentText.ts#FacebookMessageTag`. */
+        message_tags?: import('../utils/commentText').FacebookMessageTag[];
         from?: {
             id: string;
             name?: string;
@@ -392,7 +396,7 @@ export class WebhookController {
      * Process a new comment - enqueue for async processing
      */
     private async processNewComment(pageId: string, value: WebhookChange['value']) {
-        const { comment_id, post_id, message, from, parent_id } = value;
+        const { comment_id, post_id, message, from, parent_id, message_tags } = value;
 
         if (!comment_id || !post_id || !message) {
             this.log().info('Missing required fields for comment processing', {
@@ -422,6 +426,7 @@ export class WebhookController {
                 text: message,
                 senderId: from?.id,
                 senderName: from?.name,
+                messageTags: message_tags,
                 requestId: this.requestId,
             });
 

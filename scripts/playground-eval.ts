@@ -27,6 +27,14 @@
 // Types
 // ---------------------------------------------------------------------------
 
+interface FacebookMessageTag {
+    id: string;
+    name: string;
+    type: 'user' | 'page';
+    offset: number;
+    length: number;
+}
+
 interface TestCase {
     id: number;
     category: number;
@@ -35,6 +43,12 @@ interface TestCase {
     message: string;
     page: 'training' | 'school' | 'electronics';
     postMessage?: string;
+    /** Facebook Graph API message_tags array — used to detect friend tags (peer-to-peer,
+     *  skip) vs page tags (real questions, reply). See category 46 tests. */
+    messageTags?: FacebookMessageTag[];
+    /** Our own Facebook page ID — required when a messageTags entry of type 'page'
+     *  may point at us. Leave undefined for user-tag-only cases. */
+    ourFacebookPageId?: string;
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
@@ -2881,6 +2895,60 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Ellipsis on Arabic CTA post — reply must be Arabic with actual KB info',
     },
+
+    // ===== Category 46: Facebook message_tags (user-tag vs page-tag) =====
+    // Bug: customer tags a friend on an Arabic post — comment text is the friend's name
+    // ("Khadeja Alrefae") with no @ symbol. Jawab24 reads the Latin name as an English
+    // message and replies in English. The rule: any user-type tag → skip (friend-directed,
+    // peer-to-peer). Page-tag at our own page → real question, reply normally.
+    {
+        id: 306, category: 46, categoryName: 'Facebook Message Tags', channel: 'comment',
+        message: 'Khadeja Alrefae',
+        messageTags: [{ id: '1', name: 'Khadeja Alrefae', type: 'user', offset: 0, length: 15 }],
+        page: 'training',
+        postMessage: '🔥 كورس icdl 🔥\n⏳ 8 جلسات لمدة شهر\nالكلفة 25 ألف ل.س بالعملة القديمة',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+            replyMethod: ['skipped', 'ai'],
+        },
+        notes: 'Pure user-tag → friend-tagging, skip. No English reply.',
+    },
+    {
+        id: 307, category: 46, categoryName: 'Facebook Message Tags', channel: 'comment',
+        message: 'Khadeja Alrefae شو السعر؟',
+        messageTags: [{ id: '1', name: 'Khadeja Alrefae', type: 'user', offset: 0, length: 15 }],
+        page: 'training',
+        postMessage: '🔥 كورس icdl 🔥\n⏳ 8 جلسات لمدة شهر\nالكلفة 25 ألف ل.س بالعملة القديمة',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+            replyMethod: ['skipped', 'ai'],
+        },
+        notes: 'User-tag + Arabic text → friend-directed, skip (behavior change from 2026-04-10 @mention handling).',
+    },
+    {
+        id: 308, category: 46, categoryName: 'Facebook Message Tags', channel: 'comment',
+        message: 'كم السعر؟',
+        page: 'training',
+        postMessage: '🔥 كورس icdl 🔥\n⏳ 8 جلسات لمدة شهر\nالكلفة 25 ألف ل.س بالعملة القديمة',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Hi', 'Hello', 'Let me know', 'Thank you'],
+            replyContainsAny: ['25', 'ألف', 'ل.س', 'الدورة'],
+        },
+        notes: 'No tags — normal Arabic question, reply in Arabic with price from post.',
+    },
+    {
+        id: 309, category: 46, categoryName: 'Facebook Message Tags', channel: 'comment',
+        message: 'Ahmad Said شكرا',
+        messageTags: [{ id: '2', name: 'Ahmad Said', type: 'user', offset: 0, length: 10 }],
+        page: 'electronics',
+        postMessage: 'iPhone 15 Pro متوفر الآن — اطلب قبل نفاد الكمية',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+            replyMethod: ['skipped', 'ai'],
+        },
+        notes: 'User-tag + short thanks → friend-directed, skip.',
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -3008,6 +3076,8 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
         channel: test.channel,
     };
     if (test.postMessage) body.postMessage = test.postMessage;
+    if (test.messageTags) body.messageTags = test.messageTags;
+    if (test.ourFacebookPageId) body.ourFacebookPageId = test.ourFacebookPageId;
     if (test.conversationHistory) body.conversationHistory = test.conversationHistory;
     if (test.replyStyle) body.replyStyle = test.replyStyle;
     if (test.brandVoiceNotes) body.brandVoiceNotes = test.brandVoiceNotes;

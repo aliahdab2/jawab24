@@ -199,7 +199,7 @@ describe('FacebookCommentAdapter', () => {
 
             expect(result.comment.id).toBe('comment_uuid_1');
             expect(mockFindOrCreateComment).toHaveBeenCalledWith(
-                'post_uuid_1', 'ws_uuid_1', 'fb_comment_123', 'Hello', undefined, undefined,
+                'post_uuid_1', 'ws_uuid_1', 'fb_comment_123', 'Hello', undefined, undefined, undefined,
             );
         });
     });

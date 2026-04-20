@@ -197,6 +197,7 @@ Each service is independently deployable but shares:
      - `kb/` — Knowledge Base (embedding, retrieval, semantic cache)
      - `reply/` — Reply generation pipeline (context, formatting, quality checks)
        - `commentProcessor.ts` — unified comment pipeline: trigger check → template match → AI generation → send → lead extraction (fire-and-forget)
+       - `commentPreprocess.ts` — single source of truth for comment skip classification (`preprocessCommentText`) and language resolution (`resolveCommentLanguage`). Shared by `generateForComment` and `generateForPlayground` so production and playground stay in sync. Implements the Facebook `message_tags` user-tag skip rule (see `docs/comment-and-message-handling.md`).
        - `messageProcessor.ts` — unified DM pipeline: shared post enrichment → template match → AI generation → send → lead extraction (fire-and-forget)
        - `leadExtractor.ts` — fire-and-forget lead capture: phone detection (Arabic-Indic normalization) → Redis rate limit → OpenAI extraction → upsert leads table → SSE lead:captured
        - `nonTextHandler.ts` — handles non-text DMs (voice → Whisper transcription, shared posts → smart nudge, photos/videos → nudge)

@@ -17,6 +17,7 @@ export class CommentsService {
                 workspaceId: data.workspaceId,
                 facebookCommentId: data.facebookCommentId,
                 message: data.message,
+                messageTags: data.messageTags && data.messageTags.length > 0 ? data.messageTags : null,
                 fromId: data.fromId,
                 fromName: data.fromName,
                 createdTime: data.createdTime,
@@ -389,7 +390,15 @@ export class CommentsService {
     /**
      * Find or create comment from Facebook webhook
      */
-    async findOrCreateFromWebhook(postId: string, workspaceId: string, facebookCommentId: string, message: string, fromId?: string, fromName?: string) {
+    async findOrCreateFromWebhook(
+        postId: string,
+        workspaceId: string,
+        facebookCommentId: string,
+        message: string,
+        fromId?: string,
+        fromName?: string,
+        messageTags?: CreateCommentDTO['messageTags'],
+    ) {
         const existing = await this.getCommentByFacebookId(facebookCommentId);
 
         if (existing) {
@@ -403,6 +412,7 @@ export class CommentsService {
             message,
             fromId,
             fromName,
+            messageTags,
         });
 
         return { comment: newComment, isNew: true };
