@@ -71,6 +71,7 @@
   "featureAiReplies": "{count, plural, one {# Smart Reply} other {# Smart Replies}}",
   "featureAiRepliesUnlimited": "Unlimited Smart Replies",
   "featureCommentToDm": "Comment-to-DM Automation",
+  "featurePostRepliesUnlimited": "Unlimited Post Replies",
   "featureShopify": "Shopify, Salla & Zid Integration",
   "shopifyBadge": "Includes Shopify, Salla & Zid Integration",
   "ecommerceBadgeTitle": "E-commerce Integration",

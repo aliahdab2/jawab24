@@ -71,6 +71,7 @@
   "featureAiReplies": "{count, plural, zero {لا ردود ذكية} one {رد ذكي واحد} two {ردّان ذكيان} few {# ردود ذكية} many {# رد ذكي} other {# رد ذكي}}",
   "featureAiRepliesUnlimited": "ردود ذكية غير محدودة",
   "featureCommentToDm": "أتمتة التعليقات للرسائل الخاصة",
+  "featurePostRepliesUnlimited": "ردود البوست غير محدودة",
   "featureShopify": "ربط شوبيفاي وسلة وزد",
   "shopifyBadge": "يشمل ربط شوبيفاي وسلة وزد",
   "ecommerceBadgeTitle": "ربط المتاجر الإلكترونية",

@@ -194,6 +194,13 @@ function PlanCard({
 
       {/* Features */}
       <div className="space-y-1 px-3 flex-1">
+        {/* Post Replies first — unlimited on every plan, the acquisition hook */}
+        <FeatureRow
+          included={true}
+          highlight={true}
+          text={t('pricing.featurePostRepliesUnlimited')}
+        />
+
         <FeatureRow
           included={true}
           text={plan.maxPages === null ? t('pricing.featurePagesUnlimited') : t('pricing.featurePages', { count: plan.maxPages })}
@@ -202,14 +209,8 @@ function PlanCard({
 
         <FeatureRow
           included={true}
-          highlight={true}
           text={plan.maxAiRepliesPerMonth === null ? t('pricing.featureAiRepliesUnlimited') : t('pricing.featureAiReplies', { count: plan.maxAiRepliesPerMonth })}
           subtext={t('pricing.aiPowered')}
-        />
-
-        <FeatureRow
-          included={true}
-          text={t('pricing.featureCommentToDm')}
         />
 
         <FeatureRow
@@ -229,6 +230,13 @@ function PlanCard({
                 <ZidIcon className="w-3 h-3 md:w-3.5 md:h-3.5 flex-shrink-0" />
               </>
             }
+          />
+        )}
+
+        {plan.prioritySupport && (
+          <FeatureRow
+            included={true}
+            text={t('pricing.prioritySupport')}
           />
         )}
 

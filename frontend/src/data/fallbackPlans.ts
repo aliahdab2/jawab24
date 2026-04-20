@@ -8,21 +8,21 @@ import type { Plan } from '@jawab24/shared';
  * - Always fetch real plans from API for checkout
  * - Backend validates all payments
  *
- * Last updated: 2026-02-21
- * Source: Production API /plans endpoint
+ * Last updated: 2026-04-20
+ * Source: backend/migrations/0082_update_plan_limits.sql
  */
 export const FALLBACK_PLANS: Plan[] = [
     {
         id: 'fallback-starter',
         name: 'Starter',
         slug: 'starter',
-        description: 'Auto-reply to your Facebook & Instagram page - 30 days free trial',
-        price: 1500, // $15.00/month
-        yearlyPrice: 15000, // $150.00/year (10 months)
+        description: 'For small projects',
+        price: 1500,
+        yearlyPrice: 15000,
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
-        maxAiRepliesPerMonth: 400,
+        maxAiRepliesPerMonth: 500,
         maxProducts: null,
         facebookEnabled: true,
         instagramEnabled: true,
@@ -30,19 +30,19 @@ export const FALLBACK_PLANS: Plan[] = [
         ecommerceEnabled: false,
         showBranding: true,
         prioritySupport: false,
-        trialDays: 30,
+        trialDays: 0,
         regionalPricing: {},
         isActive: true,
-        isDefault: true,
-        sortOrder: 0,
+        isDefault: false,
+        sortOrder: 1,
     },
     {
         id: 'fallback-business',
         name: 'Business',
         slug: 'business',
-        description: 'Auto-reply to 2 Facebook/Instagram pages',
-        price: 3900, // $39.00/month
-        yearlyPrice: 39000, // $390.00/year (10 months)
+        description: 'For active stores',
+        price: 3900,
+        yearlyPrice: 39000,
         currency: 'USD',
         interval: 'month',
         maxPages: 2,
@@ -57,16 +57,16 @@ export const FALLBACK_PLANS: Plan[] = [
         trialDays: 0,
         regionalPricing: {},
         isActive: true,
-        isDefault: false,
-        sortOrder: 1,
+        isDefault: true,
+        sortOrder: 2,
     },
     {
         id: 'fallback-pro',
         name: 'Pro',
         slug: 'pro',
-        description: 'Auto-reply to 5 Facebook/Instagram pages - for agencies',
-        price: 7900, // $79.00/month
-        yearlyPrice: 79000, // $790.00/year (10 months)
+        description: 'For agencies',
+        price: 7900,
+        yearlyPrice: 79000,
         currency: 'USD',
         interval: 'month',
         maxPages: 5,
@@ -77,11 +77,11 @@ export const FALLBACK_PLANS: Plan[] = [
         whatsappEnabled: false,
         ecommerceEnabled: true,
         showBranding: false,
-        prioritySupport: false,
+        prioritySupport: true,
         trialDays: 0,
         regionalPricing: {},
         isActive: true,
         isDefault: false,
-        sortOrder: 2,
+        sortOrder: 3,
     },
 ];
