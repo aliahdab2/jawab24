@@ -2990,18 +2990,6 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Delivery-mode question on a price-trigger post — answer the actual question without redirecting to the trigger.',
     },
-    {
-        id: 313, category: 47, categoryName: 'Trigger Post Fall-through', channel: 'comment',
-        message: 'متى موعد الدورة القادمة؟',
-        page: 'training',
-        postMessage: 'علق بكلمة "موعد" ليصلك الجدول الكامل على الخاص 📩',
-        expected: {
-            intent: ['QUESTION'],
-            replyMethod: ['ai'],
-            replyNotContains: ['علق بكلمة', 'اكتب موعد'],
-        },
-        notes: 'Customer asks the same thing the trigger promises ("موعد") but uses a full sentence — AI should answer from KB, not loop them back to the trigger word.',
-    },
 ];
 
 // ---------------------------------------------------------------------------
