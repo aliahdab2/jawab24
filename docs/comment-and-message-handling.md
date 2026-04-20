@@ -17,6 +17,10 @@ Maintainers: if you change behavior here, update this doc in the same commit.
   plain-name tags that render without `@` (e.g. `"Khadeja Alrefae"`). Skip applies
   even with trailing real text (peer-to-peer talk, not for the page). Overridden
   only when a `type: 'page'` entry matches our own Facebook page id.
+  Enforced at two sites: (a) early guard in `commentProcessor.processComment`
+  step 3a, **before** the trigger-keyword branch — needed because trigger matches
+  send a reply immediately and bypass the AI path; (b) `preprocessCommentText`
+  for the AI path itself. Both must agree for future rule changes.
 - ✅ Nudge language derives from stripped text — no more English nudge on Arabic
   pages with tagged commenters
 - ✅ CTA-boost scoping documented correctly (dual/private only, not public)
@@ -167,7 +171,7 @@ detection on identical repeated comments.
 | `backend/src/utils/commentText.ts` | `stripCommentNoise(text)`, `hasMention(text)`, `isPunctuationOnly(text)`, `stripTagsByOffsets`, `hasUserTag`, `hasOwnPageTag`, `FacebookMessageTag` type |
 | `backend/src/services/reply/commentPreprocess.ts` | **Single source of truth** for skip classification + language resolution: `preprocessCommentText`, `resolveCommentLanguage`, `rewritePunctuationForDualDm`. Used by generator and playground — do not duplicate these rules. |
 | `backend/src/controllers/webhook.ts` | Ingest FB/IG webhook, capture `message_tags`, enqueue job with tags, normalise attachment types |
-| `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag. Threads `messageTags` + `ourFacebookPageId` into the generator context. Emits `comment:skipped` SSE event on silent-skip so the frontend can patch the comment to `resolved` in real time. |
+| `backend/src/services/reply/commentProcessor.ts` | Route generator output → send / skip / flag. Hosts the **early user-tag guard** (step 3a) that short-circuits before the trigger-keyword branch. Threads `messageTags` + `ourFacebookPageId` into the generator context. Emits `comment:skipped` SSE event on silent-skip so the frontend can patch the comment to `resolved` in real time. |
 | `frontend/src/hooks/useSSE.ts` | Listens for `comment:received`, `comment:reply_sent`, `comment:reply_failed`, `comment:skipped`. On `comment:skipped`, patches the cache to flip the card from "Pending" to "Resolved" without a round-trip and refreshes stats. |
 | `packages/shared/src/sse-events.ts` | Typed SSE event contract. `comment:skipped` payload carries `{ commentId, pageId, reason: 'friend_tag' \| 'spam' \| 'offensive', flagReason? }`. |
 | `backend/src/services/reply/generator.ts` | Decide if/how to reply; AI call; CTA boost — delegates skip/language to `commentPreprocess.ts` |

@@ -480,19 +480,25 @@ describe('CommentProcessor', () => {
 
     // --- Facebook message_tags plumbing ---
 
-    it('passes messageTags + ourFacebookPageId to generator for Facebook user-tag comments', async () => {
+    it('passes messageTags + ourFacebookPageId to generator when the comment also tags our own page', async () => {
+        // A user-tag alone is silently skipped before the generator runs (see
+        // "Friend-tag silent skip" block below). To exercise the plumbing to the
+        // generator, use a tag set that addresses our page — the skip is bypassed
+        // and preprocessCommentText still needs the tag offsets to strip them
+        // from the text before AI sees it.
         const buildGeneratorContext = vi.fn().mockReturnValue({
             workspaceId: 'test_workspace_id', userId: 'user-uuid', text: '', pageName: 'Test', pageId: 'page-uuid',
         });
         const adapter = createMockAdapter({ buildGeneratorContext });
 
         const tags = [
-            { id: 'u1', name: 'Khadeja Alrefae', type: 'user' as const, offset: 0, length: 15 },
+            { id: 'fb-page-1', name: 'Our Page', type: 'page' as const, offset: 0, length: 8 },
+            { id: 'u1', name: 'Khadeja Alrefae', type: 'user' as const, offset: 9, length: 15 },
         ];
 
         await commentProcessor.processComment(
             adapter, 'fb-page-1', 'content-1', 'comment-1',
-            'Khadeja Alrefae', 'from-1', 'Commenter', undefined, tags,
+            'Our Page Khadeja Alrefae تفاصيل؟', 'from-1', 'Commenter', undefined, tags,
         );
 
         expect(replyGenerator.generateForComment).toHaveBeenCalledWith(
@@ -1524,6 +1530,97 @@ describe('CommentProcessor — template reply mode behavior', () => {
 
             const call = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
             expect(call[7]).toBe('content-uuid');
+        });
+    });
+
+    describe('Friend-tag silent skip — runs before trigger-keyword branch', () => {
+        const userTagOnly = [
+            { type: 'user' as const, id: 'tagged-user-1', name: 'Ali Ahdab', offset: 0, length: 10 },
+        ];
+
+        it('skips user-tag comment even when it would match a trigger keyword', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'تفاصيل',
+                    triggerReply: 'تم إرسال التفاصيل على الخاص 📩',
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Ali Ahdab تفاصيل', 'noor-psid', 'Noor', undefined,
+                userTagOnly,
+            );
+
+            expect(result.success).toBe(true);
+            // Neither trigger nor AI path should fire
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(adapter.markAsReplied).not.toHaveBeenCalled();
+            // Comment is stored + resolved so the UI auto-dismisses it
+            expect(adapter.storeComment).toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            // SSE event for the frontend cache
+            const skippedCall = vi.mocked(publishSSEEvent).mock.calls.find(c => c[1] === 'comment:skipped');
+            expect(skippedCall).toBeDefined();
+            expect(skippedCall?.[2]).toMatchObject({ reason: 'friend_tag' });
+        });
+
+        it('skips user-tag comment on a post with no trigger keyword configured', async () => {
+            const adapter = createMockAdapter();
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Ali Ahdab', 'noor-psid', 'Noor', undefined,
+                userTagOnly,
+            );
+
+            expect(result.success).toBe(true);
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+        });
+
+        it('does NOT skip when the comment also tags our own page (commenter is addressing us)', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'تفاصيل',
+                    triggerReply: 'تم الإرسال',
+                }),
+            });
+
+            const tags = [
+                { type: 'page' as const, id: 'platform-page-1', name: 'Our Page', offset: 0, length: 8 },
+                { type: 'user' as const, id: 'tagged-user-1', name: 'Ali Ahdab', offset: 9, length: 10 },
+            ];
+
+            await commentProcessor.processComment(
+                adapter, 'platform-page-1', 'content-1', 'comment-1', 'Our Page Ali Ahdab تفاصيل', 'noor-psid', 'Noor', undefined,
+                tags,
+            );
+
+            // Trigger fires normally — friend-tag skip is bypassed because we're addressed
+            expect(adapter.sendReply).toHaveBeenCalled();
+            // comment:skipped with friend_tag should NOT be emitted
+            const skippedCall = vi.mocked(publishSSEEvent).mock.calls
+                .find(c => c[1] === 'comment:skipped' && (c[2] as any)?.reason === 'friend_tag');
+            expect(skippedCall).toBeUndefined();
+        });
+
+        it('Instagram comment is unaffected by the friend-tag check (no messageTags on IG webhooks)', async () => {
+            const adapter = createMockAdapter({ platform: 'instagram' });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'user-1', 'Alice',
+            );
+
+            // Normal AI path runs
+            expect(replyGenerator.generateForComment).toHaveBeenCalled();
+            expect(adapter.sendReply).toHaveBeenCalled();
         });
     });
 

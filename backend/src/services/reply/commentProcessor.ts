@@ -5,7 +5,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
-import { hasUserTag } from '../../utils/commentText';
+import { hasUserTag, hasOwnPageTag } from '../../utils/commentText';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger, CommentResult } from '../../types';
@@ -97,6 +97,41 @@ export class CommentProcessor {
                 // Store comment even if content is disabled (preserves Instagram behavior)
                 await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
                 return { success: false, commentId: platformCommentId, error: 'Auto-reply disabled for this content' };
+            }
+
+            // 3a. Friend-tag silent-skip — must run before the trigger-keyword branch.
+            // The AI path already skips user-tagged comments via preprocessCommentText,
+            // but trigger keywords fire earlier and bypassed that guard: a comment like
+            // "@Ali Ahdab تفاصيل" would match a "تفاصيل" trigger and send both a public
+            // reply and a DM, even though the commenter was addressing a friend, not us.
+            // Short-circuiting here covers both paths in one place.
+            // Exception: if one of the tags points at our own page, the commenter IS
+            // addressing us (alongside a friend) — let the normal pipeline handle it.
+            // Instagram webhooks don't carry message_tags, so this is a no-op there.
+            if (platform === 'facebook'
+                && hasUserTag(messageTags)
+                && !hasOwnPageTag(messageTags, platformPageId)) {
+                const { comment } = await adapter.storeComment(
+                    content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags,
+                );
+                invalidateWorkspaceStatsCache(workspaceId);
+                publishSSEEvent(userId, 'comment:received', {
+                    commentId: comment.id,
+                    pageId: page.id,
+                    fromName: fromName ?? null,
+                    message: commentMessage,
+                });
+                await commentsService.resolveComment(comment.id);
+                publishSSEEvent(userId, 'comment:skipped', {
+                    commentId: comment.id,
+                    pageId: page.id,
+                    reason: 'friend_tag',
+                });
+                pipelineMetrics.record(pipeline, 'skipped_spam');
+                this.logger.info(`[${platform}] Comment silently skipped — user-tag without own page-tag`, {
+                    commentId: comment.id, platformCommentId, commentMessage,
+                });
+                return { success: true, commentId: comment.id };
             }
 
             // 3b. Per-post trigger check — fires before template/AI pipeline.
@@ -297,20 +332,19 @@ export class CommentProcessor {
                     // Spam/irrelevant (tagging someone, emoji-only, etc.) — no flag, no notification.
                     // Resolve so the comment doesn't remain as "pending" in the merchant's view.
                     await commentsService.resolveComment(comment.id);
-                    // Reason classification drives the frontend label ("Friend tag" vs
-                    // generic "Skipped"). User-tag skips are the common case post-2026-04-20;
-                    // other SPAM_OR_IRRELEVANT classifications fall through as 'spam'.
-                    const skipReason: 'friend_tag' | 'spam' = hasUserTag(messageTags) ? 'friend_tag' : 'spam';
+                    // `friend_tag` skips are handled upstream in step 3a before the trigger
+                    // and AI paths — anything reaching this silent-skip is AI-classified
+                    // spam/irrelevant, so the reason is always `spam` here.
                     invalidateWorkspaceStatsCache(workspaceId);
                     publishSSEEvent(userId, 'comment:skipped', {
                         commentId: comment.id,
                         pageId: page.id,
-                        reason: skipReason,
+                        reason: 'spam',
                         ...(flagReason ? { flagReason } : {}),
                     });
                     pipelineMetrics.record(pipeline, 'skipped_spam');
                     this.logger.info(`[${platform}] Comment silently skipped as spam/irrelevant`, {
-                        commentId: comment.id, platformCommentId, aiIntent, commentMessage, skipReason,
+                        commentId: comment.id, platformCommentId, aiIntent, commentMessage,
                     });
                     return { success: true, commentId: comment.id };
                 }
