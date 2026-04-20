@@ -22,6 +22,19 @@ Sentry.init({
         'Load failed',
         'ChunkLoadError',
         'Session expired',
+        'Event `CustomEvent` (type=unhandledrejection)',
     ],
 
+    beforeSend(event, hint) {
+        const original = hint?.originalException as { type?: string; isTrusted?: boolean } | null | undefined;
+        if (
+            original &&
+            typeof original === 'object' &&
+            original.type === 'unhandledrejection' &&
+            original.isTrusted === false
+        ) {
+            return null;
+        }
+        return event;
+    },
 });
