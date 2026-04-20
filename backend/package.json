@@ -13,6 +13,8 @@
     "db:generate": "drizzle-kit generate:pg",
     "db:push": "drizzle-kit push:pg",
     "db:migrate": "node dist/migrate.js",
+    "seed:plans": "node dist/scripts/seed-plans.js",
+    "seed:plans:dev": "npx tsx src/scripts/seed-plans.ts",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check:pg",
     "db:validate": "ts-node scripts/validate-migrations.ts",

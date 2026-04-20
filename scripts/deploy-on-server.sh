@@ -290,6 +290,15 @@ run_migrations() {
         docker logs "$container_id" --tail 20 2>&1
         exit 1
     fi
+
+    echo "   🌱 Seeding plans from src/config/plans.ts..."
+    if docker exec "$container_id" npm run seed:plans; then
+        echo "   ✅ Plans reconciled"
+    else
+        echo "   ❌ Plan seed failed."
+        docker logs "$container_id" --tail 20 2>&1
+        exit 1
+    fi
 }
 
 # Switch traffic by updating Nginx
