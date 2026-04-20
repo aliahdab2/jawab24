@@ -306,6 +306,7 @@ export class MessagesService {
         aiIntent?: string,
         conn: DbConn = db,
         aiOriginalReply?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
     ): Promise<void> {
         await conn.update(messages)
             .set({
@@ -314,6 +315,7 @@ export class MessagesService {
                 replyMethod,
                 needsAttention: needsAttention ?? false,
                 flagReason: flagReason ?? null,
+                flagMeta: flagMeta ?? null,
                 aiIntent: aiIntent ?? null,
                 aiOriginalReply: aiOriginalReply ?? null,
                 repliedAt: new Date(),
@@ -329,11 +331,13 @@ export class MessagesService {
         messageId: string,
         flagReason?: string,
         aiIntent?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
     ): Promise<void> {
         await db.update(messages)
             .set({
                 needsAttention: true,
                 flagReason: flagReason ?? null,
+                flagMeta: flagMeta ?? null,
                 aiIntent: aiIntent ?? null,
                 updatedAt: new Date(),
             })
@@ -784,6 +788,7 @@ export class MessagesService {
             createdAt: record.createdAt,
             needsAttention: record.needsAttention ?? false,
             flagReason: record.flagReason ?? null,
+            flagMeta: (record.flagMeta as import('@jawab24/shared').FlagMeta | null) ?? null,
             aiIntent: record.aiIntent ?? null,
             aiOriginalReply: record.aiOriginalReply ?? null,
             resolved: record.resolved ?? false,

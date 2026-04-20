@@ -195,7 +195,12 @@ async function escalateComments(): Promise<void> {
         const threshold = Number(rows[0].thresholdMinutes);
 
         await db.update(comments)
-            .set({ needsAttention: true, flagReason: `sla_no_reply:${threshold}`, updatedAt: new Date() })
+            .set({
+                needsAttention: true,
+                flagReason: 'sla_no_reply',
+                flagMeta: { sla_no_reply: { minutes: threshold } },
+                updatedAt: new Date(),
+            })
             .where(sql`${comments.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
         const items: NotificationItem[] = rows.map(row => ({
@@ -258,7 +263,12 @@ async function escalateMessages(): Promise<void> {
         const threshold = Number(rows[0].thresholdMinutes);
 
         await db.update(messages)
-            .set({ needsAttention: true, flagReason: `sla_no_reply:${threshold}`, updatedAt: new Date() })
+            .set({
+                needsAttention: true,
+                flagReason: 'sla_no_reply',
+                flagMeta: { sla_no_reply: { minutes: threshold } },
+                updatedAt: new Date(),
+            })
             .where(sql`${messages.id} IN (${sql.join(ids.map(id => sql`${id}`), sql`, `)})`);
 
         // Group by conversation — multiple messages from same sender on same page → one notification

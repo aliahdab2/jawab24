@@ -588,7 +588,22 @@ export class CommentProcessor {
             // replied=false/needsAttention=false/resolved=false, i.e. Pending forever.
             // Swallow a secondary DB error here: we already failed to send, the SSE event
             // below still fires, and the outer catch would otherwise mask sendResult.error.
-            await adapter.flagComment(comment.id, sendResult.error || 'send_failed')
+            // flagReason must be a translatable snake_case key, not the raw error string —
+            // the UI looks it up in the flagReason i18n namespace. Structured detail
+            // (FB error code, bucket) lives in flag_meta for debugging + localization.
+            const dmf = sendResult.dmFailure;
+            const flagKey = dmf ? 'dm_failed' : 'send_failed';
+            const flagMeta = dmf
+                ? {
+                    dm_failed: {
+                        bucket: dmf.bucket,
+                        ...(dmf.code !== undefined ? { code: dmf.code } : {}),
+                        ...(dmf.subcode !== undefined ? { subcode: dmf.subcode } : {}),
+                        ...(dmf.fbMessage ? { fbMessage: dmf.fbMessage } : {}),
+                    },
+                }
+                : null;
+            await adapter.flagComment(comment.id, flagKey, undefined, flagMeta)
                 .catch(err => this.logger.error('[CommentProcessor] flagComment after send-failed threw', { err, commentId: comment.id }));
             publishSSEEvent(userId, 'comment:reply_failed', {
                 commentId: comment.id,

@@ -204,6 +204,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         flagReason?: string,
         aiIntent?: string,
         aiOriginalReply?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
     ): Promise<void> {
         await db
             .update(instagramComments)
@@ -213,6 +214,7 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
                 replyMethod,
                 needsAttention: needsAttention ?? false,
                 flagReason: flagReason ?? null,
+                flagMeta: flagMeta ?? null,
                 aiIntent: aiIntent ?? null,
                 aiOriginalReply: aiOriginalReply ?? null,
                 detectedLanguage,
@@ -222,12 +224,18 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
             .where(eq(instagramComments.id, commentId));
     }
 
-    async flagComment(commentId: string, flagReason?: string, aiIntent?: string): Promise<void> {
+    async flagComment(
+        commentId: string,
+        flagReason?: string,
+        aiIntent?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
+    ): Promise<void> {
         await db
             .update(instagramComments)
             .set({
                 needsAttention: true,
                 flagReason: flagReason ?? null,
+                flagMeta: flagMeta ?? null,
                 aiIntent: aiIntent ?? null,
                 updatedAt: new Date(),
             })

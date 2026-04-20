@@ -382,7 +382,7 @@ describe('FacebookCommentAdapter', () => {
             );
 
             expect(mockMarkAsReplied).toHaveBeenCalledWith(
-                'comment_uuid_1', 'Thank you!', 'ai', 'en', false, undefined, 'positive', undefined,
+                'comment_uuid_1', 'Thank you!', 'ai', 'en', false, undefined, 'positive', undefined, undefined,
             );
         });
     });
@@ -396,6 +396,7 @@ describe('FacebookCommentAdapter', () => {
             expect(mockUpdateComment).toHaveBeenCalledWith('comment_uuid_1', {
                 needsAttention: true,
                 flagReason: 'offensive',
+                flagMeta: null,
                 aiIntent: 'OFFENSIVE',
             });
         });
@@ -408,6 +409,7 @@ describe('FacebookCommentAdapter', () => {
             expect(mockUpdateComment).toHaveBeenCalledWith('comment_uuid_1', {
                 needsAttention: true,
                 flagReason: null,
+                flagMeta: null,
                 aiIntent: null,
             });
         });

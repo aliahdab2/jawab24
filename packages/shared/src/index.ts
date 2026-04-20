@@ -4,6 +4,30 @@
 export { default as flagReasonEn } from './i18n/en/flagReason.json';
 export { default as flagReasonAr } from './i18n/ar/flagReason.json';
 
+// --- Flag Reason Structured Metadata ---
+/**
+ * Structured parameters/debug info attached to a flag_reason. Keyed by the
+ * reason code so multi-flag rows (comma-separated flag_reason) can carry
+ * per-reason data. Rows with only plain keys (info_not_in_kb, angry_customer,
+ * etc.) leave flag_meta NULL.
+ *
+ * Example: flag_reason = "dm_failed,low_confidence",
+ *          flag_meta   = { dm_failed: { bucket: "unknown", code: 10, fbMessage: "..." } }
+ */
+export interface FlagMeta {
+    dm_failed?: {
+        bucket: 'customer_refused' | 'window_expired' | 'transient' | 'our_fault' | 'unknown';
+        code?: number;
+        subcode?: number;
+        fbMessage?: string;
+    };
+    sla_no_reply?: {
+        minutes: number;
+    };
+    // Open-ended: future flags can add their own namespaced meta here.
+    [key: string]: Record<string, unknown> | undefined;
+}
+
 // --- Utilities ---
 export { normalizeArabic } from './utils/arabic-normalize';
 export type { NormalizeOptions } from './utils/arabic-normalize';
@@ -35,6 +59,7 @@ export interface Message {
   repliedAt?: string | Date | null;
   needsAttention?: boolean;
   flagReason?: string | null;
+  flagMeta?: FlagMeta | null;
   aiIntent?: string | null;
   aiOriginalReply?: string | null;
   resolved?: boolean;
@@ -61,6 +86,7 @@ export interface Comment {
   postPermalink?: string | null;
   needsAttention?: boolean;
   flagReason?: string | null;
+  flagMeta?: FlagMeta | null;
   aiIntent?: string | null;
   aiOriginalReply?: string | null;
   resolved?: boolean | null;
@@ -153,6 +179,7 @@ export interface InstagramComment {
   createdAt: string | Date | null;
   needsAttention?: boolean;
   flagReason?: string | null;
+  flagMeta?: FlagMeta | null;
   aiIntent?: string | null;
 }
 
@@ -334,6 +361,7 @@ export interface ReplyJobResult {
   error?: string;
   needsAttention?: boolean;
   flagReason?: string;
+  flagMeta?: FlagMeta;
   aiIntent?: string;
   /** When set, the worker should re-enqueue this job with the given delay (ms) */
   handoffDelayMs?: number;

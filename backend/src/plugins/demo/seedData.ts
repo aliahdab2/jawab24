@@ -212,6 +212,7 @@ const DEMO_COMMENTS: Array<{
     replyMethod: string | null;
     needsAttention?: boolean;
     flagReason?: string;
+    flagMeta?: import('@jawab24/shared').FlagMeta | null;
     resolved?: boolean;
 }> = [
     // ── Institute comments (posts 0, 1) ──
@@ -324,7 +325,8 @@ const DEMO_COMMENTS: Array<{
         replyText: null,
         replyMethod: null,
         needsAttention: true,
-        flagReason: 'sla_no_reply:60',
+        flagReason: 'sla_no_reply',
+        flagMeta: { sla_no_reply: { minutes: 60 } },
     },
     {
         // Unreplied on congrats post — can be resolved (no reply needed)
@@ -514,6 +516,7 @@ const DEMO_MESSAGES: Array<{
     replyMethod: string | null;
     needsAttention?: boolean;
     flagReason?: string;
+    flagMeta?: import('@jawab24/shared').FlagMeta | null;
     resolved?: boolean;
     minutesAgo: number;
 }> = [
@@ -1157,6 +1160,7 @@ export async function seedDemoData(
                 replyMethod: msgData.replyMethod,
                 needsAttention: msgData.needsAttention ?? false,
                 flagReason: msgData.flagReason ?? null,
+                flagMeta: msgData.flagMeta ?? null,
                 resolved: msgData.resolved ?? false,
                 createdTime: msgTime,
                 createdAt: msgTime,
@@ -1209,6 +1213,7 @@ export async function seedDemoData(
                 replyLanguage: commentData.replyLanguage,
                 needsAttention: commentData.needsAttention ?? false,
                 flagReason: commentData.flagReason ?? null,
+                flagMeta: commentData.flagMeta ?? null,
                 resolved: commentData.resolved ?? false,
                 createdTime: commentCreatedTime,
                 repliedAt: commentData.replied
@@ -1312,6 +1317,7 @@ export async function seedDemoData(
             replyLanguage: commentData.replyLanguage,
             needsAttention: commentData.needsAttention ?? false,
             flagReason: commentData.flagReason ?? null,
+            flagMeta: commentData.flagMeta ?? null,
             resolved: commentData.resolved ?? false,
             createdTime: commentCreatedTime,
             repliedAt: commentData.replied
@@ -1339,6 +1345,7 @@ export async function seedDemoData(
             replyMethod: msgData.replyMethod,
             needsAttention: msgData.needsAttention ?? false,
             flagReason: msgData.flagReason ?? null,
+            flagMeta: msgData.flagMeta ?? null,
             resolved: msgData.resolved ?? false,
             createdTime: msgTime,
             createdAt: msgTime,

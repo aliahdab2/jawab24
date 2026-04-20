@@ -100,18 +100,25 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         flagReason?: string,
         aiIntent?: string,
         aiOriginalReply?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
     ): Promise<void> {
         await commentsService.markAsReplied(
             commentId, replyText, replyMethod,
             detectedLanguage, needsAttention, flagReason, aiIntent,
-            aiOriginalReply,
+            aiOriginalReply, flagMeta,
         );
     }
 
-    async flagComment(commentId: string, flagReason?: string, aiIntent?: string): Promise<void> {
+    async flagComment(
+        commentId: string,
+        flagReason?: string,
+        aiIntent?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
+    ): Promise<void> {
         await commentsService.updateComment(commentId, {
             needsAttention: true,
             flagReason: flagReason ?? null,
+            flagMeta: flagMeta ?? null,
             aiIntent: aiIntent ?? null,
         });
     }

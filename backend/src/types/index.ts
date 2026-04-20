@@ -137,6 +137,7 @@ export interface Comment {
     replyLanguage: string | null;
     needsAttention: boolean | null;
     flagReason: string | null;
+    flagMeta: import('@jawab24/shared').FlagMeta | null;
     aiIntent: string | null;
     createdTime: Date | null;
     repliedAt: Date | null;
@@ -166,6 +167,7 @@ export interface UpdateCommentDTO {
     repliedAt?: Date;
     needsAttention?: boolean;
     flagReason?: string | null;
+    flagMeta?: import('@jawab24/shared').FlagMeta | null;
     aiIntent?: string | null;
     fromName?: string;
 }

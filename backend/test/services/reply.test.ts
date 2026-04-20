@@ -380,7 +380,8 @@ describe('Reply Service', () => {
                 true, // needsAttention
                 'angry_customer', // flagReason
                 'COMPLAINT', // aiIntent
-                'We apologize for the inconvenience.' // aiOriginalReply (captured for AI replies)
+                'We apologize for the inconvenience.', // aiOriginalReply (captured for AI replies)
+                undefined, // flagMeta (plain keys like angry_customer carry no structured params)
             );
         });
 

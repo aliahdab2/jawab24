@@ -1867,11 +1867,46 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 adapter, 'page-1', 'content-1', 'comment-1', 'Hello', 'user-1', 'Alice',
             );
 
-            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'rate limited by Graph API');
+            // Plain send failure (no dmFailure) flags with generic 'send_failed' key + null meta.
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'send_failed', undefined, null);
             expect(result.success).toBe(false);
             const failedCall = vi.mocked(publishSSEEvent).mock.calls
                 .find(c => c[1] === 'comment:reply_failed');
             expect(failedCall).toBeDefined();
+        });
+
+        it('sendAndFinalize flags dm_failed with bucket + FB error code in flag_meta on DM failure', async () => {
+            const adapter = createMockAdapter({
+                sendReply: vi.fn().mockResolvedValue({
+                    success: false,
+                    error: 'DM failed: window_expired',
+                    dmFailure: {
+                        bucket: 'window_expired',
+                        code: 10,
+                        subcode: 2018278,
+                        fbMessage: 'This message is sent outside of allowed window.',
+                        rawMessage: 'Error validating access token',
+                    },
+                }),
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello', 'user-1', 'Alice',
+            );
+
+            expect(adapter.flagComment).toHaveBeenCalledWith(
+                'comment-uuid',
+                'dm_failed',
+                undefined,
+                {
+                    dm_failed: {
+                        bucket: 'window_expired',
+                        code: 10,
+                        subcode: 2018278,
+                        fbMessage: 'This message is sent outside of allowed window.',
+                    },
+                },
+            );
         });
 
         it('empty AI reply with no adapter fallback flags for attention', async () => {

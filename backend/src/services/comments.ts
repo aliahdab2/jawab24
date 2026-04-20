@@ -106,6 +106,7 @@ export class CommentsService {
             pageName: pages.name,
             needsAttention: comments.needsAttention,
             flagReason: comments.flagReason,
+            flagMeta: comments.flagMeta,
             aiIntent: comments.aiIntent,
             aiOriginalReply: comments.aiOriginalReply,
             resolved: comments.resolved,
@@ -153,6 +154,7 @@ export class CommentsService {
             pageName: pages.name,
             needsAttention: instagramComments.needsAttention,
             flagReason: instagramComments.flagReason,
+            flagMeta: instagramComments.flagMeta,
             aiIntent: instagramComments.aiIntent,
             aiOriginalReply: instagramComments.aiOriginalReply,
             resolved: instagramComments.resolved,
@@ -222,6 +224,7 @@ export class CommentsService {
                 pageName: pages.name,
                 needsAttention: comments.needsAttention,
                 flagReason: comments.flagReason,
+                flagMeta: comments.flagMeta,
                 aiIntent: comments.aiIntent,
             })
             .from(comments)
@@ -317,6 +320,7 @@ export class CommentsService {
         flagReason?: string,
         aiIntent?: string,
         aiOriginalReply?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
     ) {
         const [updatedComment] = await db
             .update(comments)
@@ -327,6 +331,7 @@ export class CommentsService {
                 replyLanguage,
                 needsAttention: needsAttention ?? false,
                 flagReason: flagReason ?? null,
+                flagMeta: flagMeta ?? null,
                 aiIntent: aiIntent ?? null,
                 aiOriginalReply: aiOriginalReply ?? null,
                 repliedAt: new Date(),

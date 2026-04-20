@@ -110,6 +110,7 @@ export interface CommentPlatformAdapter {
         flagReason?: string,
         aiIntent?: string,
         aiOriginalReply?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
     ): Promise<void>;
 
     /**
@@ -126,7 +127,12 @@ export interface CommentPlatformAdapter {
     getFallbackReply(): string | null;
 
     /** Flag a comment as needing attention without sending a reply */
-    flagComment(commentId: string, flagReason?: string, aiIntent?: string): Promise<void>;
+    flagComment(
+        commentId: string,
+        flagReason?: string,
+        aiIntent?: string,
+        flagMeta?: import('@jawab24/shared').FlagMeta | null,
+    ): Promise<void>;
 
     /**
      * Fetch the commenter's name from the platform API (best-effort fallback).
