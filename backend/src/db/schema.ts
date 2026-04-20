@@ -226,6 +226,10 @@ export const comments = pgTable('comments', {
     replyLanguage: varchar('reply_language', { length: 10 }),
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),
+    // Structured params/debug info for flag_reason keys that carry data
+    // (e.g. { dm_failed: { bucket, code, fbMessage } }, { sla_no_reply: { minutes } }).
+    // Plain keys like info_not_in_kb leave this NULL.
+    flagMeta: jsonb('flag_meta'),
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
     createdTime: timestamp('created_time'),
@@ -267,6 +271,7 @@ export const instagramComments = pgTable('instagram_comments', {
     replyLanguage: varchar('reply_language', { length: 10 }),
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),
+    flagMeta: jsonb('flag_meta'),
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
     createdTime: timestamp('created_time'),
@@ -393,6 +398,7 @@ export const messages = pgTable('messages', {
     replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),
+    flagMeta: jsonb('flag_meta'),
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
     attachmentType: varchar('attachment_type', { length: 20 }), // 'audio', 'image', 'video', 'file' — null for text

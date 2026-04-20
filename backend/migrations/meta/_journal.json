@@ -582,6 +582,20 @@
       "when": 1776692571394,
       "tag": "0082_abandoned_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "5",
+      "when": 1776722815942,
+      "tag": "0083_melted_steel_serpent",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "5",
+      "when": 1776722815943,
+      "tag": "0084_backfill_flag_meta",
+      "breakpoints": true
     }
   ]
 }
