@@ -27,3 +27,6 @@ export { useCountdown } from './useCountdown';
 export { usePageFilter } from './usePageFilter';
 export { useIsEmbedded } from './useIsEmbedded';
 export { useHandoffPauseDuration } from './useHandoffPauseDuration';
+export { useLoadConversation } from './useLoadConversation';
+export { useDeepLinkParam } from './useDeepLinkParam';
+export { useDeepLinkResource } from './useDeepLinkResource';

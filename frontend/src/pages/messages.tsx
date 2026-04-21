@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic';
 
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, useConversationActions, usePageFilter } from '@/hooks';
+import { useDebounce, useConversationActions, usePageFilter, useLoadConversation, useDeepLinkResource } from '@/hooks';
 import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import {
@@ -39,6 +39,7 @@ const resolveFilter = resolveInboxFilter;
 const getApiParams = (filter: FilterType): MessagesQueryParams => inboxFilterToApiParams(filter);
 
 const MESSAGES_PER_PAGE = 50;
+const deepLinkErrorTag = { page: 'messages', action: 'deep-link' } as const;
 
 const MessagesPage: NextPageWithLayout = () => {
   const t = useTranslations('messages');
@@ -56,7 +57,6 @@ const MessagesPage: NextPageWithLayout = () => {
   const debouncedSearch = useDebounce(searchQuery, 300);
   const [filter, setFilter] = useState<FilterType>('needs_action');
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const pendingDeepLinkRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   // Infinite scroll observer ref
@@ -93,23 +93,13 @@ const MessagesPage: NextPageWithLayout = () => {
     router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
   }, [filter, router]);
 
-  // Update internal filter when URL changes (+ deep-link handling)
+  // Update internal filter when URL changes
   useEffect(() => {
     if (!router.isReady) return;
-    const messageId = router.query.messageId as string | undefined;
-    if (messageId) {
-      pendingDeepLinkRef.current = messageId;
-      setFilter('all');
-      const params = new URLSearchParams(window.location.search);
-      params.delete('messageId');
-      params.delete('filter');
-      router.replace({ pathname: router.pathname, query: Object.fromEntries(params) }, undefined, { shallow: true });
-      return;
-    }
     const currentParam = router.query.filter as string | undefined;
     setFilter(resolveFilter(currentParam));
     syncFromUrl(router.query.page as string | undefined);
-  }, [router.isReady, router.query.filter, router.query.messageId, router.query.page, router, syncFromUrl]);
+  }, [router.isReady, router.query.filter, router.query.page, syncFromUrl]);
 
   // URL-driven modal open: ?conversation=<senderId> — back button / swipe-back pops
   // the entry naturally, which triggers setSelectedConversation(null) via the sync
@@ -296,20 +286,18 @@ const MessagesPage: NextPageWithLayout = () => {
 
   }, [allMessages, debouncedSearch, checkConversationNeedsAttention]);
 
-  // Deep-link: auto-select conversation after "all" data loads
-  useEffect(() => {
-    if (!pendingDeepLinkRef.current || isLoading || filter !== 'all') return;
-    const targetId = pendingDeepLinkRef.current;
-    const found = conversations.find(c =>
-      c.messages.some(m => m.id === targetId)
-    );
-    if (found) {
-      openConversation(found);
-    } else if (allMessages.length > 0) {
-      toast.info(t('deepLinkNotFound'));
-    }
-    pendingDeepLinkRef.current = null;
-  }, [conversations, allMessages, isLoading, filter, t, openConversation]);
+  // Deep-link: fetch the conversation directly by messageId (bypasses list pagination/filters).
+  const loadConversation = useLoadConversation();
+  const fetchConversationByMessageId = useCallback(async (messageId: string) => {
+    const { data: locate } = await messagesApi.locateMessage(messageId);
+    return loadConversation({ senderId: locate.senderId, pageId: locate.pageId, limit: 100 });
+  }, [loadConversation]);
+  useDeepLinkResource<Conversation>('messageId', {
+    fetch: fetchConversationByMessageId,
+    onOpen: setSelectedConversation,
+    notFoundMessage: t('deepLinkNotFound'),
+    errorTag: deepLinkErrorTag,
+  });
 
   // Sync modal state from URL (?conversation=<senderId>). Drives open via
   // click/deep-link AND close via browser back / swipe-back / hardware back.

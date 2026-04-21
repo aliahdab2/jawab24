@@ -13,7 +13,7 @@ import { SwipeableCommentCard } from '@/components/comments';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, usePageFilter } from '@/hooks';
+import { useDebounce, usePageFilter, useDeepLinkResource } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import {
   MessageSquare,
@@ -41,6 +41,7 @@ import { groupComments, filterGroupsBySearch } from '@/utils/commentGrouping';
 import { type InboxFilterType, resolveInboxFilter, inboxFilterToApiParams } from '@/utils/inboxFilters';
 type FilterType = InboxFilterType;
 const resolveFilter = resolveInboxFilter;
+const deepLinkErrorTag = { page: 'comments', action: 'deep-link' } as const;
 const getApiParams = (filter: FilterType): CommentsQueryParams => inboxFilterToApiParams(filter);
 
 
@@ -88,7 +89,6 @@ const CommentsPage: NextPageWithLayout = () => {
     }
     return map;
   }, [postsData]);
-  const pendingDeepLinkRef = useRef<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -232,25 +232,13 @@ const CommentsPage: NextPageWithLayout = () => {
     router.push({ pathname: router.pathname, query: params.toString() }, undefined, { shallow: true });
   }, [filter, router]);
 
-  // Update internal filter when URL changes (+ deep-link handling)
+  // Update internal filter when URL changes
   useEffect(() => {
     if (!router.isReady) return;
-    const commentId = router.query.commentId as string | undefined;
-    if (commentId) {
-      // Store target ID and switch to "all" so the comment is visible regardless of status
-      pendingDeepLinkRef.current = commentId;
-      setFilter('all');
-      // Clean URL immediately to avoid re-triggering
-      const params = new URLSearchParams(window.location.search);
-      params.delete('commentId');
-      params.delete('filter');
-      router.replace({ pathname: router.pathname, query: Object.fromEntries(params) }, undefined, { shallow: true });
-      return;
-    }
     const currentParam = router.query.filter as string | undefined;
     setFilter(resolveFilter(currentParam));
     syncFromUrl(router.query.page as string | undefined);
-  }, [router.isReady, router.query.filter, router.query.page, router.query.commentId, router, syncFromUrl]);
+  }, [router.isReady, router.query.filter, router.query.page, syncFromUrl]);
 
   // URL-driven modal open: ?comment=<id> — back button / swipe-back pops the
   // entry naturally, which clears selectedComment via the sync effect below.
@@ -274,18 +262,17 @@ const CommentsPage: NextPageWithLayout = () => {
     }
   }, [router]);
 
-  // Deep-link: auto-select comment after "all" data loads
-  useEffect(() => {
-    if (!pendingDeepLinkRef.current || isLoading || filter !== 'all') return;
-    const targetId = pendingDeepLinkRef.current;
-    const found = allComments.find(c => c.id === targetId);
-    if (found) {
-      openComment(found);
-    } else if (allComments.length > 0) {
-      toast.info(t('deepLinkNotFound'));
-    }
-    pendingDeepLinkRef.current = null;
-  }, [allComments, isLoading, filter, t, openComment]);
+  // Deep-link: fetch the comment directly by id (bypasses list pagination/filters).
+  const fetchCommentById = useCallback(async (commentId: string) => {
+    const { data } = await commentsApi.getById(commentId);
+    return (data as unknown as Comment) ?? null;
+  }, []);
+  useDeepLinkResource<Comment>('commentId', {
+    fetch: fetchCommentById,
+    onOpen: openComment,
+    notFoundMessage: t('deepLinkNotFound'),
+    errorTag: deepLinkErrorTag,
+  });
 
   // Sync modal state from URL (?comment=<id>). Drives open via click/deep-link
   // AND close via browser back / swipe-back / hardware back.

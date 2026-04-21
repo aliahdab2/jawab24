@@ -34,7 +34,7 @@ import { formatRelativeTime } from '@/utils/dateUtils';
 import type { NextPageWithLayout } from './_app';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
-import { useConversationActions } from '@/hooks';
+import { useConversationActions, useLoadConversation } from '@/hooks';
 import { useWorkspaceRole } from '@/hooks';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { useIsDemoUser } from '@/features/demo';
@@ -463,31 +463,22 @@ const DashboardPage: NextPageWithLayout = () => {
 
   // --- Message conversation modal handlers ---
 
+  const loadConversation = useLoadConversation();
   const openConversationModal = useCallback(async (senderId: string, pageId: string, senderName: string | null) => {
     const loadingToastId = toast.loading(tc('loading'));
     try {
-      const res = await messagesApi.getConversation(senderId, { pageId, limit: 50 });
-      const msgs = Array.isArray(res.data) ? res.data : [];
-      if (msgs.length === 0) {
+      const conv = await loadConversation({ senderId, pageId, senderName });
+      if (!conv) {
         toast.error(tc('noData'), { id: loadingToastId });
         return;
       }
       toast.dismiss(loadingToastId);
-      const sorted = [...msgs].sort((a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      );
-      setSelectedConversation({
-        senderId,
-        senderName: senderName || msgs[0]?.senderName || null,
-        messages: sorted,
-        lastMessage: sorted[sorted.length - 1],
-        needsHumanAttention: sorted.some(m => m.needsAttention && !m.replied),
-      });
+      setSelectedConversation(conv);
     } catch (err) {
       captureError(err, 'Failed to load conversation', { tags: { page: 'dashboard', action: 'open-conversation' } });
       toast.error(t('sectionLoadError'), { id: loadingToastId });
     }
-  }, [t, tc, setSelectedConversation]);
+  }, [t, tc, setSelectedConversation, loadConversation]);
 
   const handleAttentionItemClick = useCallback((item: NeedsAttentionItem) => {
     if (item.type === 'message' && item.senderId && item.pageId) {

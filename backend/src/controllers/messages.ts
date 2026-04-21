@@ -69,6 +69,39 @@ export class MessagesController {
     }
 
     /**
+     * Locate a message by id — returns { senderId, pageId } so deep-link handlers
+     * can open the containing conversation without scanning the paginated list.
+     * GET /messages/locate/:messageId
+     */
+    async locateMessage(
+        request: FastifyRequest<{ Params: { messageId: string } }>,
+        reply: FastifyReply
+    ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+
+        try {
+            const { messageId } = request.params;
+            const message = await messagesService.getMessageById(messageId);
+            if (!message) {
+                return reply.status(404).send({ error: 'Message not found' });
+            }
+
+            const page = await pagesService.getPage(req.workspaceId, message.pageId);
+            if (!page) {
+                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
+            }
+
+            return reply.send({ senderId: message.senderId, pageId: message.pageId });
+        } catch (error) {
+            request.log.error({ error: String(error) }, 'Error locating message');
+            return reply.status(500).send({ error: 'Failed to locate message' });
+        }
+    }
+
+    /**
      * Get conversation with a specific sender
      * GET /messages/conversation/:senderId
      */

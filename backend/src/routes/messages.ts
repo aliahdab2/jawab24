@@ -25,6 +25,14 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
             },
         }, messagesController.getStats);
 
+        protectedRoutes.get('/messages/locate/:messageId', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Locate a message by id (returns senderId + pageId for deep-link)',
+                security: auth,
+            },
+        }, messagesController.locateMessage);
+
         protectedRoutes.get('/messages/conversation/:senderId', {
             schema: {
                 tags: ['Messages'],

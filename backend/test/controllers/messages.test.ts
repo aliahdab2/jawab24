@@ -267,6 +267,70 @@ describe('MessagesController', () => {
         });
     });
 
+    // ─── locateMessage ───────────────────────────────────
+
+    describe('locateMessage', () => {
+        beforeEach(() => {
+            (mockRequest as any).params = { messageId: 'msg-1' };
+        });
+
+        it('should return senderId and pageId for an owned message', async () => {
+            vi.mocked(messagesService.getMessageById).mockResolvedValue({
+                id: 'msg-1',
+                senderId: 'sender-1',
+                pageId: 'page-1',
+            } as any);
+            vi.mocked(pagesService.getPage).mockResolvedValue({ id: 'page-1' } as any);
+
+            await messagesController.locateMessage(mockRequest as any, mockReply as any);
+
+            expect(pagesService.getPage).toHaveBeenCalledWith('test_workspace_id', 'page-1');
+            expect(mockReply.send).toHaveBeenCalledWith({ senderId: 'sender-1', pageId: 'page-1' });
+        });
+
+        it('should return 401 when no workspaceId', async () => {
+            (mockRequest as any).workspaceId = undefined;
+
+            await messagesController.locateMessage(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+            expect(messagesService.getMessageById).not.toHaveBeenCalled();
+        });
+
+        it('should return 404 when message does not exist', async () => {
+            vi.mocked(messagesService.getMessageById).mockResolvedValue(null);
+
+            await messagesController.locateMessage(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(404);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Message not found' });
+            expect(pagesService.getPage).not.toHaveBeenCalled();
+        });
+
+        it('should return 403 when page is not owned by workspace', async () => {
+            vi.mocked(messagesService.getMessageById).mockResolvedValue({
+                id: 'msg-1',
+                senderId: 'sender-1',
+                pageId: 'page-other',
+            } as any);
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+
+            await messagesController.locateMessage(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Unauthorized: page not owned by workspace' });
+        });
+
+        it('should return 500 on service failure', async () => {
+            vi.mocked(messagesService.getMessageById).mockRejectedValue(new Error('db down'));
+
+            await messagesController.locateMessage(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(500);
+            expect(mockReply.send).toHaveBeenCalledWith({ error: 'Failed to locate message' });
+        });
+    });
+
     // ─── resumeConversation ──────────────────────────────
 
     describe('resumeConversation', () => {

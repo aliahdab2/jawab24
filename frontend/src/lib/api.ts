@@ -223,6 +223,7 @@ export const commentsApi = {
     api.get<CommentsPaginatedResponse>('/comments', { params }),
   getStats: () => api.get<CommentStats>('/comments/stats'),
   getByPost: (postId: string) => api.get(`/posts/${postId}/comments`),
+  getById: (id: string) => api.get<CommentData>(`/comments/${id}`),
   reply: (id: string, text: string) =>
     api.post(`/comments/${id}/reply`, { replyText: text }),
   submitFeedback: (id: string, data: { feedback: 'positive' | 'negative'; reason?: string[]; source: string }) =>
@@ -363,6 +364,9 @@ export const messagesApi = {
 
   getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
     api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),
+
+  locateMessage: (messageId: string) =>
+    api.get<{ senderId: string; pageId: string }>(`/messages/locate/${messageId}`),
 
   reply: (messageId: string, replyText: string) =>
     api.post<Message>(`/messages/${messageId}/reply`, { replyText }),
