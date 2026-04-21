@@ -28,6 +28,7 @@ interface TestSmartReplyModalProps {
 
 export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps) {
   const t = useTranslations('pages');
+  const tCommon = useTranslations('common');
   const locale = useLocale();
   const dir = getLocaleDirection(locale);
   const [mounted, setMounted] = useState(false);
@@ -163,7 +164,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
 
   const modalContent = (
     <div
-      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
+      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200 touch-none"
       style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
@@ -172,14 +173,23 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
         role="dialog"
         aria-modal="true"
         dir={dir}
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-3xl h-full sm:h-[70vh] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-3xl h-full sm:h-[70vh] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
         {/* Compact header with channel toggle */}
-        <div className="flex items-center justify-between px-4 md:px-6 py-2.5 md:py-3 border-b border-theme-border flex-shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <h3 className="text-base font-semibold text-foreground flex-shrink-0">{t('testSmartReply')}</h3>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 md:px-6 py-2.5 md:py-3 border-b border-theme-border flex-shrink-0">
+          <div className="flex items-center justify-between gap-3 min-w-0">
+            <h3 className="text-base font-semibold text-foreground truncate">{t('testSmartReply')}</h3>
+            <button
+              onClick={onClose}
+              className="sm:hidden p-2 -me-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
+              aria-label={tCommon('close')}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex items-center gap-2 min-w-0">
             <div className="flex items-center gap-1 p-0.5 bg-muted rounded-lg flex-shrink-0">
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -208,17 +218,18 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                 {t('testSmartReplyComment')}
               </button>
             </div>
+            <button
+              onClick={onClose}
+              className="hidden sm:block p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0 ms-auto"
+              aria-label={tCommon('close')}
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
-          >
-            <X className="w-5 h-5" />
-          </button>
         </div>
 
         {/* Chat area — takes all remaining space */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50 min-h-0">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50 min-h-0">
           {/* Empty state — centered in the full chat area */}
           {!hasMessages && (
             <div className="h-full flex flex-col items-center justify-center gap-3">
@@ -337,7 +348,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                     placeholder={t('testSmartReplyPostContextPlaceholder')}
                     maxLength={1000}
                     rows={2}
-                    className="w-full px-3 py-2 text-sm bg-background border border-theme-border rounded-xl resize-none placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
+                    className="w-full px-3 py-2 text-sm bg-background border border-theme-border rounded-xl resize-none overscroll-contain placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
                     autoFocus
                   />
                 </div>
@@ -356,7 +367,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
               placeholder={t('testSmartReplyPlaceholder')}
               maxLength={500}
               rows={1}
-              className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-colors outline-none h-[42px]"
+              className="flex-1 min-w-0 resize-none overscroll-contain rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-colors outline-none h-[42px]"
             />
             <button
               onMouseDown={(e) => e.preventDefault()}

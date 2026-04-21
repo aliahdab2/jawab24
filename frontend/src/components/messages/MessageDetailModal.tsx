@@ -210,13 +210,13 @@ export function MessageDetailModal({
 
   return createPortal(
     <div
-      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
+      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200 touch-none"
       style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
       <div
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -305,7 +305,7 @@ export function MessageDetailModal({
         <div
           ref={scrollContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50"
+          className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50"
         >
           <div className="min-h-full flex flex-col justify-end gap-4 sm:gap-6">
             {sortedMessages.map((msg, idx) => {
@@ -405,7 +405,7 @@ export function MessageDetailModal({
               placeholder={t('typeReply')}
               aria-label={t('typeReply')}
               rows={1}
-              className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+              className="flex-1 min-w-0 resize-none overscroll-contain rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
               style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
               disabled={isReplying}
             />
@@ -440,7 +440,7 @@ export function MessageDetailModal({
             {/* Resolve / Unresolve — end-aligned */}
             {hasUnresolvedIncoming ? (
               <button
-                onClick={() => onResolve(conversation.senderId, pageId)}
+                onClick={() => { onResolve(conversation.senderId, pageId); onClose(); }}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-emerald-700 hover:bg-emerald-50 dark:hover:text-emerald-400 dark:hover:bg-emerald-900/30"
               >
                 <CheckCircle className="w-4 h-4 flex-shrink-0" />
@@ -448,7 +448,7 @@ export function MessageDetailModal({
               </button>
             ) : hasResolvedIncoming && onUnresolve ? (
               <button
-                onClick={() => onUnresolve(conversation.senderId, pageId)}
+                onClick={() => { onUnresolve(conversation.senderId, pageId); onClose(); }}
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all text-muted-foreground hover:text-foreground hover:bg-muted"
               >
                 <Undo2 className="w-4 h-4 flex-shrink-0" />

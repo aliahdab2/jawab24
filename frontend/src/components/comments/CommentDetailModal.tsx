@@ -147,7 +147,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
   return createPortal(
     <div
-      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200"
+      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200 touch-none"
       style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
@@ -156,7 +156,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="comment-detail-modal-title"
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -219,7 +219,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         />
 
         {/* Chat Thread */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-muted/50">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 md:p-6 bg-muted/50">
           <div className="min-h-full flex flex-col justify-end gap-4">
             {/* Post context snippet */}
             {comment.postMessage && (
@@ -306,7 +306,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
                 placeholder={comment.replied && needsAttention ? t('followUpReply') : t('typeReply')}
                 aria-label={t('typeReply')}
                 rows={1}
-                className="flex-1 min-w-0 resize-none rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
+                className="flex-1 min-w-0 resize-none overscroll-contain rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground rtl:placeholder:text-right focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-all outline-none"
                 style={{ fieldSizing: 'content', minHeight: '42px', maxHeight: '120px' } as React.CSSProperties}
                 disabled={isSending}
               />
