@@ -139,6 +139,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         if (kbHeight > 50) {
           document.documentElement.style.setProperty('--keyboard-height', `${kbHeight}px`);
           document.documentElement.classList.add('keyboard-open');
+        } else {
+          document.documentElement.style.setProperty('--keyboard-height', '0px');
+          document.documentElement.classList.remove('keyboard-open');
         }
       };
       vv.addEventListener('resize', updateKeyboardHeight);
