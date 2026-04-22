@@ -48,9 +48,9 @@ export const PLANS: PlanSeed[] = [
         ecommerceEnabled: false,
         showBranding: true,
         prioritySupport: false,
-        trialDays: 0,
+        trialDays: 30,
         isActive: true,
-        isDefault: false,
+        isDefault: true,
         sortOrder: 1,
     },
     {
@@ -71,7 +71,7 @@ export const PLANS: PlanSeed[] = [
         prioritySupport: false,
         trialDays: 0,
         isActive: true,
-        isDefault: true,
+        isDefault: false,
         sortOrder: 2,
     },
     {
