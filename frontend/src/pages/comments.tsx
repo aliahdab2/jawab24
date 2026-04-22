@@ -244,6 +244,7 @@ const CommentsPage: NextPageWithLayout = () => {
   // entry naturally, which clears selectedComment via the sync effect below.
   const pushedModalRef = useRef(false);
   const openComment = useCallback((comment: Comment) => {
+    setTriggerModalComment(null);
     pushedModalRef.current = true;
     router.push(
       { pathname: router.pathname, query: { ...router.query, comment: comment.id } },

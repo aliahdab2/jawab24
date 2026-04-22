@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { captureError } from '@/lib/sentryHelpers';
@@ -31,32 +31,49 @@ export function useDeepLinkResource<T>(
 ): void {
   const tc = useTranslations('common');
   const deepLinkId = useDeepLinkParam(paramName);
-  const { fetch, onOpen, notFoundMessage, errorTag } = opts;
+
+  // Keep latest opts in a ref so the effect only re-runs when deepLinkId changes.
+  // Without this, unstable callers (e.g. `onOpen` depending on `router`) cause the
+  // effect to re-fire mid-flight, spawning duplicate fetches and orphaning the
+  // loading toast from the previous run.
+  const optsRef = useRef(opts);
+  useEffect(() => {
+    optsRef.current = opts;
+  });
 
   useEffect(() => {
     if (!deepLinkId) return;
     const targetId = deepLinkId;
+    const loadingToastId = toast.loading(tc('loading'));
+    let cancelled = false;
 
     (async () => {
-      const loadingToastId = toast.loading(tc('loading'));
       try {
-        const resource = await fetch(targetId);
+        const resource = await optsRef.current.fetch(targetId);
+        if (cancelled) return;
         toast.dismiss(loadingToastId);
         if (!resource) {
-          toast.info(notFoundMessage);
+          toast.info(optsRef.current.notFoundMessage);
           return;
         }
-        onOpen(resource);
+        optsRef.current.onOpen(resource);
       } catch (err) {
+        if (cancelled) return;
         toast.dismiss(loadingToastId);
         const status = (err as { response?: { status?: number } })?.response?.status;
         if (status === 404) {
-          toast.info(notFoundMessage);
+          toast.info(optsRef.current.notFoundMessage);
         } else {
+          const { errorTag } = optsRef.current;
           captureError(err, `Failed to open deep-linked resource (${errorTag.page})`, { tags: errorTag });
           toast.error(tc('error'));
         }
       }
     })();
-  }, [deepLinkId, fetch, onOpen, notFoundMessage, errorTag, tc]);
+
+    return () => {
+      cancelled = true;
+      toast.dismiss(loadingToastId);
+    };
+  }, [deepLinkId, tc]);
 }
