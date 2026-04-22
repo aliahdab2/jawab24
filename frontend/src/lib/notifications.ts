@@ -3,9 +3,10 @@ import { Capacitor } from '@capacitor/core';
 import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } from '@capacitor/push-notifications';
 import axios from 'axios';
 import { toast } from 'sonner';
+import Router from 'next/router';
 import { api } from './api';
 import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
-import { ACTIONABLE_NOTIFICATION_TYPES } from '@/components/notifications/NotificationFilterPills';
+import { resolveNotificationRoute } from '@/components/ui/notificationUtils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
@@ -271,6 +272,24 @@ function handleForegroundNotification(notification: PushNotificationSchema): voi
 }
 
 /**
+ * Navigate via Next.js router when available (keeps in-memory auth/state),
+ * falling back to a full reload only on cold starts before the router mounts.
+ * A hard reload triggers re-hydration, which briefly routes through the
+ * landing/auth redirect path and can drop query params.
+ */
+function navigateTo(url: string): void {
+    if (typeof window === 'undefined') return;
+    // Router.router is null until _app.tsx mounts; use it when available.
+    if (Router.router) {
+        Router.push(url).catch(() => {
+            window.location.href = url;
+        });
+        return;
+    }
+    window.location.href = url;
+}
+
+/**
  * Handle notification tap - navigate to appropriate screen
  */
 function handleNotificationTap(action: ActionPerformed): void {
@@ -293,59 +312,7 @@ function handleNotificationTap(action: ActionPerformed): void {
 
     addErrorBreadcrumb('notification', 'tap', { type, hasCustomData: !!customData, keys: customData ? Object.keys(customData).join(',') : '' });
 
-    // 1a. Prefer item-specific deep links for comment/message notifications
-    const isCommentType = ACTIONABLE_NOTIFICATION_TYPES.includes(type as typeof ACTIONABLE_NOTIFICATION_TYPES[number]);
-    if (isCommentType && customData) {
-        const isMessage = customData.type === 'message';
-        if (isMessage && customData.messageId) {
-            if (typeof window !== 'undefined') window.location.href = `/messages?messageId=${encodeURIComponent(customData.messageId)}`;
-            return;
-        }
-        if (!isMessage && customData.commentId) {
-            if (typeof window !== 'undefined') window.location.href = `/comments?commentId=${encodeURIComponent(customData.commentId)}`;
-            return;
-        }
-    }
-
-    // 1b. For non-comment types, use stored deepLink
-    if (customData?.deepLink && !isCommentType) {
-        if (typeof window !== 'undefined') window.location.href = customData.deepLink;
-        return;
-    }
-
-    // 2. Fallback: route based on notification type
-    // For types shared by comments and messages (flagged_reply, skipped_reply),
-    // use customData.type to pick the right page, default to comments.
-    const itemType = customData?.type;
-    let route = '/dashboard';
-    switch (type) {
-        case 'stale_comment':
-        case 'new_comment':
-            route = '/comments?filter=needs_action';
-            break;
-        case 'stale_message':
-            route = '/messages?filter=needs_action';
-            break;
-        case 'flagged_reply':
-        case 'skipped_reply':
-            route = itemType === 'message' ? '/messages?filter=flagged' : '/comments?filter=flagged';
-            break;
-        case 'payment_failed':
-        case 'subscription_expiring':
-        case 'trial_ending':
-            route = '/pricing';
-            break;
-        case 'page_disconnected':
-        case 'kb_gap':
-            route = '/pages';
-            break;
-        default:
-            route = '/dashboard';
-    }
-
-    if (typeof window !== 'undefined') {
-        window.location.href = route;
-    }
+    navigateTo(resolveNotificationRoute(type ?? '', customData) ?? '/dashboard');
 }
 
 export interface UnreadCountResult {

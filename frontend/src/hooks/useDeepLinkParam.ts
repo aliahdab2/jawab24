@@ -2,26 +2,27 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/router';
 
 /**
- * Captures a one-shot deep-link query param (e.g. ?messageId=abc or ?commentId=xyz),
- * strips it from the URL on first read, and returns the captured value exactly once.
+ * Captures a deep-link query param (e.g. ?messageId=abc or ?commentId=xyz),
+ * strips it from the URL after reading, and returns the captured value.
  *
- * Downstream effects can depend on the returned value and run their fetch/open logic
- * without worrying about re-firing when other query params change.
+ * Re-fires when the param changes to a new value, so tapping a second
+ * notification while the page is already mounted still triggers the
+ * downstream fetch/open instead of being ignored.
  *
  * Returns null until router is ready, then either the captured string or null.
  */
 export function useDeepLinkParam(paramName: string): string | null {
   const router = useRouter();
   const [value, setValue] = useState<string | null>(null);
-  const consumedRef = useRef(false);
+  const lastConsumedRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!router.isReady || consumedRef.current) return;
+    if (!router.isReady) return;
     const raw = router.query[paramName];
     const captured = typeof raw === 'string' ? raw : null;
-    if (!captured) return;
+    if (!captured || captured === lastConsumedRef.current) return;
 
-    consumedRef.current = true;
+    lastConsumedRef.current = captured;
     setValue(captured);
 
     const params = new URLSearchParams(window.location.search);

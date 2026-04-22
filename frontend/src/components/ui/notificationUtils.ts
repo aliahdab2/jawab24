@@ -61,27 +61,37 @@ export function getNotificationStyle(type: string): NotificationStyle {
     return NOTIFICATION_STYLES[type] ?? DEFAULT_STYLE;
 }
 
-export function getNotificationRoute(notification: Notification): string | null {
-    const data = notification.data as Record<string, string> | undefined;
+/**
+ * Shared routing rules for a notification, used by both the in-app bell and
+ * the Android push-tap handler. Keep all type-to-route logic here so the two
+ * surfaces don't drift.
+ *
+ * Returns null when the notification doesn't map to a known route.
+ */
+export function resolveNotificationRoute(
+    type: string,
+    data: Record<string, string> | undefined,
+): string | null {
     const isMessage = data?.type === 'message';
 
-    // Comment/message notifications: deep-link to the specific item when possible
-    const isCommentType = ACTIONABLE_TYPES.has(notification.type);
-    if (isCommentType) {
+    if (ACTIONABLE_TYPES.has(type)) {
         if (isMessage && data?.messageId) {
             return `/messages?messageId=${encodeURIComponent(data.messageId)}`;
         }
         if (!isMessage && data?.commentId) {
             return `/comments?commentId=${encodeURIComponent(data.commentId)}`;
         }
-        // Fallback to filter page when no specific ID available
-        return (isMessage || notification.type === 'stale_message') ? '/messages?filter=needs_action' : '/comments?filter=needs_action';
+        if (type === 'flagged_reply' || type === 'skipped_reply') {
+            return isMessage ? '/messages?filter=flagged' : '/comments?filter=flagged';
+        }
+        return (isMessage || type === 'stale_message')
+            ? '/messages?filter=needs_action'
+            : '/comments?filter=needs_action';
     }
 
-    // Non-comment notifications: use stored deepLink or type-based fallback
     if (data?.deepLink) return data.deepLink;
 
-    switch (notification.type) {
+    switch (type) {
         case 'payment_failed':
         case 'subscription_expiring':
         case 'subscription_renewed':
@@ -93,6 +103,13 @@ export function getNotificationRoute(notification: Notification): string | null 
         default:
             return null;
     }
+}
+
+export function getNotificationRoute(notification: Notification): string | null {
+    return resolveNotificationRoute(
+        notification.type,
+        notification.data as Record<string, string> | undefined,
+    );
 }
 
 export function groupNotifications(

@@ -85,4 +85,27 @@ describe('useDeepLinkParam', () => {
     expect(result.current).toBeNull();
     expect(mockReplace).not.toHaveBeenCalled();
   });
+
+  it('re-fires when the param changes to a new value (second notification tap)', async () => {
+    mockQuery = { messageId: 'msg-1' };
+    (window.location as { search: string }).search = '?messageId=msg-1';
+    const { result, rerender } = await mount();
+
+    await waitFor(() => expect(result.current).toBe('msg-1'));
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+
+    // URL strip takes effect.
+    mockQuery = {};
+    (window.location as { search: string }).search = '';
+    rerender({ name: 'messageId' });
+    expect(result.current).toBe('msg-1');
+
+    // User taps a different notification — new messageId arrives.
+    mockQuery = { messageId: 'msg-2' };
+    (window.location as { search: string }).search = '?messageId=msg-2';
+    rerender({ name: 'messageId' });
+
+    await waitFor(() => expect(result.current).toBe('msg-2'));
+    expect(mockReplace).toHaveBeenCalledTimes(2);
+  });
 });
