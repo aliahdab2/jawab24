@@ -242,10 +242,17 @@ const CommentsPage: NextPageWithLayout = () => {
 
   // URL-driven modal open: ?comment=<id> — back button / swipe-back pops the
   // entry naturally, which clears selectedComment via the sync effect below.
+  //
+  // Deep-linked comments aren't in the paginated allComments list, so we stash
+  // the fetched resource in pendingOpenRef and let the sync effect pick it up
+  // once router.push lands. This keeps the URL as the single source of truth
+  // and avoids a race where a premature setSelectedComment would be cleared
+  // by the sync effect before the URL caught up.
   const pushedModalRef = useRef(false);
+  const pendingOpenRef = useRef<Map<string, Comment>>(new Map());
   const openComment = useCallback((comment: Comment) => {
     setTriggerModalComment(null);
-    setSelectedComment(comment);
+    pendingOpenRef.current.set(comment.id, comment);
     pushedModalRef.current = true;
     router.push(
       { pathname: router.pathname, query: { ...router.query, comment: comment.id } },
@@ -286,6 +293,12 @@ const CommentsPage: NextPageWithLayout = () => {
       return;
     }
     if (selectedComment?.id === commentIdParam) return;
+    const pending = pendingOpenRef.current.get(commentIdParam);
+    if (pending) {
+      pendingOpenRef.current.delete(commentIdParam);
+      setSelectedComment(pending);
+      return;
+    }
     const found = allComments.find(c => c.id === commentIdParam);
     if (found) setSelectedComment(found);
   }, [router.isReady, router.query.comment, allComments, selectedComment]);

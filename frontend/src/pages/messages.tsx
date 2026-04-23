@@ -292,17 +292,21 @@ const MessagesPage: NextPageWithLayout = () => {
     const { data: locate } = await messagesApi.locateMessage(messageId);
     return loadConversation({ senderId: locate.senderId, pageId: locate.pageId, limit: 100 });
   }, [loadConversation]);
-  // Deep-link opens: set state directly (conversation may not be in loaded list)
-  // and use router.replace — the notification tap already created the history entry,
-  // so we swap ?messageId for the canonical ?conversation without stacking a frame.
+  // Deep-link opens: the fetched conversation likely isn't in the paginated list,
+  // so stash it in pendingOpenRef and let the sync effect pick it up when
+  // router.replace lands. This keeps the URL as the source of truth and avoids
+  // the race where a premature setSelectedConversation would be cleared by the
+  // sync effect before the URL caught up. router.replace (not push) since the
+  // notification tap already created the history entry.
+  const pendingOpenRef = useRef<Map<string, Conversation>>(new Map());
   const openDeepLinkedConversation = useCallback((conv: Conversation) => {
-    setSelectedConversation(conv);
+    pendingOpenRef.current.set(conv.senderId, conv);
     router.replace(
       { pathname: router.pathname, query: { ...router.query, conversation: conv.senderId } },
       undefined,
       { shallow: true },
     );
-  }, [router, setSelectedConversation]);
+  }, [router]);
   useDeepLinkResource<Conversation>('messageId', {
     fetch: fetchConversationByMessageId,
     onOpen: openDeepLinkedConversation,
@@ -320,6 +324,12 @@ const MessagesPage: NextPageWithLayout = () => {
       return;
     }
     if (selectedConversation?.senderId === senderId) return;
+    const pending = pendingOpenRef.current.get(senderId);
+    if (pending) {
+      pendingOpenRef.current.delete(senderId);
+      setSelectedConversation(pending);
+      return;
+    }
     const found = conversations.find(c => c.senderId === senderId);
     if (found) setSelectedConversation(found);
   }, [router.isReady, router.query.conversation, conversations, selectedConversation, setSelectedConversation]);
