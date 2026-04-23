@@ -193,7 +193,22 @@
     "emailError": "فشل في إرسال البريد الإلكتروني",
     "emailConfirmTitle": "تأكيد الإرسال",
     "emailConfirmMessage": "سيتم إرسال بريد إلكتروني إلى {count} مشترك. لا يمكن التراجع عن هذا الإجراء.",
-    "emailPhoneOnly": "{count} مشترك سجّل برقم الهاتف فقط ولن يتلقى هذا البريد."
+    "emailPhoneOnly": "{count} مشترك سجّل برقم الهاتف فقط ولن يتلقى هذا البريد.",
+    "selectAllVisible": "تحديد الكل في هذه الصفحة",
+    "deselectAllVisible": "إلغاء التحديد لكل الصفحة",
+    "selectRow": "تحديد {email}",
+    "rowNotSelectable": "تسجيل عبر الهاتف فقط — غير قابل للتحديد",
+    "selectionCount": "{count, plural, zero {لم يتم تحديد أي مشترك} one {مشترك واحد محدد} two {مشتركان محددان} few {# مشتركين محددين} many {# مشتركاً محدداً} other {# مشترك محدد}}",
+    "clearSelection": "إلغاء التحديد",
+    "previousPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية",
+    "emailRecipientsSelected": "{count, plural, zero {لا يوجد مشتركون محددون} one {مشترك محدد واحد} two {مشتركان محددان} few {# مشتركين محددين} many {# مشتركاً محدداً} other {# مشترك محدد}}",
+    "extraEmailsLabel": "مستلمون إضافيون (اختياري)",
+    "extraEmailsPlaceholder": "أضف بريداً إلكترونياً واحداً في كل سطر، أو افصلها بفواصل / فاصلات منقوطة",
+    "extraEmailsValid": "{count, plural, zero {لا يوجد بريد إضافي صالح} one {بريد إضافي صالح واحد} two {بريدان إضافيان صالحان} few {# بريد إضافي صالح} many {# بريداً إضافياً صالحاً} other {# بريد إضافي صالح}}",
+    "extraEmailsInvalid": "{count, plural, zero {لا يوجد بريد غير صالح} one {بريد غير صالح واحد: {examples}} two {بريدان غير صالحين: {examples}} few {# عناوين غير صالحة: {examples}} many {# عنواناً غير صالحاً: {examples}} other {# عنوان غير صالح: {examples}}}",
+    "emailTotalRecipients": "{count, plural, =0 {لا يوجد مستلمون بعد} zero {لا يوجد مستلمون} one {مستلم واحد إجمالاً} two {مستلمان إجمالاً} few {# مستلمين إجمالاً} many {# مستلماً إجمالاً} other {# مستلم إجمالاً}}",
+    "emailTotalBreakdown": "({waitlist} من القائمة + {extras} إضافي)"
   },
   "observability": {
     "title": "المراقبة",

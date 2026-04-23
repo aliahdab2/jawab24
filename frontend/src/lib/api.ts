@@ -548,6 +548,8 @@ export const adminApi = {
     subject: string;
     body: string;
     feature?: string;
+    emailIds?: string[];
+    extraEmails?: string[];
   }) => {
     const response = await api.post('/admin/waitlist/send-email', data);
     return response.data;

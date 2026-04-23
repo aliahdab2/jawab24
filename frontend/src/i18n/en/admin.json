@@ -193,7 +193,22 @@
     "emailError": "Failed to send email",
     "emailConfirmTitle": "Confirm Send",
     "emailConfirmMessage": "This will send an email to {count} subscribers. This action cannot be undone.",
-    "emailPhoneOnly": "{count} subscribers signed up with phone only and will not receive this email."
+    "emailPhoneOnly": "{count} subscribers signed up with phone only and will not receive this email.",
+    "selectAllVisible": "Select all on this page",
+    "deselectAllVisible": "Deselect all on this page",
+    "selectRow": "Select {email}",
+    "rowNotSelectable": "Phone-only signup — not selectable",
+    "selectionCount": "{count, plural, one {# subscriber selected} other {# subscribers selected}}",
+    "clearSelection": "Clear selection",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "emailRecipientsSelected": "{count, plural, one {# selected subscriber} other {# selected subscribers}}",
+    "extraEmailsLabel": "Extra recipients (optional)",
+    "extraEmailsPlaceholder": "Add more emails — one per line, or separated by commas / semicolons",
+    "extraEmailsValid": "{count, plural, one {# valid extra email} other {# valid extra emails}}",
+    "extraEmailsInvalid": "{count, plural, one {# invalid email: {examples}} other {# invalid emails: {examples}}}",
+    "emailTotalRecipients": "{count, plural, =0 {No recipients yet} one {# total recipient} other {# total recipients}}",
+    "emailTotalBreakdown": "({waitlist} from waitlist + {extras} extra)"
   },
   "observability": {
     "title": "Observability",

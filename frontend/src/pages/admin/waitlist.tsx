@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
-import { Search, ChevronLeft, ChevronRight, Mail, Send } from 'lucide-react';
+import { Search, ChevronLeft, ChevronRight, Mail, Phone, Send, X } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -9,10 +9,12 @@ import { Card, Button, Input, Textarea, Modal, ConfirmationModal } from '@/compo
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { isValidEmail } from '@jawab24/shared';
 
 interface WaitlistEntry {
     id: string;
-    email: string;
+    email: string | null;
+    phone: string | null;
     feature: string;
     createdAt: string | null;
 }
@@ -22,6 +24,33 @@ interface Pagination {
     limit: number;
     total: number;
     totalPages: number;
+}
+
+/**
+ * Parse a free-text field of emails — split on commas, semicolons, and newlines.
+ * Returns { valid, invalid } arrays (lowercased + trimmed + deduped).
+ * Email shape validation uses the canonical isValidEmail from @jawab24/shared.
+ */
+function parseExtraEmails(input: string): { valid: string[]; invalid: string[] } {
+    const tokens = input
+        .split(/[,;\n]/)
+        .map(t => t.trim().toLowerCase())
+        .filter(t => t.length > 0);
+
+    const seen = new Set<string>();
+    const valid: string[] = [];
+    const invalid: string[] = [];
+
+    for (const t of tokens) {
+        if (seen.has(t)) continue;
+        seen.add(t);
+        if (isValidEmail(t) && t.length <= 255) {
+            valid.push(t);
+        } else {
+            invalid.push(t);
+        }
+    }
+    return { valid, invalid };
 }
 
 export default function AdminWaitlistPage() {
@@ -47,14 +76,21 @@ export default function AdminWaitlistPage() {
     const [emailCount, setEmailCount] = useState(0);
     const [phoneOnlyCount, setPhoneOnlyCount] = useState(0);
 
+    // Row selection — persists across page navigation
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
     // Email compose state
     const [showCompose, setShowCompose] = useState(false);
     const [emailSubject, setEmailSubject] = useState('');
     const [emailBody, setEmailBody] = useState('');
+    const [extraEmailsText, setExtraEmailsText] = useState('');
     const [sending, setSending] = useState(false);
     const [sendResult, setSendResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
     const [sendError, setSendError] = useState<string | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
+
+    // Master-checkbox indeterminate state needs a DOM ref (no HTML attribute equivalent)
+    const masterCheckboxRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -103,6 +139,68 @@ export default function AdminWaitlistPage() {
         setPagination(prev => ({ ...prev, page: 1 }));
     }, [debouncedSearch, featureFilter]);
 
+    // ─── Selection helpers ──────────────────────────────────────────────
+
+    // Only rows with an email can be selected (phone-only rows get a disabled checkbox)
+    const selectableIdsOnPage = useMemo(
+        () => entries.filter(e => e.email).map(e => e.id),
+        [entries]
+    );
+
+    const selectedOnPageCount = useMemo(
+        () => selectableIdsOnPage.filter(id => selectedIds.has(id)).length,
+        [selectableIdsOnPage, selectedIds]
+    );
+
+    const allVisibleSelected =
+        selectableIdsOnPage.length > 0 && selectedOnPageCount === selectableIdsOnPage.length;
+    const someVisibleSelected = selectedOnPageCount > 0 && !allVisibleSelected;
+
+    // Sync master-checkbox indeterminate state
+    useEffect(() => {
+        if (masterCheckboxRef.current) {
+            masterCheckboxRef.current.indeterminate = someVisibleSelected;
+        }
+    }, [someVisibleSelected]);
+
+    const toggleRow = useCallback((id: string) => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    }, []);
+
+    const toggleAllVisible = useCallback(() => {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (allVisibleSelected) {
+                // Deselect all on current page
+                selectableIdsOnPage.forEach(id => next.delete(id));
+            } else {
+                // Select all on current page
+                selectableIdsOnPage.forEach(id => next.add(id));
+            }
+            return next;
+        });
+    }, [allVisibleSelected, selectableIdsOnPage]);
+
+    const clearSelection = useCallback(() => {
+        setSelectedIds(new Set());
+    }, []);
+
+    // ─── Compose modal derived state ────────────────────────────────────
+
+    const parsedExtras = useMemo(() => parseExtraEmails(extraEmailsText), [extraEmailsText]);
+
+    // Base recipient count from the waitlist
+    const useExplicitSelection = selectedIds.size > 0;
+    const baseRecipientCount = useExplicitSelection ? selectedIds.size : emailCount;
+
+    // Approximate total — backend de-dupes server-side, this is an upper bound for display
+    const approxTotalRecipients = baseRecipientCount + parsedExtras.valid.length;
+
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return '-';
         return new Date(dateStr).toLocaleDateString(intlLocale, {
@@ -121,6 +219,8 @@ export default function AdminWaitlistPage() {
         return (translated === key || translated === `admin.${key}`) ? feature : translated;
     };
 
+    // ─── Send ────────────────────────────────────────────────────────────
+
     const handleSendEmail = async () => {
         setShowConfirm(false);
         setSending(true);
@@ -130,12 +230,15 @@ export default function AdminWaitlistPage() {
             const response = await adminApi.sendWaitlistEmail({
                 subject: emailSubject,
                 body: emailBody,
-                feature: featureFilter || undefined,
+                feature: useExplicitSelection ? undefined : (featureFilter || undefined),
+                emailIds: useExplicitSelection ? Array.from(selectedIds) : undefined,
+                extraEmails: parsedExtras.valid.length > 0 ? parsedExtras.valid : undefined,
             });
             if (response.success) {
                 setSendResult({ sent: response.sent, failed: response.failed, total: response.total });
                 setEmailSubject('');
                 setEmailBody('');
+                setExtraEmailsText('');
             } else {
                 setSendError(response.error || t('waitlist.emailError'));
             }
@@ -152,6 +255,25 @@ export default function AdminWaitlistPage() {
         setSendResult(null);
         setSendError(null);
     };
+
+    const canSend =
+        emailSubject.trim().length > 0 &&
+        emailBody.trim().length > 0 &&
+        approxTotalRecipients > 0 &&
+        parsedExtras.invalid.length === 0 &&
+        !sending;
+
+    // Recipients summary text shown in the compose modal
+    const recipientsSummary = useMemo(() => {
+        if (useExplicitSelection) {
+            return t('waitlist.emailRecipientsSelected', { count: selectedIds.size });
+        }
+        if (featureFilter) {
+            return t('waitlist.emailRecipientsFeature', { feature: getFeatureLabel(featureFilter) });
+        }
+        return t('waitlist.emailRecipientsAll');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [useExplicitSelection, selectedIds.size, featureFilter, t]);
 
     return (
         <AdminLayout title={t('waitlist.title')}>
@@ -214,6 +336,25 @@ export default function AdminWaitlistPage() {
                     </div>
                 </Card>
 
+                {/* Selection toolbar — only visible when any rows are selected */}
+                {selectedIds.size > 0 && (
+                    <Card padding="sm">
+                        <div className="flex items-center justify-between gap-4 px-3 py-1">
+                            <span className="text-sm text-foreground font-medium" aria-live="polite">
+                                {t('waitlist.selectionCount', { count: selectedIds.size })}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={clearSelection}
+                                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                            >
+                                <X className="w-4 h-4" aria-hidden="true" />
+                                {t('waitlist.clearSelection')}
+                            </button>
+                        </div>
+                    </Card>
+                )}
+
                 {/* Table */}
                 <Card padding="none">
                     {loading ? (
@@ -233,43 +374,84 @@ export default function AdminWaitlistPage() {
                             <table className="w-full">
                                 <thead className="bg-background border-b border-theme-border">
                                     <tr>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th scope="col" className="w-12 px-4 py-3">
+                                            <input
+                                                ref={masterCheckboxRef}
+                                                type="checkbox"
+                                                checked={allVisibleSelected}
+                                                onChange={toggleAllVisible}
+                                                disabled={selectableIdsOnPage.length === 0}
+                                                aria-label={
+                                                    allVisibleSelected
+                                                        ? t('waitlist.deselectAllVisible')
+                                                        : t('waitlist.selectAllVisible')
+                                                }
+                                                className="w-4 h-4 rounded border-theme-border text-brand-600 focus:ring-brand-500 focus:ring-offset-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                            />
+                                        </th>
+                                        <th scope="col" className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('waitlist.tableEmail')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th scope="col" className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('waitlist.tableFeature')}
                                         </th>
-                                        <th className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                                        <th scope="col" className="px-4 py-3 text-start text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                                             {t('waitlist.tableSignedUp')}
                                         </th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-theme-border">
-                                    {entries.map((entry) => (
-                                        <tr
-                                            key={entry.id}
-                                            className="hover:bg-background transition-colors"
-                                        >
-                                            <td className="px-4 py-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center">
-                                                        <Mail className="w-4 h-4 text-muted-foreground" />
+                                    {entries.map((entry) => {
+                                        const isSelectable = Boolean(entry.email);
+                                        const isSelected = selectedIds.has(entry.id);
+                                        const contact = entry.email || entry.phone || '';
+                                        return (
+                                            <tr
+                                                key={entry.id}
+                                                className={clsx(
+                                                    'hover:bg-background transition-colors',
+                                                    isSelected && 'bg-brand-50 dark:bg-brand-950/20'
+                                                )}
+                                            >
+                                                <td className="w-12 px-4 py-4">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isSelected}
+                                                        onChange={() => toggleRow(entry.id)}
+                                                        disabled={!isSelectable}
+                                                        aria-label={
+                                                            isSelectable
+                                                                ? t('waitlist.selectRow', { email: entry.email ?? '' })
+                                                                : t('waitlist.rowNotSelectable')
+                                                        }
+                                                        className="w-4 h-4 rounded border-theme-border text-brand-600 focus:ring-brand-500 focus:ring-offset-0 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                                                    />
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center" aria-hidden="true">
+                                                            {isSelectable ? (
+                                                                <Mail className="w-4 h-4 text-muted-foreground" />
+                                                            ) : (
+                                                                <Phone className="w-4 h-4 text-muted-foreground" />
+                                                            )}
+                                                        </div>
+                                                        <span className="text-sm font-medium text-foreground" dir="ltr">
+                                                            {contact}
+                                                        </span>
                                                     </div>
-                                                    <span className="text-sm font-medium text-foreground" dir="ltr">
-                                                        {entry.email}
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-brand-50 text-brand-700">
+                                                        {getFeatureLabel(entry.feature)}
                                                     </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-brand-50 text-brand-700">
-                                                    {getFeatureLabel(entry.feature)}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-4 text-sm text-muted-foreground">
-                                                {formatDate(entry.createdAt)}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                                </td>
+                                                <td className="px-4 py-4 text-sm text-muted-foreground">
+                                                    {formatDate(entry.createdAt)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -289,9 +471,10 @@ export default function AdminWaitlistPage() {
                                 <button
                                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
                                     disabled={pagination.page <= 1}
+                                    aria-label={t('waitlist.previousPage')}
                                     className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <ChevronLeft className={clsx('w-4 h-4', isRTL && 'rotate-180')} />
+                                    <ChevronLeft className={clsx('w-4 h-4', isRTL && 'rotate-180')} aria-hidden="true" />
                                 </button>
                                 <span className="text-sm text-muted-foreground">
                                     {pagination.page} / {pagination.totalPages}
@@ -299,9 +482,10 @@ export default function AdminWaitlistPage() {
                                 <button
                                     onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
                                     disabled={pagination.page >= pagination.totalPages}
+                                    aria-label={t('waitlist.nextPage')}
                                     className="p-2 rounded-lg border border-theme-border hover:bg-background disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <ChevronRight className={clsx('w-4 h-4', isRTL && 'rotate-180')} />
+                                    <ChevronRight className={clsx('w-4 h-4', isRTL && 'rotate-180')} aria-hidden="true" />
                                 </button>
                             </div>
                         </div>
@@ -320,14 +504,12 @@ export default function AdminWaitlistPage() {
                     {/* Recipients indicator */}
                     <div className="text-sm text-muted-foreground">
                         <span className="font-medium">{t('waitlist.emailRecipients')}:</span>{' '}
-                        {featureFilter
-                            ? t('waitlist.emailRecipientsFeature', { feature: getFeatureLabel(featureFilter) })
-                            : t('waitlist.emailRecipientsAll')}
-                        {' '}({emailCount})
+                        {recipientsSummary}
+                        {' '}({baseRecipientCount})
                     </div>
 
-                    {/* Phone-only warning */}
-                    {phoneOnlyCount > 0 && (
+                    {/* Phone-only warning (only relevant when sending to all / filter, not when explicit selection is used) */}
+                    {!useExplicitSelection && phoneOnlyCount > 0 && (
                         <div className="p-3 rounded-lg border alert-warning text-sm">
                             {t('waitlist.emailPhoneOnly', { count: phoneOnlyCount })}
                         </div>
@@ -348,9 +530,50 @@ export default function AdminWaitlistPage() {
                         rows={8}
                     />
 
+                    {/* Extra recipients — ad-hoc emails not in the waitlist */}
+                    <div>
+                        <Textarea
+                            label={t('waitlist.extraEmailsLabel')}
+                            placeholder={t('waitlist.extraEmailsPlaceholder')}
+                            value={extraEmailsText}
+                            onChange={(e) => setExtraEmailsText(e.target.value)}
+                            rows={3}
+                        />
+                        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                            {parsedExtras.valid.length > 0 && (
+                                <span className="text-muted-foreground" aria-live="polite">
+                                    {t('waitlist.extraEmailsValid', { count: parsedExtras.valid.length })}
+                                </span>
+                            )}
+                            {parsedExtras.invalid.length > 0 && (
+                                <span className="text-red-600 dark:text-red-400" role="alert">
+                                    {t('waitlist.extraEmailsInvalid', {
+                                        count: parsedExtras.invalid.length,
+                                        examples: parsedExtras.invalid.slice(0, 3).join(', '),
+                                    })}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Total recipients banner */}
+                    <div className="p-3 rounded-lg bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800 text-sm">
+                        <span className="font-medium text-foreground">
+                            {t('waitlist.emailTotalRecipients', { count: approxTotalRecipients })}
+                        </span>
+                        {parsedExtras.valid.length > 0 && (
+                            <span className="text-muted-foreground ms-2">
+                                {t('waitlist.emailTotalBreakdown', {
+                                    waitlist: baseRecipientCount,
+                                    extras: parsedExtras.valid.length,
+                                })}
+                            </span>
+                        )}
+                    </div>
+
                     {/* Success message */}
                     {sendResult && (
-                        <div className="p-3 rounded-lg border alert-success text-sm">
+                        <div className="p-3 rounded-lg border alert-success text-sm" role="status">
                             {t('waitlist.emailSentDetails', {
                                 sent: sendResult.sent,
                                 total: sendResult.total,
@@ -361,7 +584,7 @@ export default function AdminWaitlistPage() {
 
                     {/* Error message */}
                     {sendError && (
-                        <div className="p-3 rounded-lg border alert-error text-sm">
+                        <div className="p-3 rounded-lg border alert-error text-sm" role="alert">
                             {sendError}
                         </div>
                     )}
@@ -373,7 +596,7 @@ export default function AdminWaitlistPage() {
                         <Button
                             onClick={() => setShowConfirm(true)}
                             loading={sending}
-                            disabled={!emailSubject.trim() || !emailBody.trim() || sending}
+                            disabled={!canSend}
                         >
                             {sending ? t('waitlist.emailSending') : t('waitlist.emailSend')}
                         </Button>
@@ -387,7 +610,7 @@ export default function AdminWaitlistPage() {
                 onClose={() => setShowConfirm(false)}
                 onConfirm={handleSendEmail}
                 title={t('waitlist.emailConfirmTitle')}
-                message={t('waitlist.emailConfirmMessage', { count: emailCount })}
+                message={t('waitlist.emailConfirmMessage', { count: approxTotalRecipients })}
                 confirmText={t('waitlist.emailSend')}
                 variant="warning"
                 loading={sending}

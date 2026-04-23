@@ -49,7 +49,7 @@ vi.mock('../../src/db/schema', () => ({
     usage: {},
     kbChunks: {},
     kbGaps: {},
-    waitlistEmails: { feature: 'feature', email: 'email', createdAt: 'created_at', unsubscribedAt: 'unsubscribed_at' },
+    waitlistEmails: { id: 'id', feature: 'feature', email: 'email', createdAt: 'created_at', unsubscribedAt: 'unsubscribed_at' },
     waitlistEmailSends: {},
 }));
 
@@ -64,6 +64,7 @@ vi.mock('drizzle-orm', () => ({
     sql: vi.fn(),
     isNotNull: vi.fn(),
     isNull: vi.fn(),
+    inArray: vi.fn(),
 }));
 
 // Mock config
@@ -90,7 +91,12 @@ vi.mock('../../src/services/reply/generator', () => ({ shouldSkipReply: vi.fn(),
 vi.mock('@jawab24/shared', async (importOriginal) => ({ ...await importOriginal() as object, normalizeAiIntent: vi.fn() }));
 vi.mock('../../src/utils/language', () => ({ detectLanguageCode: vi.fn() }));
 vi.mock('../../src/utils/swagger', () => ({ auth: [] }));
-vi.mock('../../src/services/email', () => ({ emailService: { send: vi.fn(), setLogger: vi.fn() } }));
+vi.mock('../../src/services/email', () => ({
+    emailService: {
+        send: vi.fn().mockResolvedValue({ success: true, id: 'mock' }),
+        setLogger: vi.fn(),
+    },
+}));
 vi.mock('../../src/utils/emailTemplates', () => ({ waitlistEmailTemplate: vi.fn().mockReturnValue('<html></html>') }));
 vi.mock('../../src/routes/waitlist', () => ({ generateUnsubscribeToken: vi.fn().mockReturnValue('mock_token') }));
 
@@ -170,6 +176,143 @@ describe('Admin Waitlist Route', () => {
             expect(response.statusCode).toBe(200);
             const body = JSON.parse(response.payload);
             expect(body.pagination.limit).toBe(100);
+        });
+    });
+
+    describe('POST /admin/waitlist/send-email', () => {
+        // A valid UUID we can pass through zod's .uuid() validation
+        const UUID_1 = '11111111-1111-4111-a111-111111111111';
+        const UUID_2 = '22222222-2222-4222-a222-222222222222';
+
+        it('sends to all waitlist emails by default and returns counts', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: { subject: 'Launch', body: 'We are live.' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.success).toBe(true);
+            // MOCK_ENTRIES has 2 unique emails; both should be sent
+            expect(payload.sent).toBe(2);
+            expect(payload.failed).toBe(0);
+            expect(payload.total).toBe(2);
+            expect(payload.fromWaitlist).toBe(2);
+            expect(payload.fromExtra).toBe(0);
+        });
+
+        it('merges extraEmails with waitlist and dedupes', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: {
+                    subject: 'Launch',
+                    body: 'We are live.',
+                    // alice@example.com is already in MOCK_ENTRIES — must be deduped.
+                    // extra@test.com is new.
+                    extraEmails: ['ALICE@example.com', 'extra@test.com'],
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.success).toBe(true);
+            // 2 waitlist + 1 new extra (alice is deduped) = 3 unique
+            expect(payload.total).toBe(3);
+            expect(payload.fromWaitlist).toBe(2);
+            expect(payload.fromExtra).toBe(2); // 2 valid extras before dedup
+        });
+
+        it('accepts explicit emailIds selection', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: {
+                    subject: 'Launch',
+                    body: 'We are live.',
+                    emailIds: [UUID_1, UUID_2],
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.success).toBe(true);
+        });
+
+        it('rejects missing subject', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: { subject: '   ', body: 'hi' },
+            });
+
+            expect(response.statusCode).toBe(400);
+            const payload = JSON.parse(response.payload);
+            expect(payload.success).toBe(false);
+        });
+
+        it('rejects missing body', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: { subject: 'hi', body: '   ' },
+            });
+
+            expect(response.statusCode).toBe(400);
+        });
+
+        it('rejects invalid email addresses in extraEmails', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: {
+                    subject: 'Launch',
+                    body: 'We are live.',
+                    extraEmails: ['not-an-email', 'also@bad'],
+                },
+            });
+
+            expect(response.statusCode).toBe(400);
+            const payload = JSON.parse(response.payload);
+            expect(payload.success).toBe(false);
+        });
+
+        it('rejects non-UUID emailIds', async () => {
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: {
+                    subject: 'Launch',
+                    body: 'We are live.',
+                    emailIds: ['not-a-uuid'],
+                },
+            });
+
+            expect(response.statusCode).toBe(400);
+        });
+
+        it('rejects more than 500 extraEmails', async () => {
+            const tooMany = Array.from({ length: 501 }, (_, i) => `user${i}@example.com`);
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: {
+                    subject: 'Launch',
+                    body: 'We are live.',
+                    extraEmails: tooMany,
+                },
+            });
+
+            expect(response.statusCode).toBe(400);
         });
     });
 });

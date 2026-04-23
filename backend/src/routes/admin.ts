@@ -1,8 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { z } from 'zod';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends } from '../db/schema';
-import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull } from 'drizzle-orm';
+import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
 import { replyGenerator } from '../services/reply/generator';
@@ -960,49 +961,95 @@ export default async function adminRoutes(fastify: FastifyInstance) {
         );
 
         /**
-         * POST /admin/waitlist/send-email - Send an email to waitlist subscribers
-         * Body: { subject: string; body: string; feature?: string }
+         * POST /admin/waitlist/send-email — Send an email to waitlist subscribers.
+         *
+         * Recipient resolution order:
+         *   1. `emailIds` non-empty  → only those waitlist rows (still filtered to email NOT NULL + NOT unsubscribed)
+         *   2. `feature` set         → all waitlist emails for that feature
+         *   3. Neither               → all waitlist emails
+         *   Merged with validated `extraEmails`, lowercased + deduped.
+         *
+         * Safety caps:
+         *   - emailIds:     max 5000 per request
+         *   - extraEmails:  max 500 per request
+         *   - total unique: max 10000 per request
          */
-        adminProtected.post<{ Body: { subject: string; body: string; feature?: string } }>(
+        const SendEmailSchema = z.object({
+            subject: z.string().trim().min(1, 'Subject is required').max(500),
+            body: z.string().trim().min(1, 'Body is required').max(100_000),
+            feature: z.string().trim().min(1).max(50).optional(),
+            emailIds: z.array(z.string().uuid()).max(5000).optional(),
+            extraEmails: z.array(z.string().email().max(255)).max(500).optional(),
+        });
+
+        adminProtected.post(
             '/waitlist/send-email',
             { schema: { tags: ['Admin'], summary: 'Send email to waitlist subscribers', security: auth } },
             async (request, reply) => {
-                const { subject, body, feature } = request.body;
-                const adminUserId = (request as AuthenticatedRequest).user?.userId;
-
-                if (!subject?.trim() || !body?.trim()) {
-                    return reply.status(400).send({ success: false, error: 'Subject and body are required' });
+                const parsed = SendEmailSchema.safeParse(request.body);
+                if (!parsed.success) {
+                    return reply.status(400).send({
+                        success: false,
+                        error: parsed.error.errors[0]?.message ?? 'Invalid request',
+                    });
                 }
+                const { subject, body, feature, emailIds, extraEmails } = parsed.data;
 
+                const adminUserId = (request as AuthenticatedRequest).user?.userId;
                 if (!adminUserId) {
                     return reply.status(401).send({ success: false, error: 'Unauthorized' });
                 }
 
+                // Normalize extras: lowercase + dedupe (zod already validated email shape + length)
+                const extraEmailsClean = Array.from(new Set(
+                    (extraEmails ?? []).map(e => e.toLowerCase().trim()).filter(e => e.length > 0)
+                ));
+
                 try {
-                    // Fetch emails: exclude phone-only and unsubscribed entries
-                    const conditions = [isNotNull(waitlistEmails.email), isNull(waitlistEmails.unsubscribedAt)];
-                    if (feature) {
-                        conditions.push(eq(waitlistEmails.feature, feature));
+                    const hasExplicitSelection = Array.isArray(emailIds) && emailIds.length > 0;
+
+                    const waitlistConditions = [
+                        isNotNull(waitlistEmails.email),
+                        isNull(waitlistEmails.unsubscribedAt),
+                    ];
+
+                    if (hasExplicitSelection) {
+                        waitlistConditions.push(inArray(waitlistEmails.id, emailIds));
+                    } else if (feature) {
+                        waitlistConditions.push(eq(waitlistEmails.feature, feature));
                     }
 
                     const recipients = await db
                         .select({ email: waitlistEmails.email })
                         .from(waitlistEmails)
-                        .where(and(...conditions));
+                        .where(and(...waitlistConditions));
 
-                    // Deduplicate — a user may be signed up for multiple features
-                    const uniqueEmails = [...new Set(
-                        recipients
-                            .map(r => r.email)
-                            .filter((e): e is string => Boolean(e))
-                    )];
+                    const waitlistEmailsList = recipients
+                        .map(r => r.email)
+                        .filter((e): e is string => Boolean(e))
+                        .map(e => e.toLowerCase());
 
-                    if (uniqueEmails.length === 0) {
-                        return reply.send({ success: true, sent: 0, failed: 0, total: 0 });
+                    // Merge waitlist-derived + extras, dedupe
+                    const uniqueEmails = [...new Set([...waitlistEmailsList, ...extraEmailsClean])];
+
+                    if (uniqueEmails.length > 10_000) {
+                        return reply.status(400).send({
+                            success: false,
+                            error: 'Too many recipients (max 10000 per send)',
+                        });
                     }
 
-                    const trimmedSubject = subject.trim();
-                    const trimmedBody = body.trim();
+                    if (uniqueEmails.length === 0) {
+                        return reply.send({
+                            success: true,
+                            sent: 0,
+                            failed: 0,
+                            total: 0,
+                            fromWaitlist: 0,
+                            fromExtra: 0,
+                        });
+                    }
+
                     const frontendUrl = config.frontendUrl || 'https://jawab24.com';
 
                     let successCount = 0;
@@ -1011,8 +1058,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     for (const email of uniqueEmails) {
                         const token = generateUnsubscribeToken(email);
                         const unsubscribeUrl = `${frontendUrl}/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
-                        const html = waitlistEmailTemplate({ subject: trimmedSubject, body: trimmedBody, unsubscribeUrl });
-                        const result = await emailService.send({ to: email, subject: trimmedSubject, html });
+                        const html = waitlistEmailTemplate({ subject, body, unsubscribeUrl });
+                        const result = await emailService.send({ to: email, subject, html });
                         if (result.success) {
                             successCount++;
                         } else {
@@ -1021,14 +1068,14 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         }
                     }
 
-                    // Record the send in the audit table
+                    // Audit: store `feature` only when it was the effective filter
                     await db.insert(waitlistEmailSends).values({
-                        subject: subject.trim(),
-                        body: body.trim(),
+                        subject,
+                        body,
                         recipientCount: uniqueEmails.length,
                         successCount,
                         failureCount,
-                        feature: feature || null,
+                        feature: hasExplicitSelection ? null : (feature ?? null),
                         sentBy: adminUserId,
                     });
 
@@ -1037,6 +1084,8 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         sent: successCount,
                         failed: failureCount,
                         total: uniqueEmails.length,
+                        fromWaitlist: waitlistEmailsList.length,
+                        fromExtra: extraEmailsClean.length,
                     });
                 } catch (error) {
                     request.log.error(error, 'Failed to send waitlist emails');
