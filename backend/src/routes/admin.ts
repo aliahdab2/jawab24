@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends } from '../db/schema';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, leadDigestSends } from '../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
@@ -1100,6 +1100,49 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          * Useful for testing without waiting 24h. Same stamping logic applies,
          * so running this repeatedly will not re-email already-stamped leads.
          */
+        /**
+         * GET /admin/lead-digest/history - List recent lead digest sends/skips
+         * Query: ?page=1&limit=50&status=sent|failed|skipped_*
+         */
+        adminProtected.get<{ Querystring: { page?: string; limit?: string; status?: string } }>(
+            '/lead-digest/history',
+            {
+                schema: {
+                    description: 'Paginated history of lead digest sends/skips',
+                    tags: ['Admin'],
+                    security: auth,
+                },
+            },
+            async (request, reply) => {
+                const pageNum = Math.max(1, parseInt(request.query.page ?? '1', 10) || 1);
+                const limit = Math.min(200, Math.max(1, parseInt(request.query.limit ?? '50', 10) || 50));
+                const offset = (pageNum - 1) * limit;
+                const statusFilter = request.query.status?.trim();
+
+                const where = statusFilter ? eq(leadDigestSends.status, statusFilter) : undefined;
+                const rows = await db
+                    .select({
+                        id: leadDigestSends.id,
+                        userId: leadDigestSends.userId,
+                        userEmail: users.email,
+                        status: leadDigestSends.status,
+                        leadCount: leadDigestSends.leadCount,
+                        lang: leadDigestSends.lang,
+                        resendEmailId: leadDigestSends.resendEmailId,
+                        errorMessage: leadDigestSends.errorMessage,
+                        createdAt: leadDigestSends.createdAt,
+                    })
+                    .from(leadDigestSends)
+                    .leftJoin(users, eq(users.id, leadDigestSends.userId))
+                    .where(where)
+                    .orderBy(desc(leadDigestSends.createdAt))
+                    .limit(limit)
+                    .offset(offset);
+
+                return reply.send({ page: pageNum, limit, rows });
+            }
+        );
+
         adminProtected.post('/lead-digest/run', {
             schema: {
                 description: 'Manually run the daily lead digest job',

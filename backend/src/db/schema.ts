@@ -865,6 +865,23 @@ export const leads = pgTable('leads', {
     digestEmailedAtIdx: index('idx_leads_digest_emailed_at').on(table.digestEmailedAt),
 }));
 
+// Audit log for daily lead digest emails — one row per send attempt (sent, skipped, or failed).
+// Operators query this to answer "did we email user X?" and to monitor delivery health.
+export const leadDigestSends = pgTable('lead_digest_sends', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    // 'sent' | 'failed' | 'skipped_no_email' | 'skipped_no_subscription' | 'skipped_abandoned'
+    status: varchar('status', { length: 32 }).notNull(),
+    leadCount: integer('lead_count').notNull(),
+    lang: varchar('lang', { length: 10 }), // 'ar' | 'en' | null when skipped before language pick
+    resendEmailId: varchar('resend_email_id', { length: 255 }),
+    errorMessage: text('error_message'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    userIdIdx: index('idx_lead_digest_sends_user_id').on(table.userId),
+    createdAtIdx: index('idx_lead_digest_sends_created_at').on(table.createdAt),
+}));
+
 // ============================================
 // AI COST TRACKING
 // ============================================

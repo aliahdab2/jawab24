@@ -1,24 +1,38 @@
 /**
  * Tests: daily lead digest service.
- * Verifies threshold gating, idempotent stamping, and language detection.
+ * Verifies threshold, subscription + engagement gates, idempotent stamping,
+ * language detection, and audit-log writes.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { joinQueryRows, userQueryQueue, updateSetMock, updateWhereMock, emailSendMock, detectLanguageMock } = vi.hoisted(() => ({
+const {
+    joinQueryRows,
+    userQueryQueue,
+    subQueryQueue,
+    limitCounter,
+    updateSetMock,
+    updateWhereMock,
+    insertValuesMock,
+    emailSendMock,
+    detectLanguageMock,
+} = vi.hoisted(() => ({
     joinQueryRows: { value: [] as unknown[] },
-    userQueryQueue: { value: [] as unknown[][] }, // shift()ed on each .limit() call
+    userQueryQueue: { value: [] as unknown[][] },
+    subQueryQueue: { value: [] as unknown[][] },
+    limitCounter: { value: 0 },
     updateSetMock: vi.fn(),
     updateWhereMock: vi.fn().mockResolvedValue(undefined),
+    insertValuesMock: vi.fn().mockResolvedValue(undefined),
     emailSendMock: vi.fn(),
     detectLanguageMock: vi.fn().mockReturnValue('en'),
 }));
 
 vi.mock('../db', () => {
-    // The service issues two SELECT shapes:
-    //   1. join query → terminal awaits `.where(...)`
-    //   2. user lookup → terminal awaits `.limit(1)`
-    // We return a chain whose `.where()` is awaitable AND chainable;
-    // `.limit()` pulls from a separate queue.
+    // Service uses three SELECT shapes:
+    //   1. join query      → terminal: .where(...)
+    //   2. user lookup     → terminal: .limit(1), from(users)
+    //   3. subscription    → terminal: .limit(1), from(subscriptions)
+    // We distinguish #2 vs #3 by call order: user lookup comes first per user.
     const makeChain = () => {
         const chain: Record<string, unknown> = {};
         chain.from      = vi.fn(() => chain);
@@ -27,7 +41,12 @@ vi.mock('../db', () => {
             Promise.resolve(joinQueryRows.value),
             chain,
         ));
-        chain.limit     = vi.fn(() => Promise.resolve(userQueryQueue.value.shift() ?? []));
+        chain.limit     = vi.fn(() => {
+            const isUserLookup = limitCounter.value % 2 === 0;
+            limitCounter.value++;
+            const queue = isUserLookup ? userQueryQueue.value : subQueryQueue.value;
+            return Promise.resolve(queue.shift() ?? []);
+        });
         return chain;
     };
 
@@ -36,10 +55,15 @@ vi.mock('../db', () => {
         where: updateWhereMock,
     };
 
+    const insertChain = {
+        values: insertValuesMock,
+    };
+
     return {
         db: {
             select: vi.fn(() => makeChain()),
             update: vi.fn(() => updateChain),
+            insert: vi.fn(() => insertChain),
         },
     };
 });
@@ -66,7 +90,7 @@ vi.mock('../config', () => ({
     },
 }));
 
-import { runDailyLeadDigest, DIGEST_THRESHOLD } from '../services/leadDigest';
+import { runDailyLeadDigest, DIGEST_THRESHOLD, ENGAGEMENT_WINDOW_DAYS } from '../services/leadDigest';
 
 function makeLeadRow(userId: string, i: number, overrides: Partial<{ phone: string; name: string; source: string; kb: string | null }> = {}) {
     return {
@@ -80,91 +104,140 @@ function makeLeadRow(userId: string, i: number, overrides: Partial<{ phone: stri
     };
 }
 
+const activeUser = { email: 'owner@example.com', lastSeenAt: new Date() };
+const activeSub = { status: 'active' };
+
+function audits() {
+    return insertValuesMock.mock.calls.map(call => call[0] as Record<string, unknown>);
+}
+
 describe('runDailyLeadDigest', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         detectLanguageMock.mockReturnValue('en');
-        emailSendMock.mockResolvedValue({ success: true, id: 'email-1' });
+        emailSendMock.mockResolvedValue({ success: true, id: 'resend-123' });
+        joinQueryRows.value = [];
+        userQueryQueue.value = [];
+        subQueryQueue.value = [];
+        limitCounter.value = 0;
     });
 
-    it('does not send email when user has fewer than threshold leads', async () => {
-        const joinRows = Array.from({ length: DIGEST_THRESHOLD - 1 }, (_, i) => makeLeadRow('user-1', i));
-        // First select call returns join rows; user lookup never happens because we skip below threshold.
-        joinQueryRows.value = joinRows;
-        userQueryQueue.value = [];
+    it('does not send or stamp when user is below threshold', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD - 1 }, (_, i) => makeLeadRow('user-1', i));
 
         const result = await runDailyLeadDigest();
 
         expect(emailSendMock).not.toHaveBeenCalled();
         expect(updateSetMock).not.toHaveBeenCalled();
-        expect(result.sent).toBe(0);
+        expect(insertValuesMock).not.toHaveBeenCalled(); // no audit row for below-threshold
         expect(result.skipped).toBe(1);
+        expect(result.sent).toBe(0);
     });
 
-    it('sends one email and stamps all leads when threshold met', async () => {
-        const joinRows = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
-        joinQueryRows.value = joinRows;
-        userQueryQueue.value = [[{ email: 'owner@example.com' }]];
+    it('sends email, stamps leads, and writes a sent audit row when all gates pass', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[activeSub]];
 
         const result = await runDailyLeadDigest();
 
         expect(emailSendMock).toHaveBeenCalledTimes(1);
-        const sendArg = emailSendMock.mock.calls[0][0];
-        expect(sendArg.to).toBe('owner@example.com');
-        expect(sendArg.subject).toContain('10');
+        expect(emailSendMock.mock.calls[0][0].to).toBe('owner@example.com');
         expect(updateSetMock).toHaveBeenCalledTimes(1);
+        const audit = audits()[0];
+        expect(audit.status).toBe('sent');
+        expect(audit.leadCount).toBe(10);
+        expect(audit.resendEmailId).toBe('resend-123');
         expect(result.sent).toBe(1);
-        expect(result.errors).toBe(0);
     });
 
-    it('skips users with no email on file', async () => {
-        const joinRows = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
-        joinQueryRows.value = joinRows;
-        userQueryQueue.value = [[{ email: null }]];
+    it('skipped_no_email: stamps leads and audits when user has no email', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[{ email: null, lastSeenAt: new Date() }]];
 
         const result = await runDailyLeadDigest();
 
         expect(emailSendMock).not.toHaveBeenCalled();
-        expect(updateSetMock).not.toHaveBeenCalled();
+        expect(updateSetMock).toHaveBeenCalledTimes(1); // stamped
+        expect(audits()[0].status).toBe('skipped_no_email');
         expect(result.skipped).toBe(1);
-        expect(result.sent).toBe(0);
     });
 
-    it('does not stamp leads if email send fails', async () => {
-        const joinRows = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
-        joinQueryRows.value = joinRows;
-        userQueryQueue.value = [[{ email: 'owner@example.com' }]];
+    it('skipped_no_subscription: stamps leads when subscription is canceled', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[{ status: 'canceled' }]];
+
+        const result = await runDailyLeadDigest();
+
+        expect(emailSendMock).not.toHaveBeenCalled();
+        expect(updateSetMock).toHaveBeenCalledTimes(1); // stamped so they don't pile up
+        expect(audits()[0].status).toBe('skipped_no_subscription');
+        expect(result.skipped).toBe(1);
+    });
+
+    it('skipped_no_subscription: when user has no subscription row at all', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[]]; // empty
+
+        const result = await runDailyLeadDigest();
+
+        expect(emailSendMock).not.toHaveBeenCalled();
+        expect(audits()[0].status).toBe('skipped_no_subscription');
+        expect(result.skipped).toBe(1);
+    });
+
+    it('skipped_abandoned: stamps and audits when last_seen_at is older than window', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        const longAgo = new Date(Date.now() - (ENGAGEMENT_WINDOW_DAYS + 5) * 24 * 60 * 60 * 1000);
+        userQueryQueue.value = [[{ email: 'owner@example.com', lastSeenAt: longAgo }]];
+        subQueryQueue.value = [[activeSub]];
+
+        const result = await runDailyLeadDigest();
+
+        expect(emailSendMock).not.toHaveBeenCalled();
+        expect(updateSetMock).toHaveBeenCalledTimes(1);
+        expect(audits()[0].status).toBe('skipped_abandoned');
+        expect(result.skipped).toBe(1);
+    });
+
+    it('failed: does NOT stamp leads when email send fails; writes failed audit row', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[activeSub]];
         emailSendMock.mockResolvedValueOnce({ success: false, error: 'Resend API down' });
 
         const result = await runDailyLeadDigest();
 
         expect(updateSetMock).not.toHaveBeenCalled();
+        const audit = audits()[0];
+        expect(audit.status).toBe('failed');
+        expect(audit.errorMessage).toBe('Resend API down');
         expect(result.errors).toBe(1);
-        expect(result.sent).toBe(0);
     });
 
     it('uses Arabic subject when KB language is detected as ar', async () => {
-        const joinRows = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i, { kb: 'نحن نبيع الإلكترونيات' }));
-        joinQueryRows.value = joinRows;
-        userQueryQueue.value = [[{ email: 'owner@example.com' }]];
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i, { kb: 'نحن نبيع الإلكترونيات' }));
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[activeSub]];
         detectLanguageMock.mockReturnValueOnce('ar');
 
         await runDailyLeadDigest();
 
-        const subject = emailSendMock.mock.calls[0][0].subject;
-        expect(subject).toMatch(/محتمل/);
+        expect(emailSendMock.mock.calls[0][0].subject).toMatch(/محتمل/);
     });
 
-    it('processes multiple users independently — one above, one below threshold', async () => {
+    it('processes two users independently — one sent, one below threshold', async () => {
         const rowsA = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-A', i));
         const rowsB = Array.from({ length: 3 }, (_, i) => makeLeadRow('user-B', i));
         joinQueryRows.value = [...rowsA, ...rowsB];
-        userQueryQueue.value = [[{ email: 'a@example.com' }]];
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[activeSub]];
 
         const result = await runDailyLeadDigest();
 
         expect(emailSendMock).toHaveBeenCalledTimes(1);
-        expect(emailSendMock.mock.calls[0][0].to).toBe('a@example.com');
         expect(result.processed).toBe(2);
         expect(result.sent).toBe(1);
         expect(result.skipped).toBe(1);
