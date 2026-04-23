@@ -4,6 +4,7 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 let mockIsReady = true;
 let mockQuery: Record<string, string | string[] | undefined> = {};
 const mockReplace = vi.fn().mockResolvedValue(true);
+const mockHistoryReplace = vi.fn();
 
 vi.mock('next/router', () => ({
   useRouter: () => ({
@@ -15,7 +16,12 @@ vi.mock('next/router', () => ({
 }));
 
 Object.defineProperty(window, 'location', {
-  value: { search: '' },
+  value: { search: '', pathname: '/messages', hash: '' },
+  writable: true,
+});
+
+Object.defineProperty(window.history, 'replaceState', {
+  value: (...args: unknown[]) => mockHistoryReplace(...args),
   writable: true,
 });
 
@@ -31,13 +37,16 @@ describe('useDeepLinkParam', () => {
     mockIsReady = true;
     mockQuery = {};
     mockReplace.mockClear();
-    (window.location as { search: string }).search = '';
+    mockHistoryReplace.mockClear();
+    (window.location as { search: string; pathname: string; hash: string }).search = '';
+    (window.location as { search: string; pathname: string; hash: string }).pathname = '/messages';
+    (window.location as { search: string; pathname: string; hash: string }).hash = '';
   });
 
   it('returns null when the param is absent', async () => {
     const { result } = await mount();
     expect(result.current).toBeNull();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockHistoryReplace).not.toHaveBeenCalled();
   });
 
   it('returns null while router is not ready', async () => {
@@ -45,7 +54,7 @@ describe('useDeepLinkParam', () => {
     mockQuery = { messageId: 'abc' };
     const { result } = await mount();
     expect(result.current).toBeNull();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockHistoryReplace).not.toHaveBeenCalled();
   });
 
   it('captures the param value and strips it from the URL', async () => {
@@ -55,11 +64,10 @@ describe('useDeepLinkParam', () => {
     const { result } = await mount();
 
     await waitFor(() => expect(result.current).toBe('msg-123'));
-    expect(mockReplace).toHaveBeenCalledTimes(1);
-    const replaceArg = mockReplace.mock.calls[0][0] as { pathname: string; query: Record<string, string> };
-    expect(replaceArg.pathname).toBe('/messages');
-    expect(replaceArg.query.messageId).toBeUndefined();
-    expect(replaceArg.query.filter).toBe('all');
+    expect(mockHistoryReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+    const newUrl = mockHistoryReplace.mock.calls[0][2] as string;
+    expect(newUrl).toBe('/messages?filter=all');
   });
 
   it('does not re-capture after the param is consumed', async () => {
@@ -68,7 +76,7 @@ describe('useDeepLinkParam', () => {
     const { result, rerender } = await mount();
 
     await waitFor(() => expect(result.current).toBe('msg-1'));
-    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockHistoryReplace).toHaveBeenCalledTimes(1);
 
     // Simulate the URL change taking effect — param is now gone.
     mockQuery = {};
@@ -76,14 +84,14 @@ describe('useDeepLinkParam', () => {
     rerender({ name: 'messageId' });
 
     expect(result.current).toBe('msg-1');
-    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockHistoryReplace).toHaveBeenCalledTimes(1);
   });
 
   it('ignores array-valued params (Next.js can produce these for duplicate keys)', async () => {
     mockQuery = { messageId: ['a', 'b'] };
     const { result } = await mount();
     expect(result.current).toBeNull();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockHistoryReplace).not.toHaveBeenCalled();
   });
 
   it('re-fires when the param changes to a new value (second notification tap)', async () => {
@@ -92,7 +100,7 @@ describe('useDeepLinkParam', () => {
     const { result, rerender } = await mount();
 
     await waitFor(() => expect(result.current).toBe('msg-1'));
-    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockHistoryReplace).toHaveBeenCalledTimes(1);
 
     // URL strip takes effect.
     mockQuery = {};
@@ -106,6 +114,6 @@ describe('useDeepLinkParam', () => {
     rerender({ name: 'messageId' });
 
     await waitFor(() => expect(result.current).toBe('msg-2'));
-    expect(mockReplace).toHaveBeenCalledTimes(2);
+    expect(mockHistoryReplace).toHaveBeenCalledTimes(2);
   });
 });
