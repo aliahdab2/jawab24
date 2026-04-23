@@ -160,7 +160,11 @@ AUDIT_FAILED=false
 # Our app runs on frontend/node_modules/next@15.5.15 (patched). The root next@16.x is a
 # resolution artifact only — it does not serve requests. Additionally, we use Pages Router
 # exclusively (no App Router server components), so the DoS vector does not apply.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3"
+# GHSA-w5hq-g745-h8pq — uuid missing buffer bounds check in v3/v5/v6 when caller passes
+# pre-allocated `buf`. Transitive via bullmq/exceljs/gaxios; none of them call uuid with a
+# caller-provided buffer (all use the no-arg form for ID generation). Vulnerable code path
+# unreachable. Re-audit when these packages bump their uuid dep to >=14.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
