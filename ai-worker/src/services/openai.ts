@@ -508,17 +508,7 @@ export class OpenAIService {
         // conversation history → post content → KB language → merchant's configured default
         // before falling back to English.
         // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
-        const language = request.language
-            || request.context?.conversationHistory
-                ?.filter(m => m.role === 'user' && /[a-zA-Z\u0600-\u06FF]/.test(m.content))
-                .reverse()
-                .map(m => this.detectLanguage(m.content))
-                .find(Boolean)
-            || this.detectLanguageOrNull(request.comment)
-            || this.detectLanguageOrNull(request.context?.postMessage || '')
-            || this.detectLanguageOrNull(this.getKBText(request) || '')
-            || request.context?.defaultReplyLanguage
-            || 'en';
+        const language = this.resolveInputLanguage(request);
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
         const languageName = languageNames[language] || 'English';
         const retrievedChunks = request.context?.retrievedChunks;
@@ -699,6 +689,26 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
     }
 
     /**
+     * Resolve the effective input language using the same history-first chain
+     * as buildDynamicSystemSuffix. Prevents a single short Latin token mid-Arabic
+     * conversation (e.g. "ICDI", "ok") from flipping inputLang to 'en' and
+     * spuriously triggering language_mismatch.
+     */
+    private resolveInputLanguage(request: GenerateRequest): string {
+        return request.language
+            || request.context?.conversationHistory
+                ?.filter(m => m.role === 'user' && /[a-zA-Z؀-ۿ]/.test(m.content))
+                .reverse()
+                .map(m => this.detectLanguage(m.content))
+                .find(Boolean)
+            || this.detectLanguageOrNull(request.comment)
+            || this.detectLanguageOrNull(request.context?.postMessage || '')
+            || this.detectLanguageOrNull(this.getKBText(request) || '')
+            || request.context?.defaultReplyLanguage
+            || 'en';
+    }
+
+    /**
      * Extract the effective KB text from the request context.
      * Returns combined chunk content if RAG, otherwise static KB, or null.
      *
@@ -801,12 +811,7 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         // falls back to heuristic detection when absent (invalid_json fallback path).
         // Also flags `declared_lang_mismatch` when GPT's claim diverges from what the reply looks like.
         if (reply) {
-            const inputLang = request.language
-                || this.detectLanguageOrNull(request.comment)
-                || this.detectLanguageOrNull(request.context?.postMessage || '')
-                || this.detectLanguageOrNull(this.getKBText(request) || '')
-                || request.context?.defaultReplyLanguage
-                || 'en';
+            const inputLang = this.resolveInputLanguage(request);
             const detectedLang = this.detectLanguage(reply);
             const replyLang = parsed.language || detectedLang;
             if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
@@ -886,12 +891,7 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
      */
     /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
     getFallbackReply(request: GenerateRequest): GenerateResponse {
-        const language = request.language
-            || this.detectLanguageOrNull(request.comment)
-            || this.detectLanguageOrNull(request.context?.postMessage || '')
-            || this.detectLanguageOrNull(this.getKBText(request) || '')
-            || request.context?.defaultReplyLanguage
-            || 'en';
+        const language = this.resolveInputLanguage(request);
         const channel = request.context?.channel
             || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
         const isDM = channel === 'dm';

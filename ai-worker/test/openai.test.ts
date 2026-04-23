@@ -1447,10 +1447,36 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('language_mismatch');
     });
 
-    // Language mismatch tests for emoji/punctuation/Latin-acronym cases are covered
-    // by eval tests (Cat 41: Language Mismatch Guard, 4 tests) which test the full
-    // production pipeline. v29's post-processing check correctly uses the KB language
-    // fallback chain, so false positives don't reach production.
+    it('should NOT flag language_mismatch for short Latin acronym mid-Arabic conversation', async () => {
+        // Regression: customer chats in Arabic then sends "ICDI" (Latin acronym).
+        // Input-lang detection on the bare comment returns 'en', reply is Arabic → false positive.
+        // Fix: resolveInputLanguage consults conversation history first.
+        setupMock(JSON.stringify({
+            reply: 'دورة ICDL عندنا ٨ جلسات لمدة شهر',
+            intent: 'QUESTION',
+            confidence: 'high',
+            language: 'ar',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ICDI',
+            context: {
+                conversationHistory: [
+                    { role: 'user', content: 'مرحبا بدي أعرف عن الدورات' },
+                    { role: 'assistant', content: 'أهلاً! عنا دورات متنوعة' },
+                    { role: 'user', content: 'شو الدورات المتاحة؟' },
+                ],
+            },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
+    // Other language mismatch cases (emoji/punctuation) are covered by eval tests
+    // (Cat 41: Language Mismatch Guard, 4 tests) which test the full production pipeline.
 
     it('should NOT check language mismatch for empty replies (OFFENSIVE/SPAM)', async () => {
         setupMock(JSON.stringify({
