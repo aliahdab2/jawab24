@@ -483,17 +483,19 @@ const LeadsPage: NextPageWithLayout = () => {
       const rows = leads.map((lead) => {
         const fieldMap = Object.fromEntries((lead.extractedData?.fields ?? []).map((f) => [f.key, f.value]));
         const sourceLabel = lead.sourceType === 'comment' ? t('sourceComment') : t('sourceMessage');
+        const statusKey = STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0] | undefined;
         return [
           lead.senderName ?? '',
           lead.phone,
-          lead.status,
+          statusKey ? t(statusKey) : lead.status,
           lead.extractedData?.summary ?? '',
           sourceLabel,
           formatDateForExport(lead.createdAt, language),
           ...dynamicKeys.map((k) => fieldMap[k] ?? ''),
         ];
       });
-      const { savedToDocuments } = await downloadCSV(`leads-${Date.now()}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
+      const dateStamp = new Date().toISOString().slice(0, 10);
+      const { savedToDocuments } = await downloadCSV(`leads-${dateStamp}.csv`, [...staticHeaders, ...dynamicHeaders], rows);
       toast.success(savedToDocuments ? tc('exportSavedToFiles') : t('exportCsv'));
     } catch (err) {
       const isPermissionDenied = err instanceof DOMException && err.name === 'NotAllowedError';
