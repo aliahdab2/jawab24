@@ -40,7 +40,6 @@
 - Leads module (AI-powered extraction from conversations)
 - Waitlist feature with email notifications + unsubscribe
 - Blog (13+ bilingual posts)
-- Preset Replies (merged Templates + Rules)
 - Admin panel (playground, waitlist management, customer management, observability)
 - All Facebook + Instagram permissions approved (2026-04-07)
 - Prompt upgraded from v22 to v30

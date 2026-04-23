@@ -3,7 +3,7 @@
 > **System Reference Document / وثيقة مرجعية للنظام**
 > Generated: 2026-02-28 | Updated: 2026-04-15 (v30 — Email service via Resend; waitlist with admin management; all Facebook+Instagram permissions approved 2026-04-07; prompt v30)
 >
-> **Terminology note:** The UI now calls Templates+Rules "Preset Replies" (ردود جاهزة). The backend still uses `templates` and `rules` tables/services internally. This doc uses backend terminology.
+> **Terminology note:** Preset Replies (formerly Templates+Rules) was removed. Keyword-triggered reply paths are now handled by **Post Replies** (per-post keyword → DM) only. Smart Replies (AI) remain the default for comments and DMs that don't match a Post Reply trigger.
 
 ---
 

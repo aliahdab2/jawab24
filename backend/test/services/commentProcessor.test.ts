@@ -54,7 +54,7 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
-        isSubscriptionActive: vi.fn().mockResolvedValue(true),
+        enforceAutoReplyGate: vi.fn().mockResolvedValue({ allowed: true }),
     },
 }));
 vi.mock('../../src/lib/replyLock', () => ({
@@ -1234,7 +1234,7 @@ describe('CommentProcessor — subscription inactive', () => {
 
     it('should skip reply when subscription is inactive', async () => {
         const { subscriptionsService } = await import('../../src/services/subscriptions');
-        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(subscriptionsService.enforceAutoReplyGate).mockResolvedValue({ allowed: false, reason: 'Subscription is canceled' });
 
         const adapter = createMockAdapter();
         const result = await commentProcessor.processComment(
@@ -1249,7 +1249,7 @@ describe('CommentProcessor — subscription inactive', () => {
 
     it('should still process comment when subscription is active', async () => {
         const { subscriptionsService } = await import('../../src/services/subscriptions');
-        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(true);
+        vi.mocked(subscriptionsService.enforceAutoReplyGate).mockResolvedValue({ allowed: true });
 
         const adapter = createMockAdapter();
         const result = await commentProcessor.processComment(

@@ -4,7 +4,6 @@
   "usage": "Usage",
   "aiRepliesUsed": "Jawab Replies Used",
   "pagesUsed": "Pages Connected",
-  "presetRepliesUsed": "Preset Replies Used",
   "renewsOn": "Renews on",
   "trialBadge": "TRIAL",
   "trialEndsIn": "Trial ends in",
@@ -17,5 +16,13 @@
   "resumePlan": "Resume Subscription",
   "limitReached": "Limit Reached",
   "upgradeToUnlock": "Upgrade to unlock more",
-  "usagePercent": "{percent}% used"
+  "usagePercent": "{percent}% used",
+  "limitBanner": {
+    "warningTitle": "You're approaching your monthly reply limit",
+    "reachedTitle": "Smart Replies disabled — Post Replies and away messages still work",
+    "usage": "{used} of {limit} Smart Replies used",
+    "resetsOn": "resets on {date}",
+    "dismiss": "Dismiss",
+    "dismissLabel": "Dismiss usage warning"
+  }
 }

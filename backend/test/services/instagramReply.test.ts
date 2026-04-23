@@ -45,7 +45,7 @@ vi.mock('../../src/services/conversations', () => ({
 
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
-        isSubscriptionActive: vi.fn().mockResolvedValue(true),
+        enforceAutoReplyGate: vi.fn().mockResolvedValue({ allowed: true }),
     },
 }));
 vi.mock('../../src/services/pages', () => ({

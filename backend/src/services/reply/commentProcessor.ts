@@ -182,6 +182,19 @@ export class CommentProcessor {
                 return { success: true, commentId: comment.id };
             }
 
+            // 3aa. Subscription gate — runs before ALL reply paths (Post Reply, AI, away).
+            // Blocks canceled / paused / past_due-beyond-grace subscriptions so deterministic
+            // keyword-match replies don't continue firing for free after a merchant cancels.
+            // Dispatches a one-per-24h notification via enforceAutoReplyGate.
+            const subGate = await subscriptionsService.enforceAutoReplyGate(userId);
+            if (!subGate.allowed) {
+                pipelineMetrics.record(pipeline, 'subscription_inactive');
+                this.logger.info(`[${platform}] Subscription inactive — skipping all reply paths`, {
+                    userId, pageId: page.id, reason: subGate.reason,
+                });
+                return { success: false, commentId: platformCommentId, error: 'Subscription inactive' };
+            }
+
             // 3b. Per-post trigger check — fires before template/AI pipeline.
             // When a post has a triggerKeyword set, matching comments get the configured
             // triggerReply immediately (template path). Non-matching comments FALL THROUGH
@@ -301,14 +314,6 @@ export class CommentProcessor {
             if (!isNew && (comment.replied || comment.needsAttention)) {
                 pipelineMetrics.record(pipeline, 'already_replied');
                 return { success: false, commentId: comment.id, error: 'Comment already replied' };
-            }
-
-            // 4a. Subscription gate — all automation stops when subscription is inactive
-            const isActive = await subscriptionsService.isSubscriptionActive(userId);
-            if (!isActive) {
-                pipelineMetrics.record(pipeline, 'subscription_inactive');
-                this.logger.info(`[${platform}] Subscription inactive — skipping reply`, { userId, pageId: page.id });
-                return { success: false, commentId: comment.id, error: 'Subscription inactive' };
             }
 
             // 4b. Acquire per-comment lock — prevents duplicate webhook replies

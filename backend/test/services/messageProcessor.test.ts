@@ -57,7 +57,7 @@ vi.mock('../../src/lib/replyLock', () => ({
 }));
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
-        isSubscriptionActive: vi.fn().mockResolvedValue(true),
+        enforceAutoReplyGate: vi.fn().mockResolvedValue({ allowed: true }),
         canUseAiReplies: vi.fn().mockResolvedValue({ allowed: true }),
         incrementAiReplies: vi.fn(),
     },
@@ -644,7 +644,7 @@ describe('MessageProcessor — subscription inactive', () => {
 
     it('should skip reply when subscription is inactive', async () => {
         const { subscriptionsService } = await import('../../src/services/subscriptions');
-        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(false);
+        vi.mocked(subscriptionsService.enforceAutoReplyGate).mockResolvedValue({ allowed: false, reason: 'Subscription is canceled' });
 
         const adapter = createMockAdapter();
         const result = await messageProcessor.processMessage(
@@ -683,9 +683,9 @@ describe('MessageProcessor — origin post context inheritance', () => {
             })),
         } as any);
 
-        // Prior describe blocks set isSubscriptionActive=false; restore the default.
+        // Prior describe blocks set enforceAutoReplyGate={allowed:false}; restore the default.
         const { subscriptionsService } = await import('../../src/services/subscriptions');
-        vi.mocked(subscriptionsService.isSubscriptionActive).mockResolvedValue(true);
+        vi.mocked(subscriptionsService.enforceAutoReplyGate).mockResolvedValue({ allowed: true });
 
         vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({

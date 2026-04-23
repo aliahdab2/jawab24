@@ -181,11 +181,14 @@ export class MessageProcessor {
 
             const userId = page.userId;
 
-            // 4a. Subscription gate — all automation stops when subscription is inactive
-            const isActive = await subscriptionsService.isSubscriptionActive(userId);
-            if (!isActive) {
+            // 4a. Subscription gate — all automation (Smart Reply, Post Reply, away msg) stops
+            // when subscription is canceled / paused / past_due beyond grace. Respects the
+            // 3-day grace window in checkSubscriptionStatus, and fires a one-per-24h
+            // notification so the merchant sees why replies are frozen.
+            const gate = await subscriptionsService.enforceAutoReplyGate(userId);
+            if (!gate.allowed) {
                 pipelineMetrics.record(pipeline, 'subscription_inactive');
-                this.logger.info(`[${platform}] Subscription inactive — skipping reply`, { userId, pageId: page.id });
+                this.logger.info(`[${platform}] Subscription inactive — skipping reply`, { userId, pageId: page.id, reason: gate.reason });
                 return { success: false, messageId: platformMessageId, error: 'Subscription inactive' };
             }
             lap('4a-subscriptionCheck');

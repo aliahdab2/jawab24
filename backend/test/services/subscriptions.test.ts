@@ -1051,8 +1051,8 @@ describe('checkSubscriptionStatus', () => {
     });
 
     it('should allow past_due within grace period', () => {
-        // Period ended 3 days ago (within 7-day grace)
-        const periodEnd = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+        // Period ended 1 day ago (within 3-day grace)
+        const periodEnd = new Date(Date.now() - 1 * 24 * 60 * 60 * 1000);
         const result = subscriptionsService.checkSubscriptionStatus(
             makeSub({ status: 'past_due', currentPeriodEnd: periodEnd }) as any
         );
@@ -1060,8 +1060,8 @@ describe('checkSubscriptionStatus', () => {
     });
 
     it('should reject past_due beyond grace period', () => {
-        // Period ended 10 days ago (beyond 7-day grace)
-        const periodEnd = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+        // Period ended 5 days ago (beyond 3-day grace)
+        const periodEnd = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
         const result = subscriptionsService.checkSubscriptionStatus(
             makeSub({ status: 'past_due', currentPeriodEnd: periodEnd }) as any
         );

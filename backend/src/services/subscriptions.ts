@@ -3,7 +3,32 @@ import { db } from '../db';
 import { subscriptions, plans, usage, usageLogs, pages, workspaces } from '../db/schema';
 import { plansService } from './plans';
 import { redis } from '../lib/redis';
+import { notificationService } from './notifications';
+import { captureError } from '../utils/sentryHelpers';
 import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, LimitCheckResult } from '@jawab24/shared';
+
+/**
+ * AI usage notification thresholds (percent of monthly limit).
+ * Crossing one dispatches a one-time notification per subscription period.
+ */
+export const AI_USAGE_THRESHOLDS = [80, 100] as const;
+export type AiUsageThreshold = typeof AI_USAGE_THRESHOLDS[number];
+
+/**
+ * Return the thresholds newly crossed by an increment from `oldUsed` to `newUsed`.
+ * Pure function — returns [] if limit is null/<=0 or nothing crossed.
+ */
+export function computeCrossedAiThresholds(
+    oldUsed: number,
+    newUsed: number,
+    limit: number | null,
+): AiUsageThreshold[] {
+    if (limit === null || limit <= 0 || newUsed <= oldUsed) return [];
+    return AI_USAGE_THRESHOLDS.filter(t => {
+        const boundary = (t / 100) * limit;
+        return oldUsed < boundary && newUsed >= boundary;
+    });
+}
 
 /** Statuses that allow AI reply generation. */
 const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'trialing']);
@@ -386,7 +411,9 @@ export const subscriptionsService = {
 
         // Atomic increment — avoids race condition when concurrent requests
         // both read the same count and overwrite each other's writes.
-        await db
+        // RETURNING gives us the new count so we can detect threshold crossings
+        // without an extra read (and without a race between read and update).
+        const [updated] = await db
             .update(usage)
             .set({
                 aiRepliesCount: sql`COALESCE(${usage.aiRepliesCount}, 0) + ${count}`,
@@ -398,9 +425,64 @@ export const subscriptionsService = {
                     lte(usage.periodStart, now),
                     gte(usage.periodEnd, now)
                 )
-            );
+            )
+            .returning({ aiRepliesCount: usage.aiRepliesCount, periodStart: usage.periodStart });
 
         await this.logUsageEvent(userId, 'ai_reply', { count });
+
+        // Dispatch threshold notifications (80%, 100%) — best-effort, never breaks the reply flow
+        if (updated) {
+            const newUsed = updated.aiRepliesCount ?? 0;
+            await this.maybeNotifyAiUsageThreshold(userId, newUsed - count, newUsed, updated.periodStart);
+        }
+    },
+
+    /**
+     * Send 80%/100% AI-usage notifications once per subscription period.
+     * Dedup is enforced in Redis keyed by userId + periodStart + threshold.
+     * Errors are swallowed and reported — a notification failure must not break usage tracking.
+     */
+    async maybeNotifyAiUsageThreshold(
+        userId: string,
+        oldUsed: number,
+        newUsed: number,
+        periodStart: Date,
+    ): Promise<void> {
+        try {
+            const subscription = await this.getUserSubscription(userId);
+            const limit = subscription?.plan.maxAiRepliesPerMonth ?? null;
+            const crossed = computeCrossedAiThresholds(oldUsed, newUsed, limit);
+            if (crossed.length === 0 || limit === null) return;
+
+            const periodKey = periodStart.toISOString();
+            // TTL: 40 days — longer than any billing period, so dedup survives until the period rolls over.
+            const DEDUP_TTL_SECONDS = 40 * 24 * 60 * 60;
+
+            for (const threshold of crossed) {
+                const dedupKey = `notif:ai_usage:${userId}:${periodKey}:${threshold}`;
+                let firstCrossing = true;
+                try {
+                    const set = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS, 'NX');
+                    firstCrossing = set === 'OK';
+                } catch {
+                    // Redis unavailable — allow the notification; duplicates are preferable to silence.
+                    firstCrossing = true;
+                }
+                if (!firstCrossing) continue;
+
+                const type = threshold === 100 ? 'ai_usage_limit_reached' : 'ai_usage_warning_80';
+                await notificationService.sendTemplateNotification(userId, type, {
+                    used: String(newUsed),
+                    limit: String(limit),
+                    percent: String(threshold),
+                });
+            }
+        } catch (err) {
+            captureError(err, 'Failed to dispatch AI usage threshold notification', {
+                tags: { service: 'subscriptions' },
+                extra: { userId },
+            });
+        }
     },
 
     /**
@@ -457,9 +539,13 @@ export const subscriptionsService = {
             return {
                 allowed: false,
                 reason: 'Monthly AI reply limit reached',
+                code: 'ai_limit_reached',
                 limit,
                 used,
                 remaining: 0,
+                resetsAt: subscription.currentPeriodEnd
+                    ? new Date(subscription.currentPeriodEnd).toISOString()
+                    : undefined,
             };
         }
 
@@ -639,6 +725,57 @@ export const subscriptionsService = {
     },
 
     /**
+     * Check whether any auto-reply (Post Reply, Smart Reply, away message)
+     * should fire for this user. Returns `allowed: false` when the
+     * subscription is canceled, paused, or past_due beyond the 3-day grace window.
+     *
+     * Users without a subscription row are allowed (covers the
+     * pre-subscribe onboarding window where a workspace exists but no
+     * subscription has been created yet). Explicit inactive statuses block.
+     *
+     * This is the single gate called by comment/message webhook processors
+     * before any reply path runs. It keeps all paid reply paths — including
+     * deterministic ones like Post Replies — behind an active subscription.
+     */
+    async canAutoReply(userId: string): Promise<LimitCheckResult> {
+        const subscription = await this.getUserSubscription(userId);
+        if (!subscription) {
+            // No subscription row = pre-signup / freshly onboarded. Allow.
+            return { allowed: true };
+        }
+        return this.checkSubscriptionStatus(subscription);
+    },
+
+    /**
+     * Gate an auto-reply and dispatch a one-per-24h notification when blocked.
+     * Returns the `LimitCheckResult` so the caller can skip its reply path.
+     * Dedup via Redis SET NX keeps the notification from re-firing on every
+     * blocked webhook (potentially hundreds per day).
+     */
+    async enforceAutoReplyGate(userId: string): Promise<LimitCheckResult> {
+        const check = await this.canAutoReply(userId);
+        if (check.allowed) return check;
+
+        try {
+            const dedupKey = `notif:auto_reply_paused:${userId}`;
+            const TTL_SECONDS = 24 * 60 * 60;
+            const set = await redis.set(dedupKey, '1', 'EX', TTL_SECONDS, 'NX');
+            if (set === 'OK') {
+                await notificationService.sendTemplateNotification(userId, 'auto_reply_paused_billing', {
+                    reason: check.reason ?? 'inactive',
+                });
+            }
+        } catch (err) {
+            captureError(err, 'Failed to dispatch auto-reply paused notification', {
+                tags: { service: 'subscriptions' },
+                extra: { userId },
+            });
+        }
+
+        return check;
+    },
+
+    /**
      * Check subscription status (canceled/paused/expired trial/past_due beyond grace)
      * Reusable across all limit-check methods.
      */
@@ -648,7 +785,9 @@ export const subscriptionsService = {
         }
 
         if (subscription.status === 'past_due') {
-            const GRACE_PERIOD_DAYS = 7;
+            // 3 days covers Stripe's first payment-retry window (declined card, bank flag)
+            // without giving abusers a week of free service every month. Matches Shopify.
+            const GRACE_PERIOD_DAYS = 3;
             const periodEnd = subscription.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
 
             if (periodEnd) {

@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import clsx from 'clsx';
 import type { Comment, Page, UsageSummary } from '@jawab24/shared';
-import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, type NeedsAttentionItem } from '@/components/dashboard';
+import { AutoReplyStatusCard, CommandCenter, SmartStatusBanner, PageAccordionItem, AiUsageWarningBanner, type NeedsAttentionItem } from '@/components/dashboard';
 import { captureError } from '@/lib/sentryHelpers';
 import { getPageExternalUrl } from '@/utils/pageUrl';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -548,6 +548,14 @@ const DashboardPage: NextPageWithLayout = () => {
         items={needsAttentionItems}
         onItemClick={handleAttentionItemClick}
       />
+
+      {/* AI usage warning — appears at 80%, turns critical at 100% */}
+      {usage?.aiReplies && (
+        <AiUsageWarningBanner
+          aiReplies={usage.aiReplies}
+          resetsAt={usage.currentPeriod?.end}
+        />
+      )}
 
       {/* Command Center — consolidated metrics */}
       <CommandCenter

@@ -43,8 +43,8 @@ Customer Comment/Message
         │
         ▼
   ┌─────────────────┐
-  │ Layer 1: Preset  │  Keyword matching → preset reply
-  │ Replies          │  Fastest, cheapest, deterministic
+  │ Layer 1: Post    │  Per-post keyword match → configured DM
+  │ Reply            │  Fastest, cheapest, deterministic. Comments only.
   └────────┬─────────┘
            │ No match
            ▼
@@ -339,7 +339,6 @@ Merchant writes business info
 - **Leads Module**: AI-powered lead extraction from conversations (phone/email capture, intent summary, daily limits per workspace)
 - **Waitlist**: Feature waitlist signup with HMAC-based unsubscribe tokens
 - **Blog**: 13+ bilingual blog posts (Arabic/English) covering e-commerce guides, setup tutorials
-- **Preset Replies**: Merged Templates + Rules into unified "Preset Replies" page (keyword-triggered, < 6 words, comments-only)
 - **Admin Panel**: Playground (AI testing), waitlist management, customer management, observability dashboard
 - **Unsubscribe Page**: Email unsubscribe management
 

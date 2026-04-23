@@ -302,9 +302,13 @@ export interface UsageSummary {
 export interface LimitCheckResult {
   allowed: boolean;
   reason?: string;
+  /** Stable machine code for clients to switch on. */
+  code?: 'ai_limit_reached';
   limit?: number;
   used?: number;
   remaining?: number;
+  /** ISO timestamp when the current usage period resets. Set when `code` is 'ai_limit_reached'. */
+  resetsAt?: string;
 }
 
 // --- AI Worker Types ---

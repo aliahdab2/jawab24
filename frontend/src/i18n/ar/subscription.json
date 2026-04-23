@@ -4,7 +4,6 @@
   "usage": "إحصائيات الاستخدام",
   "aiRepliesUsed": "ردود جواب المستخدمة",
   "pagesUsed": "الصفحات المتصلة",
-  "presetRepliesUsed": "الردود الجاهزة المنشأة",
   "renewsOn": "موعد التجديد القادم",
   "trialBadge": "تجريبي",
   "trialEndsIn": "تنتهي الفترة التجريبية خلال",
@@ -17,5 +16,13 @@
   "resumePlan": "استئناف الاشتراك",
   "limitReached": "تم الوصول للحد الأقصى",
   "upgradeToUnlock": "قم بترقية باقتك للحصول على مميزات إضافية",
-  "usagePercent": "تم استهلاك {percent}% من الرصيد"
+  "usagePercent": "تم استهلاك {percent}% من الرصيد",
+  "limitBanner": {
+    "warningTitle": "اقتربت من الحد الشهري للردود",
+    "reachedTitle": "تم تعطيل الردود الذكية — ردود البوست ورسائل الترحيب لا تزال تعمل",
+    "usage": "تم استخدام {used} من {limit} رد ذكي",
+    "resetsOn": "يُعاد التعيين في {date}",
+    "dismiss": "تجاهل",
+    "dismissLabel": "تجاهل تنبيه الاستهلاك"
+  }
 }

@@ -47,8 +47,10 @@ export class AiController {
             if (!limitCheck.allowed) {
                 return reply.status(403).send({
                     error: limitCheck.reason || 'AI reply limit reached',
+                    code: limitCheck.code,
                     limit: limitCheck.limit,
-                    used: limitCheck.used
+                    used: limitCheck.used,
+                    resetsAt: limitCheck.resetsAt,
                 });
             }
         }
