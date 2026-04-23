@@ -335,17 +335,7 @@ export class FacebookService {
             return { recipientId: response.data.recipient_id };
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                const fbError = error.response?.data?.error;
-                const detail = fbError
-                    ? `${fbError.message} (code=${fbError.code}, subcode=${fbError.error_subcode ?? 'n/a'}, type=${fbError.type})`
-                    : error.message;
-                const isTransport = !error.response || (error.response.status >= 500 && error.response.status < 600);
-                throw new DmSendError(`Facebook API error: ${detail}`, {
-                    code: typeof fbError?.code === 'number' ? fbError.code : undefined,
-                    subcode: typeof fbError?.error_subcode === 'number' ? fbError.error_subcode : undefined,
-                    type: typeof fbError?.type === 'string' ? fbError.type : undefined,
-                    isTransport,
-                });
+                throw DmSendError.fromAxios(error, 'Facebook API error', { verboseDetail: true });
             }
             throw error;
         }
@@ -368,7 +358,7 @@ export class FacebookService {
             );
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
+                throw DmSendError.fromAxios(error, 'Facebook API error');
             }
             throw error;
         }

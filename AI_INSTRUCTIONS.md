@@ -160,7 +160,11 @@ System-level strings sent to customers (nudges, fallbacks, placeholders) live in
 
 To add a new language: extend the `Locale` type in `i18n.ts` — TypeScript will flag every missing translation.
 
-### 14. Documentation — Keep In Sync
+### 14. Proper Fixes Only
+
+Fix root causes, not symptoms. No workarounds, no swallowed errors, no silenced types/tests/lint. If the cause is unknown, diagnose first, then fix. If a temporary mitigation is truly necessary, label it `// TEMP:` and open the proper-fix follow-up in the same PR.
+
+### 15. Documentation — Keep In Sync
 
 After any feature addition, integration, or architectural change, update these docs **in the same commit**:
 

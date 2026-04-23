@@ -7,6 +7,27 @@ import { workspaceSettingsService } from '../services/workspaceSettings';
 import { promoteDelayedJobs } from '../lib/replyQueue';
 import { parseInboxFilters, parseLimit } from '../lib/queryParsers';
 import type { WorkspaceRequest } from '../middleware/workspace';
+import { DmSendError, classifyDmError, type FbPlatform } from '../utils/fbGraphErrors';
+import { AppError } from '../utils/errors';
+
+// Map a classified DM-send failure to an AppError with a proper status code.
+// 4xx for expected conditions (won't flood Sentry); 5xx for real faults on our side.
+function mapDmErrorToAppError(error: DmSendError, platform: FbPlatform): AppError {
+    const classified = classifyDmError(error, platform);
+    const detail = classified.fbMessage || error.message;
+    switch (classified.bucket) {
+        case 'window_expired':
+            return new AppError(detail, 409, 'DM_WINDOW_EXPIRED');
+        case 'customer_refused':
+            return new AppError(detail, 409, 'DM_CUSTOMER_UNAVAILABLE');
+        case 'transient':
+            return new AppError(detail, 503, 'DM_TRANSIENT');
+        case 'our_fault':
+            return new AppError(detail, 502, 'DM_PLATFORM_AUTH');
+        default:
+            return new AppError(detail, 502, 'DM_UNKNOWN', false);
+    }
+}
 
 export class MessagesController {
     /**
@@ -155,21 +176,23 @@ export class MessagesController {
             return reply.status(400).send({ error: 'Reply text is required' });
         }
 
+        // 1. Find the original incoming message
+        const message = await messagesService.getMessageById(id);
+        if (!message) {
+            return reply.status(404).send({ error: 'Message not found' });
+        }
+
+        // 2. Verify workspace owns the page
+        const page = await pagesService.getPage(req.workspaceId, message.pageId);
+        if (!page) {
+            return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
+        }
+
+        // 3. Send the reply via the appropriate platform API.
+        // Classify Graph API errors so expected conditions (window expired, customer blocked,
+        // rate limits) return proper 4xx/5xx codes rather than generic 500s that flood Sentry.
+        const platform: FbPlatform = message.platform === 'instagram' ? 'instagram' : 'facebook';
         try {
-            // 1. Find the original incoming message
-            const message = await messagesService.getMessageById(id);
-            if (!message) {
-                return reply.status(404).send({ error: 'Message not found' });
-            }
-
-            // 2. Verify workspace owns the page
-            const page = await pagesService.getPage(req.workspaceId, message.pageId);
-            if (!page) {
-                return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
-            }
-
-            // 3. Send the reply via the appropriate platform API
-            const platform = message.platform || 'facebook';
             if (platform === 'instagram' && page.instagramAccountId) {
                 await instagramService.sendDirectMessage(
                     page.instagramAccountId,
@@ -184,24 +207,27 @@ export class MessagesController {
                     replyText.trim()
                 );
             }
-
-            // 4. Mark the original message as replied (manual)
-            await messagesService.markAsReplied(message.id, replyText.trim(), 'manual');
-
-            // 5. Store the outgoing message
-            const outgoing = await messagesService.storeOutgoingMessage(
-                message.pageId,
-                req.workspaceId,
-                message.senderId,
-                replyText.trim(),
-                'manual'
-            );
-
-            return reply.send(outgoing);
         } catch (error) {
-            request.log.error(error);
-            return reply.status(500).send({ error: 'Failed to send reply' });
+            if (error instanceof DmSendError) {
+                throw mapDmErrorToAppError(error, platform);
+            }
+            throw error;
         }
+
+        // 4. Mark the original message as replied (manual)
+        await messagesService.markAsReplied(message.id, replyText.trim(), 'manual');
+
+        // 5. Store the outgoing message
+        const outgoing = await messagesService.storeOutgoingMessage(
+            message.pageId,
+            req.workspaceId,
+            message.senderId,
+            replyText.trim(),
+            'manual'
+        );
+
+        return reply.send(outgoing);
+        // Unexpected errors propagate to the global errorHandler, which reports them to Sentry.
     }
 
     /**

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FastifyRequest, FastifyReply } from 'fastify';
+import { DmSendError } from '../../src/utils/fbGraphErrors';
+import { AppError } from '../../src/utils/errors';
 
 // Mock dependencies before imports
 vi.mock('../../src/services/messages', () => ({
@@ -477,12 +479,98 @@ describe('MessagesController', () => {
             expect(mockReply.status).toHaveBeenCalledWith(401);
         });
 
-        it('should return 500 on service failure', async () => {
-            vi.mocked(messagesService.getMessageById).mockRejectedValue(new Error('fail'));
+        it('propagates unexpected service failures to the global error handler (no silent 500)', async () => {
+            // Regression: the controller used to catch-and-return-500, hiding the cause from Sentry.
+            // Now it must let unknown errors propagate so the global errorHandler captures them.
+            const boom = new Error('db exploded');
+            vi.mocked(messagesService.getMessageById).mockRejectedValue(boom);
 
-            await messagesController.reply(mockRequest as any, mockReply as any);
+            await expect(messagesController.reply(mockRequest as any, mockReply as any)).rejects.toBe(boom);
+            expect(mockReply.status).not.toHaveBeenCalledWith(500);
+        });
 
-            expect(mockReply.status).toHaveBeenCalledWith(500);
+        describe('Graph API error classification', () => {
+            beforeEach(() => {
+                vi.mocked(messagesService.getMessageById).mockResolvedValue(mockMessage as any);
+                vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+            });
+
+            const cases: Array<{
+                name: string;
+                error: DmSendError;
+                expectedStatus: number;
+                expectedCode: string;
+            }> = [
+                {
+                    name: 'window expired → 409 DM_WINDOW_EXPIRED',
+                    error: new DmSendError('outside 24h window', { code: 10, subcode: 2018278 }),
+                    expectedStatus: 409,
+                    expectedCode: 'DM_WINDOW_EXPIRED',
+                },
+                {
+                    name: 'customer unavailable → 409 DM_CUSTOMER_UNAVAILABLE',
+                    error: new DmSendError("This person isn't available", { code: 551 }),
+                    expectedStatus: 409,
+                    expectedCode: 'DM_CUSTOMER_UNAVAILABLE',
+                },
+                {
+                    name: 'transient rate limit → 503 DM_TRANSIENT',
+                    error: new DmSendError('rate limited', { code: 613 }),
+                    expectedStatus: 503,
+                    expectedCode: 'DM_TRANSIENT',
+                },
+                {
+                    name: 'expired token → 502 DM_PLATFORM_AUTH',
+                    error: new DmSendError('token invalid', { code: 190 }),
+                    expectedStatus: 502,
+                    expectedCode: 'DM_PLATFORM_AUTH',
+                },
+                {
+                    name: 'unknown Graph error → 502 DM_UNKNOWN',
+                    error: new DmSendError('something new', { code: 99999 }),
+                    expectedStatus: 502,
+                    expectedCode: 'DM_UNKNOWN',
+                },
+            ];
+
+            for (const { name, error, expectedStatus, expectedCode } of cases) {
+                it(`maps ${name}`, async () => {
+                    vi.mocked(facebookService.sendPrivateMessage).mockRejectedValue(error);
+
+                    let thrown: unknown;
+                    try {
+                        await messagesController.reply(mockRequest as any, mockReply as any);
+                    } catch (e) {
+                        thrown = e;
+                    }
+
+                    expect(thrown).toBeInstanceOf(AppError);
+                    expect((thrown as AppError).statusCode).toBe(expectedStatus);
+                    expect((thrown as AppError).code).toBe(expectedCode);
+                    // Must not have been marked as replied or stored — the send failed.
+                    expect(messagesService.markAsReplied).not.toHaveBeenCalled();
+                    expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+                });
+            }
+
+            it('routes Instagram DmSendError through the same classifier', async () => {
+                const igMessage = { ...mockMessage, platform: 'instagram' };
+                const igPage = { ...mockPage, instagramAccountId: 'ig-123' };
+                vi.mocked(messagesService.getMessageById).mockResolvedValue(igMessage as any);
+                vi.mocked(pagesService.getPage).mockResolvedValue(igPage as any);
+                vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(
+                    new DmSendError('outside 24h window', { code: 10, subcode: 2018278 }),
+                );
+
+                let thrown: unknown;
+                try {
+                    await messagesController.reply(mockRequest as any, mockReply as any);
+                } catch (e) {
+                    thrown = e;
+                }
+
+                expect((thrown as AppError).code).toBe('DM_WINDOW_EXPIRED');
+            });
         });
     });
 

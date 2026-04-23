@@ -288,16 +288,9 @@ export class InstagramService {
             return response.data.message_id;
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                const fbError = error.response?.data?.error;
-                const detail = fbError?.message || error.message;
-                this.logger.error('[Instagram] API Error sending DM', { error: detail });
-                const isTransport = !error.response || (error.response.status >= 500 && error.response.status < 600);
-                throw new DmSendError(`Instagram API error: ${detail}`, {
-                    code: typeof fbError?.code === 'number' ? fbError.code : undefined,
-                    subcode: typeof fbError?.error_subcode === 'number' ? fbError.error_subcode : undefined,
-                    type: typeof fbError?.type === 'string' ? fbError.type : undefined,
-                    isTransport,
-                });
+                const dmError = DmSendError.fromAxios(error, 'Instagram API error');
+                this.logger.error('[Instagram] API Error sending DM', { error: dmError.message });
+                throw dmError;
             }
             throw error;
         }

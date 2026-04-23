@@ -7,6 +7,7 @@ import React from 'react';
 // Must mock before importing the hook
 const mockResolveConversation = vi.fn();
 const mockUnresolveConversation = vi.fn();
+const mockReply = vi.fn();
 
 vi.mock('@/lib/api', () => ({
   messagesApi: {
@@ -15,11 +16,38 @@ vi.mock('@/lib/api', () => ({
     pauseConversation: vi.fn(),
     resumeConversation: vi.fn(),
     getPauseStatus: vi.fn(),
-    reply: vi.fn(),
+    reply: (...args: unknown[]) => mockReply(...args),
   },
 }));
 
+const mockToastError = vi.fn();
+vi.mock('sonner', () => ({
+  toast: {
+    success: vi.fn(),
+    error: (...args: unknown[]) => mockToastError(...args),
+    warning: vi.fn(),
+  },
+}));
+
+const mockCaptureError = vi.fn();
+vi.mock('@/lib/sentryHelpers', () => ({
+  captureError: (...args: unknown[]) => mockCaptureError(...args),
+}));
+
 import { useConversationActions } from './useConversationActions';
+import { AxiosError, AxiosHeaders } from 'axios';
+
+function makeAxios500(code?: string): AxiosError {
+  const err = new AxiosError('Request failed with status code 500', '500');
+  err.response = {
+    status: 500,
+    statusText: 'Internal Server Error',
+    headers: {},
+    config: { headers: new AxiosHeaders() },
+    data: code ? { error: true, code, message: 'upstream' } : { error: true },
+  };
+  return err;
+}
 
 function createWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -86,6 +114,58 @@ describe('useConversationActions', () => {
       });
 
       expect(mockResolveConversation).toHaveBeenCalledWith('sender-abc', 'page-xyz');
+    });
+  });
+
+  describe('handleReply onError', () => {
+    // Regression: the toast used to show `error.message` ("Request failed with status code 500"),
+    // leaking axios internals to the user. It now always shows the translated replyFailed key.
+    it('shows a translated toast (never the raw axios message) on 500', async () => {
+      mockReply.mockRejectedValue(makeAxios500());
+      const { wrapper } = createWrapper();
+      const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+      await act(async () => {
+        result.current.handleReply('msg-1', 'hi');
+        // Allow the mutation to settle
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(mockToastError).toHaveBeenCalledTimes(1);
+      const toastArg = mockToastError.mock.calls[0][0] as string;
+      expect(toastArg).not.toContain('500');
+      expect(toastArg).not.toContain('Request failed');
+    });
+
+    it('captures unexpected errors to Sentry (so silent 500s stop being invisible)', async () => {
+      mockReply.mockRejectedValue(makeAxios500());
+      const { wrapper } = createWrapper();
+      const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+      await act(async () => {
+        result.current.handleReply('msg-1', 'hi');
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(mockCaptureError).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['DM_WINDOW_EXPIRED'],
+      ['DM_CUSTOMER_UNAVAILABLE'],
+      ['DM_TRANSIENT'],
+    ])('does NOT capture expected platform condition %s to Sentry', async (code) => {
+      mockReply.mockRejectedValue(makeAxios500(code));
+      const { wrapper } = createWrapper();
+      const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+      await act(async () => {
+        result.current.handleReply('msg-1', 'hi');
+        await new Promise((r) => setTimeout(r, 0));
+      });
+
+      expect(mockToastError).toHaveBeenCalledTimes(1);
+      expect(mockCaptureError).not.toHaveBeenCalled();
     });
   });
 

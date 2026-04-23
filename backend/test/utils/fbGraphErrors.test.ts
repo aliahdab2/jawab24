@@ -151,3 +151,55 @@ describe('classifyDmError — unknown shapes', () => {
         expect(result.rawMessage).toBe('boom');
     });
 });
+
+describe('DmSendError.fromAxios', () => {
+    it('extracts Graph error fields and prefixes the message', () => {
+        const axiosErr = makeAxiosError(400, {
+            error: { message: 'user blocked', code: 10, error_subcode: 2534014, type: 'OAuthException' },
+        });
+        const dm = DmSendError.fromAxios(axiosErr, 'Facebook API error');
+        expect(dm).toBeInstanceOf(DmSendError);
+        expect(dm.message).toBe('Facebook API error: user blocked');
+        expect(dm.code).toBe(10);
+        expect(dm.subcode).toBe(2534014);
+        expect(dm.type).toBe('OAuthException');
+        expect(dm.isTransport).toBe(false);
+    });
+
+    it('flags 5xx responses as transport (transient)', () => {
+        const axiosErr = makeAxiosError(503, { error: { message: 'upstream down', code: 2 } });
+        const dm = DmSendError.fromAxios(axiosErr, 'Facebook API error');
+        expect(dm.isTransport).toBe(true);
+    });
+
+    it('flags network errors (no response) as transport', () => {
+        const axiosErr = new AxiosError('ECONNRESET', 'ECONNRESET');
+        const dm = DmSendError.fromAxios(axiosErr, 'Facebook API error');
+        expect(dm.isTransport).toBe(true);
+        expect(dm.message).toBe('Facebook API error: ECONNRESET');
+    });
+
+    it('appends verbose detail when requested', () => {
+        const axiosErr = makeAxiosError(400, {
+            error: { message: 'expired', code: 190, error_subcode: 463, type: 'OAuthException' },
+        });
+        const dm = DmSendError.fromAxios(axiosErr, 'Facebook API error', { verboseDetail: true });
+        expect(dm.message).toBe('Facebook API error: expired (code=190, subcode=463, type=OAuthException)');
+    });
+
+    it('falls back to axios message when Graph payload is missing', () => {
+        const axiosErr = makeAxiosError(400, { unexpected: true }, 'Request failed');
+        const dm = DmSendError.fromAxios(axiosErr, 'Instagram API error');
+        expect(dm.message).toBe('Instagram API error: Request failed');
+        expect(dm.code).toBeUndefined();
+    });
+
+    it('ignores non-numeric Graph code/subcode values', () => {
+        const axiosErr = makeAxiosError(400, {
+            error: { message: 'weird', code: 'not-a-number', error_subcode: 'also-not' },
+        });
+        const dm = DmSendError.fromAxios(axiosErr, 'Facebook API error');
+        expect(dm.code).toBeUndefined();
+        expect(dm.subcode).toBeUndefined();
+    });
+});

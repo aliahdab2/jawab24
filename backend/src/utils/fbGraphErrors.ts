@@ -49,6 +49,30 @@ export class DmSendError extends Error {
         this.type = fields.type;
         this.isTransport = fields.isTransport ?? false;
     }
+
+    /**
+     * Build a DmSendError from an AxiosError raised by a Graph API call.
+     * Extracts structured Graph error fields and flags transport-layer failures
+     * (network errors or 5xx) so `classifyDmError` can bucket them as transient.
+     * `options.verboseDetail` appends "(code=…, subcode=…, type=…)" to the message
+     * for log/debug contexts where the raw text carries extra diagnostic value.
+     */
+    static fromAxios(
+        error: import('axios').AxiosError,
+        prefix: string,
+        options: { verboseDetail?: boolean } = {},
+    ): DmSendError {
+        const fbError = (error.response?.data as { error?: { message?: string; code?: unknown; error_subcode?: unknown; type?: unknown } } | undefined)?.error;
+        const code = typeof fbError?.code === 'number' ? fbError.code : undefined;
+        const subcode = typeof fbError?.error_subcode === 'number' ? fbError.error_subcode : undefined;
+        const type = typeof fbError?.type === 'string' ? fbError.type : undefined;
+        const baseMessage = fbError?.message || error.message;
+        const detail = options.verboseDetail && fbError
+            ? `${baseMessage} (code=${code ?? 'n/a'}, subcode=${subcode ?? 'n/a'}, type=${type ?? 'n/a'})`
+            : baseMessage;
+        const isTransport = !error.response || (error.response.status >= 500 && error.response.status < 600);
+        return new DmSendError(`${prefix}: ${detail}`, { code, subcode, type, isTransport });
+    }
 }
 
 // Graph error code/subcode → bucket lookup. Keyed by "platform|code|subcode"
