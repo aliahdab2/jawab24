@@ -93,6 +93,7 @@ export interface LeadDigestRow {
     phone: string;
     sourceType: 'message' | 'comment' | string;
     createdAt: Date;
+    summary?: string | null;
 }
 
 const DIGEST_MAX_ROWS = 20;
@@ -129,10 +130,12 @@ export function leadDigestEmailTemplate(params: {
     const cta = t('leadDigestCta', lang);
     const thName = t('leadDigestTableName', lang);
     const thPhone = t('leadDigestTablePhone', lang);
+    const thReason = t('leadDigestTableReason', lang);
     const thSource = t('leadDigestTableSource', lang);
     const thDate = t('leadDigestTableDate', lang);
     const srcMsg = t('leadDigestSourceMessage', lang);
     const srcCmt = t('leadDigestSourceComment', lang);
+    const noSummary = t('leadDigestNoSummary', lang);
 
     const rows = params.leads.slice(0, DIGEST_MAX_ROWS);
     const remaining = Math.max(0, params.leadCount - rows.length);
@@ -140,13 +143,15 @@ export function leadDigestEmailTemplate(params: {
     const tableRows = rows.map(lead => {
         const name = escapeHtml(lead.name?.trim() || '—');
         const phone = escapeHtml(lead.phone);
+        const reason = escapeHtml(lead.summary?.trim() || noSummary);
         const source = escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg);
         const date = escapeHtml(formatDigestDate(lead.createdAt, lang));
         return `<tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;">${name}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;" dir="ltr">${phone}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;">${source}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;">${date}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;">${name}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${phone}</td>
+          <td dir="auto" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#3f3f46;vertical-align:top;line-height:1.5;max-width:260px;">${reason}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;">${source}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;white-space:nowrap;">${date}</td>
         </tr>`;
     }).join('');
 
@@ -183,6 +188,7 @@ export function leadDigestEmailTemplate(params: {
                   <tr style="background-color:#fafafa;">
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thName)}</th>
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thPhone)}</th>
+                    <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thReason)}</th>
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thSource)}</th>
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thDate)}</th>
                   </tr>

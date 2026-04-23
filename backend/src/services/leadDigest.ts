@@ -109,6 +109,7 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
             leadPhone: leads.phone,
             leadSource: leads.sourceType,
             leadCreatedAt: leads.createdAt,
+            leadExtracted: leads.extractedData,
             pageKb: pages.knowledgeBase,
             userId: pages.userId,
         })
@@ -131,6 +132,7 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
             phone: row.leadPhone,
             sourceType: row.leadSource,
             createdAt: row.leadCreatedAt,
+            summary: row.leadExtracted?.summary ?? null,
         });
         bucket.kbTexts.push(row.pageKb);
         byUser.set(row.userId, bucket);

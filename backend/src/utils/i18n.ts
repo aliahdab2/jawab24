@@ -97,6 +97,14 @@ const messages = {
         ar: 'التاريخ',
         en: 'Date',
     },
+    leadDigestTableReason: {
+        ar: 'السبب',
+        en: 'Reason',
+    },
+    leadDigestNoSummary: {
+        ar: '—',
+        en: '—',
+    },
     leadDigestAndMore: {
         ar: 'و{count} آخر…',
         en: 'and {count} more…',
