@@ -245,6 +245,7 @@ const CommentsPage: NextPageWithLayout = () => {
   const pushedModalRef = useRef(false);
   const openComment = useCallback((comment: Comment) => {
     setTriggerModalComment(null);
+    setSelectedComment(comment);
     pushedModalRef.current = true;
     router.push(
       { pathname: router.pathname, query: { ...router.query, comment: comment.id } },

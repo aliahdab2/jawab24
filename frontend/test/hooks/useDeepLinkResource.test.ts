@@ -23,15 +23,11 @@ Object.defineProperty(window, 'location', {
 
 // ── Toast mock ────────────────────────────────────────────────────────────────
 
-const mockToastLoading = vi.fn().mockReturnValue('toast-id');
-const mockToastDismiss = vi.fn();
 const mockToastInfo = vi.fn();
 const mockToastError = vi.fn();
 
 vi.mock('sonner', () => ({
   toast: {
-    loading: (...args: unknown[]) => mockToastLoading(...args),
-    dismiss: (...args: unknown[]) => mockToastDismiss(...args),
     info: (...args: unknown[]) => mockToastInfo(...args),
     error: (...args: unknown[]) => mockToastError(...args),
   },
@@ -74,8 +70,6 @@ describe('useDeepLinkResource', () => {
     mockIsReady = true;
     mockQuery = {};
     mockReplace.mockClear();
-    mockToastLoading.mockClear();
-    mockToastDismiss.mockClear();
     mockToastInfo.mockClear();
     mockToastError.mockClear();
     mockCaptureError.mockClear();
@@ -89,7 +83,6 @@ describe('useDeepLinkResource', () => {
 
     expect(fetchFn).not.toHaveBeenCalled();
     expect(onOpen).not.toHaveBeenCalled();
-    expect(mockToastLoading).not.toHaveBeenCalled();
   });
 
   it('fetches and opens the resource when the param is present', async () => {
@@ -103,8 +96,6 @@ describe('useDeepLinkResource', () => {
 
     await waitFor(() => expect(onOpen).toHaveBeenCalledWith(resource));
     expect(fetchFn).toHaveBeenCalledWith('msg-42');
-    expect(mockToastLoading).toHaveBeenCalledTimes(1);
-    expect(mockToastDismiss).toHaveBeenCalledWith('toast-id');
     expect(mockToastInfo).not.toHaveBeenCalled();
     expect(mockToastError).not.toHaveBeenCalled();
   });

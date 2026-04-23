@@ -292,9 +292,20 @@ const MessagesPage: NextPageWithLayout = () => {
     const { data: locate } = await messagesApi.locateMessage(messageId);
     return loadConversation({ senderId: locate.senderId, pageId: locate.pageId, limit: 100 });
   }, [loadConversation]);
+  // Deep-link opens: set state directly (conversation may not be in loaded list)
+  // and use router.replace — the notification tap already created the history entry,
+  // so we swap ?messageId for the canonical ?conversation without stacking a frame.
+  const openDeepLinkedConversation = useCallback((conv: Conversation) => {
+    setSelectedConversation(conv);
+    router.replace(
+      { pathname: router.pathname, query: { ...router.query, conversation: conv.senderId } },
+      undefined,
+      { shallow: true },
+    );
+  }, [router, setSelectedConversation]);
   useDeepLinkResource<Conversation>('messageId', {
     fetch: fetchConversationByMessageId,
-    onOpen: setSelectedConversation,
+    onOpen: openDeepLinkedConversation,
     notFoundMessage: t('deepLinkNotFound'),
     errorTag: deepLinkErrorTag,
   });

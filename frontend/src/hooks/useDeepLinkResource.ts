@@ -44,14 +44,12 @@ export function useDeepLinkResource<T>(
   useEffect(() => {
     if (!deepLinkId) return;
     const targetId = deepLinkId;
-    const loadingToastId = toast.loading(tc('loading'));
     let cancelled = false;
 
     (async () => {
       try {
         const resource = await optsRef.current.fetch(targetId);
         if (cancelled) return;
-        toast.dismiss(loadingToastId);
         if (!resource) {
           toast.info(optsRef.current.notFoundMessage);
           return;
@@ -59,7 +57,6 @@ export function useDeepLinkResource<T>(
         optsRef.current.onOpen(resource);
       } catch (err) {
         if (cancelled) return;
-        toast.dismiss(loadingToastId);
         const status = (err as { response?: { status?: number } })?.response?.status;
         if (status === 404) {
           toast.info(optsRef.current.notFoundMessage);
@@ -73,7 +70,6 @@ export function useDeepLinkResource<T>(
 
     return () => {
       cancelled = true;
-      toast.dismiss(loadingToastId);
     };
   }, [deepLinkId, tc]);
 }
