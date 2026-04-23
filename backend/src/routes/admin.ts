@@ -12,6 +12,7 @@ import { config } from '../config';
 import { emailService } from '../services/email';
 import { waitlistEmailTemplate } from '../utils/emailTemplates';
 import { generateUnsubscribeToken } from './waitlist';
+import { runDailyLeadDigest } from '../services/leadDigest';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -1093,6 +1094,38 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 }
             }
         );
+
+        /**
+         * POST /admin/lead-digest/run - Manually trigger the daily lead digest job
+         * Useful for testing without waiting 24h. Same stamping logic applies,
+         * so running this repeatedly will not re-email already-stamped leads.
+         */
+        adminProtected.post('/lead-digest/run', {
+            schema: {
+                description: 'Manually run the daily lead digest job',
+                tags: ['Admin'],
+                security: auth,
+                response: {
+                    200: {
+                        type: 'object',
+                        properties: {
+                            processed: { type: 'number' },
+                            sent: { type: 'number' },
+                            skipped: { type: 'number' },
+                            errors: { type: 'number' },
+                        },
+                    },
+                },
+            },
+        }, async (request: FastifyRequest, reply: FastifyReply) => {
+            try {
+                const result = await runDailyLeadDigest();
+                return reply.send(result);
+            } catch (error) {
+                request.log.error(error, 'Manual lead digest trigger failed');
+                return reply.status(500).send({ success: false, error: 'Lead digest run failed' });
+            }
+        });
 
     });
 }

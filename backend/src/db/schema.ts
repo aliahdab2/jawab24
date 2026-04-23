@@ -853,6 +853,8 @@ export const leads = pgTable('leads', {
     status: varchar('status', { length: 20 }).notNull().default('new'), // 'new' | 'contacted' | 'converted'
     extractionStatus: varchar('extraction_status', { length: 20 }).notNull().default('completed'), // 'completed' | 'pending' | 'failed'
     extractionAttempts: integer('extraction_attempts').notNull().default(0),
+    // Set when this lead has been included in a daily digest email to the owner (null = not yet emailed)
+    digestEmailedAt: timestamp('digest_emailed_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }, (table) => ({
@@ -860,6 +862,7 @@ export const leads = pgTable('leads', {
     senderPageUnique: uniqueIndex('idx_leads_sender_page').on(table.senderId, table.pageId),
     statusIdx: index('idx_leads_status').on(table.pageId, table.status),
     createdAtIdx: index('idx_leads_created_at').on(table.pageId, table.createdAt),
+    digestEmailedAtIdx: index('idx_leads_digest_emailed_at').on(table.digestEmailedAt),
 }));
 
 // ============================================

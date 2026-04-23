@@ -52,6 +52,7 @@ import { startCustomerNotificationWorker, stopCustomerNotificationWorker, setCus
 import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
+import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
 import { smsService } from "./services/sms";
 import { emailService } from "./services/email";
 import { createRequestLogger } from "./types";
@@ -294,6 +295,24 @@ const start = async () => {
     // Start Facebook token refresh cron (refreshes tokens expiring within 7 days, every 6h)
     setTokenRefreshLogger(workerLogger);
     startTokenRefreshCron();
+
+    // Lead digest cron — once per day, emails owners with ≥10 new leads
+    // Threshold + stamping in service guarantees at most one email per user per day.
+    setLeadDigestLogger(workerLogger);
+    const LEAD_DIGEST_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+    setInterval(() => {
+      runDailyLeadDigest().catch(err => {
+        server.log.error(err, '[LeadDigest] Scheduled run failed');
+        Sentry.captureException(err);
+      });
+    }, LEAD_DIGEST_INTERVAL_MS);
+    // First run delayed 5 min after startup so it doesn't block boot
+    setTimeout(() => {
+      runDailyLeadDigest().catch(err => {
+        server.log.error(err, '[LeadDigest] Initial run failed');
+        Sentry.captureException(err);
+      });
+    }, 5 * 60 * 1000);
 
     // Database cleanup scheduler — runs every 6 hours to enforce data retention
     // AI cache: 30 days, logs: 90 days, usage logs: 180 days

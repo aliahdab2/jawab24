@@ -63,6 +63,52 @@ const messages = {
         ar: 'لديك دعوة للانضمام إلى فريق على Jawab24. اقبل الدعوة من هنا: {link}',
         en: 'You\'ve been invited to join a team on Jawab24. Accept here: {link}',
     },
+
+    // ─── Lead digest email (sent once/day when user has ≥10 new leads) ──────────
+    leadDigestSubject: {
+        ar: 'لديك {count} عميل محتمل جديد على Jawab24',
+        en: 'You have {count} new leads on Jawab24',
+    },
+    leadDigestHeading: {
+        ar: 'عملاء محتملون جدد',
+        en: 'New leads',
+    },
+    leadDigestIntro: {
+        ar: 'جمعت {count} عميل محتمل جديد منذ آخر تقرير. اضغط للعرض والمتابعة.',
+        en: 'You collected {count} new leads since the last digest. Click through to view and follow up.',
+    },
+    leadDigestCta: {
+        ar: 'عرض العملاء المحتملين',
+        en: 'View leads',
+    },
+    leadDigestTableName: {
+        ar: 'الاسم',
+        en: 'Name',
+    },
+    leadDigestTablePhone: {
+        ar: 'الهاتف',
+        en: 'Phone',
+    },
+    leadDigestTableSource: {
+        ar: 'المصدر',
+        en: 'Source',
+    },
+    leadDigestTableDate: {
+        ar: 'التاريخ',
+        en: 'Date',
+    },
+    leadDigestAndMore: {
+        ar: 'و{count} آخر…',
+        en: 'and {count} more…',
+    },
+    leadDigestSourceMessage: {
+        ar: 'رسالة',
+        en: 'Message',
+    },
+    leadDigestSourceComment: {
+        ar: 'تعليق',
+        en: 'Comment',
+    },
 } as const satisfies Record<string, Messages>;
 
 export type MessageKey = keyof typeof messages;
