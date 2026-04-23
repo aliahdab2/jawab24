@@ -10,6 +10,11 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
+const captureErrorMock = vi.fn();
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: (...args: unknown[]) => captureErrorMock(...args),
+}));
+
 import { EmailService } from '../../src/services/email';
 import type { Logger } from '../../src/types/logger';
 
@@ -29,6 +34,7 @@ describe('EmailService', () => {
     beforeEach(() => {
         emailService = new EmailService();
         vi.resetAllMocks();
+        captureErrorMock.mockReset();
     });
 
     afterEach(() => {
@@ -160,9 +166,48 @@ describe('EmailService', () => {
             expect(result).toEqual({ success: false, error: 'Email provider not configured' });
             expect(fetchSpy).not.toHaveBeenCalled();
             expect(logger.warn).toHaveBeenCalledWith('Email not configured — RESEND_API_KEY is empty');
+            expect(captureErrorMock).toHaveBeenCalledTimes(1);
+            expect(captureErrorMock).toHaveBeenCalledWith(
+                expect.any(Error),
+                'email.send skipped — RESEND_API_KEY missing',
+                expect.objectContaining({
+                    tags: { service: 'email' },
+                    level: 'error',
+                }),
+            );
 
             // Restore
             config.resend.apiKey = originalKey;
+        });
+
+        it('should call captureError when Resend API returns non-ok', async () => {
+            process.env.NODE_ENV = 'test';
+            const mockResponse = {
+                ok: false,
+                status: 422,
+                json: vi.fn().mockResolvedValue({
+                    statusCode: 422,
+                    message: 'Invalid email address',
+                    name: 'validation_error',
+                }),
+            };
+            vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse as unknown as Response);
+
+            await emailService.send({
+                to: 'bad-email',
+                subject: 'Test',
+                html: '<p>Hi</p>',
+            });
+
+            expect(captureErrorMock).toHaveBeenCalledTimes(1);
+            expect(captureErrorMock).toHaveBeenCalledWith(
+                expect.any(Error),
+                'email.send Resend API failure',
+                expect.objectContaining({
+                    tags: expect.objectContaining({ service: 'email', statusCode: '422' }),
+                    level: 'error',
+                }),
+            );
         });
     });
 });

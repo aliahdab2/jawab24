@@ -53,6 +53,7 @@ import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
 import { setLeadDigestLogger, runDailyLeadDigest } from "./services/leadDigest";
+import { captureError } from "./utils/sentryHelpers";
 import { smsService } from "./services/sms";
 import { emailService } from "./services/email";
 import { createRequestLogger } from "./types";
@@ -303,14 +304,14 @@ const start = async () => {
     setInterval(() => {
       runDailyLeadDigest().catch(err => {
         server.log.error(err, '[LeadDigest] Scheduled run failed');
-        Sentry.captureException(err);
+        captureError(err, '[LeadDigest] Scheduled run failed', { tags: { cron: 'lead_digest' }, level: 'error' });
       });
     }, LEAD_DIGEST_INTERVAL_MS);
     // First run delayed 5 min after startup so it doesn't block boot
     setTimeout(() => {
       runDailyLeadDigest().catch(err => {
         server.log.error(err, '[LeadDigest] Initial run failed');
-        Sentry.captureException(err);
+        captureError(err, '[LeadDigest] Initial run failed', { tags: { cron: 'lead_digest' }, level: 'error' });
       });
     }, 5 * 60 * 1000);
 
@@ -321,12 +322,14 @@ const start = async () => {
     setInterval(() => {
       runAllCleanupTasks(undefined, cleanupLogger).catch(err => {
         server.log.error(err, 'Scheduled cleanup failed');
+        captureError(err, 'Scheduled cleanup failed', { tags: { cron: 'cleanup' }, level: 'error' });
       });
     }, 6 * 60 * 60 * 1000); // Every 6 hours
     // Run once on startup (delayed 60s to let DB connections settle)
     setTimeout(() => {
       runAllCleanupTasks(undefined, cleanupLogger).catch(err => {
         server.log.error(err, 'Initial cleanup failed');
+        captureError(err, 'Initial cleanup failed', { tags: { cron: 'cleanup' }, level: 'error' });
       });
     }, 60_000);
 
@@ -343,6 +346,7 @@ const start = async () => {
         server.log.info(`[EcommerceScheduler] Enqueued sync for ${stores.length} store(s)`);
       } catch (err) {
         server.log.error(err, '[EcommerceScheduler] Scheduled sync failed');
+        captureError(err, '[EcommerceScheduler] Scheduled sync failed', { tags: { cron: 'ecommerce_sync' }, level: 'error' });
       }
     }, 6 * 60 * 60 * 1000); // Every 6 hours
 

@@ -1,4 +1,5 @@
 import { config } from '../config';
+import { captureError } from '../utils/sentryHelpers';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
@@ -46,6 +47,11 @@ export class EmailService {
 
         if (!config.resend.apiKey) {
             this.logger.warn('Email not configured — RESEND_API_KEY is empty');
+            captureError(
+                new Error('Email provider not configured — RESEND_API_KEY is empty'),
+                'email.send skipped — RESEND_API_KEY missing',
+                { tags: { service: 'email' }, level: 'error', extra: { to: payload.to, subject: payload.subject } },
+            );
             return { success: false, error: 'Email provider not configured' };
         }
 
@@ -65,7 +71,17 @@ export class EmailService {
 
         if (!response.ok) {
             const err = await response.json() as ResendErrorResponse;
-            return { success: false, error: err.message || `HTTP ${response.status}` };
+            const errorMessage = err.message || `HTTP ${response.status}`;
+            captureError(
+                new Error(`Resend API error: ${errorMessage}`),
+                'email.send Resend API failure',
+                {
+                    tags: { service: 'email', statusCode: String(response.status) },
+                    level: 'error',
+                    extra: { to: payload.to, subject: payload.subject, resendError: err },
+                },
+            );
+            return { success: false, error: errorMessage };
         }
 
         const data = await response.json() as ResendResponse;

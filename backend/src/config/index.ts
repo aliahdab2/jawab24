@@ -125,7 +125,10 @@ export const config = {
         senderId: process.env.VONAGE_SENDER_ID || 'Jawab24',
     },
 
-    // Resend — transactional email (waitlist campaigns, future transactional emails)
+    // Resend — transactional email (lead digest, waitlist campaigns, future transactional emails)
+    // RESEND_API_KEY is required in production via src/utils/env.ts validation (fail-fast at boot).
+    // In dev/test it may be empty; EmailService short-circuits (NODE_ENV==='development')
+    // or captures a Sentry error and returns a typed failure.
     resend: {
         apiKey: process.env.RESEND_API_KEY || '',
         fromEmail: process.env.RESEND_FROM_EMAIL || 'info@jawab24.com',

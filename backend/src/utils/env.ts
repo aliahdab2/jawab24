@@ -83,11 +83,23 @@ const EnvSchema = z.object({
 
     // Cleanup endpoint secret token
     CLEANUP_SECRET_TOKEN: z.string().optional(),
+
+    // Resend — transactional email (lead digest, waitlist, future transactional)
+    // Validated below: required in production (digest cron depends on it)
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM_EMAIL: z.string().email('RESEND_FROM_EMAIL must be a valid email').default('info@jawab24.com'),
+    RESEND_FROM_NAME: z.string().default('Jawab24'),
 }).refine(
     data => data.NODE_ENV !== 'production' || (!!data.REDIS_PASSWORD && data.REDIS_PASSWORD !== 'changeme_in_production'),
     {
         message: 'REDIS_PASSWORD must be set to a non-default value in production',
         path: ['REDIS_PASSWORD'],
+    },
+).refine(
+    data => data.NODE_ENV !== 'production' || !!data.RESEND_API_KEY,
+    {
+        message: 'RESEND_API_KEY must be set in production — the lead digest cron cannot deliver emails without it',
+        path: ['RESEND_API_KEY'],
     },
 );
 

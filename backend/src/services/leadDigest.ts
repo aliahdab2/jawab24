@@ -222,6 +222,15 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
                     error: send.error,
                     leadCount: bucket.leadIds.length,
                 });
+                captureError(
+                    new Error(`Lead digest send failed: ${send.error ?? 'unknown'}`),
+                    'Lead digest send failed',
+                    {
+                        tags: { cron: 'lead_digest' },
+                        level: 'error',
+                        extra: { userId, leadCount: bucket.leadIds.length, lang, resendError: send.error },
+                    },
+                );
                 continue;
             }
 
