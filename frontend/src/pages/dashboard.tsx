@@ -465,18 +465,16 @@ const DashboardPage: NextPageWithLayout = () => {
 
   const loadConversation = useLoadConversation();
   const openConversationModal = useCallback(async (senderId: string, pageId: string, senderName: string | null) => {
-    const loadingToastId = toast.loading(tc('loading'));
     try {
       const conv = await loadConversation({ senderId, pageId, senderName });
       if (!conv) {
-        toast.error(tc('noData'), { id: loadingToastId });
+        toast.error(tc('noData'));
         return;
       }
-      toast.dismiss(loadingToastId);
       setSelectedConversation(conv);
     } catch (err) {
       captureError(err, 'Failed to load conversation', { tags: { page: 'dashboard', action: 'open-conversation' } });
-      toast.error(t('sectionLoadError'), { id: loadingToastId });
+      toast.error(t('sectionLoadError'));
     }
   }, [t, tc, setSelectedConversation, loadConversation]);
 
