@@ -172,7 +172,9 @@ describe('useConversationActions', () => {
       });
 
       await waitFor(() => {
-        expect(toast.error).toHaveBeenCalledWith('Network error');
+        // Toast always shows a stable translated message — never the raw error.
+        // The t('replyFailed') mock resolves to the English value from messages.json.
+        expect(toast.error).toHaveBeenCalledWith('Failed to send reply');
       });
 
       // selectedConversation should NOT be modified on error
