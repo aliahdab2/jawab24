@@ -160,7 +160,7 @@ describe('AuthController - mobileFacebookCallback', () => {
     it('should redirect to app auth sync with token on success', async () => {
         await controller.mobileFacebookCallback(makeRequest(), mockReply as FastifyReply);
 
-        expect(redirectedUrl).toContain('com.jawab24.app://auth/sync');
+        expect(redirectedUrl).toContain('https://jawab24.com/auth/app-sync');
         expect(redirectedUrl).toContain('token=');
         expect(redirectedUrl).toContain('fbToken=');
         expect(redirectedUrl).toContain('user=');
