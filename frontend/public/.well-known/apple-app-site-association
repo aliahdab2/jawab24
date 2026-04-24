@@ -8,6 +8,7 @@
           "/auth/callback",
           "/auth/callback/*",
           "/auth/sync",
+          "/auth/app-sync",
           "/ar/auth/callback",
           "/ar/auth/callback/*",
           "/en/auth/callback",

@@ -225,15 +225,18 @@ export class AuthController {
                 redirectTarget = safeReturn;
             }
 
-            // 10. HTTP 302 → custom scheme — Chrome Custom Tab follows the redirect,
-            //     Android fires an intent to the native app, tab closes automatically.
+            // 10. HTTP 302 → Universal/App Link on jawab24.com — Android (assetlinks.json)
+            //     and iOS (apple-app-site-association) both verify ownership and open the
+            //     native app directly, closing the system browser. Using the HTTPS host
+            //     instead of a custom scheme avoids SFSafariViewController's refusal to
+            //     follow 302 to custom schemes and the undocumented URL-length truncation.
             const tokenStr = encodeURIComponent(token);
             const fbTokenStr = encodeURIComponent(longLivedToken);
             const redirectStr = encodeURIComponent(redirectTarget);
             const userStr = encodeURIComponent(JSON.stringify(userPayload));
 
             return reply.redirect(
-                `com.jawab24.app://auth/sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`,
+                `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`,
             );
         } catch (error) {
             request.log.error({ err: error }, 'mobileFacebookCallback failed');

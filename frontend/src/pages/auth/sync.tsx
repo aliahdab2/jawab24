@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import axios from 'axios';
 import { captureError } from '@/lib/sentryHelpers';
@@ -9,15 +10,16 @@ import type { WorkspaceSummary } from '@jawab24/shared';
 export default function AuthSync() {
   const router = useRouter();
   const { setAuth, setWorkspaces } = useAuthStore();
-  const [status, setStatus] = useState('Initializing...');
+  const t = useTranslations('auth');
+  const [status, setStatus] = useState(() => t('syncInitializing'));
 
   useEffect(() => {
     if (!router.isReady) return;
 
     const syncAuth = async () => {
       try {
-        setStatus('Syncing session...');
-        
+        setStatus(t('syncSyncing'));
+
         // 1. Get tokens from URL
         const { token, fbToken, redirect } = router.query;
 
@@ -26,9 +28,9 @@ export default function AuthSync() {
         }
 
         // 2. Fetch fresh user profile using the token
-        setStatus('Verifying user...');
+        setStatus(t('syncVerifying'));
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
-        
+
         const userRes = await axios.get(`${apiUrl}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -54,7 +56,7 @@ export default function AuthSync() {
         // 4. Hydrate the store
         setAuth(user, token, fbToken as string || '');
 
-        setStatus('Redirecting...');
+        setStatus(t('syncRedirecting'));
         
         // Brief delay to ensure storage persistence
         setTimeout(() => {
@@ -67,14 +69,14 @@ export default function AuthSync() {
 
       } catch (err) {
         captureError(err, 'Auth sync error', { tags: { page: 'auth-sync' } });
-        setStatus('Sync failed. Please log in again.');
+        setStatus(t('syncFailed'));
         // Give user a chance to read the error before redirecting
         setTimeout(() => router.replace('/login'), 2500);
       }
     };
 
     syncAuth();
-  }, [router.isReady, router.query, setAuth, setWorkspaces, router]);
+  }, [router.isReady, router.query, setAuth, setWorkspaces, router, t]);
 
   return (
     <>
