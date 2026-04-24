@@ -16,6 +16,8 @@ describe('CORS preflight', () => {
     'capacitor://localhost',
     'http://localhost',
     'https://localhost',
+    'https://app.jawab24.com',
+    'capacitor://app.jawab24.com',
     'com.jawab24.app',
   ];
 
@@ -66,6 +68,38 @@ describe('CORS preflight', () => {
 
     expect(res.statusCode).toBe(204);
     expect(res.headers['access-control-allow-methods']).toContain('PATCH');
+  });
+
+  it('should allow iOS Capacitor origin (capacitor://app.jawab24.com)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: '/auth/me',
+      headers: {
+        origin: 'capacitor://app.jawab24.com',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('capacitor://app.jawab24.com');
+  });
+
+  it('should allow Android Capacitor origin (https://app.jawab24.com)', async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: 'OPTIONS',
+      url: '/auth/me',
+      headers: {
+        origin: 'https://app.jawab24.com',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization,content-type',
+      },
+    });
+
+    expect(res.statusCode).toBe(204);
+    expect(res.headers['access-control-allow-origin']).toBe('https://app.jawab24.com');
   });
 
   it('should reject preflight from unknown origin', async () => {

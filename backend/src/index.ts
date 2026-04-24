@@ -139,7 +139,8 @@ const start = async () => {
       "capacitor://localhost",
       "http://localhost",
       "https://localhost",
-      "https://app.jawab24.com",  // Capacitor Android WebView (hostname: app.jawab24.com)
+      "https://app.jawab24.com",   // Capacitor Android WebView (androidScheme: https)
+      "capacitor://app.jawab24.com", // Capacitor iOS WebView (default iOS scheme)
       "com.jawab24.app",
     ];
 
