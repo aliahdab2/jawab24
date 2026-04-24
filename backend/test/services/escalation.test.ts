@@ -39,6 +39,7 @@ vi.mock('drizzle-orm', () => ({
 
 import { runEscalationSweep, startEscalationCron, stopEscalationCron } from '../../src/services/escalation';
 import { db } from '../../src/db';
+import * as schema from '../../src/db/schema';
 import { notificationService } from '../../src/services/notifications';
 
 /**
@@ -76,11 +77,11 @@ function mockBatchSelect(commentRows: any[], messageRows: any[]) {
 }
 
 function mockDbUpdate(rowCount = 0) {
-    (db.update as any).mockReturnValue({
-        set: vi.fn().mockReturnValue({
-            where: vi.fn().mockResolvedValue({ rowCount }),
-        }),
+    const setMock = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue({ rowCount }),
     });
+    (db.update as any).mockReturnValue({ set: setMock });
+    return { setMock };
 }
 
 describe('Escalation Service', () => {
@@ -104,21 +105,34 @@ describe('Escalation Service', () => {
 
             await runEscalationSweep();
 
-            // resolveStuckSpamComments always issues 2 updates (FB + IG tables)
-            expect(db.update).toHaveBeenCalledTimes(2);
+            // resolveStuckSpamComments always issues 3 updates (FB comments + IG comments + messages)
+            expect(db.update).toHaveBeenCalledTimes(3);
             // No escalation notifications because no stale real comments
             expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
         it('should resolve stuck spam/punctuation comments before escalation runs', async () => {
             mockBatchSelect([], []);
-            mockDbUpdate(3); // 3 stuck spam comments resolved (FB table returns rowCount 3)
+            const { setMock } = mockDbUpdate(3); // 3 stuck spam items resolved per table
 
             await runEscalationSweep();
 
-            // db.update called twice: once for facebook comments, once for instagram_comments
-            expect(db.update).toHaveBeenCalledTimes(2);
-            // No escalation notifications — the resolved comments never reached escalation
+            // db.update must target all three surfaces: FB comments, IG comments, and
+            // messages. Regression guard for the 2026-04-24 bug where punctuation-only
+            // DMs (e.g. "..") weren't swept, then got flagged sla_no_reply after 15 min.
+            const updatedTables = vi.mocked(db.update).mock.calls.map((c) => c[0]);
+            expect(updatedTables).toContain(schema.comments);
+            expect(updatedTables).toContain(schema.instagramComments);
+            expect(updatedTables).toContain(schema.messages);
+
+            // Each sweep must set resolved=true. Guards against someone flipping
+            // the payload to needs_attention=false only — that would hide rows from
+            // the SLA query but leave them visible as unreplied in the inbox.
+            for (const call of setMock.mock.calls) {
+                expect(call[0]).toMatchObject({ resolved: true });
+            }
+
+            // No escalation notifications — the resolved rows never reached escalation
             expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
@@ -298,8 +312,8 @@ describe('Escalation Service', () => {
 
             await runEscalationSweep();
 
-            // resolveStuckSpamComments still runs its 2 updates, but no escalation updates
-            expect(db.update).toHaveBeenCalledTimes(2);
+            // resolveStuckSpamComments still runs its 3 updates, but no escalation updates
+            expect(db.update).toHaveBeenCalledTimes(3);
             expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
         });
 

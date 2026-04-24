@@ -100,15 +100,16 @@ function buildTitle(name: string | null, pageName: string | null): string {
  * Matches after 10 minutes — enough time for any legitimate processing to finish.
  */
 async function resolveStuckSpamComments(): Promise<void> {
-    // A comment is considered spam-stuck if its entire message (trimmed) contains
+    // An item is considered spam-stuck if its entire message (trimmed) contains
     // no Arabic or Latin letters — only dots, punctuation, whitespace, or emojis.
     const spamCondition = sql`
         trim(message) ~ '^[[:space:].…!?،؟@#*+=~^&%$|/\\\\]+$'
         OR (trim(message) ~ '^@\\S+$')
     `;
     const stuckCondition = sql`created_at < NOW() - INTERVAL '10 minutes'`;
+    const stuckMessageCondition = sql`created_time < NOW() - INTERVAL '10 minutes'`;
 
-    const [fbResult, igResult] = await Promise.all([
+    const [fbResult, igResult, msgResult] = await Promise.all([
         db.update(comments)
             .set({ resolved: true, updatedAt: new Date() })
             .where(and(
@@ -127,12 +128,25 @@ async function resolveStuckSpamComments(): Promise<void> {
                 stuckCondition,
                 spamCondition,
             )),
+        // Incoming DMs with only punctuation/emoji/@mention would otherwise be
+        // flagged sla_no_reply after 15–30 min. Resolve them silently like comments.
+        db.update(messages)
+            .set({ resolved: true, updatedAt: new Date() })
+            .where(and(
+                eq(messages.direction, 'incoming'),
+                eq(messages.replied, false),
+                eq(messages.resolved, false),
+                eq(messages.needsAttention, false),
+                stuckMessageCondition,
+                spamCondition,
+            )),
     ]);
 
     const fbCount = (fbResult as unknown as { rowCount?: number }).rowCount ?? 0;
     const igCount = (igResult as unknown as { rowCount?: number }).rowCount ?? 0;
-    if (fbCount + igCount > 0) {
-        logger.info('Resolved stuck spam comments', { fbCount, igCount });
+    const msgCount = (msgResult as unknown as { rowCount?: number }).rowCount ?? 0;
+    if (fbCount + igCount + msgCount > 0) {
+        logger.info('Resolved stuck spam items', { fbCount, igCount, msgCount });
     }
 }
 
