@@ -516,6 +516,16 @@ export interface EcommerceStore {
   lastSyncAt: Date | null;
   isActive: boolean;
   installedAt: Date | null;
+  /**
+   * Health of the platform's webhook registration, derived from
+   * `platform_data.webhookStatus` on the backend. Surfaced so the integrations
+   * card can render a "Re-register webhooks" CTA when retries have exhausted.
+   * - 'ok'      — every topic registered, nothing pending
+   * - 'pending' — some topics failed but retries are still in flight
+   * - 'failed'  — retries exhausted; merchant action required
+   * - 'unknown' — legacy row that predates webhookStatus tracking
+   */
+  webhookHealth: 'ok' | 'pending' | 'failed' | 'unknown';
 }
 
 export interface EcommerceProduct {

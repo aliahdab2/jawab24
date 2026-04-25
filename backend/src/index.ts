@@ -50,6 +50,7 @@ import { validateEnv } from "./utils/env";
 import { redis } from "./lib/redis";
 import { startWorker, stopWorker, setWorkerLogger } from "./workers/replyWorker";
 import { startCustomerNotificationWorker, stopCustomerNotificationWorker, setCustomerNotificationWorkerLogger } from "./workers/customerNotificationWorker";
+import { startWebhookRetryWorker, stopWebhookRetryWorker, setWebhookRetryWorkerLogger } from "./workers/webhookRetryWorker";
 import { customerNotificationService } from "./services/customerNotifications";
 import { startEscalationCron, stopEscalationCron, setEscalationLogger } from "./services/escalation";
 import { startTokenRefreshCron, stopTokenRefreshCron, setTokenRefreshLogger } from "./services/tokenRefresh";
@@ -106,7 +107,15 @@ server.addContentTypeParser(
   (req, body, done) => {
     try {
       req.rawBody = Buffer.isBuffer(body) ? body : Buffer.from(body, "utf8");
-      const json = JSON.parse(body.toString("utf8"));
+      const text = body.toString("utf8");
+      // Treat empty / whitespace-only body as `{}` so routes that don't read
+      // the body (e.g. POST /shopify/store/sync) accept curl/CLI callers that
+      // send `Content-Type: application/json` with no payload.
+      if (text.trim() === "") {
+        done(null, {});
+        return;
+      }
+      const json = JSON.parse(text);
       done(null, json);
     } catch (err: any) {
       err.statusCode = 400;
@@ -284,6 +293,10 @@ const start = async () => {
     startCustomerNotificationWorker();
     console.log(`⚙️  Customer notification worker started`);
 
+    setWebhookRetryWorkerLogger(workerLogger);
+    startWebhookRetryWorker();
+    console.log(`⚙️  Webhook retry worker started`);
+
     // Start e-commerce integration workers (Shopify, future WooCommerce, etc.)
     for (const integration of integrationRegistry.getEnabled()) {
       await integration.onStartup(workerLogger);
@@ -385,6 +398,7 @@ const gracefulShutdown = async (signal: string) => {
     await Promise.all([
       stopWorker(),
       stopCustomerNotificationWorker(),
+      stopWebhookRetryWorker(),
       ...integrationRegistry.getEnabled().map(i => i.onShutdown()),
     ]);
     console.log("✅ Workers stopped");

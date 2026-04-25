@@ -20,6 +20,7 @@ vi.mock('../../src/controllers/shopify', () => ({
     connectStore: vi.fn(),
     disconnectStoreHandler: vi.fn(),
     syncStore: vi.fn(),
+    reregisterWebhooks: vi.fn(),
     getStoreProducts: vi.fn(),
     linkPage: vi.fn(),
     unlinkPage: vi.fn(),
@@ -56,6 +57,7 @@ describe('Shopify Routes', () => {
         expect(registeredRoutes).toContain('POST /store/connect');
         expect(registeredRoutes).toContain('DELETE /store');
         expect(registeredRoutes).toContain('POST /store/sync');
+        expect(registeredRoutes).toContain('POST /store/webhooks/reregister');
         expect(registeredRoutes).toContain('GET /store/products');
         expect(registeredRoutes).toContain('PATCH /store/link-page');
         expect(registeredRoutes).toContain('PATCH /store/unlink-page');
@@ -86,6 +88,7 @@ describe('Shopify Routes', () => {
         expect(protectedRoutes).toContain('POST /store/connect');
         expect(protectedRoutes).toContain('DELETE /store');
         expect(protectedRoutes).toContain('POST /store/sync');
+        expect(protectedRoutes).toContain('POST /store/webhooks/reregister');
         expect(protectedRoutes).toContain('GET /store/products');
         expect(protectedRoutes).toContain('PATCH /store/link-page');
         expect(protectedRoutes).toContain('PATCH /store/unlink-page');

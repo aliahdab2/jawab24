@@ -29,6 +29,7 @@ export default async function shopifyRoutes(fastify: FastifyInstance) {
     fastify.post('/store/connect', { preHandler: [authenticate] }, shopifyController.connectStore);
     fastify.delete('/store', { preHandler: [authenticate, resolveWorkspace, requireRole('admin')] }, shopifyController.disconnectStoreHandler);
     fastify.post('/store/sync', { preHandler: [authenticate, resolveWorkspace, requireRole('admin')] }, shopifyController.syncStore);
+    fastify.post('/store/webhooks/reregister', { preHandler: [authenticate, resolveWorkspace, requireRole('admin')] }, shopifyController.reregisterWebhooks);
     fastify.patch('/store/link-page', { preHandler: [authenticate, resolveWorkspace, requireRole('admin')] }, shopifyController.linkPage);
     fastify.patch('/store/unlink-page', { preHandler: [authenticate, resolveWorkspace, requireRole('admin')] }, shopifyController.unlinkPage);
 }

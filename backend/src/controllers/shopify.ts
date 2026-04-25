@@ -4,6 +4,7 @@ import * as shopifyService from '../services/shopify';
 import { workspaceService } from '../services/workspace';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
+import { upsertSingleProduct, deleteSingleProduct } from '../services/ecommerce';
 import { config } from '../config';
 import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
@@ -12,6 +13,30 @@ import {
     SHOPIFY_NONCE_COOKIE_OPTIONS,
 } from '../services/cookies';
 import { tryGetUserId } from '../utils/authHelpers';
+import { captureError } from '../utils/sentryHelpers';
+
+/**
+ * Tag a Shopify webhook crash for Sentry routing. Shopify retries 5xx
+ * webhooks 19 times over 48h then silently gives up — without explicit
+ * tags, a handler crash is undetectable from production noise.
+ */
+function reportWebhookFailure(
+    request: FastifyRequest,
+    webhookName: string,
+    error: unknown,
+) {
+    captureError(error, `Shopify webhook handler failed: ${webhookName}`, {
+        tags: {
+            service: 'shopify',
+            webhook: webhookName,
+        },
+        extra: {
+            shopDomain: request.headers['x-shopify-shop-domain'],
+            topic: request.headers['x-shopify-topic'],
+            webhookId: request.headers['x-shopify-webhook-id'],
+        },
+    });
+}
 
 // --- OAuth Flow (PUBLIC — no JWT required) ---
 
@@ -109,12 +134,35 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
             const workspaceId = workspaces[0]?.id || null;
             const store = await shopifyService.createStore(userId, shop, accessToken, undefined, workspaceId);
 
-            // Register webhooks and persist status to store record
-            shopifyService.registerWebhooks(shop, accessToken).then(webhookStatus => {
-                return shopifyService.saveWebhookStatus(store.id, webhookStatus);
-            }).catch(err => {
-                request.log.error({ err }, 'Failed to register Shopify webhooks');
-            });
+            // Register webhooks INLINE (was fire-and-forget; A-1.9). On
+            // unexpected throw or partial failure, enqueue a retry so the
+            // merchant doesn't end up silently missing webhooks.
+            try {
+                const status = await shopifyService.registerWebhooks(shop, accessToken);
+                await shopifyService.saveWebhookStatus(store.id, status);
+                if (status.failed.length > 0) {
+                    const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
+                    await enqueueWebhookRetry({ storeId: store.id, platform: 'shopify' });
+                }
+            } catch (err) {
+                captureError(err, 'Shopify webhook registration after OAuth failed', {
+                    tags: { service: 'shopify', stage: 'webhook-registration' },
+                    extra: { storeId: store.id },
+                });
+                // Persist a pending marker so the integrations card has signal
+                // immediately. Retry queue will overwrite this on success.
+                await shopifyService.saveWebhookStatus(store.id, {
+                    registered: [],
+                    failed: [{ topic: 'all', error: err instanceof Error ? err.message : String(err) }],
+                    lastAttempt: new Date().toISOString(),
+                }).catch(() => { /* swallowed — capture above is sufficient */ });
+                try {
+                    const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
+                    await enqueueWebhookRetry({ storeId: store.id, platform: 'shopify' });
+                } catch (queueErr) {
+                    request.log.error({ err: queueErr }, 'Failed to enqueue webhook retry');
+                }
+            }
 
             // Enqueue full sync (non-blocking)
             enqueueSyncJob(store.id).catch(err => {
@@ -152,65 +200,83 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
 // --- Webhooks (Shopify calls these — HMAC verified) ---
 
 export async function webhookUninstall(request: FastifyRequest, reply: FastifyReply) {
-    const hmac = request.headers['x-shopify-hmac-sha256'] as string;
-    const rawBody = request.rawBody;
-    if (!rawBody) {
-        return reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
-    }
-    const body = rawBody.toString('utf8');
+    try {
+        if (!verifyShopifyWebhookHmac(request, reply)) return;
 
-    if (!hmac || !shopifyService.verifyWebhookHmac(body, hmac)) {
-        return reply.status(401).send({ error: 'Invalid HMAC' });
-    }
+        const { myshopify_domain } = request.body as { myshopify_domain?: string };
+        if (myshopify_domain) {
+            await shopifyService.deactivateStore(myshopify_domain);
+        }
 
-    const { myshopify_domain } = request.body as { myshopify_domain?: string };
-    if (myshopify_domain) {
-        await shopifyService.deactivateStore(myshopify_domain);
+        return reply.status(200).send({ ok: true });
+    } catch (error) {
+        reportWebhookFailure(request, 'app-uninstalled', error);
+        throw error;
     }
-
-    return reply.status(200).send({ ok: true });
 }
 
 export async function webhookProductsUpdate(request: FastifyRequest, reply: FastifyReply) {
-    const hmac = request.headers['x-shopify-hmac-sha256'] as string;
-    const rawBody = request.rawBody;
-    if (!rawBody) {
-        return reply.status(401).send({ error: 'Missing raw body for HMAC verification' });
-    }
-    const body = rawBody.toString('utf8');
+    try {
+        if (!verifyShopifyWebhookHmac(request, reply)) return;
 
-    if (!hmac || !shopifyService.verifyWebhookHmac(body, hmac)) {
-        return reply.status(401).send({ error: 'Invalid HMAC' });
-    }
+        const shopDomain = request.headers['x-shopify-shop-domain'] as string;
+        const topic = request.headers['x-shopify-topic'] as string;
 
-    const shopDomain = request.headers['x-shopify-shop-domain'] as string;
-    if (shopDomain) {
-        const store = await shopifyService.getStoreByDomain(shopDomain);
-        if (store) {
-            enqueueSyncJob(store.id).catch(err => {
-                request.log.error({ err }, 'Failed to enqueue product sync');
-            });
+        if (!shopDomain) {
+            return reply.status(200).send({ ok: true });
         }
-    }
 
-    return reply.status(200).send({ ok: true });
+        const store = await shopifyService.getStoreByDomain(shopDomain);
+        if (!store) {
+            return reply.status(200).send({ ok: true });
+        }
+
+        // Per-row upsert — bug B-3.1. Editing one product no longer rotates
+        // every other product's internal id. The 6h scheduled full-sync still
+        // catches missed webhooks (now idempotent thanks to onConflictDoUpdate).
+        const payload = request.body as { id?: number | string };
+        if (!payload || payload.id === undefined || payload.id === null) {
+            request.log.warn({ topic, shopDomain }, 'Shopify product webhook missing id');
+            return reply.status(200).send({ ok: true });
+        }
+
+        if (topic === 'products/delete') {
+            await deleteSingleProduct(store.id, String(payload.id));
+        } else {
+            // products/create + products/update
+            const normalized = shopifyService.mapShopifyWebhookProduct(payload as never);
+            // Stamp the store's currency since the REST webhook doesn't include it.
+            normalized.currency = store.storeCurrency || normalized.currency;
+            await upsertSingleProduct(store.id, normalized);
+        }
+
+        return reply.status(200).send({ ok: true });
+    } catch (error) {
+        reportWebhookFailure(request, 'products-update', error);
+        throw error;
+    }
 }
 
 export async function webhookOrders(request: FastifyRequest, reply: FastifyReply) {
-    if (!verifyShopifyWebhookHmac(request, reply)) return;
+    try {
+        if (!verifyShopifyWebhookHmac(request, reply)) return;
 
-    const shopDomain = request.headers['x-shopify-shop-domain'] as string;
-    const topic = request.headers['x-shopify-topic'] as string;
+        const shopDomain = request.headers['x-shopify-shop-domain'] as string;
+        const topic = request.headers['x-shopify-topic'] as string;
 
-    if (shopDomain) {
-        const store = await shopifyService.getStoreByDomain(shopDomain);
-        if (store) {
-            const orderEvent = buildShopifyOrderEvent(store.id, topic, request.body);
-            if (orderEvent) dispatchOrderNotification(orderEvent, request.log);
+        if (shopDomain) {
+            const store = await shopifyService.getStoreByDomain(shopDomain);
+            if (store) {
+                const orderEvent = buildShopifyOrderEvent(store.id, topic, request.body);
+                if (orderEvent) dispatchOrderNotification(orderEvent, request.log);
+            }
         }
-    }
 
-    return reply.status(200).send({ ok: true });
+        return reply.status(200).send({ ok: true });
+    } catch (error) {
+        reportWebhookFailure(request, 'orders', error);
+        throw error;
+    }
 }
 
 interface ShopifyOrderBody {
@@ -266,25 +332,38 @@ function verifyShopifyWebhookHmac(request: FastifyRequest, reply: FastifyReply):
 }
 
 export async function gdprCustomerDataRequest(request: FastifyRequest, reply: FastifyReply) {
-    if (!verifyShopifyWebhookHmac(request, reply)) return;
-    // No customer PII stored — acknowledge request
-    return reply.status(200).send({ ok: true });
+    try {
+        if (!verifyShopifyWebhookHmac(request, reply)) return;
+        return reply.status(200).send({ ok: true });
+    } catch (error) {
+        reportWebhookFailure(request, 'gdpr-customers-data-request', error);
+        throw error;
+    }
 }
 
 export async function gdprCustomerRedact(request: FastifyRequest, reply: FastifyReply) {
-    if (!verifyShopifyWebhookHmac(request, reply)) return;
-    // No customer PII stored — acknowledge request
-    return reply.status(200).send({ ok: true });
+    try {
+        if (!verifyShopifyWebhookHmac(request, reply)) return;
+        return reply.status(200).send({ ok: true });
+    } catch (error) {
+        reportWebhookFailure(request, 'gdpr-customers-redact', error);
+        throw error;
+    }
 }
 
 export async function gdprShopRedact(request: FastifyRequest, reply: FastifyReply) {
-    if (!verifyShopifyWebhookHmac(request, reply)) return;
+    try {
+        if (!verifyShopifyWebhookHmac(request, reply)) return;
 
-    const { shop_domain } = request.body as { shop_domain?: string };
-    if (shop_domain) {
-        await shopifyService.deactivateStore(shop_domain);
+        const { shop_domain } = request.body as { shop_domain?: string };
+        if (shop_domain) {
+            await shopifyService.deactivateStore(shop_domain);
+        }
+        return reply.status(200).send({ ok: true });
+    } catch (error) {
+        reportWebhookFailure(request, 'gdpr-shop-redact', error);
+        throw error;
     }
-    return reply.status(200).send({ ok: true });
 }
 
 // --- Protected API (Jawab24 JWT required) ---
@@ -322,6 +401,42 @@ export async function disconnectStoreHandler(request: FastifyRequest, reply: Fas
     }
     await shopifyService.disconnectStore(store.id);
     return reply.send({ ok: true });
+}
+
+/**
+ * Re-register webhooks for the workspace's Shopify store.
+ * Used by the integrations card "Re-register webhooks" CTA when retries
+ * have exhausted (webhookHealth === 'failed') or to recover from any
+ * out-of-band Shopify-side webhook deletion.
+ *
+ * Returns the new webhook status so the UI can re-render immediately
+ * without a separate fetch.
+ */
+export async function reregisterWebhooks(request: FastifyRequest, reply: FastifyReply) {
+    const req = request as WorkspaceRequest;
+    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+    const store = await shopifyService.getStoreByWorkspaceAny(req.workspaceId);
+    if (!store) {
+        return reply.status(404).send({ error: 'No Shopify store connected' });
+    }
+    if (!store.isActive) {
+        return reply.status(409).send({ error: 'Store is disconnected — reconnect first' });
+    }
+
+    const accessToken = (await import('../services/ecommerceCrypto'))
+        .decrypt(store.accessToken, store.accessTokenIv);
+
+    try {
+        const status = await shopifyService.registerWebhooks(store.storeDomain, accessToken);
+        await shopifyService.saveWebhookStatus(store.id, status);
+        return reply.send({ ok: true, webhookStatus: status });
+    } catch (err) {
+        captureError(err, 'Manual Shopify webhook re-registration failed', {
+            tags: { service: 'shopify', stage: 'webhook-reregister' },
+            extra: { storeId: store.id },
+        });
+        return reply.status(502).send({ error: 'Webhook re-registration failed' });
+    }
 }
 
 export async function syncStore(request: FastifyRequest, reply: FastifyReply) {

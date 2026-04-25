@@ -28,6 +28,24 @@ const mockMapToShopifyStore = vi.fn((store) => ({ id: store.id, shopDomain: stor
 const mockMapToEcommerceStore = vi.fn((store) => ({ id: store.id, shopDomain: store.shopDomain }));
 const mockCreatePendingInstall = vi.fn().mockResolvedValue('pending-uuid-123');
 
+// services/ecommerce now provides per-row product helpers used by the
+// products webhook (Fix B-3.1). Stub them so importing the controller
+// doesn't pull in Redis/config initialization.
+const mockUpsertSingleProduct = vi.fn().mockResolvedValue(undefined);
+const mockDeleteSingleProduct = vi.fn().mockResolvedValue(undefined);
+vi.mock('../../src/services/ecommerce', () => ({
+    upsertSingleProduct: (...args: any[]) => mockUpsertSingleProduct(...args),
+    deleteSingleProduct: (...args: any[]) => mockDeleteSingleProduct(...args),
+}));
+
+vi.mock('../../src/lib/webhookRetryQueue', () => ({
+    enqueueWebhookRetry: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
+}));
+
 vi.mock('../../src/services/shopify', () => ({
     buildAuthUrl: (...args: any[]) => mockBuildAuthUrl(...args),
     exchangeCodeForToken: (...args: any[]) => mockExchangeCodeForToken(...args),
@@ -45,6 +63,16 @@ vi.mock('../../src/services/shopify', () => ({
     mapToShopifyStore: (...args: any[]) => mockMapToShopifyStore(...args),
     mapToEcommerceStore: (...args: any[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
+    saveWebhookStatus: vi.fn().mockResolvedValue(undefined),
+    mapShopifyWebhookProduct: vi.fn((p: any) => ({
+        platformProductId: String(p?.id ?? ''),
+        title: p?.title ?? '',
+        status: 'active',
+        priceRange: '0',
+        currency: '',
+        totalInventory: 0,
+        hasVariants: false,
+    })),
 }));
 
 const mockVerifyToken = vi.fn();
@@ -652,14 +680,16 @@ describe('Shopify Controller', () => {
     // --- webhookProductsUpdate ---
 
     describe('webhookProductsUpdate', () => {
-        it('should enqueue sync on valid webhook', async () => {
+        it('upserts a single product on products/update (no full re-sync)', async () => {
             mockVerifyWebhookHmac.mockReturnValue(true);
-            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
-            const body = {};
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', storeCurrency: 'USD' });
+            mockUpsertSingleProduct.mockClear();
+            const body = { id: 12345, title: 'Updated' };
             const req = mockRequest({
                 headers: {
                     'x-shopify-hmac-sha256': 'valid_hmac',
                     'x-shopify-shop-domain': 'test.myshopify.com',
+                    'x-shopify-topic': 'products/update',
                 },
                 body,
                 rawBody: Buffer.from(JSON.stringify(body)),
@@ -668,10 +698,31 @@ describe('Shopify Controller', () => {
 
             await webhookProductsUpdate(req, rep);
 
-            // enqueueSyncJob is fire-and-forget — wait a tick for it to settle
-            await new Promise(r => setTimeout(r, 10));
+            expect(mockUpsertSingleProduct).toHaveBeenCalledTimes(1);
+            expect(mockUpsertSingleProduct.mock.calls[0][0]).toBe('store-1');
+            expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
 
-            expect(mockEnqueueSyncJob).toHaveBeenCalledWith('store-1');
+        it('deletes a single product on products/delete', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1', storeCurrency: 'USD' });
+            mockDeleteSingleProduct.mockClear();
+            const body = { id: 12345 };
+            const req = mockRequest({
+                headers: {
+                    'x-shopify-hmac-sha256': 'valid_hmac',
+                    'x-shopify-shop-domain': 'test.myshopify.com',
+                    'x-shopify-topic': 'products/delete',
+                },
+                body,
+                rawBody: Buffer.from(JSON.stringify(body)),
+            });
+            const rep = mockReply();
+
+            await webhookProductsUpdate(req, rep);
+
+            expect(mockDeleteSingleProduct).toHaveBeenCalledWith('store-1', '12345');
             expect(rep.status).toHaveBeenCalledWith(200);
         });
 

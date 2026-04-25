@@ -5,7 +5,7 @@
  * and DTO mapping live here. Platform-specific services (shopify.ts, salla.ts) import
  * from this module and add their own OAuth, API, and sync logic.
  */
-import { eq, and, lt, sql, desc } from 'drizzle-orm';
+import { eq, and, lt, sql, desc, notInArray } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers } from '../db/schema';
 import { encrypt, decrypt } from './ecommerceCrypto';
@@ -23,6 +23,30 @@ export interface WebhookRegistrationResult {
     registered: string[];
     failed: Array<{ topic: string; status?: number; error?: string }>;
     lastAttempt: string;
+    /**
+     * Set to `true` by the retry worker when all retry attempts have been
+     * exhausted. The integrations UI reads this flag to decide whether to
+     * surface a "Re-register webhooks" CTA to the merchant. Without this,
+     * an exhausted retry queue is silently invisible to the merchant: the
+     * store appears connected but no webhooks fire on new events.
+     */
+    exhausted?: boolean;
+}
+
+/**
+ * Derived health state surfaced to the frontend integrations card.
+ * - 'ok'      — every topic registered, nothing pending
+ * - 'pending' — some topics failed but retries are still in flight
+ * - 'failed'  — retries are exhausted; the merchant must click Re-register
+ * - 'unknown' — store row predates the webhookStatus tracking (legacy data)
+ */
+export type WebhookHealth = 'ok' | 'pending' | 'failed' | 'unknown';
+
+export function deriveWebhookHealth(status: WebhookRegistrationResult | undefined | null): WebhookHealth {
+    if (!status) return 'unknown';
+    if (status.exhausted) return 'failed';
+    if (status.failed.length > 0) return 'pending';
+    return 'ok';
 }
 
 export const KB_MAX_CHARS = 8000; // Must match ai-worker's KB_MAX_CHARS
@@ -602,18 +626,67 @@ export async function claimPendingInstall(
         claimedByUserId: userId,
     }).where(eq(pendingEcommerceInstalls.id, pendingId));
 
-    // Register webhooks (non-blocking) and persist status if callbacks provided
+    // Register webhooks INLINE (must complete before we return). The previous
+    // fire-and-forget pattern lost registrations whenever the calling process
+    // was short-lived (CLI scripts, lambdas, deploy-time restarts) — Shopify
+    // never received the request, so no webhooks landed and incremental
+    // updates failed silently. Bug A-1.9 in docs/testing/SHOPIFY_TEST_PLAN.md.
     if (registerWebhooksFn) {
-        registerWebhooksFn(pending.storeDomain, accessToken).then(webhookStatus => {
-            if (saveWebhookStatusFn && webhookStatus) {
-                return saveWebhookStatusFn(store.id, webhookStatus);
+        let webhookStatus: WebhookRegistrationResult | void;
+        try {
+            webhookStatus = await registerWebhooksFn(pending.storeDomain, accessToken);
+        } catch (err) {
+            captureError(err, `${platform} webhook registration after claim failed`, {
+                tags: { service: platform, stage: 'webhook-registration' },
+                extra: { storeId: store.id },
+            });
+            // Persist a 'pending' marker so the integrations API surfaces the
+            // failure even before retries run. Without this, mapToEcommerceStore
+            // returns webhookHealth: 'unknown' and the merchant has no signal.
+            if (saveWebhookStatusFn) {
+                await saveWebhookStatusFn(store.id, {
+                    registered: [],
+                    failed: [{ topic: 'all', error: err instanceof Error ? err.message : String(err) }],
+                    lastAttempt: new Date().toISOString(),
+                }).catch(() => { /* swallowed — error already captured above */ });
             }
-        }).catch(err => {
-            captureError(err, `${platform} webhook registration after claim failed`, { tags: { service: platform } });
-        });
+            await scheduleWebhookRetry(store.id, platform);
+            // Don't fail the install for a webhook hiccup — the retry queue
+            // will pick it up. The merchant sees a 'pending' badge until then.
+            return store;
+        }
+
+        if (saveWebhookStatusFn && webhookStatus) {
+            try {
+                await saveWebhookStatusFn(store.id, webhookStatus);
+            } catch (err) {
+                captureError(err, `${platform} webhook status persist failed`, {
+                    tags: { service: platform, stage: 'webhook-status-persist' },
+                    extra: { storeId: store.id },
+                });
+            }
+            // Partial-failure → schedule a retry so the missing topics get re-attempted.
+            if (webhookStatus.failed.length > 0) {
+                await scheduleWebhookRetry(store.id, platform);
+            }
+        }
     }
 
     return store;
+}
+
+/** Enqueue a webhook-registration retry. Failures here are non-fatal: the install
+ *  has already succeeded; missing webhooks will be re-attempted by the worker. */
+async function scheduleWebhookRetry(storeId: string, platform: EcommercePlatform): Promise<void> {
+    try {
+        const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
+        await enqueueWebhookRetry({ storeId, platform });
+    } catch (err) {
+        captureError(err, `${platform} webhook retry enqueue failed`, {
+            tags: { service: platform, stage: 'webhook-retry-enqueue' },
+            extra: { storeId },
+        });
+    }
 }
 
 /**
@@ -638,6 +711,8 @@ export async function cleanupExpiredInstalls(platform: EcommercePlatform): Promi
  * Note: `shopDomain` alias kept for backward compat with existing Shopify test assertions.
  */
 export function mapToEcommerceStore(row: typeof ecommerceStores.$inferSelect): EcommerceStore & { shopDomain: string } {
+    const platformData = (row.platformData as Record<string, unknown> | null) ?? null;
+    const webhookStatus = (platformData?.webhookStatus as WebhookRegistrationResult | undefined) ?? null;
     return {
         id: row.id,
         userId: row.userId,
@@ -654,10 +729,99 @@ export function mapToEcommerceStore(row: typeof ecommerceStores.$inferSelect): E
         lastSyncAt: row.lastSyncAt,
         isActive: row.isActive ?? true,
         installedAt: row.installedAt,
+        webhookHealth: deriveWebhookHealth(webhookStatus),
     };
 }
 
 // --- Helpers for product sync (used by platform-specific sync functions) ---
+
+export interface NormalizedProduct {
+    platformProductId: string;
+    handle?: string | null;
+    title: string;
+    description?: string | null;
+    productType?: string | null;
+    vendor?: string | null;
+    status: string;
+    priceRange: string;
+    currency: string;
+    totalInventory: number;
+    hasVariants: boolean;
+    variantSummary?: string | null;
+    tags?: string | null;
+    imageUrl?: string | null;
+}
+
+/** Map a NormalizedProduct (caller's shape) to the ecommerce_products row shape. */
+function toProductRow(storeId: string, p: NormalizedProduct) {
+    return {
+        ecommerceStoreId: storeId,
+        platformProductId: p.platformProductId,
+        handle: p.handle ?? null,
+        title: p.title,
+        description: p.description ?? null,
+        productType: p.productType ?? null,
+        vendor: p.vendor ?? null,
+        status: p.status,
+        priceRange: p.priceRange,
+        currency: p.currency,
+        totalInventory: p.totalInventory,
+        hasVariants: p.hasVariants,
+        variantSummary: p.variantSummary ?? null,
+        tags: p.tags ?? null,
+        imageUrl: p.imageUrl ?? null,
+    };
+}
+
+/**
+ * Single source of truth for the `ON CONFLICT DO UPDATE` set clause used by
+ * both `replaceProductsAndRebuildSummary` (full sync) and `upsertSingleProduct`
+ * (per-row webhook). When a column is added to `ecommerce_products`, mirror it
+ * here once and both paths pick it up.
+ */
+function productUpsertSetClause() {
+    return {
+        handle: sql`excluded.handle`,
+        title: sql`excluded.title`,
+        description: sql`excluded.description`,
+        productType: sql`excluded.product_type`,
+        vendor: sql`excluded.vendor`,
+        status: sql`excluded.status`,
+        priceRange: sql`excluded.price_range`,
+        currency: sql`excluded.currency`,
+        totalInventory: sql`excluded.total_inventory`,
+        hasVariants: sql`excluded.has_variants`,
+        variantSummary: sql`excluded.variant_summary`,
+        tags: sql`excluded.tags`,
+        imageUrl: sql`excluded.image_url`,
+        updatedAt: new Date(),
+    };
+}
+
+/**
+ * Refresh `ecommerce_stores` summary fields after a product mutation.
+ * Used by both full-sync and single-product paths so the post-write metadata
+ * stays consistent (productCount + productSummary + lastSyncAt + cache flush).
+ *
+ * `productCount` is queried from the table, not passed in, so callers don't
+ * have to track it themselves.
+ */
+async function refreshStoreProductMetadata(storeId: string): Promise<number> {
+    const productSummary = await buildProductSummary(storeId);
+    const [{ count }] = await db.select({
+        count: sql<number>`count(*)::int`,
+    }).from(ecommerceProducts).where(eq(ecommerceProducts.ecommerceStoreId, storeId));
+
+    await db.update(ecommerceStores).set({
+        productCount: count,
+        productSummary,
+        lastSyncAt: new Date(),
+        updatedAt: new Date(),
+    }).where(eq(ecommerceStores.id, storeId));
+
+    await invalidateCachesForStore(storeId);
+    return count;
+}
 
 /**
  * Atomically replace all products for a store and rebuild summary.
@@ -666,22 +830,7 @@ export function mapToEcommerceStore(row: typeof ecommerceStores.$inferSelect): E
  */
 export async function replaceProductsAndRebuildSummary(
     storeId: string,
-    products: Array<{
-        platformProductId: string;
-        handle?: string | null;
-        title: string;
-        description?: string | null;
-        productType?: string | null;
-        vendor?: string | null;
-        status: string;
-        priceRange: string;
-        currency: string;
-        totalInventory: number;
-        hasVariants: boolean;
-        variantSummary?: string | null;
-        tags?: string | null;
-        imageUrl?: string | null;
-    }>,
+    products: NormalizedProduct[],
 ): Promise<{ synced: number }> {
     // Safety cap: prevent abuse (no store realistically has 5000+ products)
     const PRODUCT_SAFETY_CAP = 5000;
@@ -689,49 +838,69 @@ export async function replaceProductsAndRebuildSummary(
         products = products.slice(0, PRODUCT_SAFETY_CAP);
     }
 
-    // Atomic replacement: delete old + insert new + update store metadata.
-    // Wrapped in a transaction so two concurrent syncs (e.g. UI Sync Now click
-    // racing a webhook-triggered sync) serialize cleanly instead of racing
-    // the unique index `idx_ecommerce_products_store_product` to a 500. Bug
-    // A-1.4 in docs/testing/SHOPIFY_TEST_PLAN.md.
+    // Per-row UPSERT inside a transaction.
+    //
+    // Previous implementation deleted all rows then inserted fresh ones —
+    // that wiped every `ecommerce_products.id` on every sync and rotated IDs
+    // even for products that didn't change. Bug B-3.1 in the test plan.
+    //
+    // Transaction wrap (A-1.4) still applies: concurrent syncs serialize on
+    // the unique index instead of racing.
     await db.transaction(async (tx) => {
-        await tx.delete(ecommerceProducts).where(eq(ecommerceProducts.ecommerceStoreId, storeId));
-
         if (products.length > 0) {
-            const rows = products.map(p => ({
-                ecommerceStoreId: storeId,
-                platformProductId: p.platformProductId,
-                handle: p.handle || null,
-                title: p.title,
-                description: p.description || null,
-                productType: p.productType || null,
-                vendor: p.vendor || null,
-                status: p.status,
-                priceRange: p.priceRange,
-                currency: p.currency,
-                totalInventory: p.totalInventory,
-                hasVariants: p.hasVariants,
-                variantSummary: p.variantSummary || null,
-                tags: p.tags || null,
-                imageUrl: p.imageUrl || null,
-            }));
+            const rows = products.map(p => toProductRow(storeId, p));
 
-            await tx.insert(ecommerceProducts).values(rows);
+            await tx.insert(ecommerceProducts).values(rows).onConflictDoUpdate({
+                target: [ecommerceProducts.ecommerceStoreId, ecommerceProducts.platformProductId],
+                set: productUpsertSetClause(),
+            });
+
+            // Remove products that no longer exist in the platform catalog.
+            const currentIds = rows.map(r => r.platformProductId);
+            await tx.delete(ecommerceProducts).where(
+                and(
+                    eq(ecommerceProducts.ecommerceStoreId, storeId),
+                    notInArray(ecommerceProducts.platformProductId, currentIds),
+                )
+            );
+        } else {
+            // Empty catalog → drop everything for this store.
+            await tx.delete(ecommerceProducts).where(eq(ecommerceProducts.ecommerceStoreId, storeId));
         }
     });
 
-    // Build summary outside the transaction — pure read of the just-committed rows.
-    const productSummary = await buildProductSummary(storeId);
-
-    await db.update(ecommerceStores).set({
-        productCount: products.length,
-        productSummary,
-        lastSyncAt: new Date(),
-        updatedAt: new Date(),
-    }).where(eq(ecommerceStores.id, storeId));
-
-    // Invalidate AI caches
-    await invalidateCachesForStore(storeId);
-
+    await refreshStoreProductMetadata(storeId);
     return { synced: products.length };
+}
+
+/**
+ * Upsert a single product by (storeId, platformProductId). Used by
+ * single-product webhook handlers (e.g. Shopify products/create + update)
+ * so a one-product edit doesn't rotate every other product's internal id.
+ *
+ * Bug B-3.1: previously every webhook triggered a full re-sync, which
+ * delete+inserted everything. Any future FK on ecommerce_products.id would
+ * silently break on every product edit.
+ */
+export async function upsertSingleProduct(storeId: string, product: NormalizedProduct): Promise<void> {
+    await db.insert(ecommerceProducts).values(toProductRow(storeId, product)).onConflictDoUpdate({
+        target: [ecommerceProducts.ecommerceStoreId, ecommerceProducts.platformProductId],
+        set: productUpsertSetClause(),
+    });
+    await refreshStoreProductMetadata(storeId);
+}
+
+/**
+ * Delete a single product by (storeId, platformProductId). Used by
+ * platform delete webhooks (e.g. Shopify products/delete). Other rows are
+ * untouched.
+ */
+export async function deleteSingleProduct(storeId: string, platformProductId: string): Promise<void> {
+    await db.delete(ecommerceProducts).where(
+        and(
+            eq(ecommerceProducts.ecommerceStoreId, storeId),
+            eq(ecommerceProducts.platformProductId, platformProductId),
+        )
+    );
+    await refreshStoreProductMetadata(storeId);
 }

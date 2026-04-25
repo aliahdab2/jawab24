@@ -628,6 +628,10 @@ export const ecommerceApi = {
     const response = await api.post('/shopify/store/sync');
     return response.data;
   },
+  reregisterWebhooks: async () => {
+    const response = await api.post('/shopify/store/webhooks/reregister');
+    return response.data;
+  },
   getProducts: async () => {
     const response = await api.get('/shopify/store/products');
     return response.data;

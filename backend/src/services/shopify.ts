@@ -465,6 +465,102 @@ export async function syncProducts(storeId: string, opts?: { storeDomain: string
     return replaceProductsAndRebuildSummary(storeId, mapped);
 }
 
+/**
+ * Shopify product webhook payload (REST shape — different from GraphQL).
+ * Only fields we read are typed; unknown fields are tolerated.
+ */
+interface ShopifyWebhookProduct {
+    id: number | string;
+    title?: string;
+    body_html?: string | null;
+    vendor?: string;
+    product_type?: string;
+    handle?: string;
+    status?: string;
+    tags?: string;
+    image?: { src?: string } | null;
+    images?: Array<{ src?: string }>;
+    variants?: Array<{
+        title?: string;
+        price?: string;
+        inventory_quantity?: number;
+        option1?: string | null;
+        option2?: string | null;
+        option3?: string | null;
+    }>;
+    options?: Array<{ name: string; values: string[] }>;
+}
+
+/**
+ * Convert a Shopify webhook product payload into the shape `upsertSingleProduct`
+ * expects. Used by the products/create and products/update webhook handlers.
+ */
+export function mapShopifyWebhookProduct(payload: ShopifyWebhookProduct): {
+    platformProductId: string;
+    handle: string | null;
+    title: string;
+    description: string | null;
+    productType: string | null;
+    vendor: string | null;
+    status: string;
+    priceRange: string;
+    currency: string;
+    totalInventory: number;
+    hasVariants: boolean;
+    variantSummary: string | null;
+    tags: string | null;
+    imageUrl: string | null;
+} {
+    const variants = payload.variants ?? [];
+    const prices = variants
+        .map(v => parseFloat(v.price ?? '0'))
+        .filter(n => !Number.isNaN(n));
+    const minPrice = prices.length ? Math.min(...prices) : 0;
+    const maxPrice = prices.length ? Math.max(...prices) : 0;
+    // REST webhook payload doesn't include shop currency — caller's store
+    // currency is the source of truth, but for the per-product cache we leave
+    // it empty and let the next full sync repair (every 6h).
+    const currency = '';
+    const priceRange = minPrice === maxPrice
+        ? `${minPrice}`
+        : `${minPrice} - ${maxPrice}`;
+
+    const totalInventory = variants.reduce(
+        (sum, v) => sum + (typeof v.inventory_quantity === 'number' ? v.inventory_quantity : 0),
+        0,
+    );
+    const hasVariants = variants.length > 1;
+
+    const variantSummary = buildVariantSummary(
+        variants.map(v => ({
+            title: v.title ?? '',
+            selectedOptions: (payload.options ?? []).map((opt, idx) => {
+                const value = (idx === 0 ? v.option1 : idx === 1 ? v.option2 : v.option3) ?? '';
+                return { name: opt.name, value };
+            }),
+        })),
+    );
+
+    const imageUrl = payload.image?.src ?? payload.images?.[0]?.src ?? null;
+
+    return {
+        platformProductId: String(payload.id),
+        handle: payload.handle ?? null,
+        title: payload.title ?? '',
+        description: payload.body_html?.replace(/<[^>]+>/g, '').trim() || null,
+        productType: payload.product_type || null,
+        vendor: payload.vendor || null,
+        status: (payload.status ?? 'active').toLowerCase(),
+        priceRange,
+        currency,
+        totalInventory,
+        hasVariants,
+        variantSummary: variantSummary || null,
+        tags: payload.tags && payload.tags.trim() ? payload.tags : null,
+        imageUrl,
+    };
+}
+
 const MAX_VARIANT_SUMMARY_LENGTH = 200;
 
 export function buildVariantSummary(variants: Array<{ title: string; selectedOptions: Array<{ name: string; value: string }> }>): string {
