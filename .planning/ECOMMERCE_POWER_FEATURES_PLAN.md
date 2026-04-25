@@ -21,6 +21,9 @@
 | 4a — Product Recommendations Carousel | ⏸️ **Deferred** | Defer until usage data shows demand |
 | 4b — Stock / Price Alerts | ⏸️ **Deferred** | Same |
 | 5 — Analytics Dashboard (lite) | ✅ **Shipped** (Step 2) | Page at `/ecommerce-analytics`, summary widget in `ConnectedStoreCard`, channel-keyed funnel ready for WhatsApp/DM |
+| 6 — URL Wrapping + Click Tracking | 📋 **Planned** (lands with Step 3) | Closes the LetsBot attribution gap — turns approximate phone-window matching into real click → conversion telemetry |
+| 7 — A/B Template Testing + Per-Template Conversion | 📋 **Planned** (after Step 3) | Depends on Phase 6 click data. Lets merchants split-test message copy and surfaces which template recovers more carts |
+| WhatsApp parity (cross-ref) | 🔗 See `WHATSAPP_PLAN.md` | Backend already wired (Phase B+C ✅). Phase 4 (template messages) is the LetsBot-killer for proactive sends; Phase 6 (status callbacks) gives read receipts that auto-upgrade Phase 5 analytics |
 
 ## Context
 
@@ -258,19 +261,101 @@ Extend `check_inventory` to include price, variants, and image for comparison sc
 
 Aggregate from new tables: recovery rate, revenue recovered, notification delivery stats, customer mapping coverage. New frontend page with charts.
 
+**Status: ✅ Shipped (Step 2, 2026-04-25)** — see Implementation Status table at the top of this doc.
+
+---
+
+## Phase 6: URL Wrapping + Click Tracking — Closes LetsBot's Attribution Gap
+
+> **When:** Lands together with Step 3 (DM cart recovery). The new wrapping endpoint costs ~1.5 days and unlocks real attribution that benefits both Phase 5 analytics and Phase 2 cart recovery measurement.
+
+### Why this matters
+
+Today's cart-recovery attribution in `ecommerceAnalytics.ts` is **approximate**: a recovered cart is one where the same `customerPhone` received an `order_confirmed` notification within 72h of the `abandoned_cart` SMS. That over-credits us when a customer would have purchased anyway.
+
+LetsBot wraps every URL in their recovery messages (e.g. `https://j24.link/r/abc123`) so they can show a real funnel: **delivered → opened → clicked → converted**. Per-template conversion rates and A/B testing (Phase 7) both depend on this signal.
+
+### Scope
+
+1. **New table `messageLinkClicks`** keyed by `notificationLogId` + `clickedAt` + `userAgent` + `referer`.
+2. **New backend endpoint `GET /r/:token`** that:
+   - Looks up the wrapped URL by token (unguessable, ~10 chars, base62)
+   - Inserts a click row asynchronously (fire-and-forget)
+   - 302-redirects to the destination
+3. **New helper `wrapUrl(originalUrl, notificationLogId)`** in `services/urlWrapper.ts` that returns `https://${PUBLIC_HOST}/r/<token>`.
+4. **Modify all proactive message senders** (`customerNotifications.send()`, `cartRecovery.ts`, `orderNotifications.ts`) to wrap any user-visible URL through `wrapUrl()` before substituting into the template body.
+5. **Extend `ecommerceAnalytics.ts`**: add `clickThroughCount` to `RecoveryStats` + `byTemplate.clicks` to the type breakdown. Treat "clicked but no order yet" as soft-recovered (separate counter).
+6. **Frontend dashboard tweak**: add a "Clicks" column to the funnel section once data exists. Channel-agnostic — works for SMS today, WhatsApp + DM later.
+
+### What this is NOT
+
+- Not analytics for inbound DMs/comments (the existing `messages` table already tracks those).
+- Not bot detection — UA-based filtering is enough at v1; Cloudflare-style bot scoring is overkill.
+- Not link-tracking for non-ecommerce messages (settings emails, etc.) — out of scope.
+
+### Open questions
+
+- Token format: random vs HMAC-signed-with-id? Random is simpler; HMAC is forgery-proof. Default to random + DB lookup.
+- Domain: `jawab24.com/r/` (existing CORS surface) vs subdomain `j24.link`? Subdomain looks shorter in SMS; mainline is one less DNS thing. Defer; either works.
+- TTL on click rows: keep all forever for analytics cohorts, or roll up after 90 days? Defer until data volume forces the question.
+
+---
+
+## Phase 7: A/B Template Testing + Per-Template Conversion
+
+> **When:** Post-Step-3, post-Phase-6. Pure UX layer on top of the click data Phase 6 collects.
+
+### Why this matters
+
+LetsBot's most-loved feature on Salla reviews is "I tested 3 cart recovery messages and saw which one converted best." Without this, merchants stop iterating after they write the first message and assume the conversion rate they get is the ceiling.
+
+### Scope
+
+1. **Schema extension**: `customerNotificationTemplates` gains a `variant_group_id` (uuid) and `variant_weight` (int 1–100). Templates with the same group are siblings; the worker picks one weighted-randomly when sending.
+2. **Worker logic**: `customerNotificationsWorker` resolves the group → picks a variant → records `template_variant_id` on the log row.
+3. **Aggregation**: `ecommerceAnalytics.ts` joins click + order data on `template_variant_id` to compute conversion rate per variant.
+4. **Frontend UI**: extend the existing template editor (`OrderNotificationsCard`) to support adding/removing variants. New analytics widget shows variants side-by-side with conversion rates and a "promote winner" button.
+5. **Statistical significance hint**: surface "X impressions per variant, currently inconclusive" until each variant has ≥ 100 sends. No formal test — this is a hint to the merchant, not a recommendation engine.
+
+### Why we're deferring
+
+- Without Phase 6's click data, conversion rate is meaningless
+- Most merchants haven't even iterated on their first message yet — no demand signal
+- Building this before merchants ask is YAGNI territory
+
+---
+
+## Cross-reference: WhatsApp parity track
+
+LetsBot's whole product is WhatsApp. The remaining LetsBot-parity gaps for *that* channel are tracked in [`WHATSAPP_PLAN.md`](./WHATSAPP_PLAN.md), not here. Status as of 2026-04-25:
+
+| WhatsApp phase | Status | Why it matters for the LetsBot story |
+|---|---|---|
+| Phase B+C (text DMs through pipeline) | ✅ Done | Foundation — same `messageProcessor` as FB/IG, AI replies work out of the box |
+| Phase 2 (Meta Tech Provider verification) | ❌ Not started | Calendar bottleneck — paperwork takes 1–2 weeks |
+| Phase 3 (frontend connection UI) | ❌ Not started | Required for merchant onboarding |
+| Phase 4 (template messages) | ❌ Not started | **The LetsBot killer.** Proactive WhatsApp sends (cart recovery, order updates) require pre-approved templates. Phase 4 of the WhatsApp plan + Phase 2/3 of this plan are the matched pair |
+| Phase 5 (media messages) | ❌ Not started | Rich product cards on WhatsApp (Catalog API integration) — equivalent to Phase 1b on Messenger/IG |
+| Phase 6 (status callbacks) | ❌ Not started | Read receipts → feeds Phase 5 analytics here, no extra work needed |
+
+**Coordination note:** when WhatsApp Phase 4 + 6 ship, Phase 5 analytics in this plan automatically gains read-receipt + per-template-variant data for WhatsApp. The channel-keyed funnel structure shipped in Step 2 already accommodates this — no new schema migration.
+
 ---
 
 ## Implementation Priority
 
-| Phase | Feature | Impact | Effort | When |
-|-------|---------|--------|--------|------|
-| 1 | Foundation (messaging + mapping + cards + postbacks) | Enables all | ~5 days | Week 1 |
-| 2 | Abandoned Cart Recovery | Very High (revenue) | ~8 days | Weeks 2-3 |
-| 3 | Order Notifications + Reviews + Digital Delivery | High (satisfaction) | ~6 days | Weeks 3-4 |
-| 4 | Enhanced AI Tools (recommendations + alerts) | Medium-High | ~5 days | Week 5 |
-| 5 | Analytics Dashboard | Medium (ROI proof) | ~4 days | Week 6 |
+| Phase | Feature | Impact | Effort | Status |
+|-------|---------|--------|--------|--------|
+| 1 | Foundation (messaging type + rich cards + tool loop) | Enables all | ~2 days | ✅ Shipped (`ae2d9c5a`) |
+| 5 | Analytics Dashboard (lite) | Medium-High (retention) | ~3 days | ✅ Shipped (`17070f6a`) |
+| 1d/1e + 2 | Customer mapping + DM Cart Recovery | Very High (revenue) | ~8 days | 📋 Step 3 — next |
+| 6 | URL Wrapping + Click Tracking | High (closes attribution gap) | ~1.5 days | 📋 Lands with Step 3 |
+| 3 | Order Notifications via DM | High (satisfaction) | ~6 days | 📋 After Step 3 |
+| 7 | A/B Template Testing | Medium (retention) | ~4 days | 📋 After Phase 6 has data |
+| 4 | Enhanced AI Tools (recommendations + alerts) | Medium | ~5 days | ⏸️ Deferred until usage demands it |
+| WA | WhatsApp Phases 2/3/4/5/6 | Very High (LetsBot parity) | ~3 weeks code + paperwork | 📋 See `WHATSAPP_PLAN.md` |
 
-**Total: ~28 days / 6 weeks**
+**Active roadmap from here:** Step 3 (cart recovery + URL wrapping bundled) → Phase 3 (DM order notifications) → Phase 7 (A/B testing) → WhatsApp template messages. Total ~5 weeks of code, plus calendar time on Meta paperwork running in parallel.
 
 ---
 

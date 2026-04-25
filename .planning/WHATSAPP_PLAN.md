@@ -1,7 +1,11 @@
 # WhatsApp Integration Plan
 
-> **Last updated:** 2026-04-04
-> **Status:** Phase 1 backend complete, frontend not started
+> **Last updated:** 2026-04-25
+> **Status:** Phase B+C backend complete (text DMs flow through `messageProcessor`); Phases 2–6 remaining
+>
+> **Why this matters strategically:** WhatsApp is the channel LetsBot owns end-to-end. Phase B+C closes the inbound DM gap (text auto-replies work). Phase 4 (template messages) closes the proactive cart-recovery / order-update gap that's LetsBot's biggest revenue feature. Phase 5 (Catalog media) is the WhatsApp equivalent of Messenger/IG rich cards. Phase 6 (status callbacks) gives read receipts that feed the analytics dashboard.
+>
+> **Companion plan:** [`ECOMMERCE_POWER_FEATURES_PLAN.md`](./ECOMMERCE_POWER_FEATURES_PLAN.md) — covers the FB/IG side of the same story (rich cards Phase 1b ✅, analytics Phase 5 ✅, DM cart recovery Phase 2 next, URL wrapping Phase 6, A/B testing Phase 7). The two plans interlock: shipping WhatsApp Phase 4 + 6 here automatically upgrades Phase 5 analytics over there with no schema migration (channel-keyed funnel already in place since Step 2).
 
 ---
 
