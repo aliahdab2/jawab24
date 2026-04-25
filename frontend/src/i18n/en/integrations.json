@@ -6,6 +6,9 @@
   "zidDesc": "Sync your Zid product catalog to enrich smart replies with real product info",
   "disconnectedState": "This store was disconnected. Reconnect to restore smart replies.",
   "reconnect": "Reconnect",
+  "demoLockedAction": "Demo data — connect a real store to enable",
+  "addAnotherStore": "Add another store",
+  "addAnotherStoreSubtitle": "Connect a second platform to extend Smart Replies",
   "webhookHealth": {
     "pendingTitle": "Almost ready",
     "pendingBody": "Finishing setup so we can answer comments and messages from this store.",

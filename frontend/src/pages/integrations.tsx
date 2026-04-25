@@ -17,9 +17,12 @@ import {
   Check,
   AlertTriangle,
   Loader2,
+  Plus,
+  ChevronDown,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
+import { useIsDemoUser } from '@/features/demo';
 import type { Page, EcommerceStore } from '@jawab24/shared';
 import { useWorkspaceRole } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
@@ -133,11 +136,18 @@ function ConnectedStoreCard({
   const t = usePlatformT(platform.id);
   const tInt = useTranslations('integrations');
   const { canEdit } = useWorkspaceRole();
+  const isDemoUser = useIsDemoUser();
   const [syncing, setSyncing] = useState(false);
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
   const [reregistering, setReregistering] = useState(false);
+
+  // In demo mode the seeded store has placeholder credentials, so any action
+  // that hits the real platform API (sync, re-register, disconnect) will fail
+  // with a cryptic error. Disable those CTAs and explain why on hover instead.
+  const demoLockMessage = isDemoUser ? tInt('demoLockedAction') : undefined;
+  const actionsDisabled = isDemoUser;
 
   const handleSync = async () => {
     setSyncing(true);
@@ -225,7 +235,13 @@ function ConnectedStoreCard({
               <p className="font-semibold">{tInt('webhookHealth.failedTitle')}</p>
               <p className="text-muted-foreground mb-2">{tInt('webhookHealth.failedBody')}</p>
               {canEdit && platform.reregisterWebhooks && (
-                <Button variant="primary" size="sm" onClick={handleReregister} disabled={reregistering}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleReregister}
+                  disabled={reregistering || actionsDisabled}
+                  title={demoLockMessage}
+                >
                   {reregistering ? (
                     <>
                       <Loader2 className="w-4 h-4 me-1 animate-spin" />
@@ -247,11 +263,23 @@ function ConnectedStoreCard({
           </div>
           <div className="flex gap-2">
             {canEdit && <>
-              <Button variant="secondary" size="sm" onClick={handleSync} disabled={syncing}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleSync}
+                disabled={syncing || actionsDisabled}
+                title={demoLockMessage}
+              >
                 <RefreshCw className={clsx('w-4 h-4 me-1', syncing && 'animate-spin')} />
                 {syncing ? t('syncing') : t('syncNow')}
               </Button>
-              <Button variant="danger" size="sm" onClick={() => setShowDisconnectModal(true)}>
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setShowDisconnectModal(true)}
+                disabled={actionsDisabled}
+                title={demoLockMessage}
+              >
                 <Unlink className="w-4 h-4 me-1" />
                 {t('disconnect')}
               </Button>
@@ -498,6 +526,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
   const [stores, setStores] = useState<Record<string, EcommerceStore | null>>({});
   const [pages, setPages] = useState<Page[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddAnother, setShowAddAnother] = useState(false);
 
   const fetchData = useCallback(async () => {
     const storeResults: Record<string, EcommerceStore | null> = {};
@@ -553,29 +582,85 @@ const IntegrationsPage: NextPageWithLayout = () => {
       />
 
       <div className="space-y-6 landscape:space-y-4">
-        {PLATFORMS.map((platform) => {
-          const store = stores[platform.id];
-
-          if (!store) {
-            return <NotConnectedCard key={platform.id} platform={platform} />;
-          }
-
-          return store.isActive ? (
-            <div key={platform.id} className="space-y-4">
-              <ConnectedStoreCard
-                platform={platform}
-                store={store}
-                pages={pages}
-                onSync={fetchData}
-                onDisconnect={() => handleStoreDisconnect(platform.id)}
-                onLinkPage={() => fetchData()}
-              />
-              <OrderNotificationsCard storeId={store.id} />
-            </div>
-          ) : (
-            <DisconnectedCard key={platform.id} platform={platform} store={store} />
+        {(() => {
+          // Split platforms by current connection state so we can prioritize
+          // visual hierarchy: a connected store takes the spotlight, and the
+          // marketing CTAs for platforms the merchant hasn't picked are
+          // demoted behind an "Add another store" toggle. When zero stores
+          // are connected we keep the original three-card picker since the
+          // merchant genuinely needs to choose.
+          const platformsByState = PLATFORMS.reduce(
+            (acc, p) => {
+              const store = stores[p.id];
+              if (store?.isActive) acc.connected.push({ platform: p, store });
+              else if (store) acc.disconnected.push({ platform: p, store });
+              else acc.unconnected.push(p);
+              return acc;
+            },
+            { connected: [] as Array<{ platform: PlatformConfig; store: EcommerceStore }>,
+              disconnected: [] as Array<{ platform: PlatformConfig; store: EcommerceStore }>,
+              unconnected: [] as PlatformConfig[] },
           );
-        })}
+
+          const hasAnyStore = platformsByState.connected.length > 0 || platformsByState.disconnected.length > 0;
+
+          return (
+            <>
+              {platformsByState.connected.map(({ platform, store }) => (
+                <div key={platform.id} className="space-y-4">
+                  <ConnectedStoreCard
+                    platform={platform}
+                    store={store}
+                    pages={pages}
+                    onSync={fetchData}
+                    onDisconnect={() => handleStoreDisconnect(platform.id)}
+                    onLinkPage={() => fetchData()}
+                  />
+                  <OrderNotificationsCard storeId={store.id} />
+                </div>
+              ))}
+
+              {platformsByState.disconnected.map(({ platform, store }) => (
+                <DisconnectedCard key={platform.id} platform={platform} store={store} />
+              ))}
+
+              {/* Unconnected platforms.
+                  - Zero stores anywhere → show all three so the merchant can pick.
+                  - At least one store exists → collapse the rest behind a single
+                    "Add another store" toggle to cut visual noise.            */}
+              {!hasAnyStore && platformsByState.unconnected.map((platform) => (
+                <NotConnectedCard key={platform.id} platform={platform} />
+              ))}
+
+              {hasAnyStore && platformsByState.unconnected.length > 0 && (
+                showAddAnother ? (
+                  <div className="space-y-6 landscape:space-y-4">
+                    {platformsByState.unconnected.map((platform) => (
+                      <NotConnectedCard key={platform.id} platform={platform} />
+                    ))}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAnother(true)}
+                    className={clsx(
+                      'w-full flex items-center justify-center gap-2 p-4 rounded-2xl',
+                      'border border-dashed border-theme-border',
+                      'text-sm text-muted-foreground hover:text-foreground hover:border-brand-400',
+                      'transition-colors',
+                    )}
+                    aria-expanded={false}
+                  >
+                    <Plus className="w-4 h-4" aria-hidden="true" />
+                    <span className="font-medium">{tInt('addAnotherStore')}</span>
+                    <span className="text-xs hidden sm:inline">— {tInt('addAnotherStoreSubtitle')}</span>
+                    <ChevronDown className="w-4 h-4 ms-1" aria-hidden="true" />
+                  </button>
+                )
+              )}
+            </>
+          );
+        })()}
       </div>
     </>
   );
