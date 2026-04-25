@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { Card, ConfirmationModal } from '@/components/ui';
-import { analyticsApi } from '@/lib/api';
+import { analyticsApi, adminApi } from '@/lib/api';
 import type { AiUsageReport, AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { makeGetStaticProps } from '@/i18n/getMessages';
@@ -22,6 +22,8 @@ import {
   RefreshCw,
   Globe,
   Trash2,
+  Mail,
+  Play,
 } from 'lucide-react';
 
 function StatCard({ icon: Icon, label, value, sub }: {
@@ -73,6 +75,17 @@ function BreakdownTable({ title, data }: { title: string; data: Record<string, n
       </div>
     </div>
   );
+}
+
+function translateDigestStatus(status: string, t: ReturnType<typeof useTranslations<'admin'>>): string {
+  switch (status) {
+    case 'sent': return t('observability.leadDigestStatusSent');
+    case 'failed': return t('observability.leadDigestStatusFailed');
+    case 'skipped_no_email': return t('observability.leadDigestStatusSkippedNoEmail');
+    case 'skipped_no_subscription': return t('observability.leadDigestStatusSkippedNoSubscription');
+    case 'skipped_abandoned': return t('observability.leadDigestStatusSkippedAbandoned');
+    default: return status;
+  }
 }
 
 function ServiceBadge({ status }: { status: string }) {
@@ -140,6 +153,26 @@ export default function AdminObservabilityPage() {
     staleTime: 30_000,
     retry: false,
     meta: { onError: (err: unknown) => captureError(err, 'Failed to load cache stats', { tags: { page: 'observability' } }) },
+  });
+
+  const { data: leadDigest, refetch: refetchLeadDigest, isLoading: leadDigestLoading } = useQuery({
+    queryKey: ['admin', 'lead-digest', 'history'],
+    queryFn: () => adminApi.getLeadDigestHistory({ limit: 50 }),
+    staleTime: 30_000,
+    retry: false,
+    meta: { onError: (err: unknown) => captureError(err, 'Failed to load lead digest history', { tags: { page: 'observability' } }) },
+  });
+
+  const { mutate: runLeadDigest, isPending: runningLeadDigest } = useMutation({
+    mutationFn: () => adminApi.runLeadDigest(),
+    onSuccess: (result) => {
+      refetchLeadDigest();
+      toast.success(t('observability.leadDigestRunDone', { sent: result.sent, skipped: result.skipped, errors: result.errors }));
+    },
+    onError: (err) => {
+      captureError(err, 'Failed to run lead digest', { tags: { page: 'observability' } });
+      toast.error(t('observability.leadDigestRunError'));
+    },
   });
 
   const { mutate: clearCache, isPending: clearingCache } = useMutation({
@@ -378,6 +411,88 @@ export default function AdminObservabilityPage() {
                   </div>
                 </Card>
               </div>
+            </section>
+
+            {/* Lead Digest Section */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                  <Mail className="w-4 h-4" aria-hidden="true" />
+                  {t('observability.leadDigest')}
+                </h2>
+                <button
+                  onClick={() => runLeadDigest()}
+                  disabled={runningLeadDigest}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-foreground border border-theme-border rounded-md hover:bg-muted transition-colors disabled:opacity-50"
+                >
+                  <Play className={clsx('w-3 h-3', runningLeadDigest && 'animate-pulse')} aria-hidden="true" />
+                  {runningLeadDigest ? t('observability.leadDigestRunning') : t('observability.leadDigestRunNow')}
+                </button>
+              </div>
+              <Card className="p-4">
+                <p className="text-xs text-muted-foreground mb-3">{t('observability.leadDigestSubtitle')}</p>
+                {leadDigestLoading ? (
+                  <div className="text-sm text-muted-foreground py-4">{t('observability.loading')}</div>
+                ) : !leadDigest || leadDigest.rows.length === 0 ? (
+                  <div className="text-sm text-muted-foreground py-4">{t('observability.leadDigestEmpty')}</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-theme-border">
+                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColDate')}</th>
+                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColUser')}</th>
+                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColStatus')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColCount')}</th>
+                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColLang')}</th>
+                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColResend')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leadDigest.rows.map((row) => (
+                          <tr key={row.id} className="border-b border-theme-border last:border-0">
+                            <td className="py-1.5 text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(row.createdAt).toLocaleString()}
+                            </td>
+                            <td className="py-1.5 text-xs text-foreground">{row.userEmail ?? row.userId}</td>
+                            <td className="py-1.5">
+                              <span className={clsx(
+                                'inline-flex px-2 py-0.5 rounded-full text-xs font-medium',
+                                row.status === 'sent' ? 'status-success'
+                                  : row.status === 'failed' ? 'status-error'
+                                  : 'status-warning',
+                              )}>
+                                {translateDigestStatus(row.status, t)}
+                              </span>
+                              {row.errorMessage && (
+                                <p className="text-xs text-destructive mt-0.5 truncate max-w-xs" title={row.errorMessage}>
+                                  {row.errorMessage}
+                                </p>
+                              )}
+                            </td>
+                            <td className="py-1.5 text-end font-medium text-foreground">{row.leadCount}</td>
+                            <td className="py-1.5 text-xs text-foreground">{row.lang ?? '—'}</td>
+                            <td className="py-1.5 text-xs">
+                              {row.resendEmailId ? (
+                                <a
+                                  href={`https://resend.com/emails/${row.resendEmailId}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-brand-600 dark:text-brand-400 hover:underline font-mono"
+                                >
+                                  {row.resendEmailId.slice(0, 8)}…
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
             </section>
 
             {/* System Health Section */}

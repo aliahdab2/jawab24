@@ -280,6 +280,24 @@
     "clearCacheConfirm": "This will clear the exact cache and semantic cache for all pages. New Smart Replies will be generated fresh until the cache warms up again.",
     "clearingCache": "Clearing...",
     "cacheCleared": "Cache cleared",
-    "cacheClearError": "Failed to clear cache"
+    "cacheClearError": "Failed to clear cache",
+    "leadDigest": "Lead Digest Email",
+    "leadDigestSubtitle": "Daily job emails owners with ≥10 unprocessed leads. Runs every 24h after backend boot. Below shows recent sends/skips per user.",
+    "leadDigestRunNow": "Run now",
+    "leadDigestRunning": "Running…",
+    "leadDigestRunDone": "Lead digest done — sent: {sent}, skipped: {skipped}, errors: {errors}",
+    "leadDigestRunError": "Failed to run lead digest",
+    "leadDigestEmpty": "No lead digest runs recorded yet.",
+    "leadDigestColDate": "Date",
+    "leadDigestColUser": "User",
+    "leadDigestColStatus": "Status",
+    "leadDigestColCount": "Leads",
+    "leadDigestColLang": "Lang",
+    "leadDigestColResend": "Resend ID",
+    "leadDigestStatusSent": "Sent",
+    "leadDigestStatusFailed": "Failed",
+    "leadDigestStatusSkippedNoEmail": "Skipped — no email",
+    "leadDigestStatusSkippedNoSubscription": "Skipped — no subscription",
+    "leadDigestStatusSkippedAbandoned": "Skipped — abandoned"
   }
 }

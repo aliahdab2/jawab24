@@ -592,6 +592,38 @@ export const adminApi = {
     const response = await api.post('/admin/waitlist/send-email', data);
     return response.data;
   },
+
+  // Lead digest — paginated history of sends/skips
+  getLeadDigestHistory: async (filters: { page?: number; limit?: number; status?: string }) => {
+    const params = new URLSearchParams();
+    if (filters.page) params.append('page', String(filters.page));
+    if (filters.limit) params.append('limit', String(filters.limit));
+    if (filters.status) params.append('status', filters.status);
+    const response = await api.get<{
+      page: number;
+      limit: number;
+      rows: Array<{
+        id: string;
+        userId: string;
+        userEmail: string | null;
+        status: string;
+        leadCount: number;
+        lang: 'ar' | 'en' | null;
+        resendEmailId: string | null;
+        errorMessage: string | null;
+        createdAt: string;
+      }>;
+    }>(`/admin/lead-digest/history?${params.toString()}`);
+    return response.data;
+  },
+
+  // Lead digest — manually trigger the daily run
+  runLeadDigest: async () => {
+    const response = await api.post<{ processed: number; sent: number; skipped: number; errors: number }>(
+      '/admin/lead-digest/run',
+    );
+    return response.data;
+  },
 };
 
 // KB File Upload API — extract text from PDF, Word, image

@@ -280,6 +280,24 @@
     "clearCacheConfirm": "سيتم مسح الذاكرة المؤقتة الدقيقة والدلالية لجميع الصفحات. ستُولَّد ردود الذكاء الاصطناعي من جديد حتى يعود التخزين للعمل.",
     "clearingCache": "جارٍ المسح...",
     "cacheCleared": "تم مسح الذاكرة المؤقتة",
-    "cacheClearError": "فشل مسح الذاكرة المؤقتة"
+    "cacheClearError": "فشل مسح الذاكرة المؤقتة",
+    "leadDigest": "إيميل ملخص العملاء المحتملين",
+    "leadDigestSubtitle": "وظيفة يومية ترسل بريدًا للمالكين الذين لديهم ١٠ عملاء محتملين أو أكثر لم تتم معالجتهم. تعمل كل ٢٤ ساعة بعد تشغيل الخادم. أدناه آخر عمليات الإرسال/التخطي لكل مستخدم.",
+    "leadDigestRunNow": "تشغيل الآن",
+    "leadDigestRunning": "جارٍ التشغيل…",
+    "leadDigestRunDone": "اكتمل التشغيل — مُرسل: {sent}، متخطى: {skipped}، أخطاء: {errors}",
+    "leadDigestRunError": "فشل تشغيل المهمة",
+    "leadDigestEmpty": "لا توجد عمليات تشغيل مسجلة بعد.",
+    "leadDigestColDate": "التاريخ",
+    "leadDigestColUser": "المستخدم",
+    "leadDigestColStatus": "الحالة",
+    "leadDigestColCount": "العدد",
+    "leadDigestColLang": "اللغة",
+    "leadDigestColResend": "معرّف Resend",
+    "leadDigestStatusSent": "مُرسل",
+    "leadDigestStatusFailed": "فشل",
+    "leadDigestStatusSkippedNoEmail": "متخطى — لا يوجد بريد",
+    "leadDigestStatusSkippedNoSubscription": "متخطى — لا يوجد اشتراك",
+    "leadDigestStatusSkippedAbandoned": "متخطى — حساب مهجور"
   }
 }
