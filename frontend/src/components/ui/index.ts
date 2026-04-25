@@ -5,6 +5,7 @@ export { FilterButtons, CommentsFilterButtons, MessagesFilterButtons } from './F
 export { Input } from './Input';
 export { Select } from './Select';
 export { Textarea } from './Textarea';
+export { FormField } from './FormField';
 export { Modal } from './Modal';
 export { SidePanel } from './SidePanel';
 export { EmptyState } from './EmptyState';
