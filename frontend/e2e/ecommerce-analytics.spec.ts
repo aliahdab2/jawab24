@@ -57,8 +57,8 @@ const ANALYTICS_PAYLOAD_30D = {
 
 const ANALYTICS_PAYLOAD_90D = { ...ANALYTICS_PAYLOAD_30D, period: { ...ANALYTICS_PAYLOAD_30D.period, range: '90d' } };
 
-function setupAuth(page: Page) {
-    return page.addInitScript(() => {
+function setupAuth(page: Page, language: 'en' | 'ar' = 'en') {
+    return page.addInitScript((lang) => {
         localStorage.setItem(
             'auth-storage',
             JSON.stringify({
@@ -74,12 +74,12 @@ function setupAuth(page: Page) {
         localStorage.setItem(
             'ui-storage',
             JSON.stringify({
-                state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false },
+                state: { sidebarOpen: true, language: lang, _hasHydrated: false, isOnboardingVisible: false },
                 version: 0,
             }),
         );
         localStorage.setItem('jawab24_onboarding_complete', 'true');
-    });
+    }, language);
 }
 
 interface MockOptions {
@@ -236,7 +236,9 @@ test.describe('E-commerce Analytics Page', () => {
     });
 
     test('renders Arabic copy with RTL direction', async ({ page }) => {
-        await setupAuth(page);
+        // Store language must match URL locale — _app.tsx bounces the default
+        // locale ('ar') to the store language otherwise.
+        await setupAuth(page, 'ar');
         await mockAPIs(page, {
             shopifyStore: SHOPIFY_STORE,
             analytics: { '30d': ANALYTICS_PAYLOAD_30D },

@@ -571,7 +571,7 @@ test.describe('Integrations — Store Analytics Summary widget', () => {
 
     // The link should route to the dedicated analytics page
     const link = page.getByRole('link', { name: t('ecommerceAnalytics.summary.viewDetails') }).first();
-    await expect(link).toHaveAttribute('href', '/ecommerce-analytics');
+    await expect(link).toHaveAttribute('href', '/en/ecommerce-analytics');
   });
 
   test('hides the widget on a connected store with no analytics data yet', async ({ page }) => {
@@ -609,7 +609,7 @@ test.describe('Integrations — Store Analytics Summary widget', () => {
     // No numbers, but the discoverability link is still present
     const link = page.getByRole('link', { name: t('ecommerceAnalytics.summary.viewDetails') }).first();
     await expect(link).toBeVisible({ timeout: 10000 });
-    await expect(link).toHaveAttribute('href', '/ecommerce-analytics');
+    await expect(link).toHaveAttribute('href', '/en/ecommerce-analytics');
     await expect(page.getByText(/carts recovered/i)).toHaveCount(0);
   });
 });

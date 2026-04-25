@@ -53,7 +53,7 @@ export function StoreAnalyticsSummary({ storeId }: { storeId: string }) {
     }
 
     const recovery = data?.recovery;
-    const aiReplies = data?.replies.aiReplies ?? 0;
+    const aiReplies = data?.replies?.aiReplies ?? 0;
     const cartsRecovered = recovery?.cartsRecovered ?? 0;
 
     // Render only when there is something useful to show — empty stores stay quiet.
