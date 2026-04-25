@@ -1977,6 +1977,10 @@ The `analytics` service computes these from live tables (30-day window):
 
 **Admin dashboard**: `/admin/observability` shows service status (DB/Redis/AI circuit latency), process metrics (RSS, heap, uptime), and external API latency table with p50/p95/p99.
 
+**Merchant-facing analytics** (shipped 2026-04-25): `/ecommerce-analytics` page + a summary widget inside `ConnectedStoreCard` on the integrations page. Aggregates from `customerNotificationsLog` + `messages` over a 30d/90d window. Surfaces revenue recovered (approximate — phone-window matching), carts recovered, AI reply count, notification funnel (delivered/failed/pending) and per-type breakdown. Channel-keyed funnel structure (`{ total, byChannel }`) is forward-compatible with WhatsApp + DM channels when those land. Endpoint: `GET /api/ecommerce-analytics/:storeId?range=30d|90d`. Code: `services/ecommerceAnalytics.ts` + `controllers/ecommerceAnalytics.ts` + `components/analytics/`.
+
+**Rich product cards in DM** (shipped 2026-04-24): when a Messenger or Instagram DM triggers an ecommerce tool that surfaces a product reference (e.g. `check_inventory`) and the synced product has an image, the message pipeline sends a Generic Template carousel (image + price + "View product" button) as a follow-up to the text reply. Uses Meta's `template_type: "generic"` payload via shared `metaMessaging.ts`. Falls back to text-only when no image is available. Card-send failures are fire-and-forget (don't invalidate the text reply). Forward-compatible with WhatsApp Catalog (Phase 5 of `WHATSAPP_PLAN.md`) since the `MessagePlatformAdapter.sendProductCards` interface is platform-agnostic.
+
 ## عربي
 
 ### ما هو مُراقَب حالياً

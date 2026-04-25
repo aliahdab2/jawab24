@@ -244,6 +244,24 @@
 
 ---
 
+### E-Commerce Analytics (merchant-facing)
+
+Read-only aggregator that surfaces merchant ROI for a connected store across all e-commerce platforms (Shopify, Salla, Zid). No new tables — reads from `customerNotificationsLog` + `messages`.
+
+- **Endpoint**: `GET /api/ecommerce-analytics/:storeId?range=30d|90d` (auth + workspace-scoped via `resolveWorkspace`)
+- **Implementation**:
+  - Service: `/backend/src/services/ecommerceAnalytics.ts`
+  - Controller: `/backend/src/controllers/ecommerceAnalytics.ts`
+  - Routes: `/backend/src/routes/ecommerceAnalytics.ts` (registered with prefix `/api/ecommerce-analytics`)
+- **Frontend**:
+  - Page: `/frontend/src/pages/ecommerce-analytics.tsx`
+  - Reusable primitives + sections: `/frontend/src/components/analytics/`
+  - Embedded widget: `StoreAnalyticsSummary` slot inside `ConnectedStoreCard` on the integrations page
+- **Returns**: notification funnel `{ total, byChannel }` (channel-keyed for WhatsApp/DM future), per-type breakdown, recovery stats (approximate phone-window match), reply method breakdown
+- **Attribution caveat**: cart-recovery revenue uses an EXISTS subquery matching `abandoned_cart` notifications to `order_confirmed` notifications by phone within a 72h window. Over-credits when a customer would have ordered anyway. Phase 6 (URL wrapping) tightens this with click-through telemetry — see `ECOMMERCE_POWER_FEATURES_PLAN.md`.
+
+---
+
 ### KB File Upload
 
 Text extraction from documents and images for KB content:
