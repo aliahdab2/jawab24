@@ -86,7 +86,7 @@
   "postTriggerReply": "رسالة الرد",
   "postTriggerKeywordPlaceholder": "اكتب كلمة واضغط إدخال",
   "postTriggerKeywordHelp": "أضف حتى 10 كلمات — أي تطابق يفعّل الرد",
-  "postTriggerReplyPlaceholder": "الرسالة التي تُرسل عند تطابق التعليق مع كلمة...",
+  "postTriggerReplyPlaceholder": "الرسالة التي تُرسل عند تطابق التعليق مع إحدى الكلمات المفتاحية...",
   "postTriggerSave": "حفظ",
   "postTriggerClear": "إزالة",
   "postTriggerActive": "رد البوست نشط",

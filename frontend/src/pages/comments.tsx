@@ -96,6 +96,9 @@ const CommentsPage: NextPageWithLayout = () => {
     () => Object.values(triggersByPostId).every(v => !v),
     [triggersByPostId]
   );
+  // Anchor the badge to a single card (the first un-configured one in the visible list)
+  // — rendering it on every card creates visual noise and reads as a bug.
+  // Computed below once filteredGroups is available.
   const [exporting, setExporting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -161,6 +164,17 @@ const CommentsPage: NextPageWithLayout = () => {
     if (!query) return commentGroups;
     return filterGroupsBySearch(commentGroups, query);
   }, [commentGroups, debouncedSearch]);
+
+  // The single groupKey that should display the NEW badge — first un-configured
+  // post in the visible list. Null when the badge should not be shown anywhere.
+  const newBadgeGroupKey = useMemo(() => {
+    if (!showPostReplyNewBadge) return null;
+    const first = filteredGroups.find(g => {
+      const postId = g.latestComment.postId;
+      return postId && !triggersByPostId[postId];
+    });
+    return first?.groupKey ?? null;
+  }, [showPostReplyNewBadge, filteredGroups, triggersByPostId]);
 
   // Track which groups are expanded (show earlier comments)
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -257,6 +271,13 @@ const CommentsPage: NextPageWithLayout = () => {
   // by the sync effect before the URL caught up.
   const pushedModalRef = useRef(false);
   const pendingOpenRef = useRef<Map<string, Comment>>(new Map());
+  // Stable so useModalBackHandler doesn't cleanup+re-push onClose on every parent
+  // re-render — without this, hardware back can fall through to page navigation
+  // during the microsecond gap between cleanup and re-push.
+  const closeTriggerModal = useCallback(() => setTriggerModalComment(null), []);
+  const onTriggerSaved = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['posts'] });
+  }, [queryClient]);
   const openComment = useCallback((comment: Comment) => {
     setTriggerModalComment(null);
     pendingOpenRef.current.set(comment.id, comment);
@@ -569,7 +590,7 @@ const CommentsPage: NextPageWithLayout = () => {
                     onToggleExpand={() => toggleExpand(group.groupKey)}
                     onTriggerClick={comment.postId ? () => setTriggerModalComment(comment) : undefined}
                     triggerActive={comment.postId ? !!triggersByPostId[comment.postId] : false}
-                    showNewBadge={showPostReplyNewBadge}
+                    showNewBadge={group.groupKey === newBadgeGroupKey}
                   />
                 </div>
               );
@@ -644,10 +665,8 @@ const CommentsPage: NextPageWithLayout = () => {
           triggerKeyword={triggersByPostId[triggerModalComment.postId]?.keyword ?? null}
           triggerReply={triggersByPostId[triggerModalComment.postId]?.reply ?? null}
           isOpen={!!triggerModalComment}
-          onClose={() => setTriggerModalComment(null)}
-          onSaved={() => {
-            queryClient.invalidateQueries({ queryKey: ['posts'] });
-          }}
+          onClose={closeTriggerModal}
+          onSaved={onTriggerSaved}
         />
       )}
     </>
