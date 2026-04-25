@@ -5,7 +5,7 @@
  * and DTO mapping live here. Platform-specific services (shopify.ts, salla.ts) import
  * from this module and add their own OAuth, API, and sync logic.
  */
-import { eq, and, lt, sql } from 'drizzle-orm';
+import { eq, and, lt, sql, desc } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers } from '../db/schema';
 import { encrypt, decrypt } from './ecommerceCrypto';
@@ -51,11 +51,18 @@ export async function getStoreByWorkspace(platform: EcommercePlatform, workspace
 /**
  * Like getStoreByWorkspace but also returns inactive (disconnected) stores.
  * Used by the integrations page to show a Reconnect card after disconnect.
+ *
+ * Order matters: when a workspace has multiple rows for the same platform
+ * (e.g. an old disconnected store + a new active one — happens when a
+ * merchant reinstalls on a different shop), the active row must win, and
+ * within the same activity status the most recently updated row wins.
+ * Without this ORDER BY, Postgres returns whichever row it picks up first
+ * which may be the older inactive one, hiding the active store.
  */
 export async function getStoreByWorkspaceAny(platform: EcommercePlatform, workspaceId: string) {
     const result = await db.select().from(ecommerceStores).where(
         and(eq(ecommerceStores.workspaceId, workspaceId), eq(ecommerceStores.platform, platform))
-    ).limit(1);
+    ).orderBy(desc(ecommerceStores.isActive), desc(ecommerceStores.updatedAt)).limit(1);
     return result[0] || null;
 }
 
@@ -682,32 +689,38 @@ export async function replaceProductsAndRebuildSummary(
         products = products.slice(0, PRODUCT_SAFETY_CAP);
     }
 
-    // Atomic replacement: delete old + insert new
-    await db.delete(ecommerceProducts).where(eq(ecommerceProducts.ecommerceStoreId, storeId));
+    // Atomic replacement: delete old + insert new + update store metadata.
+    // Wrapped in a transaction so two concurrent syncs (e.g. UI Sync Now click
+    // racing a webhook-triggered sync) serialize cleanly instead of racing
+    // the unique index `idx_ecommerce_products_store_product` to a 500. Bug
+    // A-1.4 in docs/testing/SHOPIFY_TEST_PLAN.md.
+    await db.transaction(async (tx) => {
+        await tx.delete(ecommerceProducts).where(eq(ecommerceProducts.ecommerceStoreId, storeId));
 
-    if (products.length > 0) {
-        const rows = products.map(p => ({
-            ecommerceStoreId: storeId,
-            platformProductId: p.platformProductId,
-            handle: p.handle || null,
-            title: p.title,
-            description: p.description || null,
-            productType: p.productType || null,
-            vendor: p.vendor || null,
-            status: p.status,
-            priceRange: p.priceRange,
-            currency: p.currency,
-            totalInventory: p.totalInventory,
-            hasVariants: p.hasVariants,
-            variantSummary: p.variantSummary || null,
-            tags: p.tags || null,
-            imageUrl: p.imageUrl || null,
-        }));
+        if (products.length > 0) {
+            const rows = products.map(p => ({
+                ecommerceStoreId: storeId,
+                platformProductId: p.platformProductId,
+                handle: p.handle || null,
+                title: p.title,
+                description: p.description || null,
+                productType: p.productType || null,
+                vendor: p.vendor || null,
+                status: p.status,
+                priceRange: p.priceRange,
+                currency: p.currency,
+                totalInventory: p.totalInventory,
+                hasVariants: p.hasVariants,
+                variantSummary: p.variantSummary || null,
+                tags: p.tags || null,
+                imageUrl: p.imageUrl || null,
+            }));
 
-        await db.insert(ecommerceProducts).values(rows);
-    }
+            await tx.insert(ecommerceProducts).values(rows);
+        }
+    });
 
-    // Build and store the product summary
+    // Build summary outside the transaction — pure read of the just-committed rows.
     const productSummary = await buildProductSummary(storeId);
 
     await db.update(ecommerceStores).set({
