@@ -617,6 +617,13 @@
       "when": 1777109661064,
       "tag": "0087_ambiguous_zeigeist",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "5",
+      "when": 1777146541979,
+      "tag": "0088_backfill_jsonb_stringified",
+      "breakpoints": true
     }
   ]
 }

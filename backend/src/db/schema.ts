@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, index, uniqueIndex, real, check } from 'drizzle-orm/pg-core';
+import { jsonb } from './jsonb';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { FacebookMessageTag } from '../utils/commentText';
