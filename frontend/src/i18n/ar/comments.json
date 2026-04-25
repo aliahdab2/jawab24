@@ -85,13 +85,14 @@
   "postTriggerKeyword": "الكلمات المفتاحية",
   "postTriggerReply": "رسالة الرد",
   "postTriggerKeywordPlaceholder": "اكتب كلمة واضغط إدخال",
-  "postTriggerKeywordHelp": "أضف حتى 10 كلمات — أي تطابق يرسل الرد كرسالة خاصة",
-  "postTriggerReplyPlaceholder": "الرسالة التي تُرسل كرسالة خاصة عند التعليق بالكلمة...",
+  "postTriggerKeywordHelp": "أضف حتى 10 كلمات — أي تطابق يفعّل الرد",
+  "postTriggerReplyPlaceholder": "الرسالة التي تُرسل عند تطابق التعليق مع كلمة...",
   "postTriggerSave": "حفظ",
   "postTriggerClear": "إزالة",
   "postTriggerActive": "رد البوست نشط",
   "postTriggerSaved": "تم حفظ رد البوست",
   "postTriggerCleared": "تم إزالة رد البوست",
   "postTriggerKeywordRequired": "الكلمة المفتاحية مطلوبة",
-  "postTriggerReplyRequired": "رسالة الرد مطلوبة"
+  "postTriggerReplyRequired": "رسالة الرد مطلوبة",
+  "newBadge": "جديد"
 }

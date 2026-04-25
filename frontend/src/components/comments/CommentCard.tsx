@@ -7,7 +7,7 @@ import { renderMessageText } from '@/utils/renderMessageText';
 import {
   Clock,
   AlertTriangle,
-  Hash,
+  Sparkles,
   CheckCircle,
   CheckCheck,
   User,
@@ -42,6 +42,8 @@ export interface CommentCardProps {
   onTriggerClick?: (e: React.MouseEvent) => void;
   /** Whether this post has an active trigger keyword set */
   triggerActive?: boolean;
+  /** Show a one-time NEW badge to drive first-use discovery */
+  showNewBadge?: boolean;
 }
 
 /**
@@ -71,6 +73,7 @@ export const CommentCard = React.memo(function CommentCard({
   onToggleExpand,
   onTriggerClick,
   triggerActive = false,
+  showNewBadge = false,
 }: CommentCardProps) {
   const t = useTranslations('comments');
   const tc = useTranslations('common');
@@ -194,19 +197,26 @@ export const CommentCard = React.memo(function CommentCard({
                    <span className="line-clamp-1 break-words" dir="auto">{comment.postMessage || t('postContext')}</span>
                  </div>
                  {onTriggerClick && (
-                   <button
-                     type="button"
-                     onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
-                     className={clsx(
-                       'self-start flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors',
-                       triggerActive
-                         ? 'border-brand-400 text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20'
-                         : 'border-dashed border-theme-border text-muted-foreground hover:border-brand-400 hover:text-brand-500'
+                   <div className="relative self-start">
+                     <button
+                       type="button"
+                       onClick={e => { e.stopPropagation(); onTriggerClick(e); }}
+                       className={clsx(
+                         'flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                         triggerActive
+                           ? 'border-brand-400 text-brand-500 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/20'
+                           : 'border-brand-300 dark:border-brand-700 bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 hover:bg-brand-100 dark:hover:bg-brand-900/30'
+                       )}
+                     >
+                       <Sparkles className="w-3.5 h-3.5" aria-hidden="true" />
+                       {triggerActive ? t('postTriggerActive') : t('postTrigger')}
+                     </button>
+                     {showNewBadge && !triggerActive && (
+                       <span className="absolute -top-2 -end-2 px-1.5 py-0.5 rounded-full bg-brand-500 text-white text-[9px] font-bold leading-none shadow-sm pointer-events-none">
+                         {t('newBadge')}
+                       </span>
                      )}
-                   >
-                     <Hash className="w-3 h-3" aria-hidden="true" />
-                     {triggerActive ? t('postTriggerActive') : t('postTrigger')}
-                   </button>
+                   </div>
                  )}
                </div>
              )}

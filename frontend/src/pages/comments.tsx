@@ -89,6 +89,13 @@ const CommentsPage: NextPageWithLayout = () => {
     }
     return map;
   }, [postsData]);
+  // Show NEW badge on the Post Reply button until the user creates their first trigger.
+  // Once any post has a trigger, the badge disappears everywhere — we trust users to
+  // remember the feature exists once they've used it.
+  const showPostReplyNewBadge = useMemo(
+    () => Object.values(triggersByPostId).every(v => !v),
+    [triggersByPostId]
+  );
   const [exporting, setExporting] = useState(false);
   const queryClient = useQueryClient();
 
@@ -562,6 +569,7 @@ const CommentsPage: NextPageWithLayout = () => {
                     onToggleExpand={() => toggleExpand(group.groupKey)}
                     onTriggerClick={comment.postId ? () => setTriggerModalComment(comment) : undefined}
                     triggerActive={comment.postId ? !!triggersByPostId[comment.postId] : false}
+                    showNewBadge={showPostReplyNewBadge}
                   />
                 </div>
               );

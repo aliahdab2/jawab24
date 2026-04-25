@@ -3,7 +3,7 @@ import { Hash } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
-import { Modal, Button, Textarea, KeywordChipInput } from '@/components/ui';
+import { Modal, Button, Textarea, KeywordChipInput, FormField } from '@/components/ui';
 import { postsApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 
@@ -85,11 +85,11 @@ export function PostTriggerModal({
   const hasActiveTrigger = !!(initialKeyword && initialReply);
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={t('postTrigger')} size="sm">
+    <Modal isOpen={isOpen} onClose={onClose} title={t('postTrigger')} size="sm" mobilePresentation="fullscreen">
       <div className="flex flex-col gap-4">
         {/* Post preview */}
         {postMessage && (
-          <div className="bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2.5 max-h-32 overflow-y-auto">
+          <div className="bg-surface-50 dark:bg-surface-800 rounded-lg px-3 py-2.5">
             <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words leading-relaxed" dir="auto">
               {postMessage}
             </p>
@@ -105,10 +105,11 @@ export function PostTriggerModal({
         )}
 
         {/* Keyword chip input */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor="trigger-keyword">
-            {t('postTriggerKeyword')}
-          </label>
+        <FormField
+          label={t('postTriggerKeyword')}
+          htmlFor="trigger-keyword"
+          helper={t('postTriggerKeywordHelp')}
+        >
           <KeywordChipInput
             id="trigger-keyword"
             value={keywords}
@@ -117,14 +118,10 @@ export function PostTriggerModal({
             maxKeywords={10}
             maxLength={100}
           />
-          <p className="text-xs text-muted-foreground">{t('postTriggerKeywordHelp')}</p>
-        </div>
+        </FormField>
 
         {/* Reply textarea */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground" htmlFor="trigger-reply">
-            {t('postTriggerReply')}
-          </label>
+        <FormField label={t('postTriggerReply')} htmlFor="trigger-reply">
           <Textarea
             id="trigger-reply"
             value={reply}
@@ -134,7 +131,7 @@ export function PostTriggerModal({
             rows={4}
             maxLength={1000}
           />
-        </div>
+        </FormField>
 
         {/* Actions */}
         <div className="flex items-center justify-between gap-3 pt-1">
