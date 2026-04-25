@@ -3,7 +3,9 @@ import { instagramService } from '../../instagram';
 import { conversationsService } from '../../conversations';
 import { fbAxios, GRAPH_API_BASE } from '../../../lib/fbAxios';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied, fetchNameFromConversationsApi } from './shared';
+import { sendMetaProductCards } from '../../metaMessaging';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
+import type { ProductCard } from '@jawab24/shared';
 
 /**
  * Instagram Platform Adapter
@@ -88,6 +90,10 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
             text,
             page.accessToken,
         );
+    }
+
+    async sendProductCards(page: PlatformPage, senderId: string, cards: ProductCard[]): Promise<void> {
+        await sendMetaProductCards(page.accessToken, senderId, cards);
     }
 
     async sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void> {

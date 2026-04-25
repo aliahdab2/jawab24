@@ -885,3 +885,124 @@ describe('MessageProcessor — origin post context inheritance', () => {
         expect(contextArg.postMessage).toBe('Instagram reel caption');
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Product Card Follow-up
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// When the AI reply carries `productCards`, the processor sends them as a
+// follow-up attachment AFTER the text reply. Behavior contract:
+//   - Card send must be fire-and-forget — failures don't invalidate the text reply
+//   - Adapters without `sendProductCards` (e.g., WhatsApp) get text-only with no error
+//   - When `productCards` is empty/undefined, no card send is attempted
+
+describe('MessageProcessor — Product Card Follow-up', () => {
+    const sampleCard = {
+        title: 'Blue Cotton Shirt',
+        subtitle: '120 SAR · In stock',
+        imageUrl: 'https://cdn.test/shirt.jpg',
+        productUrl: 'https://shop.test/p/blue-shirt',
+    };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'do you have the blue shirt?', createdTime: new Date() } as any,
+        ]);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+    });
+
+    it('sends product cards via the adapter after the text reply', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Yes, here it is!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [sampleCard],
+        });
+        const adapter = createMockAdapter({ sendProductCards: vi.fn().mockResolvedValue(undefined) });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'do you have the blue shirt?', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReply).toHaveBeenCalledWith(expect.anything(), 'sender-1', 'Yes, here it is!');
+        expect(adapter.sendProductCards).toHaveBeenCalledWith(expect.anything(), 'sender-1', [sampleCard]);
+    });
+
+    it('does not call sendProductCards when reply has no cards', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Hi there!',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+        const adapter = createMockAdapter({ sendProductCards: vi.fn() });
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'hi', 'msg-1',
+        );
+
+        expect(adapter.sendProductCards).not.toHaveBeenCalled();
+    });
+
+    it('treats card send failure as fire-and-forget (text reply still succeeds)', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Sure, take a look:',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [sampleCard],
+        });
+        const sendProductCards = vi.fn().mockRejectedValue(new Error('IG attachment 400'));
+        const adapter = createMockAdapter({ sendProductCards });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'show me', 'msg-1',
+        );
+
+        // Text reply already sent → overall pipeline must report success.
+        expect(result.success).toBe(true);
+        expect(adapter.sendReply).toHaveBeenCalled();
+        // Wait one tick so the fire-and-forget rejection settles before the assertion below.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        expect(sendProductCards).toHaveBeenCalled();
+    });
+
+    it('skips card send entirely when adapter does not implement sendProductCards', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Sure!',
+            replyMethod: 'ai',
+            needsAttention: false,
+            productCards: [sampleCard],
+        });
+        // Adapter without the optional capability — pipeline must not throw.
+        const adapter = createMockAdapter();
+        delete (adapter as { sendProductCards?: unknown }).sendProductCards;
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'show me', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReply).toHaveBeenCalled();
+    });
+});

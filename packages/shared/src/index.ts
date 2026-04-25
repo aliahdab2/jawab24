@@ -42,6 +42,27 @@ export * from './sse-events';
 // --- E-commerce Tool Types ---
 export * from './ecommerce-tools';
 
+// --- Rich Messaging Types ---
+/**
+ * A single card in a Messenger/Instagram Generic Template carousel.
+ * Used for rich product replies (images + prices + actions).
+ *
+ * Meta limits: title ≤ 80 chars, subtitle ≤ 80 chars, up to 3 buttons,
+ * up to 10 cards per carousel. Callers are responsible for truncation.
+ */
+export interface ProductCard {
+    title: string;
+    subtitle: string;
+    imageUrl: string;
+    productUrl: string;
+    buttons?: Array<{
+        type: 'web_url' | 'postback';
+        title: string;
+        url?: string;
+        payload?: string;
+    }>;
+}
+
 // --- Message Types ---
 export interface Message {
   id: string;

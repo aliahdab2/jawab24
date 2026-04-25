@@ -7,7 +7,7 @@ import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '.
 import { RetrievalService } from '../kb/retrieval';
 import { OpenAIEmbeddingProvider } from '../kb/embedding';
 import { gapDetectorService, type GapSource } from '../kb/gap-detector';
-import { DEFAULT_AI_MODEL, normalizeAiIntent } from '@jawab24/shared';
+import { DEFAULT_AI_MODEL, normalizeAiIntent, type ProductCard } from '@jawab24/shared';
 import { detectLanguage, detectLanguageCode } from '../../utils/language';
 import type { FacebookMessageTag } from '../../utils/commentText';
 import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
@@ -186,6 +186,12 @@ export interface GenerateReplyResult {
     flagReason?: string;
     aiIntent?: string;
     confidence?: string;
+    /**
+     * Rich product cards to send as a follow-up attachment after the text reply.
+     * Only populated for e-commerce replies when a tool surfaced product data.
+     * Callers must fall back to text-only when the adapter doesn't support cards.
+     */
+    productCards?: ProductCard[];
 }
 
 export interface PlaygroundInput {
@@ -779,6 +785,7 @@ export class ReplyGenerator {
             flagReason,
             aiIntent: normalizedIntent,
             confidence: aiResponse.confidence,
+            ...(aiResponse.productCards?.length ? { productCards: aiResponse.productCards } : {}),
         };
     }
 }

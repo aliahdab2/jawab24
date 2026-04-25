@@ -218,7 +218,7 @@ describe('InstagramService', () => {
             expect(result).toBe('msg-1');
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 `${BASE}/me/messages`,
-                { recipient: { id: 'user-1' }, message: { text: 'Hello' } },
+                { recipient: { id: 'user-1' }, message: { text: 'Hello' }, messaging_type: 'RESPONSE' },
                 { params: { access_token: pageAccessToken } },
             );
         });

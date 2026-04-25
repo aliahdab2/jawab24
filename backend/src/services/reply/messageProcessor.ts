@@ -334,7 +334,7 @@ export class MessageProcessor {
             );
             const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId } = enriched;
 
-            let { replyText, replyMethod, needsAttention, flagReason, aiIntent, confidence } =
+            let { replyText, replyMethod, needsAttention, flagReason, aiIntent, confidence, productCards } =
                 await replyGenerator.generateForMessage(
                     {
                         workspaceId,
@@ -449,6 +449,18 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, replyText, replyMethod, error: 'Failed to send reply' };
             }
             lap('13-sendReply');
+
+            // 13b. Follow-up: send product cards if the reply carries them and the
+            // platform adapter supports rich attachments. Fire-and-forget — a card
+            // send failure doesn't invalidate the text reply already delivered.
+            if (productCards?.length && adapter.sendProductCards) {
+                adapter.sendProductCards(page, senderId, productCards).catch((error) => {
+                    this.logger.warn(`[${platform}] Product card send failed (reply already sent)`, {
+                        error: String(error),
+                        messageId: platformMessageId,
+                    });
+                });
+            }
 
             // 14-16. Mark replied + store outgoing + mark older — wrapped in a transaction
             // so all DB state changes succeed or fail together.

@@ -65,6 +65,17 @@ export interface MessagePlatformAdapter {
     /** Send a reply message to the sender */
     sendReply(page: PlatformPage, senderId: string, text: string): Promise<void>;
 
+    /**
+     * Send rich product cards (Generic Template carousel) as a follow-up to a text reply.
+     * Optional: adapters that don't support attachments (e.g., WhatsApp today) may omit this.
+     * Callers should fall back to text only when the method is absent.
+     */
+    sendProductCards?(
+        page: PlatformPage,
+        senderId: string,
+        cards: import('@jawab24/shared').ProductCard[],
+    ): Promise<void>;
+
     /** Send an away message when auto-reply is disabled */
     sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void>;
 

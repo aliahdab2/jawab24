@@ -65,6 +65,12 @@ export interface AiGenerateResponse {
     confidence?: string;
     flags?: string[];
     tokensUsed?: number;
+    /**
+     * Rich product cards to send as a follow-up attachment after the text reply.
+     * Populated by ecommerceToolLoop when a tool surfaces product references.
+     * Undefined for non-ecommerce replies and tools that return only scalar data.
+     */
+    productCards?: import('@jawab24/shared').ProductCard[];
 }
 
 export interface AiCacheEntry {

@@ -11,6 +11,7 @@ import {
 
 import { GRAPH_API_BASE } from '../lib/fbAxios';
 import { DmSendError } from '../utils/fbGraphErrors';
+import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
 
 const INSTAGRAM_GRAPH_API = GRAPH_API_BASE;
 
@@ -263,25 +264,19 @@ export class InstagramService {
     }
 
     async sendDirectMessage(
-        instagramAccountId: string, 
-        recipientId: string, 
-        message: string, 
-        pageAccessToken: string
+        instagramAccountId: string,
+        recipientId: string,
+        message: string,
+        pageAccessToken: string,
+        opts?: SendMessageOptions,
     ): Promise<string> {
         try {
             this.logger.debug('[Instagram] Sending DM', { instagramAccountId, recipientId });
-            
+
             const response = await axios.post(
                 `${INSTAGRAM_GRAPH_API}/me/messages`,
-                {
-                    recipient: { id: recipientId },
-                    message: { text: message },
-                },
-                {
-                    params: {
-                        access_token: pageAccessToken,
-                    },
-                }
+                buildMessagePayload(recipientId, { text: message }, opts),
+                { params: { access_token: pageAccessToken } },
             );
 
             this.logger.info('[Instagram] DM sent successfully', { messageId: response.data.message_id });

@@ -25,6 +25,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { aiService } from './ai';
 import { executeToolCall } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
+import { buildProductCardsFromToolResults } from './reply/productCardBuilder';
 import type { AiGenerateRequest, AiGenerateResponse } from '../types';
 import { VALID_TOOL_NAMES, type EcommerceToolCall, type EcommerceToolResult } from '@jawab24/shared';
 
@@ -113,9 +114,12 @@ export async function generateReplyWithTools(
             };
         }
 
-        // Tool loop: execute tool calls and send results back (max 2 rounds)
+        // Tool loop: execute tool calls and send results back (max 2 rounds).
+        // We accumulate tool results across rounds so the card builder can inspect
+        // every successful product reference, not just the final round.
         let lastToolCalls = data.toolCalls;
         let lastToolResults: EcommerceToolResult[] = [];
+        const allToolResults: EcommerceToolResult[] = [];
 
         for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             // Validate and filter tool calls
@@ -139,6 +143,7 @@ export async function generateReplyWithTools(
             lastToolResults = await Promise.all(
                 validToolCalls.map((tc) => executeToolCall(storeId, tc as EcommerceToolCall)),
             );
+            allToolResults.push(...lastToolResults);
 
             // Send results back to AI worker
             const finalResponse = await axios.post<AiWorkerToolResponse>(
@@ -167,7 +172,9 @@ export async function generateReplyWithTools(
                 continue;
             }
 
-            // Final reply
+            // Final reply — attach product cards from any tool result that
+            // referenced a product. Absent when no tool carries product data.
+            const productCards = await buildProductCardsFromToolResults(storeId, allToolResults);
             return {
                 reply: roundData.reply || '',
                 language: roundData.language || request.language || 'en',
@@ -176,6 +183,7 @@ export async function generateReplyWithTools(
                 confidence: roundData.confidence,
                 flags: roundData.flags,
                 tokensUsed: totalTokens,
+                ...(productCards.length ? { productCards } : {}),
             };
         }
 

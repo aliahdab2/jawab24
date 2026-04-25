@@ -7,6 +7,8 @@ import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse,
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
 import { DmSendError } from '../utils/fbGraphErrors';
+import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
+export type { MessagingType, SendMessageOptions } from './metaMessaging';
 
 const traced = <T>(method: string, fn: () => Promise<T>) =>
     tracedExternalCall('facebook', method, fn);
@@ -342,19 +344,24 @@ export class FacebookService {
     }
 
     /**
-     * Send a private message to a user
+     * Send a private message to a user.
+     *
+     * `opts.messagingType` defaults to 'RESPONSE' — unchanged for all existing callers.
+     * Proactive sends (outside the 24h window) must pass 'MESSAGE_TAG' + an approved `tag`.
      */
-    async sendPrivateMessage(pageAccessToken: string, recipientId: string, text: string): Promise<void> {
+    async sendPrivateMessage(
+        pageAccessToken: string,
+        recipientId: string,
+        text: string,
+        opts?: SendMessageOptions,
+    ): Promise<void> {
         try {
             await traced('sendPrivateMessage', () =>
-                fbAxios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
-                    recipient: { id: recipientId },
-                    message: { text },
-                }, {
-                    params: {
-                        access_token: pageAccessToken,
-                    },
-                }),
+                fbAxios.post(
+                    `${FACEBOOK_GRAPH_API}/me/messages`,
+                    buildMessagePayload(recipientId, { text }, opts),
+                    { params: { access_token: pageAccessToken } },
+                ),
             );
         } catch (error) {
             if (axios.isAxiosError(error)) {

@@ -44,8 +44,11 @@
   - `/me/instagram_accounts` - list connected Instagram accounts
   - `/me/messages` with `recipient.comment_id` - send private reply to a comment (DM linked to the comment)
   - `/me/messages` with `recipient.id` - send DM to a user (requires prior conversation)
+  - `/me/messages` with `message.attachment` (Generic Template) - send product card carousel as follow-up to text reply
   - `/{comment_id}/comments` - post a public reply to a comment
   - `/{post_id}?fields=message,story` - fetch post content (used for shared post context enrichment)
+
+- **Rich Product Cards**: When an ecommerce tool returns a product reference (e.g. `check_inventory`), the reply pipeline sends a follow-up Generic Template carousel with the product image, price, and a `View product` button. Payload building (truncation, Meta limits, messaging_type) lives in `backend/src/services/metaMessaging.ts` and is shared by Messenger and Instagram. The card build/lookup lives in `backend/src/services/reply/productCardBuilder.ts`. Card send failures are logged but don't invalidate the text reply already delivered.
 
 - **Business Portfolio Fallback (2026-04-15)**: Facebook's `/me/accounts` returns an empty array for Pages owned by a Meta Business Portfolio, even when the user has "Facebook access with Full control" and all permissions granted. `facebookService.getUserPages` handles this by falling back to `/debug_token` `granular_scopes` discovery and fetching each authorized Page individually. See `backend/src/services/facebook.ts:getUserPages` and tests in `backend/test/services/facebook.test.ts` describe block `getUserPages — Business Portfolio fallback`.
 

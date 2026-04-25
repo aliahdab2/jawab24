@@ -1,9 +1,11 @@
 import { pagesService } from '../../pages';
 import { facebookService } from '../../facebook';
 import { conversationsService } from '../../conversations';
+import { sendMetaProductCards } from '../../metaMessaging';
 import { redis } from '../../../lib/redis';
 import { mapToPlatformPage, storeIncomingMessage as storeMessage, markAsReplied as sharedMarkAsReplied } from './shared';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../../interfaces';
+import type { ProductCard } from '@jawab24/shared';
 
 const SENDER_NAME_CACHE_TTL = 86400; // 24 hours
 const senderNameCacheKey = (senderId: string) => `sender_name:${senderId}`;
@@ -80,6 +82,10 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
 
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
         await facebookService.sendPrivateMessage(page.accessToken, senderId, text);
+    }
+
+    async sendProductCards(page: PlatformPage, senderId: string, cards: ProductCard[]): Promise<void> {
+        await sendMetaProductCards(page.accessToken, senderId, cards);
     }
 
     async sendAwayMessage(page: PlatformPage, senderId: string, text: string): Promise<void> {
