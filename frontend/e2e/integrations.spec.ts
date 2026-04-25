@@ -116,6 +116,13 @@ function mockAPIs(
       }
       return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not found' }) });
     }
+
+    // Zid store — no fixture today; always 404 so the platform is treated as
+    // "never connected". Without this, the default `{}` response made Zid
+    // look like a disconnected-store row, which broke the empty-state check.
+    if (url.includes('/zid/store') && !url.includes('/sync') && !url.includes('/link-page') && method === 'GET') {
+      return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not found' }) });
+    }
     if (url.includes('/salla/store/sync') && method === 'POST') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
     }
@@ -172,7 +179,7 @@ test.describe('Integrations Page', () => {
   /*  No stores — page shows header only (management-only view)          */
   /* ------------------------------------------------------------------ */
 
-  test('should render page title and not-connected cards when no stores are connected', async ({ page }) => {
+  test('should render page title and the Shopify "Coming soon" card when no stores are connected', async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
     await setupAuth(page);
     await mockAPIs(page, {});
@@ -184,9 +191,19 @@ test.describe('Integrations Page', () => {
       page.locator('h1').filter({ hasText: t('integrations.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Not-connected promo cards shown with Connect buttons for each platform
-    const connectButtons = page.getByRole('button', { name: new RegExp(t('integrations.notConnected.connectBtn'), 'i') });
-    await expect(connectButtons).toHaveCount(2, { timeout: 10000 });
+    // Public roll-out gate: Shopify is the only visible platform today,
+    // shown with a "Coming soon" badge until the App Store listing ships.
+    // Salla + Zid are hidden entirely. No tab strip rendered for a single
+    // visible platform — just the card.
+    await expect(page.getByText(t('integrations.comingSoonBadge'), { exact: false }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tablist')).not.toBeVisible();
+    await expect(page.getByText(t('salla.title')).first()).not.toBeVisible();
+    await expect(page.getByText(t('zid.title')).first()).not.toBeVisible();
+
+    // "Notify me" CTA replaces the Connect button while comingSoon.
+    const notifyBtn = page.getByRole('button', { name: new RegExp(t('integrations.comingSoonCta'), 'i') });
+    await expect(notifyBtn).toBeVisible({ timeout: 10000 });
+    await expect(notifyBtn).toBeDisabled();
   });
 
   /* ------------------------------------------------------------------ */
@@ -210,7 +227,7 @@ test.describe('Integrations Page', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('should show Salla not-connected card when only Shopify is connected', async ({ page }) => {
+  test('should hide Salla and Zid even when "Add another store" exists, while their status=hidden', async ({ page }) => {
     await setupAuth(page);
     await mockAPIs(page, { shopifyStore: MOCK_SHOPIFY_STORE, pages: MOCK_PAGES });
 
@@ -218,10 +235,17 @@ test.describe('Integrations Page', () => {
 
     await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
 
-    // Salla was never connected (404) → not-connected promo card shown
-    await expect(page.getByText(t('salla.title')).first()).toBeVisible({ timeout: 10000 });
-    // But no Salla store data shown
-    await expect(page.getByText('Test Salla Store')).not.toBeVisible();
+    // Today only Shopify is publicly visible (status='comingSoon' for it,
+    // status='hidden' for Salla + Zid). Even with a connected Shopify store,
+    // there are no other VISIBLE platforms to surface, so the
+    // "Add another store" pill should not appear and neither Salla nor Zid
+    // should be reachable from this page. (Routes still exist for
+    // early-access merchants who hit them directly.)
+    await expect(
+      page.getByRole('button', { name: new RegExp(t('integrations.addAnotherStore'), 'i') }),
+    ).not.toBeVisible();
+    await expect(page.getByText(t('salla.title')).first()).not.toBeVisible();
+    await expect(page.getByText(t('zid.title')).first()).not.toBeVisible();
   });
 
   test('should show page linking chips when pages exist', async ({ page }) => {

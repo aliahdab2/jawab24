@@ -33,8 +33,25 @@ import type { NextPageWithLayout } from './_app';
 
 type PlatformId = 'shopify' | 'salla' | 'zid';
 
+/**
+ * Public-facing readiness gate for an integration. Independent of whether
+ * the code works — this controls *what we tell merchants*.
+ *   live        — Connect flow open, no badge.
+ *   comingSoon  — Card visible with badge, Connect disabled until launch.
+ *                  Used while public listing is in App Review.
+ *   hidden      — Not rendered at all in the integrations UI. Routes still
+ *                  exist for early-access merchants who hit the URL directly,
+ *                  but the platform doesn't appear on the page.
+ *
+ * Roll-out plan: each platform progresses hidden → comingSoon → live as
+ * its public marketplace listing matures. Today: Shopify=comingSoon
+ * (App Store listing pending), Salla + Zid hidden until Shopify ships.
+ */
+type PlatformStatus = 'live' | 'comingSoon' | 'hidden';
+
 interface PlatformConfig {
   id: PlatformId;
+  status: PlatformStatus;
   icon: React.ReactNode;
   iconClass: string;
   storeMetaClass: string;
@@ -57,6 +74,7 @@ interface PlatformConfig {
 const PLATFORMS: PlatformConfig[] = [
   {
     id: 'shopify',
+    status: 'comingSoon',
     icon: <ShopifyIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-emerald',
     storeMetaClass: 'alert-success border',
@@ -72,6 +90,7 @@ const PLATFORMS: PlatformConfig[] = [
   },
   {
     id: 'salla',
+    status: 'hidden',
     icon: <SallaIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-brand',
     storeMetaClass: 'status-brand border',
@@ -86,6 +105,7 @@ const PLATFORMS: PlatformConfig[] = [
   },
   {
     id: 'zid',
+    status: 'hidden',
     icon: <ZidIcon className="w-8 h-8" />,
     iconClass: 'icon-bg-orange',
     storeMetaClass: 'status-orange border',
@@ -99,6 +119,11 @@ const PLATFORMS: PlatformConfig[] = [
     connectStore: () => zidApi.connectStore(),
   },
 ];
+
+/** Platforms that should appear in any UI surface (sidebar count badges,
+ *  empty-state cards, page-link selectors). Hidden platforms still have
+ *  routes for early-access merchants but stay off the public surface. */
+const VISIBLE_PLATFORMS = PLATFORMS.filter((p) => p.status !== 'hidden');
 
 /**
  * Returns the scoped translator for a platform's own namespace.
@@ -416,7 +441,14 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             {platform.icon}
           </div>
           <div className="text-start">
-            <h3 className="font-bold text-lg landscape:text-base">{t('title')}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-bold text-lg landscape:text-base">{t('title')}</h3>
+              {platform.status === 'comingSoon' && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                  {tInt('comingSoonBadge')}
+                </span>
+              )}
+            </div>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
               <Sparkles className="w-3 h-3" aria-hidden="true" />
               {tInt('notConnected.freeLabel')}
@@ -462,7 +494,20 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
           </div>
         </div>
 
-        {/* Connect action */}
+        {/* Connect action.
+            comingSoon → swap the live OAuth flow for an honest "we're not
+            ready for the public yet" message + disabled CTA. The route still
+            exists for early-access merchants who land on it directly.   */}
+        {platform.status === 'comingSoon' ? (
+          <div className="flex flex-col gap-2 p-4 rounded-xl bg-muted/40 border border-dashed border-theme-border">
+            <p className="text-sm text-muted-foreground">
+              {tInt('comingSoonHelp')}
+            </p>
+            <Button variant="secondary" size="md" disabled className="w-full sm:w-auto">
+              {tInt('comingSoonCta')}
+            </Button>
+          </div>
+        ) : (
         <div className="flex flex-col gap-2">
           {platform.requiresDomain && (
             <div>
@@ -510,6 +555,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
             </p>
           )}
         </div>
+        )}
       </div>
     </Card>
   );
@@ -547,7 +593,10 @@ const IntegrationsPage: NextPageWithLayout = () => {
   const fetchData = useCallback(async () => {
     const storeResults: Record<string, EcommerceStore | null> = {};
 
-    const fetchPromises = PLATFORMS.map(async (platform) => {
+    // Skip hidden platforms — no point fetching data we won't render.
+    // Early-access merchants who hit a hidden-platform route directly bypass
+    // this page entirely.
+    const fetchPromises = VISIBLE_PLATFORMS.map(async (platform) => {
       try {
         const data = await platform.getStore();
         storeResults[platform.id] = data;
@@ -605,7 +654,7 @@ const IntegrationsPage: NextPageWithLayout = () => {
           // demoted behind an "Add another store" toggle. When zero stores
           // are connected we keep the original three-card picker since the
           // merchant genuinely needs to choose.
-          const platformsByState = PLATFORMS.reduce(
+          const platformsByState = VISIBLE_PLATFORMS.reduce(
             (acc, p) => {
               const store = stores[p.id];
               if (store?.isActive) acc.connected.push({ platform: p, store });
@@ -651,6 +700,10 @@ const IntegrationsPage: NextPageWithLayout = () => {
                 const selected = platformsByState.unconnected.find(p => p.id === pickerTab)
                   ?? platformsByState.unconnected[0];
                 if (!selected) return null;
+                // Single visible platform → no tab strip needed; just render the card.
+                if (platformsByState.unconnected.length === 1) {
+                  return <NotConnectedCard platform={selected} />;
+                }
                 return (
                   <div className="space-y-3">
                     <div
