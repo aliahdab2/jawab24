@@ -171,7 +171,7 @@ Tests how `commentReplyMode` affects the output.
 | # | Mode | Message | Expected |
 |---|------|---------|----------|
 | 56 | dual | كم الرسوم؟ | Reply is DM-style (detailed). nudgeText shows public nudge |
-| 57 | dual | ابي اسجل | If template match → template reply. If AI → dual mode |
+| 57 | dual | ابي اسجل | If Post Reply trigger matches → Post Reply. If AI → dual mode |
 
 ---
 

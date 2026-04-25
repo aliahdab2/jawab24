@@ -56,10 +56,10 @@ export interface RecoveryStats {
 }
 
 export interface ReplyStats {
-    /** Outgoing AI/template/manual replies linked to this store's pageIds within range. */
+    /** Outgoing AI/Post Reply/manual replies linked to this store's pageIds within range. */
     totalReplies: number;
     aiReplies: number;
-    templateReplies: number;
+    postReplies: number;
     manualReplies: number;
 }
 
@@ -244,11 +244,11 @@ async function queryReplyStats(storeId: string, since: Date): Promise<ReplyStats
         ))
         .groupBy(messages.replyMethod);
 
-    const stats: ReplyStats = { totalReplies: 0, aiReplies: 0, templateReplies: 0, manualReplies: 0 };
+    const stats: ReplyStats = { totalReplies: 0, aiReplies: 0, postReplies: 0, manualReplies: 0 };
     for (const row of rows) {
         stats.totalReplies += row.count;
         if (row.replyMethod === 'ai') stats.aiReplies = row.count;
-        else if (row.replyMethod === 'template') stats.templateReplies = row.count;
+        else if (row.replyMethod === 'template') stats.postReplies = row.count;
         else if (row.replyMethod === 'manual') stats.manualReplies = row.count;
     }
     return stats;

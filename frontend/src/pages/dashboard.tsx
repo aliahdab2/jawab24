@@ -281,22 +281,12 @@ const DashboardPage: NextPageWithLayout = () => {
     const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled).length;
 
     return {
-      totalComments: stats.total,
       repliedToday: (stats.repliedToday ?? 0) + (msgStats.repliedToday ?? 0),
-      pendingReplies: stats.unreplied,
-      needsAttention: stats.needsAttention,
       commentsNeedsAction: Math.max(0, stats.needsAttention ?? 0),
       activePages,
       aiReplies: stats.byMethod.ai + (msgStats.byMethod?.ai ?? 0),
-      templateReplies: stats.byMethod.template + (msgStats.byMethod?.template ?? 0),
-      manualReplies: stats.byMethod.manual + (msgStats.byMethod?.manual ?? 0),
-      totalMessages: msgStats.total,
-      messagesPending: msgStats.pending,
-      messagesNeedsAttention: msgStats.needsAttention ?? 0,
+      postReplies: stats.byMethod.template + (msgStats.byMethod?.template ?? 0),
       messagesNeedsAction: Math.max(0, msgStats.needsAttention ?? 0),
-      messagesAiReplies: msgStats.byMethod?.ai ?? 0,
-      messagesTemplateReplies: msgStats.byMethod?.template ?? 0,
-      messagesManualReplies: msgStats.byMethod?.manual ?? 0,
     };
   }, [commentStats, messageStats, pages]);
 
@@ -557,7 +547,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Command Center — consolidated metrics */}
       <CommandCenter
-        smartReplies={((analytics?.byMethod?.ai ?? 0) + (analytics?.byMethod?.template ?? 0)) || (statsData.aiReplies + statsData.templateReplies)}
+        smartReplies={((analytics?.byMethod?.ai ?? 0) + (analytics?.byMethod?.template ?? 0)) || (statsData.aiReplies + statsData.postReplies)}
         repliedToday={statsData.repliedToday}
         replyRate={analytics?.totals?.replyRate ?? '0'}
         avgSpeedSeconds={analytics?.responseTime?.avgSeconds ?? null}

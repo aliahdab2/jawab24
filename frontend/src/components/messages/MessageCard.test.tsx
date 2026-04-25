@@ -287,7 +287,7 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
+      expect(screen.getByText('Post Reply')).toBeInTheDocument();
     });
 
     it('shows SMART REPLY badge for AI replies', () => {
@@ -313,9 +313,9 @@ describe('MessageCard', () => {
       expect(screen.getByText('Smart Reply')).toBeInTheDocument();
     });
 
-    // Regression: manual replies were being labeled "Preset Reply" in the list card
+    // Regression: manual replies were being labeled "Post Reply" in the list card
     // because the badge logic branched only on 'ai' vs else (treated everything else as template).
-    it('shows MANUAL badge for manually-sent replies (not "Preset Reply")', () => {
+    it('shows MANUAL badge for manually-sent replies (not "Post Reply")', () => {
       const incoming = makeMessage({ id: '1', direction: 'incoming', message: 'Q' });
       const outgoing = makeMessage({
         id: '2',
@@ -336,7 +336,7 @@ describe('MessageCard', () => {
       );
 
       expect(screen.getByText('Manual')).toBeInTheDocument();
-      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
   });
 });

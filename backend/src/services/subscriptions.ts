@@ -302,7 +302,6 @@ export const subscriptionsService = {
             periodStart,
             periodEnd,
             aiRepliesCount: 0,
-            templateRepliesCount: 0,
             totalCommentsProcessed: 0,
             totalMessagesProcessed: 0,
             dailyBreakdown: {},
@@ -483,30 +482,6 @@ export const subscriptionsService = {
                 extra: { userId },
             });
         }
-    },
-
-    /**
-     * Increment template reply usage
-     */
-    async incrementTemplateReplies(userId: string, count: number = 1): Promise<void> {
-        const now = new Date();
-
-        // Atomic increment — same fix as incrementAiReplies
-        await db
-            .update(usage)
-            .set({
-                templateRepliesCount: sql`COALESCE(${usage.templateRepliesCount}, 0) + ${count}`,
-                updatedAt: new Date(),
-            })
-            .where(
-                and(
-                    eq(usage.userId, userId),
-                    lte(usage.periodStart, now),
-                    gte(usage.periodEnd, now)
-                )
-            );
-
-        await this.logUsageEvent(userId, 'template_reply', { count });
     },
 
     /**
@@ -841,10 +816,9 @@ export const subscriptionsService = {
             periodStart: row.periodStart,
             periodEnd: row.periodEnd,
             aiRepliesCount: row.aiRepliesCount || 0,
-            templateRepliesCount: row.templateRepliesCount || 0,
             totalCommentsProcessed: row.totalCommentsProcessed || 0,
             totalMessagesProcessed: row.totalMessagesProcessed || 0,
-            dailyBreakdown: (row.dailyBreakdown as Record<string, { ai: number; template: number }>) || {},
+            dailyBreakdown: (row.dailyBreakdown as Record<string, { ai: number }>) || {},
         };
     },
 };

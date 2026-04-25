@@ -1,0 +1,1 @@
+ALTER TABLE "usage" DROP COLUMN IF EXISTS "template_replies_count";

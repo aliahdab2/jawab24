@@ -594,16 +594,16 @@ describe('MessageDetailModal', () => {
       expect(screen.getByText('Smart Reply')).toBeInTheDocument();
     });
 
-    // Regression: manual replies were labeled "Preset Reply" in the thread view.
-    it('shows Manual badge for manually-sent replies (not "Preset Reply")', () => {
+    // Regression: manual replies were labeled "Post Reply" in the thread view.
+    it('shows Manual badge for manually-sent replies (not "Post Reply")', () => {
       renderWithOutgoing('manual');
       expect(screen.getByText('Manual')).toBeInTheDocument();
-      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('shows Preset Reply badge for historical template replies', () => {
       renderWithOutgoing('template');
-      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
+      expect(screen.getByText('Post Reply')).toBeInTheDocument();
     });
   });
 });

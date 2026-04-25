@@ -18,7 +18,6 @@
     "priceVerification": "Price Hallucination Detection",
     "knowledgeBaseRag": "Knowledge Base with RAG Search",
     "confidenceScoring": "Confidence Scoring & Human Review",
-    "templateReplies": "Preset Replies",
     "businessHours": "Business Hours Scheduling",
     "rtlInterface": "Full RTL Arabic Interface",
     "freeTrialDays": "Free Trial",

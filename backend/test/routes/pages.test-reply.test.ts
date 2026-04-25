@@ -32,7 +32,6 @@ vi.mock('../../src/services/reply/generator', () => ({
         generateForPlayground: vi.fn().mockResolvedValue({
             reply: 'Our prices start from $10.',
             replyMethod: 'ai',
-            templateName: null,
             ragMode: 'off',
             chunksRetrieved: 0,
             chunks: [],
@@ -223,7 +222,6 @@ describe('POST /pages/:id/test-reply', () => {
         vi.mocked(replyGenerator.generateForPlayground).mockResolvedValueOnce({
             reply: null,
             replyMethod: 'skipped',
-            templateName: null,
             ragMode: 'off',
             chunksRetrieved: 0,
             chunks: [],

@@ -40,7 +40,7 @@ interface CustomerDetail {
     }>;
     usage: {
         aiRepliesCount: number;
-        templateRepliesCount: number;
+        postRepliesCount: number;
         periodStart: string | null;
         periodEnd: string | null;
         limit: number | null;
@@ -388,11 +388,11 @@ export default function AdminCustomerDetailPage() {
                                     <div className="flex items-center gap-2 mb-2">
                                         <FileText className="w-4 h-4 text-muted-foreground" />
                                         <span className="text-sm text-muted-foreground">
-                                            {t('customer.templateReplies')}
+                                            {t('customer.postReplies')}
                                         </span>
                                     </div>
                                     <div className="text-2xl font-bold text-foreground">
-                                        {customer.usage.templateRepliesCount}
+                                        {customer.usage.postRepliesCount}
                                     </div>
                                 </div>
                             </div>

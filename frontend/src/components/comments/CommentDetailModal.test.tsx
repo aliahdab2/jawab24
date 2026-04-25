@@ -310,16 +310,16 @@ describe('CommentDetailModal', () => {
       expect(screen.getByText('Smart Reply')).toBeInTheDocument();
     });
 
-    // Regression: manual replies were labeled "Preset Reply" in the detail modal.
-    it('shows Manual label for manually-sent replies (not "Preset Reply")', () => {
+    // Regression: manual replies were labeled "Post Reply" in the detail modal.
+    it('shows Manual label for manually-sent replies (not "Post Reply")', () => {
       renderModal({ comment: makeReplied('manual') });
       expect(screen.getByText('Manual')).toBeInTheDocument();
-      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('shows Preset Reply label for historical template replies', () => {
       renderModal({ comment: makeReplied('template') });
-      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
+      expect(screen.getByText('Post Reply')).toBeInTheDocument();
     });
   });
 });

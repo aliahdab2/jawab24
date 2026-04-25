@@ -288,10 +288,9 @@ export interface Usage {
   periodStart: string | Date;
   periodEnd: string | Date;
   aiRepliesCount: number;
-  templateRepliesCount: number;
   totalCommentsProcessed: number;
   totalMessagesProcessed: number;
-  dailyBreakdown?: Record<string, { ai: number; template: number }>;
+  dailyBreakdown?: Record<string, { ai: number }>;
 }
 
 export interface UsageSummary {

@@ -40,7 +40,7 @@
   "replies": {
     "title": "نشاط الردود",
     "ai": "ذكاء اصطناعي",
-    "template": "قالب",
+    "postReply": "رد البوست",
     "manual": "يدوي"
   },
   "summary": {

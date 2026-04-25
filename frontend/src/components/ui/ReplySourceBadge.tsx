@@ -30,7 +30,8 @@ export const ReplySourceBadge = React.memo(function ReplySourceBadge({
   const config = {
     ai: { Icon: Sparkles, label: tDashboard('aiReply'), colorClass: 'reply-source-ai' },
     manual: { Icon: UserCheck, label: tc('manual'), colorClass: 'reply-source-manual' },
-    template: { Icon: Zap, label: tDashboard('templateReply'), colorClass: 'reply-source-template' },
+    // 'template' replyMethod is the Post Reply (per-post keyword trigger) feature
+    template: { Icon: Zap, label: tDashboard('postReply'), colorClass: 'reply-source-template' },
   }[method];
 
   const { Icon, label, colorClass } = config;

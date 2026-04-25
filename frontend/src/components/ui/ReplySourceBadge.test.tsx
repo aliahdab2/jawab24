@@ -22,15 +22,15 @@ describe('ReplySourceBadge', () => {
       expect(screen.getByText('Smart Reply')).toBeInTheDocument();
     });
 
-    it('renders manual badge with Manual label (regression: was showing "Preset Reply")', () => {
+    it('renders manual badge with Manual label (regression: was showing "Post Reply")', () => {
       render(<ReplySourceBadge method="manual" variant="compact" />);
       expect(screen.getByText('Manual')).toBeInTheDocument();
-      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('renders template badge with Preset Reply label for historical data', () => {
       render(<ReplySourceBadge method="template" variant="compact" />);
-      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
+      expect(screen.getByText('Post Reply')).toBeInTheDocument();
     });
 
     it('applies the matching color class per method', () => {
@@ -49,15 +49,15 @@ describe('ReplySourceBadge', () => {
       expect(screen.getByText('Smart Reply')).toBeInTheDocument();
     });
 
-    it('renders manual badge with Manual label (regression: was showing "Preset Reply")', () => {
+    it('renders manual badge with Manual label (regression: was showing "Post Reply")', () => {
       render(<ReplySourceBadge method="manual" variant="detail" />);
       expect(screen.getByText('Manual')).toBeInTheDocument();
-      expect(screen.queryByText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('renders template badge with Preset Reply label for historical data', () => {
       render(<ReplySourceBadge method="template" variant="detail" />);
-      expect(screen.getByText('Preset Reply')).toBeInTheDocument();
+      expect(screen.getByText('Post Reply')).toBeInTheDocument();
     });
 
     it('uses muted styling (not the colored reply-source-* classes)', () => {
@@ -76,12 +76,12 @@ describe('ReplySourceBadge', () => {
     it('renders manual avatar with accessible label (regression: icon was indistinguishable from template)', () => {
       render(<ReplySourceBadge method="manual" variant="avatar" />);
       expect(screen.getByLabelText('Manual')).toBeInTheDocument();
-      expect(screen.queryByLabelText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('renders template avatar with accessible label for historical data', () => {
       render(<ReplySourceBadge method="template" variant="avatar" />);
-      expect(screen.getByLabelText('Preset Reply')).toBeInTheDocument();
+      expect(screen.getByLabelText('Post Reply')).toBeInTheDocument();
     });
 
     it('applies avatar layout classes and the matching color class', () => {

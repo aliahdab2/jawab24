@@ -40,7 +40,7 @@
   "replies": {
     "title": "AI reply activity",
     "ai": "AI",
-    "template": "Template",
+    "postReply": "Post Reply",
     "manual": "Manual"
   },
   "summary": {

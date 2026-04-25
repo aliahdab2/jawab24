@@ -73,7 +73,13 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn(),
     gte: vi.fn(),
     lte: vi.fn(),
-    sql: vi.fn(),
+    sql: Object.assign(vi.fn(), {
+        // tagged-template usage in admin.ts uses sql`...`
+        raw: vi.fn(),
+    }),
+    isNotNull: vi.fn(),
+    isNull: vi.fn(),
+    inArray: vi.fn(),
 }));
 
 vi.mock('../../src/db/schema', () => ({
@@ -82,7 +88,9 @@ vi.mock('../../src/db/schema', () => ({
     plans: { id: 'id', name: 'name', slug: 'slug', price: 'price', isActive: 'isActive', sortOrder: 'sortOrder', maxAiRepliesPerMonth: 'max_ai', maxPages: 'max_pages' },
     adminAuditLogs: { id: 'id', action: 'action', previousValue: 'pv', newValue: 'nv', paymentReference: 'pr', note: 'note', createdAt: 'createdAt', adminUserId: 'adminUserId', targetUserId: 'targetUserId' },
     pages: { id: 'id', userId: 'userId', name: 'name', workspaceId: 'workspaceId', knowledgeBase: 'kb', kbVersion: 'kbv', kbActiveVersion: 'kbav', kbUpdatedAt: 'kbua' },
-    usage: { userId: 'userId', aiRepliesCount: 'airc', templateRepliesCount: 'trc', periodStart: 'ps', periodEnd: 'pe' },
+    usage: { userId: 'userId', aiRepliesCount: 'airc', periodStart: 'ps', periodEnd: 'pe' },
+    posts: { pageId: 'pageId', triggerReply: 'triggerReply' },
+    instagramMedia: { pageId: 'pageId', triggerReply: 'triggerReply' },
     kbChunks: { pageId: 'pageId', kbVersion: 'kbVersion' },
     kbGaps: { id: 'id', pageId: 'pageId', queryText: 'qt', detectedIntent: 'di', occurrenceCount: 'oc', firstSeenAt: 'fsa', lastSeenAt: 'lsa', resolved: 'resolved' },
 }));
@@ -123,7 +131,6 @@ vi.mock('../../src/services/reply/generator', () => ({
         generateForPlayground: vi.fn().mockResolvedValue({
             reply: 'AI test reply',
             replyMethod: 'ai',
-            templateName: null,
             ragMode: 'off',
             chunksRetrieved: 0,
             chunks: [],
@@ -779,15 +786,27 @@ describe('Admin Routes', () => {
                 leftJoin: vi.fn().mockReturnThis(),
                 orderBy: vi.fn().mockReturnThis(),
                 limit: vi.fn().mockResolvedValue([
-                    { aiRepliesCount: 42, templateRepliesCount: 10, periodStart: '2025-01-01', periodEnd: '2025-02-01' },
+                    { aiRepliesCount: 42, periodStart: '2025-01-01', periodEnd: '2025-02-01' },
                 ]),
+            };
+
+            // Fifth + sixth selects: post replies count (FB posts + IG media)
+            const fbPostsChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([{ count: 4 }]),
+            };
+            const igMediaChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([{ count: 6 }]),
             };
 
             vi.mocked(db.select)
                 .mockReturnValueOnce(userChain as any)
                 .mockReturnValueOnce(subChain as any)
                 .mockReturnValueOnce(pagesChain as any)
-                .mockReturnValueOnce(usageChain as any);
+                .mockReturnValueOnce(usageChain as any)
+                .mockReturnValueOnce(fbPostsChain as any)
+                .mockReturnValueOnce(igMediaChain as any);
 
             const response = await app.inject({
                 method: 'GET',
@@ -803,7 +822,7 @@ describe('Admin Routes', () => {
             expect(body.data.subscription.status).toBe('active');
             expect(body.data.pages).toHaveLength(2);
             expect(body.data.usage.aiRepliesCount).toBe(42);
-            expect(body.data.usage.templateRepliesCount).toBe(10);
+            expect(body.data.usage.postRepliesCount).toBe(10);
             expect(body.data.usage.limit).toBe(1000);
         });
 

@@ -55,13 +55,13 @@
     "feature5": "Full conversation context — the AI reads previous messages and consolidates rapid-fire messages into a single coherent reply",
     "feature6": "Customer awareness — recognizes returning customers by name, remembers past conversation topics, and adjusts its greeting accordingly"
   },
-  "templateReply": {
-    "title": "Preset Replies",
-    "text": "For common short questions, you can create keyword-triggered preset replies:",
-    "feature1": "Set keywords that trigger automatic replies (e.g., \"address\", \"phone number\", \"hours\")",
+  "postReply": {
+    "title": "Post Replies",
+    "text": "For specific posts, you can configure keyword-triggered replies sent privately via DM:",
+    "feature1": "Set keywords on a post (e.g., \"price\", \"link\", \"address\") that trigger an instant DM",
     "feature2": "Instant response with zero AI cost — saves your smart reply credits",
-    "feature3": "Choose whether to reply as a comment or a private message",
-    "feature4": "Applies to short comments across all your connected pages"
+    "feature3": "Configured per-post directly from the comments page",
+    "feature4": "Perfect for promotions, lead capture, and ManyChat-style engagement on Instagram and Facebook"
   },
   "bilingual": {
     "title": "Bilingual Support",

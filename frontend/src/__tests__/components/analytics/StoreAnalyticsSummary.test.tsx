@@ -55,7 +55,7 @@ const overviewWith = (overrides: {
         replies: {
             totalReplies: overrides.aiReplies ?? 0,
             aiReplies: overrides.aiReplies ?? 0,
-            templateReplies: 0,
+            postReplies: 0,
             manualReplies: 0,
         },
     },

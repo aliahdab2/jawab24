@@ -582,12 +582,11 @@ export const usage = pgTable('usage', {
 
     // Counters
     aiRepliesCount: integer('ai_replies_count').default(0),
-    templateRepliesCount: integer('template_replies_count').default(0),
     totalCommentsProcessed: integer('total_comments_processed').default(0),
     totalMessagesProcessed: integer('total_messages_processed').default(0),
 
     // Daily breakdown (JSON for detailed analytics)
-    dailyBreakdown: jsonb('daily_breakdown').default({}), // { "2024-01-15": { ai: 10, template: 5 } }
+    dailyBreakdown: jsonb('daily_breakdown').default({}), // { "2024-01-15": { ai: 10 } }
 
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -605,7 +604,7 @@ export const usageLogs = pgTable('usage_logs', {
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
 
     // Event type
-    eventType: varchar('event_type', { length: 50 }).notNull(), // 'ai_reply', 'template_reply', 'comment_processed'
+    eventType: varchar('event_type', { length: 50 }).notNull(), // 'ai_reply', 'comment_processed'
 
     // Context
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),

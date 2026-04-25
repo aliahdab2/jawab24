@@ -52,7 +52,7 @@ const ANALYTICS_PAYLOAD_30D = {
         },
     },
     recovery: { abandonedCartsNotified: 12, cartsRecovered: 4, revenueRecovered: 480, currency: 'SAR' },
-    replies: { totalReplies: 100, aiReplies: 87, templateReplies: 0, manualReplies: 13 },
+    replies: { totalReplies: 100, aiReplies: 87, postReplies: 0, manualReplies: 13 },
 };
 
 const ANALYTICS_PAYLOAD_90D = { ...ANALYTICS_PAYLOAD_30D, period: { ...ANALYTICS_PAYLOAD_30D.period, range: '90d' } };

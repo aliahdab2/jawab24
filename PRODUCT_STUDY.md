@@ -359,7 +359,7 @@ Merchant writes business info
 
 ### Usage Tracking
 
-- Monthly counters: AI replies, template replies, comments processed, messages processed
+- Monthly counters: AI replies, comments processed, messages processed
 - Daily breakdown (JSONB) for charts
 - Auto-reset on billing period boundary
 - Real-time limit checks before each AI call

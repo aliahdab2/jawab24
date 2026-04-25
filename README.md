@@ -19,7 +19,7 @@ Connect your Facebook page, tell it about your business (products, prices, polic
 
 **You can also:**
 - Set business hours (no replies at 3am if you don't want)
-- Create template replies for common questions
+- Configure Post Replies — per-post keyword triggers that send a DM instantly
 - See conversation history with each customer
 - Export everything as CSV
 - Get notified when someone needs human help

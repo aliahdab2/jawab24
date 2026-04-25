@@ -261,15 +261,15 @@ export default function WhatIsJawab24() {
               ]}
             />
 
-            {/* Template Replies */}
+            {/* Post Replies */}
             <Section
-              title={t('templateReply.title')}
-              text={t('templateReply.text')}
+              title={t('postReply.title')}
+              text={t('postReply.text')}
               features={[
-                t('templateReply.feature1'),
-                t('templateReply.feature2'),
-                t('templateReply.feature3'),
-                t('templateReply.feature4'),
+                t('postReply.feature1'),
+                t('postReply.feature2'),
+                t('postReply.feature3'),
+                t('postReply.feature4'),
               ]}
             />
 

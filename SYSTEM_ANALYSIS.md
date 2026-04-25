@@ -452,8 +452,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │
 ├── [DM only] Consolidate unreplied messages from same sender
 │
-├── Try TEMPLATE MATCHING (keyword rules)
-│   └── MATCH → Use template reply → Go to Safety Filters
+├── Try POST REPLY MATCHING (per-post keyword trigger)
+│   └── MATCH → Use Post Reply → Go to Safety Filters
 │
 ├── Is AI enabled?
 │   └── NO → ❌ No reply generated → STOP
@@ -1553,13 +1553,13 @@ Customer comments at 21:00 Riyadh time:
 → NO reply sent, NO away message (comments don't get away messages)
 ```
 
-### Scenario 6: Template Match vs AI
+### Scenario 6: Post Reply Match vs AI
 
 ```
-Rules: Priority 0: keywords=["سعر","كم"] → "الأسعار على الموقع"
+Post-level trigger: keywords=["سعر","كم"] → "الأسعار على الموقع"
 Customer: "كم سعر الشحن؟"
-→ "سعر" matches Rule 0
-→ Template reply sent (AI NEVER called = zero cost!)
+→ "سعر" matches the post's trigger keyword
+→ Post Reply sent via DM (AI NEVER called = zero cost!)
 ```
 
 ### Scenario 7: Product Not in Catalog

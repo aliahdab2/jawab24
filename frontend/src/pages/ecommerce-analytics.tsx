@@ -60,7 +60,7 @@ const EMPTY_OVERVIEW: EcommerceAnalyticsOverview = {
         byType: {},
     },
     recovery: { abandonedCartsNotified: 0, cartsRecovered: 0, revenueRecovered: 0, currency: null },
-    replies: { totalReplies: 0, aiReplies: 0, templateReplies: 0, manualReplies: 0 },
+    replies: { totalReplies: 0, aiReplies: 0, postReplies: 0, manualReplies: 0 },
 };
 
 const EcommerceAnalyticsPage: NextPageWithLayout = () => {

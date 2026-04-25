@@ -20,7 +20,7 @@ const baseOverview: EcommerceAnalyticsOverview = {
         byType: {},
     },
     recovery: { abandonedCartsNotified: 0, cartsRecovered: 0, revenueRecovered: 0, currency: null },
-    replies: { totalReplies: 0, aiReplies: 0, templateReplies: 0, manualReplies: 0 },
+    replies: { totalReplies: 0, aiReplies: 0, postReplies: 0, manualReplies: 0 },
 };
 
 describe('NotificationFunnelSection', () => {
@@ -105,7 +105,7 @@ describe('RepliesSection', () => {
     it('renders all three reply method counts', () => {
         render(
             <RepliesSection
-                replies={{ totalReplies: 100, aiReplies: 80, templateReplies: 15, manualReplies: 5 }}
+                replies={{ totalReplies: 100, aiReplies: 80, postReplies: 15, manualReplies: 5 }}
             />,
         );
         expect(screen.getByText('80')).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe('RepliesSection', () => {
     it('renders zeros without crashing on empty store', () => {
         render(
             <RepliesSection
-                replies={{ totalReplies: 0, aiReplies: 0, templateReplies: 0, manualReplies: 0 }}
+                replies={{ totalReplies: 0, aiReplies: 0, postReplies: 0, manualReplies: 0 }}
             />,
         );
         // All three bars render with width 0; max>=1 prevents NaN
@@ -136,7 +136,7 @@ describe('AnalyticsKpiGrid', () => {
                         revenueRecovered: 480,
                         currency: 'SAR',
                     },
-                    replies: { totalReplies: 100, aiReplies: 87, templateReplies: 0, manualReplies: 13 },
+                    replies: { totalReplies: 100, aiReplies: 87, postReplies: 0, manualReplies: 13 },
                 }}
             />,
         );

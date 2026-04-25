@@ -205,10 +205,9 @@ describe('Subscriptions Service', () => {
                 periodStart: new Date('2024-01-01'),
                 periodEnd: new Date('2024-02-01'),
                 aiRepliesCount: 150,
-                templateRepliesCount: 50,
                 totalCommentsProcessed: 200,
                 totalMessagesProcessed: 100,
-                dailyBreakdown: { '2024-01-15': { ai: 10, template: 5 } },
+                dailyBreakdown: { '2024-01-15': { ai: 10 } },
                 createdAt: new Date(),
                 updatedAt: new Date(),
             };
@@ -218,8 +217,7 @@ describe('Subscriptions Service', () => {
             expect(usage.id).toBe('usage_123');
             expect(usage.userId).toBe('user_123');
             expect(usage.aiRepliesCount).toBe(150);
-            expect(usage.templateRepliesCount).toBe(50);
-            expect(usage.dailyBreakdown).toEqual({ '2024-01-15': { ai: 10, template: 5 } });
+            expect(usage.dailyBreakdown).toEqual({ '2024-01-15': { ai: 10 } });
         });
 
         it('should handle null counts with defaults', () => {
@@ -229,7 +227,6 @@ describe('Subscriptions Service', () => {
                 periodStart: new Date(),
                 periodEnd: new Date(),
                 aiRepliesCount: null,
-                templateRepliesCount: null,
                 totalCommentsProcessed: null,
                 totalMessagesProcessed: null,
                 dailyBreakdown: null,
@@ -240,7 +237,6 @@ describe('Subscriptions Service', () => {
             const usage = subscriptionsService.mapToUsage(dbRow);
 
             expect(usage.aiRepliesCount).toBe(0);
-            expect(usage.templateRepliesCount).toBe(0);
             expect(usage.totalCommentsProcessed).toBe(0);
             expect(usage.totalMessagesProcessed).toBe(0);
             expect(usage.dailyBreakdown).toEqual({});
@@ -797,7 +793,6 @@ describe('Subscriptions Service', () => {
                                 periodStart: new Date(),
                                 periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                                 aiRepliesCount: 60,
-                                templateRepliesCount: 0,
                                 totalCommentsProcessed: 0,
                                 totalMessagesProcessed: 0,
                                 dailyBreakdown: {},
@@ -859,7 +854,6 @@ describe('Subscriptions Service', () => {
                                 periodStart: new Date(),
                                 periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                                 aiRepliesCount: 30,
-                                templateRepliesCount: 0,
                                 totalCommentsProcessed: 0,
                                 totalMessagesProcessed: 0,
                                 dailyBreakdown: {},
@@ -1189,7 +1183,6 @@ describe('isSubscriptionActive', () => {
             periodStart: new Date('2026-04-01'),
             periodEnd: new Date('2026-05-01'),
             aiRepliesCount: 300,
-            templateRepliesCount: 50,
             totalCommentsProcessed: 350,
             totalMessagesProcessed: 100,
             dailyBreakdown: {},

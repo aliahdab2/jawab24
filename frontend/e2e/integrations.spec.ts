@@ -72,7 +72,7 @@ function setupAuth(page: import('@playwright/test').Page) {
 interface AnalyticsFixture {
   storeId: string;
   recovery: { abandonedCartsNotified: number; cartsRecovered: number; revenueRecovered: number; currency: string | null };
-  replies: { totalReplies: number; aiReplies: number; templateReplies: number; manualReplies: number };
+  replies: { totalReplies: number; aiReplies: number; postReplies: number; manualReplies: number };
 }
 
 function mockAPIs(
@@ -555,7 +555,7 @@ test.describe('Integrations — Store Analytics Summary widget', () => {
         [MOCK_SHOPIFY_STORE.id]: {
           storeId: MOCK_SHOPIFY_STORE.id,
           recovery: { abandonedCartsNotified: 12, cartsRecovered: 4, revenueRecovered: 480, currency: 'SAR' },
-          replies: { totalReplies: 100, aiReplies: 87, templateReplies: 0, manualReplies: 13 },
+          replies: { totalReplies: 100, aiReplies: 87, postReplies: 0, manualReplies: 13 },
         },
       },
     });
@@ -583,7 +583,7 @@ test.describe('Integrations — Store Analytics Summary widget', () => {
         [MOCK_SHOPIFY_STORE.id]: {
           storeId: MOCK_SHOPIFY_STORE.id,
           recovery: { abandonedCartsNotified: 0, cartsRecovered: 0, revenueRecovered: 0, currency: null },
-          replies: { totalReplies: 0, aiReplies: 0, templateReplies: 0, manualReplies: 0 },
+          replies: { totalReplies: 0, aiReplies: 0, postReplies: 0, manualReplies: 0 },
         },
       },
     });

@@ -222,7 +222,6 @@ export interface PlaygroundInput {
 export interface PlaygroundResult {
     reply: string | null;
     replyMethod: 'template' | 'ai' | 'skipped';
-    templateName: string | null;
     ragMode: string;
     chunksRetrieved: number;
     chunks: RetrievedChunkContext[];
@@ -570,7 +569,7 @@ export class ReplyGenerator {
             });
             if (pre.skipReason) {
                 return {
-                    reply: null, replyMethod: 'skipped', templateName: null, ragMode,
+                    reply: null, replyMethod: 'skipped', ragMode,
                     chunksRetrieved: 0, chunks: [], intent: 'SPAM_OR_IRRELEVANT',
                     confidence: null, flags: [], needsAttention: false, cached: false,
                     detectedLanguage: null, tokensUsed: 0, model: null, gapRecorded: false,
@@ -680,7 +679,6 @@ export class ReplyGenerator {
         return {
             reply: finalReply,
             replyMethod: skipped ? 'skipped' : 'ai',
-            templateName: null,
             ragMode,
             chunksRetrieved: retrievedChunks?.length ?? 0,
             chunks: retrievedChunks ?? [],

@@ -110,13 +110,13 @@ describe('CommentCard', () => {
       const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'manual' };
       render(<CommentCard {...defaultProps} comment={replied} />);
       expect(screen.getByLabelText('Manual')).toBeInTheDocument();
-      expect(screen.queryByLabelText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('shows Preset Reply indicator for historical template replies', () => {
       const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'template' };
       render(<CommentCard {...defaultProps} comment={replied} />);
-      expect(screen.getByLabelText('Preset Reply')).toBeInTheDocument();
+      expect(screen.getByLabelText('Post Reply')).toBeInTheDocument();
     });
 
     it('renders no indicator when reply has no method', () => {
@@ -124,7 +124,7 @@ describe('CommentCard', () => {
       render(<CommentCard {...defaultProps} comment={replied} />);
       expect(screen.queryByLabelText('Smart Reply')).not.toBeInTheDocument();
       expect(screen.queryByLabelText('Manual')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('Preset Reply')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
     });
   });
 

@@ -42,7 +42,6 @@ interface ChunkData {
 interface PlaygroundResult {
     reply: string | null;
     replyMethod: 'template' | 'ai' | 'skipped';
-    templateName: string | null;
     ragMode: string;
     chunksRetrieved: number;
     chunks: ChunkData[];
@@ -831,7 +830,6 @@ export default function AdminPlaygroundPage() {
                                                                                 : 'text-red-600'
                                                                     )}>
                                                                         {t(`playground.${msg.metadata.replyMethod}`)}
-                                                                        {msg.metadata.templateName && ` · ${msg.metadata.templateName}`}
                                                                     </span>
                                                                 </div>
                                                             )}

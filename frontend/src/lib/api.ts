@@ -211,6 +211,7 @@ export interface CommentStats {
   repliedToday: number;
   replyRate: string;
   byMethod: {
+    /** Post Reply trigger sends (legacy DB value 'template') */
     template: number;
     ai: number;
     manual: number;
@@ -354,7 +355,7 @@ export interface EcommerceAnalyticsOverview {
   replies: {
     totalReplies: number;
     aiReplies: number;
-    templateReplies: number;
+    postReplies: number;
     manualReplies: number;
   };
 }

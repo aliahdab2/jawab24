@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, leadDigestSends } from '../db/schema';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, leadDigestSends, posts, instagramMedia } from '../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
@@ -297,7 +297,6 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     const [currentUsage] = await db
                         .select({
                             aiRepliesCount: usage.aiRepliesCount,
-                            templateRepliesCount: usage.templateRepliesCount,
                             periodStart: usage.periodStart,
                             periodEnd: usage.periodEnd,
                         })
@@ -311,6 +310,21 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         )
                         .limit(1);
 
+                    // Count configured Post Replies (per-post keyword triggers) across user's pages
+                    const pageIds = userPages.map(p => p.id);
+                    let postRepliesCount = 0;
+                    if (pageIds.length > 0) {
+                        const [fbCount] = await db
+                            .select({ count: sql<number>`count(*)::int` })
+                            .from(posts)
+                            .where(and(inArray(posts.pageId, pageIds), isNotNull(posts.triggerReply)));
+                        const [igCount] = await db
+                            .select({ count: sql<number>`count(*)::int` })
+                            .from(instagramMedia)
+                            .where(and(inArray(instagramMedia.pageId, pageIds), isNotNull(instagramMedia.triggerReply)));
+                        postRepliesCount = (fbCount?.count || 0) + (igCount?.count || 0);
+                    }
+
                     return reply.send({
                         success: true,
                         data: {
@@ -319,13 +333,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             pages: userPages,
                             usage: currentUsage ? {
                                 aiRepliesCount: currentUsage.aiRepliesCount || 0,
-                                templateRepliesCount: currentUsage.templateRepliesCount || 0,
+                                postRepliesCount,
                                 periodStart: currentUsage.periodStart,
                                 periodEnd: currentUsage.periodEnd,
                                 limit: subscription?.maxAiRepliesPerMonth || null,
                             } : {
                                 aiRepliesCount: 0,
-                                templateRepliesCount: 0,
+                                postRepliesCount,
                                 periodStart: null,
                                 periodEnd: null,
                                 limit: subscription?.maxAiRepliesPerMonth || null,

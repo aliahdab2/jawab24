@@ -184,7 +184,7 @@ Separate from the three reply modes above. A merchant can attach a
 **Rules:**
 
 1. If the comment **matches** one of the trigger keywords, the configured
-   `triggerReply` is sent as a template reply (skipping the AI path entirely).
+   `triggerReply` is sent as a Post Reply (skipping the AI path entirely).
    Match rules follow the shared keyword matcher (Arabic substring, English
    word-boundary, diacritics normalized; punctuation-only keywords require
    full-string match — `^\.+$` for `.`, so `.` never matches a real message).
