@@ -18,7 +18,7 @@
   "kpis": {
     "revenueRecovered": "Revenue recovered",
     "cartsRecovered": "Carts recovered",
-    "aiReplies": "AI replies sent",
+    "aiReplies": "Smart Replies sent",
     "totalReplies": "Total replies"
   },
   "attributionCaveat": "Approximate — counts orders placed within 72h of an abandoned-cart message.",
@@ -38,8 +38,8 @@
     "digital_delivery": "Digital delivery"
   },
   "replies": {
-    "title": "AI reply activity",
-    "ai": "AI",
+    "title": "Smart Reply activity",
+    "ai": "Smart",
     "postReply": "Post Reply",
     "manual": "Manual"
   },

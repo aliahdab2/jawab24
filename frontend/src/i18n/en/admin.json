@@ -48,7 +48,7 @@
     "viewOnFacebook": "View on Facebook",
     "viewOnInstagram": "View on Instagram",
     "usage": "Current Period Usage",
-    "aiReplies": "AI Replies",
+    "aiReplies": "Smart Replies",
     "postReplies": "Post Replies",
     "subscription": "Subscription",
     "plan": "Plan",
@@ -75,8 +75,8 @@
     "upgradeFormSubmit": "Upgrade Customer"
   },
   "playground": {
-    "title": "AI Playground",
-    "subtitle": "Test AI replies with real Knowledge Base data",
+    "title": "Smart Reply Playground",
+    "subtitle": "Test Smart Replies with real Knowledge Base data",
     "selectPage": "Select a page",
     "selectPagePlaceholder": "Choose a page to test...",
     "question": "Test Question",
@@ -86,7 +86,7 @@
     "dm": "Direct Message",
     "test": "Test Reply",
     "testing": "Generating...",
-    "result": "AI Reply",
+    "result": "Smart Reply",
     "noReply": "No reply generated (skipped)",
     "replyMethod": "Method",
     "template": "Post Reply",
@@ -277,7 +277,7 @@
     "cacheEntries": "Entries",
     "cacheTotalHits": "Total Hits",
     "clearAiCache": "Clear All Caches",
-    "clearCacheConfirm": "This will clear the exact cache and semantic cache for all pages. New AI replies will be generated fresh until the cache warms up again.",
+    "clearCacheConfirm": "This will clear the exact cache and semantic cache for all pages. New Smart Replies will be generated fresh until the cache warms up again.",
     "clearingCache": "Clearing...",
     "cacheCleared": "Cache cleared",
     "cacheClearError": "Failed to clear cache"
