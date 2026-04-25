@@ -54,6 +54,25 @@ export function Modal({
   useEscapeKey(onClose, isOpen);
   useModalBackHandler(isOpen, onClose);
 
+  // When an input/textarea inside the modal is focused, scroll it into view AFTER
+  // the soft keyboard has opened and the overlay has shrunk. Without this, the
+  // newly-focused textarea can remain below the keyboard until the user scrolls
+  // the body manually. The 350ms delay is empirical — long enough for Android's
+  // keyboardDidShow to fire and --keyboard-height + container shrink to settle.
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') return;
+      window.setTimeout(() => {
+        target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }, 350);
+    };
+    document.addEventListener('focusin', handleFocusIn);
+    return () => document.removeEventListener('focusin', handleFocusIn);
+  }, [isOpen]);
+
   if (!isOpen || !mounted) return null;
 
   const isFullscreen = mobilePresentation === 'fullscreen';
@@ -112,10 +131,13 @@ export function Modal({
             isFullscreen
               ? "rounded-none sm:rounded-3xl landscape:rounded-3xl"
               : "rounded-t-3xl sm:rounded-3xl landscape:rounded-3xl",
-            // Height: fullscreen fills viewport on mobile portrait, sheet capped at 85vh
+            // Height: fullscreen fills the keyboard-aware overlay via items-stretch
+            // (no explicit height — lets it shrink with --keyboard-height). Sheet
+            // is capped at 85vh minus the keyboard so it never exceeds the
+            // remaining viewport when the soft keyboard is open.
             isFullscreen
-              ? "h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[85vh] landscape:max-h-[90vh]"
-              : "max-h-[85vh] sm:max-h-[85vh] landscape:max-h-[90vh]",
+              ? "sm:h-auto sm:max-h-[85vh] landscape:max-h-[90vh]"
+              : "max-h-[calc(85vh-var(--keyboard-height,0px))] sm:max-h-[85vh] landscape:max-h-[90vh]",
             // Safe area padding: fullscreen needs top safe area too (status bar); sheet only bottom
             isFullscreen
               ? "pt-safe pb-safe landscape:pt-0 landscape:pb-2 landscape:px-safe"
