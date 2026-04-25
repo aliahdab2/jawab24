@@ -85,6 +85,9 @@ const BUCKET_TABLE: Record<string, DmFailureBucket> = {
     'facebook|551':         'customer_refused',  // "This person isn't available right now"
     'facebook|100|2018001': 'customer_refused',  // No matching user found (private-reply-to-comment)
     'instagram|100|2018001':'customer_refused',
+    'facebook|10903|1893062':'customer_refused', // "This user can't reply to this activity" — commenter has restrictions
+    'facebook|10903|1893049':'customer_refused', // same family, different subcode variant
+    'facebook|10903':        'customer_refused', // catch other 10903 subcodes (fallback)
 
     // window_expired — outside 24h messaging window
     'facebook|10|2018278':  'window_expired',
@@ -96,6 +99,7 @@ const BUCKET_TABLE: Record<string, DmFailureBucket> = {
     'facebook|4':           'transient',         // app-level rate limit
     'instagram|4':          'transient',
     'facebook|17':          'transient',         // user request limit
+    'facebook|-1|2018012':  'transient',         // "Unexpected internal error" — FB-side glitch, retry
 
     // our_fault — merchant integration issue
     'facebook|190':         'our_fault',         // access token invalid/expired
