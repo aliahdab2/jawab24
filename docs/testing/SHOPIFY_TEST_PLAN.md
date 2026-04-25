@@ -521,3 +521,26 @@ After everything else passes:
 | Date | Change |
 |------|--------|
 | 2026-04-25 | Initial test plan covering Steps 1 + 2 + existing Shopify integration (OAuth, sync, page linking, agent tools, order webhooks, GDPR, security). |
+| 2026-04-25 | Dogfood session executed Sections A + B; surfaced 5 install/sync bugs. A-1.3 + A-1.4 closed in commit `723872b9`. A-1.5, A-1.9, B-3.1 closed in commit `b5ff88d2`. Backend now exposes `webhookHealth` field + `POST /shopify/store/webhooks/reregister`. Frontend banner + Try-again CTA shipped in `ff2d6324`; controller decrypt-in-trycatch hardening in `1c3eef8e`. |
+
+## Resolved bugs
+
+Issues from the 2026-04-25 dogfood session, all CLOSED. Regression tests in `backend/test/regression/shopify-install-bugs.test.ts` keep them closed.
+
+| ID | Severity | Description | Closed in | Notes |
+|----|----------|-------------|-----------|-------|
+| A-1.3 | High | `getStoreByWorkspaceAny` had no `ORDER BY` → workspaces with multiple Shopify rows could return the wrong one | `723872b9` | `ORDER BY isActive DESC, updatedAt DESC LIMIT 1` |
+| A-1.4 | High | `replaceProductsAndRebuildSummary` was not transactional → concurrent syncs raced the unique index to 500 | `723872b9` | Wrapped delete+insert in `db.transaction` |
+| A-1.5 | Low | `POST /shopify/store/sync` rejected empty JSON body with 400 "Unexpected end of JSON input" | `b5ff88d2` | Custom content-type parser treats empty body as `{}` globally |
+| A-1.9 | Medium | `claimPendingInstall` fired `registerWebhooks` fire-and-forget → CLI/short-lived processes lost registrations silently | `b5ff88d2` | `await` inline + persist `webhookStatus` + BullMQ retry queue (3 attempts, 30s/2min/8min backoff) |
+| B-3.1 | Low (dormant footgun) | Single-product webhook triggered full re-sync → every product's internal `id` rotated on every edit | `b5ff88d2` | Per-row `INSERT ... ON CONFLICT DO UPDATE` for full sync; new `upsertSingleProduct` / `deleteSingleProduct` for webhooks |
+| (new) | Medium | Manual webhook re-registration had `decrypt()` outside `try/catch` → corrupt/missing tokens surfaced as raw 500 instead of friendly 502 | `1c3eef8e` | Caught during live UI testing of the "Try again" button |
+
+## Open follow-ups
+
+Surfaced during this session, not blockers for Shopify App Store submission but tracked here so they don't get lost:
+
+- **Salla + Zid have the same install/observability gaps** — fire-and-forget webhook registration, no retry, no observability tags. Bringing them up to parity is ~1.5 hr; tracked separately.
+- **Live exercise of the new failure-recovery code paths** — the retry worker, persist-on-throw, and `/store/webhooks/reregister` endpoint have only been tested with mocks. Section 4 of `.planning/SHOPIFY_LAUNCH_VALIDATION.md` covers the exercise plan.
+- **Demo seed writes `platform_data` as a JSONB string instead of an object** — caused "cannot set path in scalar" during DB-level state injection. Not user-visible but the next dev hits the same wall.
+- **No Playwright test for the connected-store card webhook-health states** — backend regression covers the field, frontend is uncovered.
