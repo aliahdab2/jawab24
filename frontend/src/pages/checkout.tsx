@@ -147,7 +147,10 @@ function PaymentForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <PaymentElement options={{ wallets: { link: 'never', applePay: 'auto', googlePay: 'auto' } }} />
+      {/* Stripe Link is disabled server-side on the PaymentIntent (payment_method_types).
+          PaymentElement's wallets option only supports applePay/googlePay — `link` is
+          not a valid wallet key here. */}
+      <PaymentElement />
       {errorMessage && (
         <div className="mt-4 p-3 alert-error border rounded-xl text-sm text-start">
           {errorMessage}
