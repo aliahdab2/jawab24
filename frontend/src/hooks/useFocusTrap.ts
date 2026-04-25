@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const FOCUSABLE_SELECTOR = [
   'a[href]',
@@ -15,20 +15,26 @@ const FOCUSABLE_SELECTOR = [
  * the container. On deactivation, focus is restored to the element that was
  * focused when the trap was activated.
  *
+ * Uses a ref callback (not a useRef) so the effect runs once the DOM node is
+ * actually attached. A plain useRef wouldn't notify the effect when the node
+ * mounts on a later render, leaving the trap inert.
+ *
  * @param enabled - Whether the trap is active (e.g. an open modal flag)
- * @returns ref to attach to the container element
+ * @returns ref callback to attach to the container element
  *
  * @example
  * const ref = useFocusTrap(isOpen);
  * return <div ref={ref}>...</div>;
  */
 export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(enabled: boolean) {
-  const containerRef = useRef<T | null>(null);
+  const [container, setContainer] = useState<T | null>(null);
+
+  const ref = useCallback((node: T | null) => {
+    setContainer(node);
+  }, []);
 
   useEffect(() => {
-    if (!enabled) return;
-    const container = containerRef.current;
-    if (!container) return;
+    if (!enabled || !container) return;
 
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
@@ -62,7 +68,7 @@ export function useFocusTrap<T extends HTMLElement = HTMLDivElement>(enabled: bo
       // Restore focus to whatever had it before the trap activated.
       previouslyFocused?.focus?.();
     };
-  }, [enabled]);
+  }, [enabled, container]);
 
-  return containerRef;
+  return ref;
 }

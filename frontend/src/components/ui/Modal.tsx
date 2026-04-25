@@ -23,6 +23,12 @@ interface ModalProps {
    *   bottom-sheet height forces unnecessary scrolling.
    */
   mobilePresentation?: 'sheet' | 'fullscreen';
+  /**
+   * Sticky action bar pinned to the bottom of the modal — always visible,
+   * never scrolls with the body. Use for primary actions (Save / Cancel /
+   * Delete) so users don't have to scroll a long form to act.
+   */
+  footer?: React.ReactNode;
 }
 
 export function Modal({
@@ -32,6 +38,7 @@ export function Modal({
   children,
   size = 'md',
   mobilePresentation = 'sheet',
+  footer,
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
   const tc = useTranslations('common');
@@ -125,6 +132,13 @@ export function Modal({
           <div className="p-5 sm:p-6 overflow-y-auto flex-1 min-h-0">
             {children}
           </div>
+
+          {/* Footer - pinned action bar; always visible, never scrolls */}
+          {footer && (
+            <div className="px-5 py-4 sm:px-6 border-t border-theme-border flex-shrink-0 bg-card">
+              {footer}
+            </div>
+          )}
         </div>
       </div>
     </div>
