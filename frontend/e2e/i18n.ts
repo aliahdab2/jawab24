@@ -33,6 +33,7 @@ import enMeta from '../src/i18n/en/meta.json';
 import enNav from '../src/i18n/en/nav.json';
 import enNotifications from '../src/i18n/en/notifications.json';
 import enOrderNotifications from '../src/i18n/en/orderNotifications.json';
+import enEcommerceAnalytics from '../src/i18n/en/ecommerceAnalytics.json';
 import enOnboarding from '../src/i18n/en/onboarding.json';
 import enPages from '../src/i18n/en/pages.json';
 import enPayment from '../src/i18n/en/payment.json';
@@ -76,6 +77,7 @@ import arMeta from '../src/i18n/ar/meta.json';
 import arNav from '../src/i18n/ar/nav.json';
 import arNotifications from '../src/i18n/ar/notifications.json';
 import arOrderNotifications from '../src/i18n/ar/orderNotifications.json';
+import arEcommerceAnalytics from '../src/i18n/ar/ecommerceAnalytics.json';
 import arOnboarding from '../src/i18n/ar/onboarding.json';
 import arPages from '../src/i18n/ar/pages.json';
 import arPayment from '../src/i18n/ar/payment.json';
@@ -100,6 +102,7 @@ export const en = {
   dashboard: enDashboard, dataDeletion: enDataDeletion, errorBoundary: enErrorBoundary,
   errors: enErrors, export: enExport, feedback: enFeedback, flagReason: enFlagReason,
   integrations: enIntegrations, kb: enKb, leads: enLeads, landing: enLanding, logout: enLogout,
+  ecommerceAnalytics: enEcommerceAnalytics,
   messages: enMessages, meta: enMeta, nav: enNav, notifications: enNotifications, orderNotifications: enOrderNotifications,
   onboarding: enOnboarding, pages: enPages, payment: enPayment, plans: enPlans,
   pricing: enPricing, privacy: enPrivacy, profile: enProfile,
@@ -114,6 +117,7 @@ export const ar = {
   dashboard: arDashboard, dataDeletion: arDataDeletion, errorBoundary: arErrorBoundary,
   errors: arErrors, export: arExport, feedback: arFeedback, flagReason: arFlagReason,
   integrations: arIntegrations, kb: arKb, leads: arLeads, landing: arLanding, logout: arLogout,
+  ecommerceAnalytics: arEcommerceAnalytics,
   messages: arMessages, meta: arMeta, nav: arNav, notifications: arNotifications, orderNotifications: arOrderNotifications,
   onboarding: arOnboarding, pages: arPages, payment: arPayment, plans: arPlans,
   pricing: arPricing, privacy: arPrivacy, profile: arProfile,

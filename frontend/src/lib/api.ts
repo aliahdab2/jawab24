@@ -327,6 +327,43 @@ export const analyticsApi = {
     api.delete('/ai/cache'),
 };
 
+// ── E-commerce analytics (per-store, merchant-facing) ───────────────────────
+export type EcommerceAnalyticsRange = '30d' | '90d';
+
+export interface NotificationFunnel {
+  sent: number;
+  delivered: number;
+  failed: number;
+  pending: number;
+}
+
+export interface EcommerceAnalyticsOverview {
+  storeId: string;
+  period: { from: string; to: string; range: EcommerceAnalyticsRange };
+  notifications: {
+    /** Channel-keyed funnel + roll-up total. Today: only 'sms'. Future: 'whatsapp', 'dm'. */
+    funnel: { total: NotificationFunnel; byChannel: Record<string, NotificationFunnel> };
+    byType: Record<string, number>;
+  };
+  recovery: {
+    abandonedCartsNotified: number;
+    cartsRecovered: number;
+    revenueRecovered: number;
+    currency: string | null;
+  };
+  replies: {
+    totalReplies: number;
+    aiReplies: number;
+    templateReplies: number;
+    manualReplies: number;
+  };
+}
+
+export const ecommerceAnalyticsApi = {
+  getOverview: (storeId: string, range: EcommerceAnalyticsRange = '30d') =>
+    api.get<EcommerceAnalyticsOverview>(`/api/ecommerce-analytics/${storeId}`, { params: { range } }),
+};
+
 // Plans API (Public - uses publicApi to avoid auth redirect issues)
 export const plansApi = {
   getAll: (config?: AxiosRequestConfig) => publicApi.get('/plans', config),

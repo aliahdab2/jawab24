@@ -30,3 +30,4 @@ export { useHandoffPauseDuration } from './useHandoffPauseDuration';
 export { useLoadConversation } from './useLoadConversation';
 export { useDeepLinkParam } from './useDeepLinkParam';
 export { useDeepLinkResource } from './useDeepLinkResource';
+export { useConnectedStore } from './useConnectedStore';

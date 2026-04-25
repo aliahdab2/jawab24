@@ -38,6 +38,7 @@ import integrationsRoutes from "./routes/integrations";
 import waitlistRoutes from "./routes/waitlist";
 import sseRoutes from "./routes/sse";
 import customerNotificationRoutes from "./routes/customerNotifications";
+import ecommerceAnalyticsRoutes from "./routes/ecommerceAnalytics";
 import leadsRoutes from "./routes/leads";
 import { sseManager } from "./lib/sseManager";
 import { shutdownEventBus } from "./lib/eventBus";
@@ -251,6 +252,7 @@ const start = async () => {
 
     // Customer notification templates + log (authenticated)
     await server.register(customerNotificationRoutes, { prefix: "/api" });
+    await server.register(ecommerceAnalyticsRoutes, { prefix: "/api/ecommerce-analytics" });
 
     // SSE real-time events (authenticated inside the route handler)
     await server.register(sseRoutes, { prefix: "/sse" });

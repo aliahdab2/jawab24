@@ -20,7 +20,7 @@
 | 3 — Order Notifications (DM) | 📋 **Planned** (later) | SMS version already live |
 | 4a — Product Recommendations Carousel | ⏸️ **Deferred** | Defer until usage data shows demand |
 | 4b — Stock / Price Alerts | ⏸️ **Deferred** | Same |
-| 5 — Analytics Dashboard | 📋 **Planned** (Step 2 — next) | Reads existing `customerNotificationsLog`; no new tables for v1 |
+| 5 — Analytics Dashboard (lite) | ✅ **Shipped** (Step 2) | Page at `/ecommerce-analytics`, summary widget in `ConnectedStoreCard`, channel-keyed funnel ready for WhatsApp/DM |
 
 ## Context
 

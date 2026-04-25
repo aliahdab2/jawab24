@@ -58,7 +58,8 @@ export const PAGE_NAMESPACES = {
 
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
   settings:           [...DASHBOARD_LAYOUT, 'settings', 'team', 'time', 'logout'],
-  integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'orderNotifications', 'salla', 'shopify', 'zid'],
+  integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'orderNotifications', 'ecommerceAnalytics', 'salla', 'shopify', 'zid'],
+  ecommerceAnalytics: [...DASHBOARD_LAYOUT, 'ecommerceAnalytics', 'integrations'],
 
   // ── Admin pages (include ADMIN_LAYOUT) ────────────────────────
   adminWaitlist:      [...ADMIN_LAYOUT],

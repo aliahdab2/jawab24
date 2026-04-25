@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type ReactElement } from 'react';
 import { ZidIcon, ShopifyIcon, SallaIcon } from '@/components/landing';
 import { OrderNotificationsCard } from '@/components/settings';
+import { StoreAnalyticsSummary } from '@/components/analytics';
 import clsx from 'clsx';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
@@ -206,6 +207,8 @@ function ConnectedStoreCard({
             </>}
           </div>
         </div>
+
+        <StoreAnalyticsSummary storeId={store.id} />
 
         {pages.length > 0 && (
           <div>

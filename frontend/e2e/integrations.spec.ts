@@ -69,15 +69,24 @@ function setupAuth(page: import('@playwright/test').Page) {
   });
 }
 
+interface AnalyticsFixture {
+  storeId: string;
+  recovery: { abandonedCartsNotified: number; cartsRecovered: number; revenueRecovered: number; currency: string | null };
+  replies: { totalReplies: number; aiReplies: number; templateReplies: number; manualReplies: number };
+}
+
 function mockAPIs(
   page: import('@playwright/test').Page,
   options: {
     shopifyStore?: typeof MOCK_SHOPIFY_STORE | null;
     sallaStore?: typeof MOCK_SALLA_STORE | null;
     pages?: typeof MOCK_PAGES;
+    /** Per-store analytics overview keyed by storeId. Omitted = 500 from analytics endpoint. */
+    analytics?: Record<string, AnalyticsFixture>;
+    analyticsStatus?: number;
   },
 ) {
-  const { shopifyStore = null, sallaStore = null, pages = [] } = options;
+  const { shopifyStore = null, sallaStore = null, pages = [], analytics, analyticsStatus } = options;
 
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
@@ -120,6 +129,29 @@ function mockAPIs(
     // Pages
     if (url.includes('/pages')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: pages }) });
+    }
+
+    // Per-store analytics overview (used by the embedded summary widget on this page).
+    if (url.includes('/api/ecommerce-analytics/') && method === 'GET') {
+      if (analyticsStatus && analyticsStatus >= 400) {
+        return route.fulfill({ status: analyticsStatus, contentType: 'application/json', body: JSON.stringify({ error: 'down' }) });
+      }
+      const storeId = url.split('/api/ecommerce-analytics/')[1]?.split('?')[0];
+      const fixture = storeId && analytics ? analytics[storeId] : undefined;
+      if (fixture) {
+        const payload = {
+          storeId: fixture.storeId,
+          period: { from: '2026-03-25T00:00:00Z', to: '2026-04-25T00:00:00Z', range: '30d' },
+          notifications: {
+            funnel: { total: { sent: 0, delivered: 0, failed: 0, pending: 0 }, byChannel: {} },
+            byType: {},
+          },
+          recovery: fixture.recovery,
+          replies: fixture.replies,
+        };
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
+      }
+      return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'no fixture' }) });
     }
 
     // Auth & subscription
@@ -506,5 +538,78 @@ test.describe('OrderNotificationsCard', () => {
     // Collapse
     await expandBtn.click();
     await expect(page.locator('textarea#msg-ar-abandoned_cart')).not.toBeVisible();
+  });
+});
+
+/* ====================================================================== */
+/*  StoreAnalyticsSummary widget — embedded inside ConnectedStoreCard      */
+/* ====================================================================== */
+
+test.describe('Integrations — Store Analytics Summary widget', () => {
+  test('shows recovered carts + revenue + a "View details" link when analytics has data', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, {
+      shopifyStore: MOCK_SHOPIFY_STORE,
+      pages: MOCK_PAGES,
+      analytics: {
+        [MOCK_SHOPIFY_STORE.id]: {
+          storeId: MOCK_SHOPIFY_STORE.id,
+          recovery: { abandonedCartsNotified: 12, cartsRecovered: 4, revenueRecovered: 480, currency: 'SAR' },
+          replies: { totalReplies: 100, aiReplies: 87, templateReplies: 0, manualReplies: 13 },
+        },
+      },
+    });
+
+    await page.goto('/en/integrations');
+
+    // Wait for the connected card to render
+    await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
+
+    // Widget should surface the carts-recovered + revenue summary
+    await expect(page.getByText(/4 carts recovered/i).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/480.*SAR/).first()).toBeVisible();
+
+    // The link should route to the dedicated analytics page
+    const link = page.getByRole('link', { name: t('ecommerceAnalytics.summary.viewDetails') }).first();
+    await expect(link).toHaveAttribute('href', '/ecommerce-analytics');
+  });
+
+  test('hides the widget on a connected store with no analytics data yet', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, {
+      shopifyStore: MOCK_SHOPIFY_STORE,
+      pages: MOCK_PAGES,
+      analytics: {
+        [MOCK_SHOPIFY_STORE.id]: {
+          storeId: MOCK_SHOPIFY_STORE.id,
+          recovery: { abandonedCartsNotified: 0, cartsRecovered: 0, revenueRecovered: 0, currency: null },
+          replies: { totalReplies: 0, aiReplies: 0, templateReplies: 0, manualReplies: 0 },
+        },
+      },
+    });
+
+    await page.goto('/en/integrations');
+    await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
+
+    // No "carts recovered" copy, no widget link
+    await expect(page.getByText(/carts recovered/i)).toHaveCount(0);
+  });
+
+  test('falls back to a "View details" link when analytics endpoint returns 500', async ({ page }) => {
+    await setupAuth(page);
+    await mockAPIs(page, {
+      shopifyStore: MOCK_SHOPIFY_STORE,
+      pages: MOCK_PAGES,
+      analyticsStatus: 500,
+    });
+
+    await page.goto('/en/integrations');
+    await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
+
+    // No numbers, but the discoverability link is still present
+    const link = page.getByRole('link', { name: t('ecommerceAnalytics.summary.viewDetails') }).first();
+    await expect(link).toBeVisible({ timeout: 10000 });
+    await expect(link).toHaveAttribute('href', '/ecommerce-analytics');
+    await expect(page.getByText(/carts recovered/i)).toHaveCount(0);
   });
 });

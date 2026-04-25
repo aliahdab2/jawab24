@@ -1,0 +1,51 @@
+{
+  "title": "E-commerce Analytics",
+  "subtitle": "How Jawab24 is performing for your store",
+  "ranges": {
+    "30d": "Last 30 days",
+    "90d": "Last 90 days"
+  },
+  "loading": "Loading analytics…",
+  "error": "Couldn't load analytics. Try again in a moment.",
+  "empty": {
+    "title": "No data yet",
+    "body": "Once your customers start receiving notifications, your numbers will appear here."
+  },
+  "noStore": {
+    "title": "Connect a store to see analytics",
+    "body": "Connect Shopify, Salla, or Zid from the Integrations page to start tracking recovered carts and customer notifications."
+  },
+  "kpis": {
+    "revenueRecovered": "Revenue recovered",
+    "cartsRecovered": "Carts recovered",
+    "aiReplies": "AI replies sent",
+    "totalReplies": "Total replies"
+  },
+  "attributionCaveat": "Approximate — counts orders placed within 72h of an abandoned-cart message.",
+  "funnel": {
+    "title": "Notification delivery",
+    "delivered": "Delivered",
+    "failed": "Failed",
+    "pending": "Pending"
+  },
+  "byType": {
+    "title": "Notifications by type",
+    "abandoned_cart": "Abandoned cart",
+    "order_confirmed": "Order confirmed",
+    "order_shipped": "Order shipped",
+    "order_delivered": "Order delivered",
+    "review_request": "Review request",
+    "digital_delivery": "Digital delivery"
+  },
+  "replies": {
+    "title": "AI reply activity",
+    "ai": "AI",
+    "template": "Template",
+    "manual": "Manual"
+  },
+  "summary": {
+    "cartsRecovered": "{count, plural, one {# cart recovered} other {# carts recovered}}",
+    "withRevenue": "{count, plural, one {# cart recovered} other {# carts recovered}} · {amount}",
+    "viewDetails": "View details"
+  }
+}

@@ -46,6 +46,7 @@ import enTerms         from './en/terms.json';
 import enTime          from './en/time.json';
 import enZid           from './en/zid.json';
 import enOrderNotifications from './en/orderNotifications.json';
+import enEcommerceAnalytics from './en/ecommerceAnalytics.json';
 import enUnsubscribe   from './en/unsubscribe.json';
 
 // ── Arabic namespace imports ──────────────────────────────────────────────────
@@ -93,6 +94,7 @@ import arTerms         from './ar/terms.json';
 import arTime          from './ar/time.json';
 import arZid           from './ar/zid.json';
 import arOrderNotifications from './ar/orderNotifications.json';
+import arEcommerceAnalytics from './ar/ecommerceAnalytics.json';
 import arUnsubscribe   from './ar/unsubscribe.json';
 
 // Global namespaces loaded on every page
@@ -144,6 +146,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/time': enTime,             'ar/time': arTime,
   'en/zid': enZid,               'ar/zid': arZid,
   'en/orderNotifications': enOrderNotifications, 'ar/orderNotifications': arOrderNotifications,
+  'en/ecommerceAnalytics': enEcommerceAnalytics, 'ar/ecommerceAnalytics': arEcommerceAnalytics,
   'en/unsubscribe': enUnsubscribe,             'ar/unsubscribe': arUnsubscribe,
 };
 
