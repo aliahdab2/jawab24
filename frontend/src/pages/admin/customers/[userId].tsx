@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook, Instagram, ExternalLink } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -31,7 +31,13 @@ interface CustomerDetail {
         maxAiRepliesPerMonth: number | null;
         maxPages: number | null;
     } | null;
-    pagesCount: number;
+    pages: Array<{
+        id: string;
+        name: string | null;
+        facebookPageId: string | null;
+        instagramUsername: string | null;
+        instagramAccountId: string | null;
+    }>;
     usage: {
         aiRepliesCount: number;
         templateRepliesCount: number;
@@ -257,10 +263,93 @@ export default function AdminCustomerDetailPage() {
                                     <Globe className="w-5 h-5 text-muted-foreground" />
                                     <div>
                                         <div className="text-xs text-muted-foreground">{t('customer.pagesCount')}</div>
-                                        <div className="font-medium">{customer.pagesCount}</div>
+                                        <div className="font-medium">{customer.pages.length}</div>
                                     </div>
                                 </div>
                             </div>
+                        </Card>
+
+                        {/* Connected Pages */}
+                        <Card>
+                            <h2 className="text-lg font-semibold text-foreground mb-4">
+                                {t('customer.pagesCount')}
+                            </h2>
+                            {customer.pages && customer.pages.length > 0 ? (
+                                <ul className="space-y-2">
+                                    {customer.pages.map((p) => {
+                                        const fbHref = p.facebookPageId ? `https://www.facebook.com/${p.facebookPageId}` : null;
+                                        const igHref = p.instagramUsername ? `https://www.instagram.com/${p.instagramUsername}` : null;
+                                        const primaryHref = fbHref || igHref;
+                                        return (
+                                            <li
+                                                key={p.id}
+                                                className="group flex items-center gap-3 p-3 border border-theme-border rounded-lg hover:bg-muted/50 hover:border-brand-300 transition-colors"
+                                            >
+                                                <div className="w-10 h-10 rounded-full bg-[#1877F2]/10 text-[#1877F2] flex items-center justify-center shrink-0">
+                                                    <Facebook className="w-5 h-5" />
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    {primaryHref ? (
+                                                        <a
+                                                            href={primaryHref}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="font-medium text-foreground hover:text-brand-600 hover:underline truncate block"
+                                                        >
+                                                            {p.name || t('customer.unnamedPage')}
+                                                        </a>
+                                                    ) : (
+                                                        <div className="font-medium truncate">{p.name || t('customer.unnamedPage')}</div>
+                                                    )}
+                                                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground" dir="ltr">
+                                                        {p.facebookPageId && (
+                                                            <span className="font-mono truncate">{p.facebookPageId}</span>
+                                                        )}
+                                                        {p.facebookPageId && p.instagramUsername && <span aria-hidden>·</span>}
+                                                        {p.instagramUsername && (
+                                                            <span className="inline-flex items-center gap-1 truncate">
+                                                                <Instagram className="w-3 h-3" />
+                                                                @{p.instagramUsername}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    {fbHref && (
+                                                        <a
+                                                            href={fbHref}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            aria-label={t('customer.viewOnFacebook')}
+                                                            title={t('customer.viewOnFacebook')}
+                                                            className="p-2 rounded-md text-muted-foreground hover:text-[#1877F2] hover:bg-background transition-colors"
+                                                        >
+                                                            <Facebook className="w-4 h-4" />
+                                                        </a>
+                                                    )}
+                                                    {igHref && (
+                                                        <a
+                                                            href={igHref}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            aria-label={t('customer.viewOnInstagram')}
+                                                            title={t('customer.viewOnInstagram')}
+                                                            className="p-2 rounded-md text-muted-foreground hover:text-[#E4405F] hover:bg-background transition-colors"
+                                                        >
+                                                            <Instagram className="w-4 h-4" />
+                                                        </a>
+                                                    )}
+                                                    {primaryHref && (
+                                                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground/60 ms-1" aria-hidden />
+                                                    )}
+                                                </div>
+                                            </li>
+                                        );
+                                    })}
+                                </ul>
+                            ) : (
+                                <p className="text-muted-foreground">{t('customer.noPages')}</p>
+                            )}
                         </Card>
 
                         {/* Usage Card */}

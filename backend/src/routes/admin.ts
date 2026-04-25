@@ -280,12 +280,17 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         .where(eq(subscriptions.userId, userId))
                         .limit(1);
 
-                    // Get pages count
+                    // Get pages with identifying info
                     const userPages = await db
-                        .select({ id: pages.id })
+                        .select({
+                            id: pages.id,
+                            name: pages.name,
+                            facebookPageId: pages.facebookPageId,
+                            instagramUsername: pages.instagramUsername,
+                            instagramAccountId: pages.instagramAccountId,
+                        })
                         .from(pages)
                         .where(eq(pages.userId, userId));
-                    const pagesCount = userPages.length;
 
                     // Get current period usage
                     const now = new Date();
@@ -311,7 +316,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         data: {
                             ...user,
                             subscription: subscription || null,
-                            pagesCount,
+                            pages: userPages,
                             usage: currentUsage ? {
                                 aiRepliesCount: currentUsage.aiRepliesCount || 0,
                                 templateRepliesCount: currentUsage.templateRepliesCount || 0,
