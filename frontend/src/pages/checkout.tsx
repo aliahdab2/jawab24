@@ -147,7 +147,7 @@ function PaymentForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <PaymentElement />
+      <PaymentElement options={{ wallets: { link: 'never', applePay: 'auto', googlePay: 'auto' } }} />
       {errorMessage && (
         <div className="mt-4 p-3 alert-error border rounded-xl text-sm text-start">
           {errorMessage}
