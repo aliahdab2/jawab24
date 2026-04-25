@@ -126,7 +126,7 @@ export function resolveNavKey(
     return key;
 }
 
-export function getNavigationGroups(options: { isNative?: boolean } = {}) {
+export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean } = {}) {
   const accountItems = [
     // Pricing is intentionally hidden on native (iOS/Android) — mature B2B SaaS
     // apps (Slack, Notion, HubSpot) do not expose plan purchase from the mobile
@@ -137,14 +137,22 @@ export function getNavigationGroups(options: { isNative?: boolean } = {}) {
     { key: 'nav.settings', href: '/settings', icon: Settings },
   ];
 
+  // Stores is admin-only while we finish the public roll-out (Shopify App
+  // Store listing, Salla/Zid backend reliability parity). Once those land
+  // we'll drop the gate. Page-level guard in pages/integrations.tsx mirrors
+  // this so deep-links also fail closed.
+  const overviewItems = [
+    { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { key: 'nav.pages', href: '/pages', icon: FileText },
+    ...(options.isAdmin
+      ? [{ key: 'nav.integrations', href: '/integrations', icon: Store }]
+      : []),
+  ];
+
   return [
     {
       labelKey: 'sidebar.overview',
-      items: [
-        { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
-        { key: 'nav.pages', href: '/pages', icon: FileText },
-        { key: 'nav.integrations', href: '/integrations', icon: Store },
-      ],
+      items: overviewItems,
     },
     {
       labelKey: 'sidebar.inbox',
@@ -301,6 +309,7 @@ function WorkspaceSwitcher({ workspaces, activeWorkspaceId, sidebarOpen, onSwitc
 export const Sidebar = memo(function Sidebar() {
   const router = useRouter();
   const { logout, user, fbToken, workspaces, activeWorkspaceId } = useAuthStore();
+  const isAdmin = !!user?.isAdmin;
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
@@ -313,7 +322,7 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform() });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin });
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing);
 

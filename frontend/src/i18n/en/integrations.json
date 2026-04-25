@@ -15,9 +15,6 @@
     "salla": "Salla",
     "zid": "Zid"
   },
-  "comingSoonBadge": "Coming soon",
-  "comingSoonCta": "Notify me when ready",
-  "comingSoonHelp": "We're finalizing the public listing. Drop your email and we'll let you know the moment it's live.",
   "webhookHealth": {
     "pendingTitle": "Almost ready",
     "pendingBody": "Finishing setup so we can answer comments and messages from this store.",

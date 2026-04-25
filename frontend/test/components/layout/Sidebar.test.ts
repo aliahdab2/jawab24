@@ -3,7 +3,7 @@ import { getNavigationGroups } from '@/components/layout/Sidebar';
 
 describe('getNavigationGroups', () => {
   it('should always include core nav items', () => {
-    const coreHrefs = ['/dashboard', '/pages', '/integrations', '/comments', '/messages', '/pricing', '/settings'];
+    const coreHrefs = ['/dashboard', '/pages', '/comments', '/messages', '/pricing', '/settings'];
     const groups = getNavigationGroups();
     const allHrefs = groups.flatMap((g) => g.items.map((i) => i.href));
     for (const href of coreHrefs) {
@@ -17,12 +17,16 @@ describe('getNavigationGroups', () => {
     expect(automationGroup).toBeUndefined();
   });
 
-  // Integrations was previously delisted from nav (commit ba0f3d56's
-  // automation-cleanup) which orphaned the page — merchants who wanted to
-  // connect a store had no path from the dashboard. Re-listed under
-  // OVERVIEW so the discovery flow stays intact.
-  it('should include the stores nav entry under overview', () => {
-    const groups = getNavigationGroups();
+  // Stores is admin-only while we finish public roll-out. Page-level guard
+  // in pages/integrations.tsx mirrors this so deep-links also fail closed.
+  it('should hide the stores nav entry from non-admins', () => {
+    const groups = getNavigationGroups({ isAdmin: false });
+    const allKeys = groups.flatMap((g) => g.items.map((i) => i.key));
+    expect(allKeys).not.toContain('nav.integrations');
+  });
+
+  it('should show the stores nav entry under overview for admins', () => {
+    const groups = getNavigationGroups({ isAdmin: true });
     const overview = groups.find((g) => g.labelKey === 'sidebar.overview');
     const stores = overview?.items.find((i) => i.key === 'nav.integrations');
     expect(stores).toBeDefined();

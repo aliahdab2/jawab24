@@ -53,11 +53,15 @@ const MOCK_PAGES = [
 ];
 
 function setupAuth(page: import('@playwright/test').Page) {
+  // The integrations page is admin-only while we finish public roll-out
+  // (Shopify App Store listing pending, Salla/Zid backend reliability gap).
+  // The test user is flagged as admin so the page-level guard doesn't
+  // redirect away from /integrations during the test run.
   return page.addInitScript(() => {
     localStorage.setItem(
       'auth-storage',
       JSON.stringify({
-        state: { user: { id: 'user_1', email: 'test@test.com', name: 'Test User' }, token: 'mock-token', fbToken: 'mock-fb', isAuthenticated: true },
+        state: { user: { id: 'user_1', email: 'test@test.com', name: 'Test User', isAdmin: true }, token: 'mock-token', fbToken: 'mock-fb', isAuthenticated: true, _hasHydrated: true },
         version: 0,
       })
     );
@@ -179,7 +183,7 @@ test.describe('Integrations Page', () => {
   /*  No stores — page shows header only (management-only view)          */
   /* ------------------------------------------------------------------ */
 
-  test('should render page title and the Shopify "Coming soon" card when no stores are connected', async ({ page }) => {
+  test('should render page title and platform-picker tabs when no stores are connected', async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
     await setupAuth(page);
     await mockAPIs(page, {});
@@ -191,19 +195,13 @@ test.describe('Integrations Page', () => {
       page.locator('h1').filter({ hasText: t('integrations.title') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Public roll-out gate: Shopify is the only visible platform today,
-    // shown with a "Coming soon" badge until the App Store listing ships.
-    // Salla + Zid are hidden entirely. No tab strip rendered for a single
-    // visible platform — just the card.
-    await expect(page.getByText(t('integrations.comingSoonBadge'), { exact: false }).first()).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('tablist')).not.toBeVisible();
-    await expect(page.getByText(t('salla.title')).first()).not.toBeVisible();
-    await expect(page.getByText(t('zid.title')).first()).not.toBeVisible();
-
-    // "Notify me" CTA replaces the Connect button while comingSoon.
-    const notifyBtn = page.getByRole('button', { name: new RegExp(t('integrations.comingSoonCta'), 'i') });
-    await expect(notifyBtn).toBeVisible({ timeout: 10000 });
-    await expect(notifyBtn).toBeDisabled();
+    // Empty-state design: a single tab strip lets the merchant pick one
+    // platform, so only ONE Connect Store button is rendered at a time
+    // (the active tab's). Three tabs are present, default selected = Shopify.
+    const tabs = page.getByRole('tablist').getByRole('tab');
+    await expect(tabs).toHaveCount(3, { timeout: 10000 });
+    const connectButtons = page.getByRole('button', { name: new RegExp(t('integrations.notConnected.connectBtn'), 'i') });
+    await expect(connectButtons).toHaveCount(1, { timeout: 10000 });
   });
 
   /* ------------------------------------------------------------------ */
@@ -227,7 +225,7 @@ test.describe('Integrations Page', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('should hide Salla and Zid even when "Add another store" exists, while their status=hidden', async ({ page }) => {
+  test('should show Salla card under "Add another store" when only Shopify is connected', async ({ page }) => {
     await setupAuth(page);
     await mockAPIs(page, { shopifyStore: MOCK_SHOPIFY_STORE, pages: MOCK_PAGES });
 
@@ -235,17 +233,19 @@ test.describe('Integrations Page', () => {
 
     await expect(page.getByText('Test Shopify Store').first()).toBeVisible({ timeout: 15000 });
 
-    // Today only Shopify is publicly visible (status='comingSoon' for it,
-    // status='hidden' for Salla + Zid). Even with a connected Shopify store,
-    // there are no other VISIBLE platforms to surface, so the
-    // "Add another store" pill should not appear and neither Salla nor Zid
-    // should be reachable from this page. (Routes still exist for
-    // early-access merchants who hit them directly.)
-    await expect(
-      page.getByRole('button', { name: new RegExp(t('integrations.addAnotherStore'), 'i') }),
-    ).not.toBeVisible();
+    // Once any store is connected, unconnected platforms collapse behind a
+    // single "+ Add another store" pill so the connected card stays the
+    // visual focus. The Salla card is hidden until the merchant explicitly
+    // expands the pill.
+    const addAnotherStore = page.getByRole('button', { name: new RegExp(t('integrations.addAnotherStore'), 'i') });
+    await expect(addAnotherStore).toBeVisible({ timeout: 10000 });
     await expect(page.getByText(t('salla.title')).first()).not.toBeVisible();
-    await expect(page.getByText(t('zid.title')).first()).not.toBeVisible();
+
+    // After clicking, the Salla promo card appears.
+    await addAnotherStore.click();
+    await expect(page.getByText(t('salla.title')).first()).toBeVisible({ timeout: 10000 });
+    // But still no Salla store data — only the not-connected pitch.
+    await expect(page.getByText('Test Salla Store')).not.toBeVisible();
   });
 
   test('should show page linking chips when pages exist', async ({ page }) => {

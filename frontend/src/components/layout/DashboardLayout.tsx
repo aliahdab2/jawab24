@@ -1,5 +1,5 @@
 import { MessageCircle, LayoutDashboard, MessageSquare, MoreHorizontal, X, LogOut } from 'lucide-react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -48,7 +48,8 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const locale = useLocale();
   const { setLanguage } = useLanguage();
   const isRTL = isRTLLocale(locale);
-  const { isAuthenticated, _hasHydrated, logout } = useAuthStore();
+  const { isAuthenticated, _hasHydrated, logout, user } = useAuthStore();
+  const isAdmin = !!user?.isAdmin;
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   const unreadComments = useUIStore((s) => s.unreadComments);
@@ -57,6 +58,17 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutCheck, setShowLogoutCheck] = useState(false);
   const isEmbedded = useIsEmbedded();
+
+  // Bottom-nav "More" button highlights as active whenever the user is on
+  // a route surfaced inside the More overlay. Single source of truth for
+  // those paths — derived from the same nav config the overlay uses, so
+  // adding a nav entry can never silently miss this active-state check.
+  const moreOverlayPaths = useMemo(
+    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin })
+      .flatMap((g) => g.items.map((i) => i.href))
+      .filter((href) => !['/dashboard', '/comments', '/messages'].includes(href)),
+    [isAdmin],
+  );
 
   // ESC key to close modals (logout confirmation takes priority)
   useEscapeKey(() => setShowLogoutCheck(false), showLogoutCheck);
@@ -288,7 +300,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
                 onClick={() => setMobileMenuOpen(true)}
                 icon={<MoreHorizontal className="w-7 h-7" />}
                 label={tNav('more') || 'More'}
-                active={mobileMenuOpen || ['/pages', '/leads', '/pricing', '/settings'].includes(router.pathname)}
+                active={mobileMenuOpen || moreOverlayPaths.includes(router.pathname)}
                 badge={newLeads}
                 badgeColor="brand"
               />
@@ -304,6 +316,7 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
             isRTL={isRTL}
             router={router}
             onLogout={() => { setMobileMenuOpen(false); setShowLogoutCheck(true); }}
+            isAdmin={isAdmin}
           />
         )}
 
@@ -404,19 +417,21 @@ function MobileMenuOverlay({
   isRTL,
   router,
   onLogout,
+  isAdmin,
 }: {
   isOpen: boolean;
   onClose: () => void;
   isRTL: boolean;
   router: ReturnType<typeof useRouter>;
   onLogout: () => void;
+  isAdmin: boolean;
 }) {
   const tNav = useTranslations('nav');
   const tPricing = useTranslations('pricing');
   const isLandscape = useLandscape();
   useBodyScrollLock(isOpen);
 
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform() });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin });
   const menuItems = navigationGroups.flatMap((group) =>
     group.items.map((item) => ({
       path: item.href,

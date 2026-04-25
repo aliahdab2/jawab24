@@ -208,11 +208,19 @@ test.describe('Mobile Navigation', () => {
     await expect(dialog.getByRole('button', { name: t('nav.settings'), exact: true })).toBeVisible();
   });
 
-  // The integrations page used to be orphaned in nav — present at /integrations
-  // but unreachable from anywhere. Now re-listed under OVERVIEW so merchants
-  // can find the place to connect a store. On mobile it lives under "More".
-  test('Stores item is reachable in the More overlay', async ({ page }) => {
-    await setupAuth(page, { user: { hasEcommerceStore: true } });
+  // Stores is admin-only while we finish the public roll-out. A regular
+  // merchant should NOT see the entry in the More overlay; an admin should.
+  test('Stores item is hidden from non-admins in the More overlay', async ({ page }) => {
+    await setupAuth(page, { user: { hasEcommerceStore: true, isAdmin: false } });
+    await mockAPIs(page);
+    await gotoWithMobileNav(page);
+
+    await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.integrations'), exact: true })).not.toBeVisible();
+  });
+
+  test('Stores item is reachable for admins in the More overlay', async ({ page }) => {
+    await setupAuth(page, { user: { hasEcommerceStore: true, isAdmin: true } });
     await mockAPIs(page);
     await gotoWithMobileNav(page);
 
