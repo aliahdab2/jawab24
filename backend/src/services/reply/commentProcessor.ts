@@ -608,7 +608,12 @@ export class CommentProcessor {
                     },
                 }
                 : null;
-            await adapter.flagComment(comment.id, flagKey, undefined, flagMeta)
+            // customer_refused = the customer's account blocks page DMs (FB error 10903 etc).
+            // No manual intervention can succeed (the page owner would hit the same restriction),
+            // so auto-resolve instead of flagging — keeps the inbox actionable. Detail still
+            // lands in flag_meta for analytics / "unreachable" filtering.
+            const autoResolve = dmf?.bucket === 'customer_refused';
+            await adapter.flagComment(comment.id, flagKey, undefined, flagMeta, autoResolve)
                 .catch(err => this.logger.error('[CommentProcessor] flagComment after send-failed threw', { err, commentId: comment.id }));
             publishSSEEvent(userId, 'comment:reply_failed', {
                 commentId: comment.id,

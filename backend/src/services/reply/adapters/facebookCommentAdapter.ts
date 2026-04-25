@@ -114,9 +114,11 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
         flagReason?: string,
         aiIntent?: string,
         flagMeta?: import('@jawab24/shared').FlagMeta | null,
+        autoResolve?: boolean,
     ): Promise<void> {
         await commentsService.updateComment(commentId, {
-            needsAttention: true,
+            needsAttention: !autoResolve,
+            resolved: autoResolve ? true : undefined,
             flagReason: flagReason ?? null,
             flagMeta: flagMeta ?? null,
             aiIntent: aiIntent ?? null,

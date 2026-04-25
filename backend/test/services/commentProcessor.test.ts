@@ -1868,7 +1868,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
             );
 
             // Plain send failure (no dmFailure) flags with generic 'send_failed' key + null meta.
-            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'send_failed', undefined, null);
+            // autoResolve is false: no bucket → page owner should still see it in Needs Attention.
+            expect(adapter.flagComment).toHaveBeenCalledWith('comment-uuid', 'send_failed', undefined, null, false);
             expect(result.success).toBe(false);
             const failedCall = vi.mocked(publishSSEEvent).mock.calls
                 .find(c => c[1] === 'comment:reply_failed');
@@ -1906,6 +1907,39 @@ describe('CommentProcessor — template reply mode behavior', () => {
                         fbMessage: 'This message is sent outside of allowed window.',
                     },
                 },
+                false,  // window_expired stays actionable in Needs Attention (only customer_refused auto-resolves)
+            );
+        });
+
+        it('sendAndFinalize auto-resolves on customer_refused so page owner inbox stays clean', async () => {
+            const adapter = createMockAdapter({
+                sendReply: vi.fn().mockResolvedValue({
+                    success: false,
+                    error: 'DM failed: customer_refused',
+                    dmFailure: {
+                        bucket: 'customer_refused',
+                        code: 10903,
+                        subcode: 1893062,
+                        fbMessage: 'This user can\'t reply to this activity',
+                        rawMessage: 'OAuthException',
+                    },
+                }),
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello', 'user-1', 'Alice',
+            );
+
+            // autoResolve=true: still records flag_reason + flag_meta for analytics, but
+            // skips Needs Attention (the page owner can't fix what FB blocks anyway).
+            expect(adapter.flagComment).toHaveBeenCalledWith(
+                'comment-uuid',
+                'dm_failed',
+                undefined,
+                expect.objectContaining({
+                    dm_failed: expect.objectContaining({ bucket: 'customer_refused' }),
+                }),
+                true,
             );
         });
 

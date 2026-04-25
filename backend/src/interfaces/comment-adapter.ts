@@ -126,12 +126,21 @@ export interface CommentPlatformAdapter {
     /** Get fallback reply text when generator returns nothing (null = no fallback, return error) */
     getFallbackReply(): string | null;
 
-    /** Flag a comment as needing attention without sending a reply */
+    /**
+     * Flag a comment without sending a reply. Default behavior: needsAttention=true,
+     * resolved=false (surfaces in the actionable inbox).
+     *
+     * `autoResolve=true` flips that to needsAttention=false, resolved=true: the failure
+     * is still recorded in flag_reason + flag_meta for analytics/filtering, but it stays
+     * out of the page owner's queue. Used for unactionable failures like customer_refused
+     * where no manual intervention can succeed.
+     */
     flagComment(
         commentId: string,
         flagReason?: string,
         aiIntent?: string,
         flagMeta?: import('@jawab24/shared').FlagMeta | null,
+        autoResolve?: boolean,
     ): Promise<void>;
 
     /**

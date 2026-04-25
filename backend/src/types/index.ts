@@ -176,4 +176,5 @@ export interface UpdateCommentDTO {
     flagMeta?: import('@jawab24/shared').FlagMeta | null;
     aiIntent?: string | null;
     fromName?: string;
+    resolved?: boolean;
 }

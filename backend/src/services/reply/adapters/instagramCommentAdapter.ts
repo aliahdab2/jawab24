@@ -229,11 +229,13 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         flagReason?: string,
         aiIntent?: string,
         flagMeta?: import('@jawab24/shared').FlagMeta | null,
+        autoResolve?: boolean,
     ): Promise<void> {
         await db
             .update(instagramComments)
             .set({
-                needsAttention: true,
+                needsAttention: !autoResolve,
+                ...(autoResolve ? { resolved: true } : {}),
                 flagReason: flagReason ?? null,
                 flagMeta: flagMeta ?? null,
                 aiIntent: aiIntent ?? null,
