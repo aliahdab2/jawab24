@@ -1,4 +1,5 @@
 import { aiService } from '../ai';
+import type { AiGenerateRequest } from '../../types';
 import { messagesService } from '../messages';
 import { subscriptionsService } from '../subscriptions';
 import { postsService } from '../posts';
@@ -11,6 +12,21 @@ import { DEFAULT_AI_MODEL, normalizeAiIntent, type ProductCard } from '@jawab24/
 import { detectLanguage, detectLanguageCode } from '../../utils/language';
 import type { FacebookMessageTag } from '../../utils/commentText';
 import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
+
+/**
+ * Single source of truth for AI dispatch: when a store is linked, route
+ * through the e-commerce tool loop (search_products / check_inventory /
+ * lookup_order). Otherwise, use the standard aiService. Both real DM and
+ * playground/test-reply paths must use this — bypassing it caused the AI
+ * to hallucinate product URLs in the test surfaces while real DMs worked.
+ */
+async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
+    if (request.context?.ecommerceStoreId) {
+        const { generateReplyWithTools } = await import('../ecommerceToolLoop');
+        return generateReplyWithTools(request);
+    }
+    return aiService.generateReply(request);
+}
 
 /** Flags/intents that should cause the pipeline to skip auto-replying.
  *  NOTE: low_confidence is intentionally NOT here — a low-confidence reply
@@ -217,6 +233,10 @@ export interface PlaygroundInput {
     messageTags?: FacebookMessageTag[];
     /** See GenerateReplyContext.ourFacebookPageId. */
     ourFacebookPageId?: string;
+    /** Linked e-commerce store id — when set, the tool loop is invoked so the AI
+     *  can call search_products / check_inventory / lookup_order. Mirrors the
+     *  real DM path; without this, playground/test-reply would hallucinate URLs. */
+    ecommerceStoreId?: string;
 }
 
 export interface PlaygroundResult {
@@ -420,16 +440,7 @@ export class ReplyGenerator {
                     context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage },
                 };
 
-                // When an e-commerce store is linked, use the tool loop
-                // so the AI can call lookup_order / track_shipment / check_inventory.
-                // Otherwise, use the standard aiService (zero behavior change).
-                let aiResponse: AiGenerateResponse;
-                if (context.ecommerceStoreId) {
-                    const { generateReplyWithTools } = await import('../ecommerceToolLoop');
-                    aiResponse = await generateReplyWithTools(aiRequest);
-                } else {
-                    aiResponse = await aiService.generateReply(aiRequest);
-                }
+                const aiResponse = await dispatchAiReply(aiRequest);
 
                 return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
             }
@@ -554,7 +565,7 @@ export class ReplyGenerator {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
             replyStyle, brandVoiceNotes, customerContext, model, defaultReplyLanguage,
-            messageTags, ourFacebookPageId,
+            messageTags, ourFacebookPageId, ecommerceStoreId,
         } = input;
 
         const ragMode = config.ragMode || 'off';
@@ -600,7 +611,7 @@ export class ReplyGenerator {
         const playgroundExtracted = conversationHistory?.length ? extractConversationData(conversationHistory) : null;
         const mergedCustomerCtx = [customerContext, playgroundExtracted].filter(Boolean).join('. ') || undefined;
 
-        const aiResponse = await aiService.generateReply({
+        const aiRequest = {
             comment: questionForAI,
             language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
             ...(model ? { model } : {}),
@@ -621,8 +632,11 @@ export class ReplyGenerator {
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
                 ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
                 ...(defaultReplyLanguage ? { defaultReplyLanguage } : {}),
+                ...(ecommerceStoreId ? { ecommerceStoreId } : {}),
             },
-        });
+        };
+
+        const aiResponse = await dispatchAiReply(aiRequest);
 
         // 5. Normalize intent + process flags (mirrors processAiResponse, minus billing)
         const normalizedIntent = normalizeAiIntent(aiResponse.intent);

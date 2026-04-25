@@ -8,6 +8,10 @@ vi.mock('../../src/services/ai', () => ({
     },
 }));
 
+vi.mock('../../src/services/ecommerceToolLoop', () => ({
+    generateReplyWithTools: vi.fn(),
+}));
+
 vi.mock('../../src/utils/language', () => ({
     detectLanguageCode: vi.fn().mockReturnValue('en'),
     detectCommentLanguage: vi.fn().mockReturnValue('en'),
@@ -889,6 +893,63 @@ describe('ReplyGenerator - Flagging System', () => {
     });
 
 }); // end describe('ReplyGenerator - Flagging System')
+
+describe('ReplyGenerator - Playground tool-loop routing', () => {
+    let generator: ReplyGenerator;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        generator = new ReplyGenerator();
+    });
+
+    const baseInput = {
+        pageId: 'page-1',
+        userId: 'user-1',
+        workspaceId: 'ws-1',
+        question: 'send me the product link',
+        channel: 'dm' as const,
+        knowledgeBase: 'Test catalog',
+        kbActiveVersion: null,
+        pageName: 'Demo Store',
+    };
+
+    const mockAiResponse = {
+        reply: 'mocked reply',
+        language: 'en',
+        cached: false,
+        intent: 'QUESTION',
+        confidence: 'high',
+        flags: [],
+    };
+
+    it('routes through generateReplyWithTools when ecommerceStoreId is set', async () => {
+        const { generateReplyWithTools } = await import('../../src/services/ecommerceToolLoop');
+        const { aiService } = await import('../../src/services/ai');
+        vi.mocked(generateReplyWithTools).mockResolvedValue(mockAiResponse);
+
+        await generator.generateForPlayground({
+            ...baseInput,
+            ecommerceStoreId: 'store-123',
+        });
+
+        expect(generateReplyWithTools).toHaveBeenCalledTimes(1);
+        expect(aiService.generateReply).not.toHaveBeenCalled();
+
+        const callArg = vi.mocked(generateReplyWithTools).mock.calls[0][0];
+        expect(callArg.context?.ecommerceStoreId).toBe('store-123');
+    });
+
+    it('routes through aiService.generateReply when ecommerceStoreId is absent', async () => {
+        const { generateReplyWithTools } = await import('../../src/services/ecommerceToolLoop');
+        const { aiService } = await import('../../src/services/ai');
+        vi.mocked(aiService.generateReply).mockResolvedValue(mockAiResponse);
+
+        await generator.generateForPlayground(baseInput);
+
+        expect(aiService.generateReply).toHaveBeenCalledTimes(1);
+        expect(generateReplyWithTools).not.toHaveBeenCalled();
+    });
+});
 
 // --- shouldSkipReply tests ---
 

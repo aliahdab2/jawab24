@@ -2990,6 +2990,66 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Delivery-mode question on a price-trigger post — answer the actual question without redirecting to the trigger.',
     },
+
+    // -----------------------------------------------------------------------
+    // Category 48 — E-commerce Tool Loop (Shopify-linked page)
+    // -----------------------------------------------------------------------
+    // The 'electronics' demo page is seeded with a Shopify store and 5 real
+    // products with stable handles. These tests guard against the bug where
+    // the playground/test-reply path bypassed the tool loop and the AI
+    // hallucinated product URLs (e.g. "myshopify.com/products/cotton-shirt"
+    // instead of "demo-electronics.myshopify.com/products/...").
+    // Without ecommerceStoreId wired through the playground input, the AI
+    // has no search_products tool and falls back to inventing URLs from
+    // the productCatalog text.
+    {
+        id: 317, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',
+        message: 'ابغى رابط ايربودز برو',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['airpods-pro-2'],
+        },
+        notes: 'Direct product link request — AI must call search_products and return the real Shopify URL handle, not a hallucinated one.',
+    },
+    {
+        id: 318, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',
+        message: 'كم سعر الايفون 15 برو؟',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            // Accept Latin (3800, 3,800) AND Arabic numerals (٣٨٠٠) — AI legitimately uses both.
+            // Catalog price for iPhone 15 Pro is 3,800–4,500 SAR.
+            replyContainsAny: ['3,800', '3800', '4,500', '4500', '٣٨٠٠', '٣،٨٠٠', '٤٥٠٠', '٤،٥٠٠'],
+        },
+        notes: 'Price question — must quote a real price from the catalog, not a fabricated number. Tolerant to Latin/Arabic numeral variants.',
+    },
+    {
+        id: 319, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',
+        message: 'ارسلي الرابط',
+        page: 'electronics',
+        conversationHistory: [
+            { role: 'user', content: 'شو عندكم منتجات؟' },
+            { role: 'assistant', content: 'عندنا أيفون 15 برو، سامسونج جالاكسي S24، ماك بوك إير M3، وايربودز برو. أي منهم يهمك؟' },
+            { role: 'user', content: 'ماك بوك ايير' },
+            { role: 'assistant', content: 'ماك بوك إير M3 متوفر بمقاسي 13 و 15 بوصة، وألوان فضي ورمادي. حابب أرسلك الرابط؟' },
+        ],
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['macbook-air-m3'],
+        },
+        notes: 'Multi-turn anaphora resolution: "ارسلي الرابط" must resolve to MacBook Air from prior turns AND return the real URL via tool call.',
+    },
+    {
+        id: 320, category: 48, categoryName: 'E-commerce Tool Loop', channel: 'dm',
+        message: 'ارسلي رابط سامسونج',
+        page: 'electronics',
+        expected: {
+            replyMethod: ['ai'],
+            replyContains: ['demo-electronics.myshopify.com/products/samsung-galaxy-s24'],
+        },
+        notes: 'Full-URL guard: when AI sends a Shopify link, it must be the complete URL with the store subdomain (demo-electronics), not a generic myshopify.com fragment.',
+    },
 ];
 
 // ---------------------------------------------------------------------------

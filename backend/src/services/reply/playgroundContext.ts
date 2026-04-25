@@ -118,6 +118,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         defaultReplyLanguage,
         messageTags: channel === 'comment' ? messageTags : undefined,
         ourFacebookPageId: channel === 'comment' ? ourFacebookPageId : undefined,
+        ecommerceStoreId: page.ecommerceStoreId ?? undefined,
     };
 
     return { playgroundInput, commentReplyMode, nudgeText };
