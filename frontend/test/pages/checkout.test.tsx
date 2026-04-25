@@ -204,7 +204,7 @@ describe('CheckoutPage', () => {
     await waitFor(() => {
       expect(screen.getByText('$15')).toBeInTheDocument();
       expect(screen.getByText(/5 Pages/)).toBeInTheDocument();
-      expect(screen.getByText(/AI Replies per month/)).toBeInTheDocument();
+      expect(screen.getByText(/Smart Replies per month/)).toBeInTheDocument();
       expect(screen.getByText(/7 day free trial/)).toBeInTheDocument();
     });
   });

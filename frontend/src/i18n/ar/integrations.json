@@ -9,6 +9,12 @@
   "demoLockedAction": "بيانات تجريبية — اربط متجراً حقيقياً لتفعيل هذا",
   "addAnotherStore": "إضافة متجر آخر",
   "addAnotherStoreSubtitle": "اربط منصة ثانية لتوسيع الردود الذكية",
+  "platformPickerLabel": "اختر منصة متجرك",
+  "platformPicker": {
+    "shopify": "Shopify",
+    "salla": "سلة",
+    "zid": "زد"
+  },
   "webhookHealth": {
     "pendingTitle": "أوشكنا على الانتهاء",
     "pendingBody": "نُكمل الإعداد لنتمكن من الرد على تعليقات ورسائل هذا المتجر.",

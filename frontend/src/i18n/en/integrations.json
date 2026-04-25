@@ -9,6 +9,12 @@
   "demoLockedAction": "Demo data — connect a real store to enable",
   "addAnotherStore": "Add another store",
   "addAnotherStoreSubtitle": "Connect a second platform to extend Smart Replies",
+  "platformPickerLabel": "Choose your store platform",
+  "platformPicker": {
+    "shopify": "Shopify",
+    "salla": "Salla",
+    "zid": "Zid"
+  },
   "webhookHealth": {
     "pendingTitle": "Almost ready",
     "pendingBody": "Finishing setup so we can answer comments and messages from this store.",

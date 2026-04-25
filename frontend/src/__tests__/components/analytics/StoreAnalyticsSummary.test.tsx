@@ -72,7 +72,7 @@ describe('StoreAnalyticsSummary', () => {
         expect(container.textContent).toBe('');
     });
 
-    it('renders nothing on an empty store (no recovered carts, no AI replies)', async () => {
+    it('renders nothing on an empty store (no recovered carts, no Smart Replies)', async () => {
         apiMock.mockResolvedValueOnce(overviewWith({}) as never);
         const { container } = renderWithQuery(<StoreAnalyticsSummary storeId="store-1" />);
         await waitFor(() => expect(apiMock).toHaveBeenCalled());
@@ -96,7 +96,7 @@ describe('StoreAnalyticsSummary', () => {
         expect(screen.queryByText(/SAR|USD/)).not.toBeInTheDocument();
     });
 
-    it('renders the AI reply count alone when there is no recovery data', async () => {
+    it('renders the Smart Reply count alone when there is no recovery data', async () => {
         apiMock.mockResolvedValueOnce(overviewWith({ aiReplies: 142 }) as never);
         renderWithQuery(<StoreAnalyticsSummary storeId="store-1" />);
         await waitFor(() => expect(screen.getByText('142')).toBeInTheDocument());

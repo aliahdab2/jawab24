@@ -13,6 +13,7 @@ import {
   CreditCard,
   Shield,
   Users,
+  Store,
   ChevronDown as ChevronDownIcon,
   Check
 } from 'lucide-react';
@@ -142,6 +143,7 @@ export function getNavigationGroups(options: { isNative?: boolean } = {}) {
       items: [
         { key: 'nav.dashboard', href: '/dashboard', icon: LayoutDashboard },
         { key: 'nav.pages', href: '/pages', icon: FileText },
+        { key: 'nav.integrations', href: '/integrations', icon: Store },
       ],
     },
     {

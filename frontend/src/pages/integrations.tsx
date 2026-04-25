@@ -528,6 +528,22 @@ const IntegrationsPage: NextPageWithLayout = () => {
   const [loading, setLoading] = useState(true);
   const [showAddAnother, setShowAddAnother] = useState(false);
 
+  // Empty-state platform tab. Defaults to Shopify; manual override via the
+  // tab strip is always one click away. Kept deterministic — locale-based
+  // defaults sound clever but break the project's "no locale conditionals
+  // in business logic" rule, and a wrong guess is worse than a click.
+  const [pickerTab, setPickerTab] = useState<PlatformId>('shopify');
+
+  // Short labels for the tab strip — platform brand names only.
+  // Deliberately not reusing `t('title')` ("Shopify Integration") because
+  // it duplicates the card heading and makes the tab strip look like three
+  // mini-cards.
+  const platformLabels: Record<PlatformId, string> = {
+    shopify: tInt('platformPicker.shopify'),
+    salla: tInt('platformPicker.salla'),
+    zid: tInt('platformPicker.zid'),
+  };
+
   const fetchData = useCallback(async () => {
     const storeResults: Record<string, EcommerceStore | null> = {};
 
@@ -625,12 +641,50 @@ const IntegrationsPage: NextPageWithLayout = () => {
               ))}
 
               {/* Unconnected platforms.
-                  - Zero stores anywhere → show all three so the merchant can pick.
-                  - At least one store exists → collapse the rest behind a single
-                    "Add another store" toggle to cut visual noise.            */}
-              {!hasAnyStore && platformsByState.unconnected.map((platform) => (
-                <NotConnectedCard key={platform.id} platform={platform} />
-              ))}
+                  - Zero stores anywhere → tab strip + ONE platform's card.
+                    Most merchants only ever connect one platform, so showing
+                    three competing pitches is noise. Tabs let them pick once
+                    and see the full pitch for that platform only.
+                  - At least one store exists → collapse the rest behind a
+                    single "Add another store" toggle.                        */}
+              {!hasAnyStore && (() => {
+                const selected = platformsByState.unconnected.find(p => p.id === pickerTab)
+                  ?? platformsByState.unconnected[0];
+                if (!selected) return null;
+                return (
+                  <div className="space-y-3">
+                    <div
+                      className="flex items-center gap-2 overflow-x-auto"
+                      role="tablist"
+                      aria-label={tInt('platformPickerLabel')}
+                    >
+                      {platformsByState.unconnected.map((platform) => {
+                        const isActive = platform.id === selected.id;
+                        return (
+                          <button
+                            key={platform.id}
+                            role="tab"
+                            aria-selected={isActive}
+                            onClick={() => setPickerTab(platform.id)}
+                            className={clsx(
+                              'flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-colors border',
+                              isActive
+                                ? 'bg-card text-foreground border-brand-400 shadow-sm'
+                                : 'bg-muted/50 text-muted-foreground border-transparent hover:text-foreground hover:bg-muted',
+                            )}
+                          >
+                            <span className={clsx('w-5 h-5 flex items-center justify-center rounded', platform.iconClass)}>
+                              {platform.icon}
+                            </span>
+                            <span>{platformLabels[platform.id]}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <NotConnectedCard platform={selected} />
+                  </div>
+                );
+              })()}
 
               {hasAnyStore && platformsByState.unconnected.length > 0 && (
                 showAddAnother ? (
