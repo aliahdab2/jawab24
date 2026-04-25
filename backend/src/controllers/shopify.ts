@@ -423,10 +423,9 @@ export async function reregisterWebhooks(request: FastifyRequest, reply: Fastify
         return reply.status(409).send({ error: 'Store is disconnected — reconnect first' });
     }
 
-    const accessToken = (await import('../services/ecommerceCrypto'))
-        .decrypt(store.accessToken, store.accessTokenIv);
-
     try {
+        const accessToken = (await import('../services/ecommerceCrypto'))
+            .decrypt(store.accessToken, store.accessTokenIv);
         const status = await shopifyService.registerWebhooks(store.storeDomain, accessToken);
         await shopifyService.saveWebhookStatus(store.id, status);
         return reply.send({ ok: true, webhookStatus: status });
