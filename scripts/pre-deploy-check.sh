@@ -164,7 +164,12 @@ AUDIT_FAILED=false
 # pre-allocated `buf`. Transitive via bullmq/exceljs/gaxios; none of them call uuid with a
 # caller-provided buffer (all use the no-arg form for ID generation). Vulnerable code path
 # unreachable. Re-audit when these packages bump their uuid dep to >=14.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq"
+# GHSA-qx2v-qp2m-jg93 — postcss XSS via unescaped </style> in CSS stringify output (moderate).
+# postcss is build-time CSS tooling for the frontend (tailwindcss/autoprefixer/next). It never
+# processes user-controlled CSS at runtime — output is static CSS files baked into the bundle.
+# The XSS vector requires runtime stringification of attacker-controlled CSS, which we don't do.
+# Surfaces in the backend audit only because npm audit reads the workspace-wide lockfile.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
