@@ -1,10 +1,26 @@
 # E-Commerce Power Features for Jawab24
 
 > **Created:** 2026-04-04
-> **Status:** Planning complete, ready for implementation
+> **Status:** Phase 1 (foundation) partially shipped — see status table below
 > **Companion plan:** `ECOMMERCE_NOTIFICATIONS_PLAN.md` — covers SMS delivery (broad reach for all customers).
 > This plan covers Facebook/Instagram DM delivery (rich experience for mapped customers).
 > **Delivery priority:** DM first (if customer mapping exists) → SMS fallback (if phone available) → skip
+
+## Implementation Status (2026-04-25)
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1a — Messaging Type Support | ✅ **Shipped** (`ae2d9c5a`) | `sendPrivateMessage()` + `sendDirectMessage()` accept `opts.messagingType`, defaults to `RESPONSE` |
+| 1b — Rich Product Cards (Generic Template) | ✅ **Shipped** (`ae2d9c5a`) | `metaMessaging.ts` + `productCardBuilder.ts`; sends after text reply when `check_inventory` returns a synced product image |
+| 1c — Postback Webhook Handler | ⏸️ **Deferred** | Not needed for v1 — using `web_url` buttons only. Add when an action button is designed |
+| 1d — Customer Identity Mapping | 📋 **Planned** (Step 3) | Required before DM-based cart recovery |
+| 1e — Proactive Message Sender | 📋 **Planned** (Step 3) | Depends on 1d |
+| 1f — Tool Loop Return Type | ✅ **Shipped** (`ae2d9c5a`) | `AiGenerateResponse.productCards?` + `GenerateReplyResult.productCards?` threaded through pipeline |
+| 2 — Abandoned Cart Recovery (DM) | 📋 **Planned** (Step 3) | SMS version already live via `customerNotifications` |
+| 3 — Order Notifications (DM) | 📋 **Planned** (later) | SMS version already live |
+| 4a — Product Recommendations Carousel | ⏸️ **Deferred** | Defer until usage data shows demand |
+| 4b — Stock / Price Alerts | ⏸️ **Deferred** | Same |
+| 5 — Analytics Dashboard | 📋 **Planned** (Step 2 — next) | Reads existing `customerNotificationsLog`; no new tables for v1 |
 
 ## Context
 
