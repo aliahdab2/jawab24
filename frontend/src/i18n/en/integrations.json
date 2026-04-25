@@ -6,6 +6,16 @@
   "zidDesc": "Sync your Zid product catalog to enrich smart replies with real product info",
   "disconnectedState": "This store was disconnected. Reconnect to restore smart replies.",
   "reconnect": "Reconnect",
+  "webhookHealth": {
+    "pendingTitle": "Almost ready",
+    "pendingBody": "Finishing setup so we can answer comments and messages from this store.",
+    "failedTitle": "Connection problem",
+    "failedBody": "We can't pick up new comments and messages from this store right now.",
+    "reregisterBtn": "Try again",
+    "reregistering": "Reconnecting...",
+    "reregisterSuccess": "Connection refreshed",
+    "reregisterError": "Still not working. Try again in a few minutes."
+  },
   "notConnected": {
     "connectBtn": "Connect Store",
     "freeLabel": "Free to connect",

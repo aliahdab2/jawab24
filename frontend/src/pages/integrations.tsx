@@ -15,6 +15,8 @@ import {
   Sparkles,
   ArrowRight,
   Check,
+  AlertTriangle,
+  Loader2,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
@@ -43,6 +45,10 @@ interface PlatformConfig {
   /** Whether connect flow requires a shop domain input (Shopify only) */
   requiresDomain: boolean;
   connectStore: (shopDomain?: string) => Promise<{ authUrl: string }>;
+  /** Manual recovery: re-trigger webhook registration after a connection issue.
+   *  Optional — only platforms that surface webhookHealth currently support it.
+   */
+  reregisterWebhooks?: () => Promise<unknown>;
 }
 
 const PLATFORMS: PlatformConfig[] = [
@@ -59,6 +65,7 @@ const PLATFORMS: PlatformConfig[] = [
     unlinkPage: ecommerceApi.unlinkPage,
     requiresDomain: true,
     connectStore: (shopDomain) => ecommerceApi.connectStore(shopDomain!),
+    reregisterWebhooks: ecommerceApi.reregisterWebhooks,
   },
   {
     id: 'salla',
@@ -130,6 +137,8 @@ function ConnectedStoreCard({
   const [showDisconnectModal, setShowDisconnectModal] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  const [reregistering, setReregistering] = useState(false);
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -140,6 +149,20 @@ function ConnectedStoreCard({
       toast.error(t('syncError'));
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleReregister = async () => {
+    if (!platform.reregisterWebhooks) return;
+    setReregistering(true);
+    try {
+      await platform.reregisterWebhooks();
+      toast.success(tInt('webhookHealth.reregisterSuccess'));
+      onSync(); // refetch — health flips to 'ok' and banner disappears
+    } catch {
+      toast.error(tInt('webhookHealth.reregisterError'));
+    } finally {
+      setReregistering(false);
     }
   };
 
@@ -186,6 +209,34 @@ function ConnectedStoreCard({
       </div>
 
       <div className="space-y-4">
+        {store.webhookHealth === 'pending' && (
+          <div className="flex items-start gap-3 p-3 rounded-xl alert-warning border" role="status">
+            <Loader2 className="w-5 h-5 mt-0.5 shrink-0 animate-spin" aria-hidden="true" />
+            <div className="text-sm">
+              <p className="font-semibold">{tInt('webhookHealth.pendingTitle')}</p>
+              <p className="text-muted-foreground">{tInt('webhookHealth.pendingBody')}</p>
+            </div>
+          </div>
+        )}
+        {store.webhookHealth === 'failed' && (
+          <div className="flex items-start gap-3 p-3 rounded-xl alert-danger border" role="alert">
+            <AlertTriangle className="w-5 h-5 mt-0.5 shrink-0" aria-hidden="true" />
+            <div className="flex-1 text-sm">
+              <p className="font-semibold">{tInt('webhookHealth.failedTitle')}</p>
+              <p className="text-muted-foreground mb-2">{tInt('webhookHealth.failedBody')}</p>
+              {canEdit && platform.reregisterWebhooks && (
+                <Button variant="primary" size="sm" onClick={handleReregister} disabled={reregistering}>
+                  {reregistering ? (
+                    <>
+                      <Loader2 className="w-4 h-4 me-1 animate-spin" />
+                      {tInt('webhookHealth.reregistering')}
+                    </>
+                  ) : tInt('webhookHealth.reregisterBtn')}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
         <div className={clsx('flex items-center justify-between p-3 rounded-xl', platform.storeMetaClass)}>
           <div>
             <p className="font-semibold text-foreground">{store.storeName || store.storeDomain}</p>
