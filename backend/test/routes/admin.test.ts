@@ -801,7 +801,7 @@ describe('Admin Routes', () => {
             expect(body.data.email).toBe('user@test.com');
             expect(body.data.subscription).not.toBeNull();
             expect(body.data.subscription.status).toBe('active');
-            expect(body.data.pagesCount).toBe(2);
+            expect(body.data.pages).toHaveLength(2);
             expect(body.data.usage.aiRepliesCount).toBe(42);
             expect(body.data.usage.templateRepliesCount).toBe(10);
             expect(body.data.usage.limit).toBe(1000);
