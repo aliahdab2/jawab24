@@ -115,7 +115,7 @@ describe('runDailyLeadDigest', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         detectLanguageMock.mockReturnValue('en');
-        emailSendMock.mockResolvedValue({ success: true, id: 'resend-123' });
+        emailSendMock.mockResolvedValue({ success: true, id: 'resend-123', emailSendId: 'email-send-uuid-1' });
         joinQueryRows.value = [];
         userQueryQueue.value = [];
         subQueryQueue.value = [];
@@ -206,7 +206,7 @@ describe('runDailyLeadDigest', () => {
         joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
         userQueryQueue.value = [[activeUser]];
         subQueryQueue.value = [[activeSub]];
-        emailSendMock.mockResolvedValueOnce({ success: false, error: 'Resend API down' });
+        emailSendMock.mockResolvedValueOnce({ success: false, error: 'Resend API down', emailSendId: 'email-send-uuid-failed' });
 
         const result = await runDailyLeadDigest();
 
@@ -214,6 +214,7 @@ describe('runDailyLeadDigest', () => {
         const audit = audits()[0];
         expect(audit.status).toBe('failed');
         expect(audit.errorMessage).toBe('Resend API down');
+        expect(audit.emailSendId).toBe('email-send-uuid-failed');
         expect(result.errors).toBe(1);
     });
 
@@ -226,6 +227,41 @@ describe('runDailyLeadDigest', () => {
         await runDailyLeadDigest();
 
         expect(emailSendMock.mock.calls[0][0].subject).toMatch(/محتمل/);
+    });
+
+    it('passes type=lead_digest and userId to emailService for cross-email auditability', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[activeSub]];
+
+        await runDailyLeadDigest();
+
+        const sendCall = emailSendMock.mock.calls[0][0];
+        expect(sendCall.type).toBe('lead_digest');
+        expect(sendCall.userId).toBe('user-1');
+    });
+
+    it('stores the emailSendId returned by emailService on the sent audit row (links digest row to email body)', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[activeUser]];
+        subQueryQueue.value = [[activeSub]];
+
+        await runDailyLeadDigest();
+
+        const audit = audits()[0];
+        expect(audit.status).toBe('sent');
+        expect(audit.emailSendId).toBe('email-send-uuid-1');
+    });
+
+    it('does not store an emailSendId on skipped rows (nothing was sent)', async () => {
+        joinQueryRows.value = Array.from({ length: DIGEST_THRESHOLD }, (_, i) => makeLeadRow('user-1', i));
+        userQueryQueue.value = [[{ email: null, lastSeenAt: new Date() }]];
+
+        await runDailyLeadDigest();
+
+        const audit = audits()[0];
+        expect(audit.status).toBe('skipped_no_email');
+        expect(audit.emailSendId).toBeNull();
     });
 
     it('processes two users independently — one sent, one below threshold', async () => {

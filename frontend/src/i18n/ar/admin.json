@@ -298,6 +298,11 @@
     "leadDigestStatusFailed": "فشل",
     "leadDigestStatusSkippedNoEmail": "متخطى — لا يوجد بريد",
     "leadDigestStatusSkippedNoSubscription": "متخطى — لا يوجد اشتراك",
-    "leadDigestStatusSkippedAbandoned": "متخطى — حساب مهجور"
+    "leadDigestStatusSkippedAbandoned": "متخطى — حساب مهجور",
+    "leadDigestColView": "البريد",
+    "leadDigestViewEmail": "عرض",
+    "leadDigestModalTitle": "بريد ملخص العملاء",
+    "leadDigestModalLoading": "جاري تحميل البريد…",
+    "leadDigestModalNoBody": "لا يوجد محتوى محفوظ لهذا السجل (سجل قديم أو تم تخطيه قبل الإرسال)."
   }
 }

@@ -66,6 +66,7 @@ async function recordSend(row: {
     lang?: 'ar' | 'en' | null;
     resendEmailId?: string | null;
     errorMessage?: string | null;
+    emailSendId?: string | null;
 }): Promise<void> {
     try {
         await db.insert(leadDigestSends).values({
@@ -75,6 +76,7 @@ async function recordSend(row: {
             lang: row.lang ?? null,
             resendEmailId: row.resendEmailId ?? null,
             errorMessage: row.errorMessage ?? null,
+            emailSendId: row.emailSendId ?? null,
         });
     } catch (err) {
         // Audit-log failure must not block the actual send flow
@@ -206,7 +208,7 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
                 dashboardUrl: `${config.frontendUrl}/${lang}/leads`,
             });
 
-            const send = await emailService.send({ to: user.email, subject, html });
+            const send = await emailService.send({ to: user.email, subject, html, type: 'lead_digest', userId });
             if (!send.success) {
                 // Do NOT stamp — transient failure, retry tomorrow
                 await recordSend({
@@ -215,6 +217,7 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
                     leadCount: bucket.leadIds.length,
                     lang,
                     errorMessage: send.error ?? 'unknown',
+                    emailSendId: send.emailSendId ?? null,
                 });
                 result.errors++;
                 logger.error('[LeadDigest] Email send failed', {
@@ -241,6 +244,7 @@ export async function runDailyLeadDigest(): Promise<DigestResult> {
                 leadCount: bucket.leadIds.length,
                 lang,
                 resendEmailId: send.id ?? null,
+                emailSendId: send.emailSendId ?? null,
             });
             result.sent++;
             logger.info('[LeadDigest] Sent', {

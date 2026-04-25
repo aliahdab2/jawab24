@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { AdminLayout } from '@/components/layout/AdminLayout';
-import { Card, ConfirmationModal } from '@/components/ui';
+import { Card, ConfirmationModal, Modal } from '@/components/ui';
 import { analyticsApi, adminApi } from '@/lib/api';
 import type { AiUsageReport, AnalyticsOverview, SystemHealthReport, CacheStats } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -107,6 +107,7 @@ export default function AdminObservabilityPage() {
   const queryClient = useQueryClient();
   const [days, setDays] = useState(30);
   const [confirmClearCache, setConfirmClearCache] = useState(false);
+  const [previewEmailId, setPreviewEmailId] = useState<string | null>(null);
 
   const { data: health, isLoading: healthLoading, isFetching: healthFetching } = useQuery<SystemHealthReport>({
     queryKey: ['admin', 'system-health'],
@@ -161,6 +162,15 @@ export default function AdminObservabilityPage() {
     staleTime: 30_000,
     retry: false,
     meta: { onError: (err: unknown) => captureError(err, 'Failed to load lead digest history', { tags: { page: 'observability' } }) },
+  });
+
+  const { data: emailPreview, isLoading: emailPreviewLoading } = useQuery({
+    queryKey: ['admin', 'email', previewEmailId],
+    queryFn: () => adminApi.getEmailById(previewEmailId as string),
+    enabled: !!previewEmailId,
+    staleTime: 5 * 60_000,
+    retry: false,
+    meta: { onError: (err: unknown) => captureError(err, 'Failed to load email body', { tags: { page: 'observability' } }) },
   });
 
   const { mutate: runLeadDigest, isPending: runningLeadDigest } = useMutation({
@@ -446,6 +456,7 @@ export default function AdminObservabilityPage() {
                           <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColCount')}</th>
                           <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColLang')}</th>
                           <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColResend')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.leadDigestColView')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -482,6 +493,18 @@ export default function AdminObservabilityPage() {
                                 >
                                   {row.resendEmailId.slice(0, 8)}…
                                 </a>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                            <td className="py-1.5 text-xs text-end">
+                              {row.emailSendId ? (
+                                <button
+                                  onClick={() => setPreviewEmailId(row.emailSendId)}
+                                  className="text-brand-600 dark:text-brand-400 hover:underline"
+                                >
+                                  {t('observability.leadDigestViewEmail')}
+                                </button>
                               ) : (
                                 <span className="text-muted-foreground">—</span>
                               )}
@@ -611,6 +634,42 @@ export default function AdminObservabilityPage() {
           </>
         )}
       </div>
+      <Modal
+        isOpen={!!previewEmailId}
+        onClose={() => setPreviewEmailId(null)}
+        title={emailPreview?.subject || t('observability.leadDigestModalTitle')}
+        size="xl"
+        mobilePresentation="fullscreen"
+      >
+        {emailPreviewLoading ? (
+          <div className="text-sm text-muted-foreground py-8 text-center">
+            {t('observability.leadDigestModalLoading')}
+          </div>
+        ) : emailPreview?.htmlBody ? (
+          <div className="space-y-3">
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              <div>
+                <span className="font-semibold">{t('observability.leadDigestColUser')}: </span>
+                {emailPreview.toEmail}
+              </div>
+              <div>
+                <span className="font-semibold">{t('observability.leadDigestColDate')}: </span>
+                {new Date(emailPreview.createdAt).toLocaleString()}
+              </div>
+            </div>
+            <iframe
+              title={t('observability.leadDigestModalTitle')}
+              srcDoc={emailPreview.htmlBody}
+              sandbox=""
+              className="w-full h-[60vh] border border-theme-border rounded-lg bg-white"
+            />
+          </div>
+        ) : (
+          <div className="text-sm text-muted-foreground py-8 text-center">
+            {t('observability.leadDigestModalNoBody')}
+          </div>
+        )}
+      </Modal>
       <ConfirmationModal
         isOpen={confirmClearCache}
         onClose={() => setConfirmClearCache(false)}

@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, leadDigestSends, posts, instagramMedia } from '../db/schema';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, leadDigestSends, emailSends, posts, instagramMedia } from '../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
@@ -1079,7 +1079,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         const token = generateUnsubscribeToken(email);
                         const unsubscribeUrl = `${frontendUrl}/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
                         const html = waitlistEmailTemplate({ subject, body, unsubscribeUrl });
-                        const result = await emailService.send({ to: email, subject, html });
+                        const result = await emailService.send({ to: email, subject, html, type: 'waitlist' });
                         if (result.success) {
                             successCount++;
                         } else {
@@ -1149,6 +1149,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         lang: leadDigestSends.lang,
                         resendEmailId: leadDigestSends.resendEmailId,
                         errorMessage: leadDigestSends.errorMessage,
+                        emailSendId: leadDigestSends.emailSendId,
                         createdAt: leadDigestSends.createdAt,
                     })
                     .from(leadDigestSends)
@@ -1159,6 +1160,41 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     .offset(offset);
 
                 return reply.send({ page: pageNum, limit, rows });
+            }
+        );
+
+        /**
+         * GET /admin/emails/:id - Fetch a single outbound email (subject + body)
+         * by its email_sends row id. Generic across all email types — not just
+         * lead digest. Separate endpoint so list responses stay lean.
+         */
+        adminProtected.get<{ Params: { id: string } }>(
+            '/emails/:id',
+            {
+                schema: {
+                    description: 'Fetch the rendered subject + html body for a single outbound email',
+                    tags: ['Admin'],
+                    security: auth,
+                },
+            },
+            async (request, reply) => {
+                const [row] = await db
+                    .select({
+                        id: emailSends.id,
+                        type: emailSends.type,
+                        toEmail: emailSends.toEmail,
+                        subject: emailSends.subject,
+                        htmlBody: emailSends.htmlBody,
+                        status: emailSends.status,
+                        errorMessage: emailSends.errorMessage,
+                        createdAt: emailSends.createdAt,
+                    })
+                    .from(emailSends)
+                    .where(eq(emailSends.id, request.params.id))
+                    .limit(1);
+
+                if (!row) return reply.status(404).send({ error: 'Not found' });
+                return reply.send(row);
             }
         );
 

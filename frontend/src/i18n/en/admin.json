@@ -298,6 +298,11 @@
     "leadDigestStatusFailed": "Failed",
     "leadDigestStatusSkippedNoEmail": "Skipped — no email",
     "leadDigestStatusSkippedNoSubscription": "Skipped — no subscription",
-    "leadDigestStatusSkippedAbandoned": "Skipped — abandoned"
+    "leadDigestStatusSkippedAbandoned": "Skipped — abandoned",
+    "leadDigestColView": "Email",
+    "leadDigestViewEmail": "View",
+    "leadDigestModalTitle": "Lead digest email",
+    "leadDigestModalLoading": "Loading email…",
+    "leadDigestModalNoBody": "No email body stored for this row (older record or skipped before send)."
   }
 }

@@ -315,6 +315,13 @@ export interface CacheStats {
   semanticCache: { totalEntries: number; totalHits: number };
 }
 
+export interface LeadDigestSendBase {
+  id: string;
+  userEmail: string | null;
+  status: string;
+  createdAt: string;
+}
+
 export const analyticsApi = {
   getOverview: (days?: number) =>
     api.get<AnalyticsOverview>('/analytics/overview', { params: days ? { days } : undefined }),
@@ -602,18 +609,31 @@ export const adminApi = {
     const response = await api.get<{
       page: number;
       limit: number;
-      rows: Array<{
-        id: string;
+      rows: Array<LeadDigestSendBase & {
         userId: string;
-        userEmail: string | null;
-        status: string;
         leadCount: number;
         lang: 'ar' | 'en' | null;
         resendEmailId: string | null;
         errorMessage: string | null;
-        createdAt: string;
+        emailSendId: string | null;
       }>;
     }>(`/admin/lead-digest/history?${params.toString()}`);
+    return response.data;
+  },
+
+  // Generic outbound email log — fetch a single rendered email by id.
+  // Works across every email type (lead_digest, waitlist, transactional, …).
+  getEmailById: async (id: string) => {
+    const response = await api.get<{
+      id: string;
+      type: string;
+      toEmail: string;
+      subject: string;
+      htmlBody: string;
+      status: string;
+      errorMessage: string | null;
+      createdAt: string;
+    }>(`/admin/emails/${id}`);
     return response.data;
   },
 

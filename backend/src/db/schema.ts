@@ -875,10 +875,35 @@ export const leadDigestSends = pgTable('lead_digest_sends', {
     lang: varchar('lang', { length: 10 }), // 'ar' | 'en' | null when skipped before language pick
     resendEmailId: varchar('resend_email_id', { length: 255 }),
     errorMessage: text('error_message'),
+    // Link to the rendered email body in email_sends (null for skipped rows — nothing was sent).
+    emailSendId: uuid('email_send_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     userIdIdx: index('idx_lead_digest_sends_user_id').on(table.userId),
     createdAtIdx: index('idx_lead_digest_sends_created_at').on(table.createdAt),
+}));
+
+// Generic outbound email log — one row per EmailService.send() attempt.
+// Single source of truth for "what email did we send / try to send" across
+// every email type (lead_digest, waitlist, transactional, …). Decision-level
+// audit lives in type-specific tables (lead_digest_sends, waitlist_email_sends);
+// the body + delivery status lives here. Bodies contain PII (lead names,
+// phones) — TODO: add a cron to null html_body older than 30 days.
+export const emailSends = pgTable('email_sends', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    type: varchar('type', { length: 50 }).notNull(), // 'lead_digest' | 'waitlist' | 'transactional' | …
+    toEmail: varchar('to_email', { length: 255 }).notNull(),
+    subject: text('subject').notNull(),
+    htmlBody: text('html_body').notNull(),
+    status: varchar('status', { length: 16 }).notNull(), // 'sent' | 'failed'
+    resendEmailId: varchar('resend_email_id', { length: 255 }),
+    errorMessage: text('error_message'),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (table) => ({
+    typeIdx: index('idx_email_sends_type').on(table.type),
+    createdAtIdx: index('idx_email_sends_created_at').on(table.createdAt),
+    userIdIdx: index('idx_email_sends_user_id').on(table.userId),
 }));
 
 // ============================================
