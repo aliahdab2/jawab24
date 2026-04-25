@@ -74,18 +74,28 @@ export function Modal({
         xl: 'max-w-4xl landscape:max-w-5xl',
       };
 
+  // Shrink the overlay so it ends above the soft keyboard. --keyboard-height is
+  // set by keyboardSetup.ts (default 0px when no keyboard). Constrains BOTH the
+  // backdrop and the panel — works for sheet (panel anchored bottom) and
+  // fullscreen alike.
+  const overlayBottom = "bottom-[var(--keyboard-height,0px)]";
+
   const modalContent = (
-    <div className="fixed inset-0 z-50 overflow-hidden">
+    <div className={clsx("fixed top-0 start-0 end-0 z-50 overflow-hidden", overlayBottom)}>
       {/* Backdrop */}
       <div
         aria-hidden="true"
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity animate-fade-in"
+        className={clsx(
+          "fixed top-0 start-0 end-0 bg-black/50 backdrop-blur-sm transition-opacity animate-fade-in",
+          overlayBottom
+        )}
         onClick={onClose}
       />
 
       {/* Modal Container - Bottom sheet (default) or fullscreen on mobile portrait; centered on sm+/landscape */}
       <div className={clsx(
-        "fixed inset-0 flex justify-center p-0 sm:p-4 landscape:p-6",
+        "fixed top-0 start-0 end-0 flex justify-center p-0 sm:p-4 landscape:p-6",
+        overlayBottom,
         isFullscreen
           ? "items-stretch sm:items-center landscape:items-center"
           : "items-end sm:items-center landscape:items-center"

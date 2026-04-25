@@ -89,6 +89,11 @@ export function KeywordChipInput({
           placeholder={value.length === 0 ? placeholder : undefined}
           dir={inputValue ? 'auto' : undefined}
           maxLength={maxLength}
+          // Force the Android soft keyboard to show "Enter" rather than the
+          // auto-detected "Next" — without this, pressing Enter blurs to the
+          // next form input via the browser IME (preventDefault on keydown
+          // doesn't catch the IME-level focus shift).
+          enterKeyHint="enter"
           className="flex-1 min-w-[120px] bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none border-none p-0"
         />
       )}

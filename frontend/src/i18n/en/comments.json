@@ -94,5 +94,7 @@
   "postTriggerCleared": "Post reply removed",
   "postTriggerKeywordRequired": "Keyword is required",
   "postTriggerReplyRequired": "Reply message is required",
-  "newBadge": "NEW"
+  "newBadge": "NEW",
+  "postTriggerClearConfirmTitle": "Remove Post Reply?",
+  "postTriggerClearConfirmMessage": "Comments matching the keyword will no longer trigger an automatic reply on this post."
 }

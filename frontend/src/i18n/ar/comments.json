@@ -94,5 +94,7 @@
   "postTriggerCleared": "تم إزالة رد البوست",
   "postTriggerKeywordRequired": "الكلمة المفتاحية مطلوبة",
   "postTriggerReplyRequired": "رسالة الرد مطلوبة",
-  "newBadge": "جديد"
+  "newBadge": "جديد",
+  "postTriggerClearConfirmTitle": "إزالة رد البوست؟",
+  "postTriggerClearConfirmMessage": "لن تُشغّل التعليقات المطابقة للكلمات المفتاحية رداً تلقائياً على هذا البوست بعد الآن."
 }

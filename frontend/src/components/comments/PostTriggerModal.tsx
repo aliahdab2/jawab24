@@ -1,9 +1,10 @@
 import React, { useCallback, useState, useEffect } from 'react';
+import clsx from 'clsx';
 import { Hash } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
-import { Modal, Button, Textarea, KeywordChipInput, FormField } from '@/components/ui';
+import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal } from '@/components/ui';
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
 
@@ -32,6 +33,7 @@ export function PostTriggerModal({
 
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   // Sync when modal opens with fresh values
   useEffect(() => {
@@ -66,14 +68,30 @@ export function PostTriggerModal({
     await runSave(() => postsApi.updateTrigger(postId, source, keywords.join(', '), reply.trim()));
   }
 
-  async function handleClear() {
+  function requestClear() {
+    setConfirmingClear(true);
+  }
+
+  async function handleConfirmClear() {
+    setConfirmingClear(false);
     await runClear(() => postsApi.updateTrigger(postId, source, null, null));
   }
 
   const hasActiveTrigger = !!(initialKeyword && initialReply);
 
   const footer = (
-    <div className="flex items-center justify-end">
+    <div className={clsx('flex items-center gap-3', hasActiveTrigger ? 'justify-between' : 'justify-end')}>
+      {hasActiveTrigger && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={requestClear}
+          disabled={saving}
+          className="text-destructive hover:text-destructive"
+        >
+          {t('postTriggerClear')}
+        </Button>
+      )}
       <Button onClick={handleSave} disabled={saving} size="sm">
         {t('postTriggerSave')}
       </Button>
@@ -99,22 +117,11 @@ export function PostTriggerModal({
           </div>
         )}
 
-        {/* Active trigger badge — Clear lives here, not in the footer, so destructive
-            and primary actions don't sit side-by-side at equal prominence */}
+        {/* Active trigger badge */}
         {hasActiveTrigger && (
-          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-sm">
-            <div className="flex items-center gap-2 text-brand-600 dark:text-brand-400 font-medium">
-              <Hash className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-              {t('postTriggerActive')}
-            </div>
-            <button
-              type="button"
-              onClick={handleClear}
-              disabled={saving}
-              className="text-destructive hover:underline text-xs font-medium disabled:opacity-50"
-            >
-              {t('postTriggerClear')}
-            </button>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 text-sm font-medium">
+            <Hash className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            {t('postTriggerActive')}
           </div>
         )}
 
@@ -147,6 +154,16 @@ export function PostTriggerModal({
           />
         </FormField>
       </div>
+      <ConfirmationModal
+        isOpen={confirmingClear}
+        onClose={() => setConfirmingClear(false)}
+        onConfirm={handleConfirmClear}
+        title={t('postTriggerClearConfirmTitle')}
+        message={t('postTriggerClearConfirmMessage')}
+        confirmText={t('postTriggerClear')}
+        variant="danger"
+        loading={savingClear}
+      />
     </Modal>
   );
 }
