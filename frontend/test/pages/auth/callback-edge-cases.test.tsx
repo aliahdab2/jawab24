@@ -30,6 +30,7 @@ vi.mock('@/lib/capacitor', () => ({
 
 vi.mock('@/lib/sentryHelpers', () => ({
   captureError: vi.fn(),
+  getBackendErrorCode: vi.fn(() => undefined),
 }));
 
 describe('AuthCallback - edge cases', () => {
