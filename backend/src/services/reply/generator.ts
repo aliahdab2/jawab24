@@ -313,7 +313,11 @@ export class ReplyGenerator {
 
             if (!limitCheck.allowed) {
                 this.logger.info('[Generator] AI limit reached', { reason: limitCheck.reason });
-                return { replyText: 'Thank you for your comment!', replyMethod: 'template', needsAttention: false };
+                const lang = resolveFallbackLanguage({
+                    text, postMessage: contextPostMessage, knowledgeBase,
+                    defaultReplyLanguage: context.defaultReplyLanguage,
+                });
+                return { replyText: t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
             }
 
             // Fetch post content lazily if needed
@@ -367,7 +371,11 @@ export class ReplyGenerator {
 
         // 3. Fallback
         this.logger.debug('[Generator] Using fallback reply');
-        return { replyText: 'Thank you for your comment!', replyMethod: 'template', needsAttention: false };
+        const lang = resolveFallbackLanguage({
+            text, postMessage: contextPostMessage, knowledgeBase,
+            defaultReplyLanguage: context.defaultReplyLanguage,
+        });
+        return { replyText: t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
     }
 
     /**
@@ -386,7 +394,11 @@ export class ReplyGenerator {
 
             if (!limitCheck.allowed) {
                 this.logger.info('[Generator] AI limit reached', { reason: limitCheck.reason });
-                return { replyText: 'Thank you for your message! We will get back to you soon.', replyMethod: 'template', needsAttention: false };
+                const lang = resolveFallbackLanguage({
+                    text, knowledgeBase,
+                    defaultReplyLanguage: context.defaultReplyLanguage,
+                });
+                return { replyText: t('messageFallback', lang), replyMethod: 'template', needsAttention: false };
             }
 
             if (pageId && senderId) {
