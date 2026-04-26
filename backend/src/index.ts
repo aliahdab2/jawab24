@@ -260,7 +260,7 @@ const start = async () => {
     await server.register(waitlistRoutes, { prefix: "/waitlist" });
 
     // Customer notification templates + log (authenticated)
-    await server.register(customerNotificationRoutes, { prefix: "/api" });
+    await server.register(customerNotificationRoutes);
     await server.register(ecommerceAnalyticsRoutes, { prefix: "/api/ecommerce-analytics" });
 
     // SSE real-time events (authenticated inside the route handler)
