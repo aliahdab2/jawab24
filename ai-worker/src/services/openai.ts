@@ -370,10 +370,11 @@ export class OpenAIService {
             // Log to Sentry for observability and fall back to a safe canned reply.
             const refusal = completion.choices[0]?.message?.refusal;
             if (refusal) {
-                Sentry.captureMessage('openai_structured_refusal', {
-                    level: 'warning',
-                    tags: { service: 'openai' },
-                    extra: { refusal, model: config.openai.model },
+                Sentry.addBreadcrumb({
+                    category: 'openai',
+                    level: 'info',
+                    message: 'openai_structured_refusal',
+                    data: { refusal, model: config.openai.model },
                 });
                 return this.getFallbackReply(request);
             }
