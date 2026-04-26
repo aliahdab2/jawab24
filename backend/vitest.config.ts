@@ -6,6 +6,9 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./test/setup.ts'],
     exclude: ['test/integration/**', 'node_modules/**', 'dist/**'],
+    // Coverage instrumentation can slow tests ~3-10x; default 5s timeout is
+    // too tight for some heavier suites (instagramReply takes ~4.5s under coverage).
+    testTimeout: 15000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
