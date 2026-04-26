@@ -631,7 +631,7 @@ describe('Salla Controller', () => {
 
     describe('getStore', () => {
 
-        it('should return 404 when no store found', async () => {
+        it('returns 200 with null when no store connected (not 404 — onboarding state, not missing resource)', async () => {
             mockGetStoreByWorkspaceAny.mockResolvedValue(null);
             const req = mockRequest();
             const rep = mockReply();
@@ -639,7 +639,8 @@ describe('Salla Controller', () => {
             await getStore(req, rep);
 
             expect(mockGetStoreByWorkspaceAny).toHaveBeenCalledWith('salla', 'test_workspace_id');
-            expect(rep.status).toHaveBeenCalledWith(404);
+            expect(rep.status).not.toHaveBeenCalled();
+            expect(rep.send).toHaveBeenCalledWith(null);
         });
 
         it('should return store data', async () => {
