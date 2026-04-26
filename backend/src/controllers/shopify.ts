@@ -374,7 +374,7 @@ export async function getStore(request: FastifyRequest, reply: FastifyReply) {
     // Return inactive stores too so the frontend can show a Reconnect card
     const store = await shopifyService.getStoreByWorkspaceAny(req.workspaceId);
     if (!store) {
-        return reply.status(404).send({ error: 'No Shopify store connected' });
+        return reply.send(null);
     }
     return reply.send(shopifyService.mapToEcommerceStore(store));
 }

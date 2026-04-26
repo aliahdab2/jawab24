@@ -38,7 +38,7 @@ export function createEcommerceControllers(platform: EcommercePlatform, adapter:
     async function getStore(request: FastifyRequest, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
         const store = await getStoreByWorkspaceAny(platform, req.workspaceId);
-        if (!store) return reply.status(404).send({ error: `No ${platformLabel} store connected` });
+        if (!store) return reply.send(null);
         return reply.send(mapToEcommerceStore(store));
     }
 
