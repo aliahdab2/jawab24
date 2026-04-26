@@ -55,6 +55,11 @@ describe('classifyDmError — DmSendError (structured)', () => {
         expect(classifyDmError(err, 'facebook').bucket).toBe('our_fault');
     });
 
+    it('classifies 2500 as our_fault (active access token must be used)', () => {
+        const err = new DmSendError('An active access token must be used', { code: 2500 });
+        expect(classifyDmError(err, 'facebook').bucket).toBe('our_fault');
+    });
+
     it('uses code-only fallback when subcode is absent and exact key misses', () => {
         // 190 has no subcode-specific entry, only code-only. Supply a random subcode.
         const err = new DmSendError('bad token', { code: 190, subcode: 99999 });

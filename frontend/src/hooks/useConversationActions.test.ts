@@ -30,9 +30,13 @@ vi.mock('sonner', () => ({
 }));
 
 const mockCaptureError = vi.fn();
-vi.mock('@/lib/sentryHelpers', () => ({
-  captureError: (...args: unknown[]) => mockCaptureError(...args),
-}));
+vi.mock('@/lib/sentryHelpers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/sentryHelpers')>();
+  return {
+    ...actual,
+    captureError: (...args: unknown[]) => mockCaptureError(...args),
+  };
+});
 
 import { useConversationActions } from './useConversationActions';
 import { AxiosError, AxiosHeaders } from 'axios';

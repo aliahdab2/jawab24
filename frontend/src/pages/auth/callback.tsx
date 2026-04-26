@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { FB_CALLBACK_PATH } from '@/constants/auth';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { AppSkeleton } from '@/components/ui';
-import { captureError } from '@/lib/sentryHelpers';
+import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import { getLocalePath } from '@/utils/locale';
 
 export default function AuthCallback() {
@@ -142,7 +142,9 @@ export default function AuthCallback() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.message || t('loginError'));
+        const err = new Error(data.message || t('loginError')) as Error & { backendCode?: string };
+        err.backendCode = data.code;
+        throw err;
       }
 
       const data = await response.json();
@@ -253,9 +255,11 @@ export default function AuthCallback() {
         err.message.includes('NetworkError')       // Firefox
       );
       const isTimeout = err instanceof Error && (err as Error & { isLoginTimeout?: boolean }).isLoginTimeout === true;
+      const backendCode = getBackendErrorCode(err);
+      const isAuthExpired = backendCode === 'INVALID_TOKEN' || backendCode === 'AUTH_FAILED';
 
-      // Network blips and timeouts are not actionable — skip Sentry to avoid noise
-      if (!isNetworkError && !isTimeout) {
+      // Network blips, timeouts, and expired/invalid sessions are not actionable — skip Sentry to avoid noise
+      if (!isNetworkError && !isTimeout && !isAuthExpired) {
         captureError(err, 'Auth callback error', { tags: { page: 'auth-callback' } });
       }
 

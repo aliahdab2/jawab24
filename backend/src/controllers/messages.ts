@@ -23,7 +23,10 @@ function mapDmErrorToAppError(error: DmSendError, platform: FbPlatform): AppErro
         case 'transient':
             return new AppError(detail, 503, 'DM_TRANSIENT');
         case 'our_fault':
-            return new AppError(detail, 502, 'DM_PLATFORM_AUTH');
+            // Merchant-action-required (token expired/revoked, missing permission).
+            // 409 keeps these out of Sentry's 5xx error bucket — merchants need to reconnect,
+            // not the engineering team to fix code.
+            return new AppError(detail, 409, 'DM_PLATFORM_AUTH');
         default:
             return new AppError(detail, 502, 'DM_UNKNOWN', false);
     }
@@ -192,6 +195,13 @@ export class MessagesController {
         // Classify Graph API errors so expected conditions (window expired, customer blocked,
         // rate limits) return proper 4xx/5xx codes rather than generic 500s that flood Sentry.
         const platform: FbPlatform = message.platform === 'instagram' ? 'instagram' : 'facebook';
+        // Empty token in DB is our bug (column is notNull, so this means we wrote ""
+        // somewhere — sync failure, decrypt failure, etc.). Distinct from FB-rejected
+        // tokens which are merchant-action-required. Use a separate code so this still
+        // surfaces in Sentry while DM_PLATFORM_AUTH stays out.
+        if (!page.accessToken || page.accessToken.trim().length === 0) {
+            throw new AppError('Page access token missing in database', 500, 'DM_TOKEN_MISSING');
+        }
         try {
             if (platform === 'instagram' && page.instagramAccountId) {
                 await instagramService.sendDirectMessage(

@@ -365,7 +365,7 @@ export class FacebookService {
             );
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                throw DmSendError.fromAxios(error, 'Facebook API error');
+                throw DmSendError.fromAxios(error, 'Facebook API error', { verboseDetail: true });
             }
             throw error;
         }

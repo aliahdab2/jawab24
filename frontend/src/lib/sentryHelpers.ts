@@ -1,4 +1,25 @@
 import * as Sentry from '@sentry/nextjs';
+import axios from 'axios';
+
+/**
+ * Extract a structured backend error code from an unknown thrown value.
+ *
+ * Looks in two places:
+ *   1. Axios error: `response.data.code` (most API calls go through axios)
+ *   2. Custom Error with `backendCode` property (set by fetch-based callers)
+ *
+ * Returns undefined if no code is found.
+ */
+export function getBackendErrorCode(error: unknown): string | undefined {
+  if (axios.isAxiosError(error)) {
+    return (error.response?.data as { code?: string } | undefined)?.code;
+  }
+  if (error instanceof Error) {
+    const code = (error as Error & { backendCode?: string }).backendCode;
+    if (typeof code === 'string') return code;
+  }
+  return undefined;
+}
 
 /** Errors that are expected during normal operation and should not be sent to Sentry. */
 const IGNORED_ERRORS = [

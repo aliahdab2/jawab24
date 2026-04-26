@@ -107,6 +107,8 @@ const BUCKET_TABLE: Record<string, DmFailureBucket> = {
     'facebook|200':         'our_fault',         // permission error (e.g. missing pages_messaging)
     'instagram|200':        'our_fault',
     'facebook|10|2018065':  'our_fault',         // cannot message users not on the page (config)
+    'facebook|2500':        'our_fault',         // "An active access token must be used" — token missing/revoked
+    'instagram|2500':       'our_fault',
 };
 
 function lookupBucket(platform: FbPlatform, code: number | undefined, subcode: number | undefined): DmFailureBucket | undefined {

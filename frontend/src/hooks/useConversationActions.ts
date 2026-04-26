@@ -1,10 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { type Message, messagesApi } from '@/lib/api';
 import { useTranslations } from 'next-intl';
-import { captureError } from '@/lib/sentryHelpers';
+import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import type { Conversation } from '@/components/messages';
 
 interface UseConversationActionsOptions {
@@ -61,10 +60,8 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       toast.error(t('replyFailed'));
       // Report to Sentry unless the backend flagged this as an expected platform condition
       // (window expired, customer blocked, transient rate limit). Unknown/500s get captured.
-      const expectedCodes = new Set(['DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT']);
-      const backendCode = axios.isAxiosError(error)
-        ? (error.response?.data as { code?: string } | undefined)?.code
-        : undefined;
+      const expectedCodes = new Set(['DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT', 'DM_PLATFORM_AUTH']);
+      const backendCode = getBackendErrorCode(error);
       if (!backendCode || !expectedCodes.has(backendCode)) {
         captureError(error, 'Failed to send manual reply', {
           tags: { feature: 'messages.reply' },
