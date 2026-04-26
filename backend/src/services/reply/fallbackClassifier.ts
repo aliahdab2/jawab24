@@ -1,5 +1,12 @@
 import { normalizeArabic, normalizeAiIntent } from '@jawab24/shared';
 import { detectIntent } from '../kb/intent-detector';
+import {
+    EMOJI_ONLY,
+    MENTION_PATTERN,
+    PUNCTUATION_ONLY,
+    hasExternalPromoUrl,
+    hasSpamKeyword,
+} from './spamPatterns';
 
 /**
  * Lightweight, zero-cost keyword-based classifier for fallback responses.
@@ -7,15 +14,9 @@ import { detectIntent } from '../kb/intent-detector';
  * (intent, confidence, flags) instead of returning completely empty data.
  */
 
-// ── Spam / Irrelevant patterns ──────────────────────────────────────────────
-
-const EMOJI_ONLY = /^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u;
-const MENTION_PATTERN = /@\w+/;
-// English spam uses \b word boundaries; Arabic spam uses a separate pattern (no \b for Arabic)
-const SPAM_KEYWORDS_EN = /\b(follow\s+me|follow\s+@|check\s+(my|out)\s+(profile|page|bio)|check\s+this\s+out|subscribe|giveaway|link\s+in\s+bio)\b/i;
-const SPAM_KEYWORDS_AR = /(منشن|تاق|فولو|فولومي)/i;
-const SPAM_FRANCO = /\b(folo|folomi|ta2ni|ta3ni)\b/i;
-const PUNCTUATION_ONLY = /^[.…?!؟\s]+$/;
+// Spam patterns (EMOJI_ONLY, MENTION_PATTERN, PUNCTUATION_ONLY, SPAM_KEYWORDS_*) live in
+// `./spamPatterns.ts` so the comment preprocess pipeline and this fallback classifier
+// share a single source of truth.
 
 // ── Compliment patterns ─────────────────────────────────────────────────────
 
@@ -69,11 +70,14 @@ export function classifyFallbackIntent(text: string): string | undefined {
     // General emoji-only (non-compliment emojis like 😂😂😂)
     if (EMOJI_ONLY.test(lower)) return 'SPAM_OR_IRRELEVANT';
 
+    // External group/channel/DM invite URL (parity with commentPreprocess silent-skip)
+    if (hasExternalPromoUrl(lower)) return 'SPAM_OR_IRRELEVANT';
+
     // @mention + any spam signal
-    if (MENTION_PATTERN.test(lower) && (SPAM_KEYWORDS_EN.test(lower) || SPAM_KEYWORDS_AR.test(normalized) || SPAM_FRANCO.test(lower))) return 'SPAM_OR_IRRELEVANT';
+    if (MENTION_PATTERN.test(lower) && hasSpamKeyword(lower, normalized)) return 'SPAM_OR_IRRELEVANT';
 
     // Standalone spam keywords
-    if (SPAM_KEYWORDS_EN.test(lower) || SPAM_KEYWORDS_AR.test(normalized) || SPAM_FRANCO.test(lower)) return 'SPAM_OR_IRRELEVANT';
+    if (hasSpamKeyword(lower, normalized)) return 'SPAM_OR_IRRELEVANT';
 
     // Compliment text
     if (COMPLIMENT_ARABIC.test(normalized) || COMPLIMENT_ENGLISH.test(lower)) return 'COMPLIMENT';

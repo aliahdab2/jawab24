@@ -124,6 +124,19 @@ describe('preprocessCommentText', () => {
         });
     });
 
+    describe('external promo URL skip', () => {
+        // Pattern-level coverage lives in spamPatterns.test.ts. This test only verifies
+        // that preprocessCommentText routes the signal to the expected skip reason.
+        it('routes external-promo URLs to skipReason="external_promo_url"', () => {
+            const r = preprocessCommentText({
+                text: '#تعاون يعلن الفريق ❤️ https://www.facebook.com/groups/1416016389339694',
+                hasPostContext: true,
+            });
+            expect(r.skipReason).toBe('external_promo_url');
+            expect(r.commentForAI).toBe('');
+        });
+    });
+
     describe('normal comments pass through', () => {
         it('returns cleaned text for a normal Arabic question', () => {
             const r = preprocessCommentText({

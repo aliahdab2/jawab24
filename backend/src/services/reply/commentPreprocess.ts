@@ -8,6 +8,7 @@ import {
     type FacebookMessageTag,
 } from '../../utils/commentText';
 import { detectCommentLanguage, detectLanguageCode } from '../../utils/language';
+import { hasExternalPromoUrl } from './spamPatterns';
 
 /** Threshold below which a @mention comment is treated as friend-tagging
  *  (peer-to-peer chatter), not a real question. Pre-existing value from the
@@ -22,7 +23,9 @@ export type CommentSkipReason =
     /** Regex @mention with empty or ≤3-word trailing text — friend-tagging. */
     | 'friend_mention'
     /** Comment is punctuation/emoji only and there's no post context to anchor a reply. */
-    | 'punctuation_no_context';
+    | 'punctuation_no_context'
+    /** Comment links to an external group/channel/messenger invite — self-promotion spam. */
+    | 'external_promo_url';
 
 export interface CommentPreprocessResult {
     /** Trimmed, noise-free text to feed downstream (AI, RAG). Empty when fully stripped. */
@@ -47,6 +50,8 @@ export interface CommentPreprocessResult {
  *    → `friend_mention`. Legacy fallback for payloads without structured tag data.
  * 3. Stripped text is empty OR punctuation-only AND there's no post context available
  *    → `punctuation_no_context`. Nothing meaningful to answer.
+ * 4. Raw text contains an external group/channel/DM invite URL → `external_promo_url`.
+ *    Catches "join my group" / "follow my channel" spam before the AI call.
  */
 export function preprocessCommentText(opts: {
     text: string;
@@ -58,6 +63,10 @@ export function preprocessCommentText(opts: {
 
     if (hasUserTag(messageTags) && !hasOwnPageTag(messageTags, ourFacebookPageId)) {
         return { commentForAI: '', skipReason: 'user_tag', hadMention: false };
+    }
+
+    if (hasExternalPromoUrl(text)) {
+        return { commentForAI: '', skipReason: 'external_promo_url', hadMention: false };
     }
 
     const textAfterTags = stripTagsByOffsets(text, messageTags);

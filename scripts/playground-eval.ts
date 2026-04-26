@@ -1018,6 +1018,33 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Self-promotion with @-mention',
     },
+    {
+        id: 321, category: 16, categoryName: 'Spam Detection', channel: 'comment',
+        message: '#جديد #تعاون #جوائز يعلن الفريق الدمشقي للتدريب والتأهيل ❤️❤️❤️ https://www.facebook.com/groups/1416016389339694',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'External Facebook group invite — silent skip via commentPreprocess external_promo_url',
+    },
+    {
+        id: 322, category: 16, categoryName: 'Spam Detection', channel: 'comment',
+        message: 'join our channel https://t.me/crypto_signals',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'Telegram channel invite — silent skip via external_promo_url',
+    },
+    {
+        id: 323, category: 16, categoryName: 'Spam Detection', channel: 'comment',
+        message: 'تواصل واتساب https://wa.me/9665xxxxxxx',
+        page: 'training',
+        expected: {
+            intent: ['SPAM_OR_IRRELEVANT'],
+        },
+        notes: 'wa.me direct-DM handle — silent skip via external_promo_url',
+    },
 
     // ===== Category 17: Long DM History =====
     {

@@ -303,6 +303,9 @@ export class ReplyGenerator {
             hasPostContext: !!contextPostMessage,
         });
         if (pre.skipReason) {
+            this.logger.info('[Generator] Comment preprocess skip', {
+                skipReason: pre.skipReason, pageId, postId,
+            });
             return { replyText: null, replyMethod: 'ai', aiIntent: 'SPAM_OR_IRRELEVANT', needsAttention: false };
         }
         let commentForAI = pre.commentForAI;
