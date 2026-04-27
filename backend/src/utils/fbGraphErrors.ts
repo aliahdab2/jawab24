@@ -85,6 +85,8 @@ const BUCKET_TABLE: Record<string, DmFailureBucket> = {
     'facebook|551':         'customer_refused',  // "This person isn't available right now"
     'facebook|100|2018001': 'customer_refused',  // No matching user found (private-reply-to-comment)
     'instagram|100|2018001':'customer_refused',
+    'facebook|100|1893060': 'customer_refused',  // "No matching user for the field user" — privacy-locked / friends-only DM commenter
+    'instagram|100|1893060':'customer_refused',
     'facebook|10903|1893062':'customer_refused', // "This user can't reply to this activity" — commenter has restrictions
     'facebook|10903|1893049':'customer_refused', // same family, different subcode variant
     'facebook|10903':        'customer_refused', // catch other 10903 subcodes (fallback)

@@ -35,6 +35,16 @@ describe('classifyDmError — DmSendError (structured)', () => {
         expect(classifyDmError(err, 'facebook').bucket).toBe('customer_refused');
     });
 
+    it('classifies 100/1893060 as customer_refused on Facebook', () => {
+        const err = new DmSendError('no matching user', { code: 100, subcode: 1893060 });
+        expect(classifyDmError(err, 'facebook').bucket).toBe('customer_refused');
+    });
+
+    it('classifies 100/1893060 as customer_refused on Instagram', () => {
+        const err = new DmSendError('no matching user', { code: 100, subcode: 1893060 });
+        expect(classifyDmError(err, 'instagram').bucket).toBe('customer_refused');
+    });
+
     it('classifies 10/2018278 as window_expired', () => {
         const err = new DmSendError('window', { code: 10, subcode: 2018278 });
         expect(classifyDmError(err, 'facebook').bucket).toBe('window_expired');
