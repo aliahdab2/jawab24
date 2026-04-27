@@ -172,7 +172,7 @@ Each service is independently deployable but shares:
    - `errorHandler.ts` — centralized error handling (logs to Sentry)
    - `auth.ts` — JWT/session validation, workspace scoping, CSRF protection
    - `admin.ts` — admin-only routes
-   - `workspace.ts` — multi-workspace isolation
+   - `workspace.ts` — multi-workspace isolation; resolves default workspace via `workspaceService.resolveDefaultWorkspaceId` when no `X-Workspace-Id` header is sent
    - `geo.ts` — geolocation via MaxMind (for compliance checks, sanctioned countries)
    - `requestId.ts` — unique request ID for tracing
 
@@ -478,11 +478,60 @@ Each service is independently deployable but shares:
 4. POST /auth/phone/link (authenticated) links phone to existing account
 ```
 
-**Multiple workspaces:**
+**Multiple workspaces (server-authoritative selection):**
+
+Users can belong to multiple workspaces (own + invited). The server is the source of truth for *which workspace a user lands in* on login — not the device's persisted state. Mirrors Linear/Vercel/Notion's pattern.
+
 ```
-- Frontend: useAuthStore.activeWorkspaceId
-- Backend middleware: all queries filtered by workspace_id
+┌──────────────────────────────────────────────────────────────────┐
+│  users.last_active_workspace_id (uuid, nullable, FK SET NULL)    │
+│  ↑ persisted choice; survives device changes and reinstalls      │
+└──────────────────────────────────────────────────────────────────┘
+       ↓ read by
+┌──────────────────────────────────────────────────────────────────┐
+│  workspaceService.resolveDefaultWorkspaceId(userId)              │
+│  1. Stored last-active (membership-checked) → return             │
+│  2. Heuristic: most connected pages → owner-first → oldest       │
+│  3. Zero memberships → null (caller maps to NO_WORKSPACE 404)    │
+└──────────────────────────────────────────────────────────────────┘
+       ↓ called by
+┌──────────────────────────────────────────────────────────────────┐
+│  Auth response: defaultWorkspaceId field on every login path     │
+│  Middleware fallback: when no X-Workspace-Id header              │
+│  Invite acceptance: also writes last-active for the new joiner   │
+└──────────────────────────────────────────────────────────────────┘
+       ↓ honored by
+┌──────────────────────────────────────────────────────────────────┐
+│  Frontend store: setWorkspaces({ defaultWorkspaceId }) overrides │
+│  any persisted activeWorkspaceId on login. Mid-session refreshes │
+│  preserve user intent.                                           │
+└──────────────────────────────────────────────────────────────────┘
+       ↓ writes back via
+┌──────────────────────────────────────────────────────────────────┐
+│  PATCH /me/last-workspace { workspaceId }                        │
+│  Membership-checked; throws WorkspaceAccessDeniedError → 403.    │
+│  Called fire-and-forget by setActiveWorkspace so other devices   │
+│  and future logins converge on the chosen workspace.             │
+└──────────────────────────────────────────────────────────────────┘
 ```
+
+**Conflict-aware page-connect UX:** when `pages.syncFromFacebook` finds a page in another workspace AND the user is already a member of that holding workspace (e.g. invitee re-syncing pages already in the inviter's workspace), the response includes `alreadyMemberOf: [{ workspaceId, workspaceName, role, pageName }]` so the client can render an actionable *"Switch to ‹X›"* affordance instead of the misleading *"ask the owner to invite you"* warning.
+
+**Mobile workspace switcher:** rendered in the More-tab `MobileMenuOverlay` when `workspaces.length > 1`. Closes the gap that previously left mobile multi-workspace users with no way to switch (the desktop sidebar switcher is `hidden lg:block`).
+
+**Edge cases handled:**
+- `last_active_workspace_id` references a deleted workspace → FK `ON DELETE SET NULL` empties the column, resolver falls through to heuristic
+- User was removed from the workspace they had pinned → resolver's membership check fails, falls through
+- Concurrent switch from two devices → last write wins (acceptable for current scale)
+- Mobile clients on old builds (pre-1.2.0) ignore `defaultWorkspaceId` and use their existing logic — no break, they just don't get the override until they update
+
+**Files:**
+- Schema: [`backend/src/db/schema.ts`](backend/src/db/schema.ts) (`users.lastActiveWorkspaceId`)
+- Service: [`backend/src/services/workspace.ts`](backend/src/services/workspace.ts) (`resolveDefaultWorkspaceId`, `setLastActiveWorkspace`, `WorkspaceAccessDeniedError`)
+- Middleware: [`backend/src/middleware/workspace.ts`](backend/src/middleware/workspace.ts) (delegates to resolver)
+- Endpoint: [`backend/src/routes/workspace.ts`](backend/src/routes/workspace.ts) (`PATCH /me/last-workspace`)
+- Frontend store: [`frontend/src/lib/store.ts`](frontend/src/lib/store.ts) (`setWorkspaces` defaultWorkspaceId override, `setActiveWorkspace` PATCH)
+- Mobile switcher: [`frontend/src/components/layout/DashboardLayout.tsx`](frontend/src/components/layout/DashboardLayout.tsx) (`MobileMenuOverlay`)
 
 ## Key Abstractions
 
