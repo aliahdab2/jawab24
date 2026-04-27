@@ -240,6 +240,137 @@ describe('PagesService', () => {
             expect(db.update).toHaveBeenCalledTimes(2);
         });
 
+        // Regression guard for the "Noor unstuck" UX:
+        // When a sync attempts to attach a page that already lives in ANOTHER
+        // workspace, AND the syncing user is already a member of that holding
+        // workspace, the response must include `alreadyMemberOf` so the client
+        // can render an actionable "Switch to ‹X›" affordance instead of the
+        // misleading "ask the owner to invite you" warning.
+        it('returns alreadyMemberOf when conflict workspace is one the user is already a member of', async () => {
+            const workspaceId = 'ws-noor-solo';
+            const userId = 'user-noor';
+            const accessToken = 'noor-fb-token';
+            const conflictWorkspaceId = 'ws-ali';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{ id: 'fb-page-shared', name: 'Shared Page', access_token: 'pt-shared' }],
+            });
+
+            // The pages.ts flow does several DB selects in order.
+            // 1. getPages(workspaceId) — existing pages in Noor's solo workspace (empty).
+            // 2. globalResults — find the page globally (returns the row in Ali's workspace).
+            // 3. membership lookup — is Noor a member of Ali's workspace? (yes, admin).
+            const fromOrderByLimitChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(rows) }),
+                    }),
+                }),
+            });
+
+            const fromWhereChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(rows),
+                }),
+            });
+
+            const fromInnerJoinChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue(rows),
+                        }),
+                    }),
+                }),
+            });
+
+            vi.mocked(db.select)
+                // 1. existing pages in Noor's workspace — empty
+                .mockReturnValueOnce(fromOrderByLimitChain([]) as any)
+                // 2. global lookup for fb-page-shared — found in Ali's workspace, still connected
+                .mockReturnValueOnce(fromWhereChain([{
+                    id: 'page-row-id',
+                    workspaceId: conflictWorkspaceId,
+                    facebookPageId: 'fb-page-shared',
+                    accessToken: 'ali-page-token', // non-empty → "connected" (NOT disconnected)
+                }]) as any)
+                // 3. membership lookup — Noor is admin in Ali's workspace
+                .mockReturnValueOnce(fromInnerJoinChain([{
+                    role: 'admin',
+                    workspaceName: 'Ali Ahdab',
+                }]) as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
+            expect(result.takenCount).toBe(1);
+            expect(result.alreadyMemberOf).toEqual([
+                {
+                    workspaceId: conflictWorkspaceId,
+                    workspaceName: 'Ali Ahdab',
+                    role: 'admin',
+                    pageName: 'Shared Page',
+                },
+            ]);
+        });
+
+        // Back-compat regression guard: when the conflict workspace belongs to
+        // a stranger (the user is NOT a member), `alreadyMemberOf` must stay
+        // empty so the original "ask the owner to invite you" warning fires
+        // unchanged on the client.
+        it('keeps alreadyMemberOf empty when user is not a member of the conflict workspace', async () => {
+            const workspaceId = 'ws-stranger';
+            const userId = 'user-stranger';
+            const accessToken = 'stranger-fb-token';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{ id: 'fb-page-foreign', name: 'Foreign Page', access_token: 'pt-foreign' }],
+            });
+
+            const fromOrderByLimitChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(rows) }),
+                    }),
+                }),
+            });
+
+            const fromWhereChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(rows),
+                }),
+            });
+
+            const fromInnerJoinChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue(rows),
+                        }),
+                    }),
+                }),
+            });
+
+            vi.mocked(db.select)
+                .mockReturnValueOnce(fromOrderByLimitChain([]) as any)
+                .mockReturnValueOnce(fromWhereChain([{
+                    id: 'page-row-id',
+                    workspaceId: 'ws-someone-else',
+                    facebookPageId: 'fb-page-foreign',
+                    accessToken: 'someone-else-token',
+                }]) as any)
+                // Membership lookup: empty → user is NOT a member
+                .mockReturnValueOnce(fromInnerJoinChain([]) as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
+            expect(result.takenCount).toBe(1);
+            expect(result.alreadyMemberOf).toEqual([]);
+        });
+
         it('should not set suggestedKnowledgeBase when Facebook has no business info', async () => {
             const workspaceId = 'workspace-123';
             const userId = 'user-123';

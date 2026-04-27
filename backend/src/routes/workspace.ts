@@ -23,6 +23,13 @@ export default async function workspaceRoutes(fastify: FastifyInstance) {
         authOnly.post('/invites/accept', {
             schema: { tags: ['Workspaces'], summary: 'Accept workspace invite', security: auth },
         }, workspaceController.acceptInvite);
+
+        // Persist the user's last-active workspace. Picks where the next login lands.
+        // No resolveWorkspace hook — this endpoint chooses the workspace, so running
+        // the resolver would be circular. Membership is enforced inside the service.
+        authOnly.patch('/me/last-workspace', {
+            schema: { tags: ['Workspaces'], summary: 'Set user\'s last-active workspace', security: auth },
+        }, workspaceController.setLastActive);
     });
 
     // --- Workspace-scoped (member+) ---

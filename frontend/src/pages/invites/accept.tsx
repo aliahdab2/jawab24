@@ -28,12 +28,19 @@ const AcceptInvitePage: NextPageWithLayout = () => {
 
     try {
       const res = await workspaceApi.acceptInvite(token);
-      // Refresh workspace list and activate the newly joined workspace
+      // Refresh workspace list and activate the newly joined workspace.
+      // acceptedWorkspaceId is a server-provided alias of workspaceId — explicit
+      // signal "this is what you should switch to". Falls back to workspaceId
+      // for older backend builds. setActiveWorkspace also persists the choice
+      // to users.last_active_workspace_id, so future logins from any device
+      // land here too.
+      const acceptedWorkspaceId = (res.data as { acceptedWorkspaceId?: string }).acceptedWorkspaceId
+        ?? res.data?.workspaceId;
       if (res.data?.workspaces) {
-        setWorkspaces(res.data.workspaces);
+        setWorkspaces(res.data.workspaces, { defaultWorkspaceId: acceptedWorkspaceId ?? null });
       }
-      if (res.data?.workspaceId) {
-        setActiveWorkspace(res.data.workspaceId);
+      if (acceptedWorkspaceId) {
+        setActiveWorkspace(acceptedWorkspaceId);
       }
       setState('success');
     } catch (error: unknown) {

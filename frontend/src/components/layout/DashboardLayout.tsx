@@ -1,4 +1,4 @@
-import { MessageCircle, LayoutDashboard, MessageSquare, MoreHorizontal, X, LogOut } from 'lucide-react';
+import { MessageCircle, LayoutDashboard, MessageSquare, MoreHorizontal, X, LogOut, Check } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
@@ -431,6 +431,18 @@ function MobileMenuOverlay({
   const isLandscape = useLandscape();
   useBodyScrollLock(isOpen);
 
+  // Workspace switcher: only mobile path that lets multi-workspace users move
+  // between workspaces. Hidden when the user has 0 or 1 workspaces.
+  const workspaces = useAuthStore((s) => s.workspaces);
+  const activeWorkspaceId = useAuthStore((s) => s.activeWorkspaceId);
+  const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
+  const showWorkspaceSwitcher = workspaces.length > 1;
+  const handleWorkspaceSwitch = (id: string) => {
+    setActiveWorkspace(id);
+    onClose();
+    router.replace(router.asPath);
+  };
+
   const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin });
   const menuItems = navigationGroups.flatMap((group) =>
     group.items.map((item) => ({
@@ -508,6 +520,51 @@ function MobileMenuOverlay({
           "overflow-y-auto",
           isLandscape ? "p-4" : "p-5"
         )}>
+          {/* Workspace switcher — only when user belongs to multiple workspaces.
+              Without this, mobile users had no way to switch workspaces (the
+              desktop sidebar switcher is hidden behind `lg:block`). */}
+          {showWorkspaceSwitcher && (
+            <div className={clsx("mb-4", isLandscape && "mb-3")}>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                {tNav('workspace') || 'Workspace'}
+              </h4>
+              <div className="flex flex-col gap-1.5">
+                {workspaces.map((ws) => {
+                  const isActive = ws.id === activeWorkspaceId;
+                  return (
+                    <button
+                      key={ws.id}
+                      onClick={() => handleWorkspaceSwitch(ws.id)}
+                      className={clsx(
+                        "flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all duration-150 active:scale-[0.99]",
+                        isActive
+                          ? "bg-brand-50 dark:bg-brand-950/30 border-brand-200 dark:border-brand-800"
+                          : "bg-card border-theme-border/60 hover:bg-muted"
+                      )}
+                      aria-current={isActive ? 'true' : undefined}
+                    >
+                      <span className={clsx(
+                        "w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm flex-shrink-0",
+                        isActive
+                          ? "bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300"
+                          : "bg-muted text-muted-foreground"
+                      )}>
+                        {ws.name?.charAt(0) || 'W'}
+                      </span>
+                      <span className={clsx(
+                        "text-sm font-medium truncate flex-1 text-start",
+                        isActive ? "text-brand-700 dark:text-brand-300" : "text-foreground"
+                      )}>
+                        {ws.name}
+                      </span>
+                      {isActive && <Check className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {isLandscape ? (
             // Landscape: Horizontal row layout (maximizes vertical space)
             <div className="flex flex-wrap justify-center gap-3">

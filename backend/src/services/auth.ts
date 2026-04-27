@@ -369,7 +369,10 @@ export class AuthService {
     }
 
     /**
-     * Create auth response
+     * Create auth response. Callers pass the server-resolved defaultWorkspaceId
+     * (from `workspaceService.resolveDefaultWorkspaceId`) so the frontend can
+     * land the user in the right workspace on login regardless of any stale
+     * persisted state on the device.
      */
     createAuthResponse(
         user: User,
@@ -378,6 +381,7 @@ export class AuthService {
         settings?: { dashboardLanguage: string },
         workspaces: AuthResponse['workspaces'] = [],
         requiresPhone?: boolean,
+        defaultWorkspaceId: string | null = null,
     ): AuthResponse {
         return {
             token,
@@ -393,6 +397,7 @@ export class AuthService {
             },
             settings,
             workspaces,
+            defaultWorkspaceId,
             requiresPhone,
         };
     }

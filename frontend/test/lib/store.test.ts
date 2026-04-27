@@ -204,6 +204,81 @@ describe('useAuthStore - state management', () => {
     });
 });
 
+// ── Regression guard for the "Noor stuck in stale workspace" bug ───────────
+// The server returns `defaultWorkspaceId` on every login response. When set,
+// the store MUST honor it as the active workspace, even if a different
+// activeWorkspaceId is already persisted from a previous session. Without
+// this contract, mobile users with stale persisted state (Noor's exact
+// scenario) silently land in the wrong workspace.
+describe('useAuthStore - setWorkspaces with defaultWorkspaceId override', () => {
+    beforeEach(() => {
+        useAuthStore.setState({
+            user: null,
+            token: null,
+            fbToken: null,
+            isAuthenticated: false,
+            workspaces: [],
+            activeWorkspaceId: null,
+        });
+        localStorage.clear();
+        vi.clearAllMocks();
+    });
+
+    const wsA = { id: 'ws-A', name: 'Owner Workspace', role: 'admin' };
+    const wsB = { id: 'ws-B', name: 'Solo Workspace', role: 'owner' };
+
+    it('overrides a valid persisted activeWorkspaceId when server provides defaultWorkspaceId', () => {
+        // Pre-state: user already has activeWorkspaceId pointing at workspace B
+        // (the empty solo workspace, equivalent to Noor's stuck state).
+        useAuthStore.setState({ workspaces: [wsB], activeWorkspaceId: 'ws-B' });
+
+        // Login response arrives: server says "use workspace A". Both A and B
+        // are valid memberships in the new list, but server's recommendation wins.
+        useAuthStore.getState().setWorkspaces([wsA, wsB], { defaultWorkspaceId: 'ws-A' });
+
+        expect(useAuthStore.getState().activeWorkspaceId).toBe('ws-A');
+    });
+
+    it('preserves persisted activeWorkspaceId when no defaultWorkspaceId option is given', () => {
+        useAuthStore.setState({ workspaces: [wsA, wsB], activeWorkspaceId: 'ws-B' });
+
+        // Mid-session re-fetch (e.g. settings page reloads workspaces): no
+        // server override; preserve user's current selection.
+        useAuthStore.getState().setWorkspaces([wsA, wsB]);
+
+        expect(useAuthStore.getState().activeWorkspaceId).toBe('ws-B');
+    });
+
+    it('falls back to workspaces[0] when persisted activeWorkspaceId is no longer valid', () => {
+        // Stale ID (e.g. workspace deleted): not in new list, no server override.
+        useAuthStore.setState({ workspaces: [], activeWorkspaceId: 'ws-deleted' });
+
+        useAuthStore.getState().setWorkspaces([wsA, wsB]);
+
+        expect(useAuthStore.getState().activeWorkspaceId).toBe('ws-A');
+    });
+
+    it('ignores defaultWorkspaceId when it is not in the new workspaces list (defensive)', () => {
+        useAuthStore.setState({ workspaces: [], activeWorkspaceId: null });
+
+        // Server sent a defaultWorkspaceId we're not actually a member of —
+        // shouldn't happen, but if it does, fall through to standard logic
+        // rather than blindly trusting and writing a bogus active id.
+        useAuthStore.getState().setWorkspaces([wsA, wsB], { defaultWorkspaceId: 'ws-bogus' });
+
+        expect(useAuthStore.getState().activeWorkspaceId).toBe('ws-A'); // fallback to [0]
+    });
+
+    it('handles defaultWorkspaceId=null (server says "no recommendation") gracefully', () => {
+        useAuthStore.setState({ workspaces: [wsA], activeWorkspaceId: 'ws-A' });
+
+        useAuthStore.getState().setWorkspaces([wsA, wsB], { defaultWorkspaceId: null });
+
+        // No override → preserve activeWorkspaceId since it's still valid.
+        expect(useAuthStore.getState().activeWorkspaceId).toBe('ws-A');
+    });
+});
+
 describe('useUIStore', () => {
     beforeEach(() => {
         useUIStore.setState({

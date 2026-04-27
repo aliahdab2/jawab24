@@ -16,6 +16,9 @@ vi.mock('../../src/services/workspace', () => ({
         getUserWorkspaces: vi.fn().mockResolvedValue([
             { id: 'ws-1', name: 'My Workspace', role: 'member' },
         ]),
+        // setLastActiveWorkspace is called inside acceptInvite so the freshly-joined
+        // workspace becomes the user's default on next login. Mocked to no-op for unit tests.
+        setLastActiveWorkspace: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -177,6 +180,28 @@ describe('WorkspaceInviteService', () => {
             expect(result.workspaces).toBeDefined();
             expect(result.workspaces).toEqual([{ id: 'ws-1', name: 'My Workspace', role: 'member' }]);
             expect(workspaceService.getUserWorkspaces).toHaveBeenCalledWith('user-2');
+        });
+
+        // Regression guard: prevents the orphan-empty-workspace UX bug. If the
+        // invite-accept path doesn't set last_active_workspace_id, an invitee
+        // with a stale persisted activeWorkspaceId on their device will still
+        // land in the wrong (often empty) workspace on next login.
+        it('sets the invitee\'s last_active_workspace_id to the just-joined workspace', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([sampleInvite]) as any);
+            vi.mocked(db.update).mockReturnValue(mockUpdateNoReturn() as any);
+
+            await workspaceInviteService.acceptInvite('raw-token', 'user-2');
+
+            expect(workspaceService.setLastActiveWorkspace).toHaveBeenCalledWith('user-2', 'ws-1');
+        });
+
+        it('returns acceptedWorkspaceId so the client can auto-switch without diffing the list', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([sampleInvite]) as any);
+            vi.mocked(db.update).mockReturnValue(mockUpdateNoReturn() as any);
+
+            const result = await workspaceInviteService.acceptInvite('raw-token', 'user-2');
+
+            expect(result.acceptedWorkspaceId).toBe('ws-1');
         });
 
         it('should throw for invalid token', async () => {

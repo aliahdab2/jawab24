@@ -134,7 +134,9 @@ describe('AcceptInvitePage', () => {
     renderAcceptPage();
 
     await waitFor(() => {
-      expect(mockSetWorkspaces).toHaveBeenCalledWith(workspaces);
+      // setWorkspaces now takes a defaultWorkspaceId hint so the joined
+      // workspace becomes the active one even on devices with stale persisted state.
+      expect(mockSetWorkspaces).toHaveBeenCalledWith(workspaces, { defaultWorkspaceId: 'ws-owner' });
       expect(mockSetActiveWorkspace).toHaveBeenCalledWith('ws-owner');
     });
   });

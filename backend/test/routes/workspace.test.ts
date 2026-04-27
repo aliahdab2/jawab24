@@ -136,11 +136,12 @@ describe('Workspace Routes', () => {
             expect(mockFastify._routes).toContain('DELETE /workspaces/current');
         });
 
-        it('registers all 14 expected routes in total', () => {
+        it('registers all 15 expected routes in total', () => {
             const expected = [
                 'GET /workspaces',
                 'POST /workspaces',
                 'POST /invites/accept',
+                'PATCH /me/last-workspace',
                 'GET /workspaces/current',
                 'GET /workspaces/current/members',
                 'GET /workspaces/current/settings',

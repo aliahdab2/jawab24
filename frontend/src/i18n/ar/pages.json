@@ -65,6 +65,8 @@
   "sectionDisconnected": "تحتاج اهتمام",
   "addInfo": "أضف معلومات",
   "pageTakenWarning": "{count, plural, zero {لا توجد صفحات} one {صفحة واحدة مرتبطة} two {صفحتان مرتبطتان} few {# صفحات مرتبطة} many {# صفحة مرتبطة} other {# صفحة مرتبطة}} بحساب جواب24 آخر. اطلب من صاحب ذلك الحساب دعوتك كعضو في الفريق.",
+  "pageTakenInWorkspace": "{count, plural, zero {لا توجد صفحات} one {صفحة واحدة موجودة} two {صفحتان موجودتان} few {# صفحات موجودة} many {# صفحة موجودة} other {# صفحة موجودة}} في مساحة العمل ‹{workspaceName}› حيث أنت عضو بالفعل. بدّل إلى تلك المساحة لإدارتها.",
+  "switchWorkspaceCta": "التبديل إلى {workspaceName}",
   "loadFailed": "فشل تحميل الصفحات. يرجى المحاولة مرة أخرى.",
   "testSmartReply": "اختبار الرد الذكي",
   "testSmartReplyDescription": "أرسل رسالة تجريبية لترى كيف سيبدو ردك الذكي",

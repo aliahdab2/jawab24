@@ -48,6 +48,7 @@ const PagesPage: NextPageWithLayout = () => {
   const { language } = useLanguage();
   const router = useRouter();
   const { isAuthenticated, fbToken } = useAuthStore();
+  const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { canEdit, isOwner } = useWorkspaceRole();
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
@@ -112,9 +113,33 @@ const PagesPage: NextPageWithLayout = () => {
 
     try {
       setSyncing(true);
-      const { data } = await api.post<{ takenCount?: number }>('/pages/sync', { accessToken: fbToken });
+      type SyncResponse = {
+        takenCount?: number;
+        alreadyMemberOf?: { workspaceId: string; workspaceName: string; role: string; pageName: string }[];
+      };
+      const { data } = await api.post<SyncResponse>('/pages/sync', { accessToken: fbToken });
 
-      if (data?.takenCount && data.takenCount > 0) {
+      // If any of the conflicting pages live in workspaces the user is already
+      // a member of, surface a one-tap switch instead of the generic "ask the
+      // owner to invite you" warning. We use the first match — typically all
+      // conflicts route to the same workspace anyway (a user only has one or
+      // two workspace memberships in practice).
+      const memberHit = data?.alreadyMemberOf?.[0];
+      if (memberHit) {
+        toast.warning(t('pageTakenInWorkspace', {
+          count: data!.alreadyMemberOf!.length,
+          workspaceName: memberHit.workspaceName,
+        }), {
+          duration: Infinity,
+          action: {
+            label: t('switchWorkspaceCta', { workspaceName: memberHit.workspaceName }),
+            onClick: () => {
+              setActiveWorkspace(memberHit.workspaceId);
+              fetchPages();
+            },
+          },
+        });
+      } else if (data?.takenCount && data.takenCount > 0) {
         toast.warning(t('pageTakenWarning', { count: data.takenCount }), { duration: Infinity });
       }
 
@@ -126,7 +151,7 @@ const PagesPage: NextPageWithLayout = () => {
     } finally {
       setSyncing(false);
     }
-  }, [fbToken, fetchPages, t]);
+  }, [fbToken, fetchPages, t, setActiveWorkspace]);
 
   // Keep ref updated
   handleSyncRef.current = handleSync;

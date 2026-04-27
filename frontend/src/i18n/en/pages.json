@@ -65,6 +65,8 @@
   "sectionDisconnected": "Needs Attention",
   "addInfo": "Add info",
   "pageTakenWarning": "{count, plural, one {# page is} other {# pages are}} already connected to another Jawab24 account. Ask that account's owner to invite you as a team member.",
+  "pageTakenInWorkspace": "{count, plural, one {# page is} other {# pages are}} already in workspace ‹{workspaceName}› where you're already a member. Switch to that workspace to manage them.",
+  "switchWorkspaceCta": "Switch to {workspaceName}",
   "loadFailed": "Failed to load your pages. Please try again.",
   "testSmartReply": "Test Smart Reply",
   "testSmartReplyDescription": "Send a sample message to see how your smart reply would look",

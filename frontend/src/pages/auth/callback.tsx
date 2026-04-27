@@ -90,7 +90,7 @@ export default function AuthCallback() {
 
         const linkData = await linkResponse.json();
         setAuthRef.current(linkData.user, linkData.token, linkData.fbAccessToken);
-        if (linkData.workspaces?.length) setWorkspacesRef.current(linkData.workspaces);
+        if (linkData.workspaces?.length) setWorkspacesRef.current(linkData.workspaces, { defaultWorkspaceId: linkData.defaultWorkspaceId ?? null });
 
         if (platform === 'mobile') {
           const tokenStr = encodeURIComponent(linkData.token);
@@ -149,10 +149,13 @@ export default function AuthCallback() {
 
       const data = await response.json();
 
-      // Store auth data including FB token and workspace context
+      // Store auth data including FB token and workspace context.
+      // Pass the server-resolved defaultWorkspaceId so the store can override
+      // any stale persisted activeWorkspaceId (this is the heart of the
+      // last-active fix — Noor's old device-side state can't outvote the server).
       setAuthRef.current(data.user, data.token, data.fbAccessToken);
       if (data.workspaces?.length) {
-        setWorkspacesRef.current(data.workspaces);
+        setWorkspacesRef.current(data.workspaces, { defaultWorkspaceId: data.defaultWorkspaceId ?? null });
       }
 
       // Apply language setting if available

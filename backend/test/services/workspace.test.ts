@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { WorkspaceService } from '../../src/services/workspace';
+import { WorkspaceService, WorkspaceAccessDeniedError } from '../../src/services/workspace';
 
 vi.mock('../../src/db', () => ({
     db: {
@@ -319,6 +319,128 @@ describe('WorkspaceService', () => {
             });
 
             await expect(service.updateMemberRole(WS_ID, USER_2_ID, 'owner')).resolves.not.toThrow();
+        });
+    });
+
+    // ── Last-active workspace ────────────────────────────────────────────────
+    // These pin the contract that protects users from each other:
+    // - setLastActiveWorkspace MUST membership-check before writing.
+    // - resolveDefaultWorkspaceId MUST honor a stored last-active when valid,
+    //   and MUST fall through to the heuristic when the stored one is stale
+    //   (e.g. user removed from workspace after last login).
+    describe('setLastActiveWorkspace', () => {
+        it('throws WorkspaceAccessDeniedError when the user is not a member', async () => {
+            // Membership check returns no row → typed error, no UPDATE.
+            mockSelect([]);
+            const updateChain = mockUpdate();
+
+            await expect(service.setLastActiveWorkspace(USER_ID, 'ws-other'))
+                .rejects.toBeInstanceOf(WorkspaceAccessDeniedError);
+            expect(updateChain.set).not.toHaveBeenCalled();
+        });
+
+        it('updates last_active_workspace_id when the user is a member', async () => {
+            mockSelect([{ role: 'admin' }]);
+            const updateChain = mockUpdate();
+
+            await service.setLastActiveWorkspace(USER_ID, WS_ID);
+
+            expect(updateChain.set).toHaveBeenCalledWith({ lastActiveWorkspaceId: WS_ID });
+        });
+
+        it('does NOT bump users.updatedAt — workspace switch is not a profile change', async () => {
+            mockSelect([{ role: 'admin' }]);
+            const updateChain = mockUpdate();
+
+            await service.setLastActiveWorkspace(USER_ID, WS_ID);
+
+            const setArgs = updateChain.set.mock.calls[0][0];
+            expect(setArgs).not.toHaveProperty('updatedAt');
+        });
+    });
+
+    describe('resolveDefaultWorkspaceId', () => {
+        it('returns the stored last_active_workspace_id when the user is still a member', async () => {
+            // First select: read users.last_active_workspace_id.
+            // Second select: membership check.
+            // We can't easily distinguish the two with the simple chain mock,
+            // so fall back to vi.fn().mockReturnValueOnce stacking.
+            const userRow = [{ lastActive: WS_ID }];
+            const memberRow = [{ id: 'member-row' }];
+            const chain1: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue(userRow),
+                then: (resolve: (v: unknown) => unknown) => Promise.resolve(userRow).then(resolve),
+            };
+            const chain2: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue(memberRow),
+                then: (resolve: (v: unknown) => unknown) => Promise.resolve(memberRow).then(resolve),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(chain1).mockReturnValueOnce(chain2);
+
+            const result = await service.resolveDefaultWorkspaceId(USER_ID);
+            expect(result).toBe(WS_ID);
+        });
+
+        it('falls back to heuristic when stored last-active is stale (user no longer a member)', async () => {
+            const userRow = [{ lastActive: 'ws-stale' }];
+            const memberRow: unknown[] = []; // no longer a member
+            const heuristicRow = [{ workspaceId: 'ws-heuristic' }];
+            const chain1: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue(userRow),
+                then: (r: (v: unknown) => unknown) => Promise.resolve(userRow).then(r),
+            };
+            const chain2: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue(memberRow),
+                then: (r: (v: unknown) => unknown) => Promise.resolve(memberRow).then(r),
+            };
+            const chain3: any = {
+                from: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue(heuristicRow),
+                then: (r: (v: unknown) => unknown) => Promise.resolve(heuristicRow).then(r),
+            };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(chain1)
+                .mockReturnValueOnce(chain2)
+                .mockReturnValueOnce(chain3);
+
+            const result = await service.resolveDefaultWorkspaceId(USER_ID);
+            expect(result).toBe('ws-heuristic');
+        });
+
+        it('returns null when the user has no memberships at all', async () => {
+            const userRow = [{ lastActive: null }];
+            const heuristicRow: unknown[] = [];
+            const chain1: any = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue(userRow),
+                then: (r: (v: unknown) => unknown) => Promise.resolve(userRow).then(r),
+            };
+            const chain2: any = {
+                from: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue(heuristicRow),
+                then: (r: (v: unknown) => unknown) => Promise.resolve(heuristicRow).then(r),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(chain1).mockReturnValueOnce(chain2);
+
+            const result = await service.resolveDefaultWorkspaceId(USER_ID);
+            expect(result).toBeNull();
         });
     });
 });

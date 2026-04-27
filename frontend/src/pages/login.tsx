@@ -97,6 +97,7 @@ export default function LoginPage() {
       if (data.workspaces?.length) {
         useAuthStore.getState().setWorkspaces(
           data.workspaces as WorkspaceSummary[],
+          { defaultWorkspaceId: (data as { defaultWorkspaceId?: string | null }).defaultWorkspaceId ?? null },
         );
       }
       // Apply default language

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, timestamp, boolean, integer, jsonb, index, uniqueIndex, real, check, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { FacebookMessageTag } from '../utils/commentText';
@@ -17,6 +17,11 @@ export const users = pgTable('users', {
     isAdmin: boolean('is_admin').default(false), // Admin flag for manual upgrades
     hasInstagramPermission: boolean('has_instagram_permission').default(false),
     lastSeenAt: timestamp('last_seen_at'),
+    // Server-tracked last-active workspace. Source of truth for "where should this user
+    // land on login" — beats stale persisted client state. Nullable: empty until the user
+    // explicitly switches or accepts an invite. ON DELETE SET NULL so deleting a workspace
+    // doesn't break login for its members; the resolver falls back to a heuristic.
+    lastActiveWorkspaceId: uuid('last_active_workspace_id').references((): AnyPgColumn => workspaces.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
     // App-level invariant: at least one of facebookId or phone must be non-null

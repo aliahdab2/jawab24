@@ -152,10 +152,19 @@ export class WorkspaceInviteService {
             })
             .where(eq(workspaceInvites.id, invite.id));
 
+        // Make the just-joined workspace the user's last-active. Future logins
+        // and middleware fallback both honor this — invitees who came in via an
+        // invite link land directly in the inviter's workspace next time, with
+        // no need for a picker or workspace-switcher dance.
+        await workspaceService.setLastActiveWorkspace(userId, invite.workspaceId);
+
         const workspaces = await workspaceService.getUserWorkspaces(userId);
 
         return {
             workspaceId: invite.workspaceId,
+            // Explicit alias for clients: this is the workspace the user just joined,
+            // and the recommended active workspace going forward.
+            acceptedWorkspaceId: invite.workspaceId,
             role: invite.role,
             member,
             workspaces,

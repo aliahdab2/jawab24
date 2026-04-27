@@ -85,6 +85,7 @@ vi.mock('../../src/services/cookies', () => ({
 vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'test_workspace_id', role: 'owner' }]),
+        resolveDefaultWorkspaceId: vi.fn().mockResolvedValue('test_workspace_id'),
     },
 }));
 

@@ -104,9 +104,10 @@ export class AuthController {
             // 9. Build response — include requiresPhone if PHONE_AUTH_ENABLED and user has no phone yet
             const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
             request.log.info({ userId: user.id, phone: user.phone, requiresPhone: !!requiresPhone }, 'facebookLogin: phone check');
+            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, requiresPhone);
+            }, workspaces, requiresPhone, defaultWorkspaceId);
 
             // 10. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -230,13 +231,18 @@ export class AuthController {
             //     native app directly, closing the system browser. Using the HTTPS host
             //     instead of a custom scheme avoids SFSafariViewController's refusal to
             //     follow 302 to custom schemes and the undocumented URL-length truncation.
+            // defaultWorkspaceId is included so the app can hydrate active workspace
+            // immediately on cold-launch — without it, persisted state would be used and
+            // multi-workspace users could land in a stale workspace.
+            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
             const tokenStr = encodeURIComponent(token);
             const fbTokenStr = encodeURIComponent(longLivedToken);
             const redirectStr = encodeURIComponent(redirectTarget);
             const userStr = encodeURIComponent(JSON.stringify(userPayload));
+            const defaultWsParam = defaultWorkspaceId ? `&defaultWorkspaceId=${encodeURIComponent(defaultWorkspaceId)}` : '';
 
             return reply.redirect(
-                `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}`,
+                `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${redirectStr}&user=${userStr}${defaultWsParam}`,
             );
         } catch (error) {
             request.log.error({ err: error }, 'mobileFacebookCallback failed');
@@ -329,9 +335,10 @@ export class AuthController {
 
             // 11. Build response — include requiresPhone if PHONE_AUTH_ENABLED and user has no phone yet
             const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
+            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, requiresPhone);
+            }, workspaces, requiresPhone, defaultWorkspaceId);
 
             // 12. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -635,9 +642,10 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
+            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
             const response: AuthResponse = authService.createAuthResponse(user, token, '', {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces);
+            }, workspaces, undefined, defaultWorkspaceId);
 
             return reply.send(response);
         } catch (error) {
@@ -705,7 +713,8 @@ export class AuthController {
             const newToken = authService.generateToken(updatedUser, ACCESS_TOKEN_EXPIRY);
             cookiesService.setAuthCookies(reply, newToken);
 
-            const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, workspaces);
+            const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(updatedUser.id);
+            const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, workspaces, undefined, defaultWorkspaceId);
             return reply.send(response);
 
         } catch (error) {

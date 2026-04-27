@@ -139,6 +139,7 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: vi.fn().mockResolvedValue([]),
+        resolveDefaultWorkspaceId: vi.fn().mockResolvedValue(null),
     },
 }));
 

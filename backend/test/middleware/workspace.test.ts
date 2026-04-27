@@ -10,7 +10,14 @@ vi.mock('../../src/db', () => ({
     },
 }));
 
+vi.mock('../../src/services/workspace', () => ({
+    workspaceService: {
+        resolveDefaultWorkspaceId: vi.fn(),
+    },
+}));
+
 import { db } from '../../src/db';
+import { workspaceService } from '../../src/services/workspace';
 
 // Helper to build a chainable Drizzle mock.
 // Chains are made thenable so queries without a terminal .limit() can be awaited directly.
@@ -80,10 +87,15 @@ describe('resolveWorkspace', () => {
     });
 
     // ── Auto-select ───────────────────────────────────────────────────────
-    it('auto-selects workspace when user belongs to exactly one', async () => {
+    // The middleware delegates default-workspace resolution to
+    // workspaceService.resolveDefaultWorkspaceId — same code path used by the
+    // auth response. Tests below mock the resolver and only assert the
+    // middleware's own membership lookup + request hydration.
+    it('auto-selects workspace when resolver returns one', async () => {
         const req = makeRequest();
         const reply = makeReply();
-        mockQuery([{ workspaceId: 'ws-1', role: 'owner', name: 'My WS', ownerId: 'user-1', joinedAt: new Date('2025-01-01') }]);
+        vi.mocked(workspaceService.resolveDefaultWorkspaceId).mockResolvedValue('ws-1');
+        mockQuery([{ role: 'owner', ownerId: 'user-1' }]);
 
         await resolveWorkspace(req, reply);
 
@@ -93,10 +105,10 @@ describe('resolveWorkspace', () => {
         expect(reply.status).not.toHaveBeenCalled();
     });
 
-    it('returns 404 when user has no workspaces', async () => {
+    it('returns 404 when resolver returns null (no memberships)', async () => {
         const req = makeRequest();
         const reply = makeReply();
-        mockQuery([]);
+        vi.mocked(workspaceService.resolveDefaultWorkspaceId).mockResolvedValue(null);
 
         await resolveWorkspace(req, reply);
 
@@ -110,58 +122,34 @@ describe('resolveWorkspace', () => {
     // workspaces, the middleware previously returned 409
     // (workspace_selection_required), which neither the mobile build nor the
     // older web bundle had a UI handler for — every dashboard panel rendered
-    // "failed to load this section" until the user logged out. Standard SaaS
-    // behaviour (Slack, Linear, Notion) is to pick a sensible default and let
-    // the workspace switcher handle changes. These tests pin that contract so
-    // a future refactor cannot silently re-introduce the 409.
-    it('auto-selects a default workspace for users with multiple memberships (no header)', async () => {
-        const req = makeRequest();
-        const reply = makeReply();
-        // The DB query is expected to ORDER BY owner-first, then oldest joinedAt.
-        // The test mock returns rows already in that order; the middleware must
-        // pick the first row without ever calling reply.status.
-        mockQuery([
-            { workspaceId: 'ws-owned', role: 'owner', name: 'My WS', ownerId: 'user-1', joinedAt: new Date('2025-01-01') },
-            { workspaceId: 'ws-other', role: 'member', name: 'Other WS', ownerId: 'user-2', joinedAt: new Date('2025-02-01') },
-        ]);
-
-        await resolveWorkspace(req, reply);
-
-        expect(req.workspaceId).toBe('ws-owned');
-        expect(req.workspaceRole).toBe('owner');
-        expect(req.workspaceOwnerId).toBe('user-1');
-        expect(reply.status).not.toHaveBeenCalled();
-    });
-
+    // "failed to load this section" until the user logged out. Pin that the
+    // middleware always picks a default and never returns 409.
     it('never returns 409 for multi-workspace users — guards against regression', async () => {
         const req = makeRequest();
         const reply = makeReply();
-        mockQuery([
-            { workspaceId: 'ws-1', role: 'member', name: 'WS 1', ownerId: 'other', joinedAt: new Date('2025-01-01') },
-            { workspaceId: 'ws-2', role: 'member', name: 'WS 2', ownerId: 'other', joinedAt: new Date('2025-02-01') },
-            { workspaceId: 'ws-3', role: 'member', name: 'WS 3', ownerId: 'other', joinedAt: new Date('2025-03-01') },
-        ]);
+        vi.mocked(workspaceService.resolveDefaultWorkspaceId).mockResolvedValue('ws-1');
+        mockQuery([{ role: 'member', ownerId: 'someone-else' }]);
 
         await resolveWorkspace(req, reply);
 
         expect(reply.status).not.toHaveBeenCalledWith(409);
         expect(reply.send).not.toHaveBeenCalledWith(expect.objectContaining({ error: 'workspace_selection_required' }));
-        expect(req.workspaceId).toBeDefined();
+        expect(req.workspaceId).toBe('ws-1');
     });
 
-    it('passes orderBy to the query so the default workspace is deterministic', async () => {
-        // Without a deterministic ORDER BY clause, Postgres is free to return rows
-        // in any order, which means consecutive requests from the same user could
-        // resolve to different workspaces. Pin that the middleware chains orderBy.
+    it('returns 404 when resolver returned a workspace the user is no longer a member of', async () => {
+        // Defensive guard: resolver does its own membership check, but if it
+        // ever stales out (workspace deleted between resolver-read and
+        // middleware-read), the middleware must not crash or hand back a bogus
+        // workspace context.
         const req = makeRequest();
         const reply = makeReply();
-        const chain = mockQuery([
-            { workspaceId: 'ws-1', role: 'owner', name: 'WS', ownerId: 'user-1', joinedAt: new Date('2025-01-01') },
-        ]);
+        vi.mocked(workspaceService.resolveDefaultWorkspaceId).mockResolvedValue('ws-stale');
+        mockQuery([]); // membership lookup returns empty
 
         await resolveWorkspace(req, reply);
 
-        expect(chain.orderBy).toHaveBeenCalled();
+        expect(reply.status).toHaveBeenCalledWith(404);
     });
 });
 

@@ -1,7 +1,8 @@
 import { FastifyReply } from 'fastify';
-import { eq, and, asc, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaceMembers, workspaces } from '../db/schema';
+import { workspaceService } from '../services/workspace';
 import type { AuthenticatedRequest } from './auth';
 import type { WorkspaceRole } from '@jawab24/shared';
 import { ROLE_HIERARCHY } from '../utils/roles';
@@ -77,26 +78,14 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         return;
     }
 
-    // No header — auto-select a default workspace.
-    // Order: workspace the user owns first (role='owner'), then oldest membership.
-    // This matches standard SaaS UX (Slack, Linear, Notion): pick a sensible default
-    // and let the client switch via the workspace switcher. Returning 409 here
-    // strands clients that don't yet handle workspace_selection_required (e.g. older
-    // mobile builds where the auth-sync /workspaces fetch fell through silently).
-    const memberships = await db
-        .select({
-            workspaceId: workspaceMembers.workspaceId,
-            role: workspaceMembers.role,
-            name: workspaces.name,
-            ownerId: workspaces.ownerId,
-            joinedAt: workspaceMembers.joinedAt,
-        })
-        .from(workspaceMembers)
-        .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
-        .where(eq(workspaceMembers.userId, userId))
-        .orderBy(sql`CASE WHEN ${workspaceMembers.role} = 'owner' THEN 0 ELSE 1 END`, asc(workspaceMembers.joinedAt));
+    // No header — defer to the server-authoritative resolver. Same logic used
+    // everywhere we pick a default (auth response, invite acceptance): honor
+    // last-active when valid, otherwise heuristic (most pages → owner-first →
+    // oldest membership). Keeps middleware in lockstep with the auth response
+    // the client just received, so the chosen workspace is always reproducible.
+    const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(userId);
 
-    if (memberships.length === 0) {
+    if (!defaultWorkspaceId) {
         return reply.status(404).send({
             error: true,
             message: 'No workspace found. Please log out and log back in.',
@@ -104,9 +93,34 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         });
     }
 
-    request.workspaceId = memberships[0].workspaceId;
-    request.workspaceRole = memberships[0].role as WorkspaceRole;
-    request.workspaceOwnerId = memberships[0].ownerId;
+    const [membership] = await db
+        .select({
+            role: workspaceMembers.role,
+            ownerId: workspaces.ownerId,
+        })
+        .from(workspaceMembers)
+        .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
+        .where(
+            and(
+                eq(workspaceMembers.workspaceId, defaultWorkspaceId),
+                eq(workspaceMembers.userId, userId),
+            )
+        )
+        .limit(1);
+
+    if (!membership) {
+        // Resolver returned a workspace id that the user is no longer a member of.
+        // Should be impossible (resolver membership-checks), but guard anyway.
+        return reply.status(404).send({
+            error: true,
+            message: 'No workspace found. Please log out and log back in.',
+            code: 'NO_WORKSPACE',
+        });
+    }
+
+    request.workspaceId = defaultWorkspaceId;
+    request.workspaceRole = membership.role as WorkspaceRole;
+    request.workspaceOwnerId = membership.ownerId;
 }
 
 /**

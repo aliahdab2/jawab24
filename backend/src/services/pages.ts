@@ -1,5 +1,5 @@
 import { db } from '../db';
-import { pages, posts, comments, instagramComments, instagramMedia, messages } from '../db/schema';
+import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
 import type { BusinessProfile } from '@jawab24/shared';
@@ -191,6 +191,19 @@ export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
     }
 
     return validated.data;
+}
+
+/**
+ * Conflict info surfaced when a page-sync attempt finds pages already attached to
+ * another workspace AND the current user is a member of that workspace. The client
+ * uses this to render an actionable "Switch to ‹workspaceName›" affordance instead
+ * of the misleading "ask the owner to invite you" warning.
+ */
+export interface AlreadyMemberOfEntry {
+    workspaceId: string;
+    workspaceName: string;
+    role: string; // owner | admin | member
+    pageName: string;
 }
 
 export class PagesService {
@@ -469,7 +482,7 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return { syncedPages: [], skippedCount: 0, takenCount: 0 };
+            return { syncedPages: [], skippedCount: 0, takenCount: 0, alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -522,6 +535,10 @@ export class PagesService {
         }
         let skippedCount = 0;
         let takenCount = 0;
+        // Pages we couldn't attach because they already belong to another workspace
+        // AND the current user is a member of that workspace. Surfaced to the client
+        // so the UI can offer "Switch to ‹X›" instead of the generic "ask the owner".
+        const alreadyMemberOf: AlreadyMemberOfEntry[] = [];
 
         // 4. Perform DB Writes (Sequential to ensure consistency)
         // Best Practice: We write sequentially to avoid DB lock contention on the same user's rows
@@ -596,9 +613,40 @@ export class PagesService {
 
                     await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
                 } else if (globalExisting) {
-                    // Page is active under another user — skip to avoid stealing it
+                    // Page is active under another user — skip to avoid stealing it.
                     logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
                     takenCount++;
+                    // If the syncing user is already a member of the holding workspace
+                    // (Noor-style: signed up first, got invited later, hasn't switched
+                    // workspaces yet), tell the client so it can offer a one-tap switch
+                    // instead of the misleading "ask the owner to invite you" warning.
+                    // Skip the lookup when the page somehow has no workspace_id; that's a
+                    // data anomaly (orphan page) and not a "user is already a member" case.
+                    if (globalExisting.workspaceId) {
+                        const holdingWorkspaceId = globalExisting.workspaceId;
+                        const [memberOfHolding] = await db
+                            .select({
+                                role: workspaceMembers.role,
+                                workspaceName: workspacesTable.name,
+                            })
+                            .from(workspaceMembers)
+                            .innerJoin(workspacesTable, eq(workspaceMembers.workspaceId, workspacesTable.id))
+                            .where(
+                                and(
+                                    eq(workspaceMembers.workspaceId, holdingWorkspaceId),
+                                    eq(workspaceMembers.userId, userId),
+                                )
+                            )
+                            .limit(1);
+                        if (memberOfHolding) {
+                            alreadyMemberOf.push({
+                                workspaceId: holdingWorkspaceId,
+                                workspaceName: memberOfHolding.workspaceName,
+                                role: memberOfHolding.role,
+                                pageName: fbPage.name,
+                            });
+                        }
+                    }
                     continue;
                 } else {
                     // Brand new page — insert
@@ -682,7 +730,7 @@ export class PagesService {
         }
 
         logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit), ${revokedPages.length} disabled (access revoked).`);
-        return { syncedPages, skippedCount, takenCount, revokedCount: revokedPages.length };
+        return { syncedPages, skippedCount, takenCount, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 
     /**

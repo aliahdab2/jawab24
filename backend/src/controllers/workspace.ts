@@ -1,5 +1,5 @@
 import { FastifyReply } from 'fastify';
-import { workspaceService } from '../services/workspace';
+import { workspaceService, WorkspaceAccessDeniedError } from '../services/workspace';
 import { workspaceInviteService } from '../services/workspaceInvite';
 import { workspaceSettingsService } from '../services/workspaceSettings';
 import type { WorkspaceRequest, ResolvedWorkspaceRequest } from '../middleware/workspace';
@@ -228,6 +228,33 @@ async function acceptInvite(request: AuthenticatedRequest, reply: FastifyReply) 
     }
 }
 
+// --- Last-active workspace ---
+
+async function setLastActive(request: AuthenticatedRequest, reply: FastifyReply) {
+    try {
+        if (!request.user) {
+            return reply.status(401).send({ error: true, message: 'Unauthorized' });
+        }
+        const { workspaceId } = request.body as { workspaceId?: string };
+        if (!workspaceId?.trim()) {
+            return reply.status(400).send({ error: true, message: 'workspaceId is required' });
+        }
+
+        await workspaceService.setLastActiveWorkspace(request.user.userId, workspaceId.trim());
+        return reply.status(204).send();
+    } catch (error) {
+        if (error instanceof WorkspaceAccessDeniedError) {
+            return reply.status(403).send({
+                error: true,
+                message: 'You are not a member of this workspace',
+                code: 'WORKSPACE_ACCESS_DENIED',
+            });
+        }
+        captureError(error, 'Failed to set last-active workspace', { tags: { context: 'workspace' } });
+        return reply.status(500).send({ error: true, message: 'Failed to set last-active workspace' });
+    }
+}
+
 // --- Settings ---
 
 async function getSettings(request: WorkspaceRequest, reply: FastifyReply) {
@@ -264,6 +291,7 @@ export const workspaceController = {
     listInvites,
     revokeInvite,
     acceptInvite,
+    setLastActive,
     getSettings,
     updateSettings,
 };

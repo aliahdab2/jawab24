@@ -72,6 +72,7 @@ vi.mock('../integrations', () => ({
 vi.mock('../services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'test_workspace_id', role: 'owner' }]),
+        resolveDefaultWorkspaceId: vi.fn().mockResolvedValue('test_workspace_id'),
     }
 }));
 
@@ -124,8 +125,9 @@ describe('AuthController - Native Login', () => {
             user: { id: 'user-id', facebookId: 'fb-user-id', name: 'Test User' },
             settings: { dashboardLanguage: 'en' },
             workspaces: [],
+            defaultWorkspaceId: null,
         });
-        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages: [], skippedCount: 0, takenCount: 0, revokedCount: 0 });
+        vi.mocked(pagesService.syncFromFacebook).mockResolvedValue({ syncedPages: [], skippedCount: 0, takenCount: 0, revokedCount: 0, alreadyMemberOf: [] });
 
         // Execute
         await authController.nativeLogin(mockRequest, mockReply);

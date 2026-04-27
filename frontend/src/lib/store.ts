@@ -44,7 +44,14 @@ interface AuthState {
   workspaces: WorkspaceSummary[];
   activeWorkspaceId: string | null;
   setAuth: (user: User, token: string, fbToken: string) => void;
-  setWorkspaces: (workspaces: WorkspaceSummary[]) => void;
+  /**
+   * Replace the workspaces list. When `defaultWorkspaceId` is provided AND
+   * present in the new list, it overrides the persisted activeWorkspaceId —
+   * this is how the server tells the client "land here" on login. Without
+   * an override, the existing activeWorkspaceId is preserved if still valid,
+   * otherwise we fall back to workspaces[0].
+   */
+  setWorkspaces: (workspaces: WorkspaceSummary[], options?: { defaultWorkspaceId?: string | null }) => void;
   setActiveWorkspace: (id: string) => void;
   logout: () => void;
   setHasHydrated: (state: boolean) => void;
@@ -60,17 +67,37 @@ export const useAuthStore = create<AuthState>()(
       _hasHydrated: false,
       workspaces: [],
       activeWorkspaceId: null,
-      setWorkspaces: (workspaces) => set((state) => {
-        // Preserve the current activeWorkspaceId if it's still valid in the new list.
-        // Without this, re-login always resets to workspaces[0] (undefined DB order),
-        // causing team members to land on their own empty workspace instead of the one
-        // they previously selected (e.g. the owner's workspace they were invited to).
+      setWorkspaces: (workspaces, options) => set((state) => {
+        // Server-recommended default takes precedence over persisted state.
+        // This is how login responses pull a stale device into line — Noor's
+        // device persisted her empty solo workspace; backend now says "use
+        // Ali's workspace instead", and we honor it.
+        if (options?.defaultWorkspaceId && workspaces.some(w => w.id === options.defaultWorkspaceId)) {
+          return { workspaces, activeWorkspaceId: options.defaultWorkspaceId };
+        }
+        // No server override: preserve the current activeWorkspaceId if it's
+        // still in the new list, otherwise fall back to workspaces[0]. This
+        // keeps mid-session refreshes (workspace list re-fetches) from
+        // surprising the user.
         const stillValid = state.activeWorkspaceId !== null &&
           workspaces.some(w => w.id === state.activeWorkspaceId);
         const activeId = stillValid ? state.activeWorkspaceId : (workspaces[0]?.id ?? null);
         return { workspaces, activeWorkspaceId: activeId };
       }),
-      setActiveWorkspace: (id) => set({ activeWorkspaceId: id }),
+      setActiveWorkspace: (id) => {
+        set({ activeWorkspaceId: id });
+        // Persist the choice on the server so other devices and future logins
+        // pick up the same workspace. Fire-and-forget — UI shouldn't block on
+        // this; if the network drops, the worst case is a stale last-active on
+        // the server which gets corrected on the next switch.
+        if (typeof window !== 'undefined') {
+          import('./api').then(({ api }) => {
+            api.patch('/me/last-workspace', { workspaceId: id }).catch(() => {
+              // Swallow — the local state is correct, server retries on next switch
+            });
+          }).catch(() => {});
+        }
+      },
       setAuth: (user, token, fbToken) => {
         // Defensive validation
         if (!user?.id || !token || token.trim() === '') {

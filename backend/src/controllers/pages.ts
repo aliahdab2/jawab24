@@ -234,7 +234,7 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, takenCount, revokedCount } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
+            const { syncedPages, skippedCount, takenCount, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
 
             if (syncedPages.length === 0 && takenCount === 0) {
                 return reply.send({
@@ -253,6 +253,13 @@ export class PagesController {
 
             if (takenCount > 0) {
                 response.takenCount = takenCount;
+            }
+
+            // Pages whose holding workspace the user is already a member of — the
+            // client renders an actionable "Switch to ‹X›" affordance instead of
+            // the generic "ask the owner to invite you" warning.
+            if (alreadyMemberOf && alreadyMemberOf.length > 0) {
+                response.alreadyMemberOf = alreadyMemberOf;
             }
 
             if ((revokedCount ?? 0) > 0) {

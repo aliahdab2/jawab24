@@ -57,7 +57,10 @@ vi.mock('../../src/services/pages', () => ({
 }));
 
 vi.mock('../../src/services/workspace', () => ({
-    workspaceService: { getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'ws-1' }]) },
+    workspaceService: {
+        getUserWorkspaces: vi.fn().mockResolvedValue([{ id: 'ws-1' }]),
+        resolveDefaultWorkspaceId: vi.fn().mockResolvedValue('ws-1'),
+    },
 }));
 
 import { AuthController } from '../../src/controllers/auth';

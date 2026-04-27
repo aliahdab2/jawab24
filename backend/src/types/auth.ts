@@ -50,6 +50,11 @@ export interface AuthResponse {
         dashboardLanguage: string;
     };
     workspaces: WorkspaceSummary[];
+    // Server's recommended active workspace for this login. Resolved from
+    // users.last_active_workspace_id (membership-checked) with a deterministic
+    // heuristic fallback. Null when the user has zero workspaces. Frontend should
+    // override its persisted activeWorkspaceId on login when this is set.
+    defaultWorkspaceId: string | null;
     requiresPhone?: boolean; // true when PHONE_AUTH_ENABLED and user has no phone yet
     // E-commerce onboarding context (set when pending install is claimed)
     shopifyOnboarding?: boolean;

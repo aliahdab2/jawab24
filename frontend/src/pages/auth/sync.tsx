@@ -20,8 +20,10 @@ export default function AuthSync() {
       try {
         setStatus(t('syncSyncing'));
 
-        // 1. Get tokens from URL
-        const { token, fbToken, redirect } = router.query;
+        // 1. Get tokens from URL — backend appends defaultWorkspaceId here so
+        //    the active workspace is correct before the dashboard loads, even
+        //    on cold-launch installs where the WebView has zero persisted state.
+        const { token, fbToken, redirect, defaultWorkspaceId } = router.query;
 
         if (!token || typeof token !== 'string') {
             throw new Error('No token provided');
@@ -48,7 +50,9 @@ export default function AuthSync() {
           const wsRes = await axios.get<WorkspaceSummary[]>(`${apiUrl}/workspaces`, {
             headers: { Authorization: `Bearer ${token}` }
           });
-          if (wsRes.data?.length) setWorkspaces(wsRes.data);
+          if (wsRes.data?.length) setWorkspaces(wsRes.data, {
+            defaultWorkspaceId: typeof defaultWorkspaceId === 'string' ? defaultWorkspaceId : null,
+          });
         } catch {
           // Non-fatal — workspace middleware will auto-select if user has exactly 1 workspace
         }
