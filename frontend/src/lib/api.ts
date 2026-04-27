@@ -222,7 +222,7 @@ export interface CommentStats {
 export const commentsApi = {
   getAll: (params?: CommentsQueryParams) =>
     api.get<CommentsPaginatedResponse>('/comments', { params }),
-  getStats: () => api.get<CommentStats>('/comments/stats'),
+  getStats: (params?: { pageId?: string }) => api.get<CommentStats>('/comments/stats', { params }),
   getByPost: (postId: string) => api.get(`/posts/${postId}/comments`),
   getById: (id: string) => api.get<CommentData>(`/comments/${id}`),
   reply: (id: string, text: string) =>
@@ -405,7 +405,7 @@ export const messagesApi = {
   getAll: (params?: MessagesQueryParams) =>
     api.get<MessagesPaginatedResponse>('/messages', { params }),
 
-  getStats: () => api.get<{ total: number; replied: number; pending: number; resolved: number; needsAttention: number; actionRequired: number; autoReplied: number; repliedToday: number; byMethod: { template: number; ai: number; manual: number }; convTotal: number; convActionRequired: number; convAutoReplied: number; convHandled: number }>('/messages/stats'),
+  getStats: (params?: { pageId?: string }) => api.get<{ total: number; replied: number; pending: number; resolved: number; needsAttention: number; actionRequired: number; autoReplied: number; repliedToday: number; byMethod: { template: number; ai: number; manual: number }; convTotal: number; convActionRequired: number; convAutoReplied: number; convHandled: number }>('/messages/stats', { params }),
 
   getConversation: (senderId: string, params: { pageId: string; limit?: number }) =>
     api.get<Message[]>(`/messages/conversation/${senderId}`, { params }),

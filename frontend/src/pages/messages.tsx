@@ -148,11 +148,11 @@ const MessagesPage: NextPageWithLayout = () => {
   // ESC key to close modal (goes through closeConversation so URL stays in sync)
   useEscapeKey(() => closeConversation(), !!selectedConversation);
 
-  // Fetch Stats
+  // Fetch Stats — scoped to the active page filter so chip counts match the list below.
   const { data: statsData } = useQuery({
-    queryKey: ['messages-stats'],
+    queryKey: ['messages-stats', pageId ?? null],
     queryFn: async () => {
-      const res = await messagesApi.getStats();
+      const res = await messagesApi.getStats(pageId ? { pageId } : undefined);
       return res.data;
     },
     enabled: isAuthenticated,

@@ -74,17 +74,27 @@ export class MessagesController {
     }
 
     /**
-     * Get message statistics
+     * Get message statistics for the current workspace.
+     *
      * GET /messages/stats
+     *
+     * Query params:
+     * - pageId (optional, UUID): Scope counts to a single page so the chip badges
+     *   on the messages page match the filtered list. Omit for workspace-wide totals.
      */
-    async getStats(request: FastifyRequest, reply: FastifyReply) {
+    async getStats(
+        request: FastifyRequest<{ Querystring: { pageId?: string } }>,
+        reply: FastifyReply,
+    ) {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
 
+        const { pageId } = request.query;
+
         try {
-            const stats = await messagesService.getStats(req.workspaceId);
+            const stats = await messagesService.getStats(req.workspaceId, pageId ? { pageId } : undefined);
             return reply.send(stats);
         } catch (error) {
             request.log.error({ error: String(error) }, 'Error getting message stats');

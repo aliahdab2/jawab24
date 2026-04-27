@@ -224,7 +224,18 @@ describe('CommentsController', () => {
 
             await commentsController.getStats(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(commentsService.getStats).toHaveBeenCalledWith('test_workspace_id');
+            expect(commentsService.getStats).toHaveBeenCalledWith('test_workspace_id', undefined);
+            expect(mockReply.send).toHaveBeenCalledWith(mockStats);
+        });
+
+        it('should forward pageId filter to service so chip counts match the list', async () => {
+            mockRequest.query = { pageId: 'page_42' };
+            const mockStats = { total: 5, replied: 3, unreplied: 2, needsAttention: 0, repliedToday: 0, replyRate: '60.0', byMethod: { template: 0, ai: 3, manual: 0 } };
+            vi.mocked(commentsService.getStats).mockResolvedValue(mockStats);
+
+            await commentsController.getStats(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(commentsService.getStats).toHaveBeenCalledWith('test_workspace_id', { pageId: 'page_42' });
             expect(mockReply.send).toHaveBeenCalledWith(mockStats);
         });
 

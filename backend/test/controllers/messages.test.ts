@@ -194,7 +194,18 @@ describe('MessagesController', () => {
 
             await messagesController.getStats(mockRequest as any, mockReply as any);
 
-            expect(messagesService.getStats).toHaveBeenCalledWith('test_workspace_id');
+            expect(messagesService.getStats).toHaveBeenCalledWith('test_workspace_id', undefined);
+            expect(mockReply.send).toHaveBeenCalledWith(stats);
+        });
+
+        it('should forward pageId filter to service so chip counts match the list', async () => {
+            mockRequest.query = { pageId: 'page_77' };
+            const stats = { total: 5, replied: 3, pending: 2, needsAttention: 0, byMethod: { template: 0, ai: 3, manual: 0 } };
+            vi.mocked(messagesService.getStats).mockResolvedValue(stats);
+
+            await messagesController.getStats(mockRequest as any, mockReply as any);
+
+            expect(messagesService.getStats).toHaveBeenCalledWith('test_workspace_id', { pageId: 'page_77' });
             expect(mockReply.send).toHaveBeenCalledWith(stats);
         });
 

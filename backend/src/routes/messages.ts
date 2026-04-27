@@ -22,6 +22,13 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
                 tags: ['Messages'],
                 summary: 'Get message statistics',
                 security: auth,
+                querystring: {
+                    type: 'object',
+                    properties: {
+                        pageId: { type: 'string', format: 'uuid', description: 'Scope counts to a single page so badges match the filtered list' },
+                    },
+                    additionalProperties: false,
+                },
             },
         }, messagesController.getStats);
 

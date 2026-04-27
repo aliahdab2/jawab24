@@ -39,6 +39,7 @@ vi.mock('../../src/services/conversations', () => ({
 import { messagesService } from '../../src/services/messages';
 import { db } from '../../src/db';
 import { conversationsService } from '../../src/services/conversations';
+import { collectSqlValues } from '../helpers/sqlInspect';
 
 // Helper: stub the db.select().from().innerJoin().leftJoin().where().orderBy().limit() chain.
 // Returns rows in the { msg, convSenderName } shape the service now expects.
@@ -765,6 +766,46 @@ describe('MessagesService', () => {
                 convAutoReplied: 8,
                 convHandled: 0,
             });
+        });
+
+        it('should push pageId into the WHERE clause when stats are scoped to a page', async () => {
+            // The chip counts on the messages page must reflect the active page filter,
+            // otherwise the badges drift from the list and users see "0 results / 2 needs attention".
+            const where = vi.fn().mockResolvedValue([{
+                total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
+                repliedToday: 0, ai: 0, template: 0, manual: 0,
+                convTotal: 0, convActionRequired: 0, convAutoReplied: 0, convHandled: 0,
+            }]);
+            const mockChain = {
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({ where }),
+                }),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(mockChain as any);
+
+            await messagesService.getStats('user-scoped', { pageId: 'page_42' });
+
+            expect(where).toHaveBeenCalledTimes(1);
+            // Drizzle serializes the param literal into the SQL chunks.
+            expect(collectSqlValues(where.mock.calls[0][0])).toContain('page_42');
+        });
+
+        it('should NOT include any pageId predicate when scope is workspace-wide', async () => {
+            const where = vi.fn().mockResolvedValue([{
+                total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
+                repliedToday: 0, ai: 0, template: 0, manual: 0,
+                convTotal: 0, convActionRequired: 0, convAutoReplied: 0, convHandled: 0,
+            }]);
+            const mockChain = {
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({ where }),
+                }),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(mockChain as any);
+
+            await messagesService.getStats('user-unscoped');
+
+            expect(collectSqlValues(where.mock.calls[0][0])).not.toContain('page_42');
         });
 
         it('should handle zero messages', async () => {

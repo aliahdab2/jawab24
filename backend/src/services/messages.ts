@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, or, sql, ne, isNotNull, count, max } from 'drizzle-orm';
+import { eq, desc, asc, and, sql, ne, isNotNull, count, max } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages, conversations } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -23,6 +23,20 @@ export interface CreateMessageDTO {
 
 export class MessagesService {
     /**
+     * Scope predicates shared by list and stats — extracted so the two can never
+     * disagree on what "the workspace's messages" means. Adding a new scope
+     * dimension only needs editing here.
+     */
+    private scopeConditions(workspaceId: string, pageId?: string) {
+        const conds = [
+            eq(messages.workspaceId, workspaceId),
+            sql`(${pages.autoReplyEnabled} = true OR ${pages.instagramAutoReplyEnabled} = true)`,
+        ];
+        if (pageId) conds.push(eq(messages.pageId, pageId));
+        return conds;
+    }
+
+    /**
      * Get all messages for a user's pages with cursor-based pagination
      */
     async getMessages(workspaceId: string, options?: {
@@ -44,16 +58,7 @@ export class MessagesService {
         // idx_messages_workspace_created_at drives the seek. The pages JOIN is still
         // required to enforce the per-page autoReplyEnabled gate, but it now reduces
         // a much smaller candidate set.
-        // Raw SQL template avoids drizzle's or() returning SQL|undefined (which would
-        // need a non-null assertion the lint rules forbid).
-        const conditions = [
-            eq(messages.workspaceId, workspaceId),
-            sql`(${pages.autoReplyEnabled} = true OR ${pages.instagramAutoReplyEnabled} = true)`,
-        ];
-
-        if (options?.pageId) {
-            conditions.push(eq(messages.pageId, options.pageId));
-        }
+        const conditions = this.scopeConditions(workspaceId, options?.pageId);
 
         // Filter by direction if specified
         if (options?.direction) {
@@ -659,7 +664,7 @@ export class MessagesService {
      * Get message statistics
      * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query
      */
-    async getStats(workspaceId: string): Promise<{
+    async getStats(workspaceId: string, options?: { pageId?: string }): Promise<{
         total: number;
         replied: number;
         pending: number;
@@ -699,9 +704,8 @@ export class MessagesService {
             .from(messages)
             .innerJoin(pages, eq(messages.pageId, pages.id))
             .where(and(
-                eq(messages.workspaceId, workspaceId),
+                ...this.scopeConditions(workspaceId, options?.pageId),
                 eq(messages.direction, 'incoming'),
-                or(eq(pages.autoReplyEnabled, true), eq(pages.instagramAutoReplyEnabled, true)),
             ));
 
         const row = result[0];

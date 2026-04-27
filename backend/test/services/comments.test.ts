@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { commentsService } from '../../src/services/comments';
 import { db } from '../../src/db';
+import { collectSqlValues } from '../helpers/sqlInspect';
 
 vi.mock('../../src/db', () => ({
     db: {
@@ -114,6 +115,67 @@ describe('CommentsService', () => {
             expect(stats.needsAttention).toBe(2);  // only flagged
             // actionRequired > unreplied because it includes flagged replies
             expect(stats.actionRequired).toBeGreaterThan(stats.unreplied);
+        });
+
+        it('should push pageId into the WHERE clause for both FB and IG queries', async () => {
+            // Capture the WHERE arg from each of the 2 parallel queries (FB + IG).
+            // The chip counts on the comments page must reflect the active page filter,
+            // otherwise the badges drift from the list and users see "0 results / 2 needs attention".
+            const fbWhere = vi.fn().mockResolvedValue([{
+                total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
+                repliedToday: 0, ai: 0, template: 0, manual: 0,
+            }]);
+            const igWhere = vi.fn().mockResolvedValue([{
+                total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
+                repliedToday: 0, ai: 0, template: 0, manual: 0,
+            }]);
+            const buildChain = (where: typeof fbWhere) => ({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({ where }),
+                    }),
+                }),
+            });
+            vi.mocked(db.select)
+                .mockReturnValueOnce(buildChain(fbWhere) as any)
+                .mockReturnValueOnce(buildChain(igWhere) as any);
+
+            await commentsService.getStats('user-scoped', { pageId: 'page_42' });
+
+            expect(fbWhere).toHaveBeenCalledTimes(1);
+            expect(igWhere).toHaveBeenCalledTimes(1);
+            // Drizzle serializes pageId as a literal chunk inside the SQL object —
+            // stringify is robust to internal shape changes across drizzle versions.
+            expect(collectSqlValues(fbWhere.mock.calls[0][0])).toContain('page_42');
+            expect(collectSqlValues(igWhere.mock.calls[0][0])).toContain('page_42');
+        });
+
+        it('should NOT include any pageId predicate when scope is workspace-wide', async () => {
+            const fbWhere = vi.fn().mockResolvedValue([{
+                total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
+                repliedToday: 0, ai: 0, template: 0, manual: 0,
+            }]);
+            const igWhere = vi.fn().mockResolvedValue([{
+                total: 0, replied: 0, needsAttention: 0, resolved: 0, actionRequired: 0,
+                repliedToday: 0, ai: 0, template: 0, manual: 0,
+            }]);
+            const buildChain = (where: typeof fbWhere) => ({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({ where }),
+                    }),
+                }),
+            });
+            vi.mocked(db.select)
+                .mockReturnValueOnce(buildChain(fbWhere) as any)
+                .mockReturnValueOnce(buildChain(igWhere) as any);
+
+            await commentsService.getStats('user-unscoped');
+
+            // No specific pageId leaked into the WHERE — guards against accidental
+            // hardcoded scope sneaking in via shared helpers.
+            expect(collectSqlValues(fbWhere.mock.calls[0][0])).not.toContain('page_42');
+            expect(collectSqlValues(igWhere.mock.calls[0][0])).not.toContain('page_42');
         });
 
         it('should handle zero comments', async () => {

@@ -85,7 +85,7 @@ describe('Messages Routes', () => {
 
             expect(response.statusCode).toBe(200);
             expect(JSON.parse(response.payload)).toEqual(stats);
-            expect(messagesService.getStats).toHaveBeenCalledWith('test_workspace_id');
+            expect(messagesService.getStats).toHaveBeenCalledWith('test_workspace_id', undefined);
         });
     });
 

@@ -19,7 +19,18 @@ export default async function commentsRoutes(fastify: FastifyInstance) {
         }, commentsController.getInbox);
 
         memberRoutes.get('/comments/stats', {
-            schema: { tags: ['Comments'], summary: 'Get comment statistics', security: auth },
+            schema: {
+                tags: ['Comments'],
+                summary: 'Get comment statistics',
+                security: auth,
+                querystring: {
+                    type: 'object',
+                    properties: {
+                        pageId: { type: 'string', format: 'uuid', description: 'Scope counts to a single page so badges match the filtered list' },
+                    },
+                    additionalProperties: false,
+                },
+            },
         }, commentsController.getStats);
 
         memberRoutes.get('/comments/:id', {

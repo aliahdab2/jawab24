@@ -6,6 +6,23 @@ import { detectLanguageCode } from '../utils/language';
 
 export class CommentsService {
     /**
+     * Scope predicates shared by list and stats queries — extracted so the two
+     * can never disagree on what "the user's comments" means. Adding a new scope
+     * dimension (e.g. platform filter) only needs editing here.
+     */
+    private fbScopeConditions(workspaceId: string, pageId?: string) {
+        const conds = [eq(comments.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)];
+        if (pageId) conds.push(eq(pages.id, pageId));
+        return conds;
+    }
+
+    private igScopeConditions(workspaceId: string, pageId?: string) {
+        const conds = [eq(instagramComments.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true)];
+        if (pageId) conds.push(eq(pages.id, pageId));
+        return conds;
+    }
+
+    /**
      * Create a new comment
      */
     async createComment(data: CreateCommentDTO) {
@@ -73,8 +90,7 @@ export class CommentsService {
         // Filter on comments.workspace_id (denormalized) so the composite index
         // idx_comments_workspace_created_at drives the initial seek instead of starting
         // at pages and joining outward.
-        const fbConditions = [eq(comments.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true)];
-        if (options?.pageId) fbConditions.push(eq(pages.id, options.pageId));
+        const fbConditions = this.fbScopeConditions(workspaceId, options?.pageId);
         if (options?.actionRequired) {
             fbConditions.push(eq(comments.resolved, false));
             fbConditions.push(sql`(${comments.replied} = false OR ${comments.needsAttention} = true)`);
@@ -121,8 +137,7 @@ export class CommentsService {
 
         // --- Instagram comments query ---
         // Same denormalized filter pattern as the FB branch above.
-        const igConditions = [eq(instagramComments.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true)];
-        if (options?.pageId) igConditions.push(eq(pages.id, options.pageId));
+        const igConditions = this.igScopeConditions(workspaceId, options?.pageId);
         if (options?.actionRequired) {
             igConditions.push(eq(instagramComments.resolved, false));
             igConditions.push(sql`(${instagramComments.replied} = false OR ${instagramComments.needsAttention} = true)`);
@@ -427,9 +442,10 @@ export class CommentsService {
      * Get comment statistics for a user
      * Uses PostgreSQL FILTER (WHERE ...) to get all counts in a single query per table
      */
-    async getStats(workspaceId: string) {
+    async getStats(workspaceId: string, options?: { pageId?: string }) {
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
+        const pageId = options?.pageId;
 
         // 2 queries (FB + IG) instead of 10, run in parallel
         const [fbStats, igStats] = await Promise.all([
@@ -448,7 +464,7 @@ export class CommentsService {
                 .from(comments)
                 .innerJoin(posts, eq(comments.postId, posts.id))
                 .innerJoin(pages, eq(posts.pageId, pages.id))
-                .where(and(eq(comments.workspaceId, workspaceId), eq(pages.autoReplyEnabled, true))),
+                .where(and(...this.fbScopeConditions(workspaceId, pageId))),
 
             // Instagram comments — single query with FILTER
             db.select({
@@ -465,7 +481,7 @@ export class CommentsService {
                 .from(instagramComments)
                 .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
                 .innerJoin(pages, eq(instagramMedia.pageId, pages.id))
-                .where(and(eq(instagramComments.workspaceId, workspaceId), eq(pages.instagramAutoReplyEnabled, true))),
+                .where(and(...this.igScopeConditions(workspaceId, pageId))),
         ]);
 
         const fb = fbStats[0];

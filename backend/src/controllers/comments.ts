@@ -155,14 +155,23 @@ export class CommentsController {
     }
 
     /**
-     * Get comment statistics
+     * Get comment statistics for the current workspace.
+     *
      * GET /comments/stats
+     *
+     * Query params:
+     * - pageId (optional, UUID): Scope counts to a single page so the chip badges
+     *   on the comments page match the filtered list. Omit for workspace-wide totals.
      */
-    async getStats(request: FastifyRequest, reply: FastifyReply) {
+    async getStats(
+        request: FastifyRequest<{ Querystring: { pageId?: string } }>,
+        reply: FastifyReply,
+    ) {
         const req = request as ResolvedWorkspaceRequest;
+        const { pageId } = request.query;
 
         try {
-            const stats = await commentsService.getStats(req.workspaceId);
+            const stats = await commentsService.getStats(req.workspaceId, pageId ? { pageId } : undefined);
             return reply.send(stats);
         } catch (error) {
             request.log.error(error);

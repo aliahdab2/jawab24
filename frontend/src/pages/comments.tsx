@@ -187,11 +187,11 @@ const CommentsPage: NextPageWithLayout = () => {
     });
   }, []);
 
-  // Fetch global stats from server
+  // Fetch stats — scoped to the active page filter so chip counts always match the list below.
   const { data: statsData } = useQuery({
-    queryKey: ['comments-stats'],
+    queryKey: ['comments-stats', pageId ?? null],
     queryFn: async () => {
-      const res = await commentsApi.getStats();
+      const res = await commentsApi.getStats(pageId ? { pageId } : undefined);
       return res.data;
     },
     enabled: isAuthenticated,
