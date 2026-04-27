@@ -377,6 +377,101 @@ describe('AuthCallback - edge cases', () => {
     });
   });
 
+  // ─── Reconnect 401 redirects to /login preserving intent ──
+  // Guards against: user starts reconnect flow, session expires before callback,
+  // /auth/facebook/link returns 401. Industry-standard fix (RFC 6749 + OIDC
+  // Account Linking): re-authenticate with intent preserved. MUST NOT fall
+  // through to /auth/facebook — that would create an orphan FB-only account
+  // detached from the user's existing phone account.
+  it('redirects to /login with reconnect intent when reconnect link returns 401 AUTH_FAILED', async () => {
+    (useAuthStore as unknown as { getState: ReturnType<typeof vi.fn> }).getState = vi.fn(() => ({
+      isAuthenticated: true,
+      token: 'stale-token',
+      setAuth: mockSetAuth,
+      setWorkspaces: vi.fn(),
+    }));
+
+    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+      query: { code: 'valid-code', state: encodeURIComponent('/pages|web|ar|reconnect') },
+      isReady: true,
+      push: mockPush,
+      replace: mockReplace,
+    });
+
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/auth/facebook/link')) {
+        return Promise.resolve({
+          ok: false,
+          status: 401,
+          json: async () => ({ message: 'Missing or invalid authorization header/cookie', code: 'AUTH_FAILED' }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    await act(async () => {
+      render(<AuthCallback />);
+    });
+
+    // Surface the session-expired error and stop — do not silently re-login
+    await waitFor(() => {
+      expect(screen.getByText('Your session expired. Please log in again to connect Facebook.')).toBeInTheDocument();
+    });
+    expect(mockSetAuth).not.toHaveBeenCalled();
+
+    // Must NOT fall through to /auth/facebook (would create a second account)
+    const loginCall = fetchMock.mock.calls.find((c: string[]) => c[0]?.endsWith('/auth/facebook'));
+    expect(loginCall).toBeUndefined();
+
+    // After 3s setTimeout fires: redirect to /login with reconnect=facebook so
+    // login.tsx can re-trigger OAuth with |reconnect appended to state.
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/login',
+        query: { reconnect: 'facebook', redirect: '/pages' },
+      });
+    }, { timeout: 4000 });
+  });
+
+  it('still surfaces non-401 errors from reconnect link path', async () => {
+    (useAuthStore as unknown as { getState: ReturnType<typeof vi.fn> }).getState = vi.fn(() => ({
+      isAuthenticated: true,
+      token: 'good-token',
+      setAuth: mockSetAuth,
+      setWorkspaces: vi.fn(),
+    }));
+
+    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+      query: { code: 'valid-code', state: encodeURIComponent('/pages|web|ar|reconnect') },
+      isReady: true,
+      push: mockPush,
+      replace: mockReplace,
+    });
+
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/auth/facebook/link')) {
+        return Promise.resolve({
+          ok: false,
+          status: 400,
+          json: async () => ({ message: 'Facebook account already linked to another user', code: 'ALREADY_LINKED' }),
+        });
+      }
+      return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+    });
+
+    await act(async () => {
+      render(<AuthCallback />);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Facebook account already linked to another user')).toBeInTheDocument();
+    });
+
+    // Did NOT fall through to normal login on a non-auth error
+    const loginCall = fetchMock.mock.calls.find((c: string[]) => c[0]?.endsWith('/auth/facebook'));
+    expect(loginCall).toBeUndefined();
+  });
+
   // ─── AbortError suppressed ───────────────────────────────
   it('should not show error when request is aborted (navigation)', async () => {
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({

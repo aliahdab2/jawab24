@@ -64,7 +64,8 @@ export default function AuthCallback() {
 
       // If the user is already authenticated and this is a reconnect (e.g. phone user
       // connecting Facebook pages), link Facebook to their existing account instead of
-      // creating a second user.
+      // creating a second user. If the session has since expired, fall through to
+      // normal login so the user isn't left stranded on the callback page.
       if (isReconnect && useAuthStore.getState().isAuthenticated) {
         const existingToken = useAuthStore.getState().token;
         const canonicalOrigin = BRAND_ASSETS.urls.base;
@@ -83,27 +84,40 @@ export default function AuthCallback() {
           signal: abortSignal,
         });
 
-        if (!linkResponse.ok) {
-          const errData = await linkResponse.json();
-          throw new Error(errData.message || t('loginError'));
-        }
+        if (linkResponse.ok) {
+          const linkData = await linkResponse.json();
+          setAuthRef.current(linkData.user, linkData.token, linkData.fbAccessToken);
+          if (linkData.workspaces?.length) setWorkspacesRef.current(linkData.workspaces, { defaultWorkspaceId: linkData.defaultWorkspaceId ?? null });
 
-        const linkData = await linkResponse.json();
-        setAuthRef.current(linkData.user, linkData.token, linkData.fbAccessToken);
-        if (linkData.workspaces?.length) setWorkspacesRef.current(linkData.workspaces, { defaultWorkspaceId: linkData.defaultWorkspaceId ?? null });
+          if (platform === 'mobile') {
+            const tokenStr = encodeURIComponent(linkData.token);
+            const fbTokenStr = encodeURIComponent(linkData.fbAccessToken || '');
+            const userStr = encodeURIComponent(JSON.stringify(linkData.user));
+            // App Link: Android verifies jawab24.com ownership via assetlinks.json and opens
+            // the native app directly, closing Chrome in the process (proper fix, not a workaround)
+            window.location.href = `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
+            return;
+          }
 
-        if (platform === 'mobile') {
-          const tokenStr = encodeURIComponent(linkData.token);
-          const fbTokenStr = encodeURIComponent(linkData.fbAccessToken || '');
-          const userStr = encodeURIComponent(JSON.stringify(linkData.user));
-          // App Link: Android verifies jawab24.com ownership via assetlinks.json and opens
-          // the native app directly, closing Chrome in the process (proper fix, not a workaround)
-          window.location.href = `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent('/pages')}&user=${userStr}`;
+          routerRef.current.replace('/pages', '/pages', { locale: preferredLocale });
           return;
         }
 
-        routerRef.current.replace('/pages', '/pages', { locale: preferredLocale });
-        return;
+        const errData = await linkResponse.json().catch(() => ({}));
+        // Session expired between reconnect-OAuth start and callback. Industry standard
+        // (RFC 6749 + OpenID Connect Account Linking): re-authenticate with intent
+        // preserved. Do NOT fall through to /auth/facebook — that would create a new
+        // FB-only account orphaned from the user's existing phone account.
+        if (linkResponse.status === 401 && (errData.code === 'AUTH_FAILED' || errData.code === 'INVALID_TOKEN')) {
+          authAttemptedRef.current = true;
+          setError(t('sessionExpiredReconnect'));
+          setTimeout(() => routerRef.current.push({ pathname: '/login', query: { reconnect: 'facebook', redirect: '/pages' } }), 3000);
+          return;
+        }
+
+        const err = new Error(errData.message || t('loginError')) as Error & { backendCode?: string };
+        err.backendCode = errData.code;
+        throw err;
       }
 
       // Create a timeout promise (15 seconds)

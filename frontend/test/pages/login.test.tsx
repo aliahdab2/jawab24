@@ -151,6 +151,43 @@ describe('LoginPage', () => {
         // NOTE: Error handling for web construction removed because login.tsx now uses a direct redirect 
         // without a try-catch block for visual minimalism (as requested by user).
     
+        it('should append |reconnect to OAuth state when ?reconnect=facebook is present', async () => {
+            // Resumes the reconnect flow after /auth/callback bounced the user here on
+            // a 401 mid-link. Without this, login would create a fresh FB account
+            // instead of linking to the user's existing phone account.
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+            (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+                query: { reconnect: 'facebook', redirect: '/pages' },
+                push: mockPush,
+                replace: vi.fn(),
+                pathname: '/login',
+                asPath: '/login?reconnect=facebook&redirect=/pages',
+                events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+            });
+            window.location.search = '?reconnect=facebook&redirect=/pages';
+
+            render(<LoginPage />);
+            await act(async () => {
+                screen.getByRole('button', { name: /Login with Facebook/i }).click();
+            });
+
+            const decodedState = decodeURIComponent(window.location.href.match(/state=([^&]+)/)![1]);
+            expect(decodedState).toBe('/pages|web|en|reconnect');
+        });
+
+        it('should NOT append |reconnect when reconnect query is absent', async () => {
+            process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
+            window.location.search = '';
+
+            render(<LoginPage />);
+            await act(async () => {
+                screen.getByRole('button', { name: /Login with Facebook/i }).click();
+            });
+
+            const decodedState = decodeURIComponent(window.location.href.match(/state=([^&]+)/)![1]);
+            expect(decodedState).not.toContain('|reconnect');
+        });
+
         it('should include required OAuth scopes', async () => {
             process.env.NEXT_PUBLIC_FB_APP_ID = 'test-app-id-123';
     

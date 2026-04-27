@@ -162,7 +162,12 @@ export default function LoginPage() {
         const scope = encodeURIComponent('email,pages_show_list,pages_read_engagement,pages_read_user_content,pages_manage_metadata,pages_manage_engagement,pages_messaging,instagram_basic,instagram_manage_messages,instagram_manage_comments');
 
         const returnUrl = router.query.redirect as string || '/dashboard';
-        const state = encodeURIComponent(`${returnUrl}|mobile|${locale}`);
+        // Resume reconnect flow if /auth/callback bounced here after a 401 mid-link
+        // (session expired between reconnect-OAuth start and callback). Preserves
+        // intent so the user lands linking to their existing account, not creating
+        // a second FB-only one.
+        const reconnectSuffix = router.query.reconnect === 'facebook' ? '|reconnect' : '';
+        const state = encodeURIComponent(`${returnUrl}|mobile|${locale}${reconnectSuffix}`);
 
         const oauthUrl = `https://www.facebook.com/v18.0/dialog/oauth?client_id=${fbAppId}&redirect_uri=${redirectUri}&scope=${scope}&response_type=code&state=${state}&display=page`;
 
@@ -189,7 +194,8 @@ export default function LoginPage() {
 
       const webParams = new URLSearchParams(window.location.search);
       const returnUrl = webParams.get('redirect') || router.query.redirect as string || '/dashboard';
-      const state = encodeURIComponent(`${returnUrl}|web|${locale}`);
+      const reconnectSuffix = (webParams.get('reconnect') || router.query.reconnect) === 'facebook' ? '|reconnect' : '';
+      const state = encodeURIComponent(`${returnUrl}|web|${locale}${reconnectSuffix}`);
 
       const isMobileWeb = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
       const displayMode = isMobileWeb ? 'touch' : 'page';
