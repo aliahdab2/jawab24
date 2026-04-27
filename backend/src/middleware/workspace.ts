@@ -1,5 +1,5 @@
 import { FastifyReply } from 'fastify';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaceMembers, workspaces } from '../db/schema';
 import type { AuthenticatedRequest } from './auth';
@@ -24,9 +24,11 @@ export type ResolvedWorkspaceRequest = WorkspaceRequest & { workspaceId: string;
  * Resolves the workspace context for the current request.
  *
  * 1. If `X-Workspace-Id` header is present, verify the user is a member.
- * 2. If no header, auto-select if the user belongs to exactly 1 workspace.
- * 3. If >1 workspace and no header, return 409 (workspace_selection_required).
- * 4. If 0 workspaces, return 404 (NO_WORKSPACE) — should not happen after
+ * 2. If no header, auto-select a default workspace (owned-first, then oldest membership).
+ *    This matches standard SaaS behaviour and unblocks clients whose workspace
+ *    sync fell through silently (e.g. older mobile builds before X-Workspace-Id
+ *    plumbing was reliable).
+ * 3. If 0 workspaces, return 404 (NO_WORKSPACE) — should not happen after
  *    running scripts/migrate-workspaces.ts and deploying the workspace-aware
  *    auth service (which calls ensureWorkspace on every login).
  *
@@ -75,17 +77,24 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         return;
     }
 
-    // No header — auto-select if exactly 1 workspace
+    // No header — auto-select a default workspace.
+    // Order: workspace the user owns first (role='owner'), then oldest membership.
+    // This matches standard SaaS UX (Slack, Linear, Notion): pick a sensible default
+    // and let the client switch via the workspace switcher. Returning 409 here
+    // strands clients that don't yet handle workspace_selection_required (e.g. older
+    // mobile builds where the auth-sync /workspaces fetch fell through silently).
     const memberships = await db
         .select({
             workspaceId: workspaceMembers.workspaceId,
             role: workspaceMembers.role,
             name: workspaces.name,
             ownerId: workspaces.ownerId,
+            joinedAt: workspaceMembers.joinedAt,
         })
         .from(workspaceMembers)
         .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
-        .where(eq(workspaceMembers.userId, userId));
+        .where(eq(workspaceMembers.userId, userId))
+        .orderBy(sql`CASE WHEN ${workspaceMembers.role} = 'owner' THEN 0 ELSE 1 END`, asc(workspaceMembers.joinedAt));
 
     if (memberships.length === 0) {
         return reply.status(404).send({
@@ -95,23 +104,9 @@ export async function resolveWorkspace(request: WorkspaceRequest, reply: Fastify
         });
     }
 
-    if (memberships.length === 1) {
-        request.workspaceId = memberships[0].workspaceId;
-        request.workspaceRole = memberships[0].role as WorkspaceRole;
-        request.workspaceOwnerId = memberships[0].ownerId;
-        return;
-    }
-
-    // Multiple workspaces — user must specify which one
-    return reply.status(409).send({
-        error: 'workspace_selection_required',
-        message: 'You belong to multiple workspaces. Please select one.',
-        workspaces: memberships.map((m) => ({
-            id: m.workspaceId,
-            name: m.name,
-            role: m.role,
-        })),
-    });
+    request.workspaceId = memberships[0].workspaceId;
+    request.workspaceRole = memberships[0].role as WorkspaceRole;
+    request.workspaceOwnerId = memberships[0].ownerId;
 }
 
 /**

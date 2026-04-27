@@ -19,6 +19,7 @@ function mockQuery(result: unknown[]) {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         innerJoin: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue(result),
         then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
             Promise.resolve(result).then(resolve, reject),
@@ -82,12 +83,13 @@ describe('resolveWorkspace', () => {
     it('auto-selects workspace when user belongs to exactly one', async () => {
         const req = makeRequest();
         const reply = makeReply();
-        mockQuery([{ workspaceId: 'ws-1', role: 'owner', name: 'My WS' }]);
+        mockQuery([{ workspaceId: 'ws-1', role: 'owner', name: 'My WS', ownerId: 'user-1', joinedAt: new Date('2025-01-01') }]);
 
         await resolveWorkspace(req, reply);
 
         expect(req.workspaceId).toBe('ws-1');
         expect(req.workspaceRole).toBe('owner');
+        expect(req.workspaceOwnerId).toBe('user-1');
         expect(reply.status).not.toHaveBeenCalled();
     });
 
@@ -102,24 +104,64 @@ describe('resolveWorkspace', () => {
         expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'NO_WORKSPACE' }));
     });
 
-    it('returns 409 when user belongs to multiple workspaces without header', async () => {
+    // ── Multi-workspace auto-select (regression guard, 2026-04-27) ──────────
+    // Background: production mobile app 1.1.1 (5)/(6) shipped without robust
+    // X-Workspace-Id header plumbing. When a user belonged to multiple
+    // workspaces, the middleware previously returned 409
+    // (workspace_selection_required), which neither the mobile build nor the
+    // older web bundle had a UI handler for — every dashboard panel rendered
+    // "failed to load this section" until the user logged out. Standard SaaS
+    // behaviour (Slack, Linear, Notion) is to pick a sensible default and let
+    // the workspace switcher handle changes. These tests pin that contract so
+    // a future refactor cannot silently re-introduce the 409.
+    it('auto-selects a default workspace for users with multiple memberships (no header)', async () => {
         const req = makeRequest();
         const reply = makeReply();
+        // The DB query is expected to ORDER BY owner-first, then oldest joinedAt.
+        // The test mock returns rows already in that order; the middleware must
+        // pick the first row without ever calling reply.status.
         mockQuery([
-            { workspaceId: 'ws-1', role: 'owner', name: 'WS 1' },
-            { workspaceId: 'ws-2', role: 'member', name: 'WS 2' },
+            { workspaceId: 'ws-owned', role: 'owner', name: 'My WS', ownerId: 'user-1', joinedAt: new Date('2025-01-01') },
+            { workspaceId: 'ws-other', role: 'member', name: 'Other WS', ownerId: 'user-2', joinedAt: new Date('2025-02-01') },
         ]);
 
         await resolveWorkspace(req, reply);
 
-        expect(reply.status).toHaveBeenCalledWith(409);
-        expect(reply.send).toHaveBeenCalledWith(expect.objectContaining({
-            error: 'workspace_selection_required',
-            workspaces: expect.arrayContaining([
-                expect.objectContaining({ id: 'ws-1' }),
-                expect.objectContaining({ id: 'ws-2' }),
-            ]),
-        }));
+        expect(req.workspaceId).toBe('ws-owned');
+        expect(req.workspaceRole).toBe('owner');
+        expect(req.workspaceOwnerId).toBe('user-1');
+        expect(reply.status).not.toHaveBeenCalled();
+    });
+
+    it('never returns 409 for multi-workspace users — guards against regression', async () => {
+        const req = makeRequest();
+        const reply = makeReply();
+        mockQuery([
+            { workspaceId: 'ws-1', role: 'member', name: 'WS 1', ownerId: 'other', joinedAt: new Date('2025-01-01') },
+            { workspaceId: 'ws-2', role: 'member', name: 'WS 2', ownerId: 'other', joinedAt: new Date('2025-02-01') },
+            { workspaceId: 'ws-3', role: 'member', name: 'WS 3', ownerId: 'other', joinedAt: new Date('2025-03-01') },
+        ]);
+
+        await resolveWorkspace(req, reply);
+
+        expect(reply.status).not.toHaveBeenCalledWith(409);
+        expect(reply.send).not.toHaveBeenCalledWith(expect.objectContaining({ error: 'workspace_selection_required' }));
+        expect(req.workspaceId).toBeDefined();
+    });
+
+    it('passes orderBy to the query so the default workspace is deterministic', async () => {
+        // Without a deterministic ORDER BY clause, Postgres is free to return rows
+        // in any order, which means consecutive requests from the same user could
+        // resolve to different workspaces. Pin that the middleware chains orderBy.
+        const req = makeRequest();
+        const reply = makeReply();
+        const chain = mockQuery([
+            { workspaceId: 'ws-1', role: 'owner', name: 'WS', ownerId: 'user-1', joinedAt: new Date('2025-01-01') },
+        ]);
+
+        await resolveWorkspace(req, reply);
+
+        expect(chain.orderBy).toHaveBeenCalled();
     });
 });
 
