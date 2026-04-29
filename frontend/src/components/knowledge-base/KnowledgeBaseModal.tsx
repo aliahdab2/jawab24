@@ -165,10 +165,17 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const isNearLimit = totalChars > MAX_LENGTH * 0.9;
 
   const modal = (
-    <div className="modal-overlay fixed inset-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2">
+    <div
+      className="modal-overlay fixed inset-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2 touch-none"
+      style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
+      onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
+      onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
+    >
 
       <div
-        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-full lg:max-h-[85vh] landscape:max-h-[90vh] overflow-hidden flex flex-col pt-safe lg:pt-0 landscape:pb-2"
+        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-full lg:max-h-[85vh] landscape:max-h-[90vh] overflow-hidden flex flex-col pt-safe lg:pt-0 landscape:pb-2 touch-pan-y"
+        onTouchMove={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 landscape:py-2 sm:p-5 border-b border-theme-border flex-shrink-0 z-10 bg-card">
