@@ -360,11 +360,9 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
   const [showDowngradeDialog, setShowDowngradeDialog] = useState(false);
   const [downgradeLoading, setDowngradeLoading] = useState(false);
 
-  // Client-side: fetch real plans if ISR served fallback data
+  // Client-side: always refresh plans on mount so pricing/quota changes
+  // appear immediately, without waiting for the ISR window to rotate.
   useEffect(() => {
-    const isFallback = serverPlans.some(p => p.id.startsWith('fallback-'));
-    if (!isFallback) return;
-
     const fetchPlans = async () => {
       try {
         const response = await publicApi.get('/plans');
@@ -373,7 +371,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
           setPlans(realPlans);
         }
       } catch {
-        // Keep fallback plans — better than nothing
+        // Keep server-rendered plans — better than nothing
       }
     };
 
