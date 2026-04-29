@@ -41,7 +41,7 @@ export const PLANS: PlanSeed[] = [
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
-        maxAiRepliesPerMonth: 500,
+        maxAiRepliesPerMonth: 800,
         facebookEnabled: true,
         instagramEnabled: true,
         whatsappEnabled: false,
