@@ -1147,6 +1147,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 const rows = await db
                     .select({
                         id: leadDigestSends.id,
+                        workspaceId: leadDigestSends.workspaceId,
                         userId: leadDigestSends.userId,
                         userEmail: users.email,
                         status: leadDigestSends.status,

@@ -68,6 +68,8 @@ export const workspaceMembers = pgTable('workspace_members', {
     role: varchar('role', { length: 20 }).notNull().default('member'), // 'owner' | 'admin' | 'member'
     joinedAt: timestamp('joined_at').defaultNow(),
     invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    // Per-member opt-out for daily lead digest emails. Null = subscribed (default). Set = muted at this time.
+    leadDigestMutedAt: timestamp('lead_digest_muted_at'),
 }, (table) => {
     return {
         workspaceUserUnique: uniqueIndex('idx_workspace_members_ws_user').on(table.workspaceId, table.userId),
@@ -873,8 +875,12 @@ export const leads = pgTable('leads', {
 // Operators query this to answer "did we email user X?" and to monitor delivery health.
 export const leadDigestSends = pgTable('lead_digest_sends', {
     id: uuid('id').defaultRandom().primaryKey(),
+    // Workspace whose leads are summarized in this digest. Nullable for backfill rows from before
+    // the per-workspace fan-out — new rows always populate it.
+    workspaceId: uuid('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
+    // The recipient (owner or admin) the digest was sent to. Each workspace fan-out produces one row per recipient.
     userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
-    // 'sent' | 'failed' | 'skipped_no_email' | 'skipped_no_subscription' | 'skipped_abandoned'
+    // 'sent' | 'failed' | 'skipped_no_email' | 'skipped_no_subscription' | 'skipped_abandoned' | 'skipped_muted'
     status: varchar('status', { length: 32 }).notNull(),
     leadCount: integer('lead_count').notNull(),
     lang: varchar('lang', { length: 10 }), // 'ar' | 'en' | null when skipped before language pick
@@ -885,6 +891,7 @@ export const leadDigestSends = pgTable('lead_digest_sends', {
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     userIdIdx: index('idx_lead_digest_sends_user_id').on(table.userId),
+    workspaceIdIdx: index('idx_lead_digest_sends_workspace_id').on(table.workspaceId),
     createdAtIdx: index('idx_lead_digest_sends_created_at').on(table.createdAt),
 }));
 
