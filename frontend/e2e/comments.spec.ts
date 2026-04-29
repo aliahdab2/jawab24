@@ -338,6 +338,127 @@ test.describe('Comments Page', () => {
   });
 });
 
+test.describe('Comments — SSE realtime updates', () => {
+  test('should remove auto-replied comment from Needs Action tab without refresh', async ({ page }) => {
+    page.on('pageerror', (err) => console.error(`PAGE ERROR: ${err}`));
+
+    // Stub EventSource so the test can dispatch SSE events deterministically.
+    await page.addInitScript(() => {
+      class FakeEventSource {
+        url: string;
+        withCredentials: boolean;
+        readyState = 1;
+        onopen: ((e: Event) => void) | null = null;
+        onmessage: ((e: MessageEvent) => void) | null = null;
+        onerror: ((e: Event) => void) | null = null;
+        private listeners = new Map<string, Set<(e: MessageEvent) => void>>();
+        constructor(url: string, init?: { withCredentials?: boolean }) {
+          this.url = url;
+          this.withCredentials = !!init?.withCredentials;
+          (window as unknown as { __fakeES?: FakeEventSource }).__fakeES = this;
+          setTimeout(() => this.dispatch('connected', '{}'), 0);
+        }
+        addEventListener(type: string, fn: (e: MessageEvent) => void) {
+          if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+          this.listeners.get(type)!.add(fn);
+        }
+        removeEventListener(type: string, fn: (e: MessageEvent) => void) {
+          this.listeners.get(type)?.delete(fn);
+        }
+        close() { this.readyState = 2; }
+        dispatch(type: string, data: string) {
+          const evt = new MessageEvent(type, { data });
+          this.listeners.get(type)?.forEach(fn => fn(evt));
+        }
+      }
+      (window as unknown as { EventSource: typeof EventSource }).EventSource =
+        FakeEventSource as unknown as typeof EventSource;
+    });
+
+    await page.addInitScript(() => {
+      localStorage.setItem(
+        'auth-storage',
+        JSON.stringify({
+          state: { user: { id: 'u1', email: 'test@test.com', name: 'Test' }, token: 'mock-token', fbToken: 'mock-fb', isAuthenticated: true },
+          version: 0,
+        })
+      );
+      localStorage.setItem(
+        'ui-storage',
+        JSON.stringify({ state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+      );
+      localStorage.setItem('jawab24_onboarding_complete', 'true');
+    });
+
+    // Backend filter: actionRequired = !resolved AND (!replied OR needsAttention).
+    // First call returns the pending comment; after the SSE auto-reply, the
+    // refetch returns an empty list (server-side filter would have dropped it).
+    const pendingComment = {
+      id: 'c-pending',
+      postId: 'p1',
+      message: 'When do you open?',
+      fromName: 'Lina Hassan',
+      replied: false,
+      replyText: null,
+      replyMethod: null,
+      pageId: 'page_1',
+      createdAt: new Date().toISOString(),
+      postMessage: 'New schedule!',
+    };
+
+    let commentsCallCount = 0;
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      if (url.includes('/comments/stats')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_COMMENT_STATS) });
+      }
+      if (url.includes('/comments')) {
+        commentsCallCount++;
+        const body = commentsCallCount === 1
+          ? { data: [pendingComment], pagination: { nextCursor: null } }
+          : { data: [], pagination: { nextCursor: null } };
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
+      }
+      if (url.includes('/pages')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PAGES }) });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/comments');
+    await expect(page.locator('h1').filter({ hasText: t('comments.title') }).first()).toBeVisible({ timeout: 15000 });
+
+    // The pending comment is visible on the default Needs Action tab.
+    await expect(page.locator('text=When do you open?').first()).toBeVisible({ timeout: 10000 });
+
+    // Auto-reply arrives via SSE.
+    await page.evaluate(() => {
+      const es = (window as unknown as { __fakeES?: { dispatch: (t: string, d: string) => void } }).__fakeES;
+      es?.dispatch(
+        'comment:reply_sent',
+        JSON.stringify({
+          data: {
+            commentId: 'c-pending',
+            replyText: 'We open at 9am.',
+            replyMethod: 'ai',
+            senderName: 'Lina Hassan',
+            pageId: 'page_1',
+          },
+        }),
+      );
+    });
+
+    // The list should refetch and the comment should be gone — no manual refresh.
+    await expect(page.locator('text=When do you open?')).toHaveCount(0, { timeout: 5000 });
+  });
+});
+
 test.describe('Comment Detail Modal', () => {
   const setupPage = async (page: import('@playwright/test').Page) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));

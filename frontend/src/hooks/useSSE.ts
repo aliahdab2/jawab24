@@ -147,27 +147,11 @@ export function useSSE(): void {
         es.addEventListener('comment:reply_sent', (e) => {
             try {
                 const event: SSEEvent<'comment:reply_sent'> = JSON.parse(e.data);
-                const { commentId, replyText, replyMethod } = event.data;
-                // Stats badge always needs to refresh (pending count changes)
+                const { replyMethod } = event.data;
                 queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-                // Surgically patch the comment in cache — no network call needed
-                queryClient.setQueriesData<InfiniteData<{ data: Comment[]; pagination: { nextCursor?: string | null } }>>(
-                    { queryKey: ['comments'] },
-                    (old) => {
-                        if (!old) return old;
-                        return {
-                            ...old,
-                            pages: old.pages.map(page => ({
-                                ...page,
-                                data: page.data.map(c =>
-                                    c.id === commentId
-                                        ? { ...c, replied: true, replyText, replyMethod }
-                                        : c
-                                ),
-                            })),
-                        };
-                    },
-                );
+                if (isOnPage('/comments')) {
+                    queryClient.invalidateQueries({ queryKey: ['comments'] });
+                }
                 if (!isOnPage('/comments') && replyMethod === 'ai') {
                     const name = event.data.senderName?.trim();
                     showToast(name ? t('aiRepliedCommentNamed', { name }) : t('aiRepliedComment'));
