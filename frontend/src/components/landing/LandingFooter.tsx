@@ -1,12 +1,18 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { MessageCircle, Facebook, Mail, Zap, Clock, Phone } from 'lucide-react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { isRTLLocale } from '@/utils/locale';
 
 export function LandingFooter() {
   const t = useTranslations('landing');
   const tDataDeletion = useTranslations('dataDeletion');
+  const locale = useLocale();
+  const playBadgeSrc = isRTLLocale(locale)
+    ? '/badges/google-play-ar.png'
+    : '/badges/google-play-en.png';
 
   return (
     <footer className="landing-section-dark dark:bg-surface-50 pt-10 sm:pt-16 lg:pt-24 pb-8 sm:pb-12 relative overflow-hidden">
@@ -52,6 +58,23 @@ export function LandingFooter() {
                 <Mail className="w-4 h-4 sm:w-5 sm:h-5 group-hover:scale-110 transition-transform" aria-hidden="true" />
               </a>
             </div>
+
+            <a
+              href={BRAND_ASSETS.stores.googlePlay}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={t('footer.googlePlayAlt')}
+              className="inline-block mt-6 sm:mt-8 transition-opacity hover:opacity-90 focus-visible:opacity-90"
+            >
+              <Image
+                src={playBadgeSrc}
+                alt=""
+                width={124}
+                height={48}
+                unoptimized
+                className="h-12 w-auto"
+              />
+            </a>
           </div>
 
           <div>

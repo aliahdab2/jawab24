@@ -35,5 +35,8 @@ export const BRAND_ASSETS = {
         facebook: 'https://facebook.com/jawab24app',
         instagram: 'https://instagram.com/jawab24',
         twitter: '@jawab24',
+    },
+    stores: {
+        googlePlay: 'https://play.google.com/store/apps/details?id=com.jawab24.android',
     }
 };

@@ -148,7 +148,8 @@
     "phoneNumber": "+46 700 22 47 20",
     "operatedBy": "Jawab24 is operated by:",
     "operatorName": "Jawab24 Team",
-    "country": "Sweden"
+    "country": "Sweden",
+    "googlePlayAlt": "Get Jawab24 on Google Play"
   },
   "images": {
     "dashboardPreview": "Dashboard Preview",
