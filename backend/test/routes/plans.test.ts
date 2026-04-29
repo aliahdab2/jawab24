@@ -118,10 +118,20 @@ vi.mock('../../src/middleware/admin', () => ({
     isUserAdmin: vi.fn().mockResolvedValue(true),
 }));
 
+// Mock revalidation so admin write paths don't make real network calls.
+vi.mock('../../src/services/revalidation', () => ({
+    revalidatePublicPages: vi.fn().mockResolvedValue(undefined),
+    revalidatePlanPages: vi.fn().mockResolvedValue(undefined),
+    PLAN_DEPENDENT_PATHS: ['/pricing', '/en/pricing'],
+}));
+
+import { revalidatePlanPages } from '../../src/services/revalidation';
+
 describe('Plans Routes', () => {
     let app: ReturnType<typeof Fastify>;
 
     beforeEach(async () => {
+        vi.mocked(revalidatePlanPages).mockClear();
         app = Fastify();
         await app.register(plansRoutes, { prefix: '/api/plans' });
         await app.ready();
@@ -209,10 +219,23 @@ describe('Plans Routes', () => {
                 });
 
                 expect(response.statusCode).toBe(201);
-                
+
                 const body = JSON.parse(response.payload);
                 expect(body.success).toBe(true);
                 expect(body.data.name).toBe('New Plan');
+            });
+
+            it('triggers ISR revalidation of pricing pages on create', async () => {
+                await app.inject({
+                    method: 'POST',
+                    url: '/api/plans/admin',
+                    headers: {
+                        authorization: 'Bearer test_token',
+                        'content-type': 'application/json',
+                    },
+                    payload: { name: 'New Plan', slug: 'new-plan', price: 1000 },
+                });
+                expect(revalidatePlanPages).toHaveBeenCalled();
             });
         });
 
@@ -251,6 +274,26 @@ describe('Plans Routes', () => {
 
                 expect(response.statusCode).toBe(404);
             });
+
+            it('triggers ISR revalidation on successful update', async () => {
+                await app.inject({
+                    method: 'PUT',
+                    url: `/api/plans/admin/${TEST_PLAN_FREE_ID}`,
+                    headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                    payload: { price: 500 },
+                });
+                expect(revalidatePlanPages).toHaveBeenCalled();
+            });
+
+            it('does not revalidate when the plan is not found', async () => {
+                await app.inject({
+                    method: 'PUT',
+                    url: `/api/plans/admin/${NON_EXISTENT_UUID}`,
+                    headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                    payload: { price: 500 },
+                });
+                expect(revalidatePlanPages).not.toHaveBeenCalled();
+            });
         });
 
         describe('DELETE /api/plans/admin/:planId', () => {
@@ -268,6 +311,15 @@ describe('Plans Routes', () => {
                 const body = JSON.parse(response.payload);
                 expect(body.success).toBe(true);
                 expect(body.message).toBe('Plan deleted successfully');
+            });
+
+            it('triggers ISR revalidation on successful delete', async () => {
+                await app.inject({
+                    method: 'DELETE',
+                    url: `/api/plans/admin/${TEST_PLAN_FREE_ID}`,
+                    headers: { authorization: 'Bearer test_token' },
+                });
+                expect(revalidatePlanPages).toHaveBeenCalled();
             });
         });
 

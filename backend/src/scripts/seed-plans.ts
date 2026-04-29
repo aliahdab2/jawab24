@@ -18,6 +18,7 @@ import postgres from 'postgres';
 import dotenv from 'dotenv';
 import { plans } from '../db/schema';
 import { PLANS } from '../config/plans';
+import { revalidatePlanPages } from '../services/revalidation';
 
 dotenv.config();
 
@@ -105,6 +106,8 @@ async function seedPlans() {
         }
 
         console.error(`✅ Plans reconciled. Default: ${defaultSlug}`);
+
+        await revalidatePlanPages();
     } catch (err) {
         console.error('❌ Plan seed failed:', err);
         process.exit(1);

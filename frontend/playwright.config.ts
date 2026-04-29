@@ -59,6 +59,8 @@ export default defineConfig({
     // Dev mode: forces getStaticProps fallback. Prod mode: data baked in at build time.
     env: {
       NEXT_PUBLIC_API_URL: 'http://localhost:4999/api',
+      // Stable test secret so /api/revalidate has a known shared key during E2E.
+      REVALIDATE_SECRET: process.env.REVALIDATE_SECRET || 'e2e-revalidate-secret',
     },
   },
 });

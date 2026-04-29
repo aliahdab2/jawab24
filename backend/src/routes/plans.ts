@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/admin';
 import { CreatePlanSchema, UpdatePlanSchema, UUIDSchema, validateSchema } from '../utils/validation';
 import { auth } from '../utils/swagger';
+import { revalidatePlanPages } from '../services/revalidation';
 
 interface PlanParams {
     planId: string;
@@ -124,6 +125,7 @@ export default async function plansRoutes(fastify: FastifyInstance) {
 
                 try {
                     const plan = await plansService.createPlan(validation.data);
+                    void revalidatePlanPages();
                     return reply.status(201).send({
                         success: true,
                         data: plan,
@@ -176,7 +178,8 @@ export default async function plansRoutes(fastify: FastifyInstance) {
                             error: 'Plan not found',
                         });
                     }
-                    
+
+                    void revalidatePlanPages();
                     return reply.send({
                         success: true,
                         data: plan,
@@ -216,7 +219,8 @@ export default async function plansRoutes(fastify: FastifyInstance) {
                             error: 'Plan not found',
                         });
                     }
-                    
+
+                    void revalidatePlanPages();
                     return reply.send({
                         success: true,
                         message: 'Plan deleted successfully',
