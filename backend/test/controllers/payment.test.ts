@@ -55,6 +55,18 @@ vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), del: vi.fn(), quit: vi.fn() },
 }));
 
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: {
+        sendTemplateNotification: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         frontendUrl: 'http://localhost:3001',
@@ -496,12 +508,17 @@ describe('Payment Controller', () => {
             };
 
             vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            vi.mocked(stripeService.getSubscription).mockResolvedValue({
+                id: 'sub_123',
+                current_period_start: 1714402800, // 2026-04-29 17:00:00 UTC
+                current_period_end: 1716994800,   // 2026-05-29 17:00:00 UTC
+            } as any);
 
             const mockDb = vi.mocked(db);
             mockDb.update.mockReturnValue({
                 set: vi.fn().mockReturnValue({
                     where: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([{ id: 'sub_db_123' }]),
+                        returning: vi.fn().mockResolvedValue([{ id: 'sub_db_123', userId: 'user_123' }]),
                     }),
                 }),
             } as any);
@@ -513,6 +530,55 @@ describe('Payment Controller', () => {
 
             expect(mockRequest.log?.info).toHaveBeenCalledWith('Webhook received: invoice.payment_succeeded');
             expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+
+        // Regression guard: a renewed subscription must get a fresh usage row
+        // aligned with the new Stripe period, otherwise the previous period's
+        // counter keeps blocking replies even though status is 'active'.
+        it('resets the usage period when invoice.payment_succeeded fires', async () => {
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            vi.mocked(subscriptionsService.initializeUsagePeriod).mockClear();
+
+            const mockEvent: Partial<Stripe.Event> = {
+                type: 'invoice.payment_succeeded',
+                data: {
+                    object: {
+                        id: 'inv_renewal',
+                        customer: 'cus_123',
+                        subscription: 'sub_renewal',
+                    } as any,
+                },
+            };
+
+            const periodStartUnix = 1714402800; // 2026-04-29 17:00:00 UTC
+            const periodEndUnix = 1716994800;   // 2026-05-29 17:00:00 UTC
+
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            vi.mocked(stripeService.getSubscription).mockResolvedValue({
+                id: 'sub_renewal',
+                current_period_start: periodStartUnix,
+                current_period_end: periodEndUnix,
+            } as any);
+
+            const mockDb = vi.mocked(db);
+            mockDb.update.mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{ id: 'sub_db_renewal', userId: 'user_renewal' }]),
+                    }),
+                }),
+            } as any);
+
+            await paymentController.handleWebhook(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            expect(subscriptionsService.initializeUsagePeriod).toHaveBeenCalledTimes(1);
+            const [userId, start, end] = vi.mocked(subscriptionsService.initializeUsagePeriod).mock.calls[0];
+            expect(userId).toBe('user_renewal');
+            expect(start).toEqual(new Date(periodStartUnix * 1000));
+            expect(end).toEqual(new Date(periodEndUnix * 1000));
         });
 
         it('should handle unknown event types', async () => {

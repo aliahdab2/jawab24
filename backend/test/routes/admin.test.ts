@@ -118,6 +118,12 @@ vi.mock('../../src/services/kb/embedding', () => ({
     OpenAIEmbeddingProvider: vi.fn(),
 }));
 
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        initializeUsagePeriod: vi.fn().mockResolvedValue(undefined),
+    },
+}));
+
 vi.mock('../../src/services/kb/gap-detector', () => ({
     gapDetectorService: { recordGap: vi.fn().mockResolvedValue(undefined) },
 }));
@@ -618,6 +624,80 @@ describe('Admin Routes', () => {
             expect(body.message).toContain('Pro');
             expect(body.message).toContain('1 month(s)');
             expect(body.data.plan.name).toBe('Pro');
+        });
+
+        // Regression guard: manual upgrade must reset the usage period so the
+        // customer immediately gets their fresh quota. Without this call the
+        // previous period's usage row keeps blocking replies after renewal.
+        it('resets the usage period on successful manual upgrade', async () => {
+            const { db } = await import('../../src/db');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            const userFoundChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_USER_ID, email: 'user@test.com' }]),
+            };
+            const planFoundChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_PLAN_ID, name: 'Pro', slug: 'pro' }]),
+            };
+            const existingSubChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{
+                    id: 'sub-existing',
+                    userId: TEST_USER_ID,
+                    planId: TEST_PLAN_ID,
+                    status: 'past_due',
+                    paymentMethod: 'manual',
+                    currentPeriodEnd: new Date('2026-04-01'),
+                }]),
+            };
+
+            vi.mocked(db.select)
+                .mockReturnValueOnce(userFoundChain as any)
+                .mockReturnValueOnce(planFoundChain as any)
+                .mockReturnValueOnce(existingSubChain as any);
+
+            const updatedSub = { id: 'sub-existing', userId: TEST_USER_ID, planId: TEST_PLAN_ID, status: 'active' };
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([updatedSub]),
+                    }),
+                }),
+            } as any);
+
+            const response = await app.inject({
+                method: 'POST',
+                url: `/admin/users/${TEST_USER_ID}/upgrade`,
+                headers: {
+                    authorization: 'Bearer valid-token',
+                    'content-type': 'application/json',
+                },
+                payload: { planId: TEST_PLAN_ID, periodMonths: 3, paymentMethod: 'manual' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(subscriptionsService.initializeUsagePeriod).toHaveBeenCalledTimes(1);
+
+            const [calledUserId, calledStart, calledEnd] = vi.mocked(subscriptionsService.initializeUsagePeriod).mock.calls[0];
+            expect(calledUserId).toBe(TEST_USER_ID);
+            expect(calledStart).toBeInstanceOf(Date);
+            expect(calledEnd).toBeInstanceOf(Date);
+            // periodEnd must be roughly 3 months after periodStart
+            const monthsDiff =
+                (calledEnd.getFullYear() - calledStart.getFullYear()) * 12 +
+                (calledEnd.getMonth() - calledStart.getMonth());
+            expect(monthsDiff).toBe(3);
         });
     });
 

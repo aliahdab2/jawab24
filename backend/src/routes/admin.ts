@@ -13,6 +13,7 @@ import { emailService } from '../services/email';
 import { waitlistEmailTemplate } from '../utils/emailTemplates';
 import { generateUnsubscribeToken } from './waitlist';
 import { runDailyLeadDigest } from '../services/leadDigest';
+import { subscriptionsService } from '../services/subscriptions';
 
 // Request body types
 interface ManualUpgradeBody {
@@ -462,6 +463,10 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             })
                             .returning();
                     }
+
+                    // Reset quota for the new billing period so the customer
+                    // immediately gets their fresh allowance after renewal.
+                    await subscriptionsService.initializeUsagePeriod(userId, now, periodEnd);
 
                     // Create audit log
                     await db.insert(adminAuditLogs).values({

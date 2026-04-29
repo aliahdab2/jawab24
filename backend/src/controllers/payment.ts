@@ -759,24 +759,33 @@ export class PaymentController {
             return;
         }
 
+        // Pull the latest period boundaries from Stripe so DB matches Stripe's truth.
+        // On renewal Stripe advances current_period_start/end; we must mirror that
+        // and reset quota — otherwise the previous period's usage row keeps blocking.
+        const stripeSubscription = await stripeService.getSubscription(stripeSubscriptionId);
+        const periodStart = new Date(stripeSubscription.current_period_start * 1000);
+        const periodEnd = new Date(stripeSubscription.current_period_end * 1000);
+
         // Update subscription status with retry logic for race conditions
         let retries = 3;
-        let updated = false;
+        let updatedRow: { id: string; userId: string } | null = null;
 
-        while (retries > 0 && !updated) {
+        while (retries > 0 && !updatedRow) {
             const result = await db
                 .update(subscriptions)
                 .set({
                     status: 'active',
+                    currentPeriodStart: periodStart,
+                    currentPeriodEnd: periodEnd,
                     updatedAt: new Date(),
                 })
                 .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId))
-                .returning({ id: subscriptions.id });
+                .returning({ id: subscriptions.id, userId: subscriptions.userId });
 
             if (result.length > 0) {
-                updated = true;
+                updatedRow = result[0];
                 request.log.info(
-                    { subscriptionId: stripeSubscriptionId, dbId: result[0].id },
+                    { subscriptionId: stripeSubscriptionId, dbId: updatedRow.id },
                     'Payment succeeded - subscription activated'
                 );
             } else {
@@ -792,12 +801,16 @@ export class PaymentController {
             }
         }
 
-        if (!updated) {
+        if (!updatedRow) {
             request.log.error(
                 { subscriptionId: stripeSubscriptionId },
                 'Failed to activate subscription - not found after retries'
             );
+            return;
         }
+
+        // Reset quota for the new billing period.
+        await subscriptionsService.initializeUsagePeriod(updatedRow.userId, periodStart, periodEnd);
     }
 
     /**

@@ -55,6 +55,8 @@
     "status": "Status",
     "periodEnd": "Period Ends",
     "paymentMethod": "Payment Method",
+    "quota": "Smart Replies Quota",
+    "quotaUnlimited": "Unlimited",
     "noSubscription": "No subscription",
     "manualUpgrade": "Manual Upgrade",
     "cancelUpgrade": "Cancel",

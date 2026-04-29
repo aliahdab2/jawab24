@@ -435,6 +435,16 @@ export default function AdminCustomerDetailPage() {
                                             {customer.subscription.paymentMethod || '-'}
                                         </div>
                                     </div>
+                                    <div>
+                                        <div className="text-xs text-muted-foreground mb-1">{t('customer.quota')}</div>
+                                        <div className="font-medium">
+                                            {customer.usage.aiRepliesCount}
+                                            {customer.usage.limit !== null
+                                                ? <> / {customer.usage.limit}</>
+                                                : <> / {t('customer.quotaUnlimited')}</>
+                                            }
+                                        </div>
+                                    </div>
                                 </div>
                             ) : (
                                 <p className="text-muted-foreground">

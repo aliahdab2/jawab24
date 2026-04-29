@@ -55,6 +55,8 @@
     "status": "الحالة",
     "periodEnd": "نهاية الفترة",
     "paymentMethod": "طريقة الدفع",
+    "quota": "حصة الردود الذكية",
+    "quotaUnlimited": "غير محدودة",
     "noSubscription": "لا يوجد اشتراك",
     "manualUpgrade": "ترقية يدوية",
     "cancelUpgrade": "إلغاء",
