@@ -240,7 +240,8 @@ describe('useSSE', () => {
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments-stats'] });
     });
 
-    it('comment:reply_sent → patches comment in cache (setQueriesData), no list invalidation', async () => {
+    it('comment:reply_sent on /comments → invalidates the comments list so server-filtered tabs (Needs Action) re-fetch', async () => {
+        mockPathname = '/comments';
         const { unmount: u } = await mountSSE();
         unmount = u;
 
@@ -250,15 +251,16 @@ describe('useSSE', () => {
             });
         });
 
-        // Surgical in-place update — no list invalidation
-        expect(mockSetQueriesData).toHaveBeenCalledWith(
+        expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments'] });
+        // No surgical patching — invalidation is the new contract.
+        expect(mockSetQueriesData).not.toHaveBeenCalledWith(
             { queryKey: ['comments'] },
             expect.any(Function),
         );
-        expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['comments'] });
     });
 
-    it('comment:reply_sent patcher sets replied=true, replyText, replyMethod on matching comment', async () => {
+    it('comment:reply_sent NOT on /comments → does not invalidate the comments list (badge stats handled separately)', async () => {
+        mockPathname = '/dashboard';
         const { unmount: u } = await mountSSE();
         unmount = u;
 
@@ -268,41 +270,11 @@ describe('useSSE', () => {
             });
         });
 
-        // Extract the patcher function passed to setQueriesData
-        const patcher = mockSetQueriesData.mock.calls[0][1] as (old: unknown) => unknown;
-
-        const fakeCache = {
-            pages: [
-                { data: [{ id: 'c1', replied: false, replyText: null, replyMethod: null }, { id: 'c2', replied: false }], pagination: {} },
-            ],
-            pageParams: [undefined],
-        };
-
-        const updated = patcher(fakeCache) as typeof fakeCache;
-
-        expect(updated.pages[0].data[0]).toMatchObject({
-            id: 'c1',
-            replied: true,
-            replyText: 'Thanks!',
-            replyMethod: 'ai',
-        });
-        // Other comments untouched
-        expect(updated.pages[0].data[1]).toMatchObject({ id: 'c2', replied: false });
-    });
-
-    it('comment:reply_sent patcher returns old value unchanged when cache is empty', async () => {
-        const { unmount: u } = await mountSSE();
-        unmount = u;
-
-        act(() => {
-            MockEventSource.instance!.dispatch('comment:reply_sent', {
-                commentId: 'c1', pageId: 'p1', replyMethod: 'template', replyText: 'Hi',
-            });
-        });
-
-        const patcher = mockSetQueriesData.mock.calls[0][1] as (old: unknown) => unknown;
-        expect(patcher(undefined)).toBeUndefined();
-        expect(patcher(null)).toBeNull();
+        expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['comments'] });
+        expect(mockSetQueriesData).not.toHaveBeenCalledWith(
+            { queryKey: ['comments'] },
+            expect.any(Function),
+        );
     });
 
     it('comment:reply_sent ai + NOT on /comments → shows toast', async () => {
