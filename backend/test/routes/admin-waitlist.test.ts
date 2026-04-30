@@ -7,15 +7,30 @@ const MOCK_ENTRIES = [
     { id: '2', email: 'bob@test.com', feature: 'ecommerce_integrations', createdAt: '2026-01-16T12:00:00Z' },
 ];
 
-// Build a chainable query mock for Drizzle ORM
-function chainable(resolvedValue: unknown) {
+// Mutable per-test overrides — set inside `it` blocks before invoking the route.
+const MOCK_OVERRIDES: { users?: { email: string | null }[]; unsubscribes?: { email: string }[] } = {};
+
+// Build a chainable query mock for Drizzle ORM that resolves to different data
+// based on which schema table .from() was called with.
+function chainable(defaultValue: unknown) {
     const chain: Record<string, unknown> = {};
-    const self = () => chain;
-    for (const m of ['from', 'where', 'orderBy', 'limit', 'offset', 'leftJoin', 'groupBy', 'having']) {
+    let resolved: unknown = defaultValue;
+    chain.from = vi.fn((table: { _kind?: string }) => {
+        if (table?._kind === 'users' && MOCK_OVERRIDES.users !== undefined) {
+            resolved = MOCK_OVERRIDES.users;
+        } else if (table?._kind === 'emailUnsubscribes') {
+            resolved = MOCK_OVERRIDES.unsubscribes ?? [];
+        } else if (table?._kind === 'users') {
+            // Default: no registered users with email
+            resolved = [];
+        }
+        return chain;
+    });
+    for (const m of ['where', 'orderBy', 'limit', 'offset', 'leftJoin', 'groupBy', 'having']) {
         chain[m] = vi.fn().mockReturnValue(chain);
     }
     // Terminal: resolves when awaited
-    chain.then = (resolve: (v: unknown) => void) => resolve(resolvedValue);
+    chain.then = (resolve: (v: unknown) => void) => resolve(resolved);
     return chain;
 }
 
@@ -41,7 +56,7 @@ vi.mock('../../src/db', () => ({
 
 // Mock all schema tables referenced by admin routes
 vi.mock('../../src/db/schema', () => ({
-    users: { id: 'id', email: 'email' },
+    users: { _kind: 'users', id: 'id', email: 'email' },
     subscriptions: {},
     plans: {},
     adminAuditLogs: {},
@@ -49,8 +64,13 @@ vi.mock('../../src/db/schema', () => ({
     usage: {},
     kbChunks: {},
     kbGaps: {},
-    waitlistEmails: { id: 'id', feature: 'feature', email: 'email', createdAt: 'created_at', unsubscribedAt: 'unsubscribed_at' },
-    waitlistEmailSends: {},
+    waitlistEmails: { _kind: 'waitlistEmails', id: 'id', feature: 'feature', email: 'email', createdAt: 'created_at', unsubscribedAt: 'unsubscribed_at' },
+    waitlistEmailSends: { _kind: 'waitlistEmailSends' },
+    emailUnsubscribes: { _kind: 'emailUnsubscribes', email: 'email' },
+    leadDigestSends: { _kind: 'leadDigestSends' },
+    emailSends: { _kind: 'emailSends' },
+    posts: { _kind: 'posts' },
+    instagramMedia: { _kind: 'instagramMedia' },
 }));
 
 // Mock drizzle-orm operators
@@ -105,6 +125,9 @@ describe('Admin Waitlist Route', () => {
 
     beforeEach(async () => {
         vi.clearAllMocks();
+        // Reset per-test data overrides
+        MOCK_OVERRIDES.users = undefined;
+        MOCK_OVERRIDES.unsubscribes = undefined;
         app = Fastify();
         await app.register(adminRoutes, { prefix: '/admin' });
         await app.ready();
@@ -313,6 +336,89 @@ describe('Admin Waitlist Route', () => {
             });
 
             expect(response.statusCode).toBe(400);
+        });
+
+        it('audience=users sends only to registered users (not waitlist)', async () => {
+            MOCK_OVERRIDES.users = [{ email: 'user1@app.com' }, { email: 'user2@app.com' }];
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: { subject: 'Launch', body: 'We are live.', audience: 'users' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.success).toBe(true);
+            expect(payload.fromWaitlist).toBe(0);
+            expect(payload.fromUsers).toBe(2);
+            expect(payload.total).toBe(2);
+        });
+
+        it('audience=both unions waitlist + users and dedupes overlap', async () => {
+            // bob@test.com is in waitlist (MOCK_ENTRIES) AND users — must be deduped to 1
+            MOCK_OVERRIDES.users = [{ email: 'BOB@test.com' }, { email: 'newuser@app.com' }];
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: { subject: 'Launch', body: 'We are live.', audience: 'both' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            // 2 waitlist (alice, bob) + 1 unique user (newuser; bob deduped) = 3
+            expect(payload.total).toBe(3);
+            expect(payload.fromWaitlist).toBe(2);
+            expect(payload.fromUsers).toBe(2); // count is pre-dedupe
+        });
+
+        it('excludes globally suppressed addresses across all audiences', async () => {
+            MOCK_OVERRIDES.users = [{ email: 'user1@app.com' }, { email: 'user2@app.com' }];
+            MOCK_OVERRIDES.unsubscribes = [{ email: 'alice@example.com' }, { email: 'user1@app.com' }];
+
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: {
+                    subject: 'Launch',
+                    body: 'We are live.',
+                    audience: 'both',
+                    extraEmails: ['alice@example.com', 'never-suppressed@x.com'],
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            // bob@test.com (waitlist) + user2@app.com (users) + never-suppressed@x.com (extra) = 3
+            // alice is suppressed — excluded from both waitlist source and extras.
+            // user1 is suppressed — excluded from users source.
+            expect(payload.total).toBe(3);
+            expect(payload.fromWaitlist).toBe(1);
+            expect(payload.fromUsers).toBe(1);
+            expect(payload.fromExtra).toBe(1);
+        });
+
+        it('audience=users ignores emailIds and feature filters', async () => {
+            MOCK_OVERRIDES.users = [{ email: 'user1@app.com' }];
+            const response = await app.inject({
+                method: 'POST',
+                url: '/admin/waitlist/send-email',
+                headers: { authorization: 'Bearer test_token', 'content-type': 'application/json' },
+                payload: {
+                    subject: 'Launch',
+                    body: 'We are live.',
+                    audience: 'users',
+                    feature: 'early_access', // ignored
+                    emailIds: [UUID_1],       // ignored
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const payload = JSON.parse(response.payload);
+            expect(payload.fromWaitlist).toBe(0);
+            expect(payload.fromUsers).toBe(1);
         });
     });
 });

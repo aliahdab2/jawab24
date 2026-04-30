@@ -1,9 +1,12 @@
 # Jawab24 Launch Announcement — Waitlist Email
 
 > Paste the Subject and Body below into the **Compose email** modal on
-> `/admin/waitlist`. The existing `waitlistEmailTemplate` will auto-detect
-> RTL from the Arabic content and render a teal Jawab24-branded HTML email
-> with a per-recipient unsubscribe link appended automatically.
+> `/admin/waitlist`. Use the **Audience** selector to choose who receives it:
+> waitlist subscribers, registered users, or both (deduped). Globally
+> unsubscribed addresses are excluded automatically. The existing
+> `waitlistEmailTemplate` will auto-detect RTL from the Arabic content and
+> render a teal Jawab24-branded HTML email with a per-recipient unsubscribe
+> link appended automatically.
 
 ---
 
@@ -77,8 +80,9 @@ jawab24.com
 
 - [ ] `RESEND_API_KEY` is set in production env (otherwise the send short-circuits with a warn log).
 - [ ] `RESEND_FROM_EMAIL` points to a verified domain in Resend (usually `hello@jawab24.com` or similar).
-- [ ] Do a test send first: add your own email via the new **Extra recipients** field, send to 1 address only, confirm the rendered HTML in your inbox.
-- [ ] Then send to the full list.
+- [ ] Do a test send first: leave **Audience = Waitlist**, clear all selections, paste your own email into **Extra recipients**, send to 1 address only, confirm the rendered HTML in your inbox.
+- [ ] For the launch send, switch **Audience** to **Both** (waitlist + registered users) so existing customers also see the announcement. The backend dedupes overlap and excludes anyone in `email_unsubscribes`.
+- [ ] After sending, verify the success/failure counts in the result banner and the audit row in `waitlist_email_sends`.
 
 ## Notes on rendering
 

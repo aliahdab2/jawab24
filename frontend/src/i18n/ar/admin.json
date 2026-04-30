@@ -209,12 +209,19 @@
     "previousPage": "الصفحة السابقة",
     "nextPage": "الصفحة التالية",
     "emailRecipientsSelected": "{count, plural, zero {لا يوجد مشتركون محددون} one {مشترك محدد واحد} two {مشتركان محددان} few {# مشتركين محددين} many {# مشتركاً محدداً} other {# مشترك محدد}}",
+    "emailRecipientsUsers": "{count, plural, zero {لا يوجد مستخدمون مسجلون} one {مستخدم مسجل واحد} two {مستخدمان مسجلان} few {# مستخدمين مسجلين} many {# مستخدماً مسجلاً} other {# مستخدم مسجل}}",
+    "emailRecipientsBoth": "قائمة الانتظار ({waitlist}) + المستخدمون المسجلون ({users})",
+    "audienceLabel": "الفئة المستهدفة",
+    "audience_waitlist": "قائمة الانتظار",
+    "audience_users": "المستخدمون المسجلون",
+    "audience_both": "الاثنان معاً",
     "extraEmailsLabel": "مستلمون إضافيون (اختياري)",
     "extraEmailsPlaceholder": "أضف بريداً إلكترونياً واحداً في كل سطر، أو افصلها بفواصل / فاصلات منقوطة",
     "extraEmailsValid": "{count, plural, zero {لا يوجد بريد إضافي صالح} one {بريد إضافي صالح واحد} two {بريدان إضافيان صالحان} few {# بريد إضافي صالح} many {# بريداً إضافياً صالحاً} other {# بريد إضافي صالح}}",
     "extraEmailsInvalid": "{count, plural, zero {لا يوجد بريد غير صالح} one {بريد غير صالح واحد: {examples}} two {بريدان غير صالحين: {examples}} few {# عناوين غير صالحة: {examples}} many {# عنواناً غير صالحاً: {examples}} other {# عنوان غير صالح: {examples}}}",
     "emailTotalRecipients": "{count, plural, =0 {لا يوجد مستلمون بعد} zero {لا يوجد مستلمون} one {مستلم واحد إجمالاً} two {مستلمان إجمالاً} few {# مستلمين إجمالاً} many {# مستلماً إجمالاً} other {# مستلم إجمالاً}}",
-    "emailTotalBreakdown": "({waitlist} من القائمة + {extras} إضافي)"
+    "emailTotalBreakdown": "({waitlist} من القائمة + {extras} إضافي)",
+    "emailTotalBreakdownFull": "({waitlist} من القائمة + {users} من المستخدمين + {extras} إضافي)"
   },
   "observability": {
     "title": "المراقبة",

@@ -595,6 +595,7 @@ export const adminApi = {
     feature?: string;
     emailIds?: string[];
     extraEmails?: string[];
+    audience?: 'waitlist' | 'users' | 'both';
   }) => {
     const response = await api.post('/admin/waitlist/send-email', data);
     return response.data;

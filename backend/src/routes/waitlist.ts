@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { eq, and, isNull } from 'drizzle-orm';
 import { createHmac } from 'crypto';
 import { db } from '../db';
-import { waitlistEmails } from '../db/schema';
+import { waitlistEmails, emailUnsubscribes } from '../db/schema';
 import { config } from '../config';
 import { PHONE_REGEX } from '@jawab24/shared';
 
@@ -83,12 +83,19 @@ export default async function waitlistRoutes(fastify: FastifyInstance) {
         }
 
         try {
+            // Mark any matching waitlist rows so the existing admin UI keeps showing
+            // unsubscribed status, and add to the global suppression list so the
+            // address is excluded from all future sends regardless of source.
             await db.update(waitlistEmails)
                 .set({ unsubscribedAt: new Date() })
                 .where(and(
                     eq(waitlistEmails.email, email),
                     isNull(waitlistEmails.unsubscribedAt),
                 ));
+
+            await db.insert(emailUnsubscribes)
+                .values({ email, source: 'waitlist' })
+                .onConflictDoNothing({ target: emailUnsubscribes.email });
 
             return reply.send({ success: true });
         } catch (error) {

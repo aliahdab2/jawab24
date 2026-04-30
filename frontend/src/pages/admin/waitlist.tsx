@@ -75,6 +75,10 @@ export default function AdminWaitlistPage() {
     // Subscriber counts (email vs phone-only)
     const [emailCount, setEmailCount] = useState(0);
     const [phoneOnlyCount, setPhoneOnlyCount] = useState(0);
+    // Registered-user count (for the audience selector)
+    const [userEmailCount, setUserEmailCount] = useState(0);
+    // Send target — waitlist (default), registered users, or both
+    const [audience, setAudience] = useState<'waitlist' | 'users' | 'both'>('waitlist');
 
     // Row selection — persists across page navigation
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -116,6 +120,7 @@ export default function AdminWaitlistPage() {
                 setPagination(response.pagination);
                 setEmailCount(response.emailCount ?? 0);
                 setPhoneOnlyCount(response.phoneOnlyCount ?? 0);
+                setUserEmailCount(response.userEmailCount ?? 0);
                 if (response.features) {
                     setFeatures(response.features);
                 }
@@ -194,12 +199,17 @@ export default function AdminWaitlistPage() {
 
     const parsedExtras = useMemo(() => parseExtraEmails(extraEmailsText), [extraEmailsText]);
 
-    // Base recipient count from the waitlist
-    const useExplicitSelection = selectedIds.size > 0;
-    const baseRecipientCount = useExplicitSelection ? selectedIds.size : emailCount;
+    // Base recipient count from the waitlist source. Per-row selection only
+    // applies when the audience includes waitlist; the users source ignores it.
+    const useExplicitSelection = audience !== 'users' && selectedIds.size > 0;
+    const waitlistContribution = audience === 'users'
+        ? 0
+        : (useExplicitSelection ? selectedIds.size : emailCount);
+    const usersContribution = audience === 'waitlist' ? 0 : userEmailCount;
 
-    // Approximate total — backend de-dupes server-side, this is an upper bound for display
-    const approxTotalRecipients = baseRecipientCount + parsedExtras.valid.length;
+    // Approximate total — backend de-dupes server-side (and applies the global
+    // suppression list), so this is an upper bound for display only.
+    const approxTotalRecipients = waitlistContribution + usersContribution + parsedExtras.valid.length;
 
     const formatDate = (dateStr: string | null) => {
         if (!dateStr) return '-';
@@ -230,9 +240,10 @@ export default function AdminWaitlistPage() {
             const response = await adminApi.sendWaitlistEmail({
                 subject: emailSubject,
                 body: emailBody,
-                feature: useExplicitSelection ? undefined : (featureFilter || undefined),
+                feature: useExplicitSelection || audience === 'users' ? undefined : (featureFilter || undefined),
                 emailIds: useExplicitSelection ? Array.from(selectedIds) : undefined,
                 extraEmails: parsedExtras.valid.length > 0 ? parsedExtras.valid : undefined,
+                audience,
             });
             if (response.success) {
                 setSendResult({ sent: response.sent, failed: response.failed, total: response.total });
@@ -265,6 +276,15 @@ export default function AdminWaitlistPage() {
 
     // Recipients summary text shown in the compose modal
     const recipientsSummary = useMemo(() => {
+        if (audience === 'users') {
+            return t('waitlist.emailRecipientsUsers', { count: userEmailCount });
+        }
+        if (audience === 'both') {
+            return t('waitlist.emailRecipientsBoth', {
+                waitlist: useExplicitSelection ? selectedIds.size : emailCount,
+                users: userEmailCount,
+            });
+        }
         if (useExplicitSelection) {
             return t('waitlist.emailRecipientsSelected', { count: selectedIds.size });
         }
@@ -273,7 +293,7 @@ export default function AdminWaitlistPage() {
         }
         return t('waitlist.emailRecipientsAll');
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [useExplicitSelection, selectedIds.size, featureFilter, t]);
+    }, [audience, useExplicitSelection, selectedIds.size, featureFilter, emailCount, userEmailCount, t]);
 
     return (
         <AdminLayout title={t('waitlist.title')}>
@@ -501,15 +521,47 @@ export default function AdminWaitlistPage() {
                 size="lg"
             >
                 <div className="space-y-4">
+                    {/* Audience selector — waitlist / users / both */}
+                    <fieldset>
+                        <legend className="text-sm font-medium mb-2">{t('waitlist.audienceLabel')}</legend>
+                        <div className="flex flex-wrap gap-2">
+                            {(['waitlist', 'users', 'both'] as const).map(opt => (
+                                <label
+                                    key={opt}
+                                    className={clsx(
+                                        'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm cursor-pointer transition-colors',
+                                        audience === opt
+                                            ? 'border-brand-500 bg-brand-50 dark:bg-brand-950 text-brand-700 dark:text-brand-300'
+                                            : 'border-surface-200 dark:border-surface-700 hover:bg-surface-50 dark:hover:bg-surface-800',
+                                    )}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="audience"
+                                        value={opt}
+                                        checked={audience === opt}
+                                        onChange={() => setAudience(opt)}
+                                        className="accent-brand-600"
+                                    />
+                                    <span>
+                                        {t(`waitlist.audience_${opt}` as Parameters<typeof t>[0])}
+                                        {opt === 'waitlist' && ` (${emailCount})`}
+                                        {opt === 'users' && ` (${userEmailCount})`}
+                                        {opt === 'both' && ` (~${emailCount + userEmailCount})`}
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    </fieldset>
+
                     {/* Recipients indicator */}
                     <div className="text-sm text-muted-foreground">
                         <span className="font-medium">{t('waitlist.emailRecipients')}:</span>{' '}
                         {recipientsSummary}
-                        {' '}({baseRecipientCount})
                     </div>
 
-                    {/* Phone-only warning (only relevant when sending to all / filter, not when explicit selection is used) */}
-                    {!useExplicitSelection && phoneOnlyCount > 0 && (
+                    {/* Phone-only warning — only when sending to waitlist (or both) without explicit selection */}
+                    {audience !== 'users' && !useExplicitSelection && phoneOnlyCount > 0 && (
                         <div className="p-3 rounded-lg border alert-warning text-sm">
                             {t('waitlist.emailPhoneOnly', { count: phoneOnlyCount })}
                         </div>
@@ -561,10 +613,11 @@ export default function AdminWaitlistPage() {
                         <span className="font-medium text-foreground">
                             {t('waitlist.emailTotalRecipients', { count: approxTotalRecipients })}
                         </span>
-                        {parsedExtras.valid.length > 0 && (
+                        {(parsedExtras.valid.length > 0 || audience !== 'waitlist') && (
                             <span className="text-muted-foreground ms-2">
-                                {t('waitlist.emailTotalBreakdown', {
-                                    waitlist: baseRecipientCount,
+                                {t('waitlist.emailTotalBreakdownFull', {
+                                    waitlist: waitlistContribution,
+                                    users: usersContribution,
                                     extras: parsedExtras.valid.length,
                                 })}
                             </span>

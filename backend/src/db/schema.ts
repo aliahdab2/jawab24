@@ -1034,6 +1034,15 @@ export const waitlistEmails = pgTable('waitlist_emails', {
     phoneFeatureUnique: uniqueIndex('idx_waitlist_phone_feature').on(table.phone, table.feature),
 }));
 
+// Email Unsubscribes — global suppression list across waitlist + registered users.
+// Source of truth for "should this address ever receive marketing email again?"
+// `email` is stored lowercased; primary key dedupes naturally.
+export const emailUnsubscribes = pgTable('email_unsubscribes', {
+    email: varchar('email', { length: 255 }).primaryKey(),
+    unsubscribedAt: timestamp('unsubscribed_at').defaultNow().notNull(),
+    source: varchar('source', { length: 32 }), // 'waitlist' | 'user' | 'manual' — analytics only
+});
+
 // Waitlist Email Sends — audit log for emails sent to waitlist subscribers
 export const waitlistEmailSends = pgTable('waitlist_email_sends', {
     id: uuid('id').defaultRandom().primaryKey(),

@@ -209,12 +209,19 @@
     "previousPage": "Previous page",
     "nextPage": "Next page",
     "emailRecipientsSelected": "{count, plural, one {# selected subscriber} other {# selected subscribers}}",
+    "emailRecipientsUsers": "{count, plural, one {# registered user} other {# registered users}}",
+    "emailRecipientsBoth": "Waitlist ({waitlist}) + registered users ({users})",
+    "audienceLabel": "Audience",
+    "audience_waitlist": "Waitlist",
+    "audience_users": "Registered users",
+    "audience_both": "Both",
     "extraEmailsLabel": "Extra recipients (optional)",
     "extraEmailsPlaceholder": "Add more emails — one per line, or separated by commas / semicolons",
     "extraEmailsValid": "{count, plural, one {# valid extra email} other {# valid extra emails}}",
     "extraEmailsInvalid": "{count, plural, one {# invalid email: {examples}} other {# invalid emails: {examples}}}",
     "emailTotalRecipients": "{count, plural, =0 {No recipients yet} one {# total recipient} other {# total recipients}}",
-    "emailTotalBreakdown": "({waitlist} from waitlist + {extras} extra)"
+    "emailTotalBreakdown": "({waitlist} from waitlist + {extras} extra)",
+    "emailTotalBreakdownFull": "({waitlist} waitlist + {users} users + {extras} extra)"
   },
   "observability": {
     "title": "Observability",
