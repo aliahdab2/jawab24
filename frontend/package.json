@@ -28,6 +28,7 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:report": "playwright show-report",
     "translation:validate": "node scripts/validate-translations.js",
+    "sitemap:validate": "node scripts/validate-sitemap.js",
     "analyze": "ANALYZE=true next build"
   },
   "dependencies": {

@@ -75,6 +75,19 @@ else
 fi
 
 # =============================================
+# 0.55. Validate sitemap (no future <lastmod>, hreflang pairs intact, no dupes)
+# =============================================
+echo ""
+echo "🗺️  Validating sitemap..."
+if node frontend/scripts/validate-sitemap.js > /dev/null 2>&1; then
+    echo -e "${GREEN}   ✅ Sitemap valid${NC}"
+else
+    echo -e "${RED}   ❌ Sitemap validation failed!${NC}"
+    node frontend/scripts/validate-sitemap.js
+    exit 1
+fi
+
+# =============================================
 # 0.6. Lock file sync check
 # =============================================
 echo ""
