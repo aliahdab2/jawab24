@@ -216,6 +216,16 @@ export interface Template {
 // Reusable email templates for the admin waitlist broadcast UI.
 // Defined as code-as-data on the backend; the frontend fetches them and
 // inserts the variant matching the admin's UI language into Subject + Body.
+//
+// Two body shapes are supported, mutually exclusive in practice:
+//   1. bodyEn/bodyAr        — plain text. The backend wraps these in a generic
+//                             HTML shell (waitlistEmailTemplate) before sending.
+//   2. htmlBodyEn/htmlBodyAr — full custom HTML email. Sent as-is, the only
+//                             substitution is {{UNSUBSCRIBE_URL}} per recipient.
+//                             When set, the admin UI shows a read-only preview
+//                             instead of an editable body field, and the broadcast
+//                             endpoint picks the variant matching the recipient's
+//                             resolved language (KB → dashboardLanguage → 'ar').
 export interface WaitlistEmailTemplate {
   id: string;
   name: string;
@@ -223,6 +233,8 @@ export interface WaitlistEmailTemplate {
   subjectAr: string;
   bodyEn: string;
   bodyAr: string;
+  htmlBodyEn?: string;
+  htmlBodyAr?: string;
 }
 
 // --- Rule Types ---

@@ -26,7 +26,17 @@ export function waitlistEmailTemplate(params: {
     subject: string;
     body: string;
     unsubscribeUrl: string;
+    /**
+     * Optional pre-rendered HTML email body. When provided, it is sent as-is
+     * (no wrapping in the generic shell, no escaping, no preheader injection).
+     * The only substitution is the {{UNSUBSCRIBE_URL}} placeholder.
+     * Used by full-design custom templates (e.g. waitlist-launch).
+     */
+    customHtml?: string;
 }): string {
+    if (params.customHtml) {
+        return params.customHtml.replace(/\{\{UNSUBSCRIBE_URL\}\}/g, params.unsubscribeUrl);
+    }
     const htmlBody = escapeHtml(params.body).replace(/\n/g, '<br>');
     const rtl = isRTLText(params.body);
     const dir = rtl ? 'rtl' : 'ltr';

@@ -220,6 +220,7 @@
     "templateLabel": "Insert template",
     "templatePlaceholder": "Choose a template…",
     "templateHint": "Fills Subject and Body with the variant matching your current UI language. You can edit before sending.",
+    "customHtmlNote": "This template ships pre-rendered HTML — each recipient receives the AR or EN variant matching their account language. The Body field above is a fallback only and is not editable.",
     "extraEmailsLabel": "Extra recipients (optional)",
     "extraEmailsPlaceholder": "Add more emails — one per line, or separated by commas / semicolons",
     "extraEmailsValid": "{count, plural, one {# valid extra email} other {# valid extra emails}}",

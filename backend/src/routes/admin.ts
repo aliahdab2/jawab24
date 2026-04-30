@@ -12,6 +12,7 @@ import { config } from '../config';
 import { emailService } from '../services/email';
 import { waitlistEmailTemplate } from '../utils/emailTemplates';
 import { WAITLIST_TEMPLATES } from '../utils/waitlistTemplates';
+import { resolveRecipientLanguages } from '../utils/recipientLanguage';
 import { generateUnsubscribeToken } from './waitlist';
 import { runDailyLeadDigest } from '../services/leadDigest';
 import { subscriptionsService } from '../services/subscriptions';
@@ -1034,6 +1035,12 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             emailIds: z.array(z.string().uuid()).max(5000).optional(),
             extraEmails: z.array(z.string().email().max(255)).max(500).optional(),
             audience: z.enum(['waitlist', 'users', 'both', 'extras']).optional().default('waitlist'),
+            // Optional: render a full-HTML template (e.g. waitlist-launch) instead of
+            // wrapping `body` in the generic shell. When set, each recipient receives
+            // the AR or EN htmlBody variant matching their resolved language
+            // (KB → dashboardLanguage → 'ar'). `subject` is still admin-controlled,
+            // `body` is kept as a fallback for recipients whose variant is missing.
+            templateId: z.string().trim().min(1).max(100).optional(),
         });
 
         adminProtected.post(
@@ -1047,7 +1054,22 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         error: parsed.error.errors[0]?.message ?? 'Invalid request',
                     });
                 }
-                const { subject, body, feature, emailIds, extraEmails, audience } = parsed.data;
+                const { subject, body, feature, emailIds, extraEmails, audience, templateId } = parsed.data;
+
+                // Resolve template once if templateId provided and points to a custom-HTML template.
+                // `useCustomHtml` gates per-recipient language switching; missing/plain-only template = no-op.
+                const customHtmlTemplate = templateId
+                    ? WAITLIST_TEMPLATES.find(t => t.id === templateId)
+                    : undefined;
+                const useCustomHtml = Boolean(
+                    customHtmlTemplate?.htmlBodyAr || customHtmlTemplate?.htmlBodyEn
+                );
+                if (templateId && !customHtmlTemplate) {
+                    return reply.status(400).send({
+                        success: false,
+                        error: `Unknown templateId: ${templateId}`,
+                    });
+                }
 
                 const adminUserId = (request as AuthenticatedRequest).user?.userId;
                 if (!adminUserId) {
@@ -1136,13 +1158,33 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
                     const frontendUrl = config.frontendUrl || 'https://jawab24.com';
 
+                    // Per-recipient language only matters when using a custom-HTML template
+                    // (where we need to pick AR vs EN variant). Skipped otherwise to avoid
+                    // an unnecessary join across users + settings + kbChunks.
+                    const recipientLang = useCustomHtml
+                        ? await resolveRecipientLanguages(uniqueEmails)
+                        : null;
+
                     let successCount = 0;
                     let failureCount = 0;
 
                     for (const email of uniqueEmails) {
                         const token = generateUnsubscribeToken(email);
                         const unsubscribeUrl = `${frontendUrl}/unsubscribe?email=${encodeURIComponent(email)}&token=${token}`;
-                        const html = waitlistEmailTemplate({ subject, body, unsubscribeUrl });
+
+                        // For custom-HTML templates: pick AR/EN variant by recipient language,
+                        // fall back to the other variant if only one exists. If neither exists,
+                        // fall through to the generic plain-body wrapper (defensive).
+                        let customHtml: string | undefined;
+                        if (useCustomHtml && customHtmlTemplate) {
+                            const lang = recipientLang?.get(email) ?? 'ar';
+                            customHtml =
+                                (lang === 'en'
+                                    ? customHtmlTemplate.htmlBodyEn ?? customHtmlTemplate.htmlBodyAr
+                                    : customHtmlTemplate.htmlBodyAr ?? customHtmlTemplate.htmlBodyEn);
+                        }
+
+                        const html = waitlistEmailTemplate({ subject, body, unsubscribeUrl, customHtml });
                         const result = await emailService.send({ to: email, subject, html, type: 'waitlist' });
                         if (result.success) {
                             successCount++;

@@ -596,6 +596,9 @@ export const adminApi = {
     emailIds?: string[];
     extraEmails?: string[];
     audience?: 'waitlist' | 'users' | 'both' | 'extras';
+    // Optional: when set, the backend renders the matching custom-HTML template
+    // (AR/EN per recipient) instead of wrapping `body` in the generic shell.
+    templateId?: string;
   }) => {
     const response = await api.post('/admin/waitlist/send-email', data);
     return response.data;

@@ -162,6 +162,16 @@ export default function AdminWaitlistPage() {
         setEmailBody(useArabic ? tpl.bodyAr : tpl.bodyEn);
     }, [templates, isRTL]);
 
+    // Templates with htmlBody* are rendered as-is per recipient by the backend.
+    // The plain `body` field becomes a fallback only — admins should not edit it.
+    const selectedTemplate = useMemo(
+        () => templates.find(t => t.id === selectedTemplateId),
+        [templates, selectedTemplateId]
+    );
+    const isCustomHtmlTemplate = Boolean(
+        selectedTemplate?.htmlBodyAr || selectedTemplate?.htmlBodyEn
+    );
+
     // Reset to page 1 when filters change
     useEffect(() => {
         setPagination(prev => ({ ...prev, page: 1 }));
@@ -270,6 +280,7 @@ export default function AdminWaitlistPage() {
                 emailIds: useExplicitSelection ? Array.from(selectedIds) : undefined,
                 extraEmails: parsedExtras.valid.length > 0 ? parsedExtras.valid : undefined,
                 audience,
+                templateId: isCustomHtmlTemplate ? selectedTemplateId : undefined,
             });
             if (response.success) {
                 setSendResult({ sent: response.sent, failed: response.failed, total: response.total });
@@ -634,7 +645,13 @@ export default function AdminWaitlistPage() {
                         value={emailBody}
                         onChange={(e) => setEmailBody(e.target.value)}
                         rows={8}
+                        disabled={isCustomHtmlTemplate}
                     />
+                    {isCustomHtmlTemplate && (
+                        <p className="-mt-2 text-xs text-muted-foreground" role="note">
+                            {t('waitlist.customHtmlNote')}
+                        </p>
+                    )}
 
                     {/* Extra recipients — ad-hoc emails not in the waitlist */}
                     <div>

@@ -9,8 +9,22 @@
  */
 
 import type { WaitlistEmailTemplate } from '@jawab24/shared';
+import { WAITLIST_LAUNCH_AR_HTML } from '../templates/waitlistLaunchAr';
+import { WAITLIST_LAUNCH_EN_HTML } from '../templates/waitlistLaunchEn';
 
 export const WAITLIST_TEMPLATES: WaitlistEmailTemplate[] = [
+    {
+        id: 'waitlist-launch',
+        name: 'Waitlist launch (custom HTML — sent as-is, language per recipient)',
+        subjectEn: "It's ready: Jawab24 is now live",
+        subjectAr: 'إنه جاهز: Jawab24 متاح الآن',
+        // Plain bodies kept as fallback — used if a recipient's language cannot
+        // be resolved AND the htmlBody for the resolved language is somehow missing.
+        bodyEn: 'Jawab24 is now available. Get started for free at https://jawab24.com/login',
+        bodyAr: 'Jawab24 متاح الآن. ابدأ مجاناً على https://jawab24.com/login',
+        htmlBodyAr: WAITLIST_LAUNCH_AR_HTML,
+        htmlBodyEn: WAITLIST_LAUNCH_EN_HTML,
+    },
     {
         id: 'beta-launch',
         name: 'Beta launch — early access',
