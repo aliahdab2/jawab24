@@ -348,6 +348,25 @@ EOF
         exit 1
     fi
 
+    # Detect nginx.conf changes that reload alone won't pick up.
+    # Docker FILE bind mounts (./nginx/nginx.conf:/etc/nginx/nginx.conf) capture
+    # the inode at container start. `git reset --hard` rewrites files via rename,
+    # producing a new inode — the running container keeps reading the OLD inode,
+    # so `nginx -s reload` re-parses stale content. Compare host vs in-container
+    # content; if they differ, full-restart nginx so it binds to the current
+    # inode. Adds ~1-2s downtime ONLY when nginx.conf actually changed.
+    if ! diff -q ./nginx/nginx.conf <(docker exec jawab24-nginx cat /etc/nginx/nginx.conf) > /dev/null 2>&1; then
+        echo "⚠️  nginx.conf inode mismatch detected — restarting nginx container to pick up new config"
+        docker restart jawab24-nginx > /dev/null
+        for i in {1..10}; do
+            if docker exec jawab24-nginx nginx -v > /dev/null 2>&1; then
+                echo "✅ Nginx restarted (took ${i}s)"
+                break
+            fi
+            sleep 1
+        done
+    fi
+
     echo "$DEPLOY_ENV" > .active-env
     echo "✅ Verified: Traffic switched to $DEPLOY_ENV"
 }
