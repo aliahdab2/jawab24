@@ -45,6 +45,19 @@ Disallow: /en/messages
 Disallow: /en/settings
 Disallow: /en/auth/
 
+# Legacy WordPress / French content (return 410 Gone) — help search engines deindex faster
+Disallow: /2022/
+Disallow: /2023/
+Disallow: /wp-admin/
+Disallow: /wp-includes/
+Disallow: /wp-content/
+Disallow: /wp-json/
+Disallow: /category/
+Disallow: /tag/
+Disallow: /author/
+Disallow: /feed
+Disallow: /comments-feed
+
 # AI Crawlers - Explicit Allow
 User-agent: GPTBot
 Allow: /
