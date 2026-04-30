@@ -24,6 +24,8 @@ vi.mock('../../src/services/pages', () => ({
     pagesService: {
         getPage: vi.fn(),
     },
+    isPageDisconnected: (page: { accessToken: string } | null | undefined) =>
+        !!page && page.accessToken === '',
 }));
 
 vi.mock('../../src/services/facebook', () => ({
@@ -564,7 +566,9 @@ describe('MessagesController', () => {
                 });
             }
 
-            it('rejects with DM_TOKEN_MISSING when page.accessToken is empty (our bug, not merchant)', async () => {
+            it('rejects with PAGE_DISCONNECTED 409 when page.accessToken is the empty-string sentinel', async () => {
+                // Empty accessToken is the disconnect sentinel set by pages sync / tokenRefresh
+                // when Facebook revokes the page. Merchant must reconnect — frontend prompts on 409.
                 vi.mocked(pagesService.getPage).mockResolvedValue({ ...mockPage, accessToken: '' } as any);
 
                 let thrown: unknown;
@@ -575,25 +579,11 @@ describe('MessagesController', () => {
                 }
 
                 expect(thrown).toBeInstanceOf(AppError);
-                expect((thrown as AppError).statusCode).toBe(500);
-                expect((thrown as AppError).code).toBe('DM_TOKEN_MISSING');
-                // Facebook must not be called — we caught the empty token before the request
+                expect((thrown as AppError).statusCode).toBe(409);
+                expect((thrown as AppError).code).toBe('PAGE_DISCONNECTED');
+                // Facebook must not be called — we caught the disconnected sentinel before the request
                 expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
                 expect(messagesService.markAsReplied).not.toHaveBeenCalled();
-            });
-
-            it('rejects with DM_TOKEN_MISSING when page.accessToken is whitespace', async () => {
-                vi.mocked(pagesService.getPage).mockResolvedValue({ ...mockPage, accessToken: '   ' } as any);
-
-                let thrown: unknown;
-                try {
-                    await messagesController.reply(mockRequest as any, mockReply as any);
-                } catch (e) {
-                    thrown = e;
-                }
-
-                expect((thrown as AppError).code).toBe('DM_TOKEN_MISSING');
-                expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
             });
 
             it('routes Instagram DmSendError through the same classifier', async () => {
