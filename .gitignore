@@ -34,6 +34,7 @@ GoogleService-Info.plist
 # Claude Code local settings
 .claude/settings.json
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # CocoaPods (generated from Podfile)
 frontend/ios/App/Pods/
