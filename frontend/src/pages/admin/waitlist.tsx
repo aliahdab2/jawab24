@@ -10,6 +10,7 @@ import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isValidEmail } from '@jawab24/shared';
+import type { WaitlistEmailTemplate } from '@jawab24/shared';
 
 interface WaitlistEntry {
     id: string;
@@ -78,7 +79,7 @@ export default function AdminWaitlistPage() {
     // Registered-user count (for the audience selector)
     const [userEmailCount, setUserEmailCount] = useState(0);
     // Send target — waitlist (default), registered users, or both
-    const [audience, setAudience] = useState<'waitlist' | 'users' | 'both'>('waitlist');
+    const [audience, setAudience] = useState<'waitlist' | 'users' | 'both' | 'extras'>('waitlist');
 
     // Row selection — persists across page navigation
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -92,6 +93,10 @@ export default function AdminWaitlistPage() {
     const [sendResult, setSendResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
     const [sendError, setSendError] = useState<string | null>(null);
     const [showConfirm, setShowConfirm] = useState(false);
+
+    // Reusable email templates (loaded once on first compose-modal open)
+    const [templates, setTemplates] = useState<WaitlistEmailTemplate[]>([]);
+    const [selectedTemplateId, setSelectedTemplateId] = useState('');
 
     // Master-checkbox indeterminate state needs a DOM ref (no HTML attribute equivalent)
     const masterCheckboxRef = useRef<HTMLInputElement>(null);
@@ -138,6 +143,24 @@ export default function AdminWaitlistPage() {
     useEffect(() => {
         loadEntries();
     }, [loadEntries]);
+
+    // Lazy-load templates the first time the compose modal opens.
+    useEffect(() => {
+        if (!showCompose || templates.length > 0) return;
+        adminApi.getWaitlistTemplates()
+            .then(res => { if (res.success) setTemplates(res.templates); })
+            .catch(err => captureError(err, 'Failed to load waitlist templates', { tags: { page: 'admin-waitlist' } }));
+    }, [showCompose, templates.length]);
+
+    const applyTemplate = useCallback((id: string) => {
+        setSelectedTemplateId(id);
+        if (!id) return;
+        const tpl = templates.find(t => t.id === id);
+        if (!tpl) return;
+        const useArabic = isRTL;
+        setEmailSubject(useArabic ? tpl.subjectAr : tpl.subjectEn);
+        setEmailBody(useArabic ? tpl.bodyAr : tpl.bodyEn);
+    }, [templates, isRTL]);
 
     // Reset to page 1 when filters change
     useEffect(() => {
@@ -201,11 +224,13 @@ export default function AdminWaitlistPage() {
 
     // Base recipient count from the waitlist source. Per-row selection only
     // applies when the audience includes waitlist; the users source ignores it.
-    const useExplicitSelection = audience !== 'users' && selectedIds.size > 0;
-    const waitlistContribution = audience === 'users'
-        ? 0
-        : (useExplicitSelection ? selectedIds.size : emailCount);
-    const usersContribution = audience === 'waitlist' ? 0 : userEmailCount;
+    const useExplicitSelection = audience === 'waitlist' || audience === 'both'
+        ? selectedIds.size > 0
+        : false;
+    const waitlistContribution = audience === 'waitlist' || audience === 'both'
+        ? (useExplicitSelection ? selectedIds.size : emailCount)
+        : 0;
+    const usersContribution = audience === 'users' || audience === 'both' ? userEmailCount : 0;
 
     // Approximate total — backend de-dupes server-side (and applies the global
     // suppression list), so this is an upper bound for display only.
@@ -237,10 +262,11 @@ export default function AdminWaitlistPage() {
         setSendError(null);
         setSendResult(null);
         try {
+            const sendingToWaitlist = audience === 'waitlist' || audience === 'both';
             const response = await adminApi.sendWaitlistEmail({
                 subject: emailSubject,
                 body: emailBody,
-                feature: useExplicitSelection || audience === 'users' ? undefined : (featureFilter || undefined),
+                feature: sendingToWaitlist && !useExplicitSelection ? (featureFilter || undefined) : undefined,
                 emailIds: useExplicitSelection ? Array.from(selectedIds) : undefined,
                 extraEmails: parsedExtras.valid.length > 0 ? parsedExtras.valid : undefined,
                 audience,
@@ -265,6 +291,7 @@ export default function AdminWaitlistPage() {
         setShowCompose(false);
         setSendResult(null);
         setSendError(null);
+        setSelectedTemplateId('');
     };
 
     const canSend =
@@ -276,6 +303,9 @@ export default function AdminWaitlistPage() {
 
     // Recipients summary text shown in the compose modal
     const recipientsSummary = useMemo(() => {
+        if (audience === 'extras') {
+            return t('waitlist.emailRecipientsExtras', { count: parsedExtras.valid.length });
+        }
         if (audience === 'users') {
             return t('waitlist.emailRecipientsUsers', { count: userEmailCount });
         }
@@ -293,7 +323,7 @@ export default function AdminWaitlistPage() {
         }
         return t('waitlist.emailRecipientsAll');
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [audience, useExplicitSelection, selectedIds.size, featureFilter, emailCount, userEmailCount, t]);
+    }, [audience, useExplicitSelection, selectedIds.size, featureFilter, emailCount, userEmailCount, parsedExtras.valid.length, t]);
 
     return (
         <AdminLayout title={t('waitlist.title')}>
@@ -525,7 +555,7 @@ export default function AdminWaitlistPage() {
                     <fieldset>
                         <legend className="text-sm font-medium mb-2">{t('waitlist.audienceLabel')}</legend>
                         <div className="flex flex-wrap gap-2">
-                            {(['waitlist', 'users', 'both'] as const).map(opt => (
+                            {(['waitlist', 'users', 'both', 'extras'] as const).map(opt => (
                                 <label
                                     key={opt}
                                     className={clsx(
@@ -548,6 +578,7 @@ export default function AdminWaitlistPage() {
                                         {opt === 'waitlist' && ` (${emailCount})`}
                                         {opt === 'users' && ` (${userEmailCount})`}
                                         {opt === 'both' && ` (~${emailCount + userEmailCount})`}
+                                        {opt === 'extras' && ` (${parsedExtras.valid.length})`}
                                     </span>
                                 </label>
                             ))}
@@ -561,9 +592,32 @@ export default function AdminWaitlistPage() {
                     </div>
 
                     {/* Phone-only warning — only when sending to waitlist (or both) without explicit selection */}
-                    {audience !== 'users' && !useExplicitSelection && phoneOnlyCount > 0 && (
+                    {(audience === 'waitlist' || audience === 'both') && !useExplicitSelection && phoneOnlyCount > 0 && (
                         <div className="p-3 rounded-lg border alert-warning text-sm">
                             {t('waitlist.emailPhoneOnly', { count: phoneOnlyCount })}
+                        </div>
+                    )}
+
+                    {/* Template picker — fills Subject + Body with the selected template */}
+                    {templates.length > 0 && (
+                        <div>
+                            <label htmlFor="waitlist-template-select" className="block text-sm font-medium mb-2">
+                                {t('waitlist.templateLabel')}
+                            </label>
+                            <select
+                                id="waitlist-template-select"
+                                value={selectedTemplateId}
+                                onChange={(e) => applyTemplate(e.target.value)}
+                                className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 text-sm bg-card"
+                            >
+                                <option value="">{t('waitlist.templatePlaceholder')}</option>
+                                {templates.map(tpl => (
+                                    <option key={tpl.id} value={tpl.id}>{tpl.name}</option>
+                                ))}
+                            </select>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                                {t('waitlist.templateHint')}
+                            </p>
                         </div>
                     )}
 

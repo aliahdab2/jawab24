@@ -11,6 +11,7 @@ import { buildPlaygroundContext } from '../services/reply/playgroundContext';
 import { config } from '../config';
 import { emailService } from '../services/email';
 import { waitlistEmailTemplate } from '../utils/emailTemplates';
+import { WAITLIST_TEMPLATES } from '../utils/waitlistTemplates';
 import { generateUnsubscribeToken } from './waitlist';
 import { runDailyLeadDigest } from '../services/leadDigest';
 import { subscriptionsService } from '../services/subscriptions';
@@ -1005,6 +1006,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
          *   - 'waitlist' → waitlist_emails table only
          *   - 'users'    → users table (registered accounts with non-null email)
          *   - 'both'     → union of waitlist + users
+         *   - 'extras'   → only the addresses provided in `extraEmails` (no broadcast)
          *
          * Within the waitlist source, recipient resolution order:
          *   1. `emailIds` non-empty  → only those waitlist rows
@@ -1031,7 +1033,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             feature: z.string().trim().min(1).max(50).optional(),
             emailIds: z.array(z.string().uuid()).max(5000).optional(),
             extraEmails: z.array(z.string().email().max(255)).max(500).optional(),
-            audience: z.enum(['waitlist', 'users', 'both']).optional().default('waitlist'),
+            audience: z.enum(['waitlist', 'users', 'both', 'extras']).optional().default('waitlist'),
         });
 
         adminProtected.post(
@@ -1174,6 +1176,18 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     request.log.error(error, 'Failed to send waitlist emails');
                     return reply.status(500).send({ success: false, error: 'Failed to send emails' });
                 }
+            }
+        );
+
+        /**
+         * GET /admin/waitlist/templates — Read-only list of reusable email templates.
+         * Source: backend/src/utils/waitlistTemplates.ts (code-as-data).
+         */
+        adminProtected.get(
+            '/waitlist/templates',
+            { schema: { tags: ['Admin'], summary: 'List reusable waitlist email templates', security: auth } },
+            async (_request, reply) => {
+                return reply.send({ success: true, templates: WAITLIST_TEMPLATES });
             }
         );
 

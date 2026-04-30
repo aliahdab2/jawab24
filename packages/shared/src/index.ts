@@ -213,6 +213,18 @@ export interface Template {
   usageCount?: number;
 }
 
+// Reusable email templates for the admin waitlist broadcast UI.
+// Defined as code-as-data on the backend; the frontend fetches them and
+// inserts the variant matching the admin's UI language into Subject + Body.
+export interface WaitlistEmailTemplate {
+  id: string;
+  name: string;
+  subjectEn: string;
+  subjectAr: string;
+  bodyEn: string;
+  bodyAr: string;
+}
+
 // --- Rule Types ---
 export interface Rule {
   id: string;

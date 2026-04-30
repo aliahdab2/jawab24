@@ -15,7 +15,7 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { addRetryInterceptor, addTimeoutConfig } from './axiosRetry';
 import { authManager } from './authManager';
-import type { OrderNotificationType, NotificationTemplate, NotificationStats } from '@jawab24/shared';
+import type { OrderNotificationType, NotificationTemplate, NotificationStats, WaitlistEmailTemplate } from '@jawab24/shared';
 export type { OrderNotificationType, NotificationTemplate, NotificationStats };
 
 // Prefer explicit env; fall back to production API to avoid localhost calls in prod builds
@@ -595,9 +595,18 @@ export const adminApi = {
     feature?: string;
     emailIds?: string[];
     extraEmails?: string[];
-    audience?: 'waitlist' | 'users' | 'both';
+    audience?: 'waitlist' | 'users' | 'both' | 'extras';
   }) => {
     const response = await api.post('/admin/waitlist/send-email', data);
+    return response.data;
+  },
+
+  // Waitlist — list reusable email templates (read-only, code-defined)
+  getWaitlistTemplates: async () => {
+    const response = await api.get<{
+      success: true;
+      templates: WaitlistEmailTemplate[];
+    }>('/admin/waitlist/templates');
     return response.data;
   },
 
