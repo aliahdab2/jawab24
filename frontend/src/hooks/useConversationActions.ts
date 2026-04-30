@@ -60,7 +60,7 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       toast.error(t('replyFailed'));
       // Report to Sentry unless the backend flagged this as an expected platform condition
       // (window expired, customer blocked, transient rate limit). Unknown/500s get captured.
-      const expectedCodes = new Set(['DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT', 'DM_PLATFORM_AUTH']);
+      const expectedCodes = new Set(['DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT', 'DM_PLATFORM_AUTH', 'PAGE_DISCONNECTED']);
       const backendCode = getBackendErrorCode(error);
       if (!backendCode || !expectedCodes.has(backendCode)) {
         captureError(error, 'Failed to send manual reply', {

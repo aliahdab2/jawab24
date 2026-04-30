@@ -1,6 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { messagesService } from '../services/messages';
-import { pagesService } from '../services/pages';
+import { pagesService, isPageDisconnected } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
 import { workspaceSettingsService } from '../services/workspaceSettings';
@@ -205,12 +205,15 @@ export class MessagesController {
         // Classify Graph API errors so expected conditions (window expired, customer blocked,
         // rate limits) return proper 4xx/5xx codes rather than generic 500s that flood Sentry.
         const platform: FbPlatform = message.platform === 'instagram' ? 'instagram' : 'facebook';
-        // Empty token in DB is our bug (column is notNull, so this means we wrote ""
-        // somewhere — sync failure, decrypt failure, etc.). Distinct from FB-rejected
-        // tokens which are merchant-action-required. Use a separate code so this still
-        // surfaces in Sentry while DM_PLATFORM_AUTH stays out.
-        if (!page.accessToken || page.accessToken.trim().length === 0) {
-            throw new AppError('Page access token missing in database', 500, 'DM_TOKEN_MISSING');
+        // Empty accessToken is the disconnect sentinel (set by pages sync / tokenRefresh
+        // when FB revokes the page). Merchant must reconnect — return 409 so the frontend
+        // can prompt and Sentry isn't flooded with 5xx noise.
+        if (isPageDisconnected(page)) {
+            throw new AppError(
+                'This page is disconnected. Please reconnect via Facebook to resume replies.',
+                409,
+                'PAGE_DISCONNECTED'
+            );
         }
         try {
             if (platform === 'instagram' && page.instagramAccountId) {
