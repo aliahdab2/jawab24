@@ -155,10 +155,31 @@ EOF
     # 2. Start new workers with new config
     # 3. Gradually shut down old workers as requests complete
     docker exec jawab24-nginx nginx -s reload 2>&1 | grep -v "http2.*deprecated" || true
-    
+
     # Wait for reload to complete
     sleep 1
-    
+
+    # Detect nginx.conf changes that reload alone won't pick up.
+    # Docker FILE bind mounts (./nginx/nginx.conf:/etc/nginx/nginx.conf) capture
+    # the inode at container start. `git reset --hard` rewrites files via rename,
+    # producing a new inode — the running container keeps reading the OLD inode,
+    # so `nginx -s reload` re-reads stale content. Compare the host file content
+    # to what's inside the container; if they differ, full-restart nginx so it
+    # binds to the current inode. (~1s downtime; rare path.)
+    if ! diff -q "$DEPLOY_PATH/nginx/nginx.conf" \
+                 <(docker exec jawab24-nginx cat /etc/nginx/nginx.conf) > /dev/null 2>&1; then
+        log "⚠️  nginx.conf inode mismatch detected — restarting nginx container to pick up new config"
+        docker restart jawab24-nginx > /dev/null
+        # Wait for nginx to come back
+        for i in {1..10}; do
+            if docker exec jawab24-nginx nginx -v > /dev/null 2>&1; then
+                log "   nginx restarted (took ${i}s)"
+                break
+            fi
+            sleep 1
+        done
+    fi
+
     # Verify nginx is still running
     if ! docker exec jawab24-nginx nginx -v > /dev/null 2>&1; then
         error "❌ Nginx is not running after reload!"
