@@ -323,11 +323,18 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     ).toBeVisible({ timeout: 10000 });
   });
 
-  test('upgrade click opens billing portal', async ({ page }) => {
+  test('upgrade click calls /payment/change-plan with proration', async ({ page }) => {
     await page.route('**/api/subscription/usage**', async (route) => {
       await route.fulfill({
         status: 200, contentType: 'application/json',
         body: JSON.stringify({ data: MOCK_USAGE_WITH_SUBSCRIPTION }),
+      });
+    });
+    // Stub /payment/change-plan so the click resolves cleanly without hitting Stripe.
+    await page.route('**/api/payment/change-plan', async (route) => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({ success: true }),
       });
     });
 
@@ -338,14 +345,16 @@ test.describe('Payment Flow — Existing Subscriber', () => {
     await scrollIntoView(upgradeBtn);
     await expect(upgradeBtn).toBeVisible({ timeout: 5000 });
 
-    // Assert the billing portal request is made when upgrade is clicked.
-    // Clicking triggers a geo sanctions re-check first, then the portal request —
-    // allow extra time for the sequential async calls.
-    const [portalReq] = await Promise.all([
-      page.waitForRequest((req) => req.url().includes('/payment/billing-portal'), { timeout: 25000 }),
+    // Active Stripe subscribers now upgrade in-place via subscription.update
+    // (proration handled by Stripe). Billing portal is reserved for invoice
+    // history + payment method updates only.
+    const [changePlanReq] = await Promise.all([
+      page.waitForRequest((req) => req.url().includes('/payment/change-plan'), { timeout: 25000 }),
       upgradeBtn.click(),
     ]);
-    expect(portalReq.method()).toBe('POST');
+    expect(changePlanReq.method()).toBe('POST');
+    const body = changePlanReq.postDataJSON();
+    expect(body).toMatchObject({ planId: expect.any(String) });
   });
 
   test.skip('downgrade to free shows confirmation dialog', async ({ page }) => {
@@ -637,18 +646,19 @@ test.describe('Payment Flow — Checkout', () => {
 
 /* ── Billing portal error handling ────────────────── */
 
-test.describe('Payment Flow — Billing Portal Errors', () => {
+test.describe('Payment Flow — Plan Change Errors', () => {
   /**
    * Sets up a single API route handler for the subscriber pricing page.
-   * `billingPortalHandler` controls how /payment/billing-portal responds.
+   * `changePlanHandler` controls how /payment/change-plan responds — that's
+   * the endpoint the upgrade button hits for active Stripe subscribers.
    */
   async function setupSubscriberRoutes(
     page: import('@playwright/test').Page,
-    billingPortalHandler: (route: import('@playwright/test').Route) => Promise<void>,
+    changePlanHandler: (route: import('@playwright/test').Route) => Promise<void>,
   ) {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
-      if (url.includes('/payment/billing-portal')) return billingPortalHandler(route);
+      if (url.includes('/payment/change-plan')) return changePlanHandler(route);
       if (url.includes('/geo/check')) {
         return route.fulfill({
           status: 200, contentType: 'application/json',
@@ -676,7 +686,7 @@ test.describe('Payment Flow — Billing Portal Errors', () => {
     await page.addInitScript(setupAuthState);
   });
 
-  test('billing portal failure shows error toast', async ({ page }) => {
+  test('change-plan failure shows error toast', async ({ page }) => {
     await setupSubscriberRoutes(page, async (route) => {
       await route.fulfill({ status: 500, body: 'Internal Server Error' });
     });
@@ -689,7 +699,7 @@ test.describe('Payment Flow — Billing Portal Errors', () => {
     await upgradeBtn.click();
 
     await expect(
-      page.getByText(t('pricing.billingPortalError')).first()
+      page.getByText(t('pricing.planChangeError')).first()
     ).toBeVisible({ timeout: 10000 });
   });
 
