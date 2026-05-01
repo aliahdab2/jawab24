@@ -12,14 +12,12 @@ import {
   MessageCircle,
   Bot,
   Check,
-  ChevronDown,
-  ChevronUp,
   Settings2,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { captureError } from '@/lib/sentryHelpers';
-import { useWorkspaceRole } from '@/hooks';
+import { useWorkspaceRole, usePersistedBoolean } from '@/hooks';
 import type { NextPageWithLayout } from './_app';
 import {
   SimpleToggle,
@@ -34,6 +32,7 @@ import {
   ReplyStyleCard,
   DangerZone,
   TeamSection,
+  CollapsibleSectionHeader,
 } from '@/components/settings';
 import type { SettingsState } from '@/components/settings';
 
@@ -77,7 +76,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const router = useRouter();
 
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = usePersistedBoolean('settings:advanced:expanded', false);
   const [settings, setSettings] = useState<SettingsState>({ ...INITIAL_SETTINGS, dashboardLanguage: language });
   const [initialSettings, setInitialSettings] = useState<SettingsState>({ ...INITIAL_SETTINGS, dashboardLanguage: language });
   const [saving, setSaving] = useState(false);
@@ -255,36 +254,28 @@ const SettingsPage: NextPageWithLayout = () => {
       )}
 
       {/* Advanced Settings Toggle */}
-      <button
-        onClick={() => setShowAdvanced(!showAdvanced)}
-        className={clsx(
-          'w-full flex items-center justify-between p-4 landscape:p-3 rounded-xl border transition-all duration-300 mb-6 landscape:mb-4',
-          showAdvanced ? 'bg-background border-theme-border shadow-sm' : 'bg-card border-theme-border hover:border-theme-border hover:bg-background'
-        )}
-      >
-        <div className="flex items-center gap-4">
+      <CollapsibleSectionHeader
+        expanded={showAdvanced}
+        onToggle={() => setShowAdvanced(!showAdvanced)}
+        controlsId="advanced-settings-body"
+        className="mb-6 landscape:mb-4"
+        icon={
           <div className="p-2 rounded-lg bg-muted text-muted-foreground">
             <Settings2 className="w-6 h-6 landscape:w-5 landscape:h-5" />
           </div>
-          <div className="text-start">
-            <span className={clsx('block font-bold landscape:text-sm', showAdvanced ? 'text-foreground' : 'text-foreground/70')}>
-              {showAdvanced ? t('hideAdvanced') : t('showAdvanced')}
-            </span>
-            <p className="text-xs text-muted-foreground landscape:hidden">
-              {t('advancedDescription')}
-            </p>
-          </div>
-        </div>
-        {showAdvanced ? (
-          <ChevronUp className="w-5 h-5 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="w-5 h-5 text-muted-foreground" />
-        )}
-      </button>
+        }
+      >
+        <span className={clsx('block font-bold landscape:text-sm', showAdvanced ? 'text-foreground' : 'text-foreground/70')}>
+          {showAdvanced ? t('hideAdvanced') : t('showAdvanced')}
+        </span>
+        <p className="text-xs text-muted-foreground landscape:hidden">
+          {t('advancedDescription')}
+        </p>
+      </CollapsibleSectionHeader>
 
       {/* Advanced Settings */}
       {showAdvanced && (
-        <div className="space-y-4 sm:space-y-6 landscape:space-y-4 animate-slide-up pb-4 sm:pb-6">
+        <div id="advanced-settings-body" className="space-y-4 sm:space-y-6 landscape:space-y-4 animate-slide-up pb-4 sm:pb-6">
           <BusinessHoursCard settings={settings} setSettings={setSettings} currentTime={currentTime} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-start">

@@ -1,3 +1,4 @@
+export { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
 export { SimpleToggle } from './SimpleToggle';
 export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { LanguageSelector } from './LanguageSelector';

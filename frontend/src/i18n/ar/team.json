@@ -1,6 +1,9 @@
 {
   "sectionTitle": "الفريق",
   "sectionDesc": "ادعُ أشخاصاً للمساعدة في إدارة ردودك",
+  "memberCountBadge": "{count, plural, zero {لا أعضاء} one {عضو واحد} two {عضوان} few {# أعضاء} many {# عضوًا} other {# عضو}}",
+  "pendingInvitesBadge": "{count, plural, zero {لا دعوات معلّقة} one {دعوة معلّقة واحدة} two {دعوتان معلّقتان} few {# دعوات معلّقة} many {# دعوة معلّقة} other {# دعوة معلّقة}}",
+  "savedAutomatically": "يتم حفظ التغييرات هنا تلقائيًا",
   "invitePlaceholder": "البريد الإلكتروني أو الجوال (+966xxxxxxxxx)",
   "sendInvite": "دعوة",
   "roleOwner": "مالك",

@@ -9,6 +9,8 @@ import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import { isValidContact } from '@jawab24/shared';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { usePersistedBoolean } from '@/hooks';
+import { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
 import type { WorkspaceRole } from '@jawab24/shared';
 
 interface MemberRow {
@@ -101,6 +103,11 @@ export function TeamSection() {
   const t = useTranslations('team');
   const tc = useTranslations('common');
   const user = useAuthStore((s) => s.user);
+
+  // Default collapsed — the Team section is conditionally relevant for solo
+  // users and noisy on every visit otherwise. Persist user's choice so
+  // workspace owners with frequent invites get their preferred default back.
+  const [expanded, setExpanded] = usePersistedBoolean('settings:team:expanded', false);
 
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
@@ -245,34 +252,62 @@ export function TeamSection() {
         <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionTitle')}</p>
         <Card className="border-none p-6 animate-pulse">
           <div className="h-12 bg-muted rounded-xl" />
-          <div className="h-16 bg-muted rounded-xl mt-4" />
         </Card>
       </div>
     );
   }
 
   const isAlone = members.length <= 1 && invites.length === 0;
+  const pendingInvitesCount = invites.length;
 
   return (
     <div>
       <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionTitle')}</p>
 
-      <Card className="border-none p-4 landscape:p-3">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-4">
+      <CollapsibleSectionHeader
+        expanded={expanded}
+        onToggle={() => setExpanded(!expanded)}
+        controlsId="team-section-body"
+        className={expanded ? 'mb-4 landscape:mb-3' : ''}
+        icon={
           <div className="w-12 h-12 rounded-xl flex items-center justify-center icon-bg-brand landscape:w-10 landscape:h-10 flex-shrink-0">
             <Users className="w-5 h-5" aria-hidden="true" />
           </div>
-          <div className="text-start flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <h3 className="font-bold text-lg landscape:text-base text-foreground">{t('sectionTitle')}</h3>
-              <span className="text-xs text-muted-foreground font-normal">
-                {totalCount} / {MAX_MEMBERS}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground landscape:text-xs">{t('sectionDesc')}</p>
-          </div>
+        }
+      >
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={clsx('font-bold landscape:text-sm', expanded ? 'text-foreground' : 'text-foreground/70')}>
+            {t('sectionTitle')}
+          </span>
+          <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">
+            {t('memberCountBadge', { count: members.length })}
+          </span>
+          {pendingInvitesCount > 0 && (
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full status-brand whitespace-nowrap">
+              {t('pendingInvitesBadge', { count: pendingInvitesCount })}
+            </span>
+          )}
         </div>
+      </CollapsibleSectionHeader>
+
+      {expanded && (
+      <Card id="team-section-body" className="border-none p-4 landscape:p-3 animate-slide-up">
+        {/* Description sits above the invite form; the icon + title + count
+            already live in the collapsible button above. The {totalCount} /
+            {MAX_MEMBERS} quota readout stays here so the user sees how close
+            they are to the cap when actually managing the team. */}
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground landscape:text-xs">{t('sectionDesc')}</p>
+          <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">
+            {totalCount} / {MAX_MEMBERS}
+          </span>
+        </div>
+        {/* Behavioral hint — Team mutations skip the page-level Save button
+            and persist on each click. Place it inside the body so it sits
+            right above the invite form, where it's useful in context. */}
+        <p className="text-xs text-muted-foreground mb-4 italic">
+          {t('savedAutomatically')}
+        </p>
 
         {/* Invite form — admins and owners only */}
         {isAdmin && remaining > 0 && (
@@ -497,6 +532,7 @@ export function TeamSection() {
           })}
         </div>
       </Card>
+      )}
 
       {/* Remove confirmation */}
       {removeTarget && (

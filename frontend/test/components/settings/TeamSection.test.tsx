@@ -92,6 +92,23 @@ describe('TeamSection', () => {
     vi.clearAllMocks();
     mockMembers.mockResolvedValue({ data: [ownerMember] });
     mockInvites.mockResolvedValue({ data: [] });
+    // Most existing tests assert content inside the Team panel. The section
+    // is collapsed by default now, so seed the persisted-expanded flag for
+    // those tests. Tests that care about the default-collapsed behavior
+    // explicitly remove this key in their own setup.
+    window.localStorage.setItem('settings:team:expanded', '1');
+  });
+
+  it('is collapsed by default and expands on click', async () => {
+    window.localStorage.removeItem('settings:team:expanded');
+    renderTeamSection();
+    // Header is always visible; description (inside the Card) appears only when expanded.
+    expect(screen.queryByText('Invite people to help manage your replies')).not.toBeInTheDocument();
+    const toggle = await screen.findByRole('button', { name: /Team/i });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(await screen.findByText('Invite people to help manage your replies')).toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('renders team section with header', async () => {
