@@ -907,7 +907,7 @@ export class PaymentController {
         // If the subscription's price changed (plan switch via stripe.subscriptions.update),
         // resolve the new planId from our `plans` table by stripePriceId so the DB
         // mirrors what the customer is now paying for.
-        const priceId = stripeSubscription.items.data[0]?.price?.id;
+        const priceId = stripeSubscription.items?.data?.[0]?.price?.id;
         let resolvedPlanId: string | null = null;
         if (priceId) {
             const [planRow] = await db
