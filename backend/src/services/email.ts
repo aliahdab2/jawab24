@@ -58,9 +58,42 @@ function capBody(html: string): string {
  * Dev mode: returns success without calling Resend AND without writing to the
  * DB — keeps local dev free of phantom audit rows.
  */
+// Resend's published limit is 5 req/sec. We pace at 4/sec to leave headroom
+// for retries, clock skew, and concurrent sends from other call sites
+// (subscription_welcome, lead_digest, transactional) sharing the same key.
+const RESEND_MAX_PER_SECOND = 4;
+
 export class EmailService {
     private logger: Logger = noopLogger;
     setLogger(l: Logger): void { this.logger = l; }
+
+    // Sliding window of the last N send start-times. Before each send we drop
+    // entries older than 1s; if the window is full we wait until the oldest
+    // expires. Serializes via `gate` so concurrent callers don't all read the
+    // same window state and race past the limit.
+    private sendTimestamps: number[] = [];
+    private gate: Promise<void> = Promise.resolve();
+
+    private async acquireSendSlot(): Promise<void> {
+        const prev = this.gate;
+        let release!: () => void;
+        this.gate = new Promise<void>(resolve => { release = resolve; });
+        await prev;
+        try {
+            const now = Date.now();
+            this.sendTimestamps = this.sendTimestamps.filter(t => now - t < 1000);
+            const oldest = this.sendTimestamps[0];
+            if (oldest !== undefined && this.sendTimestamps.length >= RESEND_MAX_PER_SECOND) {
+                const waitMs = 1000 - (now - oldest) + 5;
+                await new Promise(r => setTimeout(r, waitMs));
+                const after = Date.now();
+                this.sendTimestamps = this.sendTimestamps.filter(t => after - t < 1000);
+            }
+            this.sendTimestamps.push(Date.now());
+        } finally {
+            release();
+        }
+    }
 
     async send(payload: EmailPayload): Promise<SendResult> {
         if (process.env.NODE_ENV === 'development') {
@@ -82,6 +115,8 @@ export class EmailService {
             const emailSendId = await this.recordAttempt(payload, { status: 'failed', errorMessage: 'Email provider not configured' });
             return { success: false, error: 'Email provider not configured', emailSendId };
         }
+
+        await this.acquireSendSlot();
 
         const response = await fetch('https://api.resend.com/emails', {
             method: 'POST',
