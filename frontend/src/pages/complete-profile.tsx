@@ -16,7 +16,7 @@ export default function CompleteProfilePage() {
   const tc = useTranslations('common');
   const locale = useLocale();
   const isRTL = isRTLLocale(locale);
-  const { user, setAuth, _hasHydrated } = useAuthStore();
+  const { user, updateUser, _hasHydrated } = useAuthStore();
   
   const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
@@ -84,13 +84,7 @@ export default function CompleteProfilePage() {
       const response = await api.patch('/auth/profile', { email });
       
       // Update user in store
-      if (user) {
-        setAuth(
-          { ...user, email: response.data.email },
-          localStorage.getItem('token') || '',
-          localStorage.getItem('fbToken') || ''
-        );
-      }
+      updateUser({ email: response.data.email });
 
       setSuccess(true);
       

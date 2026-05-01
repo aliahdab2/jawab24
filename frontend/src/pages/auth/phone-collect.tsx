@@ -78,12 +78,7 @@ export default function PhoneCollectPage() {
         try {
             await otpApi.linkPhone(phoneE164, code);
             // Update store: add phone to current user
-            const currentUser = useAuthStore.getState().user;
-            const token = useAuthStore.getState().token ?? '';
-            const fbToken = useAuthStore.getState().fbToken ?? '';
-            if (currentUser) {
-                useAuthStore.getState().setAuth({ ...currentUser, phone: phoneE164 }, token, fbToken);
-            }
+            useAuthStore.getState().updateUser({ phone: phoneE164 });
             router.replace(getRedirectUrl());
         } catch (err: unknown) {
             handleOtpVerifyError(err, t, setError, 'Phone collect: link failed', { page: 'phone-collect' });

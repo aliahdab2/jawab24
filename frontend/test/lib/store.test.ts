@@ -204,6 +204,61 @@ describe('useAuthStore - state management', () => {
     });
 });
 
+describe('useAuthStore - updateUser', () => {
+    beforeEach(() => {
+        useAuthStore.setState({ user: null, token: null, fbToken: null, isAuthenticated: false });
+        vi.clearAllMocks();
+    });
+
+    it('patches user fields without touching tokens or auth flag', () => {
+        const user = { id: 'u1', name: 'Test', email: 'old@example.com', facebookId: 'fb1' };
+        useAuthStore.getState().setAuth(user, 'tok123', 'fbtok');
+
+        useAuthStore.getState().updateUser({ email: 'new@example.com' });
+
+        const state = useAuthStore.getState();
+        expect(state.user?.email).toBe('new@example.com');
+        expect(state.user?.id).toBe('u1');
+        expect(state.user?.name).toBe('Test');
+        expect(state.token).toBe('tok123');
+        expect(state.fbToken).toBe('fbtok');
+        expect(state.isAuthenticated).toBe(true);
+    });
+
+    it('is a no-op when no user is set (does not create a partial user)', () => {
+        useAuthStore.getState().updateUser({ email: 'x@example.com' });
+
+        expect(useAuthStore.getState().user).toBeNull();
+        expect(useAuthStore.getState().isAuthenticated).toBe(false);
+    });
+
+    it('does not trip the setAuth defensive guard on web (no token in localStorage)', () => {
+        // Reproduces the /complete-profile Sentry bug: on web, token lives in
+        // HttpOnly cookies, not localStorage. Updating a profile field must
+        // not require re-passing the token through setAuth.
+        const user = { id: 'u1', name: 'Test', email: 'old@example.com', facebookId: 'fb1' };
+        useAuthStore.getState().setAuth(user, 'tok123', 'fbtok');
+        vi.clearAllMocks();
+
+        useAuthStore.getState().updateUser({ email: 'new@example.com' });
+
+        expect(Sentry.captureMessage).not.toHaveBeenCalled();
+        expect(useAuthStore.getState().user?.email).toBe('new@example.com');
+    });
+
+    it('supports patching multiple fields at once', () => {
+        const user = { id: 'u1', name: 'Old', email: 'old@example.com', facebookId: 'fb1' };
+        useAuthStore.getState().setAuth(user, 'tok', 'fb');
+
+        useAuthStore.getState().updateUser({ name: 'New', phone: '+12025550100' });
+
+        const next = useAuthStore.getState().user;
+        expect(next?.name).toBe('New');
+        expect(next?.phone).toBe('+12025550100');
+        expect(next?.email).toBe('old@example.com');
+    });
+});
+
 // ── Regression guard for the "Noor stuck in stale workspace" bug ───────────
 // The server returns `defaultWorkspaceId` on every login response. When set,
 // the store MUST honor it as the active workspace, even if a different

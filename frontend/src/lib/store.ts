@@ -44,6 +44,7 @@ interface AuthState {
   workspaces: WorkspaceSummary[];
   activeWorkspaceId: string | null;
   setAuth: (user: User, token: string, fbToken: string) => void;
+  updateUser: (patch: Partial<User>) => void;
   /**
    * Replace the workspaces list. When `defaultWorkspaceId` is provided AND
    * present in the new list, it overrides the persisted activeWorkspaceId —
@@ -98,6 +99,7 @@ export const useAuthStore = create<AuthState>()(
           }).catch(() => {});
         }
       },
+      updateUser: (patch) => set((state) => state.user ? { user: { ...state.user, ...patch } } : state),
       setAuth: (user, token, fbToken) => {
         // Defensive validation
         if (!user?.id || !token || token.trim() === '') {

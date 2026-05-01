@@ -15,7 +15,7 @@ const mockUser = { id: 'u1', name: 'Test', facebookId: 'fb1' };
 vi.mock('@/lib/store', () => ({
   useAuthStore: vi.fn(() => ({
     user: mockUser,
-    setAuth: vi.fn(),
+    updateUser: vi.fn(),
     _hasHydrated: true,
   })),
 }));
@@ -47,7 +47,7 @@ describe('CompleteProfilePage', () => {
 
     (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       user: mockUser,
-      setAuth: vi.fn(),
+      updateUser: vi.fn(),
       _hasHydrated: true,
     });
   });
@@ -66,7 +66,7 @@ describe('CompleteProfilePage', () => {
   it('should redirect to dashboard if user already has email', () => {
     (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       user: { ...mockUser, email: 'existing@test.com' },
-      setAuth: vi.fn(),
+      updateUser: vi.fn(),
       _hasHydrated: true,
     });
 
@@ -77,7 +77,7 @@ describe('CompleteProfilePage', () => {
   it('should redirect to login if no user at all', () => {
     (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       user: null,
-      setAuth: vi.fn(),
+      updateUser: vi.fn(),
       _hasHydrated: true,
     });
 
@@ -95,7 +95,7 @@ describe('CompleteProfilePage', () => {
 
     (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
       user: { ...mockUser, email: 'existing@test.com' },
-      setAuth: vi.fn(),
+      updateUser: vi.fn(),
       _hasHydrated: true,
     });
 
