@@ -233,6 +233,18 @@ Backend infrastructure is fully built and running in production (see Completed W
 - Accept/revoke/expiry — already working
 - Only needs: frontend invite accept page + invite generation UI
 
+### 6.6 Page-conflict request notification (~3 days)
+
+**Problem:** A Facebook page can have multiple admins on Facebook itself. When two of those admins each sign up for separate Jawab24 workspaces and try to connect the same FB page, only the first connector wins. Today (post commit `e8291a70`) we silently skip the conflict — the second admin sees the friendly "no pages found" empty state with no signal that they actually have a page that's just locked elsewhere. This is *softer than the chat-bot SaaS industry standard* (ManyChat / Chatfuel / Buffer / HubSpot all show a static "page is taken, ask the admin" error). Real conversion loss for new users who can't connect their page and bounce.
+
+**Approach:** When the silent-skip fires, surface the conflict to the *holder* as an in-app + FCM push notification with two CTAs: "Disconnect this page" or "Invite to team". Surface a quiet inline confirmation to the requestor on their empty state ("Request sent to current admin of {pageName}"). Both holder CTAs deeplink to existing endpoints — no new transfer logic, no schema migration. Reuses `sendTemplateNotification`, `useNotificationPoller`, and the workspace_invites flow already in production.
+
+**Why this position:** sits one tier above the chat-bot SaaS industry standard. Stops short of the full Meta-style request → approve → 7-day cooldown → transfer flow, which is overkill until the simpler version proves demand.
+
+**Sizing:** ~100-150 LOC across backend + frontend. New `page_access_request` notification type + template, ~25 LOC change in `pages.ts` silent-skip branch, frontend empty-state copy + notification CTA buttons. Rate-limited 1 per (page, requestor, holder) per 7 days via Redis TTL.
+
+**Full implementation plan:** `~/.claude/plans/what-do-you-think-silly-cook.md` — file-by-file breakdown with industry research backing the design choice.
+
 ---
 
 ## Competitive Analysis Summary
