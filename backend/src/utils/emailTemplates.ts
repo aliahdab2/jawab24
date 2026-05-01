@@ -94,6 +94,95 @@ export function waitlistEmailTemplate(params: {
 }
 
 /**
+ * Subscription welcome email — sent once when a user's subscription becomes
+ * active or trialing. Branded onboarding touchpoint; the legal/financial
+ * receipt is sent separately by Stripe (VAT-compliant invoice with PDF).
+ */
+export function subscriptionWelcomeEmailTemplate(params: {
+    lang: 'ar' | 'en';
+    name: string;
+    planName: string;
+    dashboardUrl: string;
+    trialEndsAt?: Date | null;
+}): { subject: string; html: string } {
+    const { lang, name, planName, dashboardUrl, trialEndsAt } = params;
+    const rtl = lang === 'ar';
+    const dir = rtl ? 'rtl' : 'ltr';
+    const align = rtl ? 'right' : 'left';
+    const fontFamily = rtl
+        ? "'Cairo','Tajawal',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif"
+        : "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif";
+    const brandName = config.resend.fromName || 'Jawab24';
+
+    // i18n strings come from JSON we control. User-provided values (name,
+    // planName, trial date) are HTML-escaped before substitution so they're
+    // safe when interpolated into the HTML below — which then escapes the
+    // static template parts only via the final `${...}` interpolations not
+    // wrapped in escapeHtml. Translations are static markup-free strings,
+    // so a single substitution pass is enough.
+    const escName = escapeHtml(name);
+    const escPlan = escapeHtml(planName);
+    const subject = t('subscriptionWelcomeSubject', lang, { plan: planName });
+    const heading = t('subscriptionWelcomeHeading', lang);
+    const intro = t('subscriptionWelcomeIntro', lang)
+        .replace(/\{name\}/g, escName)
+        .replace(/\{plan\}/g, escPlan);
+    const nextSteps = t('subscriptionWelcomeNextSteps', lang);
+    const billing = t('subscriptionWelcomeBilling', lang);
+    const ctaLabel = t('subscriptionWelcomeCta', lang);
+    const signoff = t('subscriptionWelcomeSignoff', lang);
+
+    const trialBlock = trialEndsAt
+        ? `<p style="margin:0 0 16px 0;color:#0f766e;background-color:#f0fdfa;border-${rtl ? 'right' : 'left'}:3px solid #14b8a6;padding:12px 16px;border-radius:6px;">${t('subscriptionWelcomeTrialNote', lang).replace(/\{trialEnd\}/g, escapeHtml(formatDigestDate(trialEndsAt, lang)))}</p>`
+        : '';
+
+    const html = `<!DOCTYPE html>
+<html lang="${lang}" dir="${dir}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:${fontFamily};">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${intro}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+          <tr>
+            <td style="background-color:#0d9488;padding:24px 32px;text-align:center;">
+              <span style="color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">${escapeHtml(brandName)}</span>
+            </td>
+          </tr>
+          <tr>
+            <td dir="auto" style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};">
+              <h1 style="margin:0 0 16px 0;font-size:22px;font-weight:700;color:#0f172a;">${heading}</h1>
+              <p style="margin:0 0 16px 0;">${intro}</p>
+              ${trialBlock}
+              <p style="margin:0 0 24px 0;">${nextSteps}</p>
+              <p style="margin:0 0 24px 0;text-align:center;">
+                <a href="${escapeHtml(dashboardUrl)}" style="display:inline-block;background-color:#0d9488;color:#ffffff;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:600;font-size:15px;">${ctaLabel}</a>
+              </p>
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${billing}</p>
+              <p style="margin:24px 0 0 0;color:#52525b;font-size:14px;">${signoff}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:24px 32px;border-top:1px solid #e4e4e7;text-align:center;color:#71717a;font-size:13px;">
+              <p style="margin:0;">${escapeHtml(brandName)} &mdash; jawab24.com</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    return { subject, html };
+}
+
+/**
  * Lead digest email — sent once per day to the workspace owner when they
  * have 10+ new (non-emailed) leads. Lists up to MAX_ROWS leads in a table
  * with an "and N more" line if truncated.

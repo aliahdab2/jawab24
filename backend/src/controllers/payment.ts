@@ -2,10 +2,13 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { stripeService } from '../services/stripe';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
-import { subscriptions, users, plans, stripeWebhookEvents } from '../db/schema';
+import { subscriptions, users, plans, settings, stripeWebhookEvents } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { config } from '../config';
 import { notificationService } from '../services/notifications';
+import { emailService } from '../services/email';
+import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
+import { captureError } from '../utils/sentryHelpers';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import type Stripe from 'stripe';
 
@@ -637,8 +640,11 @@ export class PaymentController {
             }
         }
 
-        // Create new subscription in database
-        await db.insert(subscriptions).values({
+        // Create new subscription in database. .returning() lets us scope the
+        // welcome email to genuinely-new rows (replayed webhooks won't double-send
+        // because Stripe deduplicates events upstream and we only reach this
+        // branch when no row with this externalSubscriptionId exists yet).
+        const [insertedSub] = await db.insert(subscriptions).values({
             userId,
             planId,
             status: stripeSubscription.status,
@@ -651,9 +657,74 @@ export class PaymentController {
             trialEndsAt: stripeSubscription.trial_end
                 ? new Date(stripeSubscription.trial_end * 1000)
                 : null,
-        });
+        }).returning({ id: subscriptions.id });
 
         request.log.info({ userId, subscriptionId: stripeSubscription.id, planId }, 'New subscription created');
+
+        // Send branded welcome email. Stripe sends the VAT-compliant invoice
+        // separately. Email failure must NOT break the webhook (subscription
+        // is already persisted); log to Sentry and move on.
+        if (insertedSub) {
+            await this.sendSubscriptionWelcomeEmail(userId, planId, stripeSubscription, request);
+        }
+    }
+
+    /**
+     * Best-effort welcome email after a new subscription is created. Resolves
+     * the user's preferred language from `settings.dashboardLanguage` (the same
+     * source the dashboard uses), with 'ar' as the fallback. Never throws.
+     */
+    private async sendSubscriptionWelcomeEmail(
+        userId: string,
+        planId: string,
+        stripeSubscription: Stripe.Subscription,
+        request: FastifyRequest
+    ): Promise<void> {
+        try {
+            const [user] = await db.select().from(users).where(eq(users.id, userId));
+            if (!user?.email) {
+                request.log.info({ userId }, 'Skipping welcome email — user has no email on file');
+                return;
+            }
+
+            const [plan] = await db.select().from(plans).where(eq(plans.id, planId));
+            const [userSettings] = await db.select({ dashboardLanguage: settings.dashboardLanguage })
+                .from(settings)
+                .where(eq(settings.userId, userId));
+
+            const lang: 'ar' | 'en' = userSettings?.dashboardLanguage === 'en' ? 'en' : 'ar';
+            const planName = plan?.name || 'Jawab24';
+            const trialEndsAt = stripeSubscription.trial_end
+                ? new Date(stripeSubscription.trial_end * 1000)
+                : null;
+
+            const { subject, html } = subscriptionWelcomeEmailTemplate({
+                lang,
+                name: user.name || user.email.split('@')[0],
+                planName,
+                dashboardUrl: `${config.frontendUrl}/dashboard`,
+                trialEndsAt,
+            });
+
+            const result = await emailService.send({
+                to: user.email,
+                subject,
+                html,
+                type: 'subscription_welcome',
+                userId,
+            });
+
+            if (!result.success) {
+                request.log.warn({ userId, error: result.error }, 'Welcome email send returned failure');
+            } else {
+                request.log.info({ userId, emailSendId: result.emailSendId }, 'Subscription welcome email sent');
+            }
+        } catch (err) {
+            captureError(err, 'Subscription welcome email failed', {
+                tags: { service: 'payment', flow: 'welcome_email' },
+                extra: { userId, planId },
+            });
+        }
     }
 
     /**

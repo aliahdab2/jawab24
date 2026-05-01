@@ -451,7 +451,9 @@ describe('Payment Controller', () => {
                     }),
                 } as any)
                 .mockReturnValueOnce({
-                    values: vi.fn().mockResolvedValue([]),
+                    values: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{ id: 'sub_row_id' }]),
+                    }),
                 } as any);
 
             await paymentController.handleWebhook(

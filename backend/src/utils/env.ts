@@ -89,6 +89,10 @@ const EnvSchema = z.object({
     RESEND_API_KEY: z.string().optional(),
     RESEND_FROM_EMAIL: z.string().email('RESEND_FROM_EMAIL must be a valid email').default('info@jawab24.com'),
     RESEND_FROM_NAME: z.string().default('Jawab24'),
+
+    // Demo mode — must NEVER be enabled in production (creates a real DB user
+    // that can otherwise hit live Stripe, real email, etc.)
+    DEMO_MODE_ENABLED: z.string().optional(),
 }).refine(
     data => data.NODE_ENV !== 'production' || (!!data.REDIS_PASSWORD && data.REDIS_PASSWORD !== 'changeme_in_production'),
     {
@@ -100,6 +104,12 @@ const EnvSchema = z.object({
     {
         message: 'RESEND_API_KEY must be set in production — the lead digest cron cannot deliver emails without it',
         path: ['RESEND_API_KEY'],
+    },
+).refine(
+    data => data.NODE_ENV !== 'production' || data.DEMO_MODE_ENABLED !== 'true',
+    {
+        message: 'DEMO_MODE_ENABLED must not be "true" in production — the demo user is a real DB row and would otherwise reach live Stripe / email providers',
+        path: ['DEMO_MODE_ENABLED'],
     },
 );
 

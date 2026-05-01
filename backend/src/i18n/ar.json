@@ -26,5 +26,13 @@
     "leadDigestNoSummary": "—",
     "leadDigestAndMore": "و{count} آخر…",
     "leadDigestSourceMessage": "رسالة",
-    "leadDigestSourceComment": "تعليق"
+    "leadDigestSourceComment": "تعليق",
+    "subscriptionWelcomeSubject": "أهلاً بك في Jawab24 — اشتراك {plan} نشط",
+    "subscriptionWelcomeHeading": "تم تفعيل اشتراكك 🎉",
+    "subscriptionWelcomeIntro": "مرحباً {name}، شكراً لاشتراكك في Jawab24. باقة {plan} مفعّلة وجاهزة للاستخدام.",
+    "subscriptionWelcomeTrialNote": "فترة التجربة المجانية تنتهي في {trialEnd}. يمكنك الإلغاء في أي وقت قبل ذلك ولن يتم خصم أي مبلغ.",
+    "subscriptionWelcomeCta": "افتح لوحة التحكم",
+    "subscriptionWelcomeNextSteps": "الخطوة التالية: اربط صفحة فيسبوك أو إنستغرام، ثم أضف بعض الردود إلى قاعدة المعرفة. وسنتكفل بالباقي.",
+    "subscriptionWelcomeBilling": "ستصلك فاتورة منفصلة بتفاصيل الدفع من Stripe خلال دقائق.",
+    "subscriptionWelcomeSignoff": "— فريق Jawab24"
 }

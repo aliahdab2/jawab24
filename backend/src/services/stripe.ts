@@ -16,6 +16,20 @@ function requireStripe(): Stripe {
     return stripe;
 }
 
+export class DemoUserStripeError extends Error {
+    code = 'DEMO_USER_STRIPE_BLOCKED';
+    constructor() {
+        super('Demo accounts cannot create Stripe customers or subscriptions');
+        this.name = 'DemoUserStripeError';
+    }
+}
+
+function assertNotDemoUser(email: string): void {
+    if (email && email.toLowerCase() === config.demo.userEmail.toLowerCase()) {
+        throw new DemoUserStripeError();
+    }
+}
+
 export class StripeService {
     /**
      * Create a Stripe Checkout Session for subscription
@@ -50,6 +64,14 @@ export class StripeService {
             mode: 'subscription',
             ui_mode: 'embedded',
             payment_method_collection: 'if_required',
+            // Collect VAT IDs and billing address so Stripe can issue VAT-compliant
+            // invoices (legally required for KSA/UAE/EU B2B customers). Stripe also
+            // emails these invoices automatically when "Email finalized invoices"
+            // is enabled in Dashboard → Invoicing settings. customer_update is not
+            // valid here because we pass customer_email (Stripe creates a new
+            // customer and applies collected fields automatically).
+            tax_id_collection: { enabled: true },
+            billing_address_collection: 'auto',
             line_items: [
                 {
                     price: priceId,

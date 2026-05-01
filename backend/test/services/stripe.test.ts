@@ -80,6 +80,8 @@ describe('Stripe Service', () => {
                 mode: 'subscription',
                 ui_mode: 'embedded',
                 payment_method_collection: 'if_required',
+                tax_id_collection: { enabled: true },
+                billing_address_collection: 'auto',
                 line_items: [
                     {
                         price: 'price_123',

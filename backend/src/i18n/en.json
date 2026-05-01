@@ -26,5 +26,13 @@
     "leadDigestNoSummary": "—",
     "leadDigestAndMore": "and {count} more…",
     "leadDigestSourceMessage": "Message",
-    "leadDigestSourceComment": "Comment"
+    "leadDigestSourceComment": "Comment",
+    "subscriptionWelcomeSubject": "Welcome to Jawab24 — your {plan} plan is active",
+    "subscriptionWelcomeHeading": "You're in 🎉",
+    "subscriptionWelcomeIntro": "Hi {name}, thanks for subscribing to Jawab24. Your {plan} plan is active and ready to use.",
+    "subscriptionWelcomeTrialNote": "Your free trial runs until {trialEnd}. You can cancel any time before then and you won't be charged.",
+    "subscriptionWelcomeCta": "Open dashboard",
+    "subscriptionWelcomeNextSteps": "Next: connect your Facebook or Instagram page, then add a few replies to your knowledge base. We'll handle the rest.",
+    "subscriptionWelcomeBilling": "A separate invoice email with billing details will arrive from Stripe shortly.",
+    "subscriptionWelcomeSignoff": "— The Jawab24 team"
 }
