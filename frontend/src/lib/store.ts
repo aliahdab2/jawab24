@@ -103,7 +103,20 @@ export const useAuthStore = create<AuthState>()(
       setAuth: (user, token, fbToken) => {
         // Defensive validation
         if (!user?.id || !token || token.trim() === '') {
-          Sentry.captureMessage('Invalid auth data provided to setAuth', { level: 'error', extra: { hasUser: !!user, hasUserId: !!user?.id, hasToken: !!token } });
+          Sentry.captureMessage('Invalid auth data provided to setAuth', {
+            level: 'error',
+            extra: {
+              hasUser: !!user,
+              hasUserId: !!user?.id,
+              userKeys: user && typeof user === 'object' ? Object.keys(user) : null,
+              hasToken: !!token,
+              tokenType: typeof token,
+              tokenLength: typeof token === 'string' ? token.length : null,
+              tokenIsEmptyString: token === '',
+              tokenIsWhitespace: typeof token === 'string' && token.trim() === '' && token.length > 0,
+              hasFbToken: !!fbToken,
+            },
+          });
           return;
         }
 

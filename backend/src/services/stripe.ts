@@ -43,6 +43,7 @@ export class StripeService {
         returnUrl: string,
         trialDays: number = 0
     ): Promise<Stripe.Checkout.Session> {
+        assertNotDemoUser(userEmail);
         const s = requireStripe();
 
         // Build subscription data - only include trial if trialDays > 0
@@ -93,6 +94,7 @@ export class StripeService {
      * Find or create a Stripe Customer for a user.
      */
     async findOrCreateCustomer(email: string, userId: string): Promise<string> {
+        assertNotDemoUser(email);
         const s = requireStripe();
         const existing = await s.customers.list({ email, limit: 1 });
         if (existing.data.length > 0) {

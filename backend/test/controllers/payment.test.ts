@@ -11,6 +11,13 @@ vi.mock('../../src/services/stripe', () => ({
         getSubscription: vi.fn(),
         cancelSubscriptionImmediately: vi.fn(),
     },
+    DemoUserStripeError: class DemoUserStripeError extends Error {
+        code = 'DEMO_USER_STRIPE_BLOCKED';
+        constructor() {
+            super('Demo accounts cannot create Stripe customers or subscriptions');
+            this.name = 'DemoUserStripeError';
+        }
+    },
 }));
 
 vi.mock('../../src/db', () => ({
@@ -72,6 +79,12 @@ vi.mock('../../src/config', () => ({
         frontendUrl: 'http://localhost:3001',
         stripe: {
             webhookSecret: 'whsec_test',
+        },
+        demo: {
+            enabled: false,
+            userFacebookId: 'demo_user_jawab24',
+            userName: 'Demo User',
+            userEmail: 'demo@jawab24.com',
         },
     },
 }));

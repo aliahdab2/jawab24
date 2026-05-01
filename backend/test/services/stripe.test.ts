@@ -33,6 +33,12 @@ vi.mock('../../src/config', () => ({
             secretKey: 'sk_test_mock',
             webhookSecret: 'whsec_test',
         },
+        demo: {
+            enabled: false,
+            userFacebookId: 'demo_user_jawab24',
+            userName: 'Demo User',
+            userEmail: 'demo@jawab24.com',
+        },
     },
 }));
 

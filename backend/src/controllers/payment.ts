@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { stripeService } from '../services/stripe';
+import { stripeService, DemoUserStripeError } from '../services/stripe';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
 import { subscriptions, users, plans, settings, stripeWebhookEvents } from '../db/schema';
@@ -151,6 +151,9 @@ export class PaymentController {
                 clientSecret: session.client_secret,
             });
         } catch (error) {
+            if (error instanceof DemoUserStripeError) {
+                return reply.status(403).send({ error: error.message, code: error.code });
+            }
             request.log.error({ err: error }, 'Create checkout session error');
             return reply.status(500).send({ error: 'Failed to create checkout session' });
         }
@@ -247,6 +250,9 @@ export class PaymentController {
                 subscriptionId: result.subscriptionId,
             });
         } catch (error) {
+            if (error instanceof DemoUserStripeError) {
+                return reply.status(403).send({ error: error.message, code: error.code });
+            }
             request.log.error({ err: error }, 'Create subscription intent error');
             return reply.status(500).send({ error: 'Failed to create subscription' });
         }
