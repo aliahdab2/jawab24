@@ -108,5 +108,7 @@
   "downgradeToFreeConfirm": "Manage Subscription",
   "unavailableRegion": "Payments are not available in your region. Please contact support.",
   "billingPortalError": "Could not open billing portal. Please try again.",
-  "ownerOnlyBilling": "Only the workspace owner can manage subscriptions."
+  "ownerOnlyBilling": "Only the workspace owner can manage subscriptions.",
+  "planChangeSuccess": "Plan changed. Any unused time on your old plan is credited to your next bill.",
+  "planChangeError": "Could not change your plan. Please try again or contact support."
 }

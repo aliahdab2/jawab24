@@ -84,12 +84,14 @@ export const subscriptionsService = {
             }
         }
 
-        // Check period expiration for active subscriptions
+        // Check period expiration for active subscriptions. If the user opted
+        // for graceful cancel (cancel_at_period_end=true), the terminal state
+        // is `canceled`, not `past_due` — they explicitly asked to stop.
         if (sub.status === 'active' && sub.currentPeriodEnd) {
             const periodEnd = new Date(sub.currentPeriodEnd);
             if (periodEnd < now) {
                 needsUpdate = true;
-                newStatus = 'past_due';
+                newStatus = sub.cancelAtPeriodEnd ? 'canceled' : 'past_due';
             }
         }
 
@@ -205,78 +207,6 @@ export const subscriptionsService = {
         await this.initializeUsagePeriod(userId, now, periodEnd);
 
         return this.mapToSubscription(result[0]);
-    },
-
-    /**
-     * Change user's subscription plan
-     */
-    async changePlan(userId: string, newPlanId: string): Promise<Subscription | null> {
-        const plan = await plansService.getPlanById(newPlanId);
-        if (!plan) {
-            throw new Error('Plan not found');
-        }
-
-        const result = await db
-            .update(subscriptions)
-            .set({
-                planId: newPlanId,
-                status: 'active',
-                updatedAt: new Date(),
-            })
-            .where(eq(subscriptions.userId, userId))
-            .returning();
-
-        return result[0] ? this.mapToSubscription(result[0]) : null;
-    },
-
-    /**
-     * Cancel subscription
-     */
-    async cancelSubscription(userId: string, reason?: string): Promise<Subscription | null> {
-        const result = await db
-            .update(subscriptions)
-            .set({
-                status: 'canceled',
-                canceledAt: new Date(),
-                cancelReason: reason,
-                updatedAt: new Date(),
-            })
-            .where(eq(subscriptions.userId, userId))
-            .returning();
-
-        return result[0] ? this.mapToSubscription(result[0]) : null;
-    },
-
-    /**
-     * Pause subscription
-     */
-    async pauseSubscription(userId: string): Promise<Subscription | null> {
-        const result = await db
-            .update(subscriptions)
-            .set({
-                status: 'paused',
-                updatedAt: new Date(),
-            })
-            .where(eq(subscriptions.userId, userId))
-            .returning();
-
-        return result[0] ? this.mapToSubscription(result[0]) : null;
-    },
-
-    /**
-     * Resume subscription
-     */
-    async resumeSubscription(userId: string): Promise<Subscription | null> {
-        const result = await db
-            .update(subscriptions)
-            .set({
-                status: 'active',
-                updatedAt: new Date(),
-            })
-            .where(eq(subscriptions.userId, userId))
-            .returning();
-
-        return result[0] ? this.mapToSubscription(result[0]) : null;
     },
 
     /**

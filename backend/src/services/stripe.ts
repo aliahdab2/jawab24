@@ -213,16 +213,57 @@ export class StripeService {
     }
 
     /**
-     * Create a billing portal session
+     * Switch the price on an existing subscription with proration. Stripe
+     * issues a credit for the unused portion of the old plan and a prorated
+     * charge for the new plan; net amount is reflected on the next invoice
+     * (or charged immediately if proration_behavior is 'always_invoice').
+     */
+    async updateSubscriptionPrice(
+        subscriptionId: string,
+        newPriceId: string
+    ): Promise<Stripe.Subscription> {
+        const s = requireStripe();
+        const current = await s.subscriptions.retrieve(subscriptionId);
+        const itemId = current.items.data[0]?.id;
+        if (!itemId) {
+            throw new Error(`Subscription ${subscriptionId} has no items to update`);
+        }
+        return s.subscriptions.update(subscriptionId, {
+            items: [{ id: itemId, price: newPriceId }],
+            proration_behavior: 'create_prorations',
+            metadata: current.metadata,
+        });
+    }
+
+    /**
+     * Issue a refund against a charge or payment intent.
+     */
+    async refund(params: { chargeId?: string; paymentIntentId?: string; reason?: string; metadata?: Record<string, string> }): Promise<Stripe.Refund> {
+        const s = requireStripe();
+        return s.refunds.create({
+            charge: params.chargeId,
+            payment_intent: params.paymentIntentId,
+            metadata: params.metadata,
+        });
+    }
+
+    /**
+     * Create a billing portal session. When STRIPE_BILLING_PORTAL_CONFIG_ID is
+     * set, the portal is locked to invoice history + payment method updates
+     * only — plan changes and cancellations go through the app.
      */
     async createBillingPortalSession(
         customerId: string,
         returnUrl: string
     ): Promise<Stripe.BillingPortal.Session> {
-        return requireStripe().billingPortal.sessions.create({
+        const params: Stripe.BillingPortal.SessionCreateParams = {
             customer: customerId,
             return_url: returnUrl,
-        });
+        };
+        if (config.stripe.billingPortalConfigId) {
+            params.configuration = config.stripe.billingPortalConfigId;
+        }
+        return requireStripe().billingPortal.sessions.create(params);
     }
 
     /**

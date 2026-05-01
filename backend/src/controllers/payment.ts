@@ -3,7 +3,7 @@ import { stripeService, DemoUserStripeError } from '../services/stripe';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
 import { subscriptions, users, plans, settings, stripeWebhookEvents } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, or } from 'drizzle-orm';
 import { config } from '../config';
 import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
@@ -353,6 +353,110 @@ export class PaymentController {
     }
 
     /**
+     * Change plan on an existing Stripe-backed subscription with proration.
+     * POST /api/payment/change-plan
+     *
+     * Used for upgrade/downgrade when the user already has an active Stripe
+     * subscription. Calls stripe.subscriptions.update with proration so the
+     * customer is credited for unused time on the old plan and charged a
+     * prorated amount for the new plan on the next invoice — instead of
+     * paying full price for a brand-new subscription period.
+     *
+     * Users without a Stripe-backed subscription (no externalSubscriptionId)
+     * must use the checkout flow instead and get a 400 here.
+     */
+    async changePlan(
+        request: FastifyRequest<{ Body: { planId: string; billingInterval?: 'month' | 'year' } }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user?.userId;
+            if (!userId) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+
+            const { planId } = request.body;
+            const billingInterval = request.body.billingInterval === 'year' ? 'year' : 'month';
+            if (!planId) {
+                return reply.status(400).send({ error: 'Plan ID is required' });
+            }
+
+            const [plan] = await db.select().from(plans).where(eq(plans.id, planId));
+            if (!plan) {
+                return reply.status(404).send({ error: 'Plan not found' });
+            }
+
+            const newPriceId = billingInterval === 'year' && plan.stripeYearlyPriceId
+                ? plan.stripeYearlyPriceId
+                : plan.stripePriceId;
+            if (!newPriceId) {
+                return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
+            }
+
+            // Pick the user's active Stripe-backed subscription. The resolver
+            // already prioritizes active/trialing rows, but we need the row
+            // with an externalSubscriptionId — manual rows can't be updated.
+            const userSubs = await db
+                .select()
+                .from(subscriptions)
+                .where(eq(subscriptions.userId, userId))
+                .orderBy(desc(subscriptions.createdAt));
+
+            const activeStripeSub = userSubs.find(
+                (s): s is typeof s & { externalSubscriptionId: string } =>
+                    (s.status === 'active' || s.status === 'trialing') && Boolean(s.externalSubscriptionId)
+            );
+
+            if (!activeStripeSub) {
+                return reply.status(400).send({
+                    error: 'No active Stripe subscription to update',
+                    code: 'NO_STRIPE_SUBSCRIPTION',
+                    message: 'Use the checkout flow to start a new subscription.',
+                });
+            }
+
+            if (activeStripeSub.planId === planId) {
+                return reply.status(400).send({ error: 'Already on this plan', code: 'SAME_PLAN' });
+            }
+
+            const updated = await stripeService.updateSubscriptionPrice(
+                activeStripeSub.externalSubscriptionId,
+                newPriceId
+            );
+
+            // Best-effort local mirror — the subscription.updated webhook is
+            // authoritative and will re-write these fields, but updating now
+            // means the UI reflects the change without waiting for the event.
+            await db
+                .update(subscriptions)
+                .set({
+                    planId,
+                    status: updated.status,
+                    currentPeriodStart: new Date(updated.current_period_start * 1000),
+                    currentPeriodEnd: new Date(updated.current_period_end * 1000),
+                    cancelAtPeriodEnd: updated.cancel_at_period_end,
+                    updatedAt: new Date(),
+                })
+                .where(eq(subscriptions.id, activeStripeSub.id));
+
+            await subscriptionsService.invalidateStatusCache(userId);
+
+            request.log.info(
+                { userId, oldPlanId: activeStripeSub.planId, newPlanId: planId, subId: updated.id },
+                'Plan changed via stripe.subscriptions.update'
+            );
+
+            return reply.send({
+                success: true,
+                message: 'Plan updated. Charges and credits are prorated automatically.',
+            });
+        } catch (error) {
+            request.log.error({ err: error }, 'Change plan error');
+            return reply.status(500).send({ error: 'Failed to change plan' });
+        }
+    }
+
+    /**
      * Cancel subscription
      * POST /api/payment/cancel-subscription
      */
@@ -386,6 +490,7 @@ export class PaymentController {
                 })
                 .where(eq(subscriptions.id, subscription.id));
 
+            await subscriptionsService.invalidateStatusCache(userId);
             return reply.send({ message: 'Subscription will be canceled at the end of the billing period' });
         } catch (error) {
             request.log.error({ err: error }, 'Cancel subscription error');
@@ -562,6 +667,13 @@ export class PaymentController {
                         );
                         break;
 
+                    case 'charge.refunded':
+                        await this.handleChargeRefunded(
+                            event.data.object as Stripe.Charge,
+                            request
+                        );
+                        break;
+
                     default:
                         request.log.info({ eventType: event.type }, 'Unhandled webhook event type');
                 }
@@ -666,6 +778,11 @@ export class PaymentController {
         }).returning({ id: subscriptions.id });
 
         request.log.info({ userId, subscriptionId: stripeSubscription.id, planId }, 'New subscription created');
+
+        // Drop cached status so the new sub is visible immediately to the
+        // reply pipeline (and so the previous orphan-canceled state isn't
+        // returned for up to 60s after the new row lands).
+        await subscriptionsService.invalidateStatusCache(userId);
 
         // Send branded welcome email. Stripe sends the VAT-compliant invoice
         // separately. Email failure must NOT break the webhook (subscription
@@ -787,20 +904,47 @@ export class PaymentController {
         stripeSubscription: Stripe.Subscription,
         request: FastifyRequest
     ) {
+        // If the subscription's price changed (plan switch via stripe.subscriptions.update),
+        // resolve the new planId from our `plans` table by stripePriceId so the DB
+        // mirrors what the customer is now paying for.
+        const priceId = stripeSubscription.items.data[0]?.price?.id;
+        let resolvedPlanId: string | null = null;
+        if (priceId) {
+            const [planRow] = await db
+                .select({ id: plans.id })
+                .from(plans)
+                .where(or(eq(plans.stripePriceId, priceId), eq(plans.stripeYearlyPriceId, priceId)))
+                .limit(1);
+            if (planRow) {
+                resolvedPlanId = planRow.id;
+            } else {
+                request.log.warn({ subscriptionId: stripeSubscription.id, priceId }, 'No matching plan for Stripe price');
+            }
+        }
+
+        const updateValues: Partial<typeof subscriptions.$inferInsert> = {
+            status: stripeSubscription.status,
+            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            updatedAt: new Date(),
+        };
+        if (resolvedPlanId) {
+            updateValues.planId = resolvedPlanId;
+        }
+
         const result = await db
             .update(subscriptions)
-            .set({
-                status: stripeSubscription.status,
-                currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-                currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-                cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
-                updatedAt: new Date(),
-            })
+            .set(updateValues)
             .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id))
-            .returning({ id: subscriptions.id });
+            .returning({ id: subscriptions.id, userId: subscriptions.userId });
 
         if (result.length > 0) {
-            request.log.info({ subscriptionId: stripeSubscription.id, status: stripeSubscription.status }, 'Subscription updated');
+            await subscriptionsService.invalidateStatusCache(result[0].userId);
+            request.log.info(
+                { subscriptionId: stripeSubscription.id, status: stripeSubscription.status, planId: resolvedPlanId },
+                'Subscription updated'
+            );
         } else {
             request.log.warn({ subscriptionId: stripeSubscription.id }, 'Subscription update - no matching record found');
         }
@@ -813,15 +957,19 @@ export class PaymentController {
         stripeSubscription: Stripe.Subscription,
         request: FastifyRequest
     ) {
-        await db
+        const result = await db
             .update(subscriptions)
             .set({
                 status: 'canceled',
                 canceledAt: new Date(),
                 updatedAt: new Date(),
             })
-            .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id));
+            .where(eq(subscriptions.externalSubscriptionId, stripeSubscription.id))
+            .returning({ userId: subscriptions.userId });
 
+        if (result.length > 0) {
+            await subscriptionsService.invalidateStatusCache(result[0].userId);
+        }
         request.log.info({ subscriptionId: stripeSubscription.id }, 'Subscription canceled');
     }
 
@@ -888,6 +1036,10 @@ export class PaymentController {
 
         // Reset quota for the new billing period.
         await subscriptionsService.initializeUsagePeriod(updatedRow.userId, periodStart, periodEnd);
+
+        // Drop the boolean status cache so a `past_due → active` recovery is
+        // visible to the reply pipeline immediately, not after a 60s TTL.
+        await subscriptionsService.invalidateStatusCache(updatedRow.userId);
     }
 
     /**
@@ -914,6 +1066,7 @@ export class PaymentController {
 
         // Notify user about failed payment
         if (result.length > 0) {
+            await subscriptionsService.invalidateStatusCache(result[0].userId);
             notificationService.sendTemplateNotification(
                 result[0].userId,
                 'payment_failed',
@@ -921,6 +1074,56 @@ export class PaymentController {
                 { deepLink: '/settings' }
             ).catch(err => request.log.error({ err }, 'Failed to send payment_failed notification'));
         }
+    }
+
+    /**
+     * Handle a refund issued in Stripe (manually via Dashboard or via the
+     * refund-charge.ts admin script). We log it and notify the customer.
+     * Refund alone does NOT cancel the subscription — that comes through a
+     * separate `customer.subscription.deleted` event if applicable.
+     */
+    private async handleChargeRefunded(charge: Stripe.Charge, request: FastifyRequest) {
+        const stripeCustomerId = typeof charge.customer === 'string'
+            ? charge.customer
+            : charge.customer?.id;
+
+        if (!stripeCustomerId) {
+            request.log.warn({ chargeId: charge.id }, 'Refunded charge has no customer ID');
+            return;
+        }
+
+        const [sub] = await db
+            .select({ userId: subscriptions.userId })
+            .from(subscriptions)
+            .where(eq(subscriptions.stripeCustomerId, stripeCustomerId))
+            .orderBy(desc(subscriptions.createdAt))
+            .limit(1);
+
+        if (!sub) {
+            request.log.warn({ chargeId: charge.id, stripeCustomerId }, 'No subscription matched refunded charge');
+            return;
+        }
+
+        request.log.info(
+            {
+                chargeId: charge.id,
+                userId: sub.userId,
+                amountRefunded: charge.amount_refunded,
+                currency: charge.currency,
+            },
+            'Charge refunded'
+        );
+
+        // Best-effort notification. Failure must not break the webhook.
+        notificationService.sendTemplateNotification(
+            sub.userId,
+            'refund_processed',
+            {
+                amount: (charge.amount_refunded / 100).toFixed(2),
+                currency: charge.currency.toUpperCase(),
+            },
+            { deepLink: '/settings' }
+        ).catch(err => request.log.error({ err, chargeId: charge.id }, 'Failed to send refund_processed notification'));
     }
 }
 

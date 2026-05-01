@@ -461,12 +461,24 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       return;
     }
 
-    // If user has a Stripe customer (went through checkout before),
-    // use Stripe Billing Portal for plan changes (upgrades, downgrades, interval changes).
-    // Users with trial/manual subscriptions (no Stripe customer) go through checkout instead.
+    // If user has an active Stripe-backed subscription, switch plan in-place
+    // with proration via /payment/change-plan. The customer keeps their
+    // billing anchor; Stripe credits unused time on the old plan and charges
+    // the prorated new plan on the next invoice.
+    // Users with trial/manual subscriptions (no Stripe customer) go through
+    // checkout instead — there's no Stripe subscription to update.
     if (hasActiveSubscription && usage?.subscription?.hasStripeCustomer) {
-      await openBillingPortal();
-      setChangingPlan(null);
+      try {
+        await subscriptionApi.changePlan(planId, billingInterval);
+        toast.success(tPricing('planChangeSuccess'));
+        // Refresh usage so the UI reflects the new plan immediately.
+        router.replace(router.asPath);
+      } catch (err) {
+        captureError(err, 'Failed to change plan', { tags: { page: 'pricing', action: 'change_plan' } });
+        toast.error(tPricing('planChangeError'));
+      } finally {
+        setChangingPlan(null);
+      }
       return;
     }
 

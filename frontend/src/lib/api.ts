@@ -391,11 +391,13 @@ export const plansAdminApi = {
 export const subscriptionApi = {
   get: () => api.get('/subscription'),
   getUsage: (config?: AxiosRequestConfig) => api.get('/subscription/usage', config),
-  changePlan: (planId: string) => api.post('/subscription/change-plan', { planId }),
-  cancel: (reason?: string) => api.post('/subscription/cancel', { reason }),
+  // Change plan on an existing Stripe-backed subscription. Stripe applies
+  // proration automatically; the customer is credited for unused time on the
+  // old plan and charged a prorated amount for the new plan on the next invoice.
+  changePlan: (planId: string, billingInterval: 'month' | 'year' = 'month') =>
+    api.post('/payment/change-plan', { planId, billingInterval }),
+  cancel: () => api.post('/payment/cancel-subscription'),
   billingPortal: () => api.post('/payment/billing-portal'),
-  pause: () => api.post('/subscription/pause'),
-  resume: () => api.post('/subscription/resume'),
   checkAiLimit: () => api.get('/subscription/limits/ai'),
   checkPageLimit: () => api.get('/subscription/limits/pages'),
 };

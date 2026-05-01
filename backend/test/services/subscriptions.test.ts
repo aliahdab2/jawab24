@@ -439,6 +439,51 @@ describe('Subscriptions Service', () => {
             expect(result!.status).toBe('past_due');
         });
 
+        it('should auto-transition expired active subscription with cancel_at_period_end=true to canceled (not past_due)', async () => {
+            const { db } = await import('../../src/db');
+
+            const expiredPeriodEnd = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const subRow = {
+                id: 'sub_grace_cancel',
+                userId: 'user_123',
+                planId: 'plan_123',
+                status: 'active',
+                trialEndsAt: null,
+                currentPeriodStart: new Date(Date.now() - 31 * 24 * 60 * 60 * 1000),
+                currentPeriodEnd: expiredPeriodEnd,
+                cancelAtPeriodEnd: true,
+                canceledAt: null,
+                cancelReason: null,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+            const planRow = {
+                id: 'plan_123', name: 'Business', slug: 'business', price: 2500,
+                maxPages: 3, maxAiRepliesPerMonth: 1500, trialDays: 0,
+                facebookEnabled: true, instagramEnabled: true, whatsappEnabled: false,
+                showBranding: false, prioritySupport: false,
+            };
+
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            orderBy: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue([{ subscription: subRow, plan: planRow }]),
+                            }),
+                        }),
+                    }),
+                }),
+            } as any);
+
+            const result = await subscriptionsService.getUserSubscription('user_123');
+
+            // The user opted for graceful cancel — terminal state must be 'canceled',
+            // not 'past_due'. Past-due would put them in a 3-day grace they didn't ask for.
+            expect(db.update).toHaveBeenCalled();
+            expect(result!.status).toBe('canceled');
+        });
+
         it('should NOT auto-expire active subscription within period', async () => {
             const { db } = await import('../../src/db');
 
@@ -872,95 +917,6 @@ describe('Subscriptions Service', () => {
         });
     });
 
-    describe('cancelSubscription', () => {
-        it('should set status to canceled and return updated subscription', async () => {
-            const { db } = await import('../../src/db');
-
-            vi.mocked(db.update).mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([{
-                            id: 'sub_1',
-                            userId: 'user_1',
-                            planId: 'plan_1',
-                            status: 'canceled',
-                            trialEndsAt: null,
-                            currentPeriodStart: new Date(),
-                            currentPeriodEnd: new Date(),
-                            canceledAt: new Date(),
-                            cancelReason: 'Too expensive',
-                            createdAt: new Date(),
-                            updatedAt: new Date(),
-                        }]),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.cancelSubscription('user_1', 'Too expensive');
-            expect(result).not.toBeNull();
-            expect(result!.status).toBe('canceled');
-            expect(result!.cancelReason).toBe('Too expensive');
-        });
-
-        it('should return null when no subscription found to cancel', async () => {
-            const { db } = await import('../../src/db');
-
-            vi.mocked(db.update).mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.cancelSubscription('user_none');
-            expect(result).toBeNull();
-        });
-    });
-
-    describe('pauseSubscription / resumeSubscription', () => {
-        it('should set status to paused', async () => {
-            const { db } = await import('../../src/db');
-
-            vi.mocked(db.update).mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([{
-                            id: 'sub_1', userId: 'user_1', planId: 'plan_1',
-                            status: 'paused', trialEndsAt: null,
-                            currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
-                            canceledAt: null, cancelReason: null,
-                            createdAt: new Date(), updatedAt: new Date(),
-                        }]),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.pauseSubscription('user_1');
-            expect(result!.status).toBe('paused');
-        });
-
-        it('should set status to active on resume', async () => {
-            const { db } = await import('../../src/db');
-
-            vi.mocked(db.update).mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([{
-                            id: 'sub_1', userId: 'user_1', planId: 'plan_1',
-                            status: 'active', trialEndsAt: null,
-                            currentPeriodStart: new Date(), currentPeriodEnd: new Date(),
-                            canceledAt: null, cancelReason: null,
-                            createdAt: new Date(), updatedAt: new Date(),
-                        }]),
-                    }),
-                }),
-            } as any);
-
-            const result = await subscriptionsService.resumeSubscription('user_1');
-            expect(result!.status).toBe('active');
-        });
-    });
 });
 
 describe('Subscription Status Logic', () => {

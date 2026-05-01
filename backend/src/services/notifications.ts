@@ -21,7 +21,8 @@ export type NotificationType =
     | 'provider_failover'
     | 'ai_usage_warning_80'
     | 'ai_usage_limit_reached'
-    | 'auto_reply_paused_billing';
+    | 'auto_reply_paused_billing'
+    | 'refund_processed';
 
 export interface NotificationPayload {
     type: NotificationType;
@@ -149,6 +150,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'Your subscription is {reason}. All auto-replies (Smart Replies, Post Replies, away messages) are paused until you renew. New comments and DMs will go unanswered.',
             ar: 'اشتراكك {reason}. تم إيقاف جميع الردود التلقائية (الردود الذكية وردود البوست ورسائل الغياب) حتى التجديد. لن يتم الرد على التعليقات والرسائل الجديدة.',
+        },
+    },
+    refund_processed: {
+        titles: { en: 'Refund Processed', ar: 'تمت معالجة المبلغ المسترد' },
+        bodies: {
+            en: 'A refund of {amount} {currency} has been issued to your card. It may take 5–10 business days to appear on your statement.',
+            ar: 'تم إرجاع مبلغ {amount} {currency} إلى بطاقتك. قد يستغرق ظهوره في كشف الحساب من 5 إلى 10 أيام عمل.',
         },
     },
 };

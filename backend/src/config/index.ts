@@ -90,6 +90,11 @@ export const config = {
         secretKey: process.env.STRIPE_SECRET_KEY || '',
         publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
         webhookSecret: process.env.STRIPE_WEBHOOK_SECRET || '',
+        // Pinned billing portal configuration ID. Created once via the Stripe
+        // Dashboard or the Stripe API; locks the portal to invoice history +
+        // payment method updates only. Plan changes and cancellations go
+        // through the app so DB stays in sync.
+        billingPortalConfigId: process.env.STRIPE_BILLING_PORTAL_CONFIG_ID || '',
     },
 
     // Frontend URL

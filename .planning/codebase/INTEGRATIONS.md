@@ -371,17 +371,24 @@ Voice-to-text for KB content via microphone:
      - After completion, frontend polls `GET /payment/checkout-session/:sessionId` for status
   2. **PaymentElement** (subscription creation path):
      - `POST /payment/create-subscription` → returns `clientSecret` for PaymentElement
-  3. **Billing Portal** (plan changes, cancellation, invoices):
-     - `POST /payment/billing-portal` → redirects user to Stripe Billing Portal
+  3. **In-app plan change** (proration):
+     - `POST /payment/change-plan` → calls `stripe.subscriptions.update` with `proration_behavior: 'create_prorations'`. Used when the customer already has an active Stripe-backed subscription. Customers without an externalSubscriptionId fall through to the checkout flow.
+  4. **In-app cancellation**:
+     - `POST /payment/cancel-subscription` → `stripe.subscriptions.update(id, { cancel_at_period_end: true })`. Subscription stays active until period end.
+  5. **Billing Portal** (locked-down: invoice history + payment methods):
+     - `POST /payment/billing-portal` opens the portal. When `STRIPE_BILLING_PORTAL_CONFIG_ID` is set, plan changes and cancellations are disabled in the portal — those flows go through the app so DB stays in sync.
      - Sanctions check applied before portal creation
-  4. Webhook at `POST /payment/webhook` receives `checkout.session.completed` → subscription record created
+  6. Webhook at `POST /payment/webhook` receives `checkout.session.completed` → subscription record created
 
 - **Webhook Events**:
   - `checkout.session.completed` - subscription started
-  - `customer.subscription.updated` - plan changed
+  - `customer.subscription.created` - safety net for race with checkout
+  - `customer.subscription.updated` - plan changed (also writes new `planId` resolved from `priceId`)
   - `customer.subscription.deleted` - canceled
-  - `invoice.payment_succeeded` - payment confirmed
+  - `invoice.payment_succeeded` - payment confirmed (resets quota, invalidates status cache)
   - `invoice.payment_failed` - payment failed
+  - `charge.refunded` - logs refund and notifies the customer (does not cancel the subscription)
+  - All handlers invalidate the Redis `sub:active:<userId>` cache so a status change is visible to the reply pipeline immediately, not after the 60s TTL.
 
 - **Verification**:
   - Signature via `X-Stripe-Signature` header

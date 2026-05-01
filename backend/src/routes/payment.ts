@@ -50,6 +50,15 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
         }
     );
 
+    // Change plan on existing Stripe subscription with proration.
+    fastify.post<{ Body: { planId: string; billingInterval?: 'month' | 'year' } }>(
+        '/change-plan',
+        { config: { rateLimit: { max: 10, timeWindow: '1 minute' } }, schema: { tags: ['Payment'], summary: 'Change plan with proration on existing Stripe subscription', security: auth }, preHandler: [authenticate] },
+        async (request, reply) => {
+            return paymentController.changePlan(request, reply);
+        }
+    );
+
     // Create billing portal session
     fastify.post(
         '/billing-portal',
