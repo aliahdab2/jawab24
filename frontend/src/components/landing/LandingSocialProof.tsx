@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import Image from 'next/image';
 import { Star } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { motion, useInView } from 'framer-motion';
@@ -8,12 +9,17 @@ export function LandingSocialProof() {
   const ref = useRef(null);
   const isInView = useInView(ref, { once: true, margin: '-60px' });
 
+  const stats = [
+    { value: t('testimonials.stat1Value'), label: t('testimonials.stat1Label') },
+    { value: t('testimonials.stat2Value'), label: t('testimonials.stat2Label') },
+  ];
+
   return (
-    <section className="py-10 sm:py-16 lg:py-24 bg-brand-600 relative overflow-hidden" ref={ref}>
+    <section className="py-8 sm:py-12 bg-brand-600 relative overflow-hidden" ref={ref}>
       <div className="absolute inset-0 bg-[url('/images/cubes-texture.png')] opacity-10"></div>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center relative z-10">
         <motion.div
-          className="inline-flex items-center gap-1 sm:gap-2 mb-4 sm:mb-8 bg-white/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full border border-white/20"
+          className="inline-flex items-center gap-1 mb-3 bg-white/10 px-3 py-1 rounded-full border border-white/20"
           initial={{ opacity: 1, scale: 0.8 }}
           animate={isInView ? { opacity: 1, scale: 1 } : { opacity: 1, scale: 0.8 }}
           transition={{ duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] }}
@@ -25,32 +31,73 @@ export function LandingSocialProof() {
               animate={isInView ? { opacity: 1, rotate: 0 } : { opacity: 1, rotate: -30 }}
               transition={{ delay: 0.3 + i * 0.1, duration: 0.4 }}
             >
-              <Star className="w-3 h-3 sm:w-4 sm:h-4 text-amber-400 fill-amber-400" />
+              <Star className="w-3 h-3 text-amber-400 fill-amber-400" />
             </motion.div>
           ))}
         </motion.div>
 
-        <motion.h2
-          className="text-lg sm:text-2xl lg:text-4xl font-display font-bold text-white mb-4 sm:mb-8 leading-relaxed italic italic-arabic px-2"
-          initial={{ opacity: 1, y: 30 }}
-          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 30 }}
+        <motion.p
+          className="text-base sm:text-lg lg:text-xl font-display text-white mb-3 leading-relaxed italic italic-arabic px-2"
+          initial={{ opacity: 1, y: 20 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 20 }}
           transition={{ duration: 0.6, delay: 0.2, ease: [0.25, 0.46, 0.45, 0.94] }}
         >
           &ldquo;{t('testimonials.quote1')}&rdquo;
-        </motion.h2>
+        </motion.p>
 
         <motion.div
-          className="flex flex-col items-center"
-          initial={{ opacity: 1, y: 20 }}
-          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 20 }}
+          className="flex items-center justify-center gap-2 sm:gap-3 text-white/90 text-xs sm:text-sm mb-5"
+          initial={{ opacity: 1, y: 10 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 10 }}
           transition={{ duration: 0.5, delay: 0.5 }}
         >
-          <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full border-2 sm:border-4 border-white/30 mb-2 sm:mb-4 shadow-xl bg-white flex items-center justify-center">
-            <span className="text-brand-700 font-bold text-sm sm:text-xl select-none">AS</span>
-          </div>
-          <div className="text-white font-bold text-base sm:text-xl">{t('testimonials.author1')}</div>
+          <a
+            href={t('testimonials.authorUrl1')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 group"
+          >
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full overflow-hidden bg-white/10 border border-white/20 shrink-0">
+              <Image
+                src="/images/testimonials/damascene-team.png"
+                alt={t('testimonials.author1')}
+                width={32}
+                height={32}
+                className="w-full h-full object-cover"
+              />
+            </span>
+            <span className="font-bold underline decoration-white/30 underline-offset-4 group-hover:decoration-white transition">
+              {t('testimonials.author1')}
+            </span>
+          </a>
+          <span className="text-white/60">·</span>
+          <span className="text-white/70">{t('testimonials.resultsLabel')}</span>
         </motion.div>
 
+        <motion.div
+          className="grid grid-cols-2 gap-2 sm:gap-3 max-w-md mx-auto"
+          initial={{ opacity: 1, y: 10 }}
+          animate={isInView ? { opacity: 1, y: 0 } : { opacity: 1, y: 10 }}
+          transition={{ duration: 0.5, delay: 0.6 }}
+        >
+          {stats.map((stat, i) => (
+            <div
+              key={i}
+              className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg px-2 py-2 sm:py-3"
+            >
+              <div className="text-base sm:text-xl font-display font-bold text-white">
+                {stat.value}
+              </div>
+              <div className="text-white/75 text-[10px] sm:text-xs leading-tight mt-0.5">
+                {stat.label}
+              </div>
+            </div>
+          ))}
+        </motion.div>
+
+        <p className="text-white/50 text-[10px] sm:text-xs mt-3">
+          {t('testimonials.disclaimer')}
+        </p>
       </div>
     </section>
   );

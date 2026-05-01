@@ -101,8 +101,15 @@
   },
   "testimonials": {
     "title": "What Our Users Say",
-    "quote1": "Jawab24 saved us hours every day. Our response rate improved by 300%!",
-    "author1": "Ahmed, E-commerce Store Owner",
+    "quote1": "The app is amazing — I can't keep up with calls from customers and interested people, and the page's reach has changed for the better.",
+    "author1": "Damascene Team for Training",
+    "authorUrl1": "https://www.facebook.com/The.Damascene.team/",
+    "resultsLabel": "Results — April 2026",
+    "stat1Value": "+644%",
+    "stat1Label": "Growth in started conversations",
+    "stat2Value": "5,404",
+    "stat2Label": "Auto-replies sent last month",
+    "disclaimer": "Results vary based on page activity and content.",
     "quote2": "The AI understands Arabic perfectly. Finally a solution that works for our market.",
     "author2": "Sara, Marketing Manager"
   },
