@@ -76,6 +76,11 @@ function setupAuth(page: import('@playwright/test').Page) {
       JSON.stringify({ state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
     );
     localStorage.setItem('jawab24_onboarding_complete', 'true');
+    // Team section is collapsed by default in production. These specs assert
+    // content inside the expanded panel (invite form, member rows, badges).
+    // Pre-expand it so the existing assertions keep working without each test
+    // having to click the toggle first.
+    localStorage.setItem('settings:team:expanded', '1');
   });
 }
 
@@ -149,7 +154,7 @@ test.describe('Team Section', () => {
     await page.goto('/en/settings');
 
     await expect(page.getByPlaceholder(t('team.invitePlaceholder'))).toBeVisible({ timeout: 15000 });
-    await expect(page.getByRole('button', { name: t('team.sendInvite') })).toBeVisible();
+    await expect(page.getByRole('button', { name: t('team.sendInvite'), exact: true })).toBeVisible();
   });
 
   test('shows members and pending invites', async ({ page }) => {
@@ -166,7 +171,10 @@ test.describe('Team Section', () => {
     await expect(ownerText).toBeVisible({ timeout: 5000 });
     await expect(page.getByText('Sara', { exact: true })).toBeVisible();
     await expect(page.getByText('ali@test.com')).toBeVisible();
-    await expect(page.getByText(t('team.pending'))).toBeVisible();
+    // The collapsible header now also surfaces a "1 pending invite" badge,
+    // which is a substring match for "Pending". Use exact: true to scope
+    // this assertion to the row-level pending badge.
+    await expect(page.getByText(t('team.pending'), { exact: true })).toBeVisible();
   });
 
   test('sends invite and shows copyable link', async ({ page }) => {
@@ -178,7 +186,7 @@ test.describe('Team Section', () => {
     await emailInput.waitFor({ timeout: 15000 });
     await emailInput.fill('new@test.com');
 
-    await page.getByRole('button', { name: t('team.sendInvite') }).click();
+    await page.getByRole('button', { name: t('team.sendInvite'), exact: true }).click();
 
     // Invite link should appear with copy button
     await expect(page.getByText(t('team.linkExpires'))).toBeVisible({ timeout: 10000 });
@@ -196,7 +204,7 @@ test.describe('Team Section', () => {
     await emailInput.waitFor({ timeout: 15000 });
     await emailInput.fill('not-an-email');
 
-    await page.getByRole('button', { name: t('team.sendInvite') }).click();
+    await page.getByRole('button', { name: t('team.sendInvite'), exact: true }).click();
 
     // Should show error toast
     await expect(page.getByText(t('team.invalidContact'))).toBeVisible({ timeout: 5000 });
@@ -239,6 +247,7 @@ test.describe('Team Section', () => {
         JSON.stringify({ state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
       );
       localStorage.setItem('jawab24_onboarding_complete', 'true');
+      localStorage.setItem('settings:team:expanded', '1');
     });
     await setupRoutes(page);
     // Override settings mock to return Arabic dashboard language
@@ -462,7 +471,9 @@ test.describe('Team — Invite Form Guards', () => {
     await emailInput.waitFor({ timeout: 15000 });
     // Type the same email that already has a pending invite
     await emailInput.fill('ali@test.com');
-    await page.getByRole('button', { name: t('team.sendInvite') }).click();
+    // The collapsible header's accessible name ("Team 1 member 1 pending invite")
+    // is a substring match for "Invite". Scope to exact match.
+    await page.getByRole('button', { name: t('team.sendInvite'), exact: true }).click();
 
     await expect(page.getByText(t('team.invitePending'))).toBeVisible({ timeout: 5000 });
   });
@@ -476,7 +487,7 @@ test.describe('Team — Invite Form Guards', () => {
     await emailInput.waitFor({ timeout: 15000 });
     // sara@test.com is already a member
     await emailInput.fill('sara@test.com');
-    await page.getByRole('button', { name: t('team.sendInvite') }).click();
+    await page.getByRole('button', { name: t('team.sendInvite'), exact: true }).click();
 
     await expect(page.getByText(t('team.alreadyMember'))).toBeVisible({ timeout: 5000 });
   });
@@ -517,7 +528,7 @@ test.describe('Team — Invite Form Guards', () => {
     await expect(page.getByText('ali@test.com')).toBeVisible({ timeout: 15000 });
 
     // Click Resend
-    await page.getByRole('button', { name: t('team.resendInvite') }).click();
+    await page.getByRole('button', { name: t('team.resendInvite'), exact: true }).click();
 
     // New link with the new token should appear
     await expect(page.locator('input[readonly]')).toHaveValue(new RegExp(newToken), { timeout: 10000 });
