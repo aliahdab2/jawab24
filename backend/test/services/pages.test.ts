@@ -315,11 +315,12 @@ describe('PagesService', () => {
             ]);
         });
 
-        // Back-compat regression guard: when the conflict workspace belongs to
-        // a stranger (the user is NOT a member), `alreadyMemberOf` must stay
-        // empty so the original "ask the owner to invite you" warning fires
-        // unchanged on the client.
-        it('keeps alreadyMemberOf empty when user is not a member of the conflict workspace', async () => {
+        // Product rule: when the conflict workspace belongs to a stranger (the
+        // user is NOT a member — e.g. they were removed from the team or
+        // deleted their old account and re-signed up), the page must be
+        // silently skipped: no `takenCount`, no `alreadyMemberOf`. The user
+        // can't act on it from their own account, so surfacing it is noise.
+        it('silently skips when user is not a member of the conflict workspace', async () => {
             const workspaceId = 'ws-stranger';
             const userId = 'user-stranger';
             const accessToken = 'stranger-fb-token';
@@ -367,7 +368,85 @@ describe('PagesService', () => {
 
             const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
 
-            expect(result.takenCount).toBe(1);
+            expect(result.takenCount).toBe(0);
+            expect(result.alreadyMemberOf).toEqual([]);
+            expect(result.syncedPages).toEqual([]);
+        });
+
+        // Mixed-case regression guard for the silent-skip rule:
+        // when one of the user's FB pages is fresh and another is held by a
+        // stranger workspace, the fresh page MUST still sync — silent-skip
+        // applies only to the conflict, not to siblings.
+        it('syncs the fresh page and silently skips the stranger-held one in a mixed batch', async () => {
+            const workspaceId = 'ws-noor-solo';
+            const userId = 'user-noor';
+            const accessToken = 'noor-fb-token';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [
+                    { id: 'fb-page-fresh', name: 'Fresh Page', access_token: 'pt-fresh' },
+                    { id: 'fb-page-foreign', name: 'Foreign Page', access_token: 'pt-foreign' },
+                ],
+            });
+
+            const fromOrderByLimitChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue(rows) }),
+                    }),
+                }),
+            });
+
+            const fromWhereChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue(rows),
+                }),
+            });
+
+            const fromInnerJoinChain = (rows: unknown[]) => ({
+                from: vi.fn().mockReturnValue({
+                    innerJoin: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue(rows),
+                        }),
+                    }),
+                }),
+            });
+
+            vi.mocked(db.select)
+                // 1. existing pages in Noor's workspace — empty
+                .mockReturnValueOnce(fromOrderByLimitChain([]) as any)
+                // 2. global lookup for fb-page-fresh — not found anywhere
+                .mockReturnValueOnce(fromWhereChain([]) as any)
+                // 3. global lookup for fb-page-foreign — found in stranger workspace, connected
+                .mockReturnValueOnce(fromWhereChain([{
+                    id: 'page-row-id',
+                    workspaceId: 'ws-stranger',
+                    facebookPageId: 'fb-page-foreign',
+                    accessToken: 'stranger-token',
+                }]) as any)
+                // 4. membership lookup for stranger workspace — empty (not a member)
+                .mockReturnValueOnce(fromInnerJoinChain([]) as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            const insertReturning = vi.fn().mockResolvedValue([{
+                id: 'new-page-id',
+                facebookPageId: 'fb-page-fresh',
+                name: 'Fresh Page',
+                workspaceId,
+                userId,
+                accessToken: 'pt-fresh',
+            }]);
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockReturnValue({ returning: insertReturning }),
+            } as any);
+
+            const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
+            expect(result.syncedPages).toHaveLength(1);
+            expect(result.syncedPages[0].facebookPageId).toBe('fb-page-fresh');
+            expect(result.takenCount).toBe(0);
             expect(result.alreadyMemberOf).toEqual([]);
         });
 

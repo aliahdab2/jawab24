@@ -613,15 +613,8 @@ export class PagesService {
 
                     await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
                 } else if (globalExisting) {
-                    // Page is active under another user — skip to avoid stealing it.
+                    // Page is active under another workspace — skip to avoid stealing it.
                     logger.info(`[Pages] Page "${fbPage.name}" (${fbPage.id}) is already connected in workspace ${globalExisting.workspaceId} — skipping`);
-                    takenCount++;
-                    // If the syncing user is already a member of the holding workspace
-                    // (Noor-style: signed up first, got invited later, hasn't switched
-                    // workspaces yet), tell the client so it can offer a one-tap switch
-                    // instead of the misleading "ask the owner to invite you" warning.
-                    // Skip the lookup when the page somehow has no workspace_id; that's a
-                    // data anomaly (orphan page) and not a "user is already a member" case.
                     if (globalExisting.workspaceId) {
                         const holdingWorkspaceId = globalExisting.workspaceId;
                         const [memberOfHolding] = await db
@@ -639,6 +632,9 @@ export class PagesService {
                             )
                             .limit(1);
                         if (memberOfHolding) {
+                            // Syncing user is already a member of the holding workspace —
+                            // surface a one-tap "switch workspace" CTA on the client.
+                            takenCount++;
                             alreadyMemberOf.push({
                                 workspaceId: holdingWorkspaceId,
                                 workspaceName: memberOfHolding.workspaceName,
@@ -646,6 +642,8 @@ export class PagesService {
                                 pageName: fbPage.name,
                             });
                         }
+                        // Else: silent skip — user can't act on this page from their own
+                        // account, so don't surface noise (e.g. ex-team-member case).
                     }
                     continue;
                 } else {
