@@ -65,10 +65,10 @@ export const WAITLIST_LAUNCH_AR_HTML = `<!DOCTYPE html>
             <td class="px-pad" style="padding:48px 32px 16px 32px;text-align:center;">
               <div class="hero-emoji" style="font-size:72px;line-height:1;margin-bottom:20px;">🎉</div>
               <h1 class="hero-title text-body" style="margin:0 0 16px 0;font-size:38px;font-weight:800;color:#18181b;line-height:1.2;letter-spacing:-1px;">
-                إنه جاهز.
+                جواب24 أصبح جاهزاً
               </h1>
-              <p class="text-muted" style="margin:0;font-size:17px;color:#52525b;line-height:1.6;max-width:440px;display:inline-block;">
-                جواب أصبح متاحاً. شكراً لصبرك.
+              <p class="text-body" style="margin:0;font-size:21px;font-weight:600;color:#27272a;line-height:1.55;max-width:520px;display:inline-block;">
+                فعّل الردود الذكية على تعليقات ورسائل صفحتك، وزِد تفاعلها ووصولها.
               </p>
             </td>
           </tr>
@@ -79,12 +79,12 @@ export const WAITLIST_LAUNCH_AR_HTML = `<!DOCTYPE html>
               <!--[if mso]>
               <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="https://jawab24.com/login" style="height:56px;v-text-anchor:middle;width:280px;" arcsize="16%" stroke="f" fillcolor="#0d9488">
                 <w:anchorlock/>
-                <center style="color:#ffffff;font-family:sans-serif;font-size:17px;font-weight:bold;">ابدأ الآن مجاناً</center>
+                <center style="color:#ffffff;font-family:sans-serif;font-size:17px;font-weight:bold;">ابدأ الآن — 30 يوم مجاناً</center>
               </v:roundrect>
               <![endif]-->
               <!--[if !mso]><!-- -->
               <a href="https://jawab24.com/login" class="cta-btn" style="display:inline-block;background-color:#0d9488;color:#ffffff;padding:17px 44px;border-radius:12px;text-decoration:none;font-weight:700;font-size:17px;line-height:1;box-shadow:0 4px 12px rgba(13,148,136,0.3);">
-                ابدأ الآن مجاناً ←
+                ابدأ الآن — 30 يوم مجاناً ←
               </a>
               <!--<![endif]-->
             </td>
@@ -149,7 +149,7 @@ export const WAITLIST_LAUNCH_AR_HTML = `<!DOCTYPE html>
                   <td style="vertical-align:top;">
                     <h3 class="text-body" style="margin:0 0 4px 0;font-size:16px;font-weight:700;color:#18181b;">التقاط العملاء المحتملين تلقائياً</h3>
                     <p class="text-muted" style="margin:0;font-size:14px;color:#52525b;line-height:1.6;">
-                      كل سؤال جدّي يتحوّل إلى عميل محتمل في لوحة التحكم — لن يضيع أحد منك بعد الآن.
+                      كل سؤال جدّي يتحوّل إلى عميل محتمل في <a href="https://jawab24.com/leads" style="color:#0d9488;text-decoration:underline;font-weight:600;">صفحة العملاء المحتملين</a> — لن يضيع أحد منك بعد الآن.
                     </p>
                   </td>
                 </tr>
@@ -158,28 +158,22 @@ export const WAITLIST_LAUNCH_AR_HTML = `<!DOCTYPE html>
             </td>
           </tr>
 
-          <!-- Highlight box -->
+          <!-- Coming soon -->
           <tr>
-            <td class="px-pad" style="padding:32px 32px 8px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="feature-card border-soft" style="background-color:#f0fdfa;border:1px solid #ccfbf1;border-radius:14px;">
+            <td class="px-pad" style="padding:32px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="feature-card border-soft" style="background-color:#eff6ff;border:1px solid #dbeafe;border-radius:14px;">
                 <tr>
-                  <td style="padding:22px 24px;">
-                    <p class="text-body" style="margin:0 0 6px 0;font-size:13px;font-weight:700;color:#0f766e;letter-spacing:0.3px;">🎁 هدية</p>
-                    <p class="text-body" style="margin:0;font-size:15px;color:#134e4a;line-height:1.6;font-weight:500;">
-                      أول ٣٠ يوماً مجاناً — لا تحتاج بطاقة ائتمان للتسجيل.
+                  <td style="padding:18px 22px;">
+                    <p class="text-body" style="margin:0 0 8px 0;font-size:13px;font-weight:700;color:#1d4ed8;letter-spacing:0.3px;">🚀 قريباً</p>
+                    <p class="text-body" style="margin:0 0 6px 0;font-size:15px;color:#1e3a8a;line-height:1.6;font-weight:500;">
+                      💬 <strong>دعم واتساب</strong> — ردود ذكية على رسائل عملائك في واتساب.
+                    </p>
+                    <p class="text-body" style="margin:0;font-size:15px;color:#1e3a8a;line-height:1.6;font-weight:500;">
+                      🛒 <strong>دعم شوبيفاي</strong> — يقرأ جواب24 منتجاتك وطلباتك ويرد بمعلومات دقيقة.
                     </p>
                   </td>
                 </tr>
               </table>
-            </td>
-          </tr>
-
-          <!-- Personal closing -->
-          <tr>
-            <td class="px-pad" style="padding:32px 32px 8px 32px;">
-              <p class="text-body" style="margin:0;font-size:14px;color:#3f3f46;line-height:1.7;">
-                شكراً لثقتك بنا منذ البداية. لو احتجت أي شيء — رد على هذه الرسالة مباشرةً. <span style="font-weight:700;">— فريق جواب</span>
-              </p>
             </td>
           </tr>
 
@@ -192,8 +186,11 @@ export const WAITLIST_LAUNCH_AR_HTML = `<!DOCTYPE html>
               <p class="text-muted" style="margin:0 0 8px 0;color:#71717a;font-size:12px;line-height:1.6;">
                 ردود ذكية تلقائية · إدارة العملاء المحتملين · تحليلات لحظية
               </p>
-              <p style="margin:0;font-size:13px;">
+              <p style="margin:0 0 12px 0;font-size:13px;">
                 <a href="https://jawab24.com" style="color:#0d9488;text-decoration:none;font-weight:600;">jawab24.com</a>
+              </p>
+              <p style="margin:0;font-size:12px;">
+                <a href="https://play.google.com/store/apps/details?id=com.jawab24.android" style="color:#71717a;text-decoration:none;font-weight:500;">📱 متوفر على Google Play</a>
               </p>
             </td>
           </tr>

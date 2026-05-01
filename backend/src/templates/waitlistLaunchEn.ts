@@ -64,10 +64,10 @@ export const WAITLIST_LAUNCH_EN_HTML = `<!DOCTYPE html>
             <td class="px-pad" style="padding:48px 32px 16px 32px;text-align:center;">
               <div class="hero-emoji" style="font-size:72px;line-height:1;margin-bottom:20px;">🎉</div>
               <h1 class="hero-title text-body" style="margin:0 0 16px 0;font-size:38px;font-weight:800;color:#18181b;line-height:1.2;letter-spacing:-1px;">
-                It's ready.
+                Jawab24 is ready
               </h1>
-              <p class="text-muted" style="margin:0;font-size:17px;color:#52525b;line-height:1.6;max-width:440px;display:inline-block;">
-                Jawab24 is now available. Thanks for your patience.
+              <p class="text-body" style="margin:0;font-size:21px;font-weight:600;color:#27272a;line-height:1.55;max-width:520px;display:inline-block;">
+                Turn on smart replies for your page comments and DMs — and grow its engagement and reach.
               </p>
             </td>
           </tr>
@@ -78,12 +78,12 @@ export const WAITLIST_LAUNCH_EN_HTML = `<!DOCTYPE html>
               <!--[if mso]>
               <v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" xmlns:w="urn:schemas-microsoft-com:office:word" href="https://jawab24.com/login" style="height:56px;v-text-anchor:middle;width:280px;" arcsize="16%" stroke="f" fillcolor="#0d9488">
                 <w:anchorlock/>
-                <center style="color:#ffffff;font-family:sans-serif;font-size:17px;font-weight:bold;">Get started — it's free</center>
+                <center style="color:#ffffff;font-family:sans-serif;font-size:17px;font-weight:bold;">Start now — 30 days free</center>
               </v:roundrect>
               <![endif]-->
               <!--[if !mso]><!-- -->
               <a href="https://jawab24.com/login" class="cta-btn" style="display:inline-block;background-color:#0d9488;color:#ffffff;padding:17px 44px;border-radius:12px;text-decoration:none;font-weight:700;font-size:17px;line-height:1;box-shadow:0 4px 12px rgba(13,148,136,0.3);">
-                Get started — it's free →
+                Start now — 30 days free →
               </a>
               <!--<![endif]-->
             </td>
@@ -148,7 +148,7 @@ export const WAITLIST_LAUNCH_EN_HTML = `<!DOCTYPE html>
                   <td style="vertical-align:top;">
                     <h3 class="text-body" style="margin:0 0 4px 0;font-size:16px;font-weight:700;color:#18181b;">Auto-capture every lead</h3>
                     <p class="text-muted" style="margin:0;font-size:14px;color:#52525b;line-height:1.6;">
-                      Every serious question turns into a lead in your dashboard — you'll never miss another customer.
+                      Every serious question turns into a lead in your <a href="https://jawab24.com/leads" style="color:#0d9488;text-decoration:underline;font-weight:600;">leads page</a> — you'll never miss another customer.
                     </p>
                   </td>
                 </tr>
@@ -157,28 +157,22 @@ export const WAITLIST_LAUNCH_EN_HTML = `<!DOCTYPE html>
             </td>
           </tr>
 
-          <!-- Highlight box -->
+          <!-- Coming soon -->
           <tr>
-            <td class="px-pad" style="padding:32px 32px 8px 32px;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="feature-card border-soft" style="background-color:#f0fdfa;border:1px solid #ccfbf1;border-radius:14px;">
+            <td class="px-pad" style="padding:32px 32px 0 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" class="feature-card border-soft" style="background-color:#eff6ff;border:1px solid #dbeafe;border-radius:14px;">
                 <tr>
-                  <td style="padding:22px 24px;">
-                    <p class="text-body" style="margin:0 0 6px 0;font-size:13px;font-weight:700;color:#0f766e;letter-spacing:0.3px;">🎁 ON US</p>
-                    <p class="text-body" style="margin:0;font-size:15px;color:#134e4a;line-height:1.6;font-weight:500;">
-                      First 30 days free — no credit card required to sign up.
+                  <td style="padding:18px 22px;">
+                    <p class="text-body" style="margin:0 0 8px 0;font-size:13px;font-weight:700;color:#1d4ed8;letter-spacing:0.3px;">🚀 Coming soon</p>
+                    <p class="text-body" style="margin:0 0 6px 0;font-size:15px;color:#1e3a8a;line-height:1.6;font-weight:500;">
+                      💬 <strong>WhatsApp support</strong> — smart replies for your customers' WhatsApp messages.
+                    </p>
+                    <p class="text-body" style="margin:0;font-size:15px;color:#1e3a8a;line-height:1.6;font-weight:500;">
+                      🛒 <strong>Shopify integration</strong> — Jawab24 will read your products and orders, and reply with accurate info.
                     </p>
                   </td>
                 </tr>
               </table>
-            </td>
-          </tr>
-
-          <!-- Personal closing -->
-          <tr>
-            <td class="px-pad" style="padding:32px 32px 8px 32px;">
-              <p class="text-body" style="margin:0;font-size:14px;color:#3f3f46;line-height:1.7;">
-                Thanks for trusting us from the start. If you need anything — just reply to this email. <span style="font-weight:700;">— The Jawab24 team</span>
-              </p>
             </td>
           </tr>
 
@@ -191,8 +185,11 @@ export const WAITLIST_LAUNCH_EN_HTML = `<!DOCTYPE html>
               <p class="text-muted" style="margin:0 0 8px 0;color:#71717a;font-size:12px;line-height:1.6;">
                 Smart auto-replies · Lead management · Real-time analytics
               </p>
-              <p style="margin:0;font-size:13px;">
+              <p style="margin:0 0 12px 0;font-size:13px;">
                 <a href="https://jawab24.com" style="color:#0d9488;text-decoration:none;font-weight:600;">jawab24.com</a>
+              </p>
+              <p style="margin:0;font-size:12px;">
+                <a href="https://play.google.com/store/apps/details?id=com.jawab24.android" style="color:#71717a;text-decoration:none;font-weight:500;">📱 Available on Google Play</a>
               </p>
             </td>
           </tr>
