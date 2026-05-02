@@ -7,5 +7,6 @@ export { LandingFAQ } from './LandingFAQ';
 export { LandingFooter } from './LandingFooter';
 export { IntegrationShowcase } from './IntegrationShowcase';
 export { AnnouncementBanner } from './AnnouncementBanner';
+export { LandingLatestBlog, type LatestBlogPost } from './LandingLatestBlog';
 // NOTE: LandingPageContent is NOT exported here to avoid circular dependency
 // (it imports from this barrel). Import it directly: '@/components/landing/LandingPageContent'

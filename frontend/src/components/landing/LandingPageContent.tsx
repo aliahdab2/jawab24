@@ -18,6 +18,8 @@ import {
   LandingFAQ,
   LandingFooter,
   IntegrationShowcase,
+  LandingLatestBlog,
+  type LatestBlogPost,
 } from '@/components/landing';
 
 function StatsSection({ statsList }: { statsList: { value: string; label: string }[] }) {
@@ -51,7 +53,11 @@ function StatsSection({ statsList }: { statsList: { value: string; label: string
   );
 }
 
-export default function LandingPageContent() {
+interface LandingPageContentProps {
+  latestPosts?: LatestBlogPost[];
+}
+
+export default function LandingPageContent({ latestPosts = [] }: LandingPageContentProps = {}) {
   const t = useTranslations('landing');
   const tc = useTranslations('common');
   const tNav = useTranslations('nav');
@@ -192,6 +198,7 @@ export default function LandingPageContent() {
       <LandingSocialProof />
       <LandingPricing />
       <LandingFAQ />
+      <LandingLatestBlog posts={latestPosts} />
       <LandingFooter />
 
       {/* Fixed bottom safe area background (native only) */}

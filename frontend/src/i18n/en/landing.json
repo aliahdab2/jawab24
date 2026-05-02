@@ -10,9 +10,9 @@
   "seoKeywords": "jawab24, jawab, auto reply facebook, auto reply instagram, AI chatbot, facebook bot, instagram bot, smart replies, auto reply comments, auto reply messages, messenger bot, Arabic chatbot, Shopify auto reply, Salla auto reply, e-commerce chatbot, customer service bot, facebook automation, instagram automation",
   "hero": {
     "badge": "Advanced AI Auto-Response",
-    "title1": "Turn Your Page Into a",
-    "title2": "Smart 24/7 Sales Machine",
-    "description": "The first smart AI system for Facebook & Instagram replies. Save time and boost sales with instant, accurate responses.",
+    "title1": "Jawab24 — Turn Your Facebook Page Into a",
+    "title2": "24/7 AI Sales Machine",
+    "description": "Jawab24 is the smart AI auto-reply for Facebook & Instagram comments and DMs. Instant, accurate responses in Arabic and English — built for Shopify and Salla sellers.",
     "cta1": "Start Your Free Trial",
     "cta2": "View Plans & Pricing",
     "chatQuery": "What is the product price? 🤔",
@@ -131,6 +131,12 @@
     "a4": "Absolutely! You can upgrade or change your plan anytime from the dashboard. Changes apply immediately.",
     "q5": "Does Jawab24 integrate with Shopify, Salla, and Zid?",
     "a5": "Yes! Connect your Shopify, Salla, or Zid store and Jawab24 will understand your products so it can answer customer questions accurately based on what you actually sell."
+  },
+  "latestFromBlog": {
+    "title": "Latest from the Blog",
+    "subtitle": "Guides, comparisons, and insights for Facebook & Instagram sellers",
+    "viewAll": "View all posts",
+    "readTime": "{minutes} min read"
   },
   "footer": {
     "description": "The next-generation smart auto-reply system powered by advanced AI for businesses and entrepreneurs.",
