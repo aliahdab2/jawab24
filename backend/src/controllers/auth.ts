@@ -718,6 +718,13 @@ export class AuthController {
             return reply.send(response);
 
         } catch (error) {
+            // Facebook OAuth errors (expired/replayed code, invalid token) are user-side,
+            // not server bugs — return 400 so the frontend can skip Sentry.
+            const message = error instanceof Error ? error.message : '';
+            if (message.startsWith('Facebook API error:') || message === 'Invalid access token' || message === 'Token issued to a different app') {
+                request.log.warn({ err: error }, 'Facebook link failed (OAuth)');
+                return reply.status(400).send({ error: 'oauth_failed', code: 'FACEBOOK_OAUTH_FAILED', message });
+            }
             request.log.error({ err: error }, 'Facebook link failed');
             return reply.status(500).send({ error: 'server_error', message: 'Failed to link Facebook account' });
         }

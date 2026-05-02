@@ -58,6 +58,12 @@ export default function AuthCallback() {
     // Mark as attempted before making the API call
     authAttemptedRef.current = true;
 
+    // Strip OAuth code from URL so a back-nav or reload can't replay an expired/spent code.
+    // Replace state silently — no React re-render, no navigation.
+    if (typeof window !== 'undefined') {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
     try {
       // Exchange code for token via our backend with timeout
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
@@ -274,9 +280,11 @@ export default function AuthCallback() {
       const isTimeout = err instanceof Error && (err as Error & { isLoginTimeout?: boolean }).isLoginTimeout === true;
       const backendCode = getBackendErrorCode(err);
       const isAuthExpired = backendCode === 'INVALID_TOKEN' || backendCode === 'AUTH_FAILED';
+      // Facebook returned an OAuth error (expired/replayed code, invalid token) — user-actionable, not a bug
+      const isFbOauthFailed = backendCode === 'FACEBOOK_OAUTH_FAILED';
 
-      // Network blips, timeouts, and expired/invalid sessions are not actionable — skip Sentry to avoid noise
-      if (!isNetworkError && !isTimeout && !isAuthExpired) {
+      // Network blips, timeouts, expired/invalid sessions, and FB OAuth errors are not actionable — skip Sentry to avoid noise
+      if (!isNetworkError && !isTimeout && !isAuthExpired && !isFbOauthFailed) {
         captureError(err, 'Auth callback error', { tags: { page: 'auth-callback' } });
       }
 
