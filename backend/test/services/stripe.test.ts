@@ -85,6 +85,7 @@ describe('Stripe Service', () => {
                 client_reference_id: 'user_123',
                 mode: 'subscription',
                 ui_mode: 'embedded',
+                locale: 'auto',
                 payment_method_collection: 'if_required',
                 tax_id_collection: { enabled: true },
                 billing_address_collection: 'auto',
