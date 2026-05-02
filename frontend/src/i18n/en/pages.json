@@ -26,6 +26,7 @@
   "addBusinessInfo": "Add Your Business Info",
   "notLinked": "Not linked",
   "pageLimitReached": "Page limit reached. Disable another page or upgrade your plan.",
+  "pageLimitReachedIOS": "Page limit reached. Disable another page to enable this one.",
   "instagramTooltip": "Make sure your Instagram Business account is connected to this Page in Meta settings, then click Sync.",
   "instagramNotConnected": "Instagram not connected",
   "businessInfoActive": "Edit Business Info",
@@ -87,6 +88,7 @@
   "testSmartReplyError": "Failed to generate reply. Please try again.",
   "testSmartReplyRateLimit": "Too many requests. Please wait a moment.",
   "testSmartReplyQuotaExceeded": "Monthly smart reply limit reached. Upgrade your plan for more.",
+  "testSmartReplyQuotaExceededIOS": "Monthly smart reply limit reached. Resets at the start of the next billing cycle.",
   "testSmartReplyAddKbHint": "Add business info to this page for better replies",
   "testSmartReplyNudge": "Public comment",
   "testSmartReplyPrivate": "Private message"

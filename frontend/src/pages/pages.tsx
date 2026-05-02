@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
+import { iosOr } from '@/lib/iosCopy';
 import type { Page } from '@jawab24/shared';
 import dynamic from 'next/dynamic';
 
@@ -233,7 +234,7 @@ const PagesPage: NextPageWithLayout = () => {
       if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
         toast.error(t('reconnectRequired'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t('pageLimitReached'));
+        toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
       } else {
         captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
         toast.error(tc('error'));
@@ -258,7 +259,7 @@ const PagesPage: NextPageWithLayout = () => {
       if (axiosErr.response?.data?.code === 'PAGE_DISCONNECTED') {
         toast.error(t('reconnectRequired'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t('pageLimitReached'));
+        toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
       } else {
         captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
         toast.error(tc('error'));

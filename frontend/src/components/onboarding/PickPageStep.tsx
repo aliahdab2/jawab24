@@ -1,5 +1,6 @@
 import { FileText, X, Sparkles } from 'lucide-react';
 import { Toggle } from '@/components/ui';
+import { isIOSNative } from '@/lib/capacitor';
 import type { Page } from '@jawab24/shared';
 import type { TFunction } from './onboardingTypes';
 
@@ -88,7 +89,7 @@ export function PickPageStep({
         </h3>
         <p className={`text-muted-foreground ${isLandscape ? 'text-xs mb-2' : 'text-sm mb-3'}`}>
           {t('onboarding.pickPageDesc')}
-          {pageLimit !== null && (
+          {pageLimit !== null && !isIOSNative() && (
             <span className="block text-xs text-muted-foreground mt-1">
               {t('onboarding.pageLimitInfo', { limit: pageLimit })}
             </span>

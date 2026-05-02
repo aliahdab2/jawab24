@@ -24,6 +24,7 @@
   "refreshPages": "Refresh",
   "noPagesHelp": "You need a Facebook Page to use Jawab24. Create one on Facebook, then come back and refresh.",
   "pageLimitReached": "You can only enable {limit, plural, one {# page} other {# pages}} on your plan. Disable another page or upgrade.",
+  "pageLimitReachedIOS": "Page limit reached. Disable another page to enable this one.",
   "pageLimitInfo": "Your plan allows up to {limit, plural, one {# active page} other {# active pages}}",
   "stepOf": "Step {step} of {total}",
   "readySummary": "Auto-reply is ON",

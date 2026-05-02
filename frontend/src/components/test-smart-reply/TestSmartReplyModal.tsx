@@ -8,6 +8,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { pagesApi } from '@/lib/api';
+import { iosOr } from '@/lib/iosCopy';
 import { captureError } from '@/lib/sentryHelpers';
 import type { Page } from '@jawab24/shared';
 
@@ -110,7 +111,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
       if (axiosErr.response?.status === 429) {
         setError(t('testSmartReplyRateLimit'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'AI_QUOTA_EXCEEDED') {
-        setError(t('testSmartReplyQuotaExceeded'));
+        setError(t(iosOr('testSmartReplyQuotaExceededIOS', 'testSmartReplyQuotaExceeded')));
       } else {
         setError(t('testSmartReplyError'));
         captureError(err, 'Test smart reply failed', { tags: { page: 'pages', action: 'testReply' } });

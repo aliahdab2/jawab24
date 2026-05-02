@@ -6,6 +6,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { useQueryClient } from '@tanstack/react-query';
 import { pagesApi, api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
+import { iosOr } from '@/lib/iosCopy';
 import { captureError } from '@/lib/sentryHelpers';
 import { isRTLLocale } from '@/utils/locale';
 import { toast } from 'sonner';
@@ -126,7 +127,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       const targetPage = pages.find(p => p.id === pageId);
       const targetAlreadyEnabled = targetPage?.autoReplyEnabled || targetPage?.instagramAutoReplyEnabled;
       if (!targetAlreadyEnabled && enabledPages >= pageLimit) {
-        toast.error(t('onboarding.pageLimitReached', { limit: pageLimit }));
+        toast.error(t(iosOr('onboarding.pageLimitReachedIOS', 'onboarding.pageLimitReached'), { limit: pageLimit }));
         return;
       }
     }
@@ -151,7 +152,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       captureError(error, 'Onboarding: failed to toggle page', { tags: { component: 'onboarding' } });
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
-        toast.error(t('onboarding.pageLimitReached', { limit: pageLimit ?? 1 }));
+        toast.error(t(iosOr('onboarding.pageLimitReachedIOS', 'onboarding.pageLimitReached'), { limit: pageLimit ?? 1 }));
       } else {
         toast.error(t('errors.somethingWentWrong'));
       }
