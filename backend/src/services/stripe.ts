@@ -64,6 +64,7 @@ export class StripeService {
             client_reference_id: userId,
             mode: 'subscription',
             ui_mode: 'embedded',
+            locale: 'auto',
             payment_method_collection: 'if_required',
             // Collect VAT IDs and billing address so Stripe can issue VAT-compliant
             // invoices (legally required for KSA/UAE/EU B2B customers). Stripe also
