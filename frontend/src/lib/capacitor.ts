@@ -23,3 +23,7 @@ export function getCapacitor(): CapacitorGlobal | null {
 export function isNativePlatform(): boolean {
     return getCapacitor()?.isNativePlatform?.() ?? false;
 }
+
+export function isIOSNative(): boolean {
+    return isNativePlatform() && getCapacitor()?.getPlatform?.() === 'ios';
+}

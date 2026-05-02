@@ -7,8 +7,10 @@ import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { UpgradeCTA } from './UpgradeCTA';
 
 const mockIsNative = vi.fn(() => false);
+const mockIsIOSNative = vi.fn(() => false);
 vi.mock('@/lib/capacitor', () => ({
   isNativePlatform: () => mockIsNative(),
+  isIOSNative: () => mockIsIOSNative(),
 }));
 
 const mockOpenExternalUrl = vi.fn();
@@ -24,6 +26,7 @@ describe('UpgradeCTA', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsNative.mockReturnValue(false);
+    mockIsIOSNative.mockReturnValue(false);
   });
 
   describe('on web', () => {
@@ -109,6 +112,34 @@ describe('UpgradeCTA', () => {
         </UpgradeCTA>
       );
       fireEvent.keyDown(screen.getByRole('button', { name: 'Upgrade Plan' }), { key: 'Tab' });
+      expect(mockOpenExternalUrl).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('on iOS native (App Store reader-app)', () => {
+    beforeEach(() => {
+      mockIsNative.mockReturnValue(true);
+      mockIsIOSNative.mockReturnValue(true);
+    });
+
+    it('renders nothing — no upgrade UI may be reachable from the iOS app', () => {
+      const { container } = render(
+        <UpgradeCTA className="should-not-render">
+          <span>Upgrade Plan</span>
+        </UpgradeCTA>
+      );
+      expect(container).toBeEmptyDOMElement();
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button')).not.toBeInTheDocument();
+      expect(screen.queryByText('Upgrade Plan')).not.toBeInTheDocument();
+    });
+
+    it('does not call openExternalUrl', () => {
+      render(
+        <UpgradeCTA>
+          <span>Upgrade Plan</span>
+        </UpgradeCTA>
+      );
       expect(mockOpenExternalUrl).not.toHaveBeenCalled();
     });
   });

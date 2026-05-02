@@ -8,6 +8,7 @@ import { Button } from '@/components/ui';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { useIOSPaymentRedirect } from '@/hooks';
 
 type SessionStatus = 'loading' | 'complete' | 'open' | 'expired';
 
@@ -29,9 +30,12 @@ export default function PaymentReturnPage() {
   routerRef.current = router;
   const redirectedRef = useRef(false);
 
+  const iosRedirecting = useIOSPaymentRedirect();
+
   // Check payment status from Stripe query params or legacy session_id
   useEffect(() => {
     if (!router.isReady) return;
+    if (iosRedirecting) return;
 
     const {
       payment_intent_client_secret,
@@ -78,7 +82,7 @@ export default function PaymentReturnPage() {
 
     // No valid params
     setStatus('open');
-  }, [router.isReady, router.query]);
+  }, [router.isReady, router.query, iosRedirecting]);
 
   // Countdown redirect on success
   useEffect(() => {
@@ -97,6 +101,8 @@ export default function PaymentReturnPage() {
 
     return () => clearInterval(interval);
   }, [status]);
+
+  if (iosRedirecting) return null;
 
   if (status === 'loading') {
     return (

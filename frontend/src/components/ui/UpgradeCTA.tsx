@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import React from 'react';
 import { useLocale } from 'next-intl';
-import { isNativePlatform } from '@/lib/capacitor';
+import { isIOSNative, isNativePlatform } from '@/lib/capacitor';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebUrl } from '@/lib/webUrl';
 
@@ -28,6 +28,12 @@ interface UpgradeCTAProps {
  */
 export function UpgradeCTA({ children, className }: UpgradeCTAProps) {
   const locale = useLocale();
+
+  // App Store Guideline 3.1.1: iOS reader-app model — no upgrade UI in-app.
+  // Subscriptions are managed on jawab24.com.
+  if (isIOSNative()) {
+    return null;
+  }
 
   if (isNativePlatform()) {
     const handleActivate = () => {

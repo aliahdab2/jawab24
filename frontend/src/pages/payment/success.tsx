@@ -5,19 +5,22 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { CheckCircle2 } from 'lucide-react';
+import { useIOSPaymentRedirect } from '@/hooks';
 
 export default function PaymentSuccessPage() {
   const router = useRouter();
   const { session_id } = router.query;
   const t = useTranslations('payment');
   const [countdown, setCountdown] = useState(5);
-  
+  const iosRedirecting = useIOSPaymentRedirect();
+
   // Use ref for router to avoid dependency issues
   const routerRef = useRef(router);
   routerRef.current = router;
   const redirectedRef = useRef(false);
 
   useEffect(() => {
+    if (iosRedirecting) return;
     if (!session_id) return;
 
     // Countdown redirect to dashboard
@@ -33,7 +36,9 @@ export default function PaymentSuccessPage() {
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [session_id]);
+  }, [session_id, iosRedirecting]);
+
+  if (iosRedirecting) return null;
 
   return (
     <>

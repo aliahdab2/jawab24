@@ -22,6 +22,7 @@ import {
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
+import { useIOSPaymentRedirect } from '@/hooks';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebUrl } from '@/lib/webUrl';
 import type { Plan } from '@jawab24/shared';
@@ -216,11 +217,14 @@ function CheckoutPage() {
     }
   }, [themeParam]);
 
+  const iosRedirecting = useIOSPaymentRedirect();
+
   useEffect(() => {
+    if (iosRedirecting) return;
     if (isNativePlatform()) {
       openExternalUrl(buildWebUrl('/pricing', router.locale));
     }
-  }, [router.locale]);
+  }, [router.locale, iosRedirecting]);
 
 
   const [error, setError] = useState('');
@@ -377,6 +381,8 @@ function CheckoutPage() {
       </>
     );
   }
+
+  if (iosRedirecting) return null;
 
   if (!plan && !error) {
     return <FullPageSpinner />;

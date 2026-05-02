@@ -8,6 +8,7 @@ import { BrandLogo, Button, VersionBadge } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { getNextLocale } from '@/utils/locale';
 import { useIsEmbedded } from '@/hooks';
+import { isIOSNative } from '@/lib/capacitor';
 
 /**
  * PublicLayout - Unified layout for all public-facing pages
@@ -109,12 +110,14 @@ export function PublicLayout({
                   >
                     {tLanding('nav.blog')}
                   </Link>
-                  <Link
-                    href="/pricing"
-                    className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
-                  >
-                    {tLanding('nav.pricing')}
-                  </Link>
+                  {!isIOSNative() && (
+                    <Link
+                      href="/pricing"
+                      className="hidden md:block px-4 py-2 text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"
+                    >
+                      {tLanding('nav.pricing')}
+                    </Link>
+                  )}
                   <button
                     onClick={toggleLanguage}
                     className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-muted-foreground hover:text-brand-600 rounded-lg sm:rounded-xl hover:bg-brand-50 dark:hover:bg-brand-950/30 transition-all"

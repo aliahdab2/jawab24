@@ -12,6 +12,7 @@ import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 
 import { useAuthStore, useUIStore } from '@/lib/store';
+import { isIOSNative } from '@/lib/capacitor';
 import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
 import type { AnalyticsOverview } from '@/lib/api';
 import {
@@ -764,7 +765,8 @@ const DashboardPage: NextPageWithLayout = () => {
 
                 return (
                   <>
-                    {/* Section A: Plan Info + Billing */}
+                    {/* Section A: Plan Info + Billing — hidden on iOS native (App Store Guideline 3.1.1 reader-app model) */}
+                    {!isIOSNative() && (
                     <div className="p-6 sm:p-8 relative">
                       <div className="absolute top-0 end-0 w-32 h-32 bg-brand-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-brand-500/10"></div>
 
@@ -817,9 +819,10 @@ const DashboardPage: NextPageWithLayout = () => {
                         </UpgradeCTA>
                       )}
                     </div>
+                    )}
 
-                    {/* Divider */}
-                    <div className="border-t border-theme-border" />
+                    {/* Divider — only when Section A is visible */}
+                    {!isIOSNative() && <div className="border-t border-theme-border" />}
 
                     {/* Section B: Quota Usage */}
                     <div className="p-6 sm:p-8">

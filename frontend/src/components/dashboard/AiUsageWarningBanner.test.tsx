@@ -1,8 +1,15 @@
 import '@testing-library/jest-dom';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { UsageSummary } from '@jawab24/shared';
 import { AiUsageWarningBanner } from './AiUsageWarningBanner';
+
+const mockIsIOSNative = vi.fn(() => false);
+const mockIsNative = vi.fn(() => false);
+vi.mock('@/lib/capacitor', () => ({
+    isIOSNative: () => mockIsIOSNative(),
+    isNativePlatform: () => mockIsNative(),
+}));
 
 function makeAiReplies(overrides: Partial<UsageSummary['aiReplies']> = {}): UsageSummary['aiReplies'] {
     return {
@@ -17,6 +24,8 @@ function makeAiReplies(overrides: Partial<UsageSummary['aiReplies']> = {}): Usag
 describe('AiUsageWarningBanner', () => {
     beforeEach(() => {
         localStorage.clear();
+        mockIsIOSNative.mockReturnValue(false);
+        mockIsNative.mockReturnValue(false);
     });
 
     it('renders nothing when limit is null (unlimited plan)', () => {
@@ -118,5 +127,20 @@ describe('AiUsageWarningBanner', () => {
         render(<AiUsageWarningBanner aiReplies={makeAiReplies({ percentUsed: 85 })} />);
         // UpgradeCTA renders either a Link or a div[role=button]; just assert the upgrade label is visible
         expect(screen.getByText(/upgrade/i)).toBeInTheDocument();
+    });
+
+    it('hides the upgrade CTA on iOS native (App Store reader-app)', () => {
+        mockIsNative.mockReturnValue(true);
+        mockIsIOSNative.mockReturnValue(true);
+        render(
+            <AiUsageWarningBanner
+                aiReplies={makeAiReplies({ used: 500, remaining: 0, percentUsed: 100 })}
+            />,
+        );
+        // Banner itself still renders so the user knows their limit was reached.
+        expect(screen.getByTestId('ai-usage-warning-banner')).toBeInTheDocument();
+        // No upgrade link/button anywhere.
+        expect(screen.queryByRole('link', { name: /upgrade/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /upgrade/i })).not.toBeInTheDocument();
     });
 });

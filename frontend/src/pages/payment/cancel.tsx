@@ -3,9 +3,13 @@ import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Button } from '@/components/ui';
 import { XCircle } from 'lucide-react';
+import { useIOSPaymentRedirect } from '@/hooks';
 
 export default function PaymentCancelPage() {
   const t = useTranslations('payment');
+  const iosRedirecting = useIOSPaymentRedirect();
+
+  if (iosRedirecting) return null;
 
   return (
     <>

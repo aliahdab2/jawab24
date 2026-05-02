@@ -3,6 +3,7 @@ import { AlertTriangle, Sparkles } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
+import { isIOSNative } from '@/lib/capacitor';
 import type { UsageSummary } from '@jawab24/shared';
 
 interface AiUsageWarningBannerProps {
@@ -82,27 +83,30 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBann
                     </p>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                    <UpgradeCTA className="block">
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            icon={<Sparkles className="w-4 h-4" />}
-                        >
-                            {tSub('upgradePlan')}
-                        </Button>
-                    </UpgradeCTA>
-                    {isWarning && (
-                        <button
-                            type="button"
-                            onClick={dismiss}
-                            className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
-                            aria-label={tSub('limitBanner.dismissLabel')}
-                        >
-                            {tSub('limitBanner.dismiss')}
-                        </button>
-                    )}
-                </div>
+                {/* Action area hidden on iOS native (App Store Guideline 3.1.1). Banner remains informational. */}
+                {!isIOSNative() && (
+                    <div className="flex items-center gap-2 shrink-0">
+                        <UpgradeCTA className="block">
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                icon={<Sparkles className="w-4 h-4" />}
+                            >
+                                {tSub('upgradePlan')}
+                            </Button>
+                        </UpgradeCTA>
+                        {isWarning && (
+                            <button
+                                type="button"
+                                onClick={dismiss}
+                                className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
+                                aria-label={tSub('limitBanner.dismissLabel')}
+                            >
+                                {tSub('limitBanner.dismiss')}
+                            </button>
+                        )}
+                    </div>
+                )}
             </div>
         </Card>
     );

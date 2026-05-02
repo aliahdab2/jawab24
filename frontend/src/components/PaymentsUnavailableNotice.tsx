@@ -1,6 +1,7 @@
 import { AlertCircle, MessageCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
+import { isIOSNative } from '@/lib/capacitor';
 
 // WhatsApp support number
 const WHATSAPP_NUMBER = '46700224720';
@@ -22,6 +23,11 @@ export function PaymentsUnavailableNotice() {
     const t = useTranslations('payment');
     const { user } = useAuthStore();
     const userEmail = user?.email || '';
+
+    // App Store Guideline 3.1.1: no payment/upgrade steering (incl. WhatsApp routing) on iOS native.
+    if (isIOSNative()) {
+        return null;
+    }
 
     // Build WhatsApp URL with pre-filled message containing user's email
     const buildWhatsAppUrl = () => {

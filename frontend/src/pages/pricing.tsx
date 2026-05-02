@@ -10,7 +10,7 @@ import { subscriptionApi, publicApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
 import { useTranslations, useLocale } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
-import { useOwnerGate } from '@/hooks';
+import { useOwnerGate, useIOSPaymentRedirect } from '@/hooks';
 import { Check, X, Zap, Crown, Sparkles, ChevronDown, Star } from 'lucide-react';
 import type { Plan, UsageSummary } from '@jawab24/shared';
 import { isUserSanctioned, isUserSanctionedNonBlocking } from '@/utils/geoCheck';
@@ -339,6 +339,8 @@ function FeatureRow({
 const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans }) => {
   const router = useRouter();
   const locale = useLocale();
+  const iosRedirecting = useIOSPaymentRedirect();
+
   const tPricing = useTranslations('pricing');
   const tSub = useTranslations('subscription');
   const t = (key: string, params?: Record<string, string | number>): string => {
@@ -550,6 +552,8 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     setActiveTab(next);
     tabRefs.current[next]?.focus();
   };
+
+  if (iosRedirecting) return null;
 
   return (
     <>

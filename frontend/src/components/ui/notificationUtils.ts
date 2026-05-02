@@ -3,6 +3,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import { FILTER_TYPE_MAP, ACTIONABLE_NOTIFICATION_TYPES, type NotificationFilter } from '../notifications/NotificationFilterPills';
+import { isIOSNative } from '@/lib/capacitor';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -96,7 +97,8 @@ export function resolveNotificationRoute(
         case 'subscription_expiring':
         case 'subscription_renewed':
         case 'trial_ending':
-            return '/pricing';
+            // App Store Guideline 3.1.1: iOS reader-app — no taps lead to /pricing.
+            return isIOSNative() ? '/dashboard' : '/pricing';
         case 'page_disconnected':
         case 'kb_gap':
             return '/pages';
