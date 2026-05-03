@@ -94,10 +94,44 @@ export function PhoneInput({
         return { e164: withDial, valid: false };
     };
 
+    // Normalize whatever the user types/pastes into a national-number digit string.
+    // Handles: "+966571310486", "00966571310486", "0571310486", "571310486",
+    // and auto-switches the country dropdown when a full international number
+    // for a different supported country is pasted in.
+    const normalizeInput = (raw: string): { digits: string; country: typeof COUNTRY_OPTIONS[0] } => {
+        const trimmed = raw.trim();
+        const hasIntlPrefix = /^(\+|00)/.test(trimmed);
+
+        if (hasIntlPrefix) {
+            const intl = '+' + trimmed.replace(/^(\+|00)/, '').replace(/\D/g, '');
+            try {
+                const parsed = parsePhoneNumber(intl);
+                if (parsed?.country) {
+                    const match = COUNTRY_OPTIONS.find(c => c.code === parsed.country);
+                    return { digits: parsed.nationalNumber, country: match ?? selectedCountry };
+                }
+            } catch { /* fall through */ }
+        }
+
+        let digits = trimmed.replace(/\D/g, '');
+        const dialDigits = selectedCountry.dial.replace(/\D/g, '');
+        // Strip the selected country's dial code if the user typed it inline (no +).
+        // Length guard avoids stripping legitimate national numbers that happen to start with the same digits.
+        if (digits.startsWith(dialDigits) && digits.length >= dialDigits.length + 7) {
+            digits = digits.slice(dialDigits.length);
+        }
+        // Strip national trunk prefix (e.g. "0571..." → "571...").
+        digits = digits.replace(/^0+/, '');
+        return { digits, country: selectedCountry };
+    };
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const raw = e.target.value.replace(/\D/g, '');
-        setLocalValue(e.target.value.replace(/[^\d\s\-()]/g, ''));
-        const { e164, valid } = computeE164(raw, selectedCountry);
+        const { digits, country } = normalizeInput(e.target.value);
+        if (country.code !== selectedCountry.code) {
+            setSelectedCountry(country);
+        }
+        setLocalValue(digits);
+        const { e164, valid } = computeE164(digits, country);
         onChange(e164, valid);
     };
 
