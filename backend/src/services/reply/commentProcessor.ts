@@ -671,6 +671,8 @@ export class CommentProcessor {
             senderId: fromId ?? '',
             senderName: fromName,
             messageText: commentMessage,
+            postMessage: opts.postMessage,
+            replyText,
         }).catch(() => { /* errors captured inside maybeCaptureLead */ });
 
         pipelineMetrics.record(pipeline, 'success');

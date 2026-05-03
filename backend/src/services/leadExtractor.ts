@@ -35,6 +35,7 @@ Rules:
 - Never invent data not explicitly stated in the conversation
 - If the phone number does not belong to the sender (e.g. they are sharing someone else's number), set "phone" to empty string
 - Always include a "name" field if the customer mentioned their name
+- Write the "summary" in the same language as the customer's text (Arabic if they wrote Arabic, English if English). NEVER write a meta-summary like "no conversation provided" or "not enough context" — if intent is unclear, write a short factual statement in the customer's language such as "العميل أرسل رقم هاتفه للتواصل" or "Customer shared their phone number for contact".
 
 Conversation (last 20 messages):
 <CONVERSATION>`;
@@ -64,6 +65,11 @@ export interface MaybeCaptureLeadParams {
     senderId: string;
     senderName?: string;
     messageText: string;
+    /** Comment-only: the originating post text, gives the AI intent context
+     *  when the comment itself is just a phone number with no other words. */
+    postMessage?: string;
+    /** Comment-only: the reply we just sent, so the AI sees a 2-turn exchange. */
+    replyText?: string;
 }
 
 export interface LeadsPage {
@@ -94,7 +100,7 @@ class LeadExtractorService {
      * Fire-and-forget: callers MUST NOT await this.
      */
     async maybeCaptureLead(params: MaybeCaptureLeadParams): Promise<void> {
-        const { pageId, userId, workspaceId, sourceId, sourceType, senderId, senderName, messageText } = params;
+        const { pageId, userId, workspaceId, sourceId, sourceType, senderId, senderName, messageText, postMessage, replyText } = params;
 
         // Gate: must contain a phone number
         const rawPhone = extractPhoneFromText(messageText);
@@ -111,10 +117,24 @@ class LeadExtractorService {
 
         if (withinLimit) {
                 try {
-                    const history = await messagesService.getConversationHistory(pageId, senderId, 20);
-                    const conversationText = history
-                        .map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
-                        .join('\n');
+                    let conversationText: string;
+                    if (sourceType === 'comment') {
+                        // Comments aren't in the messages table — fetching DM history by senderId
+                        // returns nothing for a commenter who never DM'd the page, which made the AI
+                        // emit a placeholder summary like "No conversation provided…". Build a
+                        // single-turn exchange from the post + comment + reply instead, so the AI
+                        // has real intent context even when the comment is just a phone number.
+                        const lines: string[] = [];
+                        if (postMessage) lines.push(`Post: ${postMessage}`);
+                        lines.push(`Customer comment: ${messageText}`);
+                        if (replyText) lines.push(`Agent reply: ${replyText}`);
+                        conversationText = lines.join('\n');
+                    } else {
+                        const history = await messagesService.getConversationHistory(pageId, senderId, 20);
+                        conversationText = history
+                            .map(m => `${m.role === 'user' ? 'Customer' : 'Agent'}: ${m.content}`)
+                            .join('\n');
+                    }
 
                     const aiResult = await this.callExtractionAI(conversationText, rawPhone);
                     extractedPhone = aiResult.phone || rawPhone;

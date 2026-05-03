@@ -246,9 +246,9 @@ export function leadDigestEmailTemplate(params: {
         const source = escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg);
         const date = escapeHtml(formatDigestDate(lead.createdAt, lang));
         return `<tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;">${name}</td>
+          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;word-break:break-word;">${name}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${phone}</td>
-          <td dir="auto" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#3f3f46;vertical-align:top;line-height:1.5;max-width:260px;">${reason}</td>
+          <td dir="auto" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#3f3f46;vertical-align:top;line-height:1.5;word-break:break-word;">${reason}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;">${source}</td>
           <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;white-space:nowrap;">${date}</td>
         </tr>`;
@@ -272,17 +272,24 @@ export function leadDigestEmailTemplate(params: {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;padding:32px 16px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;max-width:600px;width:100%;">
+        <table role="presentation" width="720" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;max-width:720px;width:100%;">
           <tr>
             <td style="background-color:#0d9488;padding:24px 32px;text-align:center;">
               <span style="color:#ffffff;font-size:24px;font-weight:700;letter-spacing:-0.5px;">${escapeHtml(brandName)}</span>
             </td>
           </tr>
           <tr>
-            <td style="padding:32px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};">
+            <td style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};">
               <h1 style="margin:0 0 8px 0;font-size:22px;color:#0d9488;">${escapeHtml(heading)}</h1>
               <p style="margin:0 0 20px 0;color:#3f3f46;">${escapeHtml(intro)}</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;table-layout:fixed;">
+                <colgroup>
+                  <col style="width:18%;">
+                  <col style="width:18%;">
+                  <col style="width:36%;">
+                  <col style="width:12%;">
+                  <col style="width:16%;">
+                </colgroup>
                 <thead>
                   <tr style="background-color:#fafafa;">
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thName)}</th>
