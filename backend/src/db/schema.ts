@@ -675,6 +675,25 @@ export const notifications = pgTable('notifications', {
     };
 });
 
+// 16. Notification Send Log - per-token FCM send audit for delivery diagnostics.
+// One row per token per send attempt. Tokens are stored as SHA-256 hashes only.
+export const notificationSendLog = pgTable('notification_send_log', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    notificationId: uuid('notification_id'),
+    userId: uuid('user_id').notNull(),
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(), // SHA-256 hex
+    platform: varchar('platform', { length: 20 }).notNull(),    // android | ios | web
+    fcmMessageId: text('fcm_message_id'),                        // present on success
+    success: boolean('success').notNull(),
+    errorCode: varchar('error_code', { length: 100 }),           // e.g. messaging/registration-token-not-registered
+    sentAt: timestamp('sent_at').defaultNow().notNull(),
+}, (table) => {
+    return {
+        userSentIdx: index('idx_notification_send_log_user_sent').on(table.userId, table.sentAt),
+        errorSentIdx: index('idx_notification_send_log_error_sent').on(table.errorCode, table.sentAt),
+    };
+});
+
 // ============================================
 // E-COMMERCE TABLES (Shopify, Salla, Zid, ...)
 // ============================================
