@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Block direct pushes to main. Land changes via PR instead.
+# Bypass (rare, justified, e.g. revert): git push --no-verify
+
+protected_branch="main"
+remote="$1"
+
+while read local_ref local_sha remote_ref remote_sha; do
+    if [[ "$remote_ref" == "refs/heads/$protected_branch" ]]; then
+        echo "🚨 BLOCKED: direct push to '$protected_branch' on '$remote'."
+        echo ""
+        echo "Open a PR instead:"
+        echo "  https://github.com/aliahdab2/jawab24/pull/new/\$(git rev-parse --abbrev-ref HEAD)"
+        echo ""
+        echo "If this push is genuinely intentional (e.g. a coordinated revert),"
+        echo "bypass with: git push --no-verify"
+        exit 1
+    fi
+done
+
+exit 0
