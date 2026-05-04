@@ -10,7 +10,7 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
-import { SmsService } from '../../src/services/sms';
+import { SmsService, SmsCountryUnsupportedError } from '../../src/services/sms';
 
 describe('SmsService', () => {
     let smsService: SmsService;
@@ -135,6 +135,31 @@ describe('SmsService', () => {
             await expect(smsService.send('+966500000000', 'msg')).rejects.toThrow(
                 'Vonage delivery error: unknown'
             );
+        });
+
+        it('throws SmsCountryUnsupportedError for Syrian numbers without calling Vonage', async () => {
+            // Vonage rejects +963 with errorCode 15 (non-whitelisted destination) — confirmed
+            // via dashboard CSV. We block before the API call so users get an actionable error
+            // instead of waiting for a code that never arrives.
+            const fetchSpy = vi.spyOn(global, 'fetch');
+
+            await expect(smsService.send('+963937549674', 'msg')).rejects.toBeInstanceOf(
+                SmsCountryUnsupportedError,
+            );
+            expect(fetchSpy).not.toHaveBeenCalled();
+        });
+
+        it('does not block non-Syrian numbers (regression: prefix must be exact, not substring)', async () => {
+            // Guard against a regression where the prefix check uses includes() rather than
+            // startsWith() — '963' appears mid-string in many valid numbers.
+            const mockResponse = {
+                ok: true,
+                json: vi.fn().mockResolvedValue({ messages: [{ status: '0' }] }),
+            };
+            vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse as unknown as Response);
+
+            await smsService.send('+966500963000', 'msg');
+            expect(global.fetch).toHaveBeenCalled();
         });
 
         it('should silently return when API credentials are not configured', async () => {

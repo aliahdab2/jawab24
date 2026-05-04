@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { parsePhoneNumber } from 'libphonenumber-js';
 import { useCountdown } from '@/hooks';
 import { toast } from 'sonner';
 import Head from 'next/head';
@@ -79,6 +80,18 @@ export default function LoginPage() {
     page: 'login',
     onSuccess: () => { setOtpStep('code'); setOtpCode(''); startExpiryTimer(5 * 60); },
   });
+
+  // TEMP: remove when WhatsApp OTP ships. Vonage rejects SMS to Syria with
+  // errorCode 15 (non-whitelisted destination), so block submit and direct the
+  // user to Facebook login instead of a silent failure.
+  const smsBlocked = useMemo(() => {
+    if (!phoneE164) return false;
+    try {
+      return parsePhoneNumber(phoneE164)?.country === 'SY';
+    } catch {
+      return false;
+    }
+  }, [phoneE164]);
 
   const handleVerifyOtp = useCallback(async (completedCode?: string) => {
     // onComplete passes the code directly; button click falls back to state
@@ -588,9 +601,14 @@ export default function LoginPage() {
                                 {otpRequestError}
                               </p>
                             )}
+                            {smsBlocked && !otpRequestError && (
+                              <p className="text-sm text-amber-600 dark:text-amber-400 text-center" role="alert">
+                                {t('smsUnsupportedCountry')}
+                              </p>
+                            )}
                             <Button
                               onClick={handleRequestOtp}
-                              disabled={otpRequestLoading}
+                              disabled={otpRequestLoading || smsBlocked}
                               size="lg"
                               className="w-full py-3 sm:py-8 max-lg:landscape:py-2.5 rounded-2xl font-bold text-lg lg:text-xl max-lg:landscape:text-base transition-all hover:scale-[1.02] active:scale-95"
                             >

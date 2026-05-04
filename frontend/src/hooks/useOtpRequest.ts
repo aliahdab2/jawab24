@@ -42,7 +42,14 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
         } catch (err: unknown) {
             captureError(err, 'OTP request failed', { tags: { page } });
             const axiosErr = err as ApiError;
-            setError(axiosErr.response?.status === 429 ? t('tooManyAttempts') : t('loginError'));
+            const errorCode = axiosErr.response?.data?.error;
+            if (errorCode === 'country_blocked') {
+                setError(t('smsUnsupportedCountry'));
+            } else if (axiosErr.response?.status === 429) {
+                setError(t('tooManyAttempts'));
+            } else {
+                setError(t('loginError'));
+            }
         } finally {
             setLoading(false);
         }

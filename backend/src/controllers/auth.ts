@@ -14,6 +14,7 @@ import { eq, and } from 'drizzle-orm';
 import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
+import { SmsCountryUnsupportedError } from '../services/sms';
 import { config } from '../config';
 import { isValidPhone, isValidEmail, normalizeArabic } from '@jawab24/shared';
 
@@ -605,6 +606,9 @@ export class AuthController {
         } catch (error) {
             if (error instanceof OtpRateLimitError) {
                 return reply.status(429).send({ error: 'rate_limited', message: 'Please wait before requesting a new code' });
+            }
+            if (error instanceof SmsCountryUnsupportedError) {
+                return reply.status(400).send({ error: 'country_blocked', message: 'SMS verification is not available for this country' });
             }
             request.log.error({ err: error }, 'OTP request failed');
             return reply.status(500).send({ error: 'server_error', message: 'Failed to send verification code' });
