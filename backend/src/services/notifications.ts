@@ -18,13 +18,24 @@ const ANDROID_CHANNEL_ID = 'jawab24_default';
  * Anything else (server errors, quota, network) is transient — keep the token.
  * Source: https://firebase.google.com/docs/reference/admin/error-handling#fcm-server-errors
  */
-const PERMANENT_FCM_TOKEN_ERRORS = new Set([
+export const PERMANENT_FCM_TOKEN_ERRORS = new Set([
     'messaging/registration-token-not-registered',
     'messaging/invalid-registration-token',
     'messaging/invalid-argument',
 ]);
 
-function hashToken(token: string): string {
+/**
+ * Classify a single FCM send response so the send path can decide whether
+ * to delete the token, log a transient failure, or do nothing.
+ * Pure function — exported for unit testing.
+ */
+export function classifyFcmResult(success: boolean, errorCode: string | undefined): 'success' | 'permanent_failure' | 'transient_failure' {
+    if (success) return 'success';
+    if (errorCode && PERMANENT_FCM_TOKEN_ERRORS.has(errorCode)) return 'permanent_failure';
+    return 'transient_failure';
+}
+
+export function hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
 }
 
@@ -483,10 +494,11 @@ class NotificationService {
                     errorCode: errorCode ?? null,
                 });
 
-                if (!resp.success && errorCode && PERMANENT_FCM_TOKEN_ERRORS.has(errorCode)) {
+                const verdict = classifyFcmResult(resp.success, errorCode);
+                if (verdict === 'permanent_failure') {
                     tokensToDelete.push(token);
-                } else if (!resp.success) {
-                    // Transient failure — keep token, surface for diagnostics.
+                } else if (verdict === 'transient_failure') {
+                    // Keep token, surface for diagnostics so we can spot brownouts.
                     captureError(new Error(`FCM transient error: ${errorCode ?? 'unknown'}`), 'FCM send transient failure', {
                         tags: { service: 'notifications', errorCode: errorCode ?? 'unknown' },
                     });

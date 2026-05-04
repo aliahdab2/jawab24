@@ -28,7 +28,7 @@ vi.mock('../../src/db', () => ({
 }));
 
 // Import after mocking
-import { notificationService, NOTIFICATION_TEMPLATES } from '../../src/services/notifications';
+import { notificationService, NOTIFICATION_TEMPLATES, classifyFcmResult, hashToken, PERMANENT_FCM_TOKEN_ERRORS } from '../../src/services/notifications';
 import { db } from '../../src/db';
 
 describe('NotificationService', () => {
@@ -736,6 +736,85 @@ describe('NotificationService', () => {
                 expect.any(Number),
                 'NX',
             );
+        });
+    });
+
+    // FCM error-code classification — drives the "delete vs keep" decision in
+    // the send path. The previous implementation deleted tokens on ANY failure,
+    // silently mass-evicting live tokens during FCM brownouts. This contract
+    // locks in the fix.
+    describe('classifyFcmResult', () => {
+        it('returns success for a successful send', () => {
+            expect(classifyFcmResult(true, undefined)).toBe('success');
+        });
+
+        it('returns permanent_failure for NotRegistered', () => {
+            expect(classifyFcmResult(false, 'messaging/registration-token-not-registered')).toBe('permanent_failure');
+        });
+
+        it('returns permanent_failure for InvalidRegistrationToken', () => {
+            expect(classifyFcmResult(false, 'messaging/invalid-registration-token')).toBe('permanent_failure');
+        });
+
+        it('returns permanent_failure for InvalidArgument', () => {
+            expect(classifyFcmResult(false, 'messaging/invalid-argument')).toBe('permanent_failure');
+        });
+
+        it('returns transient_failure for FCM internal-error (server brownout)', () => {
+            expect(classifyFcmResult(false, 'messaging/internal-error')).toBe('transient_failure');
+        });
+
+        it('returns transient_failure for server-unavailable', () => {
+            expect(classifyFcmResult(false, 'messaging/server-unavailable')).toBe('transient_failure');
+        });
+
+        it('returns transient_failure for quota-exceeded', () => {
+            expect(classifyFcmResult(false, 'messaging/quota-exceeded')).toBe('transient_failure');
+        });
+
+        it('returns transient_failure when errorCode is missing (network drop, malformed response)', () => {
+            expect(classifyFcmResult(false, undefined)).toBe('transient_failure');
+        });
+
+        it('returns transient_failure for unknown error codes (default-keep policy)', () => {
+            // Critical: any unknown / future error code must be classified as
+            // transient so we don't accidentally delete live tokens on a code
+            // we haven't seen before.
+            expect(classifyFcmResult(false, 'messaging/some-future-error-we-have-not-seen')).toBe('transient_failure');
+        });
+
+        it('PERMANENT_FCM_TOKEN_ERRORS contains exactly the three token-killing codes', () => {
+            // Locks the set so accidental additions during refactoring are caught.
+            expect(PERMANENT_FCM_TOKEN_ERRORS.size).toBe(3);
+            expect(PERMANENT_FCM_TOKEN_ERRORS.has('messaging/registration-token-not-registered')).toBe(true);
+            expect(PERMANENT_FCM_TOKEN_ERRORS.has('messaging/invalid-registration-token')).toBe(true);
+            expect(PERMANENT_FCM_TOKEN_ERRORS.has('messaging/invalid-argument')).toBe(true);
+        });
+    });
+
+    // Token hashing for the audit log — raw FCM tokens must never land in
+    // notification_send_log. Hashing must be deterministic so we can look up
+    // a customer's token by hashing what they report.
+    describe('hashToken', () => {
+        it('produces a 64-char hex SHA-256 hash', () => {
+            const hash = hashToken('fcm-some-token-value');
+            expect(hash).toMatch(/^[0-9a-f]{64}$/);
+        });
+
+        it('is deterministic — same input produces same hash', () => {
+            const a = hashToken('the-same-token');
+            const b = hashToken('the-same-token');
+            expect(a).toBe(b);
+        });
+
+        it('produces different hashes for different inputs', () => {
+            expect(hashToken('token-a')).not.toBe(hashToken('token-b'));
+        });
+
+        it('does not contain the original token', () => {
+            const token = 'sensitive-fcm-token-do-not-leak';
+            const hash = hashToken(token);
+            expect(hash).not.toContain(token);
         });
     });
 });
