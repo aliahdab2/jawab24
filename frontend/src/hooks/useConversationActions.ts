@@ -2,6 +2,9 @@ import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type Message, messagesApi } from '@/lib/api';
+import axios from 'axios';
+import { isNetworkError, isTimeoutError } from '@/lib/axiosRetry';
+import { newClientMessageId } from '@/lib/uuid';
 import { useTranslations } from 'next-intl';
 import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import type { Conversation } from '@/components/messages';
@@ -35,8 +38,31 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
   // --- Reply ---
   const sendReplyMutation = useMutation({
     mutationFn: async ({ messageId, text }: { messageId: string; text: string }) => {
-      const res = await messagesApi.reply(messageId, text);
-      return res.data;
+      // One idempotency key per logical send attempt — reused across retries so the
+      // backend dedupes if a prior attempt actually reached FB/IG but the response
+      // didn't make it back to the phone.
+      const clientMessageId = newClientMessageId();
+      const MAX_ATTEMPTS = 3;
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await messagesApi.reply(messageId, text, clientMessageId);
+          return res.data;
+        } catch (err) {
+          lastError = err;
+          // Only retry transient transport failures from axios — a real backend error
+          // (4xx/5xx with a body, e.g. DM_WINDOW_EXPIRED) must surface immediately so the
+          // UI can react. The axios.isAxiosError guard prevents us from retrying generic
+          // Errors (e.g. test mocks, programmer errors) for 3 seconds before failing.
+          const isAxiosTransportFailure = axios.isAxiosError(err) && (isNetworkError(err) || isTimeoutError(err));
+          if (attempt < MAX_ATTEMPTS && isAxiosTransportFailure) {
+            await new Promise((r) => setTimeout(r, 1000 * attempt));
+            continue;
+          }
+          throw err;
+        }
+      }
+      throw lastError;
     },
     onSuccess: (outgoingMessage) => {
       // Update the modal's conversation query cache so fullMessages shows the reply instantly.

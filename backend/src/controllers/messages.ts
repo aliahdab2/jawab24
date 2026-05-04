@@ -175,7 +175,7 @@ export class MessagesController {
      * POST /messages/:id/reply
      */
     async reply(
-        request: FastifyRequest<{ Params: { id: string }; Body: { replyText: string } }>,
+        request: FastifyRequest<{ Params: { id: string }; Body: { replyText: string; clientMessageId?: string } }>,
         reply: FastifyReply
     ) {
         const req = request as WorkspaceRequest;
@@ -183,10 +183,17 @@ export class MessagesController {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { id } = request.params;
-        const { replyText } = request.body;
+        const { replyText, clientMessageId } = request.body;
 
         if (!replyText || replyText.trim().length === 0) {
             return reply.status(400).send({ error: 'Reply text is required' });
+        }
+
+        // Reject obviously malformed idempotency keys early — anything we accept gets persisted
+        // under a UNIQUE index. UUIDs comfortably fit; reject the rest rather than risk a
+        // 23505 surfacing as a 500.
+        if (clientMessageId !== undefined && (typeof clientMessageId !== 'string' || clientMessageId.length === 0 || clientMessageId.length > 64)) {
+            return reply.status(400).send({ error: 'Invalid clientMessageId' });
         }
 
         // 1. Find the original incoming message
@@ -199,6 +206,17 @@ export class MessagesController {
         const page = await pagesService.getPage(req.workspaceId, message.pageId);
         if (!page) {
             return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
+        }
+
+        // 2b. Idempotency dedupe — if the client retried after a network blip and we already
+        // delivered the previous attempt, return the stored outgoing row instead of re-hitting
+        // the FB/IG Graph API. Bad-network clients (e.g. Syria) commonly time out reading the
+        // success response even though the send completed server-side.
+        if (clientMessageId) {
+            const existing = await messagesService.findOutgoingByClientMessageId(message.pageId, clientMessageId);
+            if (existing) {
+                return reply.send(existing);
+            }
         }
 
         // 3. Send the reply via the appropriate platform API.
@@ -240,13 +258,17 @@ export class MessagesController {
         // 4. Mark the original message as replied (manual)
         await messagesService.markAsReplied(message.id, replyText.trim(), 'manual');
 
-        // 5. Store the outgoing message
+        // 5. Store the outgoing message (with idempotency key if the client supplied one)
         const outgoing = await messagesService.storeOutgoingMessage(
             message.pageId,
             req.workspaceId,
             message.senderId,
             replyText.trim(),
-            'manual'
+            'manual',
+            undefined,
+            undefined,
+            undefined,
+            clientMessageId,
         );
 
         return reply.send(outgoing);

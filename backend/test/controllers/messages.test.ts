@@ -12,6 +12,7 @@ vi.mock('../../src/services/messages', () => ({
         getMessageById: vi.fn(),
         markAsReplied: vi.fn(),
         storeOutgoingMessage: vi.fn(),
+        findOutgoingByClientMessageId: vi.fn(),
         pauseConversation: vi.fn(),
         resumeConversation: vi.fn(),
         getPauseStatus: vi.fn(),
@@ -603,6 +604,73 @@ describe('MessagesController', () => {
                 }
 
                 expect((thrown as AppError).code).toBe('DM_WINDOW_EXPIRED');
+            });
+        });
+
+        describe('idempotency (clientMessageId)', () => {
+            const validKey = 'b1f0e6e2-9c4f-4d3a-9e2b-3d2f5a6e7b8c';
+
+            it('returns the stored outgoing row and skips FB when the same clientMessageId was already processed', async () => {
+                // Bad-network retry case: the previous attempt actually reached FB and persisted,
+                // but the response didn't make it back to the phone — the client retried with the
+                // same UUID. Backend must not double-send to FB.
+                const stored = { id: 'out-prev', message: 'Thank you!' };
+                vi.mocked(messagesService.getMessageById).mockResolvedValue(mockMessage as any);
+                vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+                vi.mocked(messagesService.findOutgoingByClientMessageId).mockResolvedValue(stored as any);
+                (mockRequest as any).body = { replyText: 'Thank you!', clientMessageId: validKey };
+
+                await messagesController.reply(mockRequest as any, mockReply as any);
+
+                expect(messagesService.findOutgoingByClientMessageId).toHaveBeenCalledWith('page-uuid', validKey);
+                expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+                expect(instagramService.sendDirectMessage).not.toHaveBeenCalled();
+                expect(messagesService.markAsReplied).not.toHaveBeenCalled();
+                expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+                expect(mockReply.send).toHaveBeenCalledWith(stored);
+            });
+
+            it('forwards clientMessageId to storeOutgoingMessage on a fresh send', async () => {
+                vi.mocked(messagesService.getMessageById).mockResolvedValue(mockMessage as any);
+                vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+                vi.mocked(messagesService.findOutgoingByClientMessageId).mockResolvedValue(null);
+                vi.mocked(facebookService.sendPrivateMessage).mockResolvedValue(undefined as any);
+                vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+                vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({ id: 'out-1' } as any);
+                (mockRequest as any).body = { replyText: 'Hello', clientMessageId: validKey };
+
+                await messagesController.reply(mockRequest as any, mockReply as any);
+
+                expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
+                // Last positional arg of storeOutgoingMessage is clientMessageId.
+                const args = vi.mocked(messagesService.storeOutgoingMessage).mock.calls[0];
+                expect(args[args.length - 1]).toBe(validKey);
+            });
+
+            it('rejects an oversized clientMessageId with 400 (would otherwise blow the unique index)', async () => {
+                (mockRequest as any).body = {
+                    replyText: 'Hello',
+                    clientMessageId: 'x'.repeat(65),
+                };
+
+                await messagesController.reply(mockRequest as any, mockReply as any);
+
+                expect(mockReply.status).toHaveBeenCalledWith(400);
+                expect(messagesService.getMessageById).not.toHaveBeenCalled();
+            });
+
+            it('does not consult the dedupe path when no clientMessageId is supplied (legacy clients)', async () => {
+                vi.mocked(messagesService.getMessageById).mockResolvedValue(mockMessage as any);
+                vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+                vi.mocked(facebookService.sendPrivateMessage).mockResolvedValue(undefined as any);
+                vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+                vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({ id: 'out-1' } as any);
+                (mockRequest as any).body = { replyText: 'Hello' };
+
+                await messagesController.reply(mockRequest as any, mockReply as any);
+
+                expect(messagesService.findOutgoingByClientMessageId).not.toHaveBeenCalled();
+                expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
             });
         });
     });

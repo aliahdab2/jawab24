@@ -409,6 +409,11 @@ export const messages = pgTable('messages', {
     aiIntent: varchar('ai_intent', { length: 50 }),
     resolved: boolean('resolved').default(false),
     attachmentType: varchar('attachment_type', { length: 20 }), // 'audio', 'image', 'video', 'file' — null for text
+    // Client-supplied idempotency key for outgoing manual replies. Frontend generates a UUID
+    // per send attempt; if the network drops mid-flight and the client retries with the same
+    // key, the controller short-circuits instead of double-sending to FB/IG. NULL on incoming
+    // and on legacy rows.
+    clientMessageId: varchar('client_message_id', { length: 64 }),
     createdTime: timestamp('created_time'),
     repliedAt: timestamp('replied_at'),
     createdAt: timestamp('created_at').defaultNow(),
@@ -434,6 +439,10 @@ export const messages = pgTable('messages', {
         escalationIdx: index('idx_messages_escalation').on(table.replied, table.needsAttention, table.direction, table.createdTime),
         // Drives workspace-scoped "all" inbox for DMs (mirrors comments tables)
         workspaceCreatedAtIdx: index('idx_messages_workspace_created_at').on(table.workspaceId, table.createdAt),
+        // Per-page idempotency for manual-reply retries. Postgres treats NULLs as distinct in
+        // unique indexes, so legacy/incoming rows (NULL key) coexist freely; only client-supplied
+        // keys are deduplicated.
+        clientMessageIdUnique: uniqueIndex('uq_messages_page_client_message_id').on(table.pageId, table.clientMessageId),
     };
 });
 

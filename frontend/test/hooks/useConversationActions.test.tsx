@@ -180,6 +180,81 @@ describe('useConversationActions', () => {
       // selectedConversation should NOT be modified on error
       expect(result.current.selectedConversation?.messages).toHaveLength(1);
     });
+
+    it('passes a stable clientMessageId on the reply call (idempotency key)', async () => {
+      const incomingMsg = makeMessage({ id: 'msg-1' });
+      const outgoingMsg = makeMessage({ id: 'msg-reply', direction: 'outgoing' });
+      mockReply.mockResolvedValue({ data: outgoingMsg });
+
+      const { wrapper } = createWrapper();
+      const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+      act(() => { result.current.setSelectedConversation(makeConversation([incomingMsg])); });
+      act(() => { result.current.handleReply('msg-1', 'Hi'); });
+
+      await waitFor(() => {
+        expect(mockReply).toHaveBeenCalled();
+      });
+      // Signature: reply(messageId, replyText, clientMessageId)
+      const [messageId, text, clientMessageId] = mockReply.mock.calls[0];
+      expect(messageId).toBe('msg-1');
+      expect(text).toBe('Hi');
+      expect(typeof clientMessageId).toBe('string');
+      expect((clientMessageId as string).length).toBeGreaterThan(0);
+    });
+
+    it('retries an axios network error using the SAME clientMessageId across attempts', async () => {
+      // The whole point of Phase 1: when the network drops mid-flight, the retry must reuse
+      // the previous attempt's idempotency key so the backend dedupes if the prior call
+      // actually reached FB. A different key per attempt would cause duplicate sends.
+      const axios = (await import('axios')).default;
+      const networkErr = new axios.AxiosError('Network Error', undefined, { url: '/x', headers: {} as never });
+      // axios.isAxiosError checks the prototype chain; AxiosError instances pass.
+      const incomingMsg = makeMessage({ id: 'msg-1' });
+      const outgoingMsg = makeMessage({ id: 'msg-reply', direction: 'outgoing' });
+
+      mockReply
+        .mockRejectedValueOnce(networkErr)
+        .mockRejectedValueOnce(networkErr)
+        .mockResolvedValueOnce({ data: outgoingMsg });
+
+      const { wrapper } = createWrapper();
+      const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+      act(() => { result.current.setSelectedConversation(makeConversation([incomingMsg])); });
+      act(() => { result.current.handleReply('msg-1', 'Hi'); });
+
+      await waitFor(() => {
+        expect(mockReply).toHaveBeenCalledTimes(3);
+      }, { timeout: 5000 });
+
+      const keys = mockReply.mock.calls.map((c) => c[2]);
+      expect(keys[0]).toBeDefined();
+      expect(keys[0]).toBe(keys[1]);
+      expect(keys[1]).toBe(keys[2]);
+
+      // Eventually the optimistic append happens once the third attempt resolves.
+      await waitFor(() => {
+        expect(result.current.selectedConversation?.messages).toHaveLength(2);
+      });
+    });
+
+    it('does NOT retry on non-axios errors — surfaces immediately so the UI can react', async () => {
+      // A plain Error (or a backend 4xx) must not trigger the transport-failure retry path,
+      // otherwise the user waits ~3 seconds for an error that was never going to recover.
+      const incomingMsg = makeMessage({ id: 'msg-1' });
+      mockReply.mockRejectedValue(new Error('boom'));
+
+      const { wrapper } = createWrapper();
+      const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+      act(() => { result.current.setSelectedConversation(makeConversation([incomingMsg])); });
+      act(() => { result.current.handleReply('msg-1', 'Hi'); });
+
+      await waitFor(() => {
+        expect(mockReply).toHaveBeenCalledTimes(1);
+      });
+    });
   });
 
   describe('handleResolve', () => {

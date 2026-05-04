@@ -360,6 +360,22 @@ export class MessagesService {
      * Without this, the UI's conversation grouping used to show "Unknown User" for
      * senders whose recent fetch page contained only outgoing messages.
      */
+    /**
+     * Look up an outgoing message previously stored under (pageId, clientMessageId).
+     * Used by the manual-reply controller to dedupe retries from flaky-network clients
+     * before re-hitting the FB/IG Graph API.
+     */
+    async findOutgoingByClientMessageId(pageId: string, clientMessageId: string): Promise<Message | null> {
+        const row = await db.query.messages.findFirst({
+            where: and(
+                eq(messages.pageId, pageId),
+                eq(messages.clientMessageId, clientMessageId),
+                eq(messages.direction, 'outgoing'),
+            ),
+        });
+        return row ? this.mapToMessage(row) : null;
+    }
+
     async storeOutgoingMessage(
         pageId: string,
         workspaceId: string,
@@ -369,6 +385,7 @@ export class MessagesService {
         conn: DbConn = db,
         senderName?: string,
         originContentId?: string,
+        clientMessageId?: string,
     ): Promise<Message> {
         // Platform unknown in this call — inherit from existing conversation if present,
         // default to 'facebook' otherwise. This is safe because we never overwrite the
@@ -403,6 +420,7 @@ export class MessagesService {
                 replied: true,
                 replyText,
                 replyMethod,
+                ...(clientMessageId ? { clientMessageId } : {}),
                 repliedAt: new Date(),
                 createdTime: new Date(),
             })
