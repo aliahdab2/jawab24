@@ -6,4 +6,6 @@
     <string name="custom_url_scheme">com.jawab24.app</string>
     <!-- facebook_app_id, facebook_client_token, and fb_login_protocol_scheme
          are injected via resValue in app/build.gradle from local.properties -->
+    <string name="notification_channel_name">Jawab24</string>
+    <string name="notification_channel_description">Replies, comments, and account alerts</string>
 </resources>
