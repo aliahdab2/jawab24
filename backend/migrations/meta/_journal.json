@@ -645,6 +645,13 @@
       "when": 1777523997855,
       "tag": "0091_boring_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "5",
+      "when": 1777932727776,
+      "tag": "0092_pink_gauntlet",
+      "breakpoints": true
     }
   ]
 }

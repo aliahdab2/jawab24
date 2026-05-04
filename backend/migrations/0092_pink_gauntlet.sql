@@ -1,0 +1,2 @@
+ALTER TABLE "messages" ADD COLUMN "client_message_id" varchar(64);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "uq_messages_page_client_message_id" ON "messages" ("page_id","client_message_id");

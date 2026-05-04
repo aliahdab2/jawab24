@@ -415,8 +415,13 @@ export const messagesApi = {
   locateMessage: (messageId: string) =>
     api.get<{ senderId: string; pageId: string }>(`/messages/locate/${messageId}`),
 
-  reply: (messageId: string, replyText: string) =>
-    api.post<Message>(`/messages/${messageId}/reply`, { replyText }),
+  reply: (messageId: string, replyText: string, clientMessageId?: string) =>
+    api.post<Message>(`/messages/${messageId}/reply`, { replyText, clientMessageId }, {
+      // Bad-network clients (e.g. Syria) need extra headroom on the request that actually
+      // hits the FB/IG Graph API. Idempotent on the backend via clientMessageId, so a longer
+      // wait can't cause duplicate sends.
+      timeout: 60_000,
+    }),
 
   // Conversation pause / human handoff
   pauseConversation: (senderId: string, pageId: string, durationMinutes?: number) =>
