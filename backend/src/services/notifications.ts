@@ -1,9 +1,32 @@
 import { db } from '../db';
-import { deviceTokens, notifications, settings, workspaceMembers } from '../db/schema';
-import { eq, and, desc, count } from 'drizzle-orm';
+import { deviceTokens, notifications, notificationSendLog, settings, workspaceMembers } from '../db/schema';
+import { eq, and, desc, count, inArray } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
 import { redis } from '../lib/redis';
+import { createHash } from 'crypto';
+
+/**
+ * Android notification channel ID. Must match the channel registered in
+ * Jawab24Application.onCreate() (see android/.../Jawab24Application.java).
+ * Without this, Android 8+ silently drops notifications when no channel matches.
+ */
+const ANDROID_CHANNEL_ID = 'jawab24_default';
+
+/**
+ * FCM error codes that mean the token is permanently dead.
+ * Anything else (server errors, quota, network) is transient — keep the token.
+ * Source: https://firebase.google.com/docs/reference/admin/error-handling#fcm-server-errors
+ */
+const PERMANENT_FCM_TOKEN_ERRORS = new Set([
+    'messaging/registration-token-not-registered',
+    'messaging/invalid-registration-token',
+    'messaging/invalid-argument',
+]);
+
+function hashToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+}
 
 // Notification types
 export type NotificationType =
@@ -290,15 +313,13 @@ class NotificationService {
     }
 
     /**
-     * Get all device tokens for a user
+     * Get all device tokens (with platform) for a user.
      */
-    async getUserDeviceTokens(userId: string): Promise<string[]> {
-        const tokens = await db
-            .select({ token: deviceTokens.token })
+    async getUserDeviceTokens(userId: string): Promise<Array<{ token: string; platform: string }>> {
+        return db
+            .select({ token: deviceTokens.token, platform: deviceTokens.platform })
             .from(deviceTokens)
             .where(eq(deviceTokens.userId, userId));
-
-        return tokens.map(t => t.token);
     }
 
     /**
@@ -345,7 +366,7 @@ class NotificationService {
             }
 
             if (pushAllowed) {
-                await this.sendPushNotification(tokens, payload, userLanguage);
+                await this.sendPushNotification(userId, notification.id, tokens, payload, userLanguage);
             }
         }
 
@@ -384,28 +405,33 @@ class NotificationService {
 
     /**
      * Send push notification via FCM.
-     * Uses user's preferred language for the notification display,
-     * with fallback to English if the locale isn't available.
+     *
+     * Per-token responsibilities:
+     * - Audit every send to `notification_send_log` (token stored as SHA-256 hash)
+     * - Delete tokens only on permanent FCM errors (NotRegistered / InvalidArgument).
+     *   Transient errors (server-unavailable, internal-error, quota) keep the token.
+     * - Include Android channelId so notifications are not silently dropped on
+     *   Android 8+ devices that don't fall back to a default channel.
      */
     private async sendPushNotification(
-        tokens: string[],
+        userId: string,
+        notificationId: string,
+        tokens: Array<{ token: string; platform: string }>,
         payload: NotificationPayload,
         userLanguage: string = 'ar'
     ): Promise<void> {
-        // Check if Firebase Admin is configured
-        const firebaseCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+        if (tokens.length === 0) return;
 
+        const firebaseCredentials = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
         if (!firebaseCredentials) {
             console.warn('[Notifications] FCM not configured, skipping push notification');
             return;
         }
 
         try {
-            // Dynamic import to avoid errors when firebase-admin isn't installed
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const admin = require('firebase-admin');
 
-            // Initialize Firebase Admin if not already initialized
             if (!admin.apps.length) {
                 const serviceAccount = JSON.parse(firebaseCredentials);
                 admin.initializeApp({
@@ -413,17 +439,13 @@ class NotificationService {
                 });
             }
 
-            // Resolve title/body for user's preferred language, with English fallback
             const title = payload.titles[userLanguage] || payload.titles[FALLBACK_LANG] || '';
             const body = payload.bodies[userLanguage] || payload.bodies[FALLBACK_LANG] || '';
-
-            // Send all locale variants so the client can switch language without re-fetching
             const isUrgent = payload.data?.urgent === true;
+
+            const tokenStrings = tokens.map(t => t.token);
             const message = {
-                notification: {
-                    title,
-                    body,
-                },
+                notification: { title, body },
                 data: {
                     type: payload.type,
                     titles: JSON.stringify(payload.titles),
@@ -431,35 +453,63 @@ class NotificationService {
                     language: userLanguage,
                     ...(payload.data ? { customData: JSON.stringify(payload.data) } : {}),
                 },
-                tokens,
-                // High priority for urgent notifications — wakes device immediately
+                tokens: tokenStrings,
+                android: {
+                    priority: (isUrgent ? 'high' : 'normal') as 'high' | 'normal',
+                    notification: { channelId: ANDROID_CHANNEL_ID },
+                },
                 ...(isUrgent ? {
-                    android: { priority: 'high' as const },
                     apns: { headers: { 'apns-priority': '10' } },
                 } : {}),
             };
 
             const response = await admin.messaging().sendEachForMulticast(message);
 
-            // Handle failed tokens (remove invalid ones)
-            if (response.failureCount > 0) {
-                const failedTokens: string[] = [];
-                response.responses.forEach((resp: { success: boolean }, idx: number) => {
-                    if (!resp.success) {
-                        failedTokens.push(tokens[idx]);
-                    }
+            // Per-token bookkeeping: audit log + selective token deletion.
+            const auditRows: Array<typeof notificationSendLog.$inferInsert> = [];
+            const tokensToDelete: string[] = [];
+
+            response.responses.forEach((resp: { success: boolean; messageId?: string; error?: { code?: string } }, idx: number) => {
+                const { token, platform } = tokens[idx];
+                const errorCode = resp.error?.code;
+
+                auditRows.push({
+                    notificationId,
+                    userId,
+                    tokenHash: hashToken(token),
+                    platform,
+                    fcmMessageId: resp.messageId ?? null,
+                    success: resp.success,
+                    errorCode: errorCode ?? null,
                 });
 
-                // Remove invalid tokens from database
-                for (const token of failedTokens) {
-                    await db
-                        .delete(deviceTokens)
-                        .where(eq(deviceTokens.token, token));
+                if (!resp.success && errorCode && PERMANENT_FCM_TOKEN_ERRORS.has(errorCode)) {
+                    tokensToDelete.push(token);
+                } else if (!resp.success) {
+                    // Transient failure — keep token, surface for diagnostics.
+                    captureError(new Error(`FCM transient error: ${errorCode ?? 'unknown'}`), 'FCM send transient failure', {
+                        tags: { service: 'notifications', errorCode: errorCode ?? 'unknown' },
+                    });
                 }
+            });
+
+            if (auditRows.length > 0) {
+                await db.insert(notificationSendLog).values(auditRows).catch(err => {
+                    // Audit failures must not break the send path.
+                    captureError(err, 'notification_send_log insert failed', { tags: { service: 'notifications' } });
+                });
+            }
+
+            if (tokensToDelete.length > 0) {
+                await db
+                    .delete(deviceTokens)
+                    .where(and(
+                        eq(deviceTokens.userId, userId),
+                        inArray(deviceTokens.token, tokensToDelete),
+                    ));
             }
         } catch (error) {
             captureError(error, 'Failed to send push notification', { tags: { service: 'notifications' } });
-            // Don't throw - push notification failure shouldn't break the main flow
         }
     }
 
