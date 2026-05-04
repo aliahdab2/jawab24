@@ -16,6 +16,12 @@
     "enable": "Enable notifications",
     "later": "Not now"
   },
+  "deniedBanner": {
+    "title": "Notifications are off",
+    "bodyAndroid": "Open Settings → Apps → Jawab24 → Notifications to turn them on. You'll miss replies that need your review until you do.",
+    "bodyIos": "Open Settings → Notifications → Jawab24 to turn them on. You'll miss replies that need your review until you do.",
+    "dismiss": "Dismiss"
+  },
   "close": "Close notifications",
   "filterLabel": "Filter notifications",
   "filter": {
