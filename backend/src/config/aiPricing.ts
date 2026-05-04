@@ -15,12 +15,32 @@ export const AI_PRICING = {
 export type ModelName = keyof typeof AI_PRICING;
 
 /**
- * Calculate estimated cost in USD for a given model and token counts.
+ * Cached input tokens are billed at 50% of the regular input rate
+ * (https://platform.openai.com/docs/guides/prompt-caching).
  */
-export function estimateCostUsd(model: string, tokensIn: number, tokensOut: number): number {
+const CACHED_INPUT_DISCOUNT = 0.5;
+
+/**
+ * Calculate estimated cost in USD for a given model and token counts.
+ *
+ * `tokensIn` is the *total* prompt tokens (matches OpenAI's `prompt_tokens`).
+ * `cachedTokensIn` is the subset of `tokensIn` that hit the prompt cache; those
+ * tokens are billed at 50% of the regular input rate.
+ */
+export function estimateCostUsd(
+    model: string,
+    tokensIn: number,
+    tokensOut: number,
+    cachedTokensIn: number = 0,
+): number {
     const pricing = AI_PRICING[model as ModelName];
     if (!pricing) return 0;
-    return (tokensIn / 1000) * pricing.inputPer1K + (tokensOut / 1000) * pricing.outputPer1K;
+    const cached = Math.min(Math.max(cachedTokensIn, 0), tokensIn);
+    const fresh = tokensIn - cached;
+    const inputCost = (fresh / 1000) * pricing.inputPer1K
+        + (cached / 1000) * pricing.inputPer1K * CACHED_INPUT_DISCOUNT;
+    const outputCost = (tokensOut / 1000) * pricing.outputPer1K;
+    return inputCost + outputCost;
 }
 
 /** Whisper speech-to-text pricing: $0.006 per minute of audio */

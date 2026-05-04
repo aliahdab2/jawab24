@@ -83,6 +83,33 @@ describe('logAiUsage', () => {
         expect(row.costUsd).toBeCloseTo(0.0001, 6);
     });
 
+    it('persists cachedInputTokens and discounts cost when prompt cache hits', async () => {
+        // gpt-4.1-mini: 2000 in (1500 cached → 50% off), 200 out
+        // Fresh: 500/1000 * 0.0004        = 0.0002
+        // Cached: 1500/1000 * 0.0004 * 0.5 = 0.0003
+        // Output: 200/1000 * 0.0016        = 0.00032
+        // Total                            = 0.00082
+        await logAiUsage({
+            userId: 'u', model: 'gpt-4.1-mini',
+            tokensIn: 2000, cachedInputTokens: 1500, tokensOut: 200,
+            cached: false, pipeline: 'dm_reply',
+        });
+        const row = valuesMock.mock.calls[0]![0]!;
+        expect(row.cachedInputTokens).toBe(1500);
+        expect(row.costUsd).toBeCloseTo(0.00082, 6);
+    });
+
+    it('defaults cachedInputTokens to 0 when caller omits it (back-compat)', async () => {
+        await logAiUsage({
+            userId: 'u', model: 'gpt-4.1-mini', tokensIn: 1000, tokensOut: 200,
+            cached: false, pipeline: 'comment_reply',
+        });
+        const row = valuesMock.mock.calls[0]![0]!;
+        expect(row.cachedInputTokens).toBe(0);
+        // Same as the original chat-completion test
+        expect(row.costUsd).toBeCloseTo(0.00072, 6);
+    });
+
     it('records cache hits as zero-token zero-cost rows', async () => {
         await logAiUsage({
             userId: 'u', model: 'gpt-4.1-mini', tokensIn: 0, tokensOut: 0,

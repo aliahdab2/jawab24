@@ -301,6 +301,7 @@ export async function buildProductSummary(storeId: string): Promise<string> {
 
     const products = await db.select().from(ecommerceProducts)
         .where(and(eq(ecommerceProducts.ecommerceStoreId, storeId), eq(ecommerceProducts.status, 'active')))
+        .orderBy(ecommerceProducts.id)
         .limit(15);
 
     if (products.length === 0) return '';

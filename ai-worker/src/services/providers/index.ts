@@ -113,6 +113,7 @@ export async function generateReplyWithProvider(
             flags: validated.flags,
             tokensUsed: result.tokensTotal,
             tokensIn: result.tokensIn,
+            tokensInCached: result.tokensInCached,
             tokensOut: result.tokensOut,
         };
     } catch (error) {
