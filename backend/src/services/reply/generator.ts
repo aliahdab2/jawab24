@@ -1,5 +1,6 @@
 import { aiService } from '../ai';
 import type { AiGenerateRequest } from '../../types';
+import type { AiPipeline } from '../../types/aiPipeline';
 import { messagesService } from '../messages';
 import { subscriptionsService } from '../subscriptions';
 import { postsService } from '../posts';
@@ -237,6 +238,8 @@ export interface PlaygroundInput {
      *  can call search_products / check_inventory / lookup_order. Mirrors the
      *  real DM path; without this, playground/test-reply would hallucinate URLs. */
     ecommerceStoreId?: string;
+    /** Pipeline tag for ai_usage_log — distinguishes interactive playground from batch eval runs. */
+    pipeline?: AiPipeline;
 }
 
 export interface PlaygroundResult {
@@ -366,7 +369,7 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'comment_reply' }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -449,10 +452,10 @@ export class ReplyGenerator {
                 const hasPriorUserMessages = historyForAI.some(m => m.role === 'user');
                 const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;
                 const deferToHistory = isLowConfidenceLatin && hasPriorUserMessages;
-                const aiRequest = {
+                const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm' as const, conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);
@@ -580,7 +583,7 @@ export class ReplyGenerator {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
             replyStyle, brandVoiceNotes, customerContext, model, defaultReplyLanguage,
-            messageTags, ourFacebookPageId, ecommerceStoreId,
+            messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
         const ragMode = config.ragMode || 'off';
@@ -648,6 +651,7 @@ export class ReplyGenerator {
                 ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
                 ...(defaultReplyLanguage ? { defaultReplyLanguage } : {}),
                 ...(ecommerceStoreId ? { ecommerceStoreId } : {}),
+                pipeline: pipeline ?? 'playground',
             },
         };
 

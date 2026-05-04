@@ -5,6 +5,7 @@ import { pickNudgeVariation } from './nudge';
 import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
 import type { FacebookMessageTag } from '../../utils/commentText';
+import type { PlaygroundSource } from '../../types/aiPipeline';
 
 /** Minimal page shape needed to build playground context */
 export interface PlaygroundPageData {
@@ -34,6 +35,9 @@ interface PlaygroundContextOptions {
     brandVoiceNotes?: string;
     customerContext?: string;
     model?: string;
+    /** 'eval' for the batch eval script, 'playground' (default) for interactive admin testing.
+     *  Set as the pipeline tag on ai_usage_log so eval cost is queryable separately. */
+    source?: PlaygroundSource;
 }
 
 export interface PlaygroundContext {
@@ -47,7 +51,7 @@ export interface PlaygroundContext {
  * Shared between the admin playground route and the customer-facing test-reply endpoint.
  */
 export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Promise<PlaygroundContext> {
-    const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = opts;
+    const { page, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model, source } = opts;
 
     // 1. Fetch owner settings for comment reply mode + workspace settings for language fallback
     let commentReplyMode: 'public' | 'private' | 'dual' = 'public';
@@ -119,6 +123,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         messageTags: channel === 'comment' ? messageTags : undefined,
         ourFacebookPageId: channel === 'comment' ? ourFacebookPageId : undefined,
         ecommerceStoreId: page.ecommerceStoreId ?? undefined,
+        pipeline: source === 'eval' ? 'eval' : 'playground',
     };
 
     return { playgroundInput, commentReplyMode, nudgeText };

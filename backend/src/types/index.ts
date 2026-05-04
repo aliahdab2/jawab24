@@ -31,7 +31,7 @@ export interface AiGenerateRequest {
     context?: {
         userId?: string;
         pageId?: string;
-        pipeline?: string;
+        pipeline?: import('./aiPipeline').AiPipeline;
         postMessage?: string;
         pageName?: string;
         previousReplies?: string[];

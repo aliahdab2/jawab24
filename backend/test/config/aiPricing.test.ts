@@ -16,6 +16,27 @@ describe('AI Pricing', () => {
         });
     });
 
+    it('exports pricing for gpt-4.1', () => {
+        expect(AI_PRICING['gpt-4.1']).toEqual({
+            inputPer1K: 0.002,
+            outputPer1K: 0.008,
+        });
+    });
+
+    it('exports pricing for gpt-4o-mini-transcribe', () => {
+        expect(AI_PRICING['gpt-4o-mini-transcribe']).toEqual({
+            inputPer1K: 0.00125,
+            outputPer1K: 0.005,
+        });
+    });
+
+    it('exports pricing for text-embedding-3-small (output tokens are free)', () => {
+        expect(AI_PRICING['text-embedding-3-small']).toEqual({
+            inputPer1K: 0.00002,
+            outputPer1K: 0,
+        });
+    });
+
     describe('estimateCostUsd', () => {
         it('calculates cost for gpt-4o-mini', () => {
             // 1000 input + 500 output

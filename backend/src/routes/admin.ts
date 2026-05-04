@@ -8,6 +8,7 @@ import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
 import { replyGenerator } from '../services/reply/generator';
 import { buildPlaygroundContext } from '../services/reply/playgroundContext';
+import type { PlaygroundSource } from '../types/aiPipeline';
 import { config } from '../config';
 import { emailService } from '../services/email';
 import { waitlistEmailTemplate } from '../utils/emailTemplates';
@@ -850,11 +851,13 @@ export default async function adminRoutes(fastify: FastifyInstance) {
             brandVoiceNotes?: string;
             customerContext?: string;
             model?: string;
+            /** 'eval' from playground-eval.ts batch script; defaults to 'playground' for the admin UI. */
+            source?: PlaygroundSource;
         };
         adminProtected.post<{ Body: PlaygroundRequestBody }>('/ai/playground', {
             schema: { tags: ['Admin'], summary: 'Test AI reply generation with full metadata', security: auth },
         }, async (request: FastifyRequest<{ Body: PlaygroundRequestBody }>, reply: FastifyReply) => {
-            const { pageId, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model } = request.body;
+            const { pageId, question, channel, postMessage, messageTags, ourFacebookPageId, conversationHistory, replyStyle, brandVoiceNotes, customerContext, model, source } = request.body;
             const startTime = Date.now();
 
             if (!pageId || !question?.trim()) {
@@ -884,7 +887,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 // 1b–3. Build playground context (shared helper)
                 const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
                     page, question, channel, postMessage, messageTags, ourFacebookPageId,
-                    conversationHistory, replyStyle, brandVoiceNotes, customerContext, model,
+                    conversationHistory, replyStyle, brandVoiceNotes, customerContext, model, source,
                 });
 
                 // 4. Delegate to replyGenerator — single source of truth for the pipeline

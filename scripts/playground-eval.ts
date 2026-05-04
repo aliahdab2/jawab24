@@ -3202,6 +3202,7 @@ async function callPlayground(test: TestCase): Promise<{ resp: PlaygroundRespons
         pageId,
         question: test.message,
         channel: test.channel,
+        source: 'eval',
     };
     if (test.postMessage) body.postMessage = test.postMessage;
     if (test.messageTags) body.messageTags = test.messageTags;

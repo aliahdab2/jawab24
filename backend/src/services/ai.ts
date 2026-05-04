@@ -16,6 +16,7 @@ import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallback, classifyFallbackIntent } from './reply/fallbackClassifier';
 import { notificationService } from './notifications';
+import type { AiPipeline } from '../types/aiPipeline';
 
 /** Context used to scope exact-cache lookups and writes. */
 interface CacheContext {
@@ -34,6 +35,57 @@ interface CacheHit {
     intent?: string;
     confidence?: string;
     flags?: string[];
+}
+
+/**
+ * Options for logAiUsage. Tagging `pipeline` is required so per-source cost
+ * stays queryable; the schema's `pipeline` column was historically NULL on
+ * every row, which made attribution impossible.
+ */
+export interface LogAiUsageOptions {
+    userId: string;
+    pageId?: string;
+    model: string;
+    tokensIn: number;
+    tokensOut: number;
+    cached: boolean;
+    pipeline: AiPipeline;
+}
+
+/**
+ * Write one row to ai_usage_log. Fire-and-forget — on failure increments a
+ * Redis drop counter and emits a Sentry breadcrumb so we can alert without
+ * blocking the reply pipeline.
+ *
+ * Single writer: every OpenAI call site in backend/ funnels through here.
+ * Embeddings pass tokensOut=0; chat completions pass real token counts.
+ */
+export async function logAiUsage(opts: LogAiUsageOptions): Promise<void> {
+    const costUsd = estimateCostUsd(opts.model, opts.tokensIn, opts.tokensOut);
+    try {
+        await db.insert(aiUsageLog).values({
+            userId: opts.userId,
+            pageId: opts.pageId ?? null,
+            model: opts.model,
+            tokensIn: opts.tokensIn,
+            tokensOut: opts.tokensOut,
+            costUsd,
+            cached: opts.cached,
+            pipeline: opts.pipeline,
+        });
+    } catch (err) {
+        Sentry.addBreadcrumb({
+            category: 'ai_usage_log',
+            level: 'warning',
+            message: 'ai_usage_log insert failed',
+            data: { pipeline: opts.pipeline, model: opts.model, error: err instanceof Error ? err.message : String(err) },
+        });
+        try {
+            await redis.incr('metrics:pipeline:ai_usage_log.dropped');
+        } catch {
+            // Redis also unavailable — silently discard
+        }
+    }
 }
 
 /** Lazy-init embedding provider for semantic cache (only when OPENAI_API_KEY exists) */
@@ -215,7 +267,10 @@ export class AiService {
         const postMessage = request.context?.postMessage;
 
         const userId = request.context?.userId;
-        const pipeline = request.context?.pipeline;
+        // Untagged callers surface as 'unknown' in the dashboard rather than being
+        // misattributed to a real pipeline. This makes missing tags visible instead
+        // of silent — the original "always NULL" failure mode is what we are fixing.
+        const pipeline: AiPipeline = request.context?.pipeline ?? 'unknown';
 
         const cacheCtx: CacheContext = {
             language: request.language,
@@ -241,7 +296,7 @@ export class AiService {
             if (cachedData) {
                 // Fire-and-forget: log zero-cost cache hit
                 if (userId) {
-                    this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
+                    logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
                 }
                 return {
                     reply: cachedData.reply,
@@ -309,7 +364,7 @@ export class AiService {
                     if (semanticHit) {
                         // Fire-and-forget: log zero-cost semantic cache hit
                         if (userId) {
-                            this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch((err) => captureError(err, 'semantic cache usage log failed'));
+                            logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch((err) => captureError(err, 'semantic cache usage log failed'));
                         }
                         return {
                             reply: semanticHit.reply,
@@ -377,7 +432,7 @@ export class AiService {
             if (userId) {
                 const tokensIn = response.data.tokensIn ?? 0;
                 const tokensOut = response.data.tokensOut ?? 0;
-                this.logUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
+                logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
             }
 
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent and non-default models
@@ -474,7 +529,7 @@ export class AiService {
                     if (userId) {
                         const tokensIn = failoverResponse.data.tokensIn ?? 0;
                         const tokensOut = failoverResponse.data.tokensOut ?? 0;
-                        this.logUsage({ userId, pageId, model: fallbackModel, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
+                        logAiUsage({ userId, pageId, model: fallbackModel, tokensIn, tokensOut, cached: false, pipeline: 'failover' }).catch(() => {});
                     }
 
                     // Cache write intentionally SKIPPED:
@@ -520,40 +575,6 @@ export class AiService {
         }
     }
 
-    /**
-     * Write one row to ai_usage_log. Fire-and-forget — on failure increments
-     * a Redis drop counter so we can alert without blocking the reply pipeline.
-     */
-    private async logUsage(opts: {
-        userId: string;
-        pageId?: string;
-        model: string;
-        tokensIn: number;
-        tokensOut: number;
-        cached: boolean;
-        pipeline?: string;
-    }): Promise<void> {
-        const costUsd = estimateCostUsd(opts.model, opts.tokensIn, opts.tokensOut);
-        try {
-            await db.insert(aiUsageLog).values({
-                userId: opts.userId,
-                pageId: opts.pageId ?? null,
-                model: opts.model,
-                tokensIn: opts.tokensIn,
-                tokensOut: opts.tokensOut,
-                costUsd,
-                cached: opts.cached,
-                pipeline: opts.pipeline ?? null,
-            });
-        } catch {
-            // Never block the reply pipeline — count dropped rows in Redis for alerting
-            try {
-                await redis.incr('metrics:pipeline:ai_usage_log.dropped');
-            } catch {
-                // Redis also unavailable — silently discard
-            }
-        }
-    }
 
     /**
      * Get cache statistics
