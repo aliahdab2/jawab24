@@ -255,6 +255,7 @@ export interface GenerateResponse {
     model?: string;
     tokensUsed?: number;
     tokensIn?: number;
+    tokensInCached?: number;
     tokensOut?: number;
     intent?: string;
     confidence?: string;
@@ -405,6 +406,7 @@ export class OpenAIService {
                 language: validated.language || request.language || detectedLanguage,
                 tokensUsed: completion.usage?.total_tokens,
                 tokensIn: completion.usage?.prompt_tokens,
+                tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
                 tokensOut: completion.usage?.completion_tokens,
                 intent: validated.intent,
                 confidence: validated.confidence,

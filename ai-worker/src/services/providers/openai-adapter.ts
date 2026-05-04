@@ -54,6 +54,7 @@ export class OpenAIAdapter implements LLMProvider {
             return {
                 content,
                 tokensIn: completion.usage?.prompt_tokens,
+                tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
                 tokensOut: completion.usage?.completion_tokens,
                 tokensTotal: completion.usage?.total_tokens,
             };

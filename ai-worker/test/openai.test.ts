@@ -2112,3 +2112,106 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
     });
 });
 
+describe('Prompt cache token reporting', () => {
+    // OpenAI's prompt caching surfaces hits via `usage.prompt_tokens_details.cached_tokens`.
+    // We forward that to the backend on `tokensInCached` so cost math can apply the 50%
+    // discount and dashboards can track cache hit ratio. These tests pin the wire contract.
+
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    const validReply = JSON.stringify({ reply: 'Hi!', intent: 'GREETING', confidence: 'high', flags: [] });
+
+    it('forwards cached_tokens from OpenAI as tokensInCached', async () => {
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: validReply } }],
+                            usage: {
+                                total_tokens: 1200,
+                                prompt_tokens: 1000,
+                                completion_tokens: 200,
+                                prompt_tokens_details: { cached_tokens: 750 },
+                            },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'k', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const result = await new FreshService().generateReply({ comment: 'hi' });
+
+        expect(result.tokensIn).toBe(1000);
+        expect(result.tokensInCached).toBe(750);
+        expect(result.tokensOut).toBe(200);
+    });
+
+    it('returns tokensInCached=undefined when OpenAI omits prompt_tokens_details (older API or no cache hit)', async () => {
+        // OpenAI returns no prompt_tokens_details on cold prompts (< 1024 tokens).
+        // We must not coerce missing data into 0 — the backend distinguishes
+        // "no info" from "0 cached tokens" via the optional field.
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: validReply } }],
+                            usage: { total_tokens: 100, prompt_tokens: 80, completion_tokens: 20 },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'k', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const result = await new FreshService().generateReply({ comment: 'hi' });
+
+        expect(result.tokensIn).toBe(80);
+        expect(result.tokensInCached).toBeUndefined();
+    });
+
+    it('returns tokensInCached=0 when prompt_tokens_details says 0 (cache miss with full reporting)', async () => {
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: {
+                    completions: {
+                        create: vi.fn().mockResolvedValue({
+                            choices: [{ message: { content: validReply } }],
+                            usage: {
+                                total_tokens: 100,
+                                prompt_tokens: 80,
+                                completion_tokens: 20,
+                                prompt_tokens_details: { cached_tokens: 0 },
+                            },
+                        }),
+                    },
+                },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'k', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const result = await new FreshService().generateReply({ comment: 'hi' });
+
+        expect(result.tokensInCached).toBe(0);
+    });
+});
+

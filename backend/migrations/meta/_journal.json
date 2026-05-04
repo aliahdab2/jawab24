@@ -652,6 +652,13 @@
       "when": 1777932727776,
       "tag": "0092_pink_gauntlet",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "5",
+      "when": 1777934939370,
+      "tag": "0093_blue_wiccan",
+      "breakpoints": true
     }
   ]
 }

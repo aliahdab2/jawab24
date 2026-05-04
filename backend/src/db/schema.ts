@@ -939,6 +939,7 @@ export const aiUsageLog = pgTable('ai_usage_log', {
     pageId: uuid('page_id').references(() => pages.id, { onDelete: 'set null' }),
     model: varchar('model', { length: 100 }).notNull(),     // e.g. 'gpt-4.1-mini'
     tokensIn: integer('tokens_in').notNull().default(0),
+    cachedInputTokens: integer('cached_input_tokens').notNull().default(0),  // OpenAI prompt-cache hits, billed at 50%
     tokensOut: integer('tokens_out').notNull().default(0),
     costUsd: real('cost_usd').notNull().default(0),          // pre-computed from pricing table
     cached: boolean('cached').notNull().default(false),      // true = cache hit (zero cost)

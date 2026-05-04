@@ -21,6 +21,7 @@ export interface LLMChatParams {
 export interface LLMChatResult {
     content: string;
     tokensIn?: number;
+    tokensInCached?: number;
     tokensOut?: number;
     tokensTotal?: number;
 }

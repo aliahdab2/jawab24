@@ -154,11 +154,12 @@ describe('A-1.4 + B-3.1 — replaceProductsAndRebuildSummary transactional UPSER
         //   4.   invalidateCachesForStore → pages where (no .limit)
         const limitEmpty = vi.fn().mockResolvedValue([]);
         const whereWithLimit = vi.fn().mockReturnValue({ limit: limitEmpty });
+        const whereWithOrderByLimit = vi.fn().mockReturnValue({ orderBy: vi.fn().mockReturnValue({ limit: limitEmpty }) });
         const countWhere = vi.fn().mockResolvedValue([{ count: 1 }]);
         const linkedPagesWhere = vi.fn().mockResolvedValue([]);
         mockSelect
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
-            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
+            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithOrderByLimit }) })
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: countWhere }) })
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: linkedPagesWhere }) });
         mockUpdate.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
@@ -200,11 +201,12 @@ describe('A-1.4 + B-3.1 — replaceProductsAndRebuildSummary transactional UPSER
 
         const limitEmpty = vi.fn().mockResolvedValue([]);
         const whereWithLimit = vi.fn().mockReturnValue({ limit: limitEmpty });
+        const whereWithOrderByLimit = vi.fn().mockReturnValue({ orderBy: vi.fn().mockReturnValue({ limit: limitEmpty }) });
         const countWhere = vi.fn().mockResolvedValue([{ count: 0 }]);
         const linkedPagesWhere = vi.fn().mockResolvedValue([]);
         mockSelect
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
-            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
+            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithOrderByLimit }) })
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: countWhere }) })
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: linkedPagesWhere }) });
         mockUpdate.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
@@ -510,11 +512,12 @@ describe('B-3.1 — upsertSingleProduct + deleteSingleProduct (FIXED)', () => {
         //   4. final stores update
         const limitResolvesEmpty = vi.fn().mockResolvedValue([]);
         const whereWithLimit = vi.fn().mockReturnValue({ limit: limitResolvesEmpty });
+        const whereWithOrderByLimit = vi.fn().mockReturnValue({ orderBy: vi.fn().mockReturnValue({ limit: limitResolvesEmpty }) });
         const countWhere = vi.fn().mockResolvedValue([{ count: 1 }]);
         const linkedPagesWhere = vi.fn().mockResolvedValue([]); // invalidateCachesForStore — no linked pages
         mockSelect
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
-            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
+            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithOrderByLimit }) })
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: countWhere }) })
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: linkedPagesWhere }) });
         mockUpdate.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
@@ -543,10 +546,11 @@ describe('B-3.1 — upsertSingleProduct + deleteSingleProduct (FIXED)', () => {
 
         const limitResolvesEmpty = vi.fn().mockResolvedValue([]);
         const whereWithLimit = vi.fn().mockReturnValue({ limit: limitResolvesEmpty });
+        const whereWithOrderByLimit = vi.fn().mockReturnValue({ orderBy: vi.fn().mockReturnValue({ limit: limitResolvesEmpty }) });
         const countWhere = vi.fn().mockResolvedValue([{ count: 0 }]);
         mockSelect
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
-            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithLimit }) })
+            .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: whereWithOrderByLimit }) })
             .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: countWhere }) });
         mockUpdate.mockReturnValue({ set: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue(undefined) }) });
 

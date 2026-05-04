@@ -1,0 +1,1 @@
+ALTER TABLE "ai_usage_log" ADD COLUMN "cached_input_tokens" integer DEFAULT 0 NOT NULL;

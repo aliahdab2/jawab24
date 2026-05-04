@@ -38,6 +38,23 @@ interface CacheHit {
 }
 
 /**
+ * Response shape from the ai-worker `/generate` endpoint. Used by both the
+ * primary path and the failover path so the wire contract lives in one place.
+ */
+interface WorkerGenerateResponse {
+    reply: string;
+    language: string;
+    intent?: string;
+    confidence?: string;
+    flags?: string[];
+    tokensUsed?: number;
+    tokensIn?: number;
+    /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at 50%). */
+    tokensInCached?: number;
+    tokensOut?: number;
+}
+
+/**
  * Options for logAiUsage. Tagging `pipeline` is required so per-source cost
  * stays queryable; the schema's `pipeline` column was historically NULL on
  * every row, which made attribution impossible.
@@ -47,6 +64,8 @@ export interface LogAiUsageOptions {
     pageId?: string;
     model: string;
     tokensIn: number;
+    /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at 50%). */
+    cachedInputTokens?: number;
     tokensOut: number;
     cached: boolean;
     pipeline: AiPipeline;
@@ -61,13 +80,15 @@ export interface LogAiUsageOptions {
  * Embeddings pass tokensOut=0; chat completions pass real token counts.
  */
 export async function logAiUsage(opts: LogAiUsageOptions): Promise<void> {
-    const costUsd = estimateCostUsd(opts.model, opts.tokensIn, opts.tokensOut);
+    const cachedInputTokens = opts.cachedInputTokens ?? 0;
+    const costUsd = estimateCostUsd(opts.model, opts.tokensIn, opts.tokensOut, cachedInputTokens);
     try {
         await db.insert(aiUsageLog).values({
             userId: opts.userId,
             pageId: opts.pageId ?? null,
             model: opts.model,
             tokensIn: opts.tokensIn,
+            cachedInputTokens,
             tokensOut: opts.tokensOut,
             costUsd,
             cached: opts.cached,
@@ -388,16 +409,7 @@ export class AiService {
             const response = await aiWorkerCircuit.execute(() =>
                 Sentry.startSpan(
                     { name: 'ai.worker.http', op: 'http.client' },
-                    () => axios.post<{
-                        reply: string;
-                        language: string;
-                        intent?: string;
-                        confidence?: string;
-                        flags?: string[];
-                        tokensUsed?: number;
-                        tokensIn?: number;
-                        tokensOut?: number;
-                    }>(
+                    () => axios.post<WorkerGenerateResponse>(
                         `${config.ai.serviceUrl}/generate`,
                         {
                             comment: request.comment,
@@ -432,7 +444,8 @@ export class AiService {
             if (userId) {
                 const tokensIn = response.data.tokensIn ?? 0;
                 const tokensOut = response.data.tokensOut ?? 0;
-                logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, tokensOut, cached: false, pipeline }).catch(() => {});
+                const cachedInputTokens = response.data.tokensInCached ?? 0;
+                logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline }).catch(() => {});
             }
 
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent and non-default models
@@ -475,16 +488,7 @@ export class AiService {
                     const fallbackModel = config.ai.fallbackModel;
                     const failoverResponse = await Sentry.startSpan(
                         { name: 'ai.failover.http', op: 'http.client', attributes: { 'ai.model': fallbackModel } },
-                        () => axios.post<{
-                            reply: string;
-                            language: string;
-                            intent?: string;
-                            confidence?: string;
-                            flags?: string[];
-                            tokensUsed?: number;
-                            tokensIn?: number;
-                            tokensOut?: number;
-                        }>(
+                        () => axios.post<WorkerGenerateResponse>(
                             `${config.ai.serviceUrl}/generate`,
                             {
                                 comment: request.comment,
@@ -529,7 +533,8 @@ export class AiService {
                     if (userId) {
                         const tokensIn = failoverResponse.data.tokensIn ?? 0;
                         const tokensOut = failoverResponse.data.tokensOut ?? 0;
-                        logAiUsage({ userId, pageId, model: fallbackModel, tokensIn, tokensOut, cached: false, pipeline: 'failover' }).catch(() => {});
+                        const cachedInputTokens = failoverResponse.data.tokensInCached ?? 0;
+                        logAiUsage({ userId, pageId, model: fallbackModel, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline: 'failover' }).catch(() => {});
                     }
 
                     // Cache write intentionally SKIPPED:

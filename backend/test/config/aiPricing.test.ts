@@ -56,6 +56,36 @@ describe('AI Pricing', () => {
         it('returns 0 for zero tokens', () => {
             expect(estimateCostUsd('gpt-4o-mini', 0, 0)).toBe(0);
         });
+
+        it('applies 50% discount on cached input tokens (gpt-4.1-mini)', () => {
+            // 2000 in (1500 cached, 500 fresh) + 1000 out
+            // Fresh: 500/1000 * 0.0004 = 0.0002
+            // Cached: 1500/1000 * 0.0004 * 0.5 = 0.0003
+            // Output: 1000/1000 * 0.0016 = 0.0016
+            // Total: 0.0021
+            const cost = estimateCostUsd('gpt-4.1-mini', 2000, 1000, 1500);
+            expect(cost).toBeCloseTo(0.0002 + 0.0003 + 0.0016, 6);
+        });
+
+        it('cachedTokensIn=0 yields the same cost as the no-cache call', () => {
+            const withZero = estimateCostUsd('gpt-4.1-mini', 2000, 1000, 0);
+            const withoutArg = estimateCostUsd('gpt-4.1-mini', 2000, 1000);
+            expect(withZero).toBe(withoutArg);
+        });
+
+        it('clamps cachedTokensIn above tokensIn (defensive)', () => {
+            // If worker reports cached > total (shouldn't happen, but be safe),
+            // treat all input as cached — never exceed total cost.
+            const allCached = estimateCostUsd('gpt-4.1-mini', 1000, 0, 5000);
+            const expected = (1000 / 1000) * 0.0004 * 0.5;
+            expect(allCached).toBeCloseTo(expected, 6);
+        });
+
+        it('clamps negative cachedTokensIn to 0', () => {
+            const cost = estimateCostUsd('gpt-4.1-mini', 1000, 0, -100);
+            const expected = (1000 / 1000) * 0.0004;
+            expect(cost).toBeCloseTo(expected, 6);
+        });
     });
 
     describe('estimateWhisperCostUsd', () => {
