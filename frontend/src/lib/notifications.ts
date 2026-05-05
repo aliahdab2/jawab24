@@ -14,8 +14,10 @@ const PERM_DISMISSED_KEY = 'push_prompt_dismissed_at';
 const PERM_GRANTED_KEY = 'push_permission_granted';
 const PERM_DENIED_KEY = 'push_permission_denied';
 const PERM_DENIED_BANNER_DISMISSED_KEY = 'push_denied_banner_dismissed_at';
+const PUSH_REFRESH_LAST_AT_KEY = 'push_refresh_last_at';
 const DISMISS_COOLDOWN_DAYS = 7;
 const DENIED_BANNER_COOLDOWN_DAYS = 14;
+const PUSH_REFRESH_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Native-safe key/value helpers.
@@ -218,8 +220,15 @@ export async function refreshPushRegistration(): Promise<void> {
     if (await prefGet(PERM_GRANTED_KEY) !== 'true') return;
     if (!pushListenersRegistered) return; // initPushNotifications hasn't run yet — nothing to refresh
 
+    // Throttle: heavy users foreground the app dozens of times a day; without
+    // this every resume would POST /notifications/register-token. Preferences
+    // (not in-memory) so the throttle survives WebView restarts and cold starts.
+    const lastAt = await prefGet(PUSH_REFRESH_LAST_AT_KEY);
+    if (lastAt && Date.now() - Number(lastAt) < PUSH_REFRESH_THROTTLE_MS) return;
+
     try {
         await PushNotifications.register();
+        await prefSet(PUSH_REFRESH_LAST_AT_KEY, String(Date.now()));
     } catch (error) {
         captureError(error, 'Push registration refresh failed', { tags: { context: 'push-refresh' } });
     }
