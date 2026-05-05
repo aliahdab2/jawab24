@@ -42,6 +42,15 @@ async function prefSet(key: string, value: string): Promise<void> {
     }
 }
 
+async function prefRemove(key: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+        const { Preferences } = await import('@capacitor/preferences');
+        await Preferences.remove({ key });
+    } else {
+        localStorage.removeItem(key);
+    }
+}
+
 /**
  * One-time migration: move notification prefs from localStorage (WebView) to
  * native Preferences so existing users don't get re-prompted after this update.
@@ -79,6 +88,13 @@ export async function shouldShowNotificationPrePrompt(): Promise<boolean> {
 
     // Already granted or user completed the flow before
     if (await prefGet(PERM_GRANTED_KEY) === 'true') return false;
+
+    // User explicitly denied — pre-prompt is the wrong UI for this state because
+    // on Android 13+ the OS permission dialog fires only once. Re-asking via
+    // pre-prompt sends the user nowhere; the denied-banner is the only path that
+    // tells them to enable in system settings. (The two helpers are kept
+    // mutually exclusive by this check.)
+    if (await prefGet(PERM_DENIED_KEY) === 'true') return false;
 
     // User dismissed the pre-prompt recently
     const dismissedAt = await prefGet(PERM_DISMISSED_KEY);
@@ -155,7 +171,7 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
         await prefSet(PERM_GRANTED_KEY, 'true');
         // Clear any prior denial flag (covers users who denied, then re-enabled
         // in system settings, then triggered the prompt again from another path).
-        await prefSet(PERM_DENIED_KEY, 'false');
+        await prefRemove(PERM_DENIED_KEY);
 
         await registerPushListeners(authToken);
         return true;
