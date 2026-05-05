@@ -659,6 +659,13 @@
       "when": 1777934939370,
       "tag": "0093_blue_wiccan",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "5",
+      "when": 1777967487518,
+      "tag": "0094_easy_bucky",
+      "breakpoints": true
     }
   ]
 }

@@ -12,7 +12,12 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
 
 const PERM_DISMISSED_KEY = 'push_prompt_dismissed_at';
 const PERM_GRANTED_KEY = 'push_permission_granted';
+const PERM_DENIED_KEY = 'push_permission_denied';
+const PERM_DENIED_BANNER_DISMISSED_KEY = 'push_denied_banner_dismissed_at';
+const PUSH_REFRESH_LAST_AT_KEY = 'push_refresh_last_at';
 const DISMISS_COOLDOWN_DAYS = 7;
+const DENIED_BANNER_COOLDOWN_DAYS = 14;
+const PUSH_REFRESH_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
 
 /**
  * Native-safe key/value helpers.
@@ -36,6 +41,15 @@ async function prefSet(key: string, value: string): Promise<void> {
         await Preferences.set({ key, value });
     } else {
         localStorage.setItem(key, value);
+    }
+}
+
+async function prefRemove(key: string): Promise<void> {
+    if (Capacitor.isNativePlatform()) {
+        const { Preferences } = await import('@capacitor/preferences');
+        await Preferences.remove({ key });
+    } else {
+        localStorage.removeItem(key);
     }
 }
 
@@ -77,6 +91,13 @@ export async function shouldShowNotificationPrePrompt(): Promise<boolean> {
     // Already granted or user completed the flow before
     if (await prefGet(PERM_GRANTED_KEY) === 'true') return false;
 
+    // User explicitly denied — pre-prompt is the wrong UI for this state because
+    // on Android 13+ the OS permission dialog fires only once. Re-asking via
+    // pre-prompt sends the user nowhere; the denied-banner is the only path that
+    // tells them to enable in system settings. (The two helpers are kept
+    // mutually exclusive by this check.)
+    if (await prefGet(PERM_DENIED_KEY) === 'true') return false;
+
     // User dismissed the pre-prompt recently
     const dismissedAt = await prefGet(PERM_DISMISSED_KEY);
     if (dismissedAt) {
@@ -95,6 +116,36 @@ export async function dismissNotificationPrePrompt(): Promise<void> {
 }
 
 /**
+ * Whether to show the recovery banner reminding the user that they
+ * previously denied notifications. Returns true only when:
+ *  - native platform
+ *  - permission was explicitly denied (PERM_DENIED_KEY === 'true')
+ *  - permission has not since been granted
+ *  - the user hasn't dismissed this banner in the last DENIED_BANNER_COOLDOWN_DAYS
+ */
+export async function shouldShowPushDeniedBanner(): Promise<boolean> {
+    if (!Capacitor.isNativePlatform()) return false;
+    await migrateFromLocalStorage();
+    if (await prefGet(PERM_GRANTED_KEY) === 'true') return false;
+    if (await prefGet(PERM_DENIED_KEY) !== 'true') return false;
+
+    const dismissedAt = await prefGet(PERM_DENIED_BANNER_DISMISSED_KEY);
+    if (dismissedAt) {
+        const daysSince = (Date.now() - Number(dismissedAt)) / (1000 * 60 * 60 * 24);
+        if (daysSince < DENIED_BANNER_COOLDOWN_DAYS) return false;
+    }
+    return true;
+}
+
+/**
+ * Record that the user dismissed the denied-permission recovery banner.
+ * Reappears after DENIED_BANNER_COOLDOWN_DAYS.
+ */
+export async function dismissPushDeniedBanner(): Promise<void> {
+    await prefSet(PERM_DENIED_BANNER_DISMISSED_KEY, String(Date.now()));
+}
+
+/**
  * Request notification permission and register for push.
  * Call this ONLY after user taps "Enable" on the pre-prompt.
  * This is the ONLY place that calls Capacitor Push APIs for permission.
@@ -108,6 +159,10 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
             // User denied the system dialog — record as dismissed so the
             // pre-prompt doesn't reappear immediately (respects cooldown).
             await prefSet(PERM_DISMISSED_KEY, String(Date.now()));
+            // Mark explicit denial so the recovery banner can prompt the user
+            // to re-enable from system settings (the system dialog only fires
+            // once on Android 13+ — without this flag the user is silently lost).
+            await prefSet(PERM_DENIED_KEY, 'true');
             return false;
         }
 
@@ -116,6 +171,9 @@ export async function requestAndRegisterPush(authToken: string): Promise<boolean
         // Set this BEFORE registerPushListeners — if listener setup fails
         // we still don't want to re-prompt (permission was granted).
         await prefSet(PERM_GRANTED_KEY, 'true');
+        // Clear any prior denial flag (covers users who denied, then re-enabled
+        // in system settings, then triggered the prompt again from another path).
+        await prefRemove(PERM_DENIED_KEY);
 
         await registerPushListeners(authToken);
         return true;
@@ -144,6 +202,35 @@ export async function initPushNotifications(token: string): Promise<void> {
         await registerPushListeners(token);
     } catch (error) {
         captureError(error, 'Push init error', { tags: { context: 'push' } });
+    }
+}
+
+/**
+ * Re-trigger FCM token registration so the backend receives a fresh `last_used_at`
+ * (and the live token if it has rotated). Calling `PushNotifications.register()`
+ * again is idempotent — the plugin re-fires the `registration` event with the
+ * current token, which our existing listener POSTs to the backend.
+ *
+ * Self-healing: dead tokens in the DB get replaced with the live one on the
+ * next app foreground, so a single transient FCM error or a server-side delete
+ * doesn't permanently disconnect the device from push.
+ */
+export async function refreshPushRegistration(): Promise<void> {
+    if (!Capacitor.isNativePlatform()) return;
+    if (await prefGet(PERM_GRANTED_KEY) !== 'true') return;
+    if (!pushListenersRegistered) return; // initPushNotifications hasn't run yet — nothing to refresh
+
+    // Throttle: heavy users foreground the app dozens of times a day; without
+    // this every resume would POST /notifications/register-token. Preferences
+    // (not in-memory) so the throttle survives WebView restarts and cold starts.
+    const lastAt = await prefGet(PUSH_REFRESH_LAST_AT_KEY);
+    if (lastAt && Date.now() - Number(lastAt) < PUSH_REFRESH_THROTTLE_MS) return;
+
+    try {
+        await PushNotifications.register();
+        await prefSet(PUSH_REFRESH_LAST_AT_KEY, String(Date.now()));
+    } catch (error) {
+        captureError(error, 'Push registration refresh failed', { tags: { context: 'push-refresh' } });
     }
 }
 

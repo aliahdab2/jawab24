@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8' ?>
+<resources>
+    <string name="notification_channel_name">جواب24</string>
+    <string name="notification_channel_description">الردود والتعليقات وتنبيهات الحساب</string>
+    <string name="notification_channel_urgent_name">جواب24 — عاجل</string>
+    <string name="notification_channel_urgent_description">ردود تحتاج إلى انتباهك الآن</string>
+</resources>

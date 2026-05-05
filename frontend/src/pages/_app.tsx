@@ -18,6 +18,7 @@ import { captureError, addErrorBreadcrumb } from '@/lib/sentryHelpers';
 import { useMobileMessages } from '@/hooks/useMobileMessages';
 import { dismissTopModal } from '@/hooks/useModalBackHandler';
 import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
+import { PushDeniedBanner } from '@/components/ui/PushDeniedBanner';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useSSE, useTheme } from '@/hooks';
 import { getLocaleDirection, getOGLocale, getOGAlternateLocales, isDefaultLocale } from '@/utils/locale';
@@ -279,6 +280,12 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
           // Ensure overlay and style are correct on resume (Best Practice for cold starts)
           StatusBar.setOverlaysWebView({ overlay: true }).catch(() => {});
           handleRouteChange(routerRef.current.asPath);
+          // Self-healing FCM token: re-register on every foreground so backend
+          // gets a fresh last_used_at and any rotated token. No-op if user never
+          // granted permission or listeners aren't initialized yet.
+          import('@/lib/notifications').then(({ refreshPushRegistration }) => {
+            refreshPushRegistration();
+          });
         }
       });
       listenersRef.current.push(() => resumeListener.remove());
@@ -318,19 +325,23 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const authToken = useAuthStore((state) => state.token);
   const [showPushPrompt, setShowPushPrompt] = useState(false);
+  const [showPushDeniedBanner, setShowPushDeniedBanner] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated || !isAuthenticated || !authToken) return;
     if (!isNativePlatform()) return;
 
     // 1. Set up listeners if permission already granted (returning users)
-    import('@/lib/notifications').then(({ initPushNotifications, shouldShowNotificationPrePrompt }) => {
+    import('@/lib/notifications').then(({ initPushNotifications, shouldShowNotificationPrePrompt, shouldShowPushDeniedBanner }) => {
       initPushNotifications(authToken).catch((err: unknown) => { captureError(err, 'Push notification init failed', { tags: { context: 'push-init' } }); });
 
       // 2. Check if we should show the pre-prompt (deferred by 5 seconds)
       // shouldShowNotificationPrePrompt is async (uses native Preferences)
       const timer = setTimeout(() => {
         shouldShowNotificationPrePrompt().then(show => { if (show) setShowPushPrompt(true); });
+        // Recovery banner for users who previously denied — only shows when
+        // pre-prompt won't (the helpers are mutually exclusive by design).
+        shouldShowPushDeniedBanner().then(show => { if (show) setShowPushDeniedBanner(true); });
       }, 5000);
       return () => clearTimeout(timer);
     });
@@ -350,6 +361,13 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
     setShowPushPrompt(false);
     import('@/lib/notifications').then(({ dismissNotificationPrePrompt }) => {
       dismissNotificationPrePrompt();
+    });
+  }, []);
+
+  const handleDismissPushDeniedBanner = useCallback(() => {
+    setShowPushDeniedBanner(false);
+    import('@/lib/notifications').then(({ dismissPushDeniedBanner }) => {
+      dismissPushDeniedBanner();
     });
   }, []);
 
@@ -497,6 +515,9 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
                 theme="system"
                 offset="calc(env(safe-area-inset-top, 16px) + 32px)"
               />
+              {showPushDeniedBanner && (
+                <PushDeniedBanner onDismiss={handleDismissPushDeniedBanner} />
+              )}
               {showPushPrompt && (
                 <NotificationPrePrompt onEnable={handleEnablePush} onDismiss={handleDismissPush} />
               )}
