@@ -2,9 +2,25 @@ import { eq, and, sql, desc } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaces, workspaceMembers, users, pages } from '../db/schema';
 import type { WorkspaceRole, WorkspaceSummary } from '@jawab24/shared';
+import { t } from '../utils/i18n';
 
 /** Internal member limit — quietly enforced, no UI for managing this. */
 const MAX_MEMBERS_PER_WORKSPACE = 5;
+
+/** Default greeting seeded into greetingMessageMulti at workspace creation.
+ *  Strings match the placeholder shown in the settings UI
+ *  (frontend/src/i18n/{en,ar}/settings.json#greetingMessagePlaceholder) so the
+ *  merchant's expectation matches what new customers receive.
+ *  `sourceLang: 'default'` matches the marker the smart-translation pipeline
+ *  uses (controllers/settings.ts:126) so the merchant's first manual edit
+ *  triggers normal auto-translation flow. */
+function buildDefaultGreetingMulti() {
+    return {
+        ar: t('defaultGreeting', 'ar'),
+        en: t('defaultGreeting', 'en'),
+        sourceLang: 'default',
+    };
+}
 
 /** Thrown by setLastActiveWorkspace when the user isn't a member of the target workspace. */
 export class WorkspaceAccessDeniedError extends Error {
@@ -24,7 +40,9 @@ export class WorkspaceService {
             .values({
                 ownerId: userId,
                 name,
-                settings: {},
+                settings: {
+                    greetingMessageMulti: buildDefaultGreetingMulti(),
+                },
             })
             .returning();
 
