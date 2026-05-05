@@ -137,14 +137,24 @@ export class SettingsController {
                 for (const targetLang of supportedLanguages) {
                     if (targetLang === sourceLang) continue;
 
-                    // We translate if:
-                    // A. Target is empty in result
-                    // B. OR Target is unchanged from current state (frontend sent old value)
-                    // C. AND we are in 'auto' mode (single changed sourceLang)
-                    
                     const isTargetEmpty = !result[targetLang];
-                    // If target is not in updateMulti at all, consider it unchanged (so it's a candidate for auto-sync)
+                    // If target is not in updateMulti at all, treat it as unchanged
+                    // (frontend forms typically only send the field the user edited).
                     const isTargetUnchanged = updateMulti[targetLang] === undefined || updateMulti[targetLang] === current[targetLang];
+
+                    // Preserve previously hand-authored translations. The target was
+                    // manually written when:
+                    //   - it was the previous translation source (current.sourceLang === targetLang), OR
+                    //   - both languages have been manually edited (current.sourceLang === 'manual').
+                    // In either case, auto-translating from the new source would silently
+                    // destroy the merchant's hand-written content. Skip and mark the result
+                    // as 'manual' so future edits also preserve both languages.
+                    const wasPreviouslyManual =
+                        current.sourceLang === targetLang || current.sourceLang === 'manual';
+                    if (wasPreviouslyManual && !isTargetEmpty) {
+                        result.sourceLang = 'manual';
+                        continue;
+                    }
 
                     if (isTargetEmpty || isTargetUnchanged) {
                         try {

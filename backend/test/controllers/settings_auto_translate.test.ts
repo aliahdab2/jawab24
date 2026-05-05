@@ -134,7 +134,10 @@ describe('SettingsController Auto-Translation Logic', () => {
         }));
     });
 
-    it('should set Source to MANUAL if ONLY EN is changed (User edit)', async () => {
+    it('should set Source to MANUAL when ONLY EN is changed (preserves manually-written AR)', async () => {
+        // Default mock: greetingMessageMulti = { ar: 'مرحبا', en: 'Hello', sourceLang: 'ar' }
+        // i.e. AR was the manual source. Editing only EN must preserve the manual AR
+        // and mark the result as 'manual' so future edits also preserve both languages.
         mockRequest.body = {
             greetingMessageMulti: {
                 ar: 'مرحبا', // Unchanged
@@ -144,11 +147,12 @@ describe('SettingsController Auto-Translation Logic', () => {
 
         await settingsController.update(mockRequest, mockReply);
 
+        expect(translationService.translateText).not.toHaveBeenCalled();
         expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
-                ar: 'Hello Edited [translated to ar]',
+                ar: 'مرحبا',          // preserved — was manually written
                 en: 'Hello Edited',
-                sourceLang: 'en'
+                sourceLang: 'manual'
             })
         }));
     });
@@ -472,6 +476,200 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             // Must NOT call translation API — defaults are used, no translation needed
             expect(translationService.translateText).not.toHaveBeenCalled();
+        });
+    });
+
+    // =========================================================
+    // Manual translation preservation (regression)
+    //
+    // Bug: when a merchant edits one language in the UI and the frontend omits
+    // the other language from the payload, the backend treated the omitted
+    // language as "unchanged → re-translate from new source" and silently
+    // overwrote the merchant's hand-written content. The fix uses
+    // current.sourceLang to detect previously-manual targets and skip
+    // auto-translation for them, marking the result as 'manual' so future
+    // edits also preserve both languages.
+    // =========================================================
+
+    describe('Manual translation preservation', () => {
+        it('preserves manually-written AR when merchant later edits only EN (greeting)', async () => {
+            // Customer wrote AR by hand → AR is the manual source.
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا يا أصدقاء',
+                    en: 'Hello friends [auto]',
+                    sourceLang: 'ar',
+                },
+            });
+
+            // Merchant switches to EN UI and edits only EN. Frontend omits AR.
+            mockRequest.body = {
+                greetingMessageMulti: { en: 'Welcome to my shop' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).not.toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    ar: 'مرحبا يا أصدقاء',         // preserved
+                    en: 'Welcome to my shop',
+                    sourceLang: 'manual',
+                }),
+            }));
+        });
+
+        it('preserves manually-written EN when merchant later edits only AR (greeting)', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا [auto]',
+                    en: 'Welcome to my shop',
+                    sourceLang: 'en',
+                },
+            });
+
+            mockRequest.body = {
+                greetingMessageMulti: { ar: 'أهلاً وسهلاً' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).not.toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    ar: 'أهلاً وسهلاً',
+                    en: 'Welcome to my shop',     // preserved
+                    sourceLang: 'manual',
+                }),
+            }));
+        });
+
+        it('preserves both manual languages when sourceLang is already "manual"', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا يا أصدقاء',
+                    en: 'Welcome to my shop',
+                    sourceLang: 'manual',
+                },
+            });
+
+            // Merchant edits only EN again
+            mockRequest.body = {
+                greetingMessageMulti: { en: 'Welcome v2' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).not.toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    ar: 'مرحبا يا أصدقاء',         // still preserved on second edit
+                    en: 'Welcome v2',
+                    sourceLang: 'manual',
+                }),
+            }));
+        });
+
+        it('preserves manual AR when editing EN — awayMessageMulti', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                awayMessageMulti: {
+                    ar: 'بنرد عليك بكرة الصبح',
+                    en: 'We will reply tomorrow morning [auto]',
+                    sourceLang: 'ar',
+                },
+            });
+
+            mockRequest.body = {
+                awayMessageMulti: { en: 'Closed for the holiday' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).not.toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                awayMessageMulti: expect.objectContaining({
+                    ar: 'بنرد عليك بكرة الصبح',
+                    en: 'Closed for the holiday',
+                    sourceLang: 'manual',
+                }),
+            }));
+        });
+
+        it('preserves manual AR when editing EN — brandVoiceNotesMulti', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                brandVoiceNotesMulti: {
+                    ar: 'استخدم لهجة شامية',
+                    en: 'Use formal English [auto]',
+                    sourceLang: 'ar',
+                },
+            });
+
+            mockRequest.body = {
+                brandVoiceNotesMulti: { en: 'Be casual and friendly' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).not.toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                brandVoiceNotesMulti: expect.objectContaining({
+                    ar: 'استخدم لهجة شامية',
+                    en: 'Be casual and friendly',
+                    sourceLang: 'manual',
+                }),
+            }));
+        });
+
+        it('still re-translates when sourceLang is "default" (seeded greeting, never manually edited)', async () => {
+            // Workspaces created via createWorkspace get seeded with sourceLang='default'.
+            // Merchant editing one language for the first time should auto-translate normally.
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحباً بك! كيف يمكننا مساعدتك اليوم؟',
+                    en: 'Hello! How can we help you?',
+                    sourceLang: 'default',
+                },
+            });
+
+            mockRequest.body = {
+                greetingMessageMulti: { en: 'Welcome to my shop!' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    en: 'Welcome to my shop!',
+                    ar: 'Welcome to my shop! [translated to ar]',
+                    sourceLang: 'en',
+                }),
+            }));
+        });
+
+        it('still re-translates for legacy data without sourceLang (back-compat)', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا',
+                    en: 'Hello',
+                    // sourceLang intentionally undefined (legacy row)
+                },
+            });
+
+            mockRequest.body = {
+                greetingMessageMulti: { en: 'New EN' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).toHaveBeenCalled();
         });
     });
 });
