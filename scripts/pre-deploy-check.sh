@@ -566,6 +566,13 @@ fi
 if [ "$CI" != "true" ]; then
     echo ""
     echo "8️⃣  Building Docker image..."
+
+    # Pre-flight: reclaim disk so the build doesn't ENOSPC on OrbStack VM.
+    # Only touches build cache + dangling/untagged images — leaves tagged
+    # images and running containers alone. Quiet unless something fails.
+    docker builder prune -af > /dev/null 2>&1 || true
+    docker image prune -f > /dev/null 2>&1 || true
+
     if docker build -f backend/Dockerfile -t jawab24-backend:pre-deploy-check . > /dev/null 2>&1; then
         echo -e "${GREEN}   ✅ Docker image builds successfully${NC}"
     else
