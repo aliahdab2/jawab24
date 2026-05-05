@@ -255,6 +255,105 @@ describe('useConversationActions', () => {
         expect(mockReply).toHaveBeenCalledTimes(1);
       });
     });
+
+    describe('error toast — distinct copy per failure cause', () => {
+      // The merchant complaint that motivated this test: a generic "failed to send" toast
+      // hid the difference between Facebook policy errors (window expired, page disconnected)
+      // and real network problems. Each backend code must surface its own copy so the agent
+      // knows whether to retry, reconnect, or wait for the customer to message first.
+
+      type Case = { name: string; code: string; status: number; expected: string };
+      const cases: Case[] = [
+        { name: '24h window expired', code: 'DM_WINDOW_EXPIRED', status: 409, expected: 'The 24-hour reply window has closed. You can only reply after the customer messages you again.' },
+        { name: 'customer unavailable', code: 'DM_CUSTOMER_UNAVAILABLE', status: 409, expected: "This customer's account is no longer available on Facebook." },
+        { name: 'page disconnected', code: 'PAGE_DISCONNECTED', status: 409, expected: 'This page is disconnected. Please reconnect from Settings.' },
+        { name: 'transient platform error', code: 'DM_TRANSIENT', status: 503, expected: 'Facebook is busy right now. Please try again in a moment.' },
+        { name: 'platform auth revoked', code: 'DM_PLATFORM_AUTH', status: 409, expected: 'Facebook revoked access. Please reconnect this page from Settings.' },
+      ];
+
+      for (const { name, code, status, expected } of cases) {
+        it(`maps ${name} (${code}) to its specific copy`, async () => {
+          const { toast } = await import('sonner');
+          const axios = (await import('axios')).default;
+          const err = new axios.AxiosError(name, undefined, { url: '/x', headers: {} as never });
+          // axios uses `response.data.code` to carry the structured backend error shape.
+          (err as unknown as { response: unknown }).response = { status, data: { code, error: name } };
+
+          const incomingMsg = makeMessage({ id: 'msg-1' });
+          mockReply.mockRejectedValue(err);
+
+          const { wrapper } = createWrapper();
+          const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+          act(() => { result.current.setSelectedConversation(makeConversation([incomingMsg])); });
+          act(() => { result.current.handleReply('msg-1', 'Hi'); });
+
+          await waitFor(() => {
+            expect(toast.error).toHaveBeenCalledWith(expected);
+          });
+        });
+      }
+
+      it('axios timeout (no backend code) → timeout-specific copy', async () => {
+        const { toast } = await import('sonner');
+        const axios = (await import('axios')).default;
+        // ECONNABORTED is what axios emits on a per-request timeout.
+        const err = new axios.AxiosError('timeout of 60000ms exceeded', 'ECONNABORTED', { url: '/x', headers: {} as never });
+
+        const incomingMsg = makeMessage({ id: 'msg-1' });
+        mockReply.mockRejectedValue(err);
+
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+        act(() => { result.current.setSelectedConversation(makeConversation([incomingMsg])); });
+        act(() => { result.current.handleReply('msg-1', 'Hi'); });
+
+        await waitFor(() => {
+          expect(toast.error).toHaveBeenCalledWith('The request took too long. Check your connection and try again.');
+        }, { timeout: 5000 });
+      });
+
+      it('axios network error (no response) → network-specific copy', async () => {
+        const { toast } = await import('sonner');
+        const axios = (await import('axios')).default;
+        const err = new axios.AxiosError('Network Error', undefined, { url: '/x', headers: {} as never });
+        // Leave response undefined so isNetworkError() returns true.
+
+        const incomingMsg = makeMessage({ id: 'msg-1' });
+        mockReply.mockRejectedValue(err);
+
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+        act(() => { result.current.setSelectedConversation(makeConversation([incomingMsg])); });
+        act(() => { result.current.handleReply('msg-1', 'Hi'); });
+
+        await waitFor(() => {
+          expect(toast.error).toHaveBeenCalledWith('Connection problem. Check your internet and try again.');
+        }, { timeout: 5000 });
+      });
+
+      it('unknown backend code falls back to the generic copy (no missing-key surprises)', async () => {
+        const { toast } = await import('sonner');
+        const axios = (await import('axios')).default;
+        const err = new axios.AxiosError('something new', undefined, { url: '/x', headers: {} as never });
+        (err as unknown as { response: unknown }).response = { status: 500, data: { code: 'DM_UNKNOWN' } };
+
+        const incomingMsg = makeMessage({ id: 'msg-1' });
+        mockReply.mockRejectedValue(err);
+
+        const { wrapper } = createWrapper();
+        const { result } = renderHook(() => useConversationActions(), { wrapper });
+
+        act(() => { result.current.setSelectedConversation(makeConversation([incomingMsg])); });
+        act(() => { result.current.handleReply('msg-1', 'Hi'); });
+
+        await waitFor(() => {
+          expect(toast.error).toHaveBeenCalledWith('Failed to send reply');
+        });
+      });
+    });
   });
 
   describe('handleResolve', () => {

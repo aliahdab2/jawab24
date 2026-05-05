@@ -9,6 +9,29 @@ import { useTranslations } from 'next-intl';
 import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
 import type { Conversation } from '@/components/messages';
 
+const REPLY_ERROR_KEYS: Record<string, string> = {
+  DM_WINDOW_EXPIRED: 'replyFailedWindowExpired',
+  DM_CUSTOMER_UNAVAILABLE: 'replyFailedCustomerUnavailable',
+  PAGE_DISCONNECTED: 'replyFailedPageDisconnected',
+  DM_TRANSIENT: 'replyFailedTransient',
+  DM_PLATFORM_AUTH: 'replyFailedPlatformAuth',
+};
+
+/**
+ * Pick the messages-namespace translation key for a manual-reply failure. Backend codes
+ * win because they're authoritative (Facebook policy decisions). Otherwise we fall back
+ * to inspecting the axios error to distinguish "no internet" from "request hung up".
+ * Anything else returns the generic key.
+ */
+export function replyErrorTranslationKey(backendCode: string | undefined, error: unknown): string {
+  if (backendCode && REPLY_ERROR_KEYS[backendCode]) return REPLY_ERROR_KEYS[backendCode];
+  if (axios.isAxiosError(error)) {
+    if (isTimeoutError(error)) return 'replyFailedTimeout';
+    if (isNetworkError(error)) return 'replyFailedNetwork';
+  }
+  return 'replyFailed';
+}
+
 interface UseConversationActionsOptions {
   /** Extra query keys to invalidate on reply/resolve (e.g. ['messages'] or ['dashboard-needs-action-messages']) */
   extraInvalidateKeys?: string[][];
@@ -82,12 +105,15 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
       invalidateShared();
     },
     onError: (error: Error) => {
-      // Surface a stable, translated message to the user — never leak axios's raw message.
-      toast.error(t('replyFailed'));
+      // Pick a specific message so the agent knows whether this is a Facebook policy
+      // problem (window expired, page disconnected) versus a real network problem they
+      // can do something about. Generic "replyFailed" was misleading agents into thinking
+      // every failure was a connection issue.
+      const backendCode = getBackendErrorCode(error);
+      toast.error(t(replyErrorTranslationKey(backendCode, error)));
       // Report to Sentry unless the backend flagged this as an expected platform condition
       // (window expired, customer blocked, transient rate limit). Unknown/500s get captured.
       const expectedCodes = new Set(['DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT', 'DM_PLATFORM_AUTH', 'PAGE_DISCONNECTED']);
-      const backendCode = getBackendErrorCode(error);
       if (!backendCode || !expectedCodes.has(backendCode)) {
         captureError(error, 'Failed to send manual reply', {
           tags: { feature: 'messages.reply' },
