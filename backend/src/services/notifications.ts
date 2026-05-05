@@ -477,8 +477,12 @@ class NotificationService {
             const response = await admin.messaging().sendEachForMulticast(message);
 
             // Per-token bookkeeping: audit log + selective token deletion.
+            // Transient failures are aggregated into a single Sentry event after
+            // the loop — per-token captures would flood the quota during an FCM
+            // brownout (one notification × N tokens × M users).
             const auditRows: Array<typeof notificationSendLog.$inferInsert> = [];
             const tokensToDelete: string[] = [];
+            const transientErrorCounts: Record<string, number> = {};
 
             response.responses.forEach((resp: { success: boolean; messageId?: string; error?: { code?: string } }, idx: number) => {
                 const { token, platform } = tokens[idx];
@@ -498,12 +502,19 @@ class NotificationService {
                 if (verdict === 'permanent_failure') {
                     tokensToDelete.push(token);
                 } else if (verdict === 'transient_failure') {
-                    // Keep token, surface for diagnostics so we can spot brownouts.
-                    captureError(new Error(`FCM transient error: ${errorCode ?? 'unknown'}`), 'FCM send transient failure', {
-                        tags: { service: 'notifications', errorCode: errorCode ?? 'unknown' },
-                    });
+                    const key = errorCode ?? 'unknown';
+                    transientErrorCounts[key] = (transientErrorCounts[key] ?? 0) + 1;
                 }
             });
+
+            const transientFailureCount = Object.values(transientErrorCounts).reduce((sum, n) => sum + n, 0);
+            if (transientFailureCount > 0) {
+                captureError(new Error('FCM transient failures'), 'FCM send transient failures', {
+                    level: 'warning',
+                    tags: { service: 'notifications' },
+                    extra: { transientFailureCount, errorCodeCounts: transientErrorCounts, totalTokens: tokens.length },
+                });
+            }
 
             if (auditRows.length > 0) {
                 await db.insert(notificationSendLog).values(auditRows).catch(err => {
