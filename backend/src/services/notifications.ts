@@ -7,11 +7,15 @@ import { redis } from '../lib/redis';
 import { createHash } from 'crypto';
 
 /**
- * Android notification channel ID. Must match the channel registered in
+ * Android notification channel IDs. Must match the channels registered in
  * Jawab24Application.onCreate() (see android/.../Jawab24Application.java).
  * Without this, Android 8+ silently drops notifications when no channel matches.
+ *
+ * Default channel: IMPORTANCE_DEFAULT (silent tray entry).
+ * Urgent channel:  IMPORTANCE_HIGH (heads-up + sound) — used when payload.data.urgent === true.
  */
 const ANDROID_CHANNEL_ID = 'jawab24_default';
+const ANDROID_URGENT_CHANNEL_ID = 'jawab24_urgent';
 
 /**
  * FCM error codes that mean the token is permanently dead.
@@ -467,7 +471,7 @@ class NotificationService {
                 tokens: tokenStrings,
                 android: {
                     priority: (isUrgent ? 'high' : 'normal') as 'high' | 'normal',
-                    notification: { channelId: ANDROID_CHANNEL_ID },
+                    notification: { channelId: isUrgent ? ANDROID_URGENT_CHANNEL_ID : ANDROID_CHANNEL_ID },
                 },
                 ...(isUrgent ? {
                     apns: { headers: { 'apns-priority': '10' } },

@@ -1,7 +1,7 @@
 import { Capacitor } from '@capacitor/core';
 import { BellOff, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
-import { isRTLLocale } from '@/utils/locale';
+import { getLocaleDirection } from '@/utils/locale';
 
 interface PushDeniedBannerProps {
   onDismiss: () => void;
@@ -18,7 +18,7 @@ export function PushDeniedBanner({ onDismiss }: PushDeniedBannerProps) {
   return (
     <div
       className="fixed bottom-6 inset-x-4 sm:inset-x-auto sm:end-6 sm:max-w-sm z-50"
-      dir={isRTLLocale(locale) ? 'rtl' : 'ltr'}
+      dir={getLocaleDirection(locale)}
       role="status"
       aria-live="polite"
     >
