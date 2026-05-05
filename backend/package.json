@@ -38,7 +38,7 @@
     "@jawab24/shared": "*",
     "@sentry/node": "^10.35.0",
     "@types/bcrypt": "^6.0.0",
-    "axios": "^1.13.2",
+    "axios": "^1.16.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.66.4",
     "dotenv": "^16.3.1",
