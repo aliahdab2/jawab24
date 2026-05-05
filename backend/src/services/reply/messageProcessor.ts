@@ -4,6 +4,7 @@ import { conversationsService } from '../conversations';
 import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
+import { isOpenerMessage } from './openerPatterns';
 import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
@@ -271,21 +272,33 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Message already replied' };
             }
 
-            // 9b. Send Greeting Message (first message in conversation only)
+            // 9b. Send Greeting Message on first message — narrow gate.
+            // Fires when EITHER:
+            //   (a) The text is a Messenger "Get Started" opener tap, OR
+            //   (b) The merchant manually configured a greeting (sourceLang !== 'default').
+            // The seeded default greeting only fires on opener taps so customers' real
+            // first questions ("what are your prices?") still go to AI as today.
             if (isNew && await messagesService.isFirstIncomingMessage(page.id, senderId)) {
                 const detectedLang = detectLanguageCode(messageText);
-                const greeting = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
-                if (greeting) {
-                    try {
-                        await adapter.sendReply(page, senderId, greeting);
-                        await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, greeting, 'template');
-                        await messagesService.markAsReplied(storedMessage.id, greeting, 'template');
-                        this.logger.info(`[${platform}] Sent greeting message`, { senderId });
-                        pipelineMetrics.record(pipeline, 'greeting_sent');
-                        return { success: true, messageId: platformMessageId, replyText: greeting, replyMethod: 'template' as const };
-                    } catch (error) {
-                        this.logger.error(`[${platform}] Failed to send greeting message — falling back to AI`, { error: String(error) });
-                        // Continue to AI reply as fallback
+                const settings = await workspaceSettingsService.getSettings(workspaceId);
+                const greetingMulti = settings.greetingMessageMulti || {};
+                const isCustomConfigured = greetingMulti.sourceLang !== undefined && greetingMulti.sourceLang !== 'default';
+                const isOpener = isOpenerMessage(messageText);
+
+                if (isCustomConfigured || isOpener) {
+                    const greeting = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
+                    if (greeting) {
+                        try {
+                            await adapter.sendReply(page, senderId, greeting);
+                            await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, greeting, 'template');
+                            await messagesService.markAsReplied(storedMessage.id, greeting, 'template');
+                            this.logger.info(`[${platform}] Sent greeting message`, { senderId, source: isOpener ? 'opener' : 'configured' });
+                            pipelineMetrics.record(pipeline, 'greeting_sent');
+                            return { success: true, messageId: platformMessageId, replyText: greeting, replyMethod: 'template' as const };
+                        } catch (error) {
+                            this.logger.error(`[${platform}] Failed to send greeting message — falling back to AI`, { error: String(error) });
+                            // Continue to AI reply as fallback
+                        }
                     }
                 }
             }

@@ -442,7 +442,8 @@ CUSTOMER SENDS MESSAGE/COMMENT
 │   └── ACQUIRED → Continue (released in finally block via Lua CAS)
 │
 ├── [DM only] Is this the FIRST message ever from sender?
-│   └── YES → Send GREETING MESSAGE, mark as replied, RETURN early
+│   └── YES → Send GREETING MESSAGE (always present — seeded at workspace creation,
+│             backfilled by migration 0095), mark as replied, RETURN early
 │   └── Greeting send failure → fall through to AI as fallback
 │
 ├── [If configured] Wait reply delay (consolidation window)
@@ -876,7 +877,7 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **replyStyle** | enum | 'professional' | `professional` / `casual` / `enthusiastic` |
 | **brandVoiceNotes** | text | '' | Custom brand voice guidelines (500 char max) |
 | **holdLowConfidence** | boolean | false | Hold low-confidence AI replies for review |
-| **greetingMessageMulti** | JSONB | {} | `{ar: "...", en: "..."}` - first msg to new customer |
+| **greetingMessageMulti** | JSONB | seeded | `{ar: "...", en: "...", sourceLang: 'default'}` - first msg to new customer. Seeded at workspace creation (`workspace.ts:createWorkspace`) and backfilled for legacy rows by migration `0095_backfill_default_greeting`. Strings come from `i18n.t('defaultGreeting', lang)` and match the settings UI placeholder so what merchants see in the empty field is what gets sent. |
 | **awayMessageMulti** | JSONB | {} | `{ar: "...", en: "..."}` - sent when off/outside hours |
 | **defaultReplyLanguage** | enum | 'ar' | Default if auto-detect fails |
 | **autoDetectLanguage** | boolean | true | Detect customer language from message |

@@ -82,6 +82,34 @@ describe('WorkspaceService', () => {
             expect(result).toEqual(workspace);
             expect(db.insert).toHaveBeenCalledTimes(2);
         });
+
+        it('seeds settings.greetingMessageMulti with default AR + EN strings', async () => {
+            const workspace = { id: WS_ID, name: 'My WS', ownerId: USER_ID };
+            let insertCallCount = 0;
+            const valuesMock = vi.fn().mockReturnThis();
+
+            vi.mocked(db.insert).mockImplementation(() => {
+                insertCallCount++;
+                if (insertCallCount === 1) {
+                    return { values: valuesMock, returning: vi.fn().mockResolvedValue([workspace]) } as any;
+                }
+                return { values: vi.fn().mockReturnThis(), returning: vi.fn().mockResolvedValue([{}]) } as any;
+            });
+
+            await service.createWorkspace(USER_ID, 'My WS');
+
+            expect(valuesMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    settings: {
+                        greetingMessageMulti: {
+                            ar: 'مرحباً بك! كيف يمكننا مساعدتك اليوم؟',
+                            en: 'Hello! How can we help you?',
+                            sourceLang: 'default',
+                        },
+                    },
+                }),
+            );
+        });
     });
 
     // ── getUserWorkspaces ─────────────────────────────────────────────────

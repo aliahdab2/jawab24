@@ -299,6 +299,17 @@ run_migrations() {
         docker logs "$container_id" --tail 20 2>&1
         exit 1
     fi
+
+    # Flush the workspace_settings Redis cache so any rows touched by data
+    # migrations (e.g. 0095 greeting backfill) are read fresh on first request.
+    # Non-fatal: cache entries also expire via 5-minute TTL, so a failure here
+    # only causes a brief window of stale reads.
+    echo "   🧹 Flushing workspace_settings cache..."
+    if docker exec "$container_id" npm run cache:flush-workspace-settings; then
+        echo "   ✅ Workspace-settings cache flushed"
+    else
+        echo "   ⚠️  Workspace-settings cache flush failed — continuing (TTL will expire stale entries within 5 min)"
+    fi
 }
 
 # Switch traffic by updating Nginx
