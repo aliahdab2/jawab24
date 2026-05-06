@@ -113,7 +113,7 @@ export class SettingsController {
 
                 // --- Special Case: Field Cleared ---
                 // If the source language is cleared, reset ALL languages to defaults
-                // (the translations derived from it and no longer make sense).
+                // (the translations derived from it no longer make sense).
                 // If a non-source (translated) language is cleared, only clear that one.
                 if (!sourceText) {
                     const currentSourceLang = current.sourceLang;
@@ -125,8 +125,13 @@ export class SettingsController {
                         }
                         result.sourceLang = 'default';
                     } else {
-                        // Non-source cleared → only that language emptied (already in result via merge)
-                        result.sourceLang = sourceLang;
+                        // Non-source cleared → only that language emptied (already in result via merge).
+                        // Point sourceLang at the language that STILL has content, not the empty one we
+                        // just cleared. Without this, sourceLang flips to the cleared field and the
+                        // frontend renders the remaining (manually-written) language as "translated"
+                        // with placeholder styling instead of as a normal stored value.
+                        const remainingManual = contentKeys.find(l => l !== sourceLang && result[l]);
+                        result.sourceLang = remainingManual || currentSourceLang || sourceLang;
                     }
                     return result;
                 }

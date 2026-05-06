@@ -168,12 +168,14 @@ describe('SettingsController Auto-Translation Logic', () => {
         await settingsController.update(mockRequest, mockReply);
 
         // EN was the translated version (sourceLang is 'ar'), so only EN is cleared.
-        // AR (the source) is preserved. Send-time fallback handles defaults.
+        // AR (the source) is preserved and sourceLang stays pointing at AR — the
+        // language that still has manual content. Without this, the frontend
+        // would render AR as "translated from EN" with placeholder styling.
         expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
             greetingMessageMulti: expect.objectContaining({
                 ar: 'مرحبا',
                 en: '',
-                sourceLang: 'en'
+                sourceLang: 'ar'
             })
         }));
     });
@@ -352,12 +354,13 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             await settingsController.update(mockRequest, mockReply);
 
-            // Only EN cleared, AR (source) preserved
+            // Only EN cleared, AR (source) preserved. sourceLang stays 'ar' — pointing
+            // at the language that still has manual content, not the cleared field.
             expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 awayMessageMulti: expect.objectContaining({
                     ar: 'نحن مغلقون الآن',
                     en: '',
-                    sourceLang: 'en'
+                    sourceLang: 'ar'
                 })
             }));
             expect(translationService.translateText).not.toHaveBeenCalled();
@@ -415,13 +418,14 @@ describe('SettingsController Auto-Translation Logic', () => {
 
             await settingsController.update(mockRequest, mockReply);
 
-            // sourceLang is undefined, so currentSourceLang !== sourceLang ('ar')
-            // Only AR is cleared, EN preserved (conservative — don't delete data)
+            // sourceLang is undefined → currentSourceLang !== sourceLang ('ar') → non-source-cleared branch.
+            // Only AR is cleared, EN preserved. sourceLang now points at EN — the language that still
+            // has manual content — so the frontend doesn't render EN with placeholder styling.
             expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
                 awayMessageMulti: expect.objectContaining({
                     ar: '',
                     en: 'Old message',
-                    sourceLang: 'ar'
+                    sourceLang: 'en'
                 })
             }));
         });
@@ -670,6 +674,107 @@ describe('SettingsController Auto-Translation Logic', () => {
             await settingsController.update(mockRequest, mockReply);
 
             expect(translationService.translateText).toHaveBeenCalled();
+        });
+    });
+
+    // =========================================================
+    // Clearing-while-manual (regression)
+    //
+    // Bug: when a merchant cleared the non-source language while sourceLang was
+    // 'manual' (both languages had been manually edited), the code set
+    // result.sourceLang = sourceLang — i.e. the language we just cleared. The
+    // frontend then saw sourceLang pointing at the empty field and rendered the
+    // remaining (manually-written) language with placeholder/translated styling
+    // even though it contained user-typed content.
+    //
+    // Fix: when clearing a non-source language, sourceLang must point at the
+    // language that STILL has content, not at the cleared one.
+    // =========================================================
+
+    describe('Clearing-while-manual preserves the still-present language', () => {
+        it('reproduces the user-reported flow: EN typed → AR typed → clear EN', async () => {
+            // After step 2, both langs were manually written → sourceLang='manual'
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا بك في معهدنا',
+                    en: 'Hello! How can we help you?',
+                    sourceLang: 'manual',
+                },
+            });
+
+            // Step 3: merchant clears EN
+            mockRequest.body = {
+                greetingMessageMulti: {
+                    ar: 'مرحبا بك في معهدنا',
+                    en: '',
+                },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).not.toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    ar: 'مرحبا بك في معهدنا', // preserved
+                    en: '',
+                    // sourceLang must point at AR (the lang still with content), NOT at the just-cleared 'en'.
+                    sourceLang: 'ar',
+                }),
+            }));
+        });
+
+        it('reproduces the inverse: AR typed → EN typed → clear AR', async () => {
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا بك في معهدنا',
+                    en: 'Welcome to our institute',
+                    sourceLang: 'manual',
+                },
+            });
+
+            mockRequest.body = {
+                greetingMessageMulti: {
+                    ar: '',
+                    en: 'Welcome to our institute',
+                },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(translationService.translateText).not.toHaveBeenCalled();
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    ar: '',
+                    en: 'Welcome to our institute',
+                    sourceLang: 'en',
+                }),
+            }));
+        });
+
+        it('still resets to defaults when the SOURCE lang is cleared (existing behavior preserved)', async () => {
+            // Source-lang clear path is unchanged — full reset to defaults.
+            (settingsService.getSettings as any).mockResolvedValue({
+                ...mockSettings,
+                greetingMessageMulti: {
+                    ar: 'مرحبا',
+                    en: 'Hello [auto]',
+                    sourceLang: 'ar',
+                },
+            });
+
+            mockRequest.body = {
+                greetingMessageMulti: { ar: '', en: 'Hello [auto]' },
+            };
+
+            await settingsController.update(mockRequest, mockReply);
+
+            expect(settingsService.updateSettings).toHaveBeenCalledWith('user-123', expect.objectContaining({
+                greetingMessageMulti: expect.objectContaining({
+                    sourceLang: 'default',
+                }),
+            }));
         });
     });
 });
