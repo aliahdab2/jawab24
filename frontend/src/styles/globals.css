@@ -1422,16 +1422,6 @@
   padding-bottom: 8px;
 }
 
-/* Android: defence-in-depth fallback using dynamic viewport height.
-   With adjustNothing the Capacitor WebView does not update dvh when the keyboard
-   opens, so --keyboard-height (set by keyboardDidShow) is the primary mechanism.
-   dvh may help on future WebView versions or configurations where it does update.
-   `bottom: auto` overrides inset-0's `bottom: 0` so height drives the size. */
-.is-android .modal-overlay {
-  height: 100dvh;
-  bottom: auto;
-}
-
 @media (orientation: landscape) {
   .is-native .pb-safe-modal {
     padding-bottom: 12px;

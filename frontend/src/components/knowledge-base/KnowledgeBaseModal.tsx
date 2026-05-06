@@ -166,14 +166,12 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
 
   const modal = (
     <div
-      className="modal-overlay fixed inset-0 bg-black/50 flex items-end lg:items-center justify-center z-50 lg:p-4 landscape:items-center landscape:p-2 touch-none"
-      style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
+      className="modal-overlay fixed top-0 start-0 end-0 bottom-[var(--keyboard-height,0px)] bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center touch-none"
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
-
       <div
-        className="bg-card rounded-t-3xl min-h-0 lg:rounded-2xl landscape:rounded-2xl shadow-xl w-full lg:max-w-2xl landscape:max-w-3xl max-h-full lg:max-h-[85vh] landscape:max-h-[90vh] overflow-hidden flex flex-col pt-safe lg:pt-0 landscape:pb-2 touch-pan-y"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe touch-pan-y"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
@@ -198,8 +196,10 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           </button>
         </div>
 
-        {/* Body — flex-1 + min-h-0 + overflow-y-auto ensures this scrolls while header/footer stay fixed */}
-        <div className="flex-1 min-h-0 p-3 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto relative">
+        {/* Body — flex-1 + min-h-0 + overflow-y-auto ensures this scrolls while header/footer stay fixed.
+            overscroll-contain prevents scroll-chaining: without it, dragging past the body's
+            scroll boundary on Android pulls the modal panel and exposes the page behind. */}
+        <div className="flex-1 min-h-0 p-3 landscape:p-3 landscape:pt-2 sm:p-5 overflow-y-auto overscroll-contain relative">
           {/* Description */}
           <p className="text-xs sm:text-sm text-surface-500 mb-2 text-start landscape:hidden">
             {tKb('description')}

@@ -63,12 +63,14 @@ export function SectionEditor({
     setTimeout(() => autoResize(), 50);
   }, [content, onChange, autoResize, remainingChars, tKb]);
 
+  // Resize the textarea when the section expands so existing content fits
+  // without an internal scrollbar. Focus is intentionally NOT taken here —
+  // popping the soft keyboard as a side-effect of expansion (including the
+  // initial-mount auto-expand of the first empty section) is unwanted UX.
+  // The textarea focuses naturally when the user taps it.
   useEffect(() => {
-    if (isExpanded && textareaRef.current) {
-      textareaRef.current.focus({ preventScroll: true });
-      autoResize();
-    }
-  }, [isExpanded, autoResize, textareaRef]);
+    if (isExpanded) autoResize();
+  }, [isExpanded, autoResize]);
 
   return (
     <div className="px-3.5 pb-3.5 sm:px-4 sm:pb-4">

@@ -146,7 +146,7 @@ test.describe('Knowledge Base Modal', () => {
     await kbButton.click();
 
     // Modal should be visible with title
-    const modal = page.locator('[class*="fixed inset-0"]').last();
+    const modal = page.locator('.modal-overlay').last();
     await expect(modal).toBeVisible();
     await expect(modal.getByText(t('kb.title'))).toBeVisible();
   });
@@ -233,7 +233,7 @@ test.describe('Knowledge Base Modal', () => {
     await closeButton.click();
 
     // Modal backdrop should disappear
-    await expect(page.locator('[class*="fixed inset-0 bg-black"]')).toBeHidden({ timeout: 5000 });
+    await expect(page.locator('.modal-overlay')).toBeHidden({ timeout: 5000 });
   });
 
   test('should save KB and show success state', async ({ page }) => {

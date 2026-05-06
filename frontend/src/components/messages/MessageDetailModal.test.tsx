@@ -540,35 +540,8 @@ describe('MessageDetailModal', () => {
     });
   });
 
-  describe('keyboard-aware modal sizing', () => {
-    it('backdrop uses keyboard-height for bottom positioning', () => {
-      render(
-        <MessageDetailModal
-          {...defaultProps}
-          conversation={makeConversation()}
-        />
-      );
-
-      // The backdrop (outer overlay) should use --keyboard-height in its
-      // inline style to position above the keyboard
-      const backdrop = document.querySelector('[class*="bg-black"]');
-      expect(backdrop).toBeTruthy();
-      expect(backdrop?.getAttribute('style')).toContain('--keyboard-height');
-    });
-
-    it('modal panel uses max-h-full on mobile', () => {
-      render(
-        <MessageDetailModal
-          {...defaultProps}
-          conversation={makeConversation()}
-        />
-      );
-
-      const modalPanel = document.querySelector('[class*="bg-card"]');
-      expect(modalPanel).toBeTruthy();
-      expect(modalPanel?.className).toContain('max-h-full');
-    });
-  });
+  // Keyboard-aware overlay/panel className contract is locked for all four
+  // modals in src/components/__tests__/keyboardAwareModalOverlays.test.tsx.
 
   describe('reply source badge', () => {
     const renderWithOutgoing = (replyMethod: Message['replyMethod']) => {
