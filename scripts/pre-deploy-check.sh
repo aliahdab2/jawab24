@@ -182,7 +182,11 @@ AUDIT_FAILED=false
 # processes user-controlled CSS at runtime — output is static CSS files baked into the bundle.
 # The XSS vector requires runtime stringification of attacker-controlled CSS, which we don't do.
 # Surfaces in the backend audit only because npm audit reads the workspace-wide lockfile.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93"
+# GHSA-v2v4-37r5-5v8g — ip-address XSS in Address6 HTML-emitting methods (moderate).
+# Transitive via geoip-lite. We only call geoip.lookup(ip), which returns a plain JS object
+# (country/region/city). The vulnerable Address6.toString()/HTML-emitter methods are never
+# invoked, so the XSS path is unreachable.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
