@@ -62,17 +62,121 @@ export class DmSendError extends Error {
         prefix: string,
         options: { verboseDetail?: boolean } = {},
     ): DmSendError {
-        const fbError = (error.response?.data as { error?: { message?: string; code?: unknown; error_subcode?: unknown; type?: unknown } } | undefined)?.error;
-        const code = typeof fbError?.code === 'number' ? fbError.code : undefined;
-        const subcode = typeof fbError?.error_subcode === 'number' ? fbError.error_subcode : undefined;
-        const type = typeof fbError?.type === 'string' ? fbError.type : undefined;
-        const baseMessage = fbError?.message || error.message;
-        const detail = options.verboseDetail && fbError
-            ? `${baseMessage} (code=${code ?? 'n/a'}, subcode=${subcode ?? 'n/a'}, type=${type ?? 'n/a'})`
-            : baseMessage;
-        const isTransport = !error.response || (error.response.status >= 500 && error.response.status < 600);
-        return new DmSendError(`${prefix}: ${detail}`, { code, subcode, type, isTransport });
+        const fields = extractFbErrorFields(error, options);
+        return new DmSendError(`${prefix}: ${fields.detail}`, {
+            code: fields.code,
+            subcode: fields.subcode,
+            type: fields.type,
+            isTransport: fields.isTransport,
+        });
     }
+}
+
+/**
+ * Thrown by non-DM Graph API calls (token exchange, /me/accounts, /debug_token, etc.)
+ * when Facebook returns an error. Same shape as DmSendError but used in contexts
+ * where the DM-specific bucket classification doesn't apply.
+ *
+ * Callers (e.g. tokenRefresh) should inspect `code`/`subcode`/`isTransport` directly
+ * to decide whether the error indicates a real token revocation vs. a transient blip.
+ */
+export class FacebookApiError extends Error {
+    readonly code?: number;
+    readonly subcode?: number;
+    readonly type?: string;
+    readonly isTransport: boolean;
+
+    constructor(
+        message: string,
+        fields: { code?: number; subcode?: number; type?: string; isTransport?: boolean } = {},
+    ) {
+        super(message);
+        this.name = 'FacebookApiError';
+        this.code = fields.code;
+        this.subcode = fields.subcode;
+        this.type = fields.type;
+        this.isTransport = fields.isTransport ?? false;
+    }
+
+    /**
+     * Build a FacebookApiError from an AxiosError raised by a Graph API call.
+     * Same extraction logic as DmSendError.fromAxios — preserves Graph error
+     * code/subcode/type and flags transport-layer failures (network or 5xx).
+     */
+    static fromAxios(
+        error: import('axios').AxiosError,
+        prefix: string,
+        options: { verboseDetail?: boolean } = {},
+    ): FacebookApiError {
+        const fields = extractFbErrorFields(error, options);
+        return new FacebookApiError(`${prefix}: ${fields.detail}`, {
+            code: fields.code,
+            subcode: fields.subcode,
+            type: fields.type,
+            isTransport: fields.isTransport,
+        });
+    }
+}
+
+/**
+ * Shared extraction of structured fields from an AxiosError thrown by a Graph API call.
+ * Used by both DmSendError.fromAxios and FacebookApiError.fromAxios.
+ */
+function extractFbErrorFields(
+    error: import('axios').AxiosError,
+    options: { verboseDetail?: boolean } = {},
+): { code?: number; subcode?: number; type?: string; isTransport: boolean; detail: string } {
+    const fbError = (error.response?.data as { error?: { message?: string; code?: unknown; error_subcode?: unknown; type?: unknown } } | undefined)?.error;
+    const code = typeof fbError?.code === 'number' ? fbError.code : undefined;
+    const subcode = typeof fbError?.error_subcode === 'number' ? fbError.error_subcode : undefined;
+    const type = typeof fbError?.type === 'string' ? fbError.type : undefined;
+    const baseMessage = fbError?.message || error.message;
+    const detail = options.verboseDetail && fbError
+        ? `${baseMessage} (code=${code ?? 'n/a'}, subcode=${subcode ?? 'n/a'}, type=${type ?? 'n/a'})`
+        : baseMessage;
+    const isTransport = !error.response || (error.response.status >= 500 && error.response.status < 600);
+    return { code, subcode, type, isTransport, detail };
+}
+
+/**
+ * FB error code/subcode pairs that indicate the user's token is **definitively
+ * revoked or invalid** and the page should be marked disconnected.
+ *
+ * Anything not in this table is treated as transient (retry-worthy) — that's
+ * the conservative default that prevents the bulk-clear bug where one transient
+ * error could disconnect all of a user's pages.
+ *
+ * Reference: https://developers.facebook.com/docs/graph-api/guides/error-handling/
+ */
+const TOKEN_REVOKED_CODES: Record<string, true> = {
+    '190|458': true, // Session invalidated (user logged out elsewhere)
+    '190|459': true, // User checkpointed (FB security review)
+    '190|460': true, // Password changed
+    '190|463': true, // Token expired (60-day limit reached)
+    '190|467': true, // Invalid OAuth access token
+    '200|10':  true, // Permission revoked
+};
+
+/**
+ * Returns true if the error is a FacebookApiError (or DmSendError) with a
+ * code/subcode pair indicating the underlying token is genuinely revoked or
+ * permanently invalid. Plain `Error` instances and transient errors return false
+ * — callers should retry rather than clear tokens for those.
+ */
+export function isTokenRevoked(error: unknown): boolean {
+    if (!(error instanceof FacebookApiError) && !(error instanceof DmSendError)) {
+        return false;
+    }
+    if (error.isTransport) return false;
+    if (error.code === undefined) return false;
+    const key = error.subcode !== undefined
+        ? `${error.code}|${error.subcode}`
+        : `${error.code}`;
+    if (TOKEN_REVOKED_CODES[key]) return true;
+    // code-only fallback for code 190 (any subcode we haven't enumerated yet
+    // is still very likely a token issue — FB only uses 190 for OAuth errors)
+    if (error.code === 190) return true;
+    return false;
 }
 
 // Graph error code/subcode → bucket lookup. Keyed by "platform|code|subcode"

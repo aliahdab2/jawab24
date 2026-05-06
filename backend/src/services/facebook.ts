@@ -6,7 +6,7 @@ import * as Sentry from '@sentry/node';
 import type { FacebookTokenResponse, FacebookUserProfile, FacebookPagesResponse, FacebookPage, FacebookGranularScope, Logger } from '../types';
 import { noopLogger } from '../types';
 import { fetchNameFromConversationsApi } from './reply/adapters/shared';
-import { DmSendError } from '../utils/fbGraphErrors';
+import { DmSendError, FacebookApiError } from '../utils/fbGraphErrors';
 import { buildMessagePayload, type SendMessageOptions } from './metaMessaging';
 export type { MessagingType, SendMessageOptions } from './metaMessaging';
 
@@ -156,7 +156,7 @@ export class FacebookService {
                 this.logger.error('[Facebook] API Error fetching pages', {
                     error: error.response?.data?.error?.message || error.message,
                 });
-                throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
+                throw FacebookApiError.fromAxios(error, 'Facebook API error');
             }
             throw error;
         }
@@ -296,7 +296,7 @@ export class FacebookService {
             };
         } catch (error) {
             if (axios.isAxiosError(error)) {
-                throw new Error(`Facebook API error: ${error.response?.data?.error?.message || error.message}`);
+                throw FacebookApiError.fromAxios(error, 'Facebook API error');
             }
             throw error;
         }

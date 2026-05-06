@@ -5,6 +5,8 @@ import { facebookService } from './facebook';
 import { maybeEncryptToken } from './facebookCrypto';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
+import { withRetry } from '../utils/retry';
+import { isTokenRevoked, FacebookApiError } from '../utils/fbGraphErrors';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
@@ -41,7 +43,7 @@ function sleep(ms: number): Promise<void> {
  * Find pages whose tokens haven't been verified recently and check
  * they're still valid via Facebook's debug_token + /me/accounts APIs.
  */
-async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: number; invalid: number }> {
+export async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: number; invalid: number }> {
     const staleThreshold = new Date(Date.now() - VERIFY_INTERVAL_MS);
     let verified = 0;
     let refreshed = 0;
@@ -109,15 +111,40 @@ async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: 
                 continue;
             }
 
+            // Capture in a local so the closure passed to withRetry doesn't
+            // need a non-null assertion (the user.* property's nullability
+            // doesn't survive across the await boundary).
+            const userToken = user.facebookAccessToken;
+
             // 2. Try to re-fetch page tokens via /me/accounts
             //    This is the most reliable check: if it succeeds, tokens are valid
             //    and we get fresh page tokens as a bonus.
-            const pagesResponse = await facebookService.getUserPages(user.facebookAccessToken);
+            //
+            //    Wrapped in withRetry so transient FB API blips (network, 5xx,
+            //    rate limits) don't trigger a false-positive disconnect for the
+            //    user. Real token-revoked errors (FacebookApiError with auth
+            //    code/subcode) are NOT retried — withRetry's default retryable
+            //    matcher only retries network/timeout/5xx responses.
+            const pagesResponse = await withRetry(
+                () => facebookService.getUserPages(userToken),
+                {
+                    maxAttempts: 3,
+                    baseDelayMs: 1000,
+                    maxDelayMs: 8000,
+                    retryableErrors: (err) => {
+                        // Don't retry definitive token-revoked errors
+                        if (err instanceof FacebookApiError) {
+                            if (isTokenRevoked(err)) return false;
+                            // Transport-layer failures (network, 5xx) are retry-worthy
+                            return err.isTransport;
+                        }
+                        return false;
+                    },
+                },
+            );
             const freshTokenMap = new Map(
                 (pagesResponse.data || []).map(p => [p.id, p.access_token])
             );
-
-            const invalidPages: typeof userPages = [];
 
             for (const page of userPages) {
                 const freshToken = page.facebookPageId ? freshTokenMap.get(page.facebookPageId) : undefined;
@@ -133,33 +160,52 @@ async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: 
                         .where(eq(pages.id, page.id));
                     refreshed++;
                 } else {
-                    // Page not returned — user may have revoked access to this page
-                    invalidPages.push(page);
-                    invalid++;
-                    logger.warn(`[TokenHealth] Page "${page.name}" (${page.facebookPageId}) not in user's accounts — access may be revoked`);
+                    // Page exists in our DB but is not in the user's /me/accounts
+                    // response. This is NOT a definitive signal of revocation:
+                    //  - Business-Portfolio-owned pages may legitimately be absent
+                    //    from /me/accounts (granular_scopes fallback in
+                    //    facebookService.getUserPages only triggers when /me/accounts
+                    //    returns zero pages, not when it returns a partial set).
+                    //  - The user may have lost admin access to this specific page
+                    //    while keeping access to others.
+                    //
+                    // Log for observability and triage, but do NOT clear the token.
+                    // If access is genuinely revoked, the next real send/read call
+                    // for this page will fail with a FacebookApiError that the
+                    // calling code can act on. False-clearing here is what produced
+                    // the disconnect-loop bug.
+                    logger.warn(`[TokenHealth] Page "${page.name}" (${page.facebookPageId}) not in /me/accounts response — token left intact, will revisit next sweep`);
                 }
             }
 
             verified += userPages.length;
-
-            if (invalidPages.length > 0) {
-                await notifyReconnectNeeded(userId, invalidPages);
-            }
         } catch (error) {
-            // /me/accounts failed — user token is likely expired or invalid
-            invalid += userPages.length;
-
-            const isAuthError = isTokenExpiredError(error);
-            if (isAuthError) {
-                logger.warn(`[TokenHealth] User ${userId} Facebook token is invalid — notifying`);
+            // /me/accounts failed even after retries.
+            //
+            // Only clear page tokens when the error is a *confirmed* token-revoked
+            // error — real OAuth code/subcode pair from FB. Anything else (transient
+            // network failure, FB outage, rate limit, unrecognized error shape) is
+            // logged for triage and retried next sweep.
+            //
+            // This prevents the bulk-clear bug where a single transient user-token
+            // failure would empty all of the user's page tokens — even though page
+            // tokens are independent of the user-level token's session state.
+            if (isTokenRevoked(error)) {
+                invalid += userPages.length;
+                const fbErr = error as FacebookApiError;
+                logger.warn(`[TokenHealth] User ${userId} Facebook token revoked — notifying`, {
+                    code: fbErr.code,
+                    subcode: fbErr.subcode,
+                });
                 await notifyReconnectNeeded(userId, userPages);
             } else {
-                // Transient error (network, rate limit) — don't mark as invalid, retry next sweep
-                captureError(error, 'Token verification failed (transient)', {
+                // Transient error (network, rate limit, FB blip, retries exhausted).
+                // Do NOT clear page tokens. Retry on the next 6h sweep.
+                captureError(error, 'Token verification failed (transient — retrying next sweep)', {
                     tags: { service: 'token-health' },
                     extra: { userId, pageCount: userPages.length },
                 });
-                logger.error(`[TokenHealth] Transient error for user ${userId}`, {
+                logger.warn(`[TokenHealth] Transient error for user ${userId} — page tokens NOT cleared, will retry next sweep`, {
                     error: error instanceof Error ? error.message : String(error),
                 });
             }
@@ -168,15 +214,6 @@ async function verifyAndRefreshTokens(): Promise<{ verified: number; refreshed: 
 
     logger.info(`[TokenHealth] Complete: ${verified} checked, ${refreshed} refreshed, ${invalid} invalid`);
     return { verified, refreshed, invalid };
-}
-
-/** Check if a Facebook API error indicates an expired/invalid token. */
-function isTokenExpiredError(error: unknown): boolean {
-    if (!error || typeof error !== 'object') return false;
-    const msg = String((error as { message?: string }).message || '').toLowerCase();
-    return msg.includes('invalid') || msg.includes('expired')
-        || msg.includes('oauthexception') || msg.includes('error validating')
-        || msg.includes('postcard and the payload');
 }
 
 /** Notify user that they need to reconnect their page(s). */
