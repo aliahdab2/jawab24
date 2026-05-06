@@ -183,6 +183,7 @@ async function recoverUser(user: AffectedUser, apply: boolean): Promise<Recovery
                 .set({
                     accessToken: maybeEncryptToken(freshToken),
                     tokenLastVerifiedAt: new Date(),
+                    disconnectReason: null,
                     updatedAt: new Date(),
                 })
                 .where(eq(pages.id, dbPage.id));

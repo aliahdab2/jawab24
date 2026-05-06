@@ -107,7 +107,7 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
             if (!user?.facebookAccessToken) {
                 logger.warn(`[TokenHealth] User ${userId} has no Facebook token — marking ${userPages.length} page(s) as unverifiable`);
                 invalid += userPages.length;
-                await notifyReconnectNeeded(userId, userPages);
+                await notifyReconnectNeeded(userId, userPages, 'no_user_token');
                 continue;
             }
 
@@ -149,12 +149,15 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
             for (const page of userPages) {
                 const freshToken = page.facebookPageId ? freshTokenMap.get(page.facebookPageId) : undefined;
                 if (freshToken) {
-                    // Token is valid — update with fresh token and mark as verified
+                    // Token is valid — update with fresh token and mark as verified.
+                    // Clear disconnect_reason: a previously-disconnected page that
+                    // came back via OAuth re-auth would have a stale reason value.
                     await db
                         .update(pages)
                         .set({
                             accessToken: maybeEncryptToken(freshToken),
                             tokenLastVerifiedAt: new Date(),
+                            disconnectReason: null,
                             updatedAt: new Date(),
                         })
                         .where(eq(pages.id, page.id));
@@ -197,7 +200,7 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
                     code: fbErr.code,
                     subcode: fbErr.subcode,
                 });
-                await notifyReconnectNeeded(userId, userPages);
+                await notifyReconnectNeeded(userId, userPages, 'token_revoked');
             } else {
                 // Transient error (network, rate limit, FB blip, retries exhausted).
                 // Do NOT clear page tokens. Retry on the next 6h sweep.
@@ -216,17 +219,26 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
     return { verified, refreshed, invalid };
 }
 
+/**
+ * Categorical reason a page is being marked disconnected. Persisted on
+ * `pages.disconnect_reason` so support can answer "why isn't this customer
+ * replying?" with one SQL query instead of cross-referencing logs.
+ */
+export type DisconnectReason = 'token_revoked' | 'no_user_token' | 'user_revoked';
+
 /** Notify user that they need to reconnect their page(s). */
 async function notifyReconnectNeeded(
     userId: string,
     failedPages: Array<{ id: string; name: string | null }>,
+    reason: DisconnectReason,
 ): Promise<void> {
     try {
         // Clear stored tokens so isConnected becomes false and the reconnect UI appears.
+        // Persist the reason so support can triage without log spelunking.
         const pageIds = failedPages.map(p => p.id);
         await db
             .update(pages)
-            .set({ accessToken: '', updatedAt: new Date() })
+            .set({ accessToken: '', disconnectReason: reason, updatedAt: new Date() })
             .where(inArray(pages.id, pageIds));
 
         const pageNames = failedPages.map(p => p.name || 'Unknown').join(', ');

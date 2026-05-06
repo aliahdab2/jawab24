@@ -559,10 +559,13 @@ export class PagesService {
                     .update(pages)
                     .set({
                         name: fbPage.name,
-                        // Only refresh the token if this is the user who connected the page
+                        // Only refresh the token if this is the user who connected the page.
+                        // Re-auth restores connectivity → clear disconnectReason for clean
+                        // support state (otherwise stale "token_revoked" lingers forever).
                         ...(isOriginalConnector && {
                             accessToken: maybeEncryptToken(fbPage.access_token),
                             tokenLastVerifiedAt: new Date(),
+                            disconnectReason: null,
                         }),
                         instagramAccountId,
                         instagramUsername,
@@ -599,6 +602,7 @@ export class PagesService {
                             name: fbPage.name,
                             accessToken: maybeEncryptToken(fbPage.access_token),
                             tokenLastVerifiedAt: new Date(),
+                            disconnectReason: null,
                             autoReplyEnabled: shouldAutoEnable,
                             instagramAccountId,
                             instagramUsername,
