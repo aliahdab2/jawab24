@@ -31,8 +31,22 @@ export function KnowledgeBaseSections({
   const tKb = useTranslations('kb');
   const { filled, total } = calculateProgress(sections);
 
+  // Click-to-focus is event-driven: when the user explicitly toggles a
+  // section open, focus its textarea to skip the extra tap. We do NOT focus
+  // as a side-effect of `isExpanded` changing in SectionEditor — that fires
+  // on the modal's initial-mount auto-expand too and would pop the soft
+  // keyboard before the user has interacted with anything.
   const handleToggle = (id: SectionId) => {
-    onExpandedChange(expandedId === id ? null : id);
+    const willExpand = expandedId !== id;
+    onExpandedChange(willExpand ? id : null);
+    if (willExpand) {
+      requestAnimationFrame(() => {
+        const textarea = document.querySelector<HTMLTextAreaElement>(
+          `[data-section-id="${CSS.escape(String(id))}"] textarea`
+        );
+        textarea?.focus({ preventScroll: true });
+      });
+    }
   };
 
   const customCount = sections.filter((s) => isCustomSection(s.id)).length;
@@ -60,35 +74,39 @@ export function KnowledgeBaseSections({
         </span>
       </div>
 
-      {/* Section cards */}
+      {/* Section cards. The data-section-id wrapper is what handleToggle's
+          focus query looks up — keep it in sync with the SectionId used in
+          state. */}
       {sections.map((section) => {
         if (isCustomSection(section.id)) {
           return (
-            <KnowledgeBaseCustomSection
-              key={section.id}
-              section={section}
-              isExpanded={expandedId === section.id}
-              onToggle={() => handleToggle(section.id)}
-              onChange={(content) => onSectionChange(section.id, content)}
-              onTitleChange={(title) => onCustomTitleChange(section.id as CustomSectionId, title)}
-              onDelete={() => onDeleteCustomSection(section.id as CustomSectionId)}
-              remainingChars={remainingChars}
-            />
+            <div key={section.id} data-section-id={section.id}>
+              <KnowledgeBaseCustomSection
+                section={section}
+                isExpanded={expandedId === section.id}
+                onToggle={() => handleToggle(section.id)}
+                onChange={(content) => onSectionChange(section.id, content)}
+                onTitleChange={(title) => onCustomTitleChange(section.id as CustomSectionId, title)}
+                onDelete={() => onDeleteCustomSection(section.id as CustomSectionId)}
+                remainingChars={remainingChars}
+              />
+            </div>
           );
         }
 
         const config = SECTION_CONFIGS.find((c) => c.id === section.id);
         if (!config) return null;
         return (
-          <KnowledgeBaseSection
-            key={section.id}
-            section={section}
-            config={config}
-            isExpanded={expandedId === section.id}
-            onToggle={() => handleToggle(section.id)}
-            onChange={(content) => onSectionChange(section.id, content)}
-            remainingChars={remainingChars}
-          />
+          <div key={section.id} data-section-id={section.id}>
+            <KnowledgeBaseSection
+              section={section}
+              config={config}
+              isExpanded={expandedId === section.id}
+              onToggle={() => handleToggle(section.id)}
+              onChange={(content) => onSectionChange(section.id, content)}
+              remainingChars={remainingChars}
+            />
+          </div>
         );
       })}
 

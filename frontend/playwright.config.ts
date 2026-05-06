@@ -33,6 +33,7 @@ export default defineConfig({
         'login.spec.ts',
         'ssr.spec.ts',
         'seo.spec.ts',
+        'keyboard-modal-layout.spec.ts',
       ],
     },
     {

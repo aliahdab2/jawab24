@@ -322,4 +322,7 @@ describe('CommentDetailModal', () => {
       expect(screen.getByText('Post Reply')).toBeInTheDocument();
     });
   });
+
+  // Keyboard-aware overlay/panel className contract is locked for all four
+  // modals in src/components/__tests__/keyboardAwareModalOverlays.test.tsx.
 });

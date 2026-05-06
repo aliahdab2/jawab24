@@ -10,7 +10,7 @@ import type { KeyboardPlugin } from '@capacitor/keyboard';
  * Android (adjustNothing — windowSoftInputMode in AndroidManifest.xml):
  *   - The OS never pans or resizes the WebView. The keyboard overlaps the viewport.
  *   - keyboardDidShow fires (via WindowInsetsAnimationCompat regardless of soft-input mode)
- *     and sets --keyboard-height. Modal backdrops use paddingBottom: var(--keyboard-height)
+ *     and sets --keyboard-height. Modal backdrops use bottom: var(--keyboard-height)
  *     to lift content above the keyboard.
  *   - keyboardDidHide clears --keyboard-height to 0.
  *   - keyboard-open class collapses pb-safe-modal safe-area padding while keyboard is up.
@@ -25,7 +25,7 @@ import type { KeyboardPlugin } from '@capacitor/keyboard';
  * iOS (KeyboardResize.None — from config, no setResizeMode call here):
  *   - WKWebView must never be resized (distorts layout permanently).
  *   - keyboardWillShow/WillHide set --keyboard-height and keyboard-open.
- *   - Modal backdrops use paddingBottom: var(--keyboard-height) to lift above keyboard.
+ *   - Modal backdrops use bottom: var(--keyboard-height) to lift above keyboard.
  *   - keyboard-open collapses pb-safe-modal to 0.
  *
  * Returns cleanup functions to remove all event listeners.

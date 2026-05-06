@@ -147,8 +147,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
 
   return createPortal(
     <div
-      className="modal-overlay fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200 touch-none"
-      style={{ paddingBottom: 'var(--keyboard-height, 0px)' }}
+      className="modal-overlay fixed top-0 start-0 end-0 bottom-[var(--keyboard-height,0px)] bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4 landscape:p-6 landscape:items-center animate-in fade-in duration-200 touch-none"
       onTouchMove={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
       onWheel={(e) => { if (e.target === e.currentTarget) e.preventDefault(); }}
     >
@@ -156,7 +155,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="comment-detail-modal-title"
-        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-full sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
+        className="bg-card rounded-t-2xl sm:rounded-2xl shadow-xl w-full max-w-2xl sm:min-h-0 max-h-[calc(100vh-var(--keyboard-height,0px))] sm:max-h-[90vh] overflow-hidden flex flex-col pt-safe sm:pt-0 landscape:pb-2 landscape:px-safe animate-in slide-in-from-bottom-10 sm:zoom-in-95 duration-200 touch-pan-y"
         onTouchMove={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >
