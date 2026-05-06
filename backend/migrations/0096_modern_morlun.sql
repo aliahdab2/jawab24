@@ -1,0 +1,1 @@
+ALTER TABLE "pages" ADD COLUMN "disconnect_reason" varchar(30);

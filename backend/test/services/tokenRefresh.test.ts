@@ -187,12 +187,54 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
 
         // notifyReconnectNeeded was called → tokens cleared + notification sent
         expect(mockDbUpdate).toHaveBeenCalledTimes(1);
-        expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({ accessToken: '' }));
+        expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
+            accessToken: '',
+            disconnectReason: 'token_revoked',
+        }));
         expect(mockSendNotification).toHaveBeenCalledWith(
             USER_ID,
             expect.objectContaining({ type: 'page_disconnected' }),
         );
         expect(result.invalid).toBe(2);
+    });
+
+    it('uses disconnect_reason="no_user_token" when user has no stored facebook token', async () => {
+        const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1' })];
+        const updateChain = buildUpdateChain();
+        mockDbUpdate.mockReturnValue(updateChain);
+        mockDbSelect
+            .mockReturnValueOnce(buildStalePagesQuery(stalePages))
+            .mockReturnValueOnce(buildUserSelectQuery({ facebookAccessToken: null }));
+
+        const result = await verifyAndRefreshTokens();
+
+        expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
+            accessToken: '',
+            disconnectReason: 'no_user_token',
+        }));
+        expect(result.invalid).toBe(1);
+    });
+
+    it('clears disconnect_reason on successful token refresh (recovered page)', async () => {
+        const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1' })];
+        const updateChain = buildUpdateChain();
+        mockDbUpdate.mockReturnValue(updateChain);
+        mockDbSelect
+            .mockReturnValueOnce(buildStalePagesQuery(stalePages))
+            .mockReturnValueOnce(buildUserSelectQuery({ facebookAccessToken: 'user-token' }));
+
+        mockGetUserPages.mockResolvedValue({
+            data: [{ id: 'fb-1', access_token: 'fresh-token' }],
+        });
+
+        await verifyAndRefreshTokens();
+
+        // The success path explicitly sets disconnectReason to null so a recovered
+        // page doesn't show stale state in support queries.
+        expect(updateChain._setMock).toHaveBeenCalledWith(expect.objectContaining({
+            accessToken: 'fresh-token',
+            disconnectReason: null,
+        }));
     });
 
     it('refreshes page tokens when /me/accounts succeeds', async () => {
