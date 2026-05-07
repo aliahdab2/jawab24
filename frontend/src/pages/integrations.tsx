@@ -244,11 +244,12 @@ function ConnectedStoreCard({
                   size="sm"
                   onClick={handleReregister}
                   disabled={reregistering || actionsDisabled}
+                  aria-busy={reregistering}
                   title={demoLockMessage}
                 >
                   {reregistering ? (
                     <>
-                      <Loader2 className="w-4 h-4 me-1 animate-spin" />
+                      <Loader2 className="w-4 h-4 me-1 animate-spin" aria-hidden="true" />
                       {tInt('webhookHealth.reregistering')}
                     </>
                   ) : tInt('webhookHealth.reregisterBtn')}

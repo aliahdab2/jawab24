@@ -474,7 +474,12 @@ test.describe('Integrations Page', () => {
         await page.goto(`/${locale}/integrations`);
 
         const tCopy = locale === 'ar' ? tAr : t;
-        await expect(page.getByText(tCopy('integrations.webhookHealth.failedTitle')).first()).toBeVisible({ timeout: 15000 });
+        // Banner must use role="alert" so screen readers announce it when
+        // webhookHealth flips to 'failed' — that's the merchant's only signal
+        // that webhooks aren't firing. Asserting via role validates the a11y
+        // attribute, not just the visible copy.
+        const banner = page.getByRole('alert').filter({ hasText: tCopy('integrations.webhookHealth.failedTitle') });
+        await expect(banner.first()).toBeVisible({ timeout: 15000 });
         const tryAgain = page.getByRole('button', { name: new RegExp(tCopy('integrations.webhookHealth.reregisterBtn'), 'i') });
         await expect(tryAgain.first()).toBeVisible({ timeout: 10000 });
 
