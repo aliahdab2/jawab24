@@ -298,13 +298,13 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
 
           <div className="flex items-center gap-3 landscape:gap-2">
             {totalChars > 0 && (
-              <div className="flex items-center gap-2 max-sm:hidden">
+              <div className="flex items-center gap-2">
                 {isOverLimit && (
-                  <span className="text-xs font-medium text-red-500" role="alert">
+                  <span className="text-xs font-medium text-red-500 max-sm:hidden" role="alert">
                     {tKb('overLimit').replace('{excess}', (totalChars - MAX_LENGTH).toLocaleString())}
                   </span>
                 )}
-                <span className={`text-xs font-medium ${
+                <span className={`text-xs font-medium tabular-nums ${
                   isOverLimit ? 'text-red-500' : isNearLimit ? 'text-amber-500' : 'text-muted-foreground'
                 }`}>
                   {totalChars.toLocaleString()}/{MAX_LENGTH.toLocaleString()}

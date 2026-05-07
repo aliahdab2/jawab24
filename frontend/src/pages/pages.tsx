@@ -218,16 +218,14 @@ const PagesPage: NextPageWithLayout = () => {
   }, [router.isReady, router.query.openKb, loading, pages, router]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
-    // Optimistic update
-    setPages(pages.map(page =>
+    setPages(prev => prev.map(page =>
       page.id === pageId ? { ...page, autoReplyEnabled: enabled } : page
     ));
 
     try {
       await pagesApi.toggle(pageId, enabled);
     } catch (error) {
-      // Revert on error
-      setPages(pages.map(page =>
+      setPages(prev => prev.map(page =>
         page.id === pageId ? { ...page, autoReplyEnabled: !enabled } : page
       ));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
@@ -243,16 +241,14 @@ const PagesPage: NextPageWithLayout = () => {
   };
 
   const handleInstagramToggle = async (pageId: string, enabled: boolean) => {
-    // Optimistic update
-    setPages(pages.map(page =>
+    setPages(prev => prev.map(page =>
       page.id === pageId ? { ...page, instagramAutoReplyEnabled: enabled } : page
     ));
 
     try {
       await api.patch(`/pages/${pageId}/instagram-auto-reply`, { enabled });
     } catch (error) {
-      // Revert on error
-      setPages(pages.map(page =>
+      setPages(prev => prev.map(page =>
         page.id === pageId ? { ...page, instagramAutoReplyEnabled: !enabled } : page
       ));
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
@@ -557,7 +553,7 @@ const PagesPage: NextPageWithLayout = () => {
                             : t('addBusinessInfo')
                           }
                         </p>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-tight mt-0.5">
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">
                           {page.knowledgeBase
                             ? t('clickToEdit')
                             : t('improveAIQuality')
@@ -583,7 +579,7 @@ const PagesPage: NextPageWithLayout = () => {
                       </div>
                       <div className="text-start">
                         <p className="text-sm font-bold text-foreground/70">{t('testSmartReply')}</p>
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-tight mt-0.5">{t('testSmartReplyDescription')}</p>
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{t('testSmartReplyDescription')}</p>
                       </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />
