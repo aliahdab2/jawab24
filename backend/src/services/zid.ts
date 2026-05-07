@@ -19,6 +19,7 @@ import { captureError } from '../utils/sentryHelpers';
 import {
     getStoreById,
     replaceProductsAndRebuildSummary,
+    type WebhookRegistrationResult,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
 import { verifyHexHmac } from '../utils/hmacVerify';
@@ -33,6 +34,7 @@ import {
 
 const MAX_PRODUCTS_PER_PAGE = 50;
 const MAX_PAGES_TO_FETCH = 6; // 300 products max
+const ERROR_TEXT_MAX_LENGTH = 200;
 
 const ZID_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
     platform: 'zid',
@@ -130,8 +132,10 @@ export function isOrderEvent(event: string): boolean {
     return event.startsWith('order.');
 }
 
-export async function registerWebhooks(accessToken: string): Promise<void> {
+export async function registerWebhooks(accessToken: string): Promise<WebhookRegistrationResult> {
     const webhookUrl = `https://${config.zid.hostName}/zid/webhooks`;
+    const registered: string[] = [];
+    const failed: Array<{ topic: string; status?: number; error?: string }> = [];
 
     for (const event of ZID_WEBHOOK_EVENTS) {
         try {
@@ -151,19 +155,27 @@ export async function registerWebhooks(accessToken: string): Promise<void> {
             );
             if (!response.ok) {
                 const text = await response.text();
-                // 409 = webhook already exists
-                if (response.status !== 409) {
+                // 409 = webhook already exists, treat as success (mirrors Shopify 422 / Salla 422)
+                if (response.status === 409) {
+                    registered.push(event);
+                } else {
+                    failed.push({ topic: event, status: response.status, error: text.slice(0, ERROR_TEXT_MAX_LENGTH) });
                     captureError(
                         new Error(`Zid webhook registration failed: ${event} ${response.status}`),
                         `Zid webhook registration failed: ${event}`,
                         { tags: { service: 'zid' }, extra: { event, status: response.status, body: text } }
                     );
                 }
+            } else {
+                registered.push(event);
             }
         } catch (err) {
+            failed.push({ topic: event, error: err instanceof Error ? err.message : String(err) });
             captureError(err, `Zid webhook registration error: ${event}`, { tags: { service: 'zid' } });
         }
     }
+
+    return { registered, failed, lastAttempt: new Date().toISOString() };
 }
 
 // --- REST API Helper ---

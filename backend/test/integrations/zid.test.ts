@@ -28,6 +28,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     getEnrichedKnowledgeBase: (...args: any[]) => mockGetEnrichedKnowledgeBase(...args),
     claimPendingInstall: (...args: any[]) => mockClaimPendingInstall(...args),
     cleanupExpiredInstalls: (...args: any[]) => mockCleanupExpiredInstalls(...args),
+    saveWebhookStatus: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock zid service
@@ -174,7 +175,8 @@ describe('ZidIntegration', () => {
                 'pending-uuid-123',
                 'user-1',
                 'zid',
-                expect.any(Function),
+                expect.any(Function), // registerWebhooksFn callback
+                expect.any(Function), // saveWebhookStatusFn — persists status from registerWebhooks
             );
             expect(rep.clearCookie).toHaveBeenCalledWith('pendingZidId', { path: '/' });
             expect(result).toEqual({ zidOnboarding: true, ecommerceStoreId: 'store-new' });

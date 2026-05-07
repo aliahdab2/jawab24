@@ -57,6 +57,10 @@ vi.mock('../../src/services/ecommerce', () => ({
     getProducts: (...args: any[]) => mockGetProducts(...args),
     mapToEcommerceStore: (...args: any[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
+    // Pass-through wrapper — calls registerFn so existing mockRegisterWebhooks
+    // assertions still apply. Real helper also persists status + enqueues
+    // retries; tested separately in webhookHardening tests.
+    registerWebhooksWithPersist: (_storeId: string, _platform: string, fn: () => Promise<unknown>) => fn(),
 }));
 
 const mockVerifyToken = vi.fn();

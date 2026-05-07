@@ -1,14 +1,24 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { Logger } from '../types';
+import type { WebhookRegistrationResult } from '../services/ecommerce';
+
+/** Subset of the ecommerceStores row needed for webhook registration. */
+export interface StoreForWebhooks {
+    id: string;
+    storeDomain: string;
+    accessToken: string;
+    accessTokenIv: string;
+}
 
 /**
- * Contract for e-commerce platform integrations (Shopify, WooCommerce, Salla, etc.)
+ * Contract for e-commerce platform integrations (Shopify, Salla, Zid, ...).
  *
- * Each integration implements these 4 hooks so core files (index.ts, auth.ts,
- * commentProcessor.ts, messageProcessor.ts) never import integration-specific code.
+ * Each integration implements these hooks so core files (index.ts, auth.ts,
+ * commentProcessor.ts, messageProcessor.ts, webhookRetryWorker.ts) never
+ * import integration-specific code.
  */
 export interface EcommerceIntegration {
-    /** Unique name, e.g. 'shopify', 'woocommerce' */
+    /** Unique name, e.g. 'shopify', 'salla', 'zid' */
     readonly name: string;
 
     /** Whether this integration is configured (has API keys, etc.) */
@@ -42,6 +52,21 @@ export interface EcommerceIntegration {
 
     /** Graceful shutdown: stop workers, clear intervals. */
     onShutdown(): Promise<void>;
+
+    /**
+     * Source-of-truth list of webhook topics this platform subscribes to.
+     * Used by the webhook hardening UI and tests to know what's expected.
+     */
+    getWebhookTopics(): readonly string[];
+
+    /**
+     * Register webhooks for a connected store. Returns a structured status
+     * (registered/failed/lastAttempt) so callers can persist it and surface
+     * webhookHealth to the merchant. Errors during partial failures must NOT
+     * throw — they go into `failed`. Throw only for total registration failure
+     * (network error, auth failure) so the caller can persist-on-throw.
+     */
+    registerWebhooks(store: StoreForWebhooks): Promise<WebhookRegistrationResult>;
 }
 
 class IntegrationRegistryImpl {
@@ -60,6 +85,11 @@ class IntegrationRegistryImpl {
 
     getEnabled(): EcommerceIntegration[] {
         return this.integrations.filter(i => i.isEnabled());
+    }
+
+    /** Look up a registered integration by platform name. Returns null if unknown. */
+    get(name: string): EcommerceIntegration | null {
+        return this.integrations.find(i => i.name === name) ?? null;
     }
 }
 

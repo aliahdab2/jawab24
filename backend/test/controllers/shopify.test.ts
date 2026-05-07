@@ -36,6 +36,7 @@ const mockDeleteSingleProduct = vi.fn().mockResolvedValue(undefined);
 vi.mock('../../src/services/ecommerce', () => ({
     upsertSingleProduct: (...args: any[]) => mockUpsertSingleProduct(...args),
     deleteSingleProduct: (...args: any[]) => mockDeleteSingleProduct(...args),
+    registerWebhooksWithPersist: (_storeId: string, _platform: string, fn: () => Promise<unknown>) => fn(),
 }));
 
 vi.mock('../../src/lib/webhookRetryQueue', () => ({

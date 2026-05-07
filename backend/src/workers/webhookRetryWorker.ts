@@ -1,8 +1,8 @@
 import { Worker, Job } from 'bullmq';
 import { config } from '../config';
 import { WEBHOOK_RETRY_QUEUE, WebhookRetryJobData } from '../lib/webhookRetryQueue';
-import { getStoreById } from '../services/ecommerce';
-import { decrypt } from '../services/ecommerceCrypto';
+import { getStoreById, saveWebhookStatus } from '../services/ecommerce';
+import { integrationRegistry } from '../integrations/registry';
 import { captureError } from '../utils/sentryHelpers';
 import { Logger, noopLogger } from '../types';
 
@@ -28,22 +28,23 @@ async function processJob(job: Job<WebhookRetryJobData>): Promise<void> {
         return;
     }
 
-    const accessToken = decrypt(store.accessToken, store.accessTokenIv);
-
-    if (platform === 'shopify') {
-        const { registerWebhooks, saveWebhookStatus } = await import('../services/shopify');
-        const status = await registerWebhooks(store.storeDomain, accessToken);
-        await saveWebhookStatus(storeId, status);
-        if (status.failed.length > 0) {
-            // Throw so BullMQ schedules the next attempt with exponential backoff.
-            throw new Error(`Shopify webhook retry: ${status.failed.length} topic(s) still failing`);
-        }
+    const adapter = integrationRegistry.get(platform);
+    if (!adapter) {
+        logger.warn('[WebhookRetry] No adapter registered for platform', { platform });
         return;
     }
 
-    // Salla / Zid don't currently use the retry queue. If they do later, add their
-    // platform-specific registration call here.
-    logger.warn('[WebhookRetry] No retry handler for platform', { platform });
+    const status = await adapter.registerWebhooks({
+        id: store.id,
+        storeDomain: store.storeDomain,
+        accessToken: store.accessToken,
+        accessTokenIv: store.accessTokenIv,
+    });
+    await saveWebhookStatus(storeId, status);
+    if (status.failed.length > 0) {
+        // Throw so BullMQ schedules the next attempt with exponential backoff.
+        throw new Error(`${platform} webhook retry: ${status.failed.length} topic(s) still failing`);
+    }
 }
 
 let worker: Worker | null = null;
@@ -86,10 +87,8 @@ export function startWebhookRetryWorker(): Worker {
     return worker;
 }
 
-async function markWebhookStatusExhausted(storeId: string, platform: string, errorMessage: string): Promise<void> {
-    if (platform !== 'shopify') return; // Other platforms don't use the retry queue yet
-    const { saveWebhookStatus } = await import('../services/shopify');
-    const { getStoreById } = await import('../services/ecommerce');
+async function markWebhookStatusExhausted(storeId: string, _platform: string, errorMessage: string): Promise<void> {
+    // Platform-agnostic — saveWebhookStatus operates by storeId regardless of platform.
     const store = await getStoreById(storeId);
     const platformData = (store?.platformData as Record<string, unknown> | null) ?? {};
     const existing = (platformData.webhookStatus as { registered?: string[]; failed?: unknown[] } | undefined) ?? null;

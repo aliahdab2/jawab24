@@ -151,20 +151,11 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
     return { registered, failed, lastAttempt: new Date().toISOString() };
 }
 
-/**
- * Save webhook registration status into the store's platformData JSONB field.
- * Merges with existing platformData so other keys (e.g. planName) are preserved.
- */
-export async function saveWebhookStatus(storeId: string, webhookStatus: WebhookRegistrationResult): Promise<void> {
-    const [store] = await db.select({ platformData: ecommerceStores.platformData })
-        .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
-
-    const existing = (store?.platformData as Record<string, unknown>) || {};
-    await db.update(ecommerceStores).set({
-        platformData: { ...existing, webhookStatus },
-        updatedAt: new Date(),
-    }).where(eq(ecommerceStores.id, storeId));
-}
+// Re-export the platform-agnostic webhook-status persister so existing
+// callers in controllers/shopify.ts and workers/webhookRetryWorker.ts keep
+// working. The implementation lives in services/ecommerce.ts.
+import { saveWebhookStatus } from './ecommerce';
+export { saveWebhookStatus };
 
 // --- Shopify-default wrappers (bind platform='shopify' for backward compat) ---
 

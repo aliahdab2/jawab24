@@ -20,6 +20,7 @@ import { captureError } from '../utils/sentryHelpers';
 import {
     getStoreById,
     replaceProductsAndRebuildSummary,
+    type WebhookRegistrationResult,
 } from './ecommerce';
 import { stripHtml } from '../utils/htmlUtils';
 import { verifyHexHmac } from '../utils/hmacVerify';
@@ -34,6 +35,7 @@ import {
 
 const MAX_PRODUCTS_PER_PAGE = 65;
 const MAX_PAGES_TO_FETCH = 4; // 260 products max
+const ERROR_TEXT_MAX_LENGTH = 200;
 
 const SALLA_TOKEN_REFRESH_CONFIG: TokenRefreshConfig = {
     platform: 'salla',
@@ -127,9 +129,11 @@ export function isOrderEvent(event: string): boolean {
     return event.startsWith('order.') || event === 'abandoned.cart';
 }
 
-export async function registerWebhooks(accessToken: string): Promise<void> {
+export async function registerWebhooks(accessToken: string): Promise<WebhookRegistrationResult> {
     // Single endpoint receives all events — dispatches by event type in body
     const webhookUrl = `https://${config.salla.hostName}/salla/webhooks`;
+    const registered: string[] = [];
+    const failed: Array<{ topic: string; status?: number; error?: string }> = [];
 
     for (const event of SALLA_WEBHOOK_EVENTS) {
         try {
@@ -149,19 +153,27 @@ export async function registerWebhooks(accessToken: string): Promise<void> {
             );
             if (!response.ok) {
                 const text = await response.text();
-                // 422 = webhook already exists
-                if (response.status !== 422) {
+                // 422 = webhook already exists, treat as success (mirrors Shopify)
+                if (response.status === 422) {
+                    registered.push(event);
+                } else {
+                    failed.push({ topic: event, status: response.status, error: text.slice(0, ERROR_TEXT_MAX_LENGTH) });
                     captureError(
                         new Error(`Salla webhook registration failed: ${event} ${response.status}`),
                         `Salla webhook registration failed: ${event}`,
                         { tags: { service: 'salla' }, extra: { event, status: response.status, body: text } }
                     );
                 }
+            } else {
+                registered.push(event);
             }
         } catch (err) {
+            failed.push({ topic: event, error: err instanceof Error ? err.message : String(err) });
             captureError(err, `Salla webhook registration error: ${event}`, { tags: { service: 'salla' } });
         }
     }
+
+    return { registered, failed, lastAttempt: new Date().toISOString() };
 }
 
 // --- REST API Helper ---

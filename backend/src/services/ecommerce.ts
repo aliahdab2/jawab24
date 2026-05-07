@@ -49,6 +49,70 @@ export function deriveWebhookHealth(status: WebhookRegistrationResult | undefine
     return 'ok';
 }
 
+/**
+ * Register webhooks for a freshly-installed store and persist the resulting
+ * status atomically with retry-queue scheduling.
+ *
+ * Replaces fire-and-forget `.catch()` patterns at controller install sites.
+ * The merchant install must NOT fail because of webhook hiccups — partial
+ * failures are persisted and retried in the background; total failures
+ * (registerFn throws) are persisted as a "failed: all" marker so the
+ * integrations card has signal immediately, then a retry job is enqueued.
+ *
+ * Used by Shopify, Salla, and Zid install paths and the manual
+ * /:platform/store/webhooks/reregister endpoint.
+ */
+export async function registerWebhooksWithPersist(
+    storeId: string,
+    platform: EcommercePlatform,
+    registerFn: () => Promise<WebhookRegistrationResult>,
+): Promise<WebhookRegistrationResult> {
+    try {
+        const status = await registerFn();
+        await saveWebhookStatus(storeId, status);
+        if (status.failed.length > 0) {
+            const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
+            await enqueueWebhookRetry({ storeId, platform });
+        }
+        return status;
+    } catch (err) {
+        captureError(err, `${platform} webhook registration failed`, {
+            tags: { service: platform, stage: 'webhook-registration' },
+            extra: { storeId },
+        });
+        const failedStatus: WebhookRegistrationResult = {
+            registered: [],
+            failed: [{ topic: 'all', error: err instanceof Error ? err.message : String(err) }],
+            lastAttempt: new Date().toISOString(),
+        };
+        await saveWebhookStatus(storeId, failedStatus).catch(() => { /* capture above is sufficient */ });
+        try {
+            const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
+            await enqueueWebhookRetry({ storeId, platform });
+        } catch {
+            // Retry queue unavailable — caller will see the failedStatus and
+            // can surface a Re-register CTA. Don't crash the install path.
+        }
+        return failedStatus;
+    }
+}
+
+/**
+ * Save webhook registration status into the store's platformData JSONB field.
+ * Merges with existing platformData so other keys (e.g. planName, merchantId)
+ * are preserved. Platform-agnostic — used by Shopify, Salla, Zid.
+ */
+export async function saveWebhookStatus(storeId: string, webhookStatus: WebhookRegistrationResult): Promise<void> {
+    const [store] = await db.select({ platformData: ecommerceStores.platformData })
+        .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
+
+    const existing = (store?.platformData as Record<string, unknown>) || {};
+    await db.update(ecommerceStores).set({
+        platformData: { ...existing, webhookStatus },
+        updatedAt: new Date(),
+    }).where(eq(ecommerceStores.id, storeId));
+}
+
 export const KB_MAX_CHARS = 8000; // Must match ai-worker's KB_MAX_CHARS
 
 // --- Store CRUD ---

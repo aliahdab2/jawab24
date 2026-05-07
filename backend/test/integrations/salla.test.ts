@@ -29,6 +29,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     getEnrichedKnowledgeBase: (...args: any[]) => mockGetEnrichedKnowledgeBase(...args),
     claimPendingInstall: (...args: any[]) => mockClaimPendingInstall(...args),
     cleanupExpiredInstalls: (...args: any[]) => mockCleanupExpiredInstalls(...args),
+    saveWebhookStatus: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock salla service
@@ -176,6 +177,7 @@ describe('SallaIntegration', () => {
                 'user-1',
                 'salla',
                 expect.any(Function), // registerWebhooksFn callback
+                expect.any(Function), // saveWebhookStatusFn — persists status from registerWebhooks
             );
             expect(rep.clearCookie).toHaveBeenCalledWith('pendingSallaId', { path: '/' });
             expect(result).toEqual({ sallaOnboarding: true, ecommerceStoreId: 'store-new' });

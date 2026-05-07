@@ -1,8 +1,21 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import type { EcommerceIntegration } from './registry';
+import type { EcommerceIntegration, StoreForWebhooks } from './registry';
 import type { Logger } from '../types';
+import type { WebhookRegistrationResult } from '../services/ecommerce';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
+
+// Mirrors ZID_WEBHOOK_EVENTS in services/zid.ts. Tests assert these stay in sync.
+const ZID_WEBHOOK_TOPICS = [
+    'product.created',
+    'product.updated',
+    'product.deleted',
+    'app.uninstalled',
+    'order.created',
+    'order.updated',
+    'order.shipped',
+    'order.delivered',
+] as const;
 
 /**
  * Zid e-commerce integration adapter.
@@ -62,16 +75,15 @@ export class ZidIntegration implements EcommerceIntegration {
         if (!result.valid || !result.value) return null;
 
         try {
-            const { claimPendingInstall } = await import('../services/ecommerce');
+            const { claimPendingInstall, saveWebhookStatus } = await import('../services/ecommerce');
             const { registerWebhooks } = await import('../services/zid');
 
             const store = await claimPendingInstall(
                 result.value,
                 userId,
                 'zid',
-                async (_storeDomain: string, accessToken: string) => {
-                    await registerWebhooks(accessToken);
-                },
+                async (_storeDomain: string, accessToken: string) => registerWebhooks(accessToken),
+                saveWebhookStatus,
             );
             if (store) {
                 reply.clearCookie('pendingZidId', { path: '/' });
@@ -124,5 +136,16 @@ export class ZidIntegration implements EcommerceIntegration {
             this.tokenRefreshInterval = null;
         }
         // Worker shutdown is handled by the Shopify adapter (shared worker)
+    }
+
+    getWebhookTopics(): readonly string[] {
+        return ZID_WEBHOOK_TOPICS;
+    }
+
+    async registerWebhooks(store: StoreForWebhooks): Promise<WebhookRegistrationResult> {
+        const { decrypt } = await import('../services/ecommerceCrypto');
+        const { registerWebhooks } = await import('../services/zid');
+        const accessToken = decrypt(store.accessToken, store.accessTokenIv);
+        return registerWebhooks(accessToken);
     }
 }

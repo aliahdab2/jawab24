@@ -1,8 +1,26 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import type { EcommerceIntegration } from './registry';
+import type { EcommerceIntegration, StoreForWebhooks } from './registry';
 import type { Logger } from '../types';
+import type { WebhookRegistrationResult } from '../services/ecommerce';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
+
+// Mirrors SALLA_WEBHOOK_EVENTS in services/salla.ts. Kept here so the adapter
+// can answer getWebhookTopics() synchronously without importing the full
+// service module. Tests assert these stay in sync.
+const SALLA_WEBHOOK_TOPICS = [
+    'product.created',
+    'product.deleted',
+    'product.price.updated',
+    'product.status.updated',
+    'product.quantity.low',
+    'app.uninstalled',
+    'order.created',
+    'order.updated',
+    'order.shipping.update',
+    'order.completed',
+    'abandoned.cart',
+] as const;
 
 /**
  * Salla e-commerce integration adapter.
@@ -57,17 +75,15 @@ export class SallaIntegration implements EcommerceIntegration {
         if (!result.valid || !result.value) return null;
 
         try {
-            const { claimPendingInstall } = await import('../services/ecommerce');
+            const { claimPendingInstall, saveWebhookStatus } = await import('../services/ecommerce');
             const { registerWebhooks } = await import('../services/salla');
 
-            // Claim with Salla webhook registration callback
             const store = await claimPendingInstall(
                 result.value,
                 userId,
                 'salla',
-                async (_storeDomain: string, accessToken: string) => {
-                    await registerWebhooks(accessToken);
-                },
+                async (_storeDomain: string, accessToken: string) => registerWebhooks(accessToken),
+                saveWebhookStatus,
             );
             if (store) {
                 reply.clearCookie('pendingSallaId', { path: '/' });
@@ -120,5 +136,16 @@ export class SallaIntegration implements EcommerceIntegration {
             this.tokenRefreshInterval = null;
         }
         // Worker shutdown is handled by the Shopify adapter (shared worker)
+    }
+
+    getWebhookTopics(): readonly string[] {
+        return SALLA_WEBHOOK_TOPICS;
+    }
+
+    async registerWebhooks(store: StoreForWebhooks): Promise<WebhookRegistrationResult> {
+        const { decrypt } = await import('../services/ecommerceCrypto');
+        const { registerWebhooks } = await import('../services/salla');
+        const accessToken = decrypt(store.accessToken, store.accessTokenIv);
+        return registerWebhooks(accessToken);
     }
 }

@@ -1,8 +1,20 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import type { EcommerceIntegration } from './registry';
+import type { EcommerceIntegration, StoreForWebhooks } from './registry';
 import type { Logger } from '../types';
+import type { WebhookRegistrationResult } from '../services/ecommerce';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
+
+const SHOPIFY_WEBHOOK_TOPICS = [
+    'app/uninstalled',
+    'products/create',
+    'products/update',
+    'products/delete',
+    'orders/create',
+    'orders/updated',
+    'orders/fulfilled',
+    'orders/cancelled',
+] as const;
 
 /**
  * Shopify e-commerce integration adapter.
@@ -88,5 +100,16 @@ export class ShopifyIntegration implements EcommerceIntegration {
         }
         const { stopEcommerceSyncWorker } = await import('../workers/ecommerceSyncWorker');
         await stopEcommerceSyncWorker();
+    }
+
+    getWebhookTopics(): readonly string[] {
+        return SHOPIFY_WEBHOOK_TOPICS;
+    }
+
+    async registerWebhooks(store: StoreForWebhooks): Promise<WebhookRegistrationResult> {
+        const { decrypt } = await import('../services/ecommerceCrypto');
+        const { registerWebhooks } = await import('../services/shopify');
+        const accessToken = decrypt(store.accessToken, store.accessTokenIv);
+        return registerWebhooks(store.storeDomain, accessToken);
     }
 }
