@@ -1045,11 +1045,19 @@ Top Products:
 
 ### Supported E-Commerce Platforms
 
-| Platform | Status | OAuth | Token Expiry | Max Products |
-|----------|--------|-------|-------------|--------------|
-| **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL (unlimited) |
-| **Salla** | Active | OAuth 2.0 | 14 days (auto-refresh) | REST, max 260 |
-| **Zid** | **Active** | OAuth 2.0 | ~1 year (auto-refresh via Redis lock) | REST, paginated |
+| Platform | Status | OAuth | Token Expiry | Max Products | Webhook hardening |
+|----------|--------|-------|-------------|--------------|-------------------|
+| **Shopify** | Active | OAuth 2.0 | Never expires | GraphQL (unlimited) | ✅ Full (retry, exhaustion flag, manual reregister, frontend recovery UI) |
+| **Salla** | Active | OAuth 2.0 | 14 days (auto-refresh, single-use refresh tokens) | REST, max 260 | ✅ Full (lifted to platform-agnostic in PR #27, 2026-05-07) |
+| **Zid** | Active | OAuth 2.0 | ~1 year (auto-refresh via Redis lock) | REST, paginated | ✅ Full (same shared infrastructure) |
+
+**Webhook recovery infrastructure** (cross-platform, 2026-05-07):
+- Shared `registerWebhooksWithPersist` helper in `services/ecommerce.ts` — install path persists status JSONB and enqueues a BullMQ retry on partial or total failure. Install never fails because of webhook hiccups.
+- Adapter contract in `integrations/registry.ts` — `IntegrationAdapter.registerWebhooks(store)` and `getWebhookTopics()`. Worker dispatches via `integrationRegistry.get(platform)` instead of switching on platform name.
+- Manual recovery endpoint `POST /:platform/store/webhooks/reregister` for all three platforms (one shared handler).
+- Frontend integrations card surfaces `webhookHealth` (`ok | pending | failed | unknown`) with a "Try again" button when `failed`. EN + AR.
+- Sentry stage tags: `webhook-registration`, `webhook-status-persist-failed`, `webhook-retry-enqueue-failed`, `webhook-retry-exhausted`.
+- See [`.planning/codebase/INTEGRATIONS.md`](.planning/codebase/INTEGRATIONS.md#cross-platform-webhook-hardening-shopify--salla--zid) for the full architecture.
 
 ### Product Sync → Cache Invalidation
 
