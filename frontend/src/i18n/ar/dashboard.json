@@ -60,7 +60,8 @@
     "replyRate": "معدل الرد",
     "avgSpeed": "متوسط السرعة",
     "quotaWarning": "{percent}% من الخطة",
-    "quotaExceeded": "تجاوز الحد"
+    "quotaExceeded": "تجاوز الحد",
+    "smartRepliesTooltip": "الردود المُرسَلة خلال آخر 30 يوماً."
   },
   "smartBanner": {
     "needsAttention": "{count, plural, zero {لا عناصر تحتاج انتباهك} one {عنصر واحد يحتاج انتباهك} two {عنصران يحتاجان انتباهك} few {# عناصر تحتاج انتباهك} many {# عنصر يحتاج انتباهك} other {# عنصر يحتاج انتباهك}}",
