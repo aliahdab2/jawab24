@@ -27,6 +27,7 @@
     "notesPlaceholder": "ماذا أيضاً يجب أن يعرف جواب؟ ساعات العمل، سياسة الإرجاع، مناطق التوصيل، الموقع — أي شيء يسأل عنه العملاء."
   },
   "charCount": "{count} / {max}",
+  "charCountAria": "{count, plural, zero {لا حروف} one {حرف واحد} two {حرفان} few {# حروف} many {# حرفًا} other {# حرف}}",
   "overLimit": "احذف {excess} حرف للحفظ",
   "extractTrimmedToBudget": "تم اقتطاع النص — تم الاحتفاظ بـ {kept} من {total} حرف",
   "addCustomSection": "أضف قسم جديد",

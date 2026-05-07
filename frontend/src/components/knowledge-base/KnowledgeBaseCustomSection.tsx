@@ -74,6 +74,7 @@ function KnowledgeBaseCustomSectionImpl({
         isExpanded={isExpanded}
         hasContent={hasContent}
         charCount={section.content.length}
+        charCountLabel={tKb('charCountAria', { count: section.content.length })}
         onToggle={handleToggle}
         header={
           <>

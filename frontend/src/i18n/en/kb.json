@@ -27,6 +27,7 @@
     "notesPlaceholder": "What else should Jawab know? Working hours, return policy, delivery areas, location — anything customers ask about."
   },
   "charCount": "{count} / {max}",
+  "charCountAria": "{count, plural, one {# character} other {# characters}}",
   "overLimit": "Remove {excess} characters to save",
   "extractTrimmedToBudget": "Text trimmed to fit — {kept} of {total} characters kept",
   "addCustomSection": "Add new section",
