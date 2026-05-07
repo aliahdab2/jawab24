@@ -239,18 +239,26 @@ export function leadDigestEmailTemplate(params: {
     const rows = params.leads.slice(0, DIGEST_MAX_ROWS);
     const remaining = Math.max(0, params.leadCount - rows.length);
 
+    const lblName = escapeHtml(thName);
+    const lblPhone = escapeHtml(thPhone);
+    const lblReason = escapeHtml(thReason);
+    const lblSource = escapeHtml(thSource);
+    const lblDate = escapeHtml(thDate);
+    const mobileLabel = (label: string) =>
+        `<span class="ld-mlabel" style="display:none;font-weight:600;color:#71717a;font-size:12px;margin-${rtl ? 'left' : 'right'}:8px;">${label}:</span>`;
+
     const tableRows = rows.map(lead => {
         const name = escapeHtml(lead.name?.trim() || '—');
         const phone = escapeHtml(lead.phone);
         const reason = escapeHtml(lead.summary?.trim() || noSummary);
         const source = escapeHtml(lead.sourceType === 'comment' ? srcCmt : srcMsg);
         const date = escapeHtml(formatDigestDate(lead.createdAt, lang));
-        return `<tr>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;word-break:break-word;">${name}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${phone}</td>
-          <td dir="auto" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#3f3f46;vertical-align:top;line-height:1.5;word-break:break-word;">${reason}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;">${source}</td>
-          <td style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;white-space:nowrap;">${date}</td>
+        return `<tr class="ld-row">
+          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;word-break:break-word;">${mobileLabel(lblName)}${name}</td>
+          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#18181b;vertical-align:top;" dir="ltr">${mobileLabel(lblPhone)}${phone}</td>
+          <td class="ld-cell" dir="auto" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#3f3f46;vertical-align:top;line-height:1.5;word-break:break-word;">${mobileLabel(lblReason)}${reason}</td>
+          <td class="ld-cell" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;">${mobileLabel(lblSource)}${source}</td>
+          <td class="ld-cell ld-cell-last" style="padding:10px 12px;border-bottom:1px solid #e4e4e7;font-size:14px;color:#52525b;vertical-align:top;white-space:nowrap;">${mobileLabel(lblDate)}${date}</td>
         </tr>`;
     }).join('');
 
@@ -266,6 +274,15 @@ export function leadDigestEmailTemplate(params: {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(subject)}</title>
+  <style>
+    @media only screen and (max-width: 600px) {
+      .ld-table { table-layout: auto !important; }
+      .ld-thead { display: none !important; }
+      .ld-row { display: block !important; width: 100% !important; padding: 12px 4px !important; border-bottom: 1px solid #e4e4e7 !important; }
+      .ld-cell { display: block !important; width: 100% !important; padding: 4px 8px !important; border-bottom: none !important; white-space: normal !important; }
+      .ld-mlabel { display: inline !important; }
+    }
+  </style>
 </head>
 <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:${fontFamily};">
   <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">${escapeHtml(intro)}</div>
@@ -282,7 +299,7 @@ export function leadDigestEmailTemplate(params: {
             <td style="padding:28px 24px;color:#18181b;font-size:16px;line-height:1.6;text-align:${align};font-family:${fontFamily};">
               <h1 style="margin:0 0 8px 0;font-size:22px;color:#0d9488;">${escapeHtml(heading)}</h1>
               <p style="margin:0 0 20px 0;color:#3f3f46;">${escapeHtml(intro)}</p>
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;table-layout:fixed;">
+              <table class="ld-table" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:16px 0;table-layout:fixed;">
                 <colgroup>
                   <col style="width:18%;">
                   <col style="width:18%;">
@@ -290,7 +307,7 @@ export function leadDigestEmailTemplate(params: {
                   <col style="width:12%;">
                   <col style="width:16%;">
                 </colgroup>
-                <thead>
+                <thead class="ld-thead">
                   <tr style="background-color:#fafafa;">
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thName)}</th>
                     <th align="${align}" style="padding:10px 12px;border-bottom:2px solid #e4e4e7;font-size:13px;color:#71717a;font-weight:600;">${escapeHtml(thPhone)}</th>
