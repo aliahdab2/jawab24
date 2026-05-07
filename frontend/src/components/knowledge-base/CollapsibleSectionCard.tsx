@@ -5,6 +5,8 @@ interface CollapsibleSectionCardProps {
   isExpanded: boolean;
   hasContent: boolean;
   charCount: number;
+  /** Localized label for the bare char-count number, e.g. "1,942 characters". Read by screen readers and shown on hover. */
+  charCountLabel: string;
   onToggle: () => void;
   /** Icon + title + preview row — rendered inside the toggle button */
   header: React.ReactNode;
@@ -24,6 +26,7 @@ export function CollapsibleSectionCard({
   isExpanded,
   hasContent,
   charCount,
+  charCountLabel,
   onToggle,
   header,
   headerAction,
@@ -49,7 +52,11 @@ export function CollapsibleSectionCard({
         {headerAction}
 
         {!isExpanded && hasContent && (
-          <span className="text-[10px] tabular-nums text-muted-foreground flex-shrink-0">
+          <span
+            className="text-[10px] tabular-nums text-muted-foreground flex-shrink-0"
+            aria-label={charCountLabel}
+            title={charCountLabel}
+          >
             {charCount.toLocaleString()}
           </span>
         )}

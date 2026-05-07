@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { KnowledgeSection, SectionId, CustomSectionId } from './types';
@@ -36,7 +36,9 @@ export function KnowledgeBaseSections({
   // as a side-effect of `isExpanded` changing in SectionEditor — that fires
   // on the modal's initial-mount auto-expand too and would pop the soft
   // keyboard before the user has interacted with anything.
-  const handleToggle = (id: SectionId) => {
+  // Memoized so children stay referentially stable across renders and can
+  // skip re-rendering when only an unrelated section's content changes.
+  const handleToggle = useCallback((id: SectionId) => {
     const willExpand = expandedId !== id;
     onExpandedChange(willExpand ? id : null);
     if (willExpand) {
@@ -47,7 +49,7 @@ export function KnowledgeBaseSections({
         textarea?.focus({ preventScroll: true });
       });
     }
-  };
+  }, [expandedId, onExpandedChange]);
 
   const customCount = sections.filter((s) => isCustomSection(s.id)).length;
 
@@ -76,19 +78,28 @@ export function KnowledgeBaseSections({
 
       {/* Section cards. The data-section-id wrapper is what handleToggle's
           focus query looks up — keep it in sync with the SectionId used in
-          state. */}
+          state.
+          Callbacks are passed straight through (memoized in parents) and
+          children bind the section id internally so React.memo can skip
+          re-renders of sibling cards while typing. remainingChars is gated
+          on isExpanded for the same reason — only the open card consumes
+          it (file/voice insert) and the global budget changes every
+          keystroke. */}
       {sections.map((section) => {
+        const isExpanded = expandedId === section.id;
+        const sectionRemaining = isExpanded ? remainingChars : undefined;
+
         if (isCustomSection(section.id)) {
           return (
             <div key={section.id} data-section-id={section.id}>
               <KnowledgeBaseCustomSection
                 section={section}
-                isExpanded={expandedId === section.id}
-                onToggle={() => handleToggle(section.id)}
-                onChange={(content) => onSectionChange(section.id, content)}
-                onTitleChange={(title) => onCustomTitleChange(section.id as CustomSectionId, title)}
-                onDelete={() => onDeleteCustomSection(section.id as CustomSectionId)}
-                remainingChars={remainingChars}
+                isExpanded={isExpanded}
+                onToggle={handleToggle}
+                onChange={onSectionChange}
+                onTitleChange={onCustomTitleChange}
+                onDelete={onDeleteCustomSection}
+                remainingChars={sectionRemaining}
               />
             </div>
           );
@@ -101,10 +112,10 @@ export function KnowledgeBaseSections({
             <KnowledgeBaseSection
               section={section}
               config={config}
-              isExpanded={expandedId === section.id}
-              onToggle={() => handleToggle(section.id)}
-              onChange={(content) => onSectionChange(section.id, content)}
-              remainingChars={remainingChars}
+              isExpanded={isExpanded}
+              onToggle={handleToggle}
+              onChange={onSectionChange}
+              remainingChars={sectionRemaining}
             />
           </div>
         );

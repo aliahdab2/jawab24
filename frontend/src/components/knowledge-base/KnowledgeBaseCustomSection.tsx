@@ -1,23 +1,28 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { ConfirmationModal } from '@/components/ui';
 import { CUSTOM_SECTION_MARKER } from './types';
-import type { KnowledgeSection } from './types';
+import type { KnowledgeSection, CustomSectionId } from './types';
 import { CollapsibleSectionCard } from './CollapsibleSectionCard';
 import { SectionEditor } from './SectionEditor';
 
 interface KnowledgeBaseCustomSectionProps {
   section: KnowledgeSection;
   isExpanded: boolean;
-  onToggle: () => void;
-  onChange: (content: string) => void;
-  onTitleChange: (title: string) => void;
-  onDelete: () => void;
-  remainingChars: number;
+  /** Stable across renders; child binds the section id. */
+  onToggle: (id: CustomSectionId) => void;
+  /** Stable across renders; child binds the section id. */
+  onChange: (id: CustomSectionId, content: string) => void;
+  /** Stable across renders; child binds the section id. */
+  onTitleChange: (id: CustomSectionId, title: string) => void;
+  /** Stable across renders; child binds the section id. */
+  onDelete: (id: CustomSectionId) => void;
+  /** Undefined when collapsed so memoized siblings skip re-renders triggered by the global budget changing. */
+  remainingChars: number | undefined;
 }
 
-export function KnowledgeBaseCustomSection({
+function KnowledgeBaseCustomSectionImpl({
   section,
   isExpanded,
   onToggle,
@@ -45,18 +50,22 @@ export function KnowledgeBaseCustomSection({
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  const sectionId = section.id as CustomSectionId;
+  const handleToggle = useCallback(() => onToggle(sectionId), [onToggle, sectionId]);
+  const handleChange = useCallback((content: string) => onChange(sectionId, content), [onChange, sectionId]);
+
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (hasContent) {
       setShowDeleteConfirm(true);
     } else {
-      onDelete();
+      onDelete(sectionId);
     }
   };
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     // Strip colons to keep parser reliable
-    onTitleChange(e.target.value.replace(/:/g, ''));
+    onTitleChange(sectionId, e.target.value.replace(/:/g, ''));
   };
 
   return (
@@ -65,7 +74,8 @@ export function KnowledgeBaseCustomSection({
         isExpanded={isExpanded}
         hasContent={hasContent}
         charCount={section.content.length}
-        onToggle={onToggle}
+        charCountLabel={tKb('charCountAria', { count: section.content.length })}
+        onToggle={handleToggle}
         header={
           <>
             <span className="text-xl flex-shrink-0 text-icon-muted">{CUSTOM_SECTION_MARKER}</span>
@@ -99,7 +109,8 @@ export function KnowledgeBaseCustomSection({
           <button
             type="button"
             onClick={handleDelete}
-            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
+            aria-label={tKb('customSection.deleteTitle')}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -107,7 +118,7 @@ export function KnowledgeBaseCustomSection({
       >
         <SectionEditor
           content={section.content}
-          onChange={onChange}
+          onChange={handleChange}
           description={tKb('customSection.desc')}
           placeholder={tKb('customSection.placeholder')}
           ariaLabel={tKb('customSection.placeholder')}
@@ -119,7 +130,7 @@ export function KnowledgeBaseCustomSection({
       <ConfirmationModal
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={() => { setShowDeleteConfirm(false); onDelete(); }}
+        onConfirm={() => { setShowDeleteConfirm(false); onDelete(sectionId); }}
         title={tKb('customSection.deleteTitle')}
         message={tKb('customSection.deleteConfirm')}
         variant="danger"
@@ -127,3 +138,5 @@ export function KnowledgeBaseCustomSection({
     </>
   );
 }
+
+export const KnowledgeBaseCustomSection = memo(KnowledgeBaseCustomSectionImpl);
