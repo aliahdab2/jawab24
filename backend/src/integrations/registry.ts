@@ -2,11 +2,19 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { Logger } from '../types';
 import type { WebhookRegistrationResult } from '../services/ecommerce';
 
-/** Subset of the ecommerceStores row needed for webhook registration. */
+/**
+ * Subset of the ecommerceStores row needed for webhook registration.
+ *
+ * `accessToken` and `accessTokenIv` are AES-256-GCM ciphertext + IV — call
+ * `decrypt(accessToken, accessTokenIv)` from `services/ecommerceCrypto` to
+ * obtain the plaintext token before sending API requests.
+ */
 export interface StoreForWebhooks {
     id: string;
     storeDomain: string;
+    /** Encrypted access token (ciphertext). Decrypt with `accessTokenIv`. */
     accessToken: string;
+    /** AES-256-GCM IV paired with `accessToken`. */
     accessTokenIv: string;
 }
 

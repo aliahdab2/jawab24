@@ -130,46 +130,49 @@ export function isOrderEvent(event: string): boolean {
 }
 
 export async function registerWebhooks(accessToken: string): Promise<WebhookRegistrationResult> {
-    // Single endpoint receives all events — dispatches by event type in body
+    // Single endpoint receives all events — dispatches by event type in body.
+    // Topics are subscribed in parallel because each is an independent REST call;
+    // serial subscription on Salla's REST endpoint exceeded the OAuth-callback
+    // budget for merchants on slower networks (~11 topics × ~500ms = 5.5s p95).
     const webhookUrl = `https://${config.salla.hostName}/salla/webhooks`;
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
 
-    for (const event of SALLA_WEBHOOK_EVENTS) {
-        try {
-            const response = await tracedExternalCall('salla', 'registerWebhook', () =>
-                fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${accessToken}`,
-                    },
-                    body: JSON.stringify({
-                        name: event,
-                        event,
-                        url: webhookUrl,
-                    }),
-                }),
-            );
-            if (!response.ok) {
-                const text = await response.text();
-                // 422 = webhook already exists, treat as success (mirrors Shopify)
-                if (response.status === 422) {
-                    registered.push(event);
-                } else {
-                    failed.push({ topic: event, status: response.status, error: text.slice(0, ERROR_TEXT_MAX_LENGTH) });
-                    captureError(
-                        new Error(`Salla webhook registration failed: ${event} ${response.status}`),
-                        `Salla webhook registration failed: ${event}`,
-                        { tags: { service: 'salla' }, extra: { event, status: response.status, body: text } }
-                    );
-                }
-            } else {
-                registered.push(event);
-            }
-        } catch (err) {
+    const results = await Promise.allSettled(SALLA_WEBHOOK_EVENTS.map(event =>
+        tracedExternalCall('salla', 'registerWebhook', () =>
+            fetch('https://api.salla.dev/admin/v2/webhooks/subscribe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                },
+                body: JSON.stringify({ name: event, event, url: webhookUrl }),
+            }).then(async response => ({ event, response, body: response.ok ? '' : await response.text() })),
+        ),
+    ));
+
+    for (let i = 0; i < results.length; i++) {
+        const event = SALLA_WEBHOOK_EVENTS[i];
+        const result = results[i];
+        if (result.status === 'rejected') {
+            const err = result.reason;
             failed.push({ topic: event, error: err instanceof Error ? err.message : String(err) });
             captureError(err, `Salla webhook registration error: ${event}`, { tags: { service: 'salla' } });
+            continue;
+        }
+        const { response, body } = result.value;
+        if (response.ok) {
+            registered.push(event);
+        } else if (response.status === 422) {
+            // 422 = webhook already exists, treat as success (mirrors Shopify)
+            registered.push(event);
+        } else {
+            failed.push({ topic: event, status: response.status, error: body.slice(0, ERROR_TEXT_MAX_LENGTH) });
+            captureError(
+                new Error(`Salla webhook registration failed: ${event} ${response.status}`),
+                `Salla webhook registration failed: ${event}`,
+                { tags: { service: 'salla' }, extra: { event, status: response.status, body } }
+            );
         }
     }
 

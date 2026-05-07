@@ -68,7 +68,7 @@ export function startWebhookRetryWorker(): Worker {
             // Persist a merchant-visible "exhausted" marker so the integrations
             // card can render a "Re-register webhooks" CTA. Without this, an
             // exhausted retry queue is silently invisible to the merchant.
-            void markWebhookStatusExhausted(job.data.storeId, job.data.platform, err.message)
+            void markWebhookStatusExhausted(job.data.storeId, err.message)
                 .catch(persistErr => {
                     captureError(persistErr, 'Failed to persist webhook exhaustion marker', {
                         tags: { service: job.data.platform, stage: 'webhook-retry-exhausted-persist' },
@@ -87,8 +87,7 @@ export function startWebhookRetryWorker(): Worker {
     return worker;
 }
 
-async function markWebhookStatusExhausted(storeId: string, _platform: string, errorMessage: string): Promise<void> {
-    // Platform-agnostic — saveWebhookStatus operates by storeId regardless of platform.
+async function markWebhookStatusExhausted(storeId: string, errorMessage: string): Promise<void> {
     const store = await getStoreById(storeId);
     const platformData = (store?.platformData as Record<string, unknown> | null) ?? {};
     const existing = (platformData.webhookStatus as { registered?: string[]; failed?: unknown[] } | undefined) ?? null;

@@ -133,45 +133,47 @@ export function isOrderEvent(event: string): boolean {
 }
 
 export async function registerWebhooks(accessToken: string): Promise<WebhookRegistrationResult> {
+    // Topics subscribed in parallel — see services/salla.ts for rationale.
     const webhookUrl = `https://${config.zid.hostName}/zid/webhooks`;
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
 
-    for (const event of ZID_WEBHOOK_EVENTS) {
-        try {
-            const response = await tracedExternalCall('zid', 'registerWebhook', () =>
-                fetch('https://api.zid.sa/v1/webhooks', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-MANAGER-TOKEN': accessToken,
-                        'Accept': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        event,
-                        url: webhookUrl,
-                    }),
-                }),
-            );
-            if (!response.ok) {
-                const text = await response.text();
-                // 409 = webhook already exists, treat as success (mirrors Shopify 422 / Salla 422)
-                if (response.status === 409) {
-                    registered.push(event);
-                } else {
-                    failed.push({ topic: event, status: response.status, error: text.slice(0, ERROR_TEXT_MAX_LENGTH) });
-                    captureError(
-                        new Error(`Zid webhook registration failed: ${event} ${response.status}`),
-                        `Zid webhook registration failed: ${event}`,
-                        { tags: { service: 'zid' }, extra: { event, status: response.status, body: text } }
-                    );
-                }
-            } else {
-                registered.push(event);
-            }
-        } catch (err) {
+    const results = await Promise.allSettled(ZID_WEBHOOK_EVENTS.map(event =>
+        tracedExternalCall('zid', 'registerWebhook', () =>
+            fetch('https://api.zid.sa/v1/webhooks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-MANAGER-TOKEN': accessToken,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ event, url: webhookUrl }),
+            }).then(async response => ({ event, response, body: response.ok ? '' : await response.text() })),
+        ),
+    ));
+
+    for (let i = 0; i < results.length; i++) {
+        const event = ZID_WEBHOOK_EVENTS[i];
+        const result = results[i];
+        if (result.status === 'rejected') {
+            const err = result.reason;
             failed.push({ topic: event, error: err instanceof Error ? err.message : String(err) });
             captureError(err, `Zid webhook registration error: ${event}`, { tags: { service: 'zid' } });
+            continue;
+        }
+        const { response, body } = result.value;
+        if (response.ok) {
+            registered.push(event);
+        } else if (response.status === 409) {
+            // 409 = webhook already exists, treat as success (mirrors Shopify 422 / Salla 422)
+            registered.push(event);
+        } else {
+            failed.push({ topic: event, status: response.status, error: body.slice(0, ERROR_TEXT_MAX_LENGTH) });
+            captureError(
+                new Error(`Zid webhook registration failed: ${event} ${response.status}`),
+                `Zid webhook registration failed: ${event}`,
+                { tags: { service: 'zid' }, extra: { event, status: response.status, body } }
+            );
         }
     }
 

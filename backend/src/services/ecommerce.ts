@@ -71,8 +71,15 @@ export async function registerWebhooksWithPersist(
         const status = await registerFn();
         await saveWebhookStatus(storeId, status);
         if (status.failed.length > 0) {
-            const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
-            await enqueueWebhookRetry({ storeId, platform });
+            try {
+                const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
+                await enqueueWebhookRetry({ storeId, platform });
+            } catch (queueErr) {
+                captureError(queueErr, `${platform} webhook retry enqueue failed (partial-failure path)`, {
+                    tags: { service: platform, stage: 'webhook-retry-enqueue-failed' },
+                    extra: { storeId, failedTopicCount: status.failed.length },
+                });
+            }
         }
         return status;
     } catch (err) {
@@ -85,13 +92,25 @@ export async function registerWebhooksWithPersist(
             failed: [{ topic: 'all', error: err instanceof Error ? err.message : String(err) }],
             lastAttempt: new Date().toISOString(),
         };
-        await saveWebhookStatus(storeId, failedStatus).catch(() => { /* capture above is sufficient */ });
+        try {
+            await saveWebhookStatus(storeId, failedStatus);
+        } catch (persistErr) {
+            // Surface this — the integrations card depends on this DB write
+            // for the Re-register CTA. Without it, merchant has no signal AND
+            // no retry job AND no recovery path.
+            captureError(persistErr, `${platform} webhook status persist failed`, {
+                tags: { service: platform, stage: 'webhook-status-persist-failed' },
+                extra: { storeId, originalError: err instanceof Error ? err.message : String(err) },
+            });
+        }
         try {
             const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
             await enqueueWebhookRetry({ storeId, platform });
-        } catch {
-            // Retry queue unavailable — caller will see the failedStatus and
-            // can surface a Re-register CTA. Don't crash the install path.
+        } catch (queueErr) {
+            captureError(queueErr, `${platform} webhook retry enqueue failed (throw path)`, {
+                tags: { service: platform, stage: 'webhook-retry-enqueue-failed' },
+                extra: { storeId, originalError: err instanceof Error ? err.message : String(err) },
+            });
         }
         return failedStatus;
     }

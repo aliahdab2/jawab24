@@ -383,15 +383,6 @@ export async function disconnectStoreHandler(request: FastifyRequest, reply: Fas
     return reply.send({ ok: true });
 }
 
-/**
- * Re-register webhooks for the workspace's Shopify store.
- * Used by the integrations card "Re-register webhooks" CTA when retries
- * have exhausted (webhookHealth === 'failed') or to recover from any
- * out-of-band Shopify-side webhook deletion.
- *
- * Returns the new webhook status so the UI can re-render immediately
- * without a separate fetch.
- */
 export async function syncStore(request: FastifyRequest, reply: FastifyReply) {
     const req = request as WorkspaceRequest;
     if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
