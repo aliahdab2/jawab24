@@ -4,7 +4,7 @@ import * as shopifyService from '../services/shopify';
 import { workspaceService } from '../services/workspace';
 import type { WorkspaceRequest } from '../middleware/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
-import { upsertSingleProduct, deleteSingleProduct } from '../services/ecommerce';
+import { upsertSingleProduct, deleteSingleProduct, registerWebhooksWithPersist } from '../services/ecommerce';
 import { config } from '../config';
 import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
@@ -134,35 +134,15 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
             const workspaceId = workspaces[0]?.id || null;
             const store = await shopifyService.createStore(userId, shop, accessToken, undefined, workspaceId);
 
-            // Register webhooks INLINE (was fire-and-forget; A-1.9). On
-            // unexpected throw or partial failure, enqueue a retry so the
-            // merchant doesn't end up silently missing webhooks.
-            try {
-                const status = await shopifyService.registerWebhooks(shop, accessToken);
-                await shopifyService.saveWebhookStatus(store.id, status);
-                if (status.failed.length > 0) {
-                    const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
-                    await enqueueWebhookRetry({ storeId: store.id, platform: 'shopify' });
-                }
-            } catch (err) {
-                captureError(err, 'Shopify webhook registration after OAuth failed', {
-                    tags: { service: 'shopify', stage: 'webhook-registration' },
-                    extra: { storeId: store.id },
-                });
-                // Persist a pending marker so the integrations card has signal
-                // immediately. Retry queue will overwrite this on success.
-                await shopifyService.saveWebhookStatus(store.id, {
-                    registered: [],
-                    failed: [{ topic: 'all', error: err instanceof Error ? err.message : String(err) }],
-                    lastAttempt: new Date().toISOString(),
-                }).catch(() => { /* swallowed — capture above is sufficient */ });
-                try {
-                    const { enqueueWebhookRetry } = await import('../lib/webhookRetryQueue');
-                    await enqueueWebhookRetry({ storeId: store.id, platform: 'shopify' });
-                } catch (queueErr) {
-                    request.log.error({ err: queueErr }, 'Failed to enqueue webhook retry');
-                }
-            }
+            // Register webhooks with persist-on-throw + retry queue (was
+            // fire-and-forget; A-1.9). On any failure the helper persists a
+            // marker and enqueues a retry so the merchant doesn't silently
+            // miss webhooks.
+            await registerWebhooksWithPersist(
+                store.id,
+                'shopify',
+                () => shopifyService.registerWebhooks(shop, accessToken),
+            );
 
             // Enqueue full sync (non-blocking)
             enqueueSyncJob(store.id).catch(err => {
@@ -401,41 +381,6 @@ export async function disconnectStoreHandler(request: FastifyRequest, reply: Fas
     }
     await shopifyService.disconnectStore(store.id);
     return reply.send({ ok: true });
-}
-
-/**
- * Re-register webhooks for the workspace's Shopify store.
- * Used by the integrations card "Re-register webhooks" CTA when retries
- * have exhausted (webhookHealth === 'failed') or to recover from any
- * out-of-band Shopify-side webhook deletion.
- *
- * Returns the new webhook status so the UI can re-render immediately
- * without a separate fetch.
- */
-export async function reregisterWebhooks(request: FastifyRequest, reply: FastifyReply) {
-    const req = request as WorkspaceRequest;
-    if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
-    const store = await shopifyService.getStoreByWorkspaceAny(req.workspaceId);
-    if (!store) {
-        return reply.status(404).send({ error: 'No Shopify store connected' });
-    }
-    if (!store.isActive) {
-        return reply.status(409).send({ error: 'Store is disconnected — reconnect first' });
-    }
-
-    try {
-        const accessToken = (await import('../services/ecommerceCrypto'))
-            .decrypt(store.accessToken, store.accessTokenIv);
-        const status = await shopifyService.registerWebhooks(store.storeDomain, accessToken);
-        await shopifyService.saveWebhookStatus(store.id, status);
-        return reply.send({ ok: true, webhookStatus: status });
-    } catch (err) {
-        captureError(err, 'Manual Shopify webhook re-registration failed', {
-            tags: { service: 'shopify', stage: 'webhook-reregister' },
-            extra: { storeId: store.id },
-        });
-        return reply.status(502).send({ error: 'Webhook re-registration failed' });
-    }
 }
 
 export async function syncStore(request: FastifyRequest, reply: FastifyReply) {

@@ -116,55 +116,49 @@ export async function registerWebhooks(shop: string, accessToken: string): Promi
     const registered: string[] = [];
     const failed: Array<{ topic: string; status?: number; error?: string }> = [];
 
-    for (const { topic, address } of topics) {
-        try {
-            const response = await tracedExternalCall('shopify', 'registerWebhook', () =>
-                fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Shopify-Access-Token': accessToken,
-                    },
-                    body: JSON.stringify({
-                        webhook: { topic, address, format: 'json' },
-                    }),
-                }),
-            );
-            if (!response.ok) {
-                const text = await response.text();
-                if (response.status === 422) {
-                    // 422 = already registered, treat as success
-                    registered.push(topic);
-                } else {
-                    failed.push({ topic, status: response.status, error: text.slice(0, ERROR_TEXT_MAX_LENGTH) });
-                    captureError(new Error(`Shopify webhook registration failed: ${topic} ${response.status}`), `Shopify webhook registration failed: ${topic}`, { tags: { service: 'shopify' }, extra: { topic, status: response.status, body: text } });
-                }
-            } else {
-                registered.push(topic);
-            }
-        } catch (err) {
+    // Topics subscribed in parallel — each is an independent REST call.
+    const results = await Promise.allSettled(topics.map(({ topic, address }) =>
+        tracedExternalCall('shopify', 'registerWebhook', () =>
+            fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/webhooks.json`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Shopify-Access-Token': accessToken,
+                },
+                body: JSON.stringify({ webhook: { topic, address, format: 'json' } }),
+            }).then(async response => ({ topic, response, body: response.ok ? '' : await response.text() })),
+        ),
+    ));
+
+    for (let i = 0; i < results.length; i++) {
+        const { topic } = topics[i];
+        const result = results[i];
+        if (result.status === 'rejected') {
+            const err = result.reason;
             failed.push({ topic, error: err instanceof Error ? err.message : String(err) });
             captureError(err, `Shopify webhook registration error: ${topic}`, { tags: { service: 'shopify' } });
+            continue;
+        }
+        const { response, body } = result.value;
+        if (response.ok) {
+            registered.push(topic);
+        } else if (response.status === 422) {
+            // 422 = already registered, treat as success
+            registered.push(topic);
+        } else {
+            failed.push({ topic, status: response.status, error: body.slice(0, ERROR_TEXT_MAX_LENGTH) });
+            captureError(
+                new Error(`Shopify webhook registration failed: ${topic} ${response.status}`),
+                `Shopify webhook registration failed: ${topic}`,
+                { tags: { service: 'shopify' }, extra: { topic, status: response.status, body } },
+            );
         }
     }
 
     return { registered, failed, lastAttempt: new Date().toISOString() };
 }
 
-/**
- * Save webhook registration status into the store's platformData JSONB field.
- * Merges with existing platformData so other keys (e.g. planName) are preserved.
- */
-export async function saveWebhookStatus(storeId: string, webhookStatus: WebhookRegistrationResult): Promise<void> {
-    const [store] = await db.select({ platformData: ecommerceStores.platformData })
-        .from(ecommerceStores).where(eq(ecommerceStores.id, storeId)).limit(1);
-
-    const existing = (store?.platformData as Record<string, unknown>) || {};
-    await db.update(ecommerceStores).set({
-        platformData: { ...existing, webhookStatus },
-        updatedAt: new Date(),
-    }).where(eq(ecommerceStores.id, storeId));
-}
+import { saveWebhookStatus } from './ecommerce';
 
 // --- Shopify-default wrappers (bind platform='shopify' for backward compat) ---
 

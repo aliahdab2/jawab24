@@ -7,6 +7,7 @@ import {
     createStore,
     deactivateStore,
     createPendingInstall,
+    registerWebhooksWithPersist,
 } from '../services/ecommerce';
 import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
@@ -80,10 +81,15 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
                 workspaceId,
             });
 
-            // Register webhooks (non-blocking)
-            zidService.registerWebhooks(tokens.accessToken).catch(err => {
-                request.log.error({ err }, 'Failed to register Zid webhooks');
-            });
+            // Register webhooks with persist-on-throw + retry queue. Mirrors
+            // the Shopify install path. Install must NOT fail because of webhook
+            // hiccups — the helper persists a "failed: all" marker and enqueues
+            // a retry so the integrations card surfaces a Re-register CTA.
+            await registerWebhooksWithPersist(
+                store.id,
+                'zid',
+                () => zidService.registerWebhooks(tokens.accessToken),
+            );
 
             // Enqueue full sync (non-blocking)
             enqueueSyncJob(store.id, 'zid').catch(err => {

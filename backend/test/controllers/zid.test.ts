@@ -59,6 +59,7 @@ vi.mock('../../src/services/ecommerce', () => ({
     getProducts: (...args: any[]) => mockGetProducts(...args),
     mapToEcommerceStore: (...args: any[]) => mockMapToEcommerceStore(...args),
     createPendingInstall: (...args: any[]) => mockCreatePendingInstall(...args),
+    registerWebhooksWithPersist: (_storeId: string, _platform: string, fn: () => Promise<unknown>) => fn(),
 }));
 
 const mockVerifyToken = vi.fn();

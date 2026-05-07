@@ -42,7 +42,7 @@ function makeMockFastify() {
 describe('createEcommerceRoutes', () => {
     it('should register all standard e-commerce routes', async () => {
         const controller = makeController();
-        const routes = createEcommerceRoutes(controller);
+        const routes = createEcommerceRoutes('salla', controller);
         const { fastify, registeredRoutes } = makeMockFastify();
 
         await routes(fastify as any);
@@ -62,23 +62,24 @@ describe('createEcommerceRoutes', () => {
         expect(registeredRoutes).toContain('POST /store/connect');
         expect(registeredRoutes).toContain('DELETE /store');
         expect(registeredRoutes).toContain('POST /store/sync');
+        expect(registeredRoutes).toContain('POST /store/webhooks/reregister');
         expect(registeredRoutes).toContain('PATCH /store/link-page');
         expect(registeredRoutes).toContain('PATCH /store/unlink-page');
     });
 
-    it('should register exactly 10 routes', async () => {
+    it('should register exactly 11 routes', async () => {
         const controller = makeController();
-        const routes = createEcommerceRoutes(controller);
+        const routes = createEcommerceRoutes('salla', controller);
         const { fastify, registeredRoutes } = makeMockFastify();
 
         await routes(fastify as any);
 
-        expect(registeredRoutes).toHaveLength(10);
+        expect(registeredRoutes).toHaveLength(11);
     });
 
     it('should wire controller functions to the correct routes', async () => {
         const controller = makeController();
-        const routes = createEcommerceRoutes(controller);
+        const routes = createEcommerceRoutes('salla', controller);
         const mockFastify = {
             get: vi.fn(),
             post: vi.fn(),
@@ -106,7 +107,7 @@ describe('createEcommerceRoutes', () => {
 
     it('should apply preHandler middleware to protected routes', async () => {
         const controller = makeController();
-        const routes = createEcommerceRoutes(controller);
+        const routes = createEcommerceRoutes('salla', controller);
         const mockFastify = {
             get: vi.fn(),
             post: vi.fn(),
@@ -135,8 +136,8 @@ describe('createEcommerceRoutes', () => {
         const sallaController = makeController();
         const zidController = makeController();
 
-        const sallaRoutes = createEcommerceRoutes(sallaController);
-        const zidRoutes = createEcommerceRoutes(zidController);
+        const sallaRoutes = createEcommerceRoutes('salla', sallaController);
+        const zidRoutes = createEcommerceRoutes('zid', zidController);
 
         const { fastify: sallaFastify } = makeMockFastify();
         const { fastify: zidFastify } = makeMockFastify();
