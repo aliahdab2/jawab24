@@ -12,8 +12,9 @@ export type AiPipeline =
     | 'dm_reply'             // Webhook-driven DM reply (Facebook Messenger/Instagram)
     | 'playground'           // Admin playground interactive testing
     | 'eval'                 // scripts/playground-eval.ts batch testing
-    | 'embedding_rag'        // Embedding for KB retrieval
-    | 'embedding_cache'      // Embedding for semantic cache lookup
+    | 'embedding_rag'        // Embedding for KB retrieval (per-reply, hot path)
+    | 'embedding_cache'      // Embedding for semantic cache lookup (per-reply, hot path)
+    | 'embedding_ingestion'  // Embedding for KB ingestion (one-off batch on KB upload)
     | 'translation'          // Away/greeting auto-translate or DM language mismatch
     | 'transcription'        // Voice DM transcription (whisper / gpt-4o-mini-transcribe)
     | 'lead_extraction'      // Lead extraction from conversations

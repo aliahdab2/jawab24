@@ -23,9 +23,11 @@ import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { aiService } from './ai';
+import { logAiUsage } from './aiUsageLog';
 import { executeToolCall } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
 import { buildProductCardsFromToolResults } from './reply/productCardBuilder';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { AiGenerateRequest, AiGenerateResponse } from '../types';
 import { VALID_TOOL_NAMES, type EcommerceToolCall, type EcommerceToolResult } from '@jawab24/shared';
 
@@ -34,8 +36,12 @@ interface AiWorkerToolResponse {
     toolCalls?: Array<{ name: string; arguments: Record<string, string> }>;
     reply?: string;
     language?: string;
+    /** Model used by the worker — surfaced so cost is computed against the right unit price. */
+    model?: string;
     tokensUsed?: number;
     tokensIn?: number;
+    /** Subset of tokensIn that hit OpenAI's prompt cache (billed at 50%). */
+    tokensInCached?: number;
     tokensOut?: number;
     intent?: string;
     confidence?: string;
@@ -48,6 +54,36 @@ const TOOL_LOOP_TIMEOUT_MS = 30_000;
 
 /** Shared whitelist converted to Set for O(1) lookup */
 const VALID_TOOL_SET: Set<string> = new Set(VALID_TOOL_NAMES);
+
+/** Fire-and-forget ai_usage_log write for one ai-worker tool-loop round. */
+function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolResponse): void {
+    const userId = request.context?.userId;
+    if (!userId) {
+        // No userId → can't attribute. Surface as a breadcrumb so a future plumbing
+        // regression is visible in Sentry instead of silently dropping rows.
+        Sentry.addBreadcrumb({
+            category: 'ai_usage_log',
+            level: 'warning',
+            message: 'ecommerce_tools usage skipped: no userId in context',
+            data: { pageId: request.context?.pageId },
+        });
+        return;
+    }
+    const tokensIn = data.tokensIn ?? 0;
+    const tokensOut = data.tokensOut ?? 0;
+    if (tokensIn === 0 && tokensOut === 0) return; // worker didn't report usage (fallback path)
+    logAiUsage({
+        userId,
+        pageId: request.context?.pageId,
+        // Prefer the model the worker actually used; backend config is a safe fallback.
+        model: data.model || config.ai.model || DEFAULT_AI_MODEL,
+        tokensIn,
+        cachedInputTokens: data.tokensInCached,
+        tokensOut,
+        cached: false,
+        pipeline: 'ecommerce_tools',
+    }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
+}
 
 /**
  * Generate an AI reply with optional e-commerce tool execution.
@@ -99,6 +135,7 @@ export async function generateReplyWithTools(
         );
 
         const data = toolResponse.data;
+        logToolRoundUsage(request, data);
         let totalTokens = data.tokensUsed || 0;
 
         // No tool calls → AI handled it directly
@@ -164,6 +201,7 @@ export async function generateReplyWithTools(
             );
 
             const roundData = finalResponse.data;
+            logToolRoundUsage(request, roundData);
             totalTokens += roundData.tokensUsed || 0;
 
             // If AI returned more tool calls (Phase 2), loop again

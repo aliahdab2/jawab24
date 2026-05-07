@@ -360,9 +360,10 @@ export class ReplyGenerator {
             const ragQuery = (isVagueComment && postMessage)
                 ? `${postMessage.slice(0, 200)} ${commentText}`.trim()
                 : commentText;
-            const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                pageId, ragQuery, knowledgeBase, context.kbActiveVersion, effectiveChannel, undefined, !!context.productCatalog,
-            );
+            const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
+                pageId, query: ragQuery, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion,
+                channel: effectiveChannel, hasEcommerceChunks: !!context.productCatalog, userId,
+            });
 
             const resolvedLang = resolveCommentLanguage(commentForAI, postMessage, effectiveKB);
 
@@ -430,9 +431,10 @@ export class ReplyGenerator {
                 const gapSource: GapSource = { type: 'dm', context: prevUserMsg?.content };
 
                 // Run RAG retrieval if enabled (pass full history for context-aware search)
-                const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-                    pageId, text, knowledgeBase, context.kbActiveVersion, 'dm', conversationHistory, !!context.productCatalog,
-                );
+                const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
+                    pageId, query: text, staticKB: knowledgeBase, kbActiveVersion: context.kbActiveVersion,
+                    channel: 'dm', conversationHistory, hasEcommerceChunks: !!context.productCatalog, userId,
+                });
 
                 // Exclude the current message from history sent to GPT — it is already
                 // included as the final user prompt in buildUserPrompt. Without this filter,
@@ -475,15 +477,17 @@ export class ReplyGenerator {
      * - 'shadow': runs retrieval + logs results, but still sends static KB to GPT
      * - 'on': runs retrieval, sends chunks to GPT (static KB omitted)
      */
-    private async resolveKnowledge(
-        pageId: string | undefined,
-        query: string,
-        staticKB: string | undefined,
-        kbActiveVersion: number | null | undefined,
-        channel: 'comment' | 'dm',
-        conversationHistory?: { role: string; content: string }[],
-        hasEcommerceChunks?: boolean,
-    ): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
+    private async resolveKnowledge(opts: {
+        pageId: string | undefined;
+        query: string;
+        staticKB: string | undefined;
+        kbActiveVersion: number | null | undefined;
+        channel: 'comment' | 'dm';
+        conversationHistory?: { role: string; content: string }[];
+        hasEcommerceChunks?: boolean;
+        userId?: string;
+    }): Promise<{ retrievedChunks?: RetrievedChunkContext[]; effectiveKB?: string; queryEmbedding?: number[]; ragAttempted: boolean }> {
+        const { pageId, query, staticKB, kbActiveVersion, channel, conversationHistory, hasEcommerceChunks, userId } = opts;
         const retrieval = getRetrievalService();
 
         // No retrieval possible: missing service, pageId, or active version
@@ -530,7 +534,7 @@ export class ReplyGenerator {
 
         try {
             retrieval.setLogger(this.logger);
-            const { chunks, queryEmbedding } = await retrieval.retrieve(pageId, enrichedQuery, kbActiveVersion);
+            const { chunks, queryEmbedding } = await retrieval.retrieve(pageId, enrichedQuery, kbActiveVersion, undefined, userId);
 
             if (chunks.length === 0) {
                 this.logger.debug('[Generator] RAG returned no chunks, using static KB', { pageId, channel });
@@ -615,10 +619,10 @@ export class ReplyGenerator {
         });
 
         // 3. RAG retrieval (uses shared resolveKnowledge — same logic as production)
-        const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge(
-            pageId, questionForAI, knowledgeBase, kbActiveVersion, channel,
-            conversationHistory, !!productCatalog,
-        );
+        const { retrievedChunks, effectiveKB, queryEmbedding, ragAttempted } = await this.resolveKnowledge({
+            pageId, query: questionForAI, staticKB: knowledgeBase, kbActiveVersion,
+            channel, conversationHistory, hasEcommerceChunks: !!productCatalog, userId,
+        });
 
         // 4. Call AI
         const resolvedLang = channel === 'comment'

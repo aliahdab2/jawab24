@@ -164,7 +164,12 @@ export class KbIngestionService {
             c.title ? `${c.title}\n${c.contentNormalized}` : c.contentNormalized
         );
 
-        const embeddings = await this.embeddingProvider.embedBatch(textsToEmbed);
+        // Resolve userId from pageId so the embedding cost is attributed to the merchant.
+        // Ingestion is rare (KB updates), so the extra round-trip is acceptable.
+        const [pageRow] = await db.select({ userId: pages.userId }).from(pages).where(eq(pages.id, pageId)).limit(1);
+        const logCtx = pageRow?.userId ? { userId: pageRow.userId, pageId, pipeline: 'embedding_ingestion' as const } : undefined;
+
+        const embeddings = await this.embeddingProvider.embedBatch(textsToEmbed, logCtx);
 
         return chunks.map((chunk, i) => ({
             pageId,

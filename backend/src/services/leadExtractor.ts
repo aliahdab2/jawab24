@@ -7,6 +7,7 @@ import { config } from '../config';
 import { redis } from '../lib/redis';
 import { publishSSEEvent } from '../lib/eventBus';
 import { messagesService } from './messages';
+import { logAiUsage } from './aiUsageLog';
 import { noopLogger } from '../types/logger';
 import { extractPhoneFromText } from '@jawab24/shared';
 import type { LeadExtractedData, LeadStatus } from '@jawab24/shared';
@@ -136,7 +137,7 @@ class LeadExtractorService {
                             .join('\n');
                     }
 
-                    const aiResult = await this.callExtractionAI(conversationText, rawPhone);
+                    const aiResult = await this.callExtractionAI(conversationText, rawPhone, { userId, pageId });
                     extractedPhone = aiResult.phone || rawPhone;
                     extractedData = { summary: aiResult.summary, fields: aiResult.fields };
                     extractionStatus = 'completed';
@@ -206,17 +207,34 @@ class LeadExtractorService {
     private async callExtractionAI(
         conversation: string,
         rawPhone: string,
+        logCtx: { userId: string; pageId: string },
     ): Promise<{ phone: string; summary?: string; fields: LeadExtractedData['fields'] }> {
         const prompt = EXTRACTION_PROMPT.replace('<CONVERSATION>', conversation);
         const client = this.getClient();
 
+        const model = 'gpt-4.1-mini';
         const response = await client.chat.completions.create({
-            model: 'gpt-4.1-mini',
+            model,
             messages: [{ role: 'user', content: prompt }],
             temperature: 0,
             max_tokens: 500,
             response_format: { type: 'json_object' },
         });
+
+        // Fire-and-forget cost log — same pattern as ai.ts:398
+        const usage = response.usage;
+        if (usage) {
+            logAiUsage({
+                userId: logCtx.userId,
+                pageId: logCtx.pageId,
+                model,
+                tokensIn: usage.prompt_tokens ?? 0,
+                cachedInputTokens: usage.prompt_tokens_details?.cached_tokens ?? 0,
+                tokensOut: usage.completion_tokens ?? 0,
+                cached: false,
+                pipeline: 'lead_extraction',
+            }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
+        }
 
         const content = response.choices[0]?.message?.content;
         if (!content) throw new Error('Empty response from extraction AI');
