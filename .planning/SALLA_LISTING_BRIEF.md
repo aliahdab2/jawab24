@@ -6,6 +6,16 @@
 > policy + technical correctness review).
 > **Goal:** Have every asset listed in Section 8 *production-ready* the day
 > Salla Launch Validation (Phase 4.2) passes, so submission is just upload.
+>
+> **Stop point:** if more than half of the `[TBD]` placeholders are still
+> open when design/marketing kicks off, this brief is too thin — pause and
+> resolve them first. A brief with 12+ unanswered questions is a
+> questionnaire, not a spec, and produces rework.
+>
+> **Related docs:**
+> - [`SALLA_LAUNCH_VALIDATION.md`](./SALLA_LAUNCH_VALIDATION.md) — engineering's pre-submission validation track.
+> - [`ECOMMERCE_LAUNCH_VALIDATION.md`](./ECOMMERCE_LAUNCH_VALIDATION.md) — shared template behind it.
+> - Project memory file (Salla local-dev section) — credentials, dev-store domain, ngrok pattern. Designers benefit from the same workflow when capturing screenshots.
 
 ---
 
@@ -84,8 +94,8 @@ Same structure. Translate AFTER Arabic is finalized — the Arabic is canonical.
 ### App icon — required for store listing
 - **Spec:** 1024×1024 PNG, transparent or opaque background, no rounded corners (Salla applies them)
 - **Source of truth:** existing Jawab24 brand mark — same one used for the app stores (Play / App Store) and Facebook listing
-- **File destination:** `frontend/public/salla-app-icon-1024.png` (commit alongside Phase 5 PR so it's reviewable)
-- **Designer notes:** the icon should be readable at 64×64 (Salla's listing tile size). Test by zooming out — if the wordmark becomes unreadable, use the symbol-only variant.
+- **Delivery:** designer commits the file in a separate follow-up PR (`feat/salla-listing-assets`), not in this brief PR. Reviewers can preview by checking out that branch.
+- **Designer notes:** the icon must be readable at 64×64 (Salla's listing tile size). Test by zooming out — if the wordmark becomes unreadable, use the symbol-only variant.
 
 ### Banner / hero image
 - **Spec:** [TBD — confirm exact size from Salla Partners docs; Shopify is 1920×1080, Salla is likely similar]
@@ -102,7 +112,7 @@ Same structure. Translate AFTER Arabic is finalized — the Arabic is canonical.
 
 ## 4. Screenshot script (Arabic + English versions of each)
 
-Salla typically requires 4–6 screenshots. Draft list:
+Screenshot count [TBD — verify Salla Partners spec sheet]. Draft list assumes 4–6:
 
 | # | Screen | What it shows | Arabic copy overlay | Notes |
 |---|---|---|---|---|
@@ -114,10 +124,13 @@ Salla typically requires 4–6 screenshots. Draft list:
 | 6 | Mobile view of comments on the iOS app | The Capacitor mobile app showing the same comment + reply | "تابع الردود من جوالك" | Optional — only if listing supports 6 |
 
 **Production rules:**
-- Real Salla product titles/prices from `demo-electronics.myshopify.com`-equivalent demo store, OR use the partner-test store referenced in the project memory.
-- Hide the merchant's email + phone in every screenshot.
-- All UI elements must be in Arabic for the Arabic set; English for the English set. Do NOT mix.
-- 1280×720 minimum (Salla spec [TBD — verify]).
+- **Synthetic conversations only.** Never screenshot a real customer's Facebook DM or comment, even anonymized. Set up two test accounts and stage the conversation. Real-customer screen-grabs raise Meta ToS and Saudi PDPL exposure.
+- Real Salla product titles/prices are fine — use a Salla dev store you control, or the partner-test store referenced in the project memory. Don't use a real merchant's live catalog without explicit written permission.
+- Hide the merchant's email + phone in every screenshot. Hide test-account real names too.
+- All UI elements must be in Arabic for the Arabic set (use `/ar/...` URLs); English for the English set (`/en/...`). Do NOT mix.
+- 1280×720 minimum (Salla spec [TBD — verify in Salla Partners docs]).
+- **Salla brand assets:** if any screenshot or asset includes the Salla logo or wordmark, review [Salla's brand guidelines](https://salla.partners/) first. Misuse of the platform logo is a common reason for app-marketplace rejection.
+- **Accessibility:** screenshots delivered to design must come with descriptive alt text (Arabic + English) so the listing meets WCAG when uploaded to Salla Partners.
 
 ---
 
@@ -130,15 +143,17 @@ Salla App Store listings benefit from a short demo video. Draft script:
 | Scene | Duration | Visual | Voiceover (Arabic) |
 |---|---|---|---|
 | 1 | 0:00–0:08 | Stress montage — phone buzzing, merchant reading message after message | "كل يوم، نفس الأسئلة..." |
-| 2 | 0:08–0:18 | Open `/en/integrations`, click Connect Salla, OAuth screen, 3-step onboarding wizard | "اربط متجرك في سلة بـ Jawab24 في دقيقة." |
-| 3 | 0:18–0:32 | Customer DM in Arabic asking about a real product → AI reply with correct price + product link | "الذكاء الاصطناعي يقرأ متجرك ويرد بأسعار ومنتجات حقيقية." |
-| 4 | 0:32–0:48 | Comments page showing AI reply on a public Facebook comment, then DM thread | "يرد على التعليقات والرسائل في فيسبوك وإنستغرام، تلقائياً." |
-| 5 | 0:48–0:60 | Knowledge base editor briefly + Settings → reply mode toggle | "تحكم كامل: متى يرد، وكيف يرد." |
-| 6 | 0:60–0:72 | Mobile view on iPhone — same flow on the road | "تابع كل شيء من جوالك." |
+| 2 | 0:08–0:18 | **`/ar/integrations`** — click Connect Salla, OAuth screen, 3-step onboarding wizard | "اربط متجرك في سلة بـ Jawab24 في دقيقة." |
+| 3 | 0:18–0:32 | DM thread between two **test accounts** (synthetic conversation, not a real customer) — Arabic question about a real product → AI reply with correct price + product link | "الذكاء الاصطناعي يقرأ متجرك ويرد بأسعار ومنتجات حقيقية." |
+| 4 | 0:32–0:48 | Comments page showing AI reply on a Facebook post belonging to the test page, then a DM thread (both synthetic) | "يرد على التعليقات والرسائل في فيسبوك وإنستغرام، تلقائياً." |
+| 5 | 0:48–0:60 | Knowledge base editor briefly + Settings → reply mode toggle, both at `/ar/...` paths | "تحكم كامل: متى يرد، وكيف يرد." |
+| 6 | 0:60–0:72 | Mobile view on iPhone — same `/ar/...` flow on the road | "تابع كل شيء من جوالك." |
 | 7 | 0:72–0:85 | Hero screen + URL `jawab24.com` + "ابدأ مجاناً" CTA | "Jawab24 — جوابك الذكي على فيسبوك وإنستغرام، من متجرك في سلة." |
 
+**Critical:** every screen capture in the Arabic-narrated video must show the `/ar/...` URL with Arabic UI. Mixing Arabic narration with English UI is a credibility-killer.
+
 ### Production notes
-- Voiceover in **Saudi-neutral Arabic** (avoid heavy Egyptian/Levantine for broadest reach across Salla's MENA base)
+- Voiceover in **Modern Standard Arabic with a neutral Saudi accent** (avoid heavy Egyptian/Levantine for broadest reach across Salla's MENA base)
 - Captions in Arabic + English (so an international Salla merchant can follow without sound)
 - Background music: subtle, MENA-friendly (avoid Western pop/EDM)
 - Branding: end card with Jawab24 logo, `jawab24.com`, and "ابدأ مجاناً — Try free"
@@ -146,21 +161,27 @@ Salla App Store listings benefit from a short demo video. Draft script:
 
 ---
 
-## 6. Privacy policy review checklist
+## 6. Privacy policy — gap analysis (2026-05-07)
 
-Salla App Store reviewers check that the privacy policy linked in the listing accurately describes how the app handles merchant + end-customer data. Audit `https://jawab24.com/privacy` for these specifically:
+**Current state:** [`frontend/src/pages/privacy.tsx`](../frontend/src/pages/privacy.tsx) exists but the copy is generic — driven by `t('introText')`, `t('collectText')` etc. translation keys with no Salla-specific or processor-specific content. Verified by grep: no mentions of Salla, AES, encryption, OpenAI, Sentry, Resend, or PDPL.
 
-- [ ] **Salla data scope** — explicitly names Salla as a data source: products, store info, customer details from cart/order webhooks
-- [ ] **Token storage** — states tokens are encrypted at rest (AES-256-GCM)
+This means the privacy policy must be **updated**, not just verified, before submission. Treat each item below as required content the policy must explicitly include:
+
+- [ ] **Salla data scope** — name Salla as a data source: products, store info, customer details that arrive via cart/order webhooks
+- [ ] **Token storage** — state that platform access/refresh tokens are encrypted at rest (AES-256-GCM via `services/ecommerceCrypto.ts`)
 - [ ] **Customer data retention** — how long DMs/comments are stored; deletion path on disconnect
-- [ ] **Third-party processors** — OpenAI (AI generation), Resend (email), Sentry (error tracking), Cloudinary or equivalent (image hosting)
-- [ ] **Data residency** — where the database is hosted (per memory: production is on the user's server)
-- [ ] **GDPR/PDPL compliance** — though Salla doesn't require GDPR endpoints, Saudi PDPL applies to most Salla merchants
-- [ ] **Right to deletion** — merchant can request deletion of all their data via support email
-- [ ] **Children's data** — confirm no targeting of users <13 (NA in B2B context but reviewers ask)
-- [ ] **Localization** — Arabic version of the privacy policy must exist alongside English; both must say the same thing
+- [ ] **Third-party processors** — name each: OpenAI (AI generation), Resend (transactional email), Sentry (error tracking), and any image hosting / CDN actually in use (verify against `package.json` before naming)
+- [ ] **Data residency** — where the database is hosted (per project memory: production runs on the user's own server, not a managed cloud DB)
+- [ ] **PDPL compliance** — Saudi Personal Data Protection Law applies to most Salla merchants and their end customers; even though Salla doesn't require GDPR endpoints, PDPL data-subject rights must be honored
+- [ ] **Right to deletion** — explicit path: merchant emails support, all data is purged within X days
+- [ ] **Children's data** — state no targeting of users <13 (NA in a B2B context but reviewers ask)
+- [ ] **Localization** — Arabic version of the privacy policy must exist alongside English; both must say the same thing. Currently driven by `next-intl` keys, so both locales render the same content — but the keys themselves need to be filled in for both languages.
 
-If any box is unticked, update `frontend/src/pages/privacy.tsx` (or wherever the policy lives) **before** submission.
+Update path:
+1. Edit `frontend/src/i18n/{en,ar}/privacy.json` (or whatever namespace `privacy.tsx` reads from) to add the new sections.
+2. Run `npm run translation:validate` per `AI_INSTRUCTIONS.md` rule 5.
+3. Verify the page renders correctly at `/en/privacy` and `/ar/privacy` (RTL).
+4. Commit with the matching listing-asset PR so the policy and the listing go live together.
 
 ---
 
@@ -174,11 +195,11 @@ Salla supports two billing models:
 - **(A) Salla-managed billing** — Jawab24 charges through Salla's billing API, Salla takes a cut, merchant pays in SAR through their existing Salla payment relationship. Lower friction, lower margin.
 - **(B) External billing** — Jawab24 has its own subscription page; merchant signs up there. Higher friction (two payment relationships), full margin.
 
-[TBD — decide. Recommend (A) for launch — friction matters more than margin for first-100-merchant adoption.]
+[TBD — decide.] *Recommendation, not decided:* (A) for launch — first-100-merchant adoption friction matters more than per-merchant margin. Validate by checking what comparable Salla apps in the same category do.
 
 ### Free tier strategy
-- Salla App Store norms: ~30% of listed apps offer a free tier (typically capped at limited features or volume)
-- Recommendation: free tier with caps matching the Jawab24.com plan (e.g. 100 AI replies/month), then paid plans through Salla billing
+- *Recommendation, not decided:* free tier with caps matching the Jawab24.com plan (e.g. 100 AI replies/month), then paid plans through Salla billing.
+- Free tier prevalence on the Salla App Store [TBD — verify by browsing the live listings; the original draft cited "~30%" without a source].
 - Decision: [TBD]
 
 ### Pricing tiers (if Salla-managed billing)
