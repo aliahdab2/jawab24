@@ -748,6 +748,10 @@ export const sallaApi = {
     const response = await api.post('/salla/store/sync');
     return response.data;
   },
+  reregisterWebhooks: async () => {
+    const response = await api.post('/salla/store/webhooks/reregister');
+    return response.data;
+  },
   getProducts: async () => {
     const response = await api.get('/salla/store/products');
     return response.data;
@@ -778,6 +782,10 @@ export const zidApi = {
   },
   syncProducts: async () => {
     const response = await api.post('/zid/store/sync');
+    return response.data;
+  },
+  reregisterWebhooks: async () => {
+    const response = await api.post('/zid/store/webhooks/reregister');
     return response.data;
   },
   getProducts: async () => {

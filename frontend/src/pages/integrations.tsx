@@ -50,7 +50,8 @@ interface PlatformConfig {
   requiresDomain: boolean;
   connectStore: (shopDomain?: string) => Promise<{ authUrl: string }>;
   /** Manual recovery: re-trigger webhook registration after a connection issue.
-   *  Optional — only platforms that surface webhookHealth currently support it.
+   *  All three platforms support this; the prop is optional only because the
+   *  card hides the CTA when `store.webhookHealth` is `'ok'` or `'unknown'`.
    */
   reregisterWebhooks?: () => Promise<unknown>;
 }
@@ -84,6 +85,7 @@ const PLATFORMS: PlatformConfig[] = [
     unlinkPage: sallaApi.unlinkPage,
     requiresDomain: false,
     connectStore: () => sallaApi.connectStore(),
+    reregisterWebhooks: sallaApi.reregisterWebhooks,
   },
   {
     id: 'zid',
@@ -98,6 +100,7 @@ const PLATFORMS: PlatformConfig[] = [
     unlinkPage: zidApi.unlinkPage,
     requiresDomain: false,
     connectStore: () => zidApi.connectStore(),
+    reregisterWebhooks: zidApi.reregisterWebhooks,
   },
 ];
 
@@ -241,11 +244,12 @@ function ConnectedStoreCard({
                   size="sm"
                   onClick={handleReregister}
                   disabled={reregistering || actionsDisabled}
+                  aria-busy={reregistering}
                   title={demoLockMessage}
                 >
                   {reregistering ? (
                     <>
-                      <Loader2 className="w-4 h-4 me-1 animate-spin" />
+                      <Loader2 className="w-4 h-4 me-1 animate-spin" aria-hidden="true" />
                       {tInt('webhookHealth.reregistering')}
                     </>
                   ) : tInt('webhookHealth.reregisterBtn')}

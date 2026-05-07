@@ -47,6 +47,23 @@ const MOCK_SALLA_STORE = {
   installedAt: '2026-02-01T00:00:00Z',
 };
 
+const MOCK_ZID_STORE = {
+  id: 'store_3',
+  userId: 'user_1',
+  platform: 'zid' as const,
+  storeDomain: 'test-store.zid.sa',
+  storeName: 'Test Zid Store',
+  storeEmail: 'zid@test.com',
+  storeCurrency: 'SAR',
+  tokenExpiresAt: null,
+  productCount: 24,
+  productSummary: null,
+  policiesSummary: null,
+  lastSyncAt: null,
+  isActive: true,
+  installedAt: '2026-02-15T00:00:00Z',
+};
+
 const MOCK_PAGES = [
   { id: 'page_1', facebookPageId: 'fb_123', name: 'My Business Page', autoReplyEnabled: true, ecommerceStoreId: null },
   { id: 'page_2', facebookPageId: 'fb_456', name: 'My Second Page', autoReplyEnabled: true, ecommerceStoreId: 'store_1' },
@@ -79,18 +96,24 @@ interface AnalyticsFixture {
   replies: { totalReplies: number; aiReplies: number; postReplies: number; manualReplies: number };
 }
 
+type StoreFixture<Base> = Base & { webhookHealth?: 'ok' | 'pending' | 'failed' | 'unknown' };
+
 function mockAPIs(
   page: import('@playwright/test').Page,
   options: {
-    shopifyStore?: typeof MOCK_SHOPIFY_STORE | null;
-    sallaStore?: typeof MOCK_SALLA_STORE | null;
+    shopifyStore?: StoreFixture<typeof MOCK_SHOPIFY_STORE> | null;
+    sallaStore?: StoreFixture<typeof MOCK_SALLA_STORE> | null;
+    zidStore?: StoreFixture<typeof MOCK_ZID_STORE> | null;
     pages?: typeof MOCK_PAGES;
     /** Per-store analytics overview keyed by storeId. Omitted = 500 from analytics endpoint. */
     analytics?: Record<string, AnalyticsFixture>;
     analyticsStatus?: number;
+    /** Mutable counter the mock increments on each platform-specific reregister POST.
+     *  Tests assert e.g. `expect(reregisterCounts.salla).toBe(1)` after clicking Try-again. */
+    reregisterCounts?: { shopify: number; salla: number; zid: number };
   },
 ) {
-  const { shopifyStore = null, sallaStore = null, pages = [], analytics, analyticsStatus } = options;
+  const { shopifyStore = null, sallaStore = null, zidStore = null, pages = [], analytics, analyticsStatus, reregisterCounts } = options;
 
   return page.route('**/api/**', async (route) => {
     const url = route.request().url();
@@ -121,12 +144,40 @@ function mockAPIs(
       return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not found' }) });
     }
 
-    // Zid store — no fixture today; always 404 so the platform is treated as
-    // "never connected". Without this, the default `{}` response made Zid
-    // look like a disconnected-store row, which broke the empty-state check.
+    // Reregister webhooks — POST per platform. Checked BEFORE the store-GET
+    // routes below so the URL substring `/store/webhooks/reregister` doesn't
+    // accidentally match the GET branch.
+    for (const p of ['shopify', 'salla', 'zid'] as const) {
+      if (url.includes(`/${p}/store/webhooks/reregister`) && method === 'POST') {
+        if (reregisterCounts) reregisterCounts[p]++;
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            webhookStatus: { registered: ['t1', 't2'], failed: [], lastAttempt: '2026-05-07T00:00:00Z' },
+          }),
+        });
+      }
+    }
+
+    // Zid store
     if (url.includes('/zid/store') && !url.includes('/sync') && !url.includes('/link-page') && method === 'GET') {
+      if (zidStore) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(zidStore) });
+      }
       return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not found' }) });
     }
+    if (url.includes('/zid/store/sync') && method === 'POST') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
+    }
+    if (url.includes('/zid/store/link-page') && method === 'PATCH') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
+    }
+    if (url.includes('/zid/store') && method === 'DELETE') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
+    }
+
     if (url.includes('/salla/store/sync') && method === 'POST') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
     }
@@ -390,6 +441,60 @@ test.describe('Integrations Page', () => {
 
     await expect(page.getByText(t('shopify.never')).first()).toBeVisible({ timeout: 15000 });
   });
+
+  /* ------------------------------------------------------------------ */
+  /*  webhookHealth recovery UI — over [shopify, salla, zid] x [en, ar]  */
+  /* ------------------------------------------------------------------ */
+
+  // The badge + reregister button live in the platform-agnostic
+  // ConnectedStoreCard. Coverage proves the UI hits the per-platform
+  // endpoint and that copy translates correctly in both locales — so a
+  // Salla/Zid merchant in `webhookHealth: 'failed'` has a real recovery
+  // path in both English and Arabic.
+  const PLATFORM_FIXTURES = {
+    shopify: MOCK_SHOPIFY_STORE,
+    salla: MOCK_SALLA_STORE,
+    zid: MOCK_ZID_STORE,
+  } as const;
+
+  for (const platform of ['shopify', 'salla', 'zid'] as const) {
+    for (const locale of ['en', 'ar'] as const) {
+      test(`[${locale}] shows reregister CTA and POSTs /${platform}/store/webhooks/reregister when webhookHealth is "failed"`, async ({ page }) => {
+        await setupAuth(page);
+
+        const failedStore = { ...PLATFORM_FIXTURES[platform], webhookHealth: 'failed' as const };
+        const reregisterCounts = { shopify: 0, salla: 0, zid: 0 };
+        await mockAPIs(page, {
+          shopifyStore: platform === 'shopify' ? failedStore as StoreFixture<typeof MOCK_SHOPIFY_STORE> : null,
+          sallaStore: platform === 'salla' ? failedStore as StoreFixture<typeof MOCK_SALLA_STORE> : null,
+          zidStore: platform === 'zid' ? failedStore as StoreFixture<typeof MOCK_ZID_STORE> : null,
+          reregisterCounts,
+        });
+
+        await page.goto(`/${locale}/integrations`);
+
+        const tCopy = locale === 'ar' ? tAr : t;
+        // Banner must use role="alert" so screen readers announce it when
+        // webhookHealth flips to 'failed' — that's the merchant's only signal
+        // that webhooks aren't firing. Asserting via role validates the a11y
+        // attribute, not just the visible copy.
+        const banner = page.getByRole('alert').filter({ hasText: tCopy('integrations.webhookHealth.failedTitle') });
+        await expect(banner.first()).toBeVisible({ timeout: 15000 });
+        const tryAgain = page.getByRole('button', { name: new RegExp(tCopy('integrations.webhookHealth.reregisterBtn'), 'i') });
+        await expect(tryAgain.first()).toBeVisible({ timeout: 10000 });
+
+        await tryAgain.first().click();
+        await expect(page.getByText(tCopy('integrations.webhookHealth.reregisterSuccess')).first()).toBeVisible({ timeout: 10000 });
+
+        // Only the platform under test should have been hit.
+        expect(reregisterCounts[platform]).toBe(1);
+        const otherPlatforms = (['shopify', 'salla', 'zid'] as const).filter(p => p !== platform);
+        for (const other of otherPlatforms) {
+          expect(reregisterCounts[other]).toBe(0);
+        }
+      });
+    }
+  }
 });
 
 /* ------------------------------------------------------------------ */
