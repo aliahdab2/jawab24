@@ -183,10 +183,11 @@ When products are synced, caches are invalidated in 4 steps:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/salla/store` | Get connected store info |
+| GET | `/salla/store` | Get connected store info — response includes `webhookHealth: 'ok' \| 'pending' \| 'failed' \| 'unknown'` |
 | POST | `/salla/store/connect` | Start connection (returns OAuth URL) |
 | DELETE | `/salla/store` | Disconnect store |
 | POST | `/salla/store/sync` | Trigger manual product sync |
+| POST | `/salla/store/webhooks/reregister` | Manual webhook re-registration. Used by the integrations-card "Try again" button when `webhookHealth === 'failed'` (retry queue exhausted). Returns `{ ok, webhookStatus }`. Admin role required. Implementation is the shared `createReregisterHandler('salla')` factory in `controllers/ecommerceWebhooks.ts` |
 | GET | `/salla/store/products` | List synced products |
 | PATCH | `/salla/store/link-page` | Link store to a Facebook/Instagram page |
 | PATCH | `/salla/store/unlink-page` | Unlink store from a page |

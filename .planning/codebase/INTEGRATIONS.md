@@ -138,6 +138,46 @@
 
 ## E-Commerce Platforms
 
+### Cross-platform: webhook hardening (Shopify + Salla + Zid)
+
+> Lifted to a shared, platform-agnostic layer in PR #27 (2026-05-07). Every
+> e-commerce integration goes through the same code path for webhook
+> registration, retry, exhaustion, and manual recovery. Adding a new
+> platform = implementing the adapter contract; everything below applies for free.
+
+- **Adapter contract** (`backend/src/integrations/registry.ts`):
+  - `registerWebhooks(store): Promise<WebhookRegistrationResult>` — returns `{registered[], failed[], lastAttempt, exhausted?}`. Each adapter (`integrations/{shopify,salla,zid}.ts`) implements by delegating to its service module.
+  - `getWebhookTopics(): readonly string[]` — source-of-truth topic list, asserted equal to the service constant by `backend/test/integrations/webhookTopicDrift.test.ts`.
+  - `integrationRegistry.get(platform)` — lookup used by the worker + the shared reregister handler.
+
+- **Shared install-path helper** (`backend/src/services/ecommerce.ts:registerWebhooksWithPersist`):
+  - Awaits `adapter.registerWebhooks(store)`, persists the status JSONB, enqueues a retry job on partial or total failure.
+  - Install never fails because of webhook hiccups — total failures persist a `{registered:[], failed:[{topic:'all',error}]}` marker so the integrations card can surface a Re-register CTA.
+  - Save and queue failures emit Sentry events tagged `webhook-status-persist-failed` / `webhook-retry-enqueue-failed`.
+
+- **Retry queue** (`backend/src/lib/webhookRetryQueue.ts`):
+  - BullMQ queue `ecommerce-webhook-retry`, 3 attempts, exponential backoff (~30s, ~2min, ~8min).
+  - Worker (`backend/src/workers/webhookRetryWorker.ts`) dispatches via `integrationRegistry.get(platform).registerWebhooks(store)` — no platform branching.
+  - On exhaustion: persists `webhookStatus.exhausted = true`, emits Sentry event tagged `service: <platform>, stage: webhook-retry-exhausted`. Frontend integrations card renders a "Re-register webhooks" CTA.
+
+- **Manual recovery endpoint**: `POST /:platform/store/webhooks/reregister`
+  - Mounted under each platform's prefix; one shared handler in `backend/src/controllers/ecommerceWebhooks.ts:createReregisterHandler(platform)`.
+  - Auth: `authenticate + resolveWorkspace + requireRole('admin')`.
+  - Returns `{ ok, webhookStatus }` with the latest registration result. Frontend `ecommerceApi.reregisterWebhooks(platform)` wraps it.
+
+- **Frontend recovery UI**:
+  - `frontend/src/pages/integrations.tsx` — banner + "Try again" button driven entirely off `store.webhookHealth`. Renders for any platform whose `PlatformConfig.reregisterWebhooks` is set (all three today).
+  - i18n keys `webhookHealth.{pendingTitle,pendingBody,failedTitle,failedBody,reregisterBtn,reregistering,reregisterSuccess,reregisterError}` are platform-neutral. EN + AR translations live in `frontend/src/i18n/{en,ar}/integrations.json`.
+
+- **Tests**:
+  - `backend/test/services/registerWebhooksWithPersist.test.ts` — 15 tests, table-driven over `[shopify, salla, zid]`: success, partial-failure, total-throw, queue-down, db-down resilience.
+  - `backend/test/controllers/ecommerceWebhooks.test.ts` — 18 tests for the reregister handler.
+  - `backend/test/workers/webhookRetryWorker.test.ts` — 12 tests for registry dispatch.
+  - `backend/test/integrations/webhookTopicDrift.test.ts` — adapter topics match service constants.
+  - `frontend/e2e/integrations.spec.ts` — 6 tests (`[shopify, salla, zid] × [en, ar]`) for the recovery UI banner + reregister round-trip.
+
+---
+
 ### Shopify
 - **Purpose**: Sync product catalog, enrich AI knowledge base with product details
 - **Integration Type**: OAuth 2.0 + REST API
@@ -155,10 +195,12 @@
   - `/admin/api/2024-01/product_variants.json` - variant details
 
 - **Webhook Integration**:
-  - Endpoint: `/shopify/webhooks` (POST)
-  - Events: `products/update`, `inventory_levels/update`
-  - Verification: HMAC-SHA256 signature in `X-Shopify-Hmac-SHA256` header
+  - Endpoint: `/shopify/webhooks` (POST), plus dedicated `/shopify/webhooks/{uninstall,products-update,orders}` per-event handlers
+  - Events (8): `app/uninstalled`, `products/{create,update,delete}`, `orders/{create,updated,fulfilled,cancelled}`
+  - Verification: HMAC-SHA256 base64 signature in `X-Shopify-Hmac-SHA256` header
   - Signature Key: Shopify API secret
+  - GDPR endpoints: `/gdpr/customers/{data_request,redact}`, `/gdpr/shop/redact` (mandatory for App Store)
+  - Source-of-truth topic list: in `services/shopify.ts:registerWebhooks` body
 
 - **Background Worker**:
   - `ecommerceSyncWorker` - syncs products on interval
@@ -194,10 +236,10 @@
 - **Purpose**: Sync product catalog, enrich AI knowledge base (Middle East e-commerce platform)
 - **Integration Type**: OAuth 2.0 + REST API
 - **OAuth Flow**:
-  - User enters Salla store domain
+  - No domain input (Salla authenticates the merchant directly)
   - Redirect to Salla authorization
-  - Request scopes: `offline_access`, `products.read_write`, `settings.read`, `webhooks.read_write`, `orders.read_write`
-  - Access token (and refresh token for long-lived auth)
+  - Request scopes: `offline_access`, `products.read_write`, `settings.read` (verify against `config.salla.scopes`)
+  - Access token (14 days) + refresh token (single-use; Redis distributed lock prevents concurrent-refresh races)
 
 - **API Endpoints Used**:
   - `/products` - list products
@@ -205,9 +247,11 @@
   - `/merchants/profile` - store info
 
 - **Webhook Integration**:
-  - Endpoint: `/salla/webhooks` (POST)
-  - Events: `product.added`, `product.updated`, `product.deleted`
-  - Verification: HMAC-SHA256 signature in `X-Salla-Signature` header
+  - Endpoint: `/salla/webhooks` (POST) — single endpoint, dispatched by `event` field in body
+  - Events (11): `product.{created,deleted,price.updated,status.updated,quantity.low}`, `app.uninstalled`, `order.{created,updated,shipping.update,completed}`, `abandoned.cart`
+  - Verification: HMAC-SHA256 hex signature in `X-Salla-Signature` header (timing-safe compare)
+  - Source-of-truth topic list: `SALLA_WEBHOOK_EVENTS` in `services/salla.ts`
+  - No GDPR endpoints required (Salla policy)
 
 - **Configuration**:
   - `SALLA_CLIENT_ID` - OAuth app ID
