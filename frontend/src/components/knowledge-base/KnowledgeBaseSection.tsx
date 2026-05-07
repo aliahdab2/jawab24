@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useCallback, memo } from 'react';
 import { useTranslations } from 'next-intl';
-import type { KnowledgeSection, SectionConfig } from './types';
+import type { KnowledgeSection, SectionConfig, SectionId } from './types';
 import { CollapsibleSectionCard } from './CollapsibleSectionCard';
 import { SectionEditor } from './SectionEditor';
 
@@ -8,12 +8,15 @@ interface KnowledgeBaseSectionProps {
   section: KnowledgeSection;
   config: SectionConfig;
   isExpanded: boolean;
-  onToggle: () => void;
-  onChange: (content: string) => void;
-  remainingChars: number;
+  /** Stable across renders; child binds the section id. */
+  onToggle: (id: SectionId) => void;
+  /** Stable across renders; child binds the section id. */
+  onChange: (id: SectionId, content: string) => void;
+  /** Undefined when collapsed so memoized siblings skip re-renders triggered by the global budget changing. */
+  remainingChars: number | undefined;
 }
 
-export function KnowledgeBaseSection({
+function KnowledgeBaseSectionImpl({
   section,
   config,
   isExpanded,
@@ -23,6 +26,9 @@ export function KnowledgeBaseSection({
 }: KnowledgeBaseSectionProps) {
   const tKb = useTranslations('kb');
   const hasContent = section.content.trim().length > 0;
+
+  const handleToggle = useCallback(() => onToggle(section.id), [onToggle, section.id]);
+  const handleChange = useCallback((content: string) => onChange(section.id, content), [onChange, section.id]);
 
   // Preview: first line of content, truncated
   const preview = hasContent
@@ -34,7 +40,7 @@ export function KnowledgeBaseSection({
       isExpanded={isExpanded}
       hasContent={hasContent}
       charCount={section.content.length}
-      onToggle={onToggle}
+      onToggle={handleToggle}
       header={
         <>
           <span className="text-xl flex-shrink-0">{config.emoji}</span>
@@ -53,7 +59,7 @@ export function KnowledgeBaseSection({
     >
       <SectionEditor
         content={section.content}
-        onChange={onChange}
+        onChange={handleChange}
         description={tKb(config.descKey)}
         placeholder={tKb(config.placeholderKey)}
         ariaLabel={tKb(config.titleKey)}
@@ -63,3 +69,5 @@ export function KnowledgeBaseSection({
     </CollapsibleSectionCard>
   );
 }
+
+export const KnowledgeBaseSection = memo(KnowledgeBaseSectionImpl);
