@@ -390,6 +390,79 @@ test.describe('Integrations Page', () => {
 
     await expect(page.getByText(t('shopify.never')).first()).toBeVisible({ timeout: 15000 });
   });
+
+  /* ------------------------------------------------------------------ */
+  /*  webhookHealth recovery UI — table-driven over all three platforms  */
+  /* ------------------------------------------------------------------ */
+
+  // One spec for all platforms because the badge + reregister button live in
+  // the platform-agnostic ConnectedStoreCard. Test goal: prove the UI hits
+  // the per-platform endpoint when the merchant clicks "Try again", so a
+  // Salla/Zid merchant in `webhookHealth: 'failed'` has a real recovery path.
+  for (const platform of ['shopify', 'salla', 'zid'] as const) {
+    test(`shows reregister CTA and POSTs /${platform}/store/webhooks/reregister when webhookHealth is "failed"`, async ({ page }) => {
+      await setupAuth(page);
+
+      const failedStore = {
+        id: `store_${platform}`,
+        userId: 'user_1',
+        platform,
+        storeDomain: platform === 'shopify' ? 'failed.myshopify.com' : `failed.${platform}.test`,
+        storeName: `Failed ${platform} Store`,
+        storeEmail: `${platform}@test.com`,
+        storeCurrency: 'USD',
+        tokenExpiresAt: null,
+        productCount: 7,
+        productSummary: null,
+        policiesSummary: null,
+        lastSyncAt: '2026-04-01T00:00:00Z',
+        isActive: true,
+        installedAt: '2026-03-01T00:00:00Z',
+        webhookHealth: 'failed' as const,
+      };
+
+      let reregisterHits = 0;
+      await page.route('**/api/**', async (route) => {
+        const url = route.request().url();
+        const method = route.request().method();
+
+        // Per-platform store fixture (only the platform under test is connected)
+        for (const p of ['shopify', 'salla', 'zid'] as const) {
+          if (url.includes(`/${p}/store/webhooks/reregister`) && method === 'POST') {
+            if (p === platform) reregisterHits++;
+            return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, webhookStatus: { registered: ['t1'], failed: [], lastAttempt: '2026-05-07T00:00:00Z' } }) });
+          }
+          if (url.includes(`/${p}/store`) && !url.includes('/sync') && !url.includes('/link-page') && !url.includes('/webhooks/') && method === 'GET') {
+            if (p === platform) {
+              return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(failedStore) });
+            }
+            return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not found' }) });
+          }
+        }
+        if (url.includes('/pages')) {
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [] }) });
+        }
+        if (url.includes('/auth/profile')) {
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user_1', email: 'test@test.com', name: 'Test User' }) });
+        }
+        if (url.includes('/subscription/usage')) {
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+        }
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+      });
+
+      await page.goto('/en/integrations');
+
+      // Failed banner + Try again button render for any platform with webhookHealth === 'failed'.
+      await expect(page.getByText(t('integrations.webhookHealth.failedTitle')).first()).toBeVisible({ timeout: 15000 });
+      const tryAgain = page.getByRole('button', { name: new RegExp(t('integrations.webhookHealth.reregisterBtn'), 'i') });
+      await expect(tryAgain.first()).toBeVisible({ timeout: 10000 });
+
+      await tryAgain.first().click();
+      await expect(page.getByText(t('integrations.webhookHealth.reregisterSuccess')).first()).toBeVisible({ timeout: 10000 });
+      expect(reregisterHits).toBe(1);
+    });
+  }
 });
 
 /* ------------------------------------------------------------------ */
