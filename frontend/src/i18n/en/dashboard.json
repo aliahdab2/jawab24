@@ -60,7 +60,8 @@
     "replyRate": "Reply Rate",
     "avgSpeed": "Avg Speed",
     "quotaWarning": "{percent}% of plan",
-    "quotaExceeded": "Over limit"
+    "quotaExceeded": "Over limit",
+    "smartRepliesTooltip": "Replies sent in the last 30 days."
   },
   "smartBanner": {
     "needsAttention": "{count, plural, one {# item needs} other {# items need}} your attention",

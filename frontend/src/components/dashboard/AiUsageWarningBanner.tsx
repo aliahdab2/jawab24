@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { AlertTriangle, Sparkles } from 'lucide-react';
+import { AlertTriangle, Sparkles, Info } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
@@ -69,17 +69,25 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBann
                     <p className="font-bold text-sm sm:text-base leading-tight">
                         {isLimitReached ? tSub('limitBanner.reachedTitle') : tSub('limitBanner.warningTitle')}
                     </p>
-                    <p className="text-xs sm:text-sm opacity-80 mt-1">
-                        {tSub('limitBanner.usage', {
-                            used: used.toLocaleString(locale),
-                            limit: limit.toLocaleString(locale),
-                        })}
-                        {resetDate && (
-                            <>
-                                {' · '}
-                                {tSub('limitBanner.resetsOn', { date: resetDate })}
-                            </>
-                        )}
+                    <p className="text-xs sm:text-sm opacity-80 mt-1 inline-flex items-center gap-1 flex-wrap">
+                        <span>
+                            {tSub('limitBanner.usage', {
+                                used: used.toLocaleString(locale),
+                                limit: limit.toLocaleString(locale),
+                            })}
+                            {resetDate && (
+                                <>
+                                    {' · '}
+                                    {tSub('limitBanner.resetsOn', { date: resetDate })}
+                                </>
+                            )}
+                        </span>
+                        <span className="relative group inline-flex">
+                            <Info className="w-3.5 h-3.5 opacity-70 cursor-help" aria-label={tSub('limitBanner.scopeTooltip')} />
+                            <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] font-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-56 text-center z-10 leading-snug">
+                                {tSub('limitBanner.scopeTooltip')}
+                            </span>
+                        </span>
                     </p>
                 </div>
 

@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { Sparkles, CheckCircle, Gauge, Timer } from 'lucide-react';
+import { Sparkles, CheckCircle, Gauge, Timer, Info } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { Badge } from '@/components/ui/Badge';
 import { useTranslations } from 'next-intl';
@@ -26,6 +26,10 @@ interface MetricCell {
   iconBg: string;
   iconColor: string;
   badge?: React.ReactNode;
+  /** Optional explanatory text shown via an info-icon hover/focus tooltip
+   *  next to the label. Used to disambiguate this metric from the plan-usage
+   *  banner so users (and their customers) can tell which one is which. */
+  tooltip?: string;
 }
 
 export function CommandCenter({
@@ -75,6 +79,7 @@ export function CommandCenter({
       iconBg: isOverLimit ? 'icon-bg-red-light' : isWarning ? 'icon-bg-amber-light' : 'icon-bg-brand-light',
       iconColor: '',
       badge: quotaBadge,
+      tooltip: tDash('commandCenter.smartRepliesTooltip'),
     },
     {
       label: tDash('commandCenter.repliedToday'),
@@ -154,8 +159,16 @@ export function CommandCenter({
                   <p className="text-2xl sm:text-3xl font-bold leading-none tracking-tight text-foreground">
                     {metric.value}
                   </p>
-                  <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5">
+                  <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5 inline-flex items-center gap-1">
                       {metric.label}
+                      {metric.tooltip && (
+                        <span className="relative group inline-flex">
+                          <Info className="w-3 h-3 text-icon-muted cursor-help" aria-label={metric.tooltip} />
+                          <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] font-normal normal-case tracking-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-48 text-center z-10 leading-snug">
+                            {metric.tooltip}
+                          </span>
+                        </span>
+                      )}
                   </p>
                   {metric.badge}
                 </div>
