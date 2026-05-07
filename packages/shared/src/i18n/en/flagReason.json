@@ -13,6 +13,7 @@
   "negative_sentiment": "Negative sentiment",
   "human_requested": "Human requested",
   "language_mismatch": "Language mismatch",
+  "declared_lang_mismatch": "Reply language mismatch",
   "comment_too_long": "Comment too long",
   "cancellation_request": "Cancellation request",
   "refund_request": "Refund request",
