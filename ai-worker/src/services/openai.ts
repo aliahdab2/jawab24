@@ -812,7 +812,7 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         // Check 3: Language mismatch — reply language differs from input.
         // Prefers GPT's declared `language` field (from strict json_schema) as the source of truth;
         // falls back to heuristic detection when absent (invalid_json fallback path).
-        // Also flags `declared_lang_mismatch` when GPT's claim diverges from what the reply looks like.
+        // Also logs `declared_lang_mismatch` (observability only) when GPT's JSON metadata diverges from what the reply looks like.
         if (reply) {
             const inputLang = this.resolveInputLanguage(request);
             const detectedLang = this.detectLanguage(reply);
@@ -823,14 +823,21 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
                 flags.push(`reply_lang:${replyLang}`);
             }
             // Cross-check: GPT declared one language but reply text looks like another.
-            // Only flag when reply has enough script content to detect reliably.
+            // Log-only \u2014 this catches a metadata inconsistency in GPT's JSON output, not a
+            // reply-quality issue. The reply itself is correct (it matches the resolved input
+            // language); surfacing this to merchants creates false positives when customers
+            // type a Latin acronym ("ICDL") in an otherwise Arabic conversation.
             if (
                 parsed.language
                 && parsed.language !== detectedLang
                 && /[a-zA-Z\u0600-\u06FF]{3,}/.test(reply)
-                && !flags.includes('declared_lang_mismatch')
             ) {
-                flags.push('declared_lang_mismatch');
+                console.log(JSON.stringify({
+                    event: 'declared_lang_mismatch',
+                    declared: parsed.language,
+                    detected: detectedLang,
+                    inputLang,
+                }));
             }
         }
 
