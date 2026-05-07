@@ -13,6 +13,7 @@
   "negative_sentiment": "مشاعر سلبية",
   "human_requested": "طلب تحويل لموظف",
   "language_mismatch": "عدم تطابق اللغة",
+  "declared_lang_mismatch": "عدم تطابق لغة الرد",
   "comment_too_long": "التعليق طويل جداً",
   "cancellation_request": "طلب إلغاء",
   "refund_request": "طلب استرجاع",
