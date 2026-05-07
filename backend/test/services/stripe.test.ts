@@ -80,34 +80,37 @@ describe('Stripe Service', () => {
                 // No trialDays = default 0 = no trial
             );
 
-            expect(mockStripeInstance.checkout.sessions.create).toHaveBeenCalledWith({
-                customer_email: 'test@example.com',
-                client_reference_id: 'user_123',
-                mode: 'subscription',
-                ui_mode: 'embedded',
-                locale: 'auto',
-                payment_method_collection: 'if_required',
-                tax_id_collection: { enabled: true },
-                billing_address_collection: 'auto',
-                line_items: [
-                    {
-                        price: 'price_123',
-                        quantity: 1,
+            expect(mockStripeInstance.checkout.sessions.create).toHaveBeenCalledWith(
+                {
+                    customer_email: 'test@example.com',
+                    client_reference_id: 'user_123',
+                    mode: 'subscription',
+                    ui_mode: 'embedded',
+                    locale: 'auto',
+                    payment_method_collection: 'if_required',
+                    tax_id_collection: { enabled: true },
+                    billing_address_collection: 'auto',
+                    line_items: [
+                        {
+                            price: 'price_123',
+                            quantity: 1,
+                        },
+                    ],
+                    return_url: 'https://example.com/payment/return?session_id={CHECKOUT_SESSION_ID}',
+                    subscription_data: {
+                        metadata: {
+                            userId: 'user_123',
+                            planId: 'plan_456',
+                        },
+                        // No trial_period_days when trialDays=0
                     },
-                ],
-                return_url: 'https://example.com/payment/return?session_id={CHECKOUT_SESSION_ID}',
-                subscription_data: {
                     metadata: {
                         userId: 'user_123',
                         planId: 'plan_456',
                     },
-                    // No trial_period_days when trialDays=0
                 },
-                metadata: {
-                    userId: 'user_123',
-                    planId: 'plan_456',
-                },
-            });
+                expect.objectContaining({ idempotencyKey: expect.stringMatching(/^checkout:user_123:plan_456:price_123:0:\d+$/) })
+            );
 
             expect(session).toEqual(mockSession);
         });
@@ -136,7 +139,8 @@ describe('Stripe Service', () => {
                     subscription_data: expect.objectContaining({
                         trial_period_days: 30,
                     }),
-                })
+                }),
+                expect.objectContaining({ idempotencyKey: expect.stringMatching(/^checkout:user_123:plan_456:price_123:30:\d+$/) })
             );
         });
 

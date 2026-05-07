@@ -136,7 +136,8 @@ export class PaymentController {
             // Build return URL server-side (no client-supplied URLs = no open-redirect risk)
             const returnUrl = `${config.frontendUrl}/payment/return?session_id={CHECKOUT_SESSION_ID}`;
 
-            // Create embedded checkout session with appropriate trial
+            // Create embedded checkout session with appropriate trial.
+            // Idempotency key for retry-safety is derived inside stripeService.
             const session = await stripeService.createCheckoutSession(
                 userId,
                 user.email,
@@ -235,7 +236,8 @@ export class PaymentController {
                 stripeCustomerId = await stripeService.findOrCreateCustomer(user.email, userId);
             }
 
-            // Create subscription with PaymentIntent or SetupIntent
+            // Create subscription with PaymentIntent or SetupIntent.
+            // Idempotency key for retry-safety is derived inside stripeService.
             const result = await stripeService.createSubscriptionIntent({
                 customerId: stripeCustomerId,
                 priceId: stripePriceId,
@@ -683,14 +685,21 @@ export class PaymentController {
                     .set({ status: 'completed', processedAt: new Date() })
                     .where(eq(stripeWebhookEvents.eventId, event.id));
             } catch (handlerError) {
-                // Leave status as 'processing' so Stripe retry can re-attempt
-                request.log.error({ err: handlerError, eventId: event.id }, 'Webhook handler failed, event left as processing for retry');
-                throw handlerError;
+                // Leave status as 'processing' so Stripe retry can re-attempt.
+                // Return 5xx so Stripe schedules a retry — 4xx is treated as permanent and the event would be silently dropped.
+                captureError(handlerError, 'Stripe webhook handler failed', {
+                    tags: { eventType: event.type },
+                    extra: { eventId: event.id },
+                });
+                request.log.error({ err: handlerError, eventId: event.id, eventType: event.type }, 'Webhook handler failed, event left as processing for retry');
+                return reply.status(500).send({ error: 'Webhook handler failed' });
             }
 
             return reply.send({ received: true });
         } catch (error) {
-            request.log.error({ err: error }, 'Webhook error');
+            // Reaches here only for signature verification / raw-body / idempotency-lookup errors.
+            // 400 is correct for signature failures (Stripe should not retry an invalid signature).
+            request.log.error({ err: error }, 'Webhook signature verification failed');
             return reply.status(400).send({ error: 'Webhook verification failed' });
         }
     }
