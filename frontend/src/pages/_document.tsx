@@ -209,7 +209,7 @@ export default function MyDocument({ locale }: DocProps) {
                 "E-commerce product catalog sync — مزامنة كتالوج المنتجات",
                 "Arabic dialect support (6 families) — دعم 6 عائلات لهجات عربية",
                 "24/7 automated responses — رد تلقائي على مدار الساعة",
-                "Preset keyword replies — ردود جاهزة بالكلمات المفتاحية",
+                "Per-post keyword replies (Post Replies) — رد فوري على البوست بكلمات مفتاحية",
                 "Business knowledge base — قاعدة معرفة ذكية"
               ],
               "screenshot": "https://jawab24.com/brand/og-social.png",

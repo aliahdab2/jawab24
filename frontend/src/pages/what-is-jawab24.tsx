@@ -117,7 +117,7 @@ export default function WhatIsJawab24() {
                   "AI auto-replies to Facebook comments and Messenger messages",
                   "AI auto-replies to Instagram comments and direct messages",
                   "AI-powered automatic replies (Smart Replies) with 99.6% eval accuracy",
-                  "Template-based keyword replies (zero AI cost)",
+                  "Per-post keyword replies (Post Replies) — comment matches keyword, sends reply via DM",
                   "Knowledge Base with RAG (Retrieval-Augmented Generation) search",
                   "Shopify product catalog sync with automatic price updates",
                   "Salla product catalog sync (native Arabic e-commerce)",
