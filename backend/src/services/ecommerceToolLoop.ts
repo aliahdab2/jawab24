@@ -71,7 +71,19 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
     }
     const tokensIn = data.tokensIn ?? 0;
     const tokensOut = data.tokensOut ?? 0;
-    if (tokensIn === 0 && tokensOut === 0) return; // worker didn't report usage (fallback path)
+    if (tokensIn === 0 && tokensOut === 0) {
+        // Worker didn't report usage — expected on its internal fallback path,
+        // but surface as a breadcrumb so a worker regression that silently stops
+        // reporting tokens is visible in Sentry instead of becoming an invoice
+        // surprise.
+        Sentry.addBreadcrumb({
+            category: 'ai_usage_log',
+            level: 'warning',
+            message: 'ecommerce_tools usage skipped: worker reported zero tokens',
+            data: { pageId: request.context?.pageId, model: data.model },
+        });
+        return;
+    }
     logAiUsage({
         userId,
         pageId: request.context?.pageId,

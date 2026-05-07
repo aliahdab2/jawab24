@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import * as Sentry from '@sentry/node';
 import type { EmbeddingProvider, EmbeddingLogContext } from './interfaces';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
@@ -69,6 +70,8 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
         );
         if (logCtx && response.usage) {
             logEmbeddingUsage(logCtx, response.usage.prompt_tokens ?? 0);
+        } else if (!logCtx) {
+            warnUnattributedEmbedding('embed', response.usage?.prompt_tokens ?? 0);
         }
         return response.data[0].embedding;
     }
@@ -90,12 +93,30 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
             );
             if (logCtx && response.usage) {
                 logEmbeddingUsage(logCtx, response.usage.prompt_tokens ?? 0);
+            } else if (!logCtx) {
+                warnUnattributedEmbedding('embedBatch', response.usage?.prompt_tokens ?? 0);
             }
             const sorted = response.data.sort((a, b) => a.index - b.index);
             results.push(...sorted.map(d => d.embedding));
         }
         return results;
     }
+}
+
+/**
+ * Surface embedding calls made without a logCtx as a Sentry breadcrumb.
+ * Callers conditionally drop the context when userId is missing (e.g.
+ * unauthenticated cache lookups, ingestion for pages with no owner row);
+ * those tokens still cost real money, and this trail makes any new
+ * unattributed code path visible without breaking the call.
+ */
+function warnUnattributedEmbedding(method: 'embed' | 'embedBatch', tokensIn: number): void {
+    Sentry.addBreadcrumb({
+        category: 'ai_usage_log',
+        level: 'warning',
+        message: `embedding usage skipped: no logCtx (${method})`,
+        data: { tokensIn, model: EMBEDDING_MODEL },
+    });
 }
 
 function logEmbeddingUsage(ctx: EmbeddingLogContext, tokensIn: number): void {
