@@ -69,12 +69,18 @@ const MOCK_PAGES = [
   { id: 'page_2', facebookPageId: 'fb_456', name: 'My Second Page', autoReplyEnabled: true, ecommerceStoreId: 'store_1' },
 ];
 
-function setupAuth(page: import('@playwright/test').Page) {
+function setupAuth(page: import('@playwright/test').Page, locale: 'en' | 'ar' = 'en') {
   // The integrations page is admin-only while we finish public roll-out
   // (Shopify App Store listing pending, Salla/Zid backend reliability gap).
   // The test user is flagged as admin so the page-level guard doesn't
   // redirect away from /integrations during the test run.
-  return page.addInitScript(() => {
+  //
+  // The `language` in ui-storage MUST match the URL locale. _app.tsx has a
+  // sync effect (lines 167-173) that redirects to the store's language when
+  // it differs from the URL on the default locale ('ar'). If we hardcode
+  // 'en' here and run a [ar] test, the page redirects /ar/* → /en/* on
+  // hydration and the test never finds the Arabic copy it expects.
+  return page.addInitScript((language) => {
     localStorage.setItem(
       'auth-storage',
       JSON.stringify({
@@ -84,10 +90,10 @@ function setupAuth(page: import('@playwright/test').Page) {
     );
     localStorage.setItem(
       'ui-storage',
-      JSON.stringify({ state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
+      JSON.stringify({ state: { sidebarOpen: true, language, _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
     );
     localStorage.setItem('jawab24_onboarding_complete', 'true');
-  });
+  }, locale);
 }
 
 interface AnalyticsFixture {
@@ -460,7 +466,7 @@ test.describe('Integrations Page', () => {
   for (const platform of ['shopify', 'salla', 'zid'] as const) {
     for (const locale of ['en', 'ar'] as const) {
       test(`[${locale}] shows reregister CTA and POSTs /${platform}/store/webhooks/reregister when webhookHealth is "failed"`, async ({ page }) => {
-        await setupAuth(page);
+        await setupAuth(page, locale);
 
         const failedStore = { ...PLATFORM_FIXTURES[platform], webhookHealth: 'failed' as const };
         const reregisterCounts = { shopify: 0, salla: 0, zid: 0 };
