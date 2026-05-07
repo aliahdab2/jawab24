@@ -66,6 +66,7 @@ export class RetrievalService {
         query: string,
         kbActiveVersion: number,
         topK: number = DEFAULT_TOP_K,
+        userId?: string,
     ): Promise<RetrievalResult> {
         // 1. Normalize + embed
         const normalizedQuery = normalizeArabic(query);
@@ -73,7 +74,8 @@ export class RetrievalService {
 
         this.logger.debug('Retrieval started', { pageId, queryLanguage, kbActiveVersion });
 
-        const queryEmbedding = await this.embeddingProvider.embed(normalizedQuery);
+        const embedLogCtx = userId ? { userId, pageId, pipeline: 'embedding_rag' as const } : undefined;
+        const queryEmbedding = await this.embeddingProvider.embed(normalizedQuery, embedLogCtx);
         const vectorStr = `[${queryEmbedding.join(',')}]`;
 
         // 2+3. Hybrid search: vector candidates → trigram re-rank in a single query

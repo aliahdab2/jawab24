@@ -10,6 +10,14 @@ vi.mock('../../../src/db', () => ({
             })),
         })),
         execute: vi.fn().mockResolvedValue(undefined),
+        // userId lookup for cost-attribution: returns no row → embedding logger is skipped
+        select: vi.fn(() => ({
+            from: vi.fn(() => ({
+                where: vi.fn(() => ({
+                    limit: vi.fn().mockResolvedValue([]),
+                })),
+            })),
+        })),
     },
 }));
 

@@ -18,6 +18,11 @@ vi.mock('../../../src/services/ai', () => ({
     aiService: { generateReply: vi.fn() },
 }));
 
+// Stub aiUsageLog so transitive imports (leadExtractor → aiUsageLog → redis) don't try to connect.
+vi.mock('../../../src/services/aiUsageLog', () => ({
+    logAiUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../../src/services/posts', () => ({
     postsService: { findOrCreateFromWebhook: vi.fn() },
 }));

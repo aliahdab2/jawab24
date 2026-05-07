@@ -30,10 +30,19 @@ export interface ScoredChunk {
     finalScore: number;
 }
 
+import type { AiPipeline } from '../../types/aiPipeline';
+
+/** Optional cost-attribution context. When set, the provider writes one ai_usage_log row per OpenAI call. */
+export interface EmbeddingLogContext {
+    userId: string;
+    pageId?: string;
+    pipeline: Extract<AiPipeline, 'embedding_rag' | 'embedding_cache' | 'embedding_ingestion'>;
+}
+
 /** Swap embedding provider without touching retrieval logic */
 export interface EmbeddingProvider {
-    embed(text: string): Promise<number[]>;
-    embedBatch(texts: string[]): Promise<number[][]>;
+    embed(text: string, logCtx?: EmbeddingLogContext): Promise<number[]>;
+    embedBatch(texts: string[], logCtx?: EmbeddingLogContext): Promise<number[][]>;
     getDimensions(): number;
 }
 

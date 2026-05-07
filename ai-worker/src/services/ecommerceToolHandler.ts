@@ -36,8 +36,12 @@ export interface ToolEnabledResponse {
     /** When no tools are needed, this is the normal reply */
     reply?: string;
     language?: string;
+    /** Model name actually used by the worker — surfaced so the backend logs the correct unit price. */
+    model?: string;
     tokensUsed?: number;
     tokensIn?: number;
+    /** Subset of tokensIn that hit OpenAI's prompt cache (billed at 50%). */
+    tokensInCached?: number;
     tokensOut?: number;
     intent?: string;
     confidence?: string;
@@ -239,7 +243,10 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
 
             return {
                 toolCalls,
+                model: config.openai.model,
+                tokensUsed: completion.usage?.total_tokens,
                 tokensIn: completion.usage?.prompt_tokens,
+                tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
                 tokensOut: completion.usage?.completion_tokens,
             };
         }
@@ -340,7 +347,10 @@ export async function generateWithToolResults(
                 reply: '',
                 language: request.language || 'en',
                 toolCalls,
+                model: config.openai.model,
+                tokensUsed: completion.usage?.total_tokens,
                 tokensIn: completion.usage?.prompt_tokens,
+                tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
                 tokensOut: completion.usage?.completion_tokens,
             } as GenerateResponse & { toolCalls: Array<{ name: string; arguments: Record<string, string> }> };
         }
@@ -358,8 +368,10 @@ export async function generateWithToolResults(
         return {
             reply: parsed.reply || 'Thank you for your patience!',
             language: detectedLanguage,
+            model: config.openai.model,
             tokensUsed: completion.usage?.total_tokens,
             tokensIn: completion.usage?.prompt_tokens,
+            tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
             tokensOut: completion.usage?.completion_tokens,
             intent: parsed.intent,
             confidence: parsed.confidence,
@@ -400,8 +412,10 @@ function parseDirectReply(
     return {
         reply: parsed.reply || content,
         language: request.language || 'en',
+        model: config.openai.model,
         tokensUsed: completion.usage?.total_tokens,
         tokensIn: completion.usage?.prompt_tokens,
+        tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
         tokensOut: completion.usage?.completion_tokens,
         intent: parsed.intent,
         confidence: parsed.confidence,

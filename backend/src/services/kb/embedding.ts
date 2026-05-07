@@ -1,7 +1,8 @@
 import OpenAI from 'openai';
-import type { EmbeddingProvider } from './interfaces';
+import type { EmbeddingProvider, EmbeddingLogContext } from './interfaces';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
+import { logAiUsage } from '../aiUsageLog';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const EMBEDDING_DIMENSIONS = 512;
@@ -56,7 +57,7 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
         return EMBEDDING_DIMENSIONS;
     }
 
-    async embed(text: string): Promise<number[]> {
+    async embed(text: string, logCtx?: EmbeddingLogContext): Promise<number[]> {
         const safeText = truncateForEmbedding(text, this.logger);
         const response = await withRetry(() =>
             this.client.embeddings.create({
@@ -66,10 +67,13 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
             }),
             this.logger,
         );
+        if (logCtx && response.usage) {
+            logEmbeddingUsage(logCtx, response.usage.prompt_tokens ?? 0);
+        }
         return response.data[0].embedding;
     }
 
-    async embedBatch(texts: string[]): Promise<number[][]> {
+    async embedBatch(texts: string[], logCtx?: EmbeddingLogContext): Promise<number[][]> {
         if (texts.length === 0) return [];
 
         const results: number[][] = [];
@@ -84,9 +88,24 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
                 }),
                 this.logger,
             );
+            if (logCtx && response.usage) {
+                logEmbeddingUsage(logCtx, response.usage.prompt_tokens ?? 0);
+            }
             const sorted = response.data.sort((a, b) => a.index - b.index);
             results.push(...sorted.map(d => d.embedding));
         }
         return results;
     }
+}
+
+function logEmbeddingUsage(ctx: EmbeddingLogContext, tokensIn: number): void {
+    logAiUsage({
+        userId: ctx.userId,
+        pageId: ctx.pageId,
+        model: EMBEDDING_MODEL,
+        tokensIn,
+        tokensOut: 0,
+        cached: false,
+        pipeline: ctx.pipeline,
+    }).catch(() => { /* Sentry breadcrumb emitted inside logAiUsage on failure */ });
 }

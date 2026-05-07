@@ -2,7 +2,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import * as Sentry from '@sentry/node';
 import { db } from '../db';
-import { aiCache, aiUsageLog, semanticCache } from '../db/schema';
+import { aiCache, semanticCache } from '../db/schema';
 import { eq, sql, count } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
@@ -11,7 +11,6 @@ import { normalizeArabic, DEFAULT_AI_MODEL, PROMPT_VERSION } from '@jawab24/shar
 import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
-import { estimateCostUsd } from '../config/aiPricing';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallback, classifyFallbackIntent } from './reply/fallbackClassifier';
@@ -54,60 +53,11 @@ interface WorkerGenerateResponse {
     tokensOut?: number;
 }
 
-/**
- * Options for logAiUsage. Tagging `pipeline` is required so per-source cost
- * stays queryable; the schema's `pipeline` column was historically NULL on
- * every row, which made attribution impossible.
- */
-export interface LogAiUsageOptions {
-    userId: string;
-    pageId?: string;
-    model: string;
-    tokensIn: number;
-    /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at 50%). */
-    cachedInputTokens?: number;
-    tokensOut: number;
-    cached: boolean;
-    pipeline: AiPipeline;
-}
-
-/**
- * Write one row to ai_usage_log. Fire-and-forget — on failure increments a
- * Redis drop counter and emits a Sentry breadcrumb so we can alert without
- * blocking the reply pipeline.
- *
- * Single writer: every OpenAI call site in backend/ funnels through here.
- * Embeddings pass tokensOut=0; chat completions pass real token counts.
- */
-export async function logAiUsage(opts: LogAiUsageOptions): Promise<void> {
-    const cachedInputTokens = opts.cachedInputTokens ?? 0;
-    const costUsd = estimateCostUsd(opts.model, opts.tokensIn, opts.tokensOut, cachedInputTokens);
-    try {
-        await db.insert(aiUsageLog).values({
-            userId: opts.userId,
-            pageId: opts.pageId ?? null,
-            model: opts.model,
-            tokensIn: opts.tokensIn,
-            cachedInputTokens,
-            tokensOut: opts.tokensOut,
-            costUsd,
-            cached: opts.cached,
-            pipeline: opts.pipeline,
-        });
-    } catch (err) {
-        Sentry.addBreadcrumb({
-            category: 'ai_usage_log',
-            level: 'warning',
-            message: 'ai_usage_log insert failed',
-            data: { pipeline: opts.pipeline, model: opts.model, error: err instanceof Error ? err.message : String(err) },
-        });
-        try {
-            await redis.incr('metrics:pipeline:ai_usage_log.dropped');
-        } catch {
-            // Redis also unavailable — silently discard
-        }
-    }
-}
+// logAiUsage moved to ./aiUsageLog so callers outside ai.ts can import it
+// statically without forming a circular dependency. Re-exported for back-compat
+// (existing tests and callers import from './ai').
+import { logAiUsage } from './aiUsageLog';
+export { logAiUsage, type LogAiUsageOptions } from './aiUsageLog';
 
 /** Lazy-init embedding provider for semantic cache (only when OPENAI_API_KEY exists) */
 let _embeddingProvider: OpenAIEmbeddingProvider | null = null;
@@ -355,7 +305,8 @@ export class AiService {
                     const embeddingProvider = getEmbeddingProvider();
                     if (embeddingProvider) {
                         embeddingProvider.setLogger(this.logger);
-                        queryEmbedding = await embeddingProvider.embed(normalizeArabic(request.comment));
+                        const embedLogCtx = userId ? { userId, pageId, pipeline: 'embedding_cache' as const } : undefined;
+                        queryEmbedding = await embeddingProvider.embed(normalizeArabic(request.comment), embedLogCtx);
                     }
                 }
 

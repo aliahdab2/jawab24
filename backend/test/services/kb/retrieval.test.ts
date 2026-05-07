@@ -98,7 +98,7 @@ describe('RetrievalService', () => {
         await service.retrieve('page-1', 'Hello World', 1);
 
         // normalizeArabic mock lowercases, so embed should be called with that result
-        expect(mockEmbedding.embed).toHaveBeenCalledWith('hello world');
+        expect(mockEmbedding.embed).toHaveBeenCalledWith('hello world', undefined);
     });
 
     it('handles null language and title gracefully', async () => {

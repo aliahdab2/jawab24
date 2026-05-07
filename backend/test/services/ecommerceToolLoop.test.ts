@@ -11,6 +11,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // --- Mocks ---
 const mockAiServiceGenerateReply = vi.fn();
+// Mock aiUsageLog so the cost-logging side-effect doesn't pull in redis at module load.
+vi.mock('../../src/services/aiUsageLog', () => ({
+    logAiUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../src/services/ai', () => ({
     aiService: {
         generateReply: (...args: unknown[]) => mockAiServiceGenerateReply(...args),
