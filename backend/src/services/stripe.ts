@@ -45,6 +45,10 @@ export class StripeService {
     ): Promise<Stripe.Checkout.Session> {
         assertNotDemoUser(userEmail);
         const s = requireStripe();
+        // Per-minute bucket: a double-clicked Subscribe dedupes to one session;
+        // a deliberate retry next minute creates a fresh one.
+        const bucket = Math.floor(Date.now() / 60_000);
+        const idempotencyKey = `checkout:${userId}:${planId}:${priceId}:${trialDays}:${bucket}`;
 
         // Build subscription data - only include trial if trialDays > 0
         const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
@@ -59,34 +63,37 @@ export class StripeService {
             subscriptionData.trial_period_days = trialDays;
         }
 
-        const session = await s.checkout.sessions.create({
-            customer_email: userEmail,
-            client_reference_id: userId,
-            mode: 'subscription',
-            ui_mode: 'embedded',
-            locale: 'auto',
-            payment_method_collection: 'if_required',
-            // Collect VAT IDs and billing address so Stripe can issue VAT-compliant
-            // invoices (legally required for KSA/UAE/EU B2B customers). Stripe also
-            // emails these invoices automatically when "Email finalized invoices"
-            // is enabled in Dashboard → Invoicing settings. customer_update is not
-            // valid here because we pass customer_email (Stripe creates a new
-            // customer and applies collected fields automatically).
-            tax_id_collection: { enabled: true },
-            billing_address_collection: 'auto',
-            line_items: [
-                {
-                    price: priceId,
-                    quantity: 1,
+        const session = await s.checkout.sessions.create(
+            {
+                customer_email: userEmail,
+                client_reference_id: userId,
+                mode: 'subscription',
+                ui_mode: 'embedded',
+                locale: 'auto',
+                payment_method_collection: 'if_required',
+                // Collect VAT IDs and billing address so Stripe can issue VAT-compliant
+                // invoices (legally required for KSA/UAE/EU B2B customers). Stripe also
+                // emails these invoices automatically when "Email finalized invoices"
+                // is enabled in Dashboard → Invoicing settings. customer_update is not
+                // valid here because we pass customer_email (Stripe creates a new
+                // customer and applies collected fields automatically).
+                tax_id_collection: { enabled: true },
+                billing_address_collection: 'auto',
+                line_items: [
+                    {
+                        price: priceId,
+                        quantity: 1,
+                    },
+                ],
+                return_url: returnUrl,
+                subscription_data: subscriptionData,
+                metadata: {
+                    userId,
+                    planId,
                 },
-            ],
-            return_url: returnUrl,
-            subscription_data: subscriptionData,
-            metadata: {
-                userId,
-                planId,
             },
-        });
+            { idempotencyKey }
+        );
 
         return session;
     }
@@ -101,10 +108,12 @@ export class StripeService {
         if (existing.data.length > 0) {
             return existing.data[0].id;
         }
-        const customer = await s.customers.create({
-            email,
-            metadata: { userId },
-        });
+        // Per (userId, email) so concurrent creates dedupe but a later email change
+        // doesn't reuse the cached key with mismatched params (Stripe would 400).
+        const customer = await s.customers.create(
+            { email, metadata: { userId } },
+            { idempotencyKey: `customer:${userId}:${email.toLowerCase()}` }
+        );
         return customer.id;
     }
 
@@ -141,7 +150,14 @@ export class StripeService {
             subscriptionParams.payment_behavior = 'default_incomplete';
         }
 
-        const subscription = await s.subscriptions.create(subscriptionParams);
+        // Per-minute bucket: protects against double-create on quick retry without
+        // permanently locking the user out of legitimate later attempts (cancel + resub).
+        const bucket = Math.floor(Date.now() / 60_000);
+        const idempotencyKey = `sub:${params.userId}:${params.priceId}:${params.trialDays}:${bucket}`;
+        const subscription = await s.subscriptions.create(
+            subscriptionParams,
+            { idempotencyKey }
+        );
 
         if (params.trialDays > 0) {
             const setupIntent = subscription.pending_setup_intent as Stripe.SetupIntent | null;
@@ -229,23 +245,36 @@ export class StripeService {
         if (!itemId) {
             throw new Error(`Subscription ${subscriptionId} has no items to update`);
         }
-        return s.subscriptions.update(subscriptionId, {
-            items: [{ id: itemId, price: newPriceId }],
-            proration_behavior: 'create_prorations',
-            metadata: current.metadata,
-        });
+        // Per-minute bucket prevents duplicate prorations on retry while letting a
+        // genuine later plan-change with the same target price succeed (item id may
+        // change between calls, so a stable key would 400 with "params mismatch").
+        const bucket = Math.floor(Date.now() / 60_000);
+        const idempotencyKey = `subupd:${subscriptionId}:${newPriceId}:${bucket}`;
+        return s.subscriptions.update(
+            subscriptionId,
+            {
+                items: [{ id: itemId, price: newPriceId }],
+                proration_behavior: 'create_prorations',
+                metadata: current.metadata,
+            },
+            { idempotencyKey }
+        );
     }
 
     /**
      * Issue a refund against a charge or payment intent.
      */
-    async refund(params: { chargeId?: string; paymentIntentId?: string; reason?: string; metadata?: Record<string, string> }): Promise<Stripe.Refund> {
+    async refund(params: { chargeId?: string; paymentIntentId?: string; reason?: string; metadata?: Record<string, string>; idempotencyKey?: string }): Promise<Stripe.Refund> {
         const s = requireStripe();
-        return s.refunds.create({
-            charge: params.chargeId,
-            payment_intent: params.paymentIntentId,
-            metadata: params.metadata,
-        });
+        // A retried refund without an idempotency key issues a second refund — real money loss.
+        return s.refunds.create(
+            {
+                charge: params.chargeId,
+                payment_intent: params.paymentIntentId,
+                metadata: params.metadata,
+            },
+            params.idempotencyKey ? { idempotencyKey: params.idempotencyKey } : undefined
+        );
     }
 
     /**

@@ -485,6 +485,51 @@ describe('Payment Controller', () => {
             expect(mockReply.send).toHaveBeenCalledWith({ received: true });
         });
 
+        // Regression: Stripe treats 4xx as a permanent failure and never retries.
+        // A handler crash MUST return 5xx so the event is rescheduled — otherwise
+        // failed subscription/charge updates are silently dropped forever.
+        it('returns 500 when an event handler throws (so Stripe retries)', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                type: 'checkout.session.completed',
+                data: {
+                    object: {
+                        id: 'cs_boom',
+                        client_reference_id: 'user_boom',
+                        metadata: { userId: 'user_boom', planId: 'plan_boom' },
+                        subscription: 'sub_boom',
+                    } as any,
+                },
+            };
+
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            // Force the handler to throw — simulates a downstream failure (DB, Stripe, etc.).
+            vi.mocked(stripeService.getSubscription).mockRejectedValue(new Error('downstream blew up'));
+
+            const mockDb = vi.mocked(db);
+            // Idempotency insert succeeds (event marked 'processing').
+            mockDb.insert.mockReturnValueOnce({
+                values: vi.fn().mockReturnValue({
+                    onConflictDoNothing: vi.fn().mockReturnValue({
+                        returning: vi.fn().mockResolvedValue([{ eventId: 'evt_boom' }]),
+                    }),
+                }),
+            } as any);
+            // Subscription lookups inside handleCheckoutComplete.
+            mockDb.select.mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
+            await paymentController.handleWebhook(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            expect(mockReply.status).toHaveBeenCalledWith(500);
+            expect(mockRequest.log?.error).toHaveBeenCalled();
+        });
+
         it('should return 400 if signature is missing', async () => {
             mockRequest.headers = {};
 
