@@ -109,7 +109,8 @@ function KnowledgeBaseCustomSectionImpl({
           <button
             type="button"
             onClick={handleDelete}
-            className="p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
+            aria-label={tKb('customSection.deleteTitle')}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 text-icon-muted hover:text-red-500 transition-colors flex-shrink-0"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

@@ -190,7 +190,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-surface-100 text-surface-500"
+            aria-label={tc('close')}
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-surface-100 text-surface-500"
           >
             <X className="w-5 h-5" />
           </button>
@@ -213,7 +214,8 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               </span>
               <button
                 onClick={() => setShowFacebookBanner(false)}
-                className="ms-auto text-blue-400 hover:text-blue-600"
+                aria-label={tc('close')}
+                className="ms-auto min-h-[44px] min-w-[44px] -m-2 flex items-center justify-center text-blue-400 hover:text-blue-600"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
