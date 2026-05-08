@@ -66,6 +66,7 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 import { settingsService } from '../../src/services/settings';
 import { redis } from '../../src/lib/redis';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
+import { db } from '../../src/db';
 
 const baseSettings = {
     id: 'settings_123',
@@ -103,35 +104,46 @@ const baseSettings = {
     updatedAt: new Date(),
 };
 
+// ── Test helpers ─────────────────────────────────────────────────────────────
+
+function buildMembershipQuery(workspaceId: string | null) {
+    const rows = workspaceId ? [{ workspaceId }] : [];
+    const limitMock = vi.fn().mockResolvedValue(rows);
+    const mockWhere = vi.fn().mockReturnValue({ limit: limitMock });
+    const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+    return { from: mockFrom, _limitMock: limitMock };
+}
+
+function buildSettingsUpdateChain<T>(updatedRow: T) {
+    const mockReturning = vi.fn().mockResolvedValue([updatedRow]);
+    const mockWhere = vi.fn().mockReturnValue({ returning: mockReturning });
+    const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+    return { set: mockSet, _setMock: mockSet };
+}
+
 describe('settingsService.updateSettings → workspace sync', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('propagates commentReplyMode change to workspace JSONB via workspaceSettingsService', async () => {
-        const { db } = await import('../../src/db');
+    afterEach(() => {
+        vi.resetAllMocks();
+    });
 
+    it('propagates commentReplyMode change to workspace JSONB via workspaceSettingsService', async () => {
         // Mock: getSettings returns existing settings
         vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
 
         // Mock: select membership returns one workspace
-        const mockFrom = vi.fn().mockReturnThis();
-        const mockWhere = vi.fn().mockReturnThis();
-        const mockLimit = vi.fn().mockResolvedValue([{ workspaceId: 'ws1' }]);
+        const membershipQuery = buildMembershipQuery('ws1');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockFrom.mockReturnValue({ where: mockWhere } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockWhere.mockReturnValue({ limit: mockLimit } as any);
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
 
         // Mock: update returns the new settings
         const updatedSettings = { ...baseSettings, commentReplyMode: 'dual' as const };
-        const mockReturning = vi.fn().mockResolvedValue([updatedSettings]);
-        const mockUpdateWhere = vi.fn().mockReturnValue({ returning: mockReturning });
-        const mockSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
+        const updateChain = buildSettingsUpdateChain(updatedSettings);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
 
         await settingsService.updateSettings('u1', { commentReplyMode: 'dual' });
 
@@ -142,18 +154,14 @@ describe('settingsService.updateSettings → workspace sync', () => {
     });
 
     it('skips workspace sync when no pipeline fields are in the update', async () => {
-        const { db } = await import('../../src/db');
-
         // Mock: getSettings returns existing settings
         vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
 
         // Mock: update returns the updated settings
         const updatedSettings = { ...baseSettings, dashboardLanguage: 'en' };
-        const mockReturning = vi.fn().mockResolvedValue([updatedSettings]);
-        const mockUpdateWhere = vi.fn().mockReturnValue({ returning: mockReturning });
-        const mockSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
+        const updateChain = buildSettingsUpdateChain(updatedSettings);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
 
         await settingsService.updateSettings('u1', { dashboardLanguage: 'en' });
 
@@ -162,29 +170,19 @@ describe('settingsService.updateSettings → workspace sync', () => {
     });
 
     it('skips workspace sync gracefully when user has no membership (does not throw)', async () => {
-        const { db } = await import('../../src/db');
-
         // Mock: getSettings returns existing settings
         vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
 
         // Mock: select membership returns empty (no workspace)
-        const mockFrom = vi.fn().mockReturnThis();
-        const mockWhere = vi.fn().mockReturnThis();
-        const mockLimit = vi.fn().mockResolvedValue([]);
+        const membershipQuery = buildMembershipQuery(null);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockFrom.mockReturnValue({ where: mockWhere } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockWhere.mockReturnValue({ limit: mockLimit } as any);
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
 
         // Mock: update returns the new settings
         const updatedSettings = { ...baseSettings, commentReplyMode: 'dual' as const };
-        const mockReturning = vi.fn().mockResolvedValue([updatedSettings]);
-        const mockUpdateWhere = vi.fn().mockReturnValue({ returning: mockReturning });
-        const mockSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
+        const updateChain = buildSettingsUpdateChain(updatedSettings);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
 
         // Should not throw even though no workspace is found
         await expect(settingsService.updateSettings('u1', { commentReplyMode: 'dual' })).resolves.toBeDefined();
@@ -193,21 +191,13 @@ describe('settingsService.updateSettings → workspace sync', () => {
     });
 
     it('syncs multiple pipeline fields in one call', async () => {
-        const { db } = await import('../../src/db');
-
         // Mock: getSettings returns existing settings
         vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
 
         // Mock: select membership returns one workspace
-        const mockFrom = vi.fn().mockReturnThis();
-        const mockWhere = vi.fn().mockReturnThis();
-        const mockLimit = vi.fn().mockResolvedValue([{ workspaceId: 'ws1' }]);
+        const membershipQuery = buildMembershipQuery('ws1');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockFrom.mockReturnValue({ where: mockWhere } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockWhere.mockReturnValue({ limit: mockLimit } as any);
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
 
         // Mock: update returns the new settings
         const updatedSettings = {
@@ -216,11 +206,9 @@ describe('settingsService.updateSettings → workspace sync', () => {
             dualReplyNudge: 'Just to let you know...',
             aiEnabled: false,
         };
-        const mockReturning = vi.fn().mockResolvedValue([updatedSettings]);
-        const mockUpdateWhere = vi.fn().mockReturnValue({ returning: mockReturning });
-        const mockSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
+        const updateChain = buildSettingsUpdateChain(updatedSettings);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
 
         await settingsService.updateSettings('u1', {
             commentReplyMode: 'dual',
@@ -239,29 +227,19 @@ describe('settingsService.updateSettings → workspace sync', () => {
     });
 
     it('passes only the fields in the update to workspaceSettingsService, not the entire DB record', async () => {
-        const { db } = await import('../../src/db');
-
         // Mock: getSettings returns existing settings
         vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
 
         // Mock: select membership returns one workspace
-        const mockFrom = vi.fn().mockReturnThis();
-        const mockWhere = vi.fn().mockReturnThis();
-        const mockLimit = vi.fn().mockResolvedValue([{ workspaceId: 'ws1' }]);
+        const membershipQuery = buildMembershipQuery('ws1');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockFrom.mockReturnValue({ where: mockWhere } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockWhere.mockReturnValue({ limit: mockLimit } as any);
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
 
         // Mock: update returns the new settings
         const updatedSettings = { ...baseSettings, commentReplyMode: 'private' as const };
-        const mockReturning = vi.fn().mockResolvedValue([updatedSettings]);
-        const mockUpdateWhere = vi.fn().mockReturnValue({ returning: mockReturning });
-        const mockSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
+        const updateChain = buildSettingsUpdateChain(updatedSettings);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
 
         await settingsService.updateSettings('u1', { commentReplyMode: 'private' });
 
@@ -274,29 +252,19 @@ describe('settingsService.updateSettings → workspace sync', () => {
     });
 
     it('invalidates the Redis cache after settings update', async () => {
-        const { db } = await import('../../src/db');
-
         // Mock: getSettings returns existing settings
         vi.mocked(db.query.settings.findFirst).mockResolvedValue(baseSettings);
 
         // Mock: select membership returns one workspace
-        const mockFrom = vi.fn().mockReturnThis();
-        const mockWhere = vi.fn().mockReturnThis();
-        const mockLimit = vi.fn().mockResolvedValue([{ workspaceId: 'ws1' }]);
+        const membershipQuery = buildMembershipQuery('ws1');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockFrom.mockReturnValue({ where: mockWhere } as any);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        mockWhere.mockReturnValue({ limit: mockLimit } as any);
+        vi.mocked(db.select).mockReturnValue({ from: membershipQuery.from } as any);
 
         // Mock: update returns the new settings
         const updatedSettings = { ...baseSettings, commentReplyMode: 'dual' as const };
-        const mockReturning = vi.fn().mockResolvedValue([updatedSettings]);
-        const mockUpdateWhere = vi.fn().mockReturnValue({ returning: mockReturning });
-        const mockSet = vi.fn().mockReturnValue({ where: mockUpdateWhere });
+        const updateChain = buildSettingsUpdateChain(updatedSettings);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        vi.mocked(db.update).mockReturnValue({ set: mockSet } as any);
+        vi.mocked(db.update).mockReturnValue({ set: updateChain.set } as any);
 
         await settingsService.updateSettings('u1', { commentReplyMode: 'dual' });
 
