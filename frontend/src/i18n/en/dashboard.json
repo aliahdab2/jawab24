@@ -56,12 +56,13 @@
   "recentMessages": "Recent Messages",
   "noMessagesYet": "No recent messages. Messages will appear here once your pages receive DMs.",
   "commandCenter": {
-    "repliedToday": "Replied Today",
+    "repliedToday": "Smart Replied Today",
     "replyRate": "Reply Rate",
     "avgSpeed": "Avg Speed",
     "quotaWarning": "{percent}% of plan",
     "quotaExceeded": "Over limit",
-    "smartRepliesTooltip": "Replies sent in the last 30 days."
+    "smartRepliesTooltip": "Replies sent in the last 30 days.",
+    "repliedTodayTooltip": "{comments, plural, one {# comment} other {# comments}} + {messages, plural, one {# message} other {# messages}}"
   },
   "smartBanner": {
     "needsAttention": "{count, plural, one {# item needs} other {# items need}} your attention",

@@ -8,6 +8,8 @@ import { formatDuration } from '@/lib/formatDuration';
 interface CommandCenterProps {
   smartReplies: number;
   repliedToday: number;
+  commentsRepliedToday?: number;
+  messagesRepliedToday?: number;
   replyRate: string;
   avgSpeedSeconds: number | null;
   hasError?: boolean;
@@ -35,6 +37,8 @@ interface MetricCell {
 export function CommandCenter({
   smartReplies,
   repliedToday,
+  commentsRepliedToday,
+  messagesRepliedToday,
   replyRate,
   avgSpeedSeconds,
   hasError,
@@ -88,6 +92,12 @@ export function CommandCenter({
       borderColor: 'border-s-emerald-500',
       iconBg: 'icon-bg-emerald-light',
       iconColor: '',
+      tooltip: (commentsRepliedToday !== undefined && messagesRepliedToday !== undefined)
+        ? tDash('commandCenter.repliedTodayTooltip', {
+            comments: commentsRepliedToday,
+            messages: messagesRepliedToday,
+          })
+        : undefined,
     },
     {
       label: tDash('commandCenter.replyRate'),

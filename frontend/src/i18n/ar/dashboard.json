@@ -56,12 +56,13 @@
   "recentMessages": "آخر الرسائل",
   "noMessagesYet": "لا توجد رسائل حديثة. ستظهر الرسائل هنا عند استلام رسائل خاصة على صفحاتك.",
   "commandCenter": {
-    "repliedToday": "تم الرد اليوم",
+    "repliedToday": "ردود ذكية اليوم",
     "replyRate": "معدل الرد",
     "avgSpeed": "متوسط السرعة",
     "quotaWarning": "{percent}% من الخطة",
     "quotaExceeded": "تجاوز الحد",
-    "smartRepliesTooltip": "الردود المُرسَلة خلال آخر 30 يوماً."
+    "smartRepliesTooltip": "الردود المُرسَلة خلال آخر 30 يوماً.",
+    "repliedTodayTooltip": "{comments, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}} + {messages, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالةً} other {# رسالة}}"
   },
   "smartBanner": {
     "needsAttention": "{count, plural, zero {لا عناصر تحتاج انتباهك} one {عنصر واحد يحتاج انتباهك} two {عنصران يحتاجان انتباهك} few {# عناصر تحتاج انتباهك} many {# عنصر يحتاج انتباهك} other {# عنصر يحتاج انتباهك}}",
