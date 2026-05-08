@@ -17,6 +17,9 @@ import { resolveRecipientLanguages } from '../utils/recipientLanguage';
 import { generateUnsubscribeToken } from './waitlist';
 import { runDailyLeadDigest } from '../services/leadDigest';
 import { subscriptionsService } from '../services/subscriptions';
+import { analyticsService, type AdminUserAiCostPeriod } from '../services/analytics';
+
+const AI_COST_PERIODS: readonly AdminUserAiCostPeriod[] = ['7d', '30d', '90d', 'this_month', 'last_month'];
 
 // Request body types
 interface ManualUpgradeBody {
@@ -358,6 +361,45 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                     });
                 }
             }
+        );
+
+        /**
+         * GET /admin/users/:userId/ai-cost?period=7d|30d|90d|this_month|last_month
+         * AI usage cost broken down by Facebook/Instagram page for a single user.
+         * Default period: 30d. Sorted by cost desc; pages with no activity are excluded.
+         */
+        adminProtected.get<{ Params: { userId: string }; Querystring: { period?: string } }>(
+            '/users/:userId/ai-cost',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'AI cost by page for a single user, scoped to a preset time period',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    querystring: {
+                        type: 'object',
+                        properties: { period: { type: 'string', enum: [...AI_COST_PERIODS] } },
+                    },
+                },
+            },
+            async (
+                request: FastifyRequest<{ Params: { userId: string }; Querystring: { period?: string } }>,
+                reply: FastifyReply,
+            ) => {
+                const { userId } = request.params;
+                const periodParam = request.query.period;
+                const period: AdminUserAiCostPeriod = (periodParam && (AI_COST_PERIODS as readonly string[]).includes(periodParam))
+                    ? periodParam as AdminUserAiCostPeriod
+                    : '30d';
+
+                try {
+                    const report = await analyticsService.getUserAiCostByPage(userId, period);
+                    return reply.send({ success: true, data: report });
+                } catch (error) {
+                    request.log.error(error, 'Admin get user AI cost failed');
+                    return reply.status(500).send({ success: false, error: 'Failed to get AI cost' });
+                }
+            },
         );
 
         /**

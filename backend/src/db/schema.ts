@@ -969,6 +969,7 @@ export const aiUsageLog = pgTable('ai_usage_log', {
     costUsd: real('cost_usd').notNull().default(0),          // pre-computed from pricing table
     cached: boolean('cached').notNull().default(false),      // true = cache hit (zero cost)
     pipeline: varchar('pipeline', { length: 50 }),           // 'facebook_comment', 'instagram_message', …
+    intent: varchar('intent', { length: 50 }),               // GREETING, COMPLAINT, … (nullable; legacy rows have none)
     createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
     userIdIdx: index('idx_ai_usage_log_user_id').on(table.userId),

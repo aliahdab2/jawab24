@@ -308,6 +308,41 @@ export default function AdminObservabilityPage() {
                 </Card>
               )}
 
+              {/* Cost by intent — surfaces which intents drive cost; informs cheaper-model routing */}
+              {aiUsage && Object.keys(aiUsage.byIntent).length > 0 && (
+                <Card className="mt-3 p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">{t('observability.costByIntent')}</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-theme-border">
+                          <th className="text-start pb-2 text-muted-foreground font-medium">{t('observability.intent')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.calls')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.cacheHits')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.avgCostPerCall')}</th>
+                          <th className="text-end pb-2 text-muted-foreground font-medium">{t('observability.cost')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(aiUsage.byIntent)
+                          .sort(([, a], [, b]) => b.costUsd - a.costUsd)
+                          .map(([intent, stats]) => (
+                            <tr key={intent} className="border-b border-theme-border last:border-0">
+                              <td className="py-2 font-mono text-xs text-foreground">{intent}</td>
+                              <td className="py-2 text-end text-foreground">{stats.calls.toLocaleString()}</td>
+                              <td className="py-2 text-end text-foreground">{stats.cacheHits.toLocaleString()}</td>
+                              <td className="py-2 text-end text-muted-foreground">
+                                {stats.calls > 0 ? formatCost(stats.costUsd / stats.calls) : '—'}
+                              </td>
+                              <td className="py-2 text-end font-medium text-foreground">{formatCost(stats.costUsd)}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
               {/* Daily cost chart (simple bar representation) */}
               {aiUsage && aiUsage.byDay.length > 0 && (
                 <Card className="mt-3 p-4">

@@ -26,6 +26,8 @@ export interface LogAiUsageOptions {
     tokensOut: number;
     cached: boolean;
     pipeline: AiPipeline;
+    /** Classified intent (GREETING, COMPLAINT, …) — null when not applicable (e.g. embeddings). */
+    intent?: string | null;
 }
 
 /**
@@ -50,6 +52,7 @@ export async function logAiUsage(opts: LogAiUsageOptions): Promise<void> {
             costUsd,
             cached: opts.cached,
             pipeline: opts.pipeline,
+            intent: opts.intent ?? null,
         });
     } catch (err) {
         Sentry.addBreadcrumb({

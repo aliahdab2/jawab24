@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { comments, posts, instagramComments, instagramMedia, messages, pages, aiUsageLog } from '../db/schema';
-import { eq, and, gte, sql } from 'drizzle-orm';
+import { eq, and, gte, lt, isNotNull, sql } from 'drizzle-orm';
 
 interface AnalyticsOverview {
     period: { from: string; to: string; days: number };
@@ -267,24 +267,43 @@ export class AnalyticsService {
         const now = new Date();
         const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
 
-        const rows = await db
-            .select({
-                model: aiUsageLog.model,
-                day: sql<string>`DATE(${aiUsageLog.createdAt})`,
-                calls: sql<number>`count(*)`,
-                llmCalls: sql<number>`count(*) filter (where ${aiUsageLog.cached} = false)`,
-                cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
-                tokensIn: sql<number>`COALESCE(SUM(${aiUsageLog.tokensIn}), 0)`,
-                tokensOut: sql<number>`COALESCE(SUM(${aiUsageLog.tokensOut}), 0)`,
-                costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
-            })
-            .from(aiUsageLog)
-            .where(and(
-                eq(aiUsageLog.userId, userId),
-                gte(aiUsageLog.createdAt, since),
-            ))
-            .groupBy(aiUsageLog.model, sql`DATE(${aiUsageLog.createdAt})`)
-            .orderBy(sql`DATE(${aiUsageLog.createdAt})`);
+        const [rows, intentRows] = await Promise.all([
+            db
+                .select({
+                    model: aiUsageLog.model,
+                    day: sql<string>`DATE(${aiUsageLog.createdAt})`,
+                    calls: sql<number>`count(*)`,
+                    llmCalls: sql<number>`count(*) filter (where ${aiUsageLog.cached} = false)`,
+                    cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
+                    tokensIn: sql<number>`COALESCE(SUM(${aiUsageLog.tokensIn}), 0)`,
+                    tokensOut: sql<number>`COALESCE(SUM(${aiUsageLog.tokensOut}), 0)`,
+                    costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+                })
+                .from(aiUsageLog)
+                .where(and(
+                    eq(aiUsageLog.userId, userId),
+                    gte(aiUsageLog.createdAt, since),
+                ))
+                .groupBy(aiUsageLog.model, sql`DATE(${aiUsageLog.createdAt})`)
+                .orderBy(sql`DATE(${aiUsageLog.createdAt})`),
+            db
+                .select({
+                    intent: aiUsageLog.intent,
+                    calls: sql<number>`count(*)`,
+                    llmCalls: sql<number>`count(*) filter (where ${aiUsageLog.cached} = false)`,
+                    cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
+                    tokensIn: sql<number>`COALESCE(SUM(${aiUsageLog.tokensIn}), 0)`,
+                    tokensOut: sql<number>`COALESCE(SUM(${aiUsageLog.tokensOut}), 0)`,
+                    costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+                })
+                .from(aiUsageLog)
+                .where(and(
+                    eq(aiUsageLog.userId, userId),
+                    gte(aiUsageLog.createdAt, since),
+                    isNotNull(aiUsageLog.intent),
+                ))
+                .groupBy(aiUsageLog.intent),
+        ]);
 
         const totals: AiUsageModelStats = { calls: 0, llmCalls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
         const byModel: Record<string, AiUsageModelStats> = {};
@@ -336,6 +355,19 @@ export class AnalyticsService {
             .sort(([a], [b]) => a.localeCompare(b))
             .map(([date, data]) => ({ date, ...data, costUsd: roundCost(data.costUsd) }));
 
+        const byIntent: Record<string, AiUsageModelStats> = {};
+        for (const row of intentRows) {
+            const key = row.intent ?? 'unknown';
+            byIntent[key] = {
+                calls: Number(row.calls),
+                llmCalls: Number(row.llmCalls),
+                cacheHits: Number(row.cacheHits),
+                tokensIn: Number(row.tokensIn),
+                tokensOut: Number(row.tokensOut),
+                costUsd: roundCost(Number(row.costUsd)),
+            };
+        }
+
         return {
             period: {
                 from: since.toISOString().split('T')[0],
@@ -345,9 +377,109 @@ export class AnalyticsService {
             totals,
             byModel,
             byDay,
+            byIntent,
         };
     }
 
+    /**
+     * Per-user AI cost breakdown by Facebook/Instagram page for a given preset period.
+     *
+     * Powers the "AI Cost by Page" card on /admin/customers/[userId]. NULL pageId rows
+     * (embeddings, lead extraction, anything not tied to a page) are folded into a single
+     * '__no_page__' bucket so the totals reconcile with the global observability page.
+     */
+    async getUserAiCostByPage(userId: string, period: AdminUserAiCostPeriod = '30d'): Promise<AdminUserAiCostReport> {
+        const { rangeStart, rangeEnd } = resolvePeriodRange(period);
+
+        const rows = await db
+            .select({
+                pageId: aiUsageLog.pageId,
+                pageName: pages.name,
+                calls: sql<number>`count(*)`,
+                cacheHits: sql<number>`count(*) filter (where ${aiUsageLog.cached} = true)`,
+                tokensIn: sql<number>`COALESCE(SUM(${aiUsageLog.tokensIn}), 0)`,
+                tokensOut: sql<number>`COALESCE(SUM(${aiUsageLog.tokensOut}), 0)`,
+                costUsd: sql<number>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+            })
+            .from(aiUsageLog)
+            .leftJoin(pages, eq(pages.id, aiUsageLog.pageId))
+            .where(and(
+                eq(aiUsageLog.userId, userId),
+                gte(aiUsageLog.createdAt, rangeStart),
+                lt(aiUsageLog.createdAt, rangeEnd),
+            ))
+            .groupBy(aiUsageLog.pageId, pages.name);
+
+        const roundCost = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
+        const totals = { calls: 0, cacheHits: 0, tokensIn: 0, tokensOut: 0, costUsd: 0 };
+
+        const byPage = rows.map(row => {
+            const calls = Number(row.calls);
+            const cacheHits = Number(row.cacheHits);
+            const tokensIn = Number(row.tokensIn);
+            const tokensOut = Number(row.tokensOut);
+            const costUsd = Number(row.costUsd);
+            totals.calls += calls;
+            totals.cacheHits += cacheHits;
+            totals.tokensIn += tokensIn;
+            totals.tokensOut += tokensOut;
+            totals.costUsd += costUsd;
+            return {
+                pageId: row.pageId,
+                pageName: row.pageName ?? null,
+                calls,
+                cacheHits,
+                tokensIn,
+                tokensOut,
+                costUsd: roundCost(costUsd),
+            };
+        }).sort((a, b) => b.costUsd - a.costUsd);
+
+        totals.costUsd = roundCost(totals.costUsd);
+
+        return {
+            period,
+            rangeStart: rangeStart.toISOString(),
+            rangeEnd: rangeEnd.toISOString(),
+            totals,
+            byPage,
+        };
+    }
+
+}
+
+export type AdminUserAiCostPeriod = '7d' | '30d' | '90d' | 'this_month' | 'last_month';
+
+export interface AdminUserAiCostReport {
+    period: AdminUserAiCostPeriod;
+    rangeStart: string;
+    rangeEnd: string;
+    totals: { calls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
+    byPage: Array<{
+        pageId: string | null;
+        pageName: string | null;
+        calls: number;
+        cacheHits: number;
+        tokensIn: number;
+        tokensOut: number;
+        costUsd: number;
+    }>;
+}
+
+function resolvePeriodRange(period: AdminUserAiCostPeriod): { rangeStart: Date; rangeEnd: Date } {
+    const now = new Date();
+    if (period === 'this_month') {
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        return { rangeStart: start, rangeEnd: now };
+    }
+    if (period === 'last_month') {
+        const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+        const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        return { rangeStart: start, rangeEnd: end };
+    }
+    const days = period === '7d' ? 7 : period === '90d' ? 90 : 30;
+    const start = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+    return { rangeStart: start, rangeEnd: now };
 }
 
 interface AiUsageModelStats {
@@ -364,6 +496,8 @@ interface AiUsageReport {
     totals: AiUsageModelStats;
     byModel: Record<string, AiUsageModelStats>;
     byDay: Array<{ date: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+    /** Aggregation keyed by classified intent (GREETING, COMPLAINT, …). Excludes rows with NULL intent. */
+    byIntent: Record<string, AiUsageModelStats>;
 }
 
 interface GroupedRow {
