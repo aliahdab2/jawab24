@@ -2,7 +2,9 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { workspaces, workspaceMembers, settings as settingsTable } from '../db/schema';
 import { redis } from '../lib/redis';
+import { t } from '../utils/i18n';
 import { captureError } from '../utils/sentryHelpers';
+import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 import type { WorkspaceSettings } from '@jawab24/shared';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
 
@@ -39,6 +41,8 @@ const DEFAULTS: WorkspaceSettings = {
     holdLowConfidence: false,
 };
 
+// TODO: extract PIPELINE_FIELDS to a shared constant — currently mirrored in
+// settings.ts:10-21. Diverging the two lists silently breaks drift detection.
 /** Pipeline fields the reply pipeline reads. Must mirror PIPELINE_FIELDS in settings.ts. */
 const PIPELINE_FIELDS_FOR_DRIFT = [
     'commentsAutoReply', 'messagesAutoReply', 'businessHoursOnly',
@@ -94,9 +98,6 @@ async function detectLegacyDrift(
     return Object.keys(recovered).length > 0 ? recovered : null;
 }
 
-import { t } from '../utils/i18n';
-import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
-
 /** Default away message as send-time fallback when all stored values are empty */
 const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
     ar: t('defaultAway', 'ar'),
@@ -134,11 +135,11 @@ export class WorkspaceSettingsService {
 
         const raw = (workspace.settings ?? {}) as Partial<WorkspaceSettings>;
 
-        // Defensive auto-resync: heal any drift between this JSONB and the
-        // legacy `settings` table (per-user owner row). Idempotent — once we
-        // write back, subsequent reads observe missing.length === 0 and skip
-        // the recovery path. Fire-and-forget the write so a slow DB never
-        // blocks the reply pipeline's hot path.
+        // Defensive auto-resync: heal drift between this JSONB and the legacy
+        // `settings` table (per-user owner row). Converges toward zero drift on
+        // each read; fully idempotent once all pipeline fields are present.
+        // Fire-and-forget the write so a slow DB never blocks the reply
+        // pipeline's hot path.
         const drift = await detectLegacyDrift(workspaceId, raw).catch(err => {
             captureError(err, 'workspaceSettings drift detection failed', {
                 tags: { service: 'workspace-settings', action: 'drift-detect' },
