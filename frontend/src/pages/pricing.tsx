@@ -622,7 +622,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                       {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
                     </div>
                   </>
-                ) : usage.currentPeriod.end ? (
+                ) : usage.currentPeriod?.end ? (
                   <>
                     <div className="w-px h-4 bg-theme-border" />
                     <div className="flex items-center gap-1.5 text-muted-foreground">
