@@ -285,6 +285,25 @@ export interface AiUsageReport {
   totals: AiUsageModelStats;
   byModel: Record<string, AiUsageModelStats>;
   byDay: Array<{ date: string; calls: number; tokensIn: number; tokensOut: number; costUsd: number }>;
+  byIntent: Record<string, AiUsageModelStats>;
+}
+
+export type AdminUserAiCostPeriod = '7d' | '30d' | '90d' | 'this_month' | 'last_month';
+
+export interface AdminUserAiCostReport {
+  period: AdminUserAiCostPeriod;
+  rangeStart: string;
+  rangeEnd: string;
+  totals: { calls: number; cacheHits: number; tokensIn: number; tokensOut: number; costUsd: number };
+  byPage: Array<{
+    pageId: string | null;
+    pageName: string | null;
+    calls: number;
+    cacheHits: number;
+    tokensIn: number;
+    tokensOut: number;
+    costUsd: number;
+  }>;
 }
 
 export interface SystemHealthReport {
@@ -512,6 +531,15 @@ export const adminApi = {
   getUser: async (userId: string) => {
     const response = await api.get(`/admin/users/${userId}`);
     return response.data;
+  },
+
+  // Get AI cost breakdown by page for a single user, scoped to a preset period
+  getUserAiCost: async (userId: string, period: AdminUserAiCostPeriod = '30d') => {
+    const response = await api.get<{ success: boolean; data: AdminUserAiCostReport }>(
+      `/admin/users/${userId}/ai-cost`,
+      { params: { period } },
+    );
+    return response.data.data;
   },
 
   // Manual upgrade user subscription

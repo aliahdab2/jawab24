@@ -267,7 +267,7 @@ export class AiService {
             if (cachedData) {
                 // Fire-and-forget: log zero-cost cache hit
                 if (userId) {
-                    logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch(() => {});
+                    logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline, intent: cachedData.intent ?? null }).catch(() => {});
                 }
                 return {
                     reply: cachedData.reply,
@@ -336,7 +336,7 @@ export class AiService {
                     if (semanticHit) {
                         // Fire-and-forget: log zero-cost semantic cache hit
                         if (userId) {
-                            logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline }).catch((err) => captureError(err, 'semantic cache usage log failed'));
+                            logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline, intent: semanticHit.intent ?? null }).catch((err) => captureError(err, 'semantic cache usage log failed'));
                         }
                         return {
                             reply: semanticHit.reply,
@@ -396,7 +396,7 @@ export class AiService {
                 const tokensIn = response.data.tokensIn ?? 0;
                 const tokensOut = response.data.tokensOut ?? 0;
                 const cachedInputTokens = response.data.tokensInCached ?? 0;
-                logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline }).catch(() => {});
+                logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline, intent: aiMetadata.intent ?? null }).catch(() => {});
             }
 
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent and non-default models
@@ -485,7 +485,7 @@ export class AiService {
                         const tokensIn = failoverResponse.data.tokensIn ?? 0;
                         const tokensOut = failoverResponse.data.tokensOut ?? 0;
                         const cachedInputTokens = failoverResponse.data.tokensInCached ?? 0;
-                        logAiUsage({ userId, pageId, model: fallbackModel, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline: 'failover' }).catch(() => {});
+                        logAiUsage({ userId, pageId, model: fallbackModel, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline: 'failover', intent: failoverResponse.data.intent ?? null }).catch(() => {});
                     }
 
                     // Cache write intentionally SKIPPED:

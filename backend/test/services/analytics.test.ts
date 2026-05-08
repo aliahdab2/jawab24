@@ -21,6 +21,8 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn((...args: unknown[]) => args),
     and: vi.fn((...args: unknown[]) => args),
     gte: vi.fn((...args: unknown[]) => args),
+    lt: vi.fn((...args: unknown[]) => args),
+    isNotNull: vi.fn((...args: unknown[]) => args),
     sql: vi.fn().mockReturnValue('sql-mock'),
 }));
 
@@ -255,9 +257,16 @@ describe('AnalyticsService', () => {
     });
 
     describe('getAiUsage', () => {
-        function setupAiUsageMock(rows: any[]) {
+        // getAiUsage runs two parallel queries: one ends at .orderBy() (model+day),
+        // the other ends at .groupBy() (intent). The mocked groupBy must be
+        // thenable AND expose .orderBy so both code paths resolve.
+        function setupAiUsageMock(rows: any[], intentRows: any[] = []) {
             const mockOrderBy = vi.fn().mockResolvedValue(rows);
-            const mockGroupBy = vi.fn().mockReturnValue({ orderBy: mockOrderBy });
+            const mockGroupBy = vi.fn().mockImplementation(() => {
+                const promise: any = Promise.resolve(intentRows);
+                promise.orderBy = mockOrderBy;
+                return promise;
+            });
             const mockWhere = vi.fn().mockReturnValue({ groupBy: mockGroupBy });
             const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
             vi.mocked(db.select).mockReturnValue({ from: mockFrom } as any);
