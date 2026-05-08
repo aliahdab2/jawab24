@@ -65,14 +65,14 @@ export async function exchangeCodeForToken(code: string): Promise<SallaTokenResp
     const response = await tracedExternalCall('salla', 'exchangeCodeForToken', () =>
         fetch('https://accounts.salla.sa/oauth2/token', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
                 grant_type: 'authorization_code',
                 client_id: clientId,
                 client_secret: clientSecret,
                 code,
                 redirect_uri: redirectUri,
-            }),
+            }).toString(),
         }),
     );
 

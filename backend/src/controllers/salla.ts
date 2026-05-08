@@ -122,7 +122,14 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
             return reply.redirect(`${frontendUrl}/login?salla_pending=true`);
         }
     } catch (error) {
-        request.log.error({ error }, 'Salla auth callback failed');
+        const err = error as Error & { response?: { status?: number; data?: unknown } };
+        request.log.error({
+            err,
+            message: err?.message,
+            stack: err?.stack,
+            responseStatus: err?.response?.status,
+            responseData: err?.response?.data,
+        }, 'Salla auth callback failed');
         return reply.redirect(`${frontendUrl}/login?salla_error=auth_failed`);
     }
 }
