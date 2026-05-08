@@ -5,6 +5,7 @@
 export const AI_PRICING = {
     'gpt-4o-mini': { inputPer1K: 0.00015, outputPer1K: 0.0006 },
     'gpt-4.1-mini': { inputPer1K: 0.0004, outputPer1K: 0.0016 },
+    'gpt-4.1-nano': { inputPer1K: 0.0001, outputPer1K: 0.0004 },
     'gpt-4.1': { inputPer1K: 0.002, outputPer1K: 0.008 },
     'gpt-4o-mini-transcribe': { inputPer1K: 0.00125, outputPer1K: 0.005 },
     'text-embedding-3-small': { inputPer1K: 0.00002, outputPer1K: 0 },

@@ -12,6 +12,7 @@ import { ClaudeAdapter } from './claude-adapter';
 const MODEL_PROVIDERS: Record<string, () => LLMProvider> = {
     // OpenAI models
     'gpt-4.1-mini': () => new OpenAIAdapter('gpt-4.1-mini'),
+    'gpt-4.1-nano': () => new OpenAIAdapter('gpt-4.1-nano'),
     'gpt-4.1': () => new OpenAIAdapter('gpt-4.1'),
     'gpt-4o-mini': () => new OpenAIAdapter('gpt-4o-mini'),
     'gpt-5-nano': () => new OpenAIAdapter('gpt-5-nano'),

@@ -16,7 +16,7 @@ import type { Logger } from '../types/logger';
 // Daily AI extraction limit per workspace (prevents runaway costs on high-traffic pages)
 const DAILY_EXTRACTION_LIMIT = 50;
 
-const EXTRACTION_PROMPT = `You are a lead-capture assistant. Analyze the conversation below and extract structured contact information.
+export const EXTRACTION_PROMPT = `You are a lead-capture assistant. Analyze the conversation below and extract structured contact information.
 
 Return ONLY valid JSON in this exact shape — no markdown, no explanation:
 {
