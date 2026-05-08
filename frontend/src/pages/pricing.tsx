@@ -622,13 +622,13 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
                       {t('pricing.daysLeftCount', { count: usage.subscription.trialDaysRemaining })}
                     </div>
                   </>
-                ) : usage.subscription.renewsAt ? (
+                ) : usage.currentPeriod?.end ? (
                   <>
                     <div className="w-px h-4 bg-theme-border" />
                     <div className="flex items-center gap-1.5 text-muted-foreground">
-                      <span className="font-medium">{t('subscription.renewsOn')}</span>
+                      <span className="font-medium">{t('subscription.quotaResetsOn')}</span>
                       <span className="font-bold text-foreground/70">
-                        {new Date(usage.subscription.renewsAt).toLocaleDateString(locale === 'ar' ? 'ar-u-nu-latn' : 'en', { month: 'short', day: 'numeric' })}
+                        {new Date(usage.currentPeriod.end).toLocaleDateString(locale === 'ar' ? 'ar-u-nu-latn' : 'en', { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
                   </>
