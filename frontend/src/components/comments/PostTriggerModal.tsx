@@ -1,6 +1,6 @@
 import React, { useCallback, useState, useEffect } from 'react';
 import clsx from 'clsx';
-import { Hash } from 'lucide-react';
+import { Hash, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslations } from 'next-intl';
 import { parseKeywords } from '@jawab24/shared';
@@ -8,12 +8,15 @@ import { Modal, Button, Textarea, KeywordChipInput, FormField, ConfirmationModal
 import { postsApi } from '@/lib/api';
 import { useSaveHandler } from '@/hooks/useSaveHandler';
 
+type ReplyMode = 'all' | 'keyword';
+
 interface PostTriggerModalProps {
   postId: string;
   source: 'facebook' | 'instagram';
   postMessage?: string | null;
   triggerKeyword?: string | null;
   triggerReply?: string | null;
+  replyToAll?: boolean;
   isOpen: boolean;
   onClose: () => void;
   onSaved: () => void;
@@ -25,12 +28,20 @@ export function PostTriggerModal({
   postMessage,
   triggerKeyword: initialKeyword,
   triggerReply: initialReply,
+  replyToAll: initialReplyToAll = false,
   isOpen,
   onClose,
   onSaved,
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
 
+  // Default mode: 'all' for new posts (the simpler, primary use case).
+  // Existing rows that had a keyword set load in 'keyword' mode.
+  const initialMode: ReplyMode = initialReplyToAll
+    ? 'all'
+    : (initialKeyword ? 'keyword' : 'all');
+
+  const [mode, setMode] = useState<ReplyMode>(initialMode);
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
   const [reply, setReply] = useState(initialReply ?? '');
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -38,10 +49,11 @@ export function PostTriggerModal({
   // Sync when modal opens with fresh values
   useEffect(() => {
     if (isOpen) {
+      setMode(initialReplyToAll ? 'all' : (initialKeyword ? 'keyword' : 'all'));
       setKeywords(parseKeywords(initialKeyword));
       setReply(initialReply ?? '');
     }
-  }, [isOpen, initialKeyword, initialReply]);
+  }, [isOpen, initialKeyword, initialReply, initialReplyToAll]);
 
   const onSaveSuccess = useCallback(() => { onSaved(); onClose(); }, [onSaved, onClose]);
   const { handle: runSave, saving: savingSave } = useSaveHandler({
@@ -57,15 +69,17 @@ export function PostTriggerModal({
   const saving = savingSave || savingClear;
 
   async function handleSave() {
-    if (keywords.length === 0) {
-      toast.error(t('postTriggerKeywordRequired'));
-      return;
-    }
     if (!reply.trim()) {
       toast.error(t('postTriggerReplyRequired'));
       return;
     }
-    await runSave(() => postsApi.updateTrigger(postId, source, keywords.join(', '), reply.trim()));
+    if (mode === 'keyword' && keywords.length === 0) {
+      toast.error(t('postTriggerKeywordRequired'));
+      return;
+    }
+    const replyToAll = mode === 'all';
+    const keywordPayload = mode === 'keyword' ? keywords.join(', ') : null;
+    await runSave(() => postsApi.updateTrigger(postId, source, keywordPayload, reply.trim(), replyToAll));
   }
 
   function requestClear() {
@@ -74,10 +88,10 @@ export function PostTriggerModal({
 
   async function handleConfirmClear() {
     setConfirmingClear(false);
-    await runClear(() => postsApi.updateTrigger(postId, source, null, null));
+    await runClear(() => postsApi.updateTrigger(postId, source, null, null, false));
   }
 
-  const hasActiveTrigger = !!(initialKeyword && initialReply);
+  const hasActiveTrigger = !!(initialReply && (initialKeyword || initialReplyToAll));
 
   const footer = (
     <div className={clsx('flex items-center gap-3', hasActiveTrigger ? 'justify-between' : 'justify-end')}>
@@ -125,23 +139,7 @@ export function PostTriggerModal({
           </div>
         )}
 
-        {/* Keyword chip input */}
-        <FormField
-          label={t('postTriggerKeyword')}
-          htmlFor="trigger-keyword"
-          helper={t('postTriggerKeywordHelp')}
-        >
-          <KeywordChipInput
-            id="trigger-keyword"
-            value={keywords}
-            onChange={setKeywords}
-            placeholder={t('postTriggerKeywordPlaceholder')}
-            maxKeywords={10}
-            maxLength={100}
-          />
-        </FormField>
-
-        {/* Reply textarea */}
+        {/* Reply textarea (always shown — the message itself, regardless of scope) */}
         <FormField label={t('postTriggerReply')} htmlFor="trigger-reply">
           <Textarea
             id="trigger-reply"
@@ -153,6 +151,58 @@ export function PostTriggerModal({
             maxLength={1000}
           />
         </FormField>
+
+        {/* Mode selector — when to send the reply */}
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-sm font-medium mb-2">{t('postTriggerModeLegend')}</legend>
+
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-surface-200 dark:border-surface-700 cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800/50">
+            <input
+              type="radio"
+              name="reply-mode"
+              value="all"
+              checked={mode === 'all'}
+              onChange={() => setMode('all')}
+              className="mt-0.5"
+            />
+            <div className="flex-1">
+              <div className="text-sm font-medium">{t('postTriggerModeAll')}</div>
+              {mode === 'all' && (
+                <div className="mt-2 flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400">
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" aria-hidden="true" />
+                  <span>{t('postTriggerModeAllWarning')}</span>
+                </div>
+              )}
+            </div>
+          </label>
+
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-surface-200 dark:border-surface-700 cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800/50">
+            <input
+              type="radio"
+              name="reply-mode"
+              value="keyword"
+              checked={mode === 'keyword'}
+              onChange={() => setMode('keyword')}
+              className="mt-0.5"
+            />
+            <div className="flex-1">
+              <div className="text-sm font-medium">{t('postTriggerModeKeyword')}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">{t('postTriggerModeKeywordHelp')}</div>
+              {mode === 'keyword' && (
+                <div className="mt-3">
+                  <KeywordChipInput
+                    id="trigger-keyword"
+                    value={keywords}
+                    onChange={setKeywords}
+                    placeholder={t('postTriggerKeywordPlaceholder')}
+                    maxKeywords={10}
+                    maxLength={100}
+                  />
+                </div>
+              )}
+            </div>
+          </label>
+        </fieldset>
       </div>
       <ConfirmationModal
         isOpen={confirmingClear}

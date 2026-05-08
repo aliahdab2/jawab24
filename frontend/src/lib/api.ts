@@ -151,8 +151,14 @@ export const postsApi = {
   getById: (id: string) => api.get(`/posts/${id}`),
   toggle: (id: string, enabled: boolean) =>
     api.patch(`/posts/${id}/auto-reply`, { enabled }),
-  updateTrigger: (id: string, source: 'facebook' | 'instagram', triggerKeyword: string | null, triggerReply: string | null) =>
-    api.patch(`/posts/${id}/trigger`, { source, triggerKeyword, triggerReply }),
+  updateTrigger: (
+    id: string,
+    source: 'facebook' | 'instagram',
+    triggerKeyword: string | null,
+    triggerReply: string | null,
+    replyToAll: boolean,
+  ) =>
+    api.patch(`/posts/${id}/trigger`, { source, triggerKeyword, triggerReply, replyToAll }),
 };
 
 // Comments API Types

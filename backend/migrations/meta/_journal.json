@@ -680,6 +680,13 @@
       "when": 1778082722747,
       "tag": "0096_modern_morlun",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "5",
+      "when": 1778234965686,
+      "tag": "0097_foamy_stone_men",
+      "breakpoints": true
     }
   ]
 }

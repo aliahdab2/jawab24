@@ -1667,6 +1667,120 @@ describe('CommentProcessor — template reply mode behavior', () => {
         });
     });
 
+    describe('Reply-to-all scope', () => {
+        it('replyToAll=true with no keywords sends triggerReply to every comment, AI bypassed', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: null,
+                    triggerReply: 'اتصل بنا: 0935924472',
+                    replyToAll: true,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'بالتوفيق 🌹', 'user-1', 'Ali',
+            );
+
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('اتصل بنا: 0935924472');
+        });
+
+        it('replyToAll=true with keywords: matching comment uses keyword scope', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سعر',
+                    triggerReply: 'السعر 25 ألف',
+                    replyToAll: true,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'كم السعر', 'user-1', 'Ali',
+            );
+
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('السعر 25 ألف');
+        });
+
+        it('replyToAll=true with keywords: non-matching comment still gets triggerReply (all-scope), AI bypassed', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: 'سعر',
+                    triggerReply: 'السعر 25 ألف',
+                    replyToAll: true,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'بالتوفيق 🌹', 'user-1', 'Ali',
+            );
+
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+            expect(result.replyText).toBe('السعر 25 ألف');
+        });
+
+        it('replyToAll=false (default) with no keywords does NOT send the trigger — falls through to AI', async () => {
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: null,
+                    triggerReply: 'اتصل بنا',
+                    replyToAll: false,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'hello', 'user-1', 'Ali',
+            );
+
+            expect(replyGenerator.generateForComment).toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('replyToAll=true is gated by isCommentsEnabled — when comments auto-reply is off, no reply is sent', async () => {
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+                id: 'settings-uuid',
+                userId: 'user-uuid',
+                aiEnabled: true,
+                commentsAutoReply: false,
+                replyDelay: 0,
+            } as any);
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: null,
+                    triggerReply: 'اتصل بنا',
+                    replyToAll: true,
+                }),
+            });
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'hello', 'user-1', 'Ali',
+            );
+
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+        });
+    });
+
     describe('Friend-tag silent skip — runs before trigger-keyword branch', () => {
         const userTagOnly = [
             { type: 'user' as const, id: 'tagged-user-1', name: 'Ali Ahdab', offset: 0, length: 10 },

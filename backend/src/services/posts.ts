@@ -55,6 +55,7 @@ export class PostsService {
                 autoReplyEnabled: posts.autoReplyEnabled,
                 triggerKeyword: posts.triggerKeyword,
                 triggerReply: posts.triggerReply,
+                replyToAll: posts.replyToAll,
                 createdTime: posts.createdTime,
                 createdAt: posts.createdAt,
                 updatedAt: posts.updatedAt,
@@ -173,6 +174,7 @@ export class PostsService {
         source: 'facebook' | 'instagram',
         triggerKeyword: string | null,
         triggerReply: string | null,
+        replyToAll: boolean,
         workspaceId: string,
     ): Promise<boolean> {
         if (source === 'instagram') {
@@ -185,7 +187,7 @@ export class PostsService {
 
             await db
                 .update(instagramMedia)
-                .set({ triggerKeyword, triggerReply, updatedAt: new Date() })
+                .set({ triggerKeyword, triggerReply, replyToAll, updatedAt: new Date() })
                 .where(eq(instagramMedia.id, contentId));
         } else {
             const owned = await db
@@ -197,7 +199,7 @@ export class PostsService {
 
             await db
                 .update(posts)
-                .set({ triggerKeyword, triggerReply, updatedAt: new Date() })
+                .set({ triggerKeyword, triggerReply, replyToAll, updatedAt: new Date() })
                 .where(eq(posts.id, contentId));
         }
 

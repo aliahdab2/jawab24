@@ -135,29 +135,43 @@ export class PostsController {
     }
 
     /**
-     * Update trigger keyword + reply for a post or Instagram media
+     * Update trigger keyword + reply for a post or Instagram media.
      * PATCH /posts/:id/trigger
+     *
+     * Two valid active states:
+     *   - replyToAll=false + keyword + reply → reply only on keyword match (existing)
+     *   - replyToAll=true + reply (keyword optional) → reply to every comment, AI bypassed
+     * Cleared: keyword=null + reply=null + replyToAll=false.
      */
     async updateTrigger(
-        request: FastifyRequest<{ Params: { id: string }; Body: { source: 'facebook' | 'instagram'; triggerKeyword: string | null; triggerReply: string | null } }>,
+        request: FastifyRequest<{ Params: { id: string }; Body: { source: 'facebook' | 'instagram'; triggerKeyword: string | null; triggerReply: string | null; replyToAll?: boolean } }>,
         reply: FastifyReply,
     ) {
         const req = request as WorkspaceRequest;
         if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
         const { id } = request.params;
-        const { source, triggerKeyword, triggerReply } = request.body;
+        const { source, triggerKeyword, triggerReply, replyToAll: rawReplyToAll } = request.body;
+        const replyToAll = rawReplyToAll === true;
 
         if (!['facebook', 'instagram'].includes(source)) {
             return reply.status(400).send({ error: 'Invalid source: must be facebook or instagram' });
         }
 
-        // Trigger must be either fully set (both keyword + reply) or fully cleared (both null).
-        // A keyword without a reply (or vice versa) is an inconsistent state.
         const keyword = triggerKeyword?.trim() || null;
         const replyText = triggerReply?.trim() || null;
-        if ((keyword === null) !== (replyText === null)) {
-            return reply.status(400).send({ error: 'triggerKeyword and triggerReply must both be set or both be null' });
+
+        // Cleared state: everything null/false. Active state: replyText required.
+        const isCleared = !keyword && !replyText && !replyToAll;
+        if (!isCleared) {
+            if (!replyText) {
+                return reply.status(400).send({ error: 'triggerReply is required when trigger is active' });
+            }
+            // Keyword-only mode (replyToAll=false) requires both keyword and reply.
+            if (!replyToAll && !keyword) {
+                return reply.status(400).send({ error: 'triggerKeyword is required when replyToAll is false' });
+            }
         }
+
         if (keyword) {
             const parts = parseKeywords(keyword);
             if (parts.length === 0) {
@@ -175,7 +189,7 @@ export class PostsController {
         }
 
         try {
-            const found = await postsService.updateTrigger(id, source, keyword, replyText, req.workspaceId);
+            const found = await postsService.updateTrigger(id, source, keyword, replyText, replyToAll, req.workspaceId);
             if (!found) return reply.status(404).send({ error: 'Post not found' });
             return reply.send({ success: true });
         } catch (error) {

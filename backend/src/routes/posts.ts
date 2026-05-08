@@ -54,7 +54,7 @@ export default async function postsRoutes(fastify: FastifyInstance) {
         protectedRoutes.patch('/posts/:id/trigger', {
             schema: {
                 tags: ['Posts'],
-                summary: 'Set or clear trigger keyword + reply for a post or Instagram media',
+                summary: 'Set or clear trigger reply (keyword-scoped or reply-to-all) for a post or Instagram media',
                 security: auth,
             },
         }, postsController.updateTrigger);

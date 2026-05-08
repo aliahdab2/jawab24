@@ -85,15 +85,20 @@
   "postTriggerReply": "Reply message",
   "postTriggerKeywordPlaceholder": "Type a keyword and press Enter",
   "postTriggerKeywordHelp": "Add up to 10 keywords — any match triggers the reply",
-  "postTriggerReplyPlaceholder": "Message to send when a comment matches a keyword...",
+  "postTriggerReplyPlaceholder": "Message to send to commenters on this post...",
   "postTriggerSave": "Save",
   "postTriggerClear": "Remove",
   "postTriggerActive": "Post reply active",
   "postTriggerSaved": "Post reply saved",
   "postTriggerCleared": "Post reply removed",
-  "postTriggerKeywordRequired": "Keyword is required",
+  "postTriggerKeywordRequired": "Add at least one keyword",
   "postTriggerReplyRequired": "Reply message is required",
+  "postTriggerModeLegend": "When should this reply be sent?",
+  "postTriggerModeAll": "Send to every comment",
+  "postTriggerModeAllWarning": "Smart Replies will be disabled for this post.",
+  "postTriggerModeKeyword": "Only when comments contain specific keywords",
+  "postTriggerModeKeywordHelp": "Other comments will be answered by Smart Replies.",
   "newBadge": "NEW",
   "postTriggerClearConfirmTitle": "Remove Post Reply?",
-  "postTriggerClearConfirmMessage": "Comments matching the keyword will no longer trigger an automatic reply on this post."
+  "postTriggerClearConfirmMessage": "Smart Replies will resume answering comments on this post."
 }

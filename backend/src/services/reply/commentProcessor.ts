@@ -231,23 +231,34 @@ export class CommentProcessor {
             }
 
             // 3b. Per-post trigger check — fires before template/AI pipeline.
-            // When a post has a triggerKeyword set, matching comments get the configured
-            // triggerReply immediately (template path). Non-matching comments FALL THROUGH
-            // to the AI pipeline — real questions on a trigger-configured post still deserve
-            // an answer. This mirrors the "comment X to get details" engagement tactic
-            // (ManyChat-style) without silencing off-keyword customers.
-            // Respects isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
-            // Triggers fire on both top-level comments AND sub-comments (replies to pinned comments
-            // are common in engagement posts like "comment . to get details").
-            if (content.triggerKeyword && content.triggerReply && isCommentsEnabled) {
-                const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
-                const triggerKeywords = parseKeywords(content.triggerKeyword);
-                const matchedKeyword = triggerKeywords.find(kw =>
-                    matchesKeyword(normalizedComment, normalizeArabic(kw.toLowerCase())),
-                );
+            // Two scopes:
+            //  - Keyword-scoped (triggerKeyword set, replyToAll=false):
+            //      Matching comments → triggerReply. Non-matching → fall through to AI.
+            //      Mirrors the "comment X to get details" engagement tactic (ManyChat-style).
+            //  - Reply-to-all (replyToAll=true):
+            //      Every comment → triggerReply. AI is bypassed for this post.
+            //      For promo posts where every commenter wants the same uniform info.
+            // Both respect isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
+            // Triggers fire on both top-level comments AND sub-comments.
+            if (content.triggerReply && isCommentsEnabled) {
+                let triggerScope: 'keyword' | 'all' | null = null;
+                let matchedKeyword: string | undefined;
+                let triggerKeywords: string[] = [];
 
-                if (matchedKeyword) {
-                    // Comment matches a trigger keyword — send triggerReply immediately, skip template/AI
+                if (content.triggerKeyword) {
+                    const normalizedComment = normalizeArabic(commentMessage.toLowerCase());
+                    triggerKeywords = parseKeywords(content.triggerKeyword);
+                    matchedKeyword = triggerKeywords.find(kw =>
+                        matchesKeyword(normalizedComment, normalizeArabic(kw.toLowerCase())),
+                    );
+                    if (matchedKeyword) triggerScope = 'keyword';
+                }
+                if (!triggerScope && content.replyToAll) {
+                    triggerScope = 'all';
+                }
+
+                if (triggerScope) {
+                    // Trigger fires — send triggerReply immediately, skip AI
                     const { comment, isNew: triggerIsNew } = await adapter.storeComment(content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags);
                     invalidateWorkspaceStatsCache(workspaceId);
                     // Mirror the non-trigger path: announce the new comment so the frontend
@@ -288,20 +299,25 @@ export class CommentProcessor {
                             postMessage: content.message || undefined,
                             contentId: content.id,
                             triggerKeyword: matchedKeyword,
+                            triggerScope,
                         });
                     } finally {
                         await releaseReplyLock(`comment:${page.id}`, platformCommentId, triggerLockToken).catch(() => { /* TTL will auto-expire */ });
                     }
                 }
-                // No match — fall through to AI
-                this.logger.info(`[${platform}] Trigger keywords set but comment did not match — falling through to AI`, {
-                    platformCommentId, triggerKeywords,
-                });
-            } else if (content.triggerKeyword) {
-                // Trigger keywords exist but conditions not met — log for diagnostics
-                this.logger.info(`[${platform}] Trigger keywords exist but trigger block skipped`, {
+                // No keyword match and replyToAll=false — fall through to AI
+                if (content.triggerKeyword) {
+                    this.logger.info(`[${platform}] Trigger keywords set but comment did not match — falling through to AI`, {
+                        platformCommentId, triggerKeywords,
+                    });
+                }
+            } else if (content.triggerKeyword || content.replyToAll) {
+                // Trigger configured but conditions not met (no triggerReply, or comments disabled)
+                this.logger.info(`[${platform}] Trigger configured but trigger block skipped`, {
                     platformCommentId,
                     hasTriggerReply: !!content.triggerReply,
+                    hasTriggerKeyword: !!content.triggerKeyword,
+                    replyToAll: !!content.replyToAll,
                     isCommentsEnabled,
                 });
             }
@@ -602,13 +618,15 @@ export class CommentProcessor {
         aiOriginalReply?: string;
         confidence?: string;
         triggerKeyword?: string;
+        /** When replyMethod='template', distinguishes keyword-match from reply-to-all scope. */
+        triggerScope?: 'keyword' | 'all';
     }): Promise<CommentResult> {
         const {
             adapter, platform, pipeline, pageId, userId, workspaceId,
             comment, replyText, replyMethod, commentMessage,
             platformCommentId, platformPageId, accessToken, fromId, fromName, userSettings,
             contentId, needsAttention, flagReason, aiIntent, aiOriginalReply,
-            confidence, triggerKeyword,
+            confidence, triggerKeyword, triggerScope,
         } = opts;
 
         const sendResult = await adapter.sendReply({
@@ -727,7 +745,9 @@ export class CommentProcessor {
             pageId,
             commentId: comment.id,
             replyMethod,
-            ...(triggerKeyword ? { triggerKeyword } : { aiIntent, confidence, flagReason: flagReason || null, needsAttention }),
+            ...(replyMethod === 'template'
+                ? { triggerScope: triggerScope ?? 'keyword', ...(triggerKeyword ? { triggerKeyword } : {}) }
+                : { aiIntent, confidence, flagReason: flagReason || null, needsAttention }),
             replyLength: replyText.length,
         });
 

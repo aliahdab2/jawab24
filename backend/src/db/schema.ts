@@ -181,6 +181,8 @@ export const posts = pgTable('posts', {
     triggerKeyword: text('trigger_keyword'),
     /** Per-post engagement trigger: reply sent when any triggerKeyword is matched */
     triggerReply: text('trigger_reply'),
+    /** When true, send triggerReply to every comment on this post (bypasses Smart Reply). */
+    replyToAll: boolean('reply_to_all').default(false).notNull(),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -205,6 +207,8 @@ export const instagramMedia = pgTable('instagram_media', {
     triggerKeyword: text('trigger_keyword'),
     /** Per-post engagement trigger: reply sent when any triggerKeyword is matched */
     triggerReply: text('trigger_reply'),
+    /** When true, send triggerReply to every comment on this media (bypasses Smart Reply). */
+    replyToAll: boolean('reply_to_all').default(false).notNull(),
     createdTime: timestamp('created_time'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),

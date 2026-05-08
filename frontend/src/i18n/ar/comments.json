@@ -85,15 +85,20 @@
   "postTriggerReply": "رسالة الرد",
   "postTriggerKeywordPlaceholder": "اكتب كلمة واضغط إدخال",
   "postTriggerKeywordHelp": "أضف حتى 10 كلمات — أي تطابق يفعّل الرد",
-  "postTriggerReplyPlaceholder": "الرسالة التي تُرسل عند تطابق التعليق مع إحدى الكلمات المفتاحية...",
+  "postTriggerReplyPlaceholder": "الرسالة التي تُرسل للمعلقين على هذا البوست...",
   "postTriggerSave": "حفظ",
   "postTriggerClear": "إزالة",
   "postTriggerActive": "رد البوست نشط",
   "postTriggerSaved": "تم حفظ رد البوست",
   "postTriggerCleared": "تم إزالة رد البوست",
-  "postTriggerKeywordRequired": "الكلمة المفتاحية مطلوبة",
+  "postTriggerKeywordRequired": "أضف كلمة مفتاحية واحدة على الأقل",
   "postTriggerReplyRequired": "رسالة الرد مطلوبة",
+  "postTriggerModeLegend": "متى يُرسل هذا الرد؟",
+  "postTriggerModeAll": "أرسل على كل التعليقات",
+  "postTriggerModeAllWarning": "الردود الذكية ستتعطل لهذا البوست.",
+  "postTriggerModeKeyword": "فقط عندما يحتوي التعليق على كلمات معينة",
+  "postTriggerModeKeywordHelp": "التعليقات الأخرى سيجيب عليها نظام الردود الذكية.",
   "newBadge": "جديد",
   "postTriggerClearConfirmTitle": "إزالة رد البوست؟",
-  "postTriggerClearConfirmMessage": "لن تُشغّل التعليقات المطابقة للكلمات المفتاحية رداً تلقائياً على هذا البوست بعد الآن."
+  "postTriggerClearConfirmMessage": "ستعود الردود الذكية للإجابة على التعليقات في هذا البوست."
 }
