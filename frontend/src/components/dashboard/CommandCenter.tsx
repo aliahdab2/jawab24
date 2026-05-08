@@ -174,7 +174,14 @@ export function CommandCenter({
                       {metric.tooltip && (
                         <span className="relative group inline-flex">
                           <Info className="w-3 h-3 text-icon-muted cursor-help" aria-label={metric.tooltip} />
-                          <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-1.5 px-2.5 py-1.5 text-[11px] font-normal normal-case tracking-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-48 text-center z-10 leading-snug">
+                          <span className={clsx(
+                            'absolute bottom-full mb-1.5 px-2.5 py-1.5 text-[11px] font-normal normal-case tracking-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-48 text-start z-10 leading-snug',
+                            // Anchor to the inward side of each mobile column so the tooltip never overflows the viewport.
+                            // On md+ (4-col grid) we revert to centered.
+                            i % 2 === 0
+                              ? 'start-0 md:start-1/2 md:-translate-x-1/2'
+                              : 'end-0 md:start-1/2 md:end-auto md:-translate-x-1/2',
+                          )}>
                             {metric.tooltip}
                           </span>
                         </span>
