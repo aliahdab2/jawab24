@@ -1,9 +1,13 @@
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
-import { workspaces } from '../db/schema';
+import { workspaces, workspaceMembers, settings as settingsTable } from '../db/schema';
 import { redis } from '../lib/redis';
+import { t } from '../utils/i18n';
+import { captureError } from '../utils/sentryHelpers';
+import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 import type { WorkspaceSettings } from '@jawab24/shared';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
@@ -38,8 +42,47 @@ const DEFAULTS: WorkspaceSettings = {
     holdLowConfidence: false,
 };
 
-import { t } from '../utils/i18n';
-import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
+type LegacyRow = Partial<Record<PipelineField, unknown>>;
+
+/**
+ * If the workspace JSONB is missing pipeline fields that exist in the
+ * legacy settings table (owner row), return them so getSettings can merge
+ * AND persist back. Returns null when no drift is detected.
+ */
+async function detectLegacyDrift(
+    workspaceId: string,
+    jsonb: Partial<WorkspaceSettings>,
+): Promise<Partial<WorkspaceSettings> | null> {
+    const missing = PIPELINE_FIELDS.filter(k => !(k in jsonb));
+    if (missing.length === 0) return null;
+
+    const owners = await db
+        .select({ userId: workspaceMembers.userId })
+        .from(workspaceMembers)
+        .where(and(
+            eq(workspaceMembers.workspaceId, workspaceId),
+            eq(workspaceMembers.role, 'owner'),
+        ))
+        .limit(1);
+    const ownerId = owners[0]?.userId;
+    if (!ownerId) return null;
+
+    const [legacy] = await db
+        .select()
+        .from(settingsTable)
+        .where(eq(settingsTable.userId, ownerId))
+        .limit(1) as unknown as [LegacyRow | undefined];
+    if (!legacy) return null;
+
+    const recovered: Partial<WorkspaceSettings> = {};
+    for (const k of missing) {
+        const v = legacy[k];
+        if (v === null || v === undefined) continue;
+        if (typeof v === 'string' && v.length === 0) continue;
+        (recovered as Record<string, unknown>)[k] = v;
+    }
+    return Object.keys(recovered).length > 0 ? recovered : null;
+}
 
 /** Default away message as send-time fallback when all stored values are empty */
 const DEFAULT_AWAY_MESSAGE: Record<string, string> = {
@@ -77,7 +120,33 @@ export class WorkspaceSettingsService {
         }
 
         const raw = (workspace.settings ?? {}) as Partial<WorkspaceSettings>;
-        const result: WorkspaceSettings = { ...DEFAULTS, ...raw };
+
+        // Defensive auto-resync: heal drift between this JSONB and the legacy
+        // `settings` table (per-user owner row). Converges toward zero drift on
+        // each read; fully idempotent once all pipeline fields are present.
+        // Fire-and-forget the write so a slow DB never blocks the reply
+        // pipeline's hot path.
+        const drift = await detectLegacyDrift(workspaceId, raw).catch(err => {
+            captureError(err, 'workspaceSettings drift detection failed', {
+                tags: { service: 'workspace-settings', action: 'drift-detect' },
+                extra: { workspaceId },
+            });
+            return null;
+        });
+
+        const merged: Partial<WorkspaceSettings> = drift ? { ...raw, ...drift } : raw;
+
+        if (drift) {
+            void db.update(workspaces)
+                .set({ settings: merged as Record<string, unknown>, updatedAt: new Date() })
+                .where(eq(workspaces.id, workspaceId))
+                .catch(err => captureError(err, 'workspaceSettings drift auto-resync write failed', {
+                    tags: { service: 'workspace-settings', action: 'drift-resync' },
+                    extra: { workspaceId, recoveredFields: Object.keys(drift) },
+                }));
+        }
+
+        const result: WorkspaceSettings = { ...DEFAULTS, ...merged };
 
         // Populate cache — fail open
         try {
