@@ -87,6 +87,11 @@ vi.mock('../../src/services/protection', () => ({
         check: vi.fn().mockResolvedValue({ allowed: true, count: 0 }),
         setLogger: vi.fn(),
     },
+    commentDebounce: {
+        isCoolingDown: vi.fn().mockResolvedValue(false),
+        arm: vi.fn().mockResolvedValue(undefined),
+        setLogger: vi.fn(),
+    },
 }));
 
 vi.mock('../../src/services/reply/generator', async (importOriginal) => {
@@ -138,6 +143,13 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
         processor = new CommentProcessor();
         pipelineMetrics.reset();
         mockGenerateForComment.mockClear();
+        // Defensive reset — vi.clearAllMocks() doesn't reset implementations.
+        // Tests that override the debounce mock would otherwise leak.
+        const { commentDebounce } = await import('../../src/services/protection');
+        vi.mocked(commentDebounce.isCoolingDown).mockClear();
+        vi.mocked(commentDebounce.arm).mockClear();
+        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
+        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
         mockGenerateForComment.mockResolvedValue({
             replyText: 'Mocked AI reply',
             replyMethod: 'ai' as const,
@@ -445,5 +457,118 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
         expect(row.replyText).toContain('Thank you for your interest');
         expect(row.needsAttention).toBe(true);
         expect(row.flagReason).toBe('price_not_in_kb');
+    });
+
+    // =========================================================
+    // Per-(page, post, sender) auto-reply debounce
+    // (real Postgres + real commentsService; isCoolingDown mocked
+    // to flip true on the second call from the same sender)
+    // =========================================================
+    describe('per-(page, post, sender) debounce', () => {
+        it('first comment fires an AI reply, back-to-back duplicate from same sender is silently resolved with no AI call', async () => {
+            const { commentDebounce } = await import('../../src/services/protection');
+            // Cold for the first call, hot for the second — simulates the
+            // arm() that would have fired between the two webhook deliveries.
+            vi.mocked(commentDebounce.isCoolingDown)
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
+
+            const adapter = createMockAdapter(platformPage);
+            const platformPostId = 'post-fb-debounce-001';
+
+            // First comment — full pipeline runs, AI replies
+            const r1 = await processor.processComment(
+                adapter, facebookPageId, platformPostId, 'comment-debounce-1',
+                '..', fromId, fromName,
+            );
+            expect(r1.success).toBe(true);
+            expect(r1.replyMethod).toBe('ai');
+            expect(mockGenerateForComment).toHaveBeenCalledTimes(1);
+
+            // Second comment from same sender on same post — debounced
+            const r2 = await processor.processComment(
+                adapter, facebookPageId, platformPostId, 'comment-debounce-2',
+                '..', fromId, fromName,
+            );
+            expect(r2.success).toBe(true);
+            // AI was NOT called again
+            expect(mockGenerateForComment).toHaveBeenCalledTimes(1);
+            // sendReply was NOT called for the second comment (still 1 from #1)
+            expect(adapter.sendReply).toHaveBeenCalledTimes(1);
+
+            // Both rows exist in DB. First: replied. Second: resolved (no reply).
+            const [row1] = await testDb.select().from(comments).where(eq(comments.facebookCommentId, 'comment-debounce-1'));
+            const [row2] = await testDb.select().from(comments).where(eq(comments.facebookCommentId, 'comment-debounce-2'));
+            expect(row1.replied).toBe(true);
+            expect(row1.replyText).toBe('Mocked AI reply');
+            expect(row2.replied).toBe(false);
+            expect(row2.resolved).toBe(true);
+            expect(row2.replyText).toBeNull();
+
+            // Pipeline metric: 1 success + 1 debounce_skipped
+            const metrics = await pipelineMetrics.getMetrics();
+            expect(metrics.counters['facebook_comment.success']).toBe(1);
+            expect(metrics.counters['facebook_comment.debounce_skipped']).toBe(1);
+
+            // Cooldown was armed once (after the successful reply)
+            expect(commentDebounce.arm).toHaveBeenCalledTimes(1);
+            expect(commentDebounce.arm).toHaveBeenCalledWith(pageId, expect.any(String), fromId);
+        });
+
+        it('a duplicate webhook for the SAME comment_id (after arm) hits already_replied, not debounce', async () => {
+            const { commentDebounce } = await import('../../src/services/protection');
+            // First webhook: cold, fires reply. Second webhook (same comment_id): hot.
+            vi.mocked(commentDebounce.isCoolingDown)
+                .mockResolvedValueOnce(false)
+                .mockResolvedValueOnce(true);
+
+            const adapter = createMockAdapter(platformPage);
+            const platformPostId = 'post-fb-dup-debounce';
+            const platformCommentId = 'comment-fb-dup-debounce';
+
+            await processor.processComment(
+                adapter, facebookPageId, platformPostId, platformCommentId,
+                'Hello!', fromId, fromName,
+            );
+            const r2 = await processor.processComment(
+                adapter, facebookPageId, platformPostId, platformCommentId,
+                'Hello!', fromId, fromName,
+            );
+
+            // Duplicate webhook short-circuits via already_replied — NOT debounce.
+            expect(r2.success).toBe(false);
+            expect(r2.error).toBe('Comment already replied');
+
+            const metrics = await pipelineMetrics.getMetrics();
+            expect(metrics.counters['facebook_comment.already_replied']).toBe(1);
+            expect(metrics.counters['facebook_comment.debounce_skipped']).toBeUndefined();
+        });
+
+        it('different senders on the same post are NOT gated against each other', async () => {
+            const { commentDebounce } = await import('../../src/services/protection');
+            // Cooldown stays cold for both — different senders, different keys.
+            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
+
+            const adapter = createMockAdapter(platformPage);
+            const platformPostId = 'post-fb-debounce-multi';
+
+            const r1 = await processor.processComment(
+                adapter, facebookPageId, platformPostId, 'comment-multi-A',
+                'First!', 'sender-A', 'Alice',
+            );
+            const r2 = await processor.processComment(
+                adapter, facebookPageId, platformPostId, 'comment-multi-B',
+                'Second!', 'sender-B', 'Bob',
+            );
+
+            expect(r1.success).toBe(true);
+            expect(r2.success).toBe(true);
+            expect(mockGenerateForComment).toHaveBeenCalledTimes(2);
+            expect(adapter.sendReply).toHaveBeenCalledTimes(2);
+
+            // arm called twice with distinct sender ids
+            expect(commentDebounce.arm).toHaveBeenCalledWith(pageId, expect.any(String), 'sender-A');
+            expect(commentDebounce.arm).toHaveBeenCalledWith(pageId, expect.any(String), 'sender-B');
+        });
     });
 });

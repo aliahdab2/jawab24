@@ -1,7 +1,7 @@
 import { workspaceSettingsService } from '../workspaceSettings';
 import { messagesService } from '../messages';
 import { commentsService } from '../comments';
-import { rateLimiter } from '../protection';
+import { rateLimiter, commentDebounce } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { detectLanguageCode, detectCommentLanguage } from '../../utils/language';
@@ -60,7 +60,7 @@ export class CommentProcessor {
         pageId: string,
         userId: string,
         workspaceId: string,
-        reason: 'friend_tag' | 'spam' | 'offensive',
+        reason: 'friend_tag' | 'spam' | 'offensive' | 'debounced',
         flagReason?: string,
     ): Promise<void> {
         await commentsService.resolveComment(comment.id);
@@ -193,6 +193,41 @@ export class CommentProcessor {
                     userId, pageId: page.id, reason: subGate.reason,
                 });
                 return { success: false, commentId: platformCommentId, error: 'Subscription inactive' };
+            }
+
+            // 3ab. Per-(page, post, sender) debounce — silently skip when this
+            // commenter already received an auto-reply on this post inside the
+            // cooldown window. Catches accidental double-comments and back-to-back
+            // duplicates (e.g. "..", "...") that would otherwise each fire a fresh
+            // AI reply. Distinct from the per-comment idempotency lock, which only
+            // dedupes the same comment_id. Distinct from the rate limiter, which
+            // counts comments per sender across all posts. Skipped when fromId is
+            // missing (pre-registered fan posts) — there's nothing to key on.
+            // Applies to AI, trigger, and template paths uniformly.
+            if (fromId && isCommentsEnabled && await commentDebounce.isCoolingDown(page.id, content.id, fromId)) {
+                const { comment, isNew } = await adapter.storeComment(
+                    content.id, workspaceId, platformCommentId, commentMessage, fromId, fromName, messageTags,
+                );
+                // True webhook duplicate for the SAME comment_id (not a separate
+                // back-to-back comment): defer to the existing already_replied
+                // path so observability stays clean — duplicate webhooks should
+                // not surface as "debounced", they were never going to reply.
+                if (!isNew && (comment.replied || comment.needsAttention)) {
+                    pipelineMetrics.record(pipeline, 'already_replied');
+                    return { success: false, commentId: comment.id, error: 'Comment already replied' };
+                }
+                publishSSEEvent(userId, 'comment:received', {
+                    commentId: comment.id,
+                    pageId: page.id,
+                    fromName: fromName ?? null,
+                    message: commentMessage,
+                });
+                await this.silentlyResolveAndSkip(comment, page.id, userId, workspaceId, 'debounced', 'recent_reply_to_same_sender_on_post');
+                pipelineMetrics.record(pipeline, 'debounce_skipped');
+                this.logger.info(`[${platform}] Comment debounced — same sender replied to on this post within cooldown`, {
+                    commentId: comment.id, platformCommentId, pageId: page.id, postId: content.id, fromId,
+                });
+                return { success: true, commentId: comment.id };
             }
 
             // 3b. Per-post trigger check — fires before template/AI pipeline.
@@ -656,6 +691,14 @@ export class CommentProcessor {
             replyText,
             senderName: fromName ?? null,
         });
+
+        // Arm the per-(page, post, sender) cooldown so back-to-back comments
+        // from the same sender on the same post don't each fire a fresh reply.
+        // See step 3ab in processComment(). Skipped when fromId is missing
+        // (pre-registered fan posts) — nothing to key on. Fail-open inside arm().
+        if (fromId) {
+            await commentDebounce.arm(pageId, contentId, fromId);
+        }
 
         if (replyMethod === 'ai') {
             publishSSEEvent(userId, 'usage:updated', { aiRepliesUsed: -1 });
