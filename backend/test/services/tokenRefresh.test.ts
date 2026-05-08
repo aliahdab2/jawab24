@@ -56,9 +56,12 @@ vi.mock('../../src/services/notifications', () => ({
     },
 }));
 
-// crypto passthrough — encrypt is identity in tests
+// crypto passthrough — encrypt/decrypt strip the enc:v1: prefix in tests so
+// assertions can verify the sweep decrypts before calling FB.
 vi.mock('../../src/services/facebookCrypto', () => ({
     maybeEncryptToken: (token: string) => token,
+    maybeDecryptToken: (token: string | null | undefined) =>
+        token && token.startsWith('enc:v1:') ? token.slice('enc:v1:'.length) : (token ?? ''),
 }));
 
 // sentry helper — no-op
@@ -272,6 +275,28 @@ describe('tokenRefresh.verifyAndRefreshTokens', () => {
         expect(result.invalid).toBe(0);
     });
 
+    it('regression: decrypts encrypted user token before calling FB (enc:v1: prefix)', async () => {
+        // Reproduces the 2026-05-08 incident: 24 pages across 8 paying merchants
+        // were wrongly disconnected because tokenRefresh sent the raw enc:v1: blob
+        // to Facebook, which returned code 190 with a malformed-token message.
+        const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1', name: 'Page 1' })];
+        const updateChain = buildUpdateChain();
+        mockDbUpdate.mockReturnValue(updateChain);
+        mockDbSelect
+            .mockReturnValueOnce(buildStalePagesQuery(stalePages))
+            .mockReturnValueOnce(buildUserSelectQuery({ facebookAccessToken: 'enc:v1:plaintext-user-token' }));
+
+        mockGetUserPages.mockResolvedValue({
+            data: [{ id: 'fb-1', access_token: 'fresh-token-1' }],
+        });
+
+        await verifyAndRefreshTokens();
+
+        // FB must receive the decrypted token, not the enc:v1: blob.
+        expect(mockGetUserPages).toHaveBeenCalledWith('plaintext-user-token');
+        expect(mockSendNotification).not.toHaveBeenCalled();
+    });
+
     it('regression: retry-exhaustion on transient errors does NOT clear tokens', async () => {
         const stalePages = [pageRow({ id: 'p1', facebookPageId: 'fb-1', name: 'Page 1' })];
         mockDbSelect
@@ -341,7 +366,7 @@ describe('isTokenRevoked', () => {
         [190, 999, '190 with unknown subcode (still treated as revoked)'],
     ];
 
-    it.each(revokedCases)('returns true for code=%i subcode=%s (%s)', (code, subcode, _label) => {
+    it.each(revokedCases)('returns true for code=%i subcode=%s (%s)', (code, subcode) => {
         const err = new FacebookApiError('test', { code, subcode, isTransport: false });
         expect(isTokenRevoked(err)).toBe(true);
     });
@@ -356,7 +381,7 @@ describe('isTokenRevoked', () => {
         [null, 'null'],
     ];
 
-    it.each(notRevokedCases)('returns false for: %s', (err, _label) => {
+    it.each(notRevokedCases)('returns false for: %s', (err) => {
         expect(isTokenRevoked(err)).toBe(false);
     });
 

@@ -2,7 +2,7 @@ import { db } from '../db';
 import { pages, users } from '../db/schema';
 import { and, ne, eq, isNotNull, lt, isNull, or, inArray } from 'drizzle-orm';
 import { facebookService } from './facebook';
-import { maybeEncryptToken } from './facebookCrypto';
+import { maybeEncryptToken, maybeDecryptToken } from './facebookCrypto';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
 import { withRetry } from '../utils/retry';
@@ -111,10 +111,11 @@ export async function verifyAndRefreshTokens(): Promise<{ verified: number; refr
                 continue;
             }
 
-            // Capture in a local so the closure passed to withRetry doesn't
-            // need a non-null assertion (the user.* property's nullability
-            // doesn't survive across the await boundary).
-            const userToken = user.facebookAccessToken;
+            // Decrypt before calling FB. User tokens are stored AES-GCM
+            // encrypted (enc:v1:...). Sending the ciphertext makes FB return
+            // code 190 with a malformed-token message, which isTokenRevoked()
+            // then misclassifies as a real revoke and bulk-clears page tokens.
+            const userToken = maybeDecryptToken(user.facebookAccessToken);
 
             // 2. Try to re-fetch page tokens via /me/accounts
             //    This is the most reliable check: if it succeeds, tokens are valid
