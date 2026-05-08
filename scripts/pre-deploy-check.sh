@@ -186,7 +186,14 @@ AUDIT_FAILED=false
 # Transitive via geoip-lite. We only call geoip.lookup(ip), which returns a plain JS object
 # (country/region/city). The vulnerable Address6.toString()/HTML-emitter methods are never
 # invoked, so the XSS path is unreachable.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g"
+# GHSA-4c35-wcg5-mm9h — next-intl prototype pollution via experimental.messages.precompile
+# with attacker-controlled translation catalog keys. We use the standard getMessages flow
+# (makeGetStaticProps loading static JSON from frontend/src/i18n/{en,ar}/*.json) and do not
+# enable experimental.messages.precompile. Vulnerable code path is unreachable.
+# GHSA-r27j-894h-3w3p — icu-minify DoS via unsanitized `select` key lookup on Object.prototype
+# when precompile: true. Transitive via next-intl's precompile feature, which we don't use
+# (see GHSA-4c35-wcg5-mm9h above). Vulnerable code path is unreachable.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
