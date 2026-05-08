@@ -64,6 +64,7 @@ function mockDbSelectSequence(...rowSets: unknown[][]) {
     vi.mocked(db.select).mockImplementation(() => {
         const rows = rowSets[callIndex] ?? [];
         callIndex++;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return buildSelectChain(rows) as any;
     });
 }
@@ -72,6 +73,7 @@ function mockDbUpdate() {
     const setMock = vi.fn().mockReturnValue({
         where: vi.fn().mockResolvedValue(undefined),
     });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(db.update).mockReturnValue({ set: setMock } as any);
     return { set: setMock };
 }
@@ -183,6 +185,7 @@ describe('WorkspaceSettingsService', () => {
             vi.mocked(redis.get).mockResolvedValueOnce(null);
             // Workspace JSONB is missing commentReplyMode (and many other pipeline fields)
             const partialJsonb = { ...FULL_JSONB };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             delete (partialJsonb as any).commentReplyMode;
 
             mockDbSelectSequence(
@@ -208,6 +211,7 @@ describe('WorkspaceSettingsService', () => {
         it('skips write-back when JSONB already contains all pipeline fields', async () => {
             vi.mocked(redis.get).mockResolvedValueOnce(null);
             // Full JSONB — drift detection short-circuits (missing.length === 0)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             mockDbSelectSequence([{ settings: FULL_JSONB }]);
 
             await service.getSettings(WS_ID);
@@ -220,6 +224,7 @@ describe('WorkspaceSettingsService', () => {
         it('returns defaults without write when workspace_members has no owner row', async () => {
             vi.mocked(redis.get).mockResolvedValueOnce(null);
             const partialJsonb = { ...FULL_JSONB };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             delete (partialJsonb as any).commentReplyMode;
 
             mockDbSelectSequence(
@@ -237,6 +242,7 @@ describe('WorkspaceSettingsService', () => {
         it('captures error and returns DEFAULTS when detectLegacyDrift throws', async () => {
             vi.mocked(redis.get).mockResolvedValueOnce(null);
             const partialJsonb = { ...FULL_JSONB };
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             delete (partialJsonb as any).commentReplyMode;
 
             // First call (workspace) succeeds; second call (owner lookup) throws
@@ -244,9 +250,11 @@ describe('WorkspaceSettingsService', () => {
             vi.mocked(db.select).mockImplementation(() => {
                 callIndex++;
                 if (callIndex === 1) {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     return buildSelectChain([{ settings: partialJsonb }]) as any;
                 }
                 // Drift detection inner query throws
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 return {
                     from: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
@@ -276,6 +284,7 @@ describe('WorkspaceSettingsService', () => {
         it('merges updates with existing settings and invalidates cache', async () => {
             // First call is getSettings (inside updateSettings) — full JSONB to avoid drift
             vi.mocked(redis.get).mockResolvedValueOnce(null);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             mockDbSelectSequence([{ settings: { ...FULL_JSONB, aiEnabled: true, replyDelay: 0 } }]);
             mockDbUpdate();
 
@@ -290,6 +299,7 @@ describe('WorkspaceSettingsService', () => {
     // ── isCommentsAutoReplyEnabled ────────────────────────────────────────
     describe('isCommentsAutoReplyEnabled', () => {
         it('returns false when commentsAutoReply is off', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 commentsAutoReply: false,
                 businessHoursOnly: false,
@@ -299,6 +309,7 @@ describe('WorkspaceSettingsService', () => {
         });
 
         it('returns true when commentsAutoReply is on and no business hours restriction', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 commentsAutoReply: true,
                 businessHoursOnly: false,
@@ -308,6 +319,7 @@ describe('WorkspaceSettingsService', () => {
         });
 
         it('delegates to business hours check when businessHoursOnly is true', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 commentsAutoReply: true,
                 businessHoursOnly: true,
@@ -324,6 +336,7 @@ describe('WorkspaceSettingsService', () => {
     // ── isMessagesAutoReplyEnabled ────────────────────────────────────────
     describe('isMessagesAutoReplyEnabled', () => {
         it('returns false when messagesAutoReply is off', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 messagesAutoReply: false,
                 businessHoursOnly: false,
@@ -333,6 +346,7 @@ describe('WorkspaceSettingsService', () => {
         });
 
         it('returns true when messagesAutoReply is on', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 messagesAutoReply: true,
                 businessHoursOnly: false,
@@ -346,6 +360,7 @@ describe('WorkspaceSettingsService', () => {
     describe('getAwayMessage', () => {
         it('returns configured away message for detected language', async () => {
             // defaultReplyLanguage:'en' so resolveLanguage('en') → 'en', resolveLanguage('ar') → 'ar'
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 awayMessageMulti: { en: 'We are away', ar: 'نحن غائبون' },
                 autoDetectLanguage: true,
@@ -357,6 +372,7 @@ describe('WorkspaceSettingsService', () => {
         });
 
         it('falls back to other language when preferred is missing', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 awayMessageMulti: { en: 'We are away' },
                 autoDetectLanguage: true,
@@ -369,6 +385,7 @@ describe('WorkspaceSettingsService', () => {
 
         it('returns default away message when none configured', async () => {
             // defaultReplyLanguage:'en' so resolveLanguage('en') → 'en' → DEFAULT_AWAY_MESSAGE['en']
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 awayMessageMulti: {},
                 autoDetectLanguage: true,
@@ -384,6 +401,7 @@ describe('WorkspaceSettingsService', () => {
     describe('getGreetingMessage', () => {
         it('returns greeting for detected language', async () => {
             // defaultReplyLanguage:'en' so resolveLanguage('en') → 'en'
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 greetingMessageMulti: { en: 'Welcome!', ar: 'مرحباً!' },
                 autoDetectLanguage: true,
@@ -394,6 +412,7 @@ describe('WorkspaceSettingsService', () => {
         });
 
         it('returns null when no greeting configured', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 greetingMessageMulti: {},
                 autoDetectLanguage: true,
@@ -407,6 +426,7 @@ describe('WorkspaceSettingsService', () => {
     // ── getReplyDelay ─────────────────────────────────────────────────────
     describe('getReplyDelay', () => {
         it('returns configured delay in seconds', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({ replyDelay: 3 } as any);
             expect(await service.getReplyDelay(WS_ID)).toBe(3);
         });
@@ -415,6 +435,7 @@ describe('WorkspaceSettingsService', () => {
     // ── language resolution ───────────────────────────────────────────────
     describe('language resolution', () => {
         it('uses default language when autoDetect is off', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 greetingMessageMulti: { en: 'Hi', ar: 'مرحباً' },
                 autoDetectLanguage: false,
@@ -426,6 +447,7 @@ describe('WorkspaceSettingsService', () => {
         });
 
         it('uses detected language when autoDetect is on', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 greetingMessageMulti: { en: 'Hi', ar: 'مرحباً' },
                 autoDetectLanguage: true,
@@ -436,6 +458,7 @@ describe('WorkspaceSettingsService', () => {
         });
 
         it('falls back to default when detected language is "unknown"', async () => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn(service, 'getSettings').mockResolvedValue({
                 greetingMessageMulti: { en: 'Hi', ar: 'مرحباً' },
                 autoDetectLanguage: true,

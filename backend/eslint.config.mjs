@@ -6,17 +6,6 @@ export default tseslint.config(
     js.configs.recommended,
     ...tseslint.configs.recommended,
     {
-        files: ['test/**/*.ts'],
-        rules: {
-            '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/no-unused-vars': ['warn', {
-                argsIgnorePattern: '^_',
-                varsIgnorePattern: '^_',
-            }],
-            'no-unused-vars': 'off',
-        },
-    },
-    {
         files: ['src/**/*.ts'],
         rules: {
             '@typescript-eslint/no-unused-vars': ['warn', {
