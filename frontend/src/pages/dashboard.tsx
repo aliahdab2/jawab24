@@ -281,8 +281,14 @@ const DashboardPage: NextPageWithLayout = () => {
     const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
     const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled).length;
 
+    // Tooltip breakdown: only pass values when BOTH endpoints succeeded, so a
+    // partial-load doesn't render a misleading "X comments + 0 messages" tooltip.
+    const breakdownAvailable = commentStats !== undefined && messageStats !== undefined;
+
     return {
       repliedToday: (stats.repliedToday ?? 0) + (msgStats.repliedToday ?? 0),
+      commentsRepliedToday: breakdownAvailable ? stats.repliedToday ?? 0 : undefined,
+      messagesRepliedToday: breakdownAvailable ? msgStats.repliedToday ?? 0 : undefined,
       commentsNeedsAction: Math.max(0, stats.needsAttention ?? 0),
       activePages,
       aiReplies: stats.byMethod.ai + (msgStats.byMethod?.ai ?? 0),
@@ -550,6 +556,8 @@ const DashboardPage: NextPageWithLayout = () => {
       <CommandCenter
         smartReplies={((analytics?.byMethod?.ai ?? 0) + (analytics?.byMethod?.template ?? 0)) || (statsData.aiReplies + statsData.postReplies)}
         repliedToday={statsData.repliedToday}
+        commentsRepliedToday={statsData.commentsRepliedToday}
+        messagesRepliedToday={statsData.messagesRepliedToday}
         replyRate={analytics?.totals?.replyRate ?? '0'}
         avgSpeedSeconds={analytics?.responseTime?.avgSeconds ?? null}
         hasError={sectionErrors.comments && sectionErrors.messages && sectionErrors.analytics}
