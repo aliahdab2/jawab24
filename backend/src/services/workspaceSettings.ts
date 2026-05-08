@@ -7,6 +7,7 @@ import { captureError } from '../utils/sentryHelpers';
 import { isWithinBusinessHours as isWithinBusinessHoursShared, resolveLanguage as resolveLanguageShared } from '../utils/settingsHelpers';
 import type { WorkspaceSettings } from '@jawab24/shared';
 import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { PIPELINE_FIELDS, type PipelineField } from './pipelineFields';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
@@ -41,22 +42,7 @@ const DEFAULTS: WorkspaceSettings = {
     holdLowConfidence: false,
 };
 
-// TODO: extract PIPELINE_FIELDS to a shared constant — currently mirrored in
-// settings.ts:10-21. Diverging the two lists silently breaks drift detection.
-/** Pipeline fields the reply pipeline reads. Must mirror PIPELINE_FIELDS in settings.ts. */
-const PIPELINE_FIELDS_FOR_DRIFT = [
-    'commentsAutoReply', 'messagesAutoReply', 'businessHoursOnly',
-    'businessHoursStart', 'businessHoursEnd', 'timezone',
-    'aiEnabled', 'aiModel', 'commentReplyMode',
-    'dualReplyNudge', 'dualReplyNudgeMulti', 'dualReplyNudgeVariations',
-    'replyDelay', 'greetingMessageMulti', 'awayMessageMulti',
-    'handoffPauseDurationMinutes', 'commentEscalationMinutes',
-    'messageEscalationMinutes', 'defaultReplyLanguage',
-    'supportedLanguages', 'autoDetectLanguage',
-    'replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti', 'holdLowConfidence',
-] as const;
-
-type LegacyRow = Partial<Record<typeof PIPELINE_FIELDS_FOR_DRIFT[number], unknown>>;
+type LegacyRow = Partial<Record<PipelineField, unknown>>;
 
 /**
  * If the workspace JSONB is missing pipeline fields that exist in the
@@ -67,7 +53,7 @@ async function detectLegacyDrift(
     workspaceId: string,
     jsonb: Partial<WorkspaceSettings>,
 ): Promise<Partial<WorkspaceSettings> | null> {
-    const missing = PIPELINE_FIELDS_FOR_DRIFT.filter(k => !(k in jsonb));
+    const missing = PIPELINE_FIELDS.filter(k => !(k in jsonb));
     if (missing.length === 0) return null;
 
     const owners = await db

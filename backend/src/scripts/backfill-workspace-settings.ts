@@ -12,18 +12,7 @@ import { db } from '../db';
 import { workspaces, workspaceMembers, settings as settingsTable } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { workspaceSettingsService } from '../services/workspaceSettings';
-
-const PIPELINE_FIELDS = [
-    'commentsAutoReply', 'messagesAutoReply', 'businessHoursOnly',
-    'businessHoursStart', 'businessHoursEnd', 'timezone',
-    'aiEnabled', 'aiModel', 'commentReplyMode',
-    'dualReplyNudge', 'dualReplyNudgeMulti', 'dualReplyNudgeVariations',
-    'replyDelay', 'greetingMessageMulti', 'awayMessageMulti',
-    'handoffPauseDurationMinutes', 'commentEscalationMinutes',
-    'messageEscalationMinutes', 'defaultReplyLanguage',
-    'supportedLanguages', 'autoDetectLanguage',
-    'replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti', 'holdLowConfidence',
-] as const;
+import { PIPELINE_FIELDS } from '../services/pipelineFields';
 
 type Stat = { synced: number; skipped: number; errored: number };
 

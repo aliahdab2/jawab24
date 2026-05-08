@@ -6,19 +6,7 @@ import { DEFAULT_HANDOFF_PAUSE_MINUTES, DEFAULT_AI_MODEL } from '@jawab24/shared
 import { redis } from '../lib/redis';
 import { workspaceSettingsService } from './workspaceSettings';
 import { captureError } from '../utils/sentryHelpers';
-
-/** Settings fields consumed by the reply pipeline — synced to workspaceSettings on every save */
-const PIPELINE_FIELDS = [
-    'commentsAutoReply', 'messagesAutoReply', 'businessHoursOnly',
-    'businessHoursStart', 'businessHoursEnd', 'timezone',
-    'aiEnabled', 'aiModel', 'commentReplyMode',
-    'dualReplyNudge', 'dualReplyNudgeMulti', 'dualReplyNudgeVariations',
-    'replyDelay', 'greetingMessageMulti', 'awayMessageMulti',
-    'handoffPauseDurationMinutes', 'commentEscalationMinutes',
-    'messageEscalationMinutes', 'defaultReplyLanguage',
-    'supportedLanguages', 'autoDetectLanguage',
-    'replyStyle', 'brandVoiceNotes', 'brandVoiceNotesMulti', 'holdLowConfidence',
-] as const;
+import { PIPELINE_FIELDS } from './pipelineFields';
 
 /** Cache TTL: 5 minutes. Settings change rarely; staleness is acceptable. */
 const SETTINGS_CACHE_TTL = 300;
