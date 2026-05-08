@@ -5,3 +5,4 @@
 
 export { rateLimiter, RateLimiter, RATE_LIMIT_CONFIG } from './rate-limiter';
 export type { RateLimitType, RateLimitResult } from './rate-limiter';
+export { commentDebounce, CommentDebounce } from './comment-debounce';

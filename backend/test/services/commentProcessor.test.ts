@@ -4,7 +4,7 @@ import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
 import { commentsService } from '../../src/services/comments';
 import { replyGenerator, shouldSkipReply, shouldUseFallback, PRICE_FALLBACK } from '../../src/services/reply/generator';
-import { rateLimiter } from '../../src/services/protection';
+import { rateLimiter, commentDebounce } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { notificationService } from '../../src/services/notifications';
 import { publishSSEEvent } from '../../src/lib/eventBus';
@@ -30,6 +30,11 @@ vi.mock('../../src/services/reply/generator', async (importOriginal) => {
 vi.mock('../../src/services/protection', () => ({
     rateLimiter: {
         check: vi.fn().mockResolvedValue({ allowed: true, count: 1 }),
+        setLogger: vi.fn(),
+    },
+    commentDebounce: {
+        isCoolingDown: vi.fn().mockResolvedValue(false),
+        arm: vi.fn().mockResolvedValue(undefined),
         setLogger: vi.fn(),
     },
 }));
@@ -147,6 +152,8 @@ describe('CommentProcessor', () => {
         // it a resolved promise by default so the .catch() chain doesn't throw in tests.
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
+        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Thank you!',
             replyMethod: 'ai',
@@ -345,6 +352,126 @@ describe('CommentProcessor', () => {
 
         expect(result.success).toBe(false);
         expect(result.error).toBe('Rate limited');
+    });
+
+    describe('per-(page, post, sender) debounce', () => {
+        it('skips with reason=debounced when same sender already replied to on same post within window', async () => {
+            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValueOnce(true);
+            const adapter = createMockAdapter();
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-2', '..', 'from-1', 'Nano',
+            );
+
+            expect(result.success).toBe(true);
+            expect(result.commentId).toBe('comment-uuid');
+            expect(commentDebounce.isCoolingDown).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'from-1');
+            // No AI call, no platform reply, no markAsReplied
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            expect(adapter.markAsReplied).not.toHaveBeenCalled();
+            // Comment IS persisted (so it shows in inbox) and resolved
+            expect(adapter.storeComment).toHaveBeenCalled();
+            expect(commentsService.resolveComment).toHaveBeenCalledWith('comment-uuid');
+            // SSE event with reason=debounced
+            expect(publishSSEEvent).toHaveBeenCalledWith(
+                'user-uuid',
+                'comment:skipped',
+                expect.objectContaining({ commentId: 'comment-uuid', reason: 'debounced' }),
+            );
+            // Metric records as debounce_skipped, NOT skipped_spam
+            const counters = (await pipelineMetrics.getMetrics()).counters;
+            expect(counters['facebook_comment.debounce_skipped']).toBe(1);
+            expect(counters['facebook_comment.skipped_spam']).toBeUndefined();
+        });
+
+        it('a duplicate webhook for the SAME comment_id (after arm) defers to already_replied, not debounced', async () => {
+            // Webhook A successfully replied; arm fired. Webhook B for the same
+            // comment_id arrives — cooldown is hot, BUT storeComment returns the
+            // existing replied=true row. Must hit already_replied, not debounce.
+            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValueOnce(true);
+            const adapter = createMockAdapter({
+                storeComment: vi.fn().mockResolvedValue({
+                    comment: { id: 'comment-uuid', replied: true },
+                    isNew: false,
+                }),
+            });
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1',
+            );
+
+            expect(result.success).toBe(false);
+            expect(result.error).toBe('Comment already replied');
+            // Should NOT emit comment:skipped with reason=debounced
+            const skippedCalls = vi.mocked(publishSSEEvent).mock.calls
+                .filter(c => c[1] === 'comment:skipped');
+            expect(skippedCalls).toHaveLength(0);
+            // Metric: already_replied, not debounce_skipped
+            const counters = (await pipelineMetrics.getMetrics()).counters;
+            expect(counters['facebook_comment.already_replied']).toBe(1);
+            expect(counters['facebook_comment.debounce_skipped']).toBeUndefined();
+        });
+
+        it('keys the cooldown by (page, post, sender) — different sender on same post is not gated', async () => {
+            const adapter = createMockAdapter();
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'sender-A', 'Alice',
+            );
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-2', 'Hello!', 'sender-B', 'Bob',
+            );
+            // arm called with two distinct sender ids — same page, same post
+            expect(commentDebounce.arm).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'sender-A');
+            expect(commentDebounce.arm).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'sender-B');
+        });
+
+        it('arms the cooldown after a successful reply (per page/post/sender)', async () => {
+            const adapter = createMockAdapter();
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1', 'Alice',
+            );
+
+            expect(commentDebounce.arm).toHaveBeenCalledWith('page-uuid', 'content-uuid', 'from-1');
+        });
+
+        it('does not arm the cooldown when fromId is missing', async () => {
+            const adapter = createMockAdapter();
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!',
+                // fromId omitted
+            );
+
+            expect(commentDebounce.arm).not.toHaveBeenCalled();
+        });
+
+        it('does not check the debounce when fromId is missing', async () => {
+            // If we somehow set isCoolingDown=true but fromId is absent, the gate
+            // is skipped entirely — there is nothing to key on.
+            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(true);
+            const adapter = createMockAdapter();
+
+            const result = await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!',
+            );
+
+            expect(commentDebounce.isCoolingDown).not.toHaveBeenCalled();
+            expect(result.success).toBe(true);
+        });
+
+        it('does not check the debounce when comments auto-reply is disabled (settings_disabled path wins)', async () => {
+            vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(true);
+            const adapter = createMockAdapter();
+
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'Hello!', 'from-1',
+            );
+
+            expect(commentDebounce.isCoolingDown).not.toHaveBeenCalled();
+        });
     });
 
     it('should use fallback reply when generator returns null and adapter has fallback', async () => {
@@ -1141,6 +1268,8 @@ describe('CommentProcessor — fromName fallback fetch', () => {
         } as any);
         vi.mocked(messagesService.isPaused).mockResolvedValue(false);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
+        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
             replyText: 'Thank you!',
             replyMethod: 'ai',
@@ -1276,6 +1405,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
         // Default mock so fire-and-forget .catch() chain doesn't blow up
         vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({} as any);
         vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
+        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
 
         // Template match returns the price redirect text (old-style template)
         vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
@@ -1427,6 +1558,8 @@ describe('CommentProcessor — template reply mode behavior', () => {
             vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue(settingsWithMode(mode));
             vi.mocked(messagesService.isPaused).mockResolvedValue(false);
             vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(commentDebounce.isCoolingDown).mockResolvedValue(false);
+        vi.mocked(commentDebounce.arm).mockResolvedValue(undefined);
             vi.mocked(replyGenerator.generateForComment).mockResolvedValue({
                 replyText: 'reply text',
                 replyMethod: 'ai',

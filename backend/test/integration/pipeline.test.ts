@@ -55,6 +55,11 @@ vi.mock('../../src/services/protection', () => ({
         check: vi.fn().mockResolvedValue({ allowed: true, count: 0 }),
         setLogger: vi.fn(),
     },
+    commentDebounce: {
+        isCoolingDown: vi.fn().mockResolvedValue(false),
+        arm: vi.fn().mockResolvedValue(undefined),
+        setLogger: vi.fn(),
+    },
 }));
 
 // Reply generator (AI/template) — return a canned reply

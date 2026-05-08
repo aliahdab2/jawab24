@@ -58,9 +58,11 @@ export interface SSEEventDataMap {
         commentId: string;
         pageId: string;
         /** High-level reason: 'friend_tag' for peer-to-peer user tags,
-         *  'spam' for other silent-skip cases. `flagReason` carries the
-         *  generator-level reason when present. */
-        reason: 'friend_tag' | 'spam' | 'offensive';
+         *  'spam' for other silent-skip cases, 'debounced' when the same
+         *  sender already received an auto-reply on the same post inside
+         *  the cooldown window. `flagReason` carries the generator-level
+         *  reason when present. */
+        reason: 'friend_tag' | 'spam' | 'offensive' | 'debounced';
         flagReason?: string;
     };
     'message:received': {
