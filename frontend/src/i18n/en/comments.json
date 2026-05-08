@@ -100,5 +100,5 @@
   "postTriggerModeKeywordHelp": "Other comments will be answered by Smart Replies.",
   "newBadge": "NEW",
   "postTriggerClearConfirmTitle": "Remove Post Reply?",
-  "postTriggerClearConfirmMessage": "Smart Replies will resume answering comments on this post."
+  "postTriggerClearConfirmMessage": "Comments on this post will no longer receive an automatic Post Reply."
 }

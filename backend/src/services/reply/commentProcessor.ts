@@ -240,7 +240,15 @@ export class CommentProcessor {
             //      For promo posts where every commenter wants the same uniform info.
             // Both respect isCommentsEnabled — if workspace auto-reply is off, triggers are also off.
             // Triggers fire on both top-level comments AND sub-comments.
-            if (content.triggerReply && isCommentsEnabled) {
+            //
+            // Outer condition: triggerReply alone is enough to enter the block. Controller
+            // validation in posts.updateTrigger guarantees triggerReply is only set when
+            // either triggerKeyword or replyToAll is also set, so there is no orphan state
+            // where we'd enter the block with neither scope. If the inner block finds no
+            // scope (e.g. legacy keyword-only row + non-matching comment), we fall through
+            // to AI as before.
+            const triggerReplyText = content.triggerReply?.trim() || null;
+            if (triggerReplyText && isCommentsEnabled) {
                 let triggerScope: 'keyword' | 'all' | null = null;
                 let matchedKeyword: string | undefined;
                 let triggerKeywords: string[] = [];
@@ -292,7 +300,7 @@ export class CommentProcessor {
                         return await this.sendAndFinalize({
                             adapter, platform, pipeline,
                             pageId: page.id, userId, workspaceId,
-                            comment, replyText: content.triggerReply, replyMethod: 'template',
+                            comment, replyText: triggerReplyText, replyMethod: 'template',
                             commentMessage, platformCommentId, platformPageId,
                             accessToken: page.accessToken, fromId, fromName,
                             userSettings: userSettings as unknown as Record<string, unknown>,

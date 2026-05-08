@@ -1751,6 +1751,34 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(result.success).toBe(true);
         });
 
+        it('replyToAll=true respects per-(page, post, sender) debounce — second comment from same sender no-ops', async () => {
+            vi.mocked(commentDebounce.isCoolingDown).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+
+            const adapter = createMockAdapter({
+                findOrCreateContent: vi.fn().mockResolvedValue({
+                    id: 'content-uuid',
+                    autoReplyEnabled: true,
+                    message: 'Post body',
+                    triggerKeyword: null,
+                    triggerReply: 'اتصل بنا: 0935924472',
+                    replyToAll: true,
+                }),
+            });
+
+            // First comment from sender → reply sent
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-1', 'مرحبا', 'sender-1', 'Ali',
+            );
+            expect(adapter.sendReply).toHaveBeenCalledTimes(1);
+
+            // Second comment from same sender (debounce now active) → no reply
+            await commentProcessor.processComment(
+                adapter, 'page-1', 'content-1', 'comment-2', 'سؤال آخر', 'sender-1', 'Ali',
+            );
+            expect(adapter.sendReply).toHaveBeenCalledTimes(1);
+            expect(replyGenerator.generateForComment).not.toHaveBeenCalled();
+        });
+
         it('replyToAll=true is gated by isCommentsEnabled — when comments auto-reply is off, no reply is sent', async () => {
             vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
                 id: 'settings-uuid',

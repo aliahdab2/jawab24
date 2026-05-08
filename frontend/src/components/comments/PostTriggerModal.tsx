@@ -35,11 +35,12 @@ export function PostTriggerModal({
 }: PostTriggerModalProps) {
   const t = useTranslations('comments');
 
-  // Default mode: 'all' for new posts (the simpler, primary use case).
-  // Existing rows that had a keyword set load in 'keyword' mode.
+  // Default mode: 'keyword' for new posts. The "all" mode disables Smart Replies
+  // for the post, which is the more destructive choice — merchants must opt into
+  // it consciously. Existing rows load with whichever mode their data implies.
   const initialMode: ReplyMode = initialReplyToAll
     ? 'all'
-    : (initialKeyword ? 'keyword' : 'all');
+    : 'keyword';
 
   const [mode, setMode] = useState<ReplyMode>(initialMode);
   const [keywords, setKeywords] = useState<string[]>(() => parseKeywords(initialKeyword));
@@ -49,7 +50,7 @@ export function PostTriggerModal({
   // Sync when modal opens with fresh values
   useEffect(() => {
     if (isOpen) {
-      setMode(initialReplyToAll ? 'all' : (initialKeyword ? 'keyword' : 'all'));
+      setMode(initialReplyToAll ? 'all' : 'keyword');
       setKeywords(parseKeywords(initialKeyword));
       setReply(initialReply ?? '');
     }

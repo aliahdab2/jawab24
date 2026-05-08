@@ -100,5 +100,5 @@
   "postTriggerModeKeywordHelp": "التعليقات الأخرى سيجيب عليها نظام الردود الذكية.",
   "newBadge": "جديد",
   "postTriggerClearConfirmTitle": "إزالة رد البوست؟",
-  "postTriggerClearConfirmMessage": "ستعود الردود الذكية للإجابة على التعليقات في هذا البوست."
+  "postTriggerClearConfirmMessage": "لن يتم إرسال أي رد تلقائي مخصص للبوست على التعليقات بعد الآن."
 }
