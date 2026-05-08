@@ -3,11 +3,26 @@ import { WorkspaceSettingsService } from '../../src/services/workspaceSettings';
 
 // ── Mocks ─────────────────────────────────────────────────────────────────────
 
+const { mockCaptureError } = vi.hoisted(() => ({
+    mockCaptureError: vi.fn(),
+}));
+
 vi.mock('../../src/db', () => ({
     db: {
         select: vi.fn(),
         update: vi.fn(),
     },
+}));
+
+vi.mock('../../src/db/schema', () => ({
+    workspaces: { id: 'id', settings: 'settings', updatedAt: 'updated_at' },
+    workspaceMembers: { workspaceId: 'workspace_id', userId: 'user_id', role: 'role' },
+    settings: { userId: 'user_id' },
+}));
+
+vi.mock('drizzle-orm', () => ({
+    eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+    and: vi.fn((...args: unknown[]) => ({ args, op: 'and' })),
 }));
 
 vi.mock('../../src/lib/redis', () => ({
@@ -18,29 +33,80 @@ vi.mock('../../src/lib/redis', () => ({
     },
 }));
 
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: mockCaptureError,
+}));
+
 import { db } from '../../src/db';
 import { redis } from '../../src/lib/redis';
 
-function mockDbSelect(result: unknown) {
-    const chain: any = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue(result),
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Build a single-call db.select chain returning the given rows. */
+function buildSelectChain(rows: unknown[]) {
+    return {
+        from: vi.fn().mockReturnValue({
+            where: vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue(rows),
+            }),
+        }),
     };
-    vi.mocked(db.select).mockReturnValue(chain);
-    return chain;
+}
+
+/**
+ * Set up db.select to return results in sequence:
+ *   calls[0] → workspaces fetch
+ *   calls[1] → workspaceMembers owner lookup     (optional)
+ *   calls[2] → settings legacy row lookup        (optional)
+ */
+function mockDbSelectSequence(...rowSets: unknown[][]) {
+    let callIndex = 0;
+    vi.mocked(db.select).mockImplementation(() => {
+        const rows = rowSets[callIndex] ?? [];
+        callIndex++;
+        return buildSelectChain(rows) as any;
+    });
 }
 
 function mockDbUpdate() {
-    const chain: any = {
-        set: vi.fn().mockReturnThis(),
-        where: vi.fn().mockResolvedValue([]),
-    };
-    vi.mocked(db.update).mockReturnValue(chain);
-    return chain;
+    const setMock = vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue(undefined),
+    });
+    vi.mocked(db.update).mockReturnValue({ set: setMock } as any);
+    return { set: setMock };
 }
 
+/** A complete workspace JSONB that satisfies all pipeline fields so drift is NOT triggered. */
+const FULL_JSONB = {
+    commentsAutoReply: true,
+    messagesAutoReply: true,
+    businessHoursOnly: false,
+    businessHoursStart: '09:00',
+    businessHoursEnd: '18:00',
+    timezone: 'Asia/Damascus',
+    aiEnabled: true,
+    aiModel: 'gpt-4o-mini',
+    commentReplyMode: 'public',
+    dualReplyNudge: '',
+    dualReplyNudgeMulti: {},
+    dualReplyNudgeVariations: {},
+    replyDelay: 0,
+    greetingMessageMulti: {},
+    awayMessageMulti: {},
+    handoffPauseDurationMinutes: 30,
+    commentEscalationMinutes: 60,
+    messageEscalationMinutes: 30,
+    defaultReplyLanguage: 'ar',
+    supportedLanguages: ['en', 'ar'],
+    autoDetectLanguage: true,
+    replyStyle: 'professional',
+    brandVoiceNotes: '',
+    brandVoiceNotesMulti: {},
+    holdLowConfidence: false,
+};
+
 const WS_ID = 'ws-test-123';
+const OWNER_ID = 'user-owner-456';
 
 describe('WorkspaceSettingsService', () => {
     let service: WorkspaceSettingsService;
@@ -64,7 +130,8 @@ describe('WorkspaceSettingsService', () => {
 
         it('fetches from DB when cache is empty and merges with defaults', async () => {
             vi.mocked(redis.get).mockResolvedValueOnce(null);
-            mockDbSelect([{ settings: { aiEnabled: false } }]);
+            // Workspace has full JSONB — no drift triggered (only 1 db.select call)
+            mockDbSelectSequence([{ settings: { ...FULL_JSONB, aiEnabled: false } }]);
 
             const result = await service.getSettings(WS_ID);
 
@@ -76,7 +143,7 @@ describe('WorkspaceSettingsService', () => {
 
         it('returns full defaults when workspace not found in DB', async () => {
             vi.mocked(redis.get).mockResolvedValueOnce(null);
-            mockDbSelect([]);
+            mockDbSelectSequence([]); // workspace not found
 
             const result = await service.getSettings(WS_ID);
 
@@ -88,7 +155,7 @@ describe('WorkspaceSettingsService', () => {
 
         it('falls through to DB when Redis throws', async () => {
             vi.mocked(redis.get).mockRejectedValueOnce(new Error('Redis down'));
-            mockDbSelect([{ settings: { replyDelay: 5 } }]);
+            mockDbSelectSequence([{ settings: { ...FULL_JSONB, replyDelay: 5 } }]);
 
             const result = await service.getSettings(WS_ID);
 
@@ -97,7 +164,7 @@ describe('WorkspaceSettingsService', () => {
 
         it('populates cache after DB fetch', async () => {
             vi.mocked(redis.get).mockResolvedValueOnce(null);
-            mockDbSelect([{ settings: {} }]);
+            mockDbSelectSequence([{ settings: FULL_JSONB }]);
 
             await service.getSettings(WS_ID);
 
@@ -110,12 +177,106 @@ describe('WorkspaceSettingsService', () => {
         });
     });
 
+    // ── drift detection ───────────────────────────────────────────────────
+    describe('getSettings — drift detection', () => {
+        it('recovers missing pipeline field from legacy owner row and triggers write-back', async () => {
+            vi.mocked(redis.get).mockResolvedValueOnce(null);
+            // Workspace JSONB is missing commentReplyMode (and many other pipeline fields)
+            const partialJsonb = { ...FULL_JSONB };
+            delete (partialJsonb as any).commentReplyMode;
+
+            mockDbSelectSequence(
+                [{ settings: partialJsonb }],               // workspace fetch
+                [{ userId: OWNER_ID }],                     // owner lookup
+                [{ commentReplyMode: 'dual' }],             // legacy settings row
+            );
+            const { set: setMock } = mockDbUpdate();
+
+            const result = await service.getSettings(WS_ID);
+
+            // Recovered value returned
+            expect(result.commentReplyMode).toBe('dual');
+            // Write-back was triggered with the merged JSONB
+            expect(db.update).toHaveBeenCalled();
+            expect(setMock).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    settings: expect.objectContaining({ commentReplyMode: 'dual' }),
+                }),
+            );
+        });
+
+        it('skips write-back when JSONB already contains all pipeline fields', async () => {
+            vi.mocked(redis.get).mockResolvedValueOnce(null);
+            // Full JSONB — drift detection short-circuits (missing.length === 0)
+            mockDbSelectSequence([{ settings: FULL_JSONB }]);
+
+            await service.getSettings(WS_ID);
+
+            // Only 1 db.select call (workspace) — no owner/legacy lookups
+            expect(vi.mocked(db.select)).toHaveBeenCalledTimes(1);
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
+        it('returns defaults without write when workspace_members has no owner row', async () => {
+            vi.mocked(redis.get).mockResolvedValueOnce(null);
+            const partialJsonb = { ...FULL_JSONB };
+            delete (partialJsonb as any).commentReplyMode;
+
+            mockDbSelectSequence(
+                [{ settings: partialJsonb }],  // workspace fetch
+                [],                             // no owner found
+            );
+
+            const result = await service.getSettings(WS_ID);
+
+            // Falls back to DEFAULTS for missing field
+            expect(result.commentReplyMode).toBe('public');
+            expect(db.update).not.toHaveBeenCalled();
+        });
+
+        it('captures error and returns DEFAULTS when detectLegacyDrift throws', async () => {
+            vi.mocked(redis.get).mockResolvedValueOnce(null);
+            const partialJsonb = { ...FULL_JSONB };
+            delete (partialJsonb as any).commentReplyMode;
+
+            // First call (workspace) succeeds; second call (owner lookup) throws
+            let callIndex = 0;
+            vi.mocked(db.select).mockImplementation(() => {
+                callIndex++;
+                if (callIndex === 1) {
+                    return buildSelectChain([{ settings: partialJsonb }]) as any;
+                }
+                // Drift detection inner query throws
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockRejectedValue(new Error('DB timeout')),
+                        }),
+                    }),
+                } as any;
+            });
+
+            const result = await service.getSettings(WS_ID);
+
+            // Error captured via captureError
+            expect(mockCaptureError).toHaveBeenCalledWith(
+                expect.any(Error),
+                'workspaceSettings drift detection failed',
+                expect.objectContaining({ tags: { service: 'workspace-settings', action: 'drift-detect' } }),
+            );
+            // getSettings did NOT throw — fell back to defaults for missing field
+            expect(result.commentReplyMode).toBe('public');
+            // No write attempted
+            expect(db.update).not.toHaveBeenCalled();
+        });
+    });
+
     // ── updateSettings ────────────────────────────────────────────────────
     describe('updateSettings', () => {
         it('merges updates with existing settings and invalidates cache', async () => {
-            // First call is getSettings (inside updateSettings)
+            // First call is getSettings (inside updateSettings) — full JSONB to avoid drift
             vi.mocked(redis.get).mockResolvedValueOnce(null);
-            mockDbSelect([{ settings: { aiEnabled: true, replyDelay: 0 } }]);
+            mockDbSelectSequence([{ settings: { ...FULL_JSONB, aiEnabled: true, replyDelay: 0 } }]);
             mockDbUpdate();
 
             const result = await service.updateSettings(WS_ID, { replyDelay: 10 });
