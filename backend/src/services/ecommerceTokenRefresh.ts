@@ -69,13 +69,13 @@ export async function refreshAccessToken(storeId: string, cfg: TokenRefreshConfi
         const response = await tracedExternalCall(cfg.platform, 'refreshAccessToken', () =>
             fetch(cfg.tokenEndpointUrl, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({
                     grant_type: 'refresh_token',
                     refresh_token: refreshToken,
                     client_id: cfg.clientId,
                     client_secret: cfg.clientSecret,
-                }),
+                }).toString(),
             }),
         );
 
