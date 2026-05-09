@@ -74,7 +74,7 @@ export interface Message {
   direction: 'incoming' | 'outgoing';
   replied: boolean;
   replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | null;
+  replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | null;
   createdAt: string | Date | null;
   createdTime?: string | Date | null;
   repliedAt?: string | Date | null;
@@ -96,7 +96,7 @@ export interface Comment {
   fromId?: string | null;
   replied: boolean | null;
   replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | string | null;
+  replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | string | null;
   detectedLanguage: string | null;
   pageId: string | null;
   createdAt: string | Date | null;
@@ -193,7 +193,7 @@ export interface InstagramComment {
   fromUsername?: string | null;
   replied: boolean | null;
   replyText?: string | null;
-  replyMethod?: 'template' | 'ai' | 'manual' | null;
+  replyMethod?: 'template' | 'ai' | 'manual' | 'post_reply' | null;
   detectedLanguage?: string | null;
   createdTime?: string | Date | null;
   repliedAt?: string | Date | null;
@@ -405,7 +405,7 @@ export interface ReplyJobResult {
   skipped?: boolean;
   reason?: string;
   replyText?: string;
-  replyMethod?: 'template' | 'ai';
+  replyMethod?: 'template' | 'ai' | 'post_reply';
   error?: string;
   needsAttention?: boolean;
   flagReason?: string;

@@ -83,7 +83,7 @@ export interface MessagePlatformAdapter {
     markAsReplied(
         messageId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual',
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,

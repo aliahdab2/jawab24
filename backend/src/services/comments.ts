@@ -63,7 +63,7 @@ export class CommentsService {
      */
     async getCommentsByWorkspace(workspaceId: string, options?: {
         replied?: boolean;
-        replyMethod?: 'ai' | 'template' | 'manual';  // Filter by reply method
+        replyMethod?: 'ai' | 'template' | 'manual' | 'post_reply';  // Filter by reply method
         needsAttention?: boolean;  // Filter by needsAttention flag
         resolved?: boolean;  // Filter by resolved status
         actionRequired?: boolean;  // Composite: (unreplied & unresolved) OR (needsAttention & unresolved)
@@ -329,7 +329,7 @@ export class CommentsService {
     async markAsReplied(
         commentId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual',
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
         replyLanguage?: string,
         needsAttention?: boolean,
         flagReason?: string,
@@ -474,6 +474,7 @@ export class CommentsService {
                 ai:             sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'manual')`,
+                postReply:      sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} = 'post_reply')`,
             })
                 .from(comments)
                 .innerJoin(posts, eq(comments.postId, posts.id))
@@ -491,6 +492,7 @@ export class CommentsService {
                 ai:             sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'ai')`,
                 template:       sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'template')`,
                 manual:         sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'manual')`,
+                postReply:      sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} = 'post_reply')`,
             })
                 .from(instagramComments)
                 .innerJoin(instagramMedia, eq(instagramComments.mediaId, instagramMedia.id))
@@ -507,7 +509,7 @@ export class CommentsService {
             return {
                 total: 0, replied: 0, unreplied: 0, needsAttention: 0, actionRequired: 0,
                 resolved: 0, repliedToday: 0, replyRate: '0',
-                byMethod: { template: 0, ai: 0, manual: 0 },
+                byMethod: { template: 0, ai: 0, manual: 0, postReply: 0 },
             };
         }
 
@@ -518,9 +520,10 @@ export class CommentsService {
         const repliedToday = Number(fb?.repliedToday || 0) + Number(ig?.repliedToday || 0);
 
         const byMethod = {
-            template: Number(fb?.template || 0) + Number(ig?.template || 0),
-            ai:       Number(fb?.ai || 0)       + Number(ig?.ai || 0),
-            manual:   Number(fb?.manual || 0)   + Number(ig?.manual || 0),
+            template:  Number(fb?.template || 0)  + Number(ig?.template || 0),
+            ai:        Number(fb?.ai || 0)        + Number(ig?.ai || 0),
+            manual:    Number(fb?.manual || 0)    + Number(ig?.manual || 0),
+            postReply: Number(fb?.postReply || 0) + Number(ig?.postReply || 0),
         };
 
         // unreplied excludes resolved comments (they don't need action)

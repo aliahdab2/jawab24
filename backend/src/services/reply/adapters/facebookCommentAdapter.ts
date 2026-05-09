@@ -94,7 +94,7 @@ export class FacebookCommentAdapter implements CommentPlatformAdapter {
     async markAsReplied(
         commentId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual',
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
         detectedLanguage: string,
         needsAttention?: boolean,
         flagReason?: string,

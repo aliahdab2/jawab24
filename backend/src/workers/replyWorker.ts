@@ -60,7 +60,7 @@ async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobR
     return {
         success: result.success,
         replyText: result.replyText,
-        replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
+        replyMethod: result.replyMethod as 'template' | 'ai' | 'post_reply' | undefined,
         error: result.error,
         handoffDelayMs: result.handoffDelayMs,
     };
@@ -93,7 +93,7 @@ async function processMessageJob(
     return {
         success: result.success,
         replyText: result.replyText,
-        replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
+        replyMethod: result.replyMethod as 'template' | 'ai' | 'post_reply' | undefined,
         error: result.error,
         handoffDelayMs: result.handoffDelayMs,
     };
@@ -128,7 +128,7 @@ async function processInstagramComment(job: Job<ReplyJobData>): Promise<ReplyJob
     return {
         success: result.success,
         replyText: result.replyText,
-        replyMethod: result.replyMethod as 'template' | 'ai' | undefined,
+        replyMethod: result.replyMethod as 'template' | 'ai' | 'post_reply' | undefined,
         error: result.error,
         handoffDelayMs: result.handoffDelayMs,
     };

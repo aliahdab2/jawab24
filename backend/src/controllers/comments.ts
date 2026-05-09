@@ -27,7 +27,7 @@ export class CommentsController {
             cursor?: string;
             limit?: string;
             replied?: string;
-            replyMethod?: 'ai' | 'template' | 'manual';
+            replyMethod?: 'ai' | 'template' | 'manual' | 'post_reply';
             needsAttention?: string;
             resolved?: string;
             actionRequired?: string;
@@ -41,7 +41,7 @@ export class CommentsController {
             const options = {
                 ...(cursor && { cursor }),
                 ...(limit !== undefined && { limit: parseLimit(limit) }),
-                ...(replyMethod && ['ai', 'template', 'manual'].includes(replyMethod) && { replyMethod }),
+                ...(replyMethod && ['ai', 'template', 'manual', 'post_reply'].includes(replyMethod) && { replyMethod }),
                 ...(pageId && { pageId }),
                 ...parseInboxFilters({ replied, resolved, needsAttention, actionRequired }),
             };
