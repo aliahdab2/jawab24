@@ -234,7 +234,7 @@ export const comments = pgTable('comments', {
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
     aiOriginalReply: text('ai_original_reply'),
-    replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
+    replyMethod: varchar('reply_method', { length: 50 }), // 'template' (canned: AI fallback or greeting/away message), 'ai', 'manual', 'post_reply' (per-post keyword trigger)
     detectedLanguage: varchar('detected_language', { length: 10 }),
     replyLanguage: varchar('reply_language', { length: 10 }),
     needsAttention: boolean('needs_attention').default(false),
@@ -279,7 +279,7 @@ export const instagramComments = pgTable('instagram_comments', {
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
     aiOriginalReply: text('ai_original_reply'),
-    replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
+    replyMethod: varchar('reply_method', { length: 50 }), // 'template' (canned: AI fallback or greeting/away message), 'ai', 'manual', 'post_reply' (per-post keyword trigger)
     detectedLanguage: varchar('detected_language', { length: 10 }),
     replyLanguage: varchar('reply_language', { length: 10 }),
     needsAttention: boolean('needs_attention').default(false),
@@ -412,7 +412,7 @@ export const messages = pgTable('messages', {
     replied: boolean('replied').default(false),
     replyText: text('reply_text'),
     aiOriginalReply: text('ai_original_reply'),
-    replyMethod: varchar('reply_method', { length: 50 }), // 'template', 'ai', 'manual'
+    replyMethod: varchar('reply_method', { length: 50 }), // 'template' (canned: AI fallback or greeting/away message), 'ai', 'manual', 'post_reply' (per-post keyword trigger)
     needsAttention: boolean('needs_attention').default(false),
     flagReason: varchar('flag_reason', { length: 255 }),
     flagMeta: jsonb('flag_meta'),

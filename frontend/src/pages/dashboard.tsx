@@ -162,7 +162,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryKey: ['comments-stats'],
     queryFn: async () => {
       const res = await commentsApi.getStats();
-      return res.data || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0 } };
+      return res.data || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
     },
     enabled: isAuthenticated,
   });
@@ -171,7 +171,7 @@ const DashboardPage: NextPageWithLayout = () => {
     queryKey: ['messages-stats'],
     queryFn: async () => {
       const res = await messagesApi.getStats();
-      return res.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
+      return res.data || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
     },
     enabled: isAuthenticated,
   });
@@ -277,8 +277,8 @@ const DashboardPage: NextPageWithLayout = () => {
   const connectedPages = pages.filter(p => p.isConnected !== false);
 
   const statsData = useMemo(() => {
-    const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0 } };
-    const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0 } };
+    const stats = commentStats || { total: 0, replied: 0, unreplied: 0, needsAttention: 0, repliedToday: 0, replyRate: '0.0', byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
+    const msgStats = messageStats || { total: 0, replied: 0, pending: 0, needsAttention: 0, repliedToday: 0, byMethod: { ai: 0, template: 0, manual: 0, postReply: 0 } };
     const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled).length;
 
     // Tooltip breakdown: only pass values when BOTH endpoints succeeded, so a
@@ -292,7 +292,7 @@ const DashboardPage: NextPageWithLayout = () => {
       commentsNeedsAction: Math.max(0, stats.needsAttention ?? 0),
       activePages,
       aiReplies: stats.byMethod.ai + (msgStats.byMethod?.ai ?? 0),
-      postReplies: stats.byMethod.template + (msgStats.byMethod?.template ?? 0),
+      postReplies: (stats.byMethod.postReply ?? 0) + (msgStats.byMethod?.postReply ?? 0),
       messagesNeedsAction: Math.max(0, msgStats.needsAttention ?? 0),
     };
   }, [commentStats, messageStats, pages]);
@@ -554,7 +554,7 @@ const DashboardPage: NextPageWithLayout = () => {
 
       {/* Command Center — consolidated metrics */}
       <CommandCenter
-        smartReplies={((analytics?.byMethod?.ai ?? 0) + (analytics?.byMethod?.template ?? 0)) || (statsData.aiReplies + statsData.postReplies)}
+        smartReplies={analytics?.byMethod?.ai ?? statsData.aiReplies}
         repliedToday={statsData.repliedToday}
         commentsRepliedToday={statsData.commentsRepliedToday}
         messagesRepliedToday={statsData.messagesRepliedToday}

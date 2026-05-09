@@ -460,6 +460,60 @@ describe('Comment Pipeline — Integration (real Postgres)', () => {
     });
 
     // =========================================================
+    // Post Reply (per-post keyword trigger): persists reply_method='post_reply',
+    // not 'template'. The dashboard 'Smart Replies' counter sums only ai —
+    // bucketing trigger sends as 'template' would conflate them with AI fallbacks
+    // and contradict the AI quota-exhausted banner.
+    // =========================================================
+    it('persists reply_method="post_reply" when a post-reply trigger keyword matches, and skips AI generation', async () => {
+        const platformPostId = 'post-fb-trigger-001';
+        const platformCommentId = 'comment-fb-trigger-001';
+        const triggerReplyText = 'Check the catalog at example.com/shop';
+
+        // Pre-create the post with trigger keyword + reply configured.
+        // Post stamps its DB id from the platform id via the adapter's findOrCreateContent.
+        const post = await insertPost(pageId, {
+            facebookPostId: platformPostId,
+            triggerKeyword: 'price, info',
+            triggerReply: triggerReplyText,
+        });
+
+        // Override findOrCreateContent so the mock adapter forwards the trigger
+        // fields (the real adapter does this in production; the default test
+        // helper omits them).
+        const adapter = createMockAdapter(platformPage, {
+            findOrCreateContent: vi.fn(async (): Promise<ContentEntity> => ({
+                id: post.id,
+                autoReplyEnabled: true,
+                message: post.message,
+                triggerKeyword: post.triggerKeyword,
+                triggerReply: post.triggerReply,
+            })),
+        });
+
+        const result = await processor.processComment(
+            adapter, facebookPageId, platformPostId, platformCommentId,
+            'price please', fromId, fromName,
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyText).toBe(triggerReplyText);
+        // Trigger path bypasses AI generator entirely
+        expect(mockGenerateForComment).not.toHaveBeenCalled();
+
+        const [row] = await testDb
+            .select()
+            .from(comments)
+            .where(eq(comments.facebookCommentId, platformCommentId));
+        expect(row).toBeDefined();
+        expect(row.replied).toBe(true);
+        expect(row.replyText).toBe(triggerReplyText);
+        // Critical: 'post_reply' (not 'template') so dashboard analytics can
+        // tell trigger sends apart from AI fallbacks.
+        expect(row.replyMethod).toBe('post_reply');
+    });
+
+    // =========================================================
     // Per-(page, post, sender) auto-reply debounce
     // (real Postgres + real commentsService; isCoolingDown mocked
     // to flip true on the second call from the same sender)

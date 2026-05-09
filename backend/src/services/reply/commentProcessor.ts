@@ -281,7 +281,7 @@ export class CommentProcessor {
                         return await this.sendAndFinalize({
                             adapter, platform, pipeline,
                             pageId: page.id, userId, workspaceId,
-                            comment, replyText: content.triggerReply, replyMethod: 'template',
+                            comment, replyText: content.triggerReply, replyMethod: 'post_reply',
                             commentMessage, platformCommentId, platformPageId,
                             accessToken: page.accessToken, fromId, fromName,
                             userSettings: userSettings as unknown as Record<string, unknown>,
@@ -584,7 +584,7 @@ export class CommentProcessor {
         workspaceId: string;
         comment: { id: string };
         replyText: string;
-        replyMethod: 'template' | 'ai';
+        replyMethod: 'template' | 'ai' | 'post_reply';
         commentMessage: string;
         platformCommentId: string;
         platformPageId: string;
@@ -665,7 +665,7 @@ export class CommentProcessor {
         if (sendResult.dmRecipientId) {
             messagesService.storeOutgoingMessage(
                 pageId, workspaceId, sendResult.dmRecipientId, replyText,
-                replyMethod as 'template' | 'ai' | 'manual',
+                replyMethod as 'template' | 'ai' | 'manual' | 'post_reply',
                 undefined, fromName, contentId,
             )
                 .catch(err => this.logger.error('[CommentProcessor] Failed to store outgoing DM', { err, pageId, fromId }));
@@ -687,7 +687,7 @@ export class CommentProcessor {
         publishSSEEvent(userId, 'comment:reply_sent', {
             commentId: comment.id,
             pageId,
-            replyMethod: replyMethod as 'template' | 'ai',
+            replyMethod: replyMethod as 'template' | 'ai' | 'post_reply',
             replyText,
             senderName: fromName ?? null,
         });

@@ -247,9 +247,14 @@ async function queryReplyStats(storeId: string, since: Date): Promise<ReplyStats
     const stats: ReplyStats = { totalReplies: 0, aiReplies: 0, postReplies: 0, manualReplies: 0 };
     for (const row of rows) {
         stats.totalReplies += row.count;
-        if (row.replyMethod === 'ai') stats.aiReplies = row.count;
-        else if (row.replyMethod === 'template') stats.postReplies = row.count;
-        else if (row.replyMethod === 'manual') stats.manualReplies = row.count;
+        if (row.replyMethod === 'ai') stats.aiReplies += row.count;
+        // Bucket 'template' alongside 'post_reply' so historical pre-migration DMs
+        // (which stored Post Reply trigger sends as 'template') keep counting here.
+        // Post-migration the messages-table backfill flips reliable matches to
+        // 'post_reply'; the residual 'template' rows are low-signal but still belong
+        // closer to "auto-reply" than dropped on the floor.
+        else if (row.replyMethod === 'post_reply' || row.replyMethod === 'template') stats.postReplies += row.count;
+        else if (row.replyMethod === 'manual') stats.manualReplies += row.count;
     }
     return stats;
 }
