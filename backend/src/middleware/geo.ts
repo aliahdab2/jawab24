@@ -1,4 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import { env } from '../utils/env';
 import type { GeoLocation } from '../utils/sanctions';
 
 /**
@@ -12,18 +13,22 @@ declare module 'fastify' {
 
 /**
  * Geolocation Middleware
- * 
- * Extracts geographic location (country/region) from request headers
- * and attaches it to the request object for use in sanctions checking.
- * 
- * Priority order:
- * 1. Cloudflare headers (CF-IPCountry)
- * 2. Vercel headers (x-vercel-ip-country)
- * 3. Custom geo headers (X-Geo-Country, X-Geo-Region)
- * 4. Fallback: mark as unknown
- * 
- * Note: IP-based geolocation fallback (MaxMind, IP-API) can be added later.
+ *
+ * Resolves the request's country/region for sanctions enforcement.
+ *
+ * SECURITY: Geo headers (cf-ipcountry, x-vercel-ip-country, x-geo-country) are
+ * trivially spoofable by any client. They are ONLY consulted when
+ * TRUSTED_GEO_HEADER_SOURCE explicitly names the active upstream proxy AND
+ * that proxy is known to strip inbound copies before setting its own header.
+ * Default behavior: ignore all geo headers, resolve from request.ip via
+ * geoip-lite. nginx must also strip these headers (defense in depth).
  */
+const HEADER_BY_SOURCE: Record<NonNullable<typeof env.TRUSTED_GEO_HEADER_SOURCE>, { country: string; region?: string }> = {
+    cloudflare: { country: 'cf-ipcountry' },
+    vercel: { country: 'x-vercel-ip-country' },
+    nginx: { country: 'x-geo-country', region: 'x-geo-region' },
+};
+
 export async function geoMiddleware(request: FastifyRequest, _reply: FastifyReply) {
     const geo: GeoLocation = {
         country: undefined,
@@ -31,37 +36,26 @@ export async function geoMiddleware(request: FastifyRequest, _reply: FastifyRepl
         source: 'unknown',
     };
 
-    // Priority 1: Cloudflare headers
-    const cfCountry = request.headers['cf-ipcountry'] as string | undefined;
-    if (cfCountry && cfCountry !== 'XX' && cfCountry !== 'T1') {
-        geo.country = cfCountry;
-        geo.source = 'cloudflare';
-        request.geo = geo;
-        return;
+    // Trusted-proxy header path. Only enabled when env explicitly opts in.
+    const trustedSource = env.TRUSTED_GEO_HEADER_SOURCE;
+    if (trustedSource) {
+        const headerNames = HEADER_BY_SOURCE[trustedSource];
+        const country = request.headers[headerNames.country] as string | undefined;
+        // Cloudflare uses 'XX' for unknown, 'T1' for Tor — treat as unresolved.
+        if (country && country !== 'XX' && country !== 'T1') {
+            geo.country = country;
+            geo.source = trustedSource;
+            if (headerNames.region) {
+                geo.region = request.headers[headerNames.region] as string | undefined;
+            }
+            request.geo = geo;
+            return;
+        }
     }
 
-    // Priority 2: Vercel headers
-    const vercelCountry = request.headers['x-vercel-ip-country'] as string | undefined;
-    if (vercelCountry) {
-        geo.country = vercelCountry;
-        geo.source = 'vercel';
-        request.geo = geo;
-        return;
-    }
-
-    // Priority 3: Custom geo headers (from nginx or other proxy)
-    const customCountry = request.headers['x-geo-country'] as string | undefined;
-    const customRegion = request.headers['x-geo-region'] as string | undefined;
-    if (customCountry) {
-        geo.country = customCountry;
-        geo.region = customRegion;
-        geo.source = 'nginx';
-        request.geo = geo;
-        return;
-    }
-
-    // Priority 4: IP-based geolocation fallback (Local GeoIP Database)
-    // Using geoip-lite for fast, local, offline resolution
+    // IP-based resolution via local GeoIP database. request.ip is the
+    // X-Forwarded-For-resolved client IP because Fastify is configured with
+    // trustProxy: true and nginx sets X-Real-IP / X-Forwarded-For.
     const ip = request.ip;
     if (ip && ip !== '127.0.0.1' && ip !== '::1') {
         const geoipModule = await import('geoip-lite');
@@ -77,39 +71,29 @@ export async function geoMiddleware(request: FastifyRequest, _reply: FastifyRepl
         }
     }
 
-    // Attach geo to request (possibly unknown if IP lookup failed)
     request.geo = geo;
 
-    // Log geo resolution for debugging (only in development)
     if (process.env.NODE_ENV === 'development') {
         request.log.debug({
             geo,
             ip: request.ip,
-            headers: {
-                cfCountry,
-                vercelCountry,
-                customCountry,
-                customRegion,
-            },
+            trustedSource: trustedSource ?? null,
         }, 'Geo resolution completed');
     }
 }
 
 /**
  * Safe-by-default: Should we block payments for unknown geo?
- * 
+ *
  * If geo cannot be resolved reliably, we default to blocking Stripe payments
  * for safety. This prevents potential sanctions violations.
- * 
+ *
  * @param geo - GeoLocation object
  * @returns true if payments should be blocked due to unknown geo
  */
 export function shouldBlockUnknownGeo(geo?: GeoLocation): boolean {
-    // If no geo object or no country, treat as unknown
     if (!geo || !geo.country) {
         return true;
     }
-
-    // If country is present, allow (sanctions check will be done separately)
     return false;
 }

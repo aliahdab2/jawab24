@@ -1,8 +1,19 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { geoMiddleware } from '../../src/middleware/geo';
 import { isSanctionedGeo } from '../../src/utils/sanctions';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// env.ts validates at import time and reads TRUSTED_GEO_HEADER_SOURCE once.
+// Tests need to swap the value, so we mock the module.
+let mockedTrustedSource: 'cloudflare' | 'vercel' | 'nginx' | undefined;
+vi.mock('../../src/utils/env', () => ({
+    get env() {
+        return { TRUSTED_GEO_HEADER_SOURCE: mockedTrustedSource };
+    },
+}));
+
+// Dynamic import so the mock is in place before geo.ts evaluates.
+const { geoMiddleware } = await import('../../src/middleware/geo');
 
 // Mock Fastify Request and Reply
 const createMockRequest = (ip: string, headers: Record<string, string | string[] | undefined> = {}) => ({
@@ -19,6 +30,12 @@ const createMockRequest = (ip: string, headers: Record<string, string | string[]
 const createMockReply = () => ({} as FastifyReply);
 
 describe('Geo Middleware & Sanctions (Real IP Examples)', () => {
+    beforeEach(() => {
+        mockedTrustedSource = undefined;
+    });
+    afterEach(() => {
+        mockedTrustedSource = undefined;
+    });
 
     it('should correctly identify Sweden IP (NOT sanctioned)', async () => {
         // IP from Stockholm, Sweden
@@ -85,16 +102,48 @@ describe('Geo Middleware & Sanctions (Real IP Examples)', () => {
         expect(isSanctionedGeo({ country: 'IR' })).toBe(true);
     });
 
-    it('should prioritize Cloudflare headers over IP', async () => {
-        const req = createMockRequest('193.10.252.19', { // Sweden IP
-            'cf-ipcountry': 'US' // Header says US
+    it('should IGNORE spoofable cf-ipcountry header when TRUSTED_GEO_HEADER_SOURCE is unset', async () => {
+        // SECURITY: This is the regression guard for the OFAC bypass.
+        // An attacker in a sanctioned region would set cf-ipcountry: US
+        // hoping the backend trusts it. Without explicit env opt-in we must not.
+        mockedTrustedSource = undefined;
+        const req = createMockRequest('185.17.20.10', { // Syria IP
+            'cf-ipcountry': 'US', // Spoofed header
         });
         const reply = createMockReply();
 
         await geoMiddleware(req, reply);
 
-        expect(req.geo?.country).toBe('US'); // Should trust Header
+        // Header is ignored; resolution falls back to IP-based geoip-lite.
+        expect(req.geo?.source).not.toBe('cloudflare');
+        expect(req.geo?.country).not.toBe('US');
+    });
+
+    it('should trust cf-ipcountry header only when TRUSTED_GEO_HEADER_SOURCE=cloudflare', async () => {
+        mockedTrustedSource = 'cloudflare';
+        const req = createMockRequest('193.10.252.19', { // Sweden IP
+            'cf-ipcountry': 'US',
+        });
+        const reply = createMockReply();
+
+        await geoMiddleware(req, reply);
+
+        expect(req.geo?.country).toBe('US');
         expect(req.geo?.source).toBe('cloudflare');
+    });
+
+    it('should ignore x-geo-country header when TRUSTED_GEO_HEADER_SOURCE=cloudflare (mismatched proxy)', async () => {
+        mockedTrustedSource = 'cloudflare';
+        const req = createMockRequest('193.10.252.19', {
+            'x-geo-country': 'US',
+        });
+        const reply = createMockReply();
+
+        await geoMiddleware(req, reply);
+
+        // Only the source named in the env var is consulted.
+        expect(req.geo?.source).not.toBe('cloudflare');
+        expect(req.geo?.source).not.toBe('nginx');
     });
 
     it('should handle localhost/private IPs gracefully', async () => {
