@@ -317,9 +317,15 @@ describe('CommentDetailModal', () => {
       expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
-    it('shows Preset Reply label for historical template replies', () => {
-      renderModal({ comment: makeReplied('template') });
+    it('shows Post Reply label for post_reply replies', () => {
+      renderModal({ comment: makeReplied('post_reply') });
       expect(screen.getByText('Post Reply')).toBeInTheDocument();
+    });
+
+    it('shows Auto reply label for template (AI fallback) replies', () => {
+      renderModal({ comment: makeReplied('template') });
+      expect(screen.getByText('Auto reply')).toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
   });
 

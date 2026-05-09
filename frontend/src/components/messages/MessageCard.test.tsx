@@ -267,7 +267,30 @@ describe('MessageCard', () => {
   });
 
   describe('reply source indicator', () => {
-    it('shows TEMPLATE REPLY badge for template replies', () => {
+    it('shows POST REPLY badge for post_reply replies', () => {
+      const incoming = makeMessage({ id: '1', direction: 'incoming', message: 'Q' });
+      const outgoing = makeMessage({
+        id: '2',
+        direction: 'outgoing',
+        message: 'A',
+        replyMethod: 'post_reply',
+        createdAt: '2026-02-16T06:05:00Z',
+      });
+
+      render(
+        <MessageCard
+          {...defaultProps}
+          conversation={makeConversation({
+            messages: [incoming, outgoing],
+            lastMessage: outgoing,
+          })}
+        />
+      );
+
+      expect(screen.getByText('Post Reply')).toBeInTheDocument();
+    });
+
+    it('shows AUTO REPLY badge for template (AI fallback) replies', () => {
       const incoming = makeMessage({ id: '1', direction: 'incoming', message: 'Q' });
       const outgoing = makeMessage({
         id: '2',
@@ -287,7 +310,8 @@ describe('MessageCard', () => {
         />
       );
 
-      expect(screen.getByText('Post Reply')).toBeInTheDocument();
+      expect(screen.getByText('Auto reply')).toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('shows SMART REPLY badge for AI replies', () => {

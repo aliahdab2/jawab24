@@ -28,17 +28,25 @@ describe('ReplySourceBadge', () => {
       expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
-    it('renders template badge with Preset Reply label for historical data', () => {
-      render(<ReplySourceBadge method="template" variant="compact" />);
+    it('renders post_reply badge with Post Reply label', () => {
+      render(<ReplySourceBadge method="post_reply" variant="compact" />);
       expect(screen.getByText('Post Reply')).toBeInTheDocument();
+    });
+
+    it('renders template badge with Auto reply label (canned/fallback, not Post Reply)', () => {
+      render(<ReplySourceBadge method="template" variant="compact" />);
+      expect(screen.getByText('Auto reply')).toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('applies the matching color class per method', () => {
       const { container: aiC } = render(<ReplySourceBadge method="ai" variant="compact" />);
       const { container: manualC } = render(<ReplySourceBadge method="manual" variant="compact" />);
+      const { container: postReplyC } = render(<ReplySourceBadge method="post_reply" variant="compact" />);
       const { container: templateC } = render(<ReplySourceBadge method="template" variant="compact" />);
       expect(aiC.firstChild).toHaveClass('reply-source-ai');
       expect(manualC.firstChild).toHaveClass('reply-source-manual');
+      expect(postReplyC.firstChild).toHaveClass('reply-source-template');
       expect(templateC.firstChild).toHaveClass('reply-source-template');
     });
   });
@@ -55,9 +63,15 @@ describe('ReplySourceBadge', () => {
       expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
-    it('renders template badge with Preset Reply label for historical data', () => {
-      render(<ReplySourceBadge method="template" variant="detail" />);
+    it('renders post_reply badge with Post Reply label', () => {
+      render(<ReplySourceBadge method="post_reply" variant="detail" />);
       expect(screen.getByText('Post Reply')).toBeInTheDocument();
+    });
+
+    it('renders template badge with Auto reply label (canned/fallback)', () => {
+      render(<ReplySourceBadge method="template" variant="detail" />);
+      expect(screen.getByText('Auto reply')).toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('uses muted styling (not the colored reply-source-* classes)', () => {
@@ -79,9 +93,15 @@ describe('ReplySourceBadge', () => {
       expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
     });
 
-    it('renders template avatar with accessible label for historical data', () => {
-      render(<ReplySourceBadge method="template" variant="avatar" />);
+    it('renders post_reply avatar with Post Reply accessible label', () => {
+      render(<ReplySourceBadge method="post_reply" variant="avatar" />);
       expect(screen.getByLabelText('Post Reply')).toBeInTheDocument();
+    });
+
+    it('renders template avatar with Auto reply accessible label', () => {
+      render(<ReplySourceBadge method="template" variant="avatar" />);
+      expect(screen.getByLabelText('Auto reply')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('applies avatar layout classes and the matching color class', () => {

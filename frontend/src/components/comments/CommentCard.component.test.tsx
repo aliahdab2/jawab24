@@ -113,10 +113,17 @@ describe('CommentCard', () => {
       expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
     });
 
-    it('shows Preset Reply indicator for historical template replies', () => {
-      const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'template' };
+    it('shows Post Reply indicator for post_reply replies', () => {
+      const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'post_reply' };
       render(<CommentCard {...defaultProps} comment={replied} />);
       expect(screen.getByLabelText('Post Reply')).toBeInTheDocument();
+    });
+
+    it('shows Auto reply indicator for template (AI fallback / canned) replies', () => {
+      const replied: Comment = { ...baseComment, replied: true, replyText: 'x', replyMethod: 'template' };
+      render(<CommentCard {...defaultProps} comment={replied} />);
+      expect(screen.getByLabelText('Auto reply')).toBeInTheDocument();
+      expect(screen.queryByLabelText('Post Reply')).not.toBeInTheDocument();
     });
 
     it('renders no indicator when reply has no method', () => {

@@ -574,9 +574,15 @@ describe('MessageDetailModal', () => {
       expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
 
-    it('shows Preset Reply badge for historical template replies', () => {
-      renderWithOutgoing('template');
+    it('shows Post Reply badge for post_reply replies', () => {
+      renderWithOutgoing('post_reply');
       expect(screen.getByText('Post Reply')).toBeInTheDocument();
+    });
+
+    it('shows Auto reply badge for template (AI fallback) replies', () => {
+      renderWithOutgoing('template');
+      expect(screen.getByText('Auto reply')).toBeInTheDocument();
+      expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
     });
   });
 });
