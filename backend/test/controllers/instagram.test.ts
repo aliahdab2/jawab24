@@ -55,7 +55,8 @@ vi.mock('drizzle-orm', () => ({
     eq: vi.fn((a: any, b: any) => ({ field: a, value: b, op: 'eq' })),
     and: vi.fn((...args: any[]) => ({ op: 'and', args })),
     desc: vi.fn((field: any) => ({ field, dir: 'desc' })),
-    sql: vi.fn(),
+    inArray: vi.fn((field: any, values: any[]) => ({ field, values, op: 'inArray' })),
+    sql: Object.assign(vi.fn(), { raw: vi.fn() }),
 }));
 
 // Import controller AFTER mocks
@@ -315,33 +316,24 @@ describe('InstagramController', () => {
                 { id: 'ig-comment-1', text: 'Cool!', from: { id: 'u1', username: 'fan' }, timestamp: '2024-01-01T01:00:00Z' },
             ] as any);
 
-            // DB select returns empty (nothing existing)
-            vi.mocked(db.select).mockReturnValue({
+            // db.select(...).from(...).where(...) — used to look up existing
+            // media and comment IDs for the new-vs-existing split. Empty = all new.
+            vi.mocked(db.select).mockImplementation(() => ({
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        orderBy: vi.fn().mockResolvedValue([]),
-                    }),
+                    where: vi.fn().mockResolvedValue([]),
                 }),
-            } as any);
+            } as any));
 
-            // DB insert returns new row
-            const mockReturning = vi.fn().mockResolvedValue([{ id: 'new-media-1' }]);
+            // db.insert(media).values(...).onConflictDoUpdate(...).returning(...) → upserted rows
+            // db.insert(comments).values(...).onConflictDoNothing(...) → resolves
+            const mockMediaReturning = vi.fn().mockResolvedValue([
+                { id: 'new-media-1', instagramMediaId: 'ig-media-1' },
+            ]);
             const mockValues = vi.fn().mockReturnValue({
-                onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
-                returning: mockReturning,
+                onConflictDoUpdate: vi.fn().mockReturnValue({ returning: mockMediaReturning }),
+                onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
             });
             vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
-
-            // DB select for existing media check returns empty
-            let selectCallCount = 0;
-            vi.mocked(db.select).mockImplementation(() => {
-                selectCallCount++;
-                return {
-                    from: vi.fn().mockReturnValue({
-                        where: vi.fn().mockResolvedValue([]),
-                    }),
-                } as any;
-            });
 
             (mockRequest as any).params = { pageId: 'page-1' };
 
