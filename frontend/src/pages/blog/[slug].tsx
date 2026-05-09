@@ -263,13 +263,19 @@ export default function BlogPostPage({
         <meta key="og:description" property="og:description" content={frontmatter.seoDescription} />
         <meta key="og:type" property="og:type" content="article" />
         <meta key="og:url" property="og:url" content={`https://jawab24.com${locale === 'en' ? '/en' : ''}/blog/${slug}`} />
+        <meta key="og:image" property="og:image" content={`https://jawab24.com/api/og?title=${encodeURIComponent(frontmatter.title)}&locale=${locale}`} />
+        <meta key="og:image:width" property="og:image:width" content="1200" />
+        <meta key="og:image:height" property="og:image:height" content="630" />
+        <meta key="og:image:alt" property="og:image:alt" content={frontmatter.title} />
         <meta key="article:published_time" property="article:published_time" content={post.date} />
         <meta key="article:modified_time" property="article:modified_time" content={post.date} />
         <meta key="article:author" property="article:author" content="Jawab24" />
         <meta key="article:section" property="article:section" content="Technology" />
 
+        <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content={frontmatter.seoTitle} />
         <meta name="twitter:description" content={frontmatter.seoDescription} />
+        <meta name="twitter:image" content={`https://jawab24.com/api/og?title=${encodeURIComponent(frontmatter.title)}&locale=${locale}`} />
 
         <script
           type="application/ld+json"
