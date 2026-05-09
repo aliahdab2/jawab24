@@ -57,7 +57,7 @@ describe('AiUsageWarningBanner', () => {
         );
         const banner = screen.getByTestId('ai-usage-warning-banner');
         expect(banner).toHaveAttribute('data-severity', 'critical');
-        expect(banner).toHaveTextContent(/Smart Replies disabled.*Post Replies/i);
+        expect(banner).toHaveTextContent(/Smart Replies for this period.*Post Replies/i);
     });
 
     it('renders as critical past 100%', () => {
