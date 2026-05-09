@@ -5,7 +5,8 @@ import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, inArray, sql } from 'drizzle-orm';
+import type { InstagramComment } from '../types';
 
 export class InstagramController {
     /**
@@ -275,86 +276,127 @@ export class InstagramController {
             let syncedMedia = 0;
             let syncedComments = 0;
 
-            for (const item of igMedia) {
-                // Upsert media
-                const existing = await db
-                    .select()
+            // Phase 1: Bulk upsert all media in a single round trip.
+            // Pre-fetch existing IDs only to count new-vs-updated correctly;
+            // the actual write is one batched INSERT … ON CONFLICT DO UPDATE.
+            const mediaPkByPlatformId = new Map<string, string>();
+            if (igMedia.length > 0) {
+                const igMediaIds = igMedia.map(m => m.id);
+                const existingMediaRows = await db
+                    .select({ instagramMediaId: instagramMedia.instagramMediaId })
                     .from(instagramMedia)
-                    .where(eq(instagramMedia.instagramMediaId, item.id));
+                    .where(inArray(instagramMedia.instagramMediaId, igMediaIds));
+                const existingMediaIds = new Set(existingMediaRows.map(r => r.instagramMediaId));
+                syncedMedia = igMediaIds.filter(id => !existingMediaIds.has(id)).length;
 
-                let mediaId: string;
-
-                if (existing[0]) {
-                    // Update existing media
-                    await db
-                        .update(instagramMedia)
-                        .set({
-                            caption: item.caption,
-                            permalink: item.permalink,
-                            thumbnailUrl: item.thumbnail_url,
+                const upserted = await db
+                    .insert(instagramMedia)
+                    .values(igMedia.map(item => ({
+                        pageId,
+                        instagramMediaId: item.id,
+                        mediaType: item.media_type,
+                        caption: item.caption,
+                        permalink: item.permalink,
+                        thumbnailUrl: item.thumbnail_url,
+                        createdTime: item.timestamp ? new Date(item.timestamp) : null,
+                    })))
+                    .onConflictDoUpdate({
+                        target: instagramMedia.instagramMediaId,
+                        set: {
+                            caption: sql`EXCLUDED.caption`,
+                            permalink: sql`EXCLUDED.permalink`,
+                            thumbnailUrl: sql`EXCLUDED.thumbnail_url`,
                             updatedAt: new Date(),
-                        })
-                        .where(eq(instagramMedia.id, existing[0].id));
-                    mediaId = existing[0].id;
-                } else {
-                    // Insert new media
-                    const [inserted] = await db
-                        .insert(instagramMedia)
-                        .values({
-                            pageId,
-                            instagramMediaId: item.id,
-                            mediaType: item.media_type,
-                            caption: item.caption,
-                            permalink: item.permalink,
-                            thumbnailUrl: item.thumbnail_url,
-                            createdTime: item.timestamp ? new Date(item.timestamp) : null,
-                        })
-                        .returning();
-                    mediaId = inserted.id;
-                    syncedMedia++;
-                }
+                        },
+                    })
+                    .returning({
+                        id: instagramMedia.id,
+                        instagramMediaId: instagramMedia.instagramMediaId,
+                    });
 
-                // Fetch and sync comments for this media
+                for (const r of upserted) {
+                    mediaPkByPlatformId.set(r.instagramMediaId, r.id);
+                }
+            }
+
+            // Phase 2: Fetch comments per media (per-media IG Graph call is
+            // unavoidable). Collect first, then batch the DB writes.
+            // Track per-media fetch failures so partial outages (rate limit,
+            // permission revoked on a subset of media) surface to the merchant
+            // instead of being reported as success: true with undercount.
+            const collectedComments: Array<{ mediaPk: string; comment: InstagramComment }> = [];
+            let commentFetchFailures = 0;
+            for (const item of igMedia) {
+                const mediaPk = mediaPkByPlatformId.get(item.id);
+                if (!mediaPk) continue;
                 try {
                     const igComments = await instagramService.getComments(
                         item.id,
                         page.accessToken
                     );
-
                     for (const comment of igComments) {
-                        const existingComment = await db
-                            .select()
-                            .from(instagramComments)
-                            .where(eq(instagramComments.instagramCommentId, comment.id));
-
-                        if (!existingComment[0]) {
-                            await db
-                                .insert(instagramComments)
-                                .values({
-                                    mediaId,
-                                    workspaceId: req.workspaceId,
-                                    instagramCommentId: comment.id,
-                                    message: comment.text,
-                                    fromId: comment.from?.id,
-                                    fromUsername: comment.from?.username,
-                                    createdTime: comment.timestamp ? new Date(comment.timestamp) : null,
-                                });
-                            syncedComments++;
-                        }
+                        collectedComments.push({ mediaPk, comment });
                     }
                 } catch (commentsError) {
+                    commentFetchFailures++;
                     request.log.warn(`Failed to fetch comments for media ${item.id}: ${commentsError}`);
                 }
             }
 
-            request.log.info(`[Instagram] Sync complete: ${syncedMedia} new media, ${syncedComments} new comments`);
+            // Phase 3: Bulk upsert all comments in two round trips total
+            // (one SELECT for the new-vs-existing split, one INSERT for new rows).
+            if (collectedComments.length > 0) {
+                const commentIds = collectedComments.map(c => c.comment.id);
+                const existingCommentRows = await db
+                    .select({ instagramCommentId: instagramComments.instagramCommentId })
+                    .from(instagramComments)
+                    .where(inArray(instagramComments.instagramCommentId, commentIds));
+                const existingCommentSet = new Set(existingCommentRows.map(r => r.instagramCommentId));
+
+                const newComments = collectedComments.filter(
+                    ({ comment }) => !existingCommentSet.has(comment.id)
+                );
+
+                if (newComments.length > 0) {
+                    // Race-safe: a concurrent webhook may have inserted the same
+                    // instagram_comment_id between our SELECT and INSERT.
+                    // .returning() counts only rows actually inserted (ON CONFLICT
+                    // DO NOTHING skips conflicting rows), so the reported count
+                    // stays accurate when we lose the race.
+                    const inserted = await db
+                        .insert(instagramComments)
+                        .values(newComments.map(({ mediaPk, comment }) => ({
+                            mediaId: mediaPk,
+                            workspaceId: req.workspaceId,
+                            instagramCommentId: comment.id,
+                            message: comment.text,
+                            fromId: comment.from?.id,
+                            fromUsername: comment.from?.username,
+                            createdTime: comment.timestamp ? new Date(comment.timestamp) : null,
+                        })))
+                        .onConflictDoNothing({ target: instagramComments.instagramCommentId })
+                        .returning({ id: instagramComments.id });
+                    syncedComments = inserted.length;
+                }
+            }
+
+            const partial = commentFetchFailures > 0;
+            if (partial) {
+                request.log.warn(`[Instagram] Sync completed with ${commentFetchFailures} per-media comment-fetch failures — comment count is undercounted`);
+            }
+            request.log.info(`[Instagram] Sync complete: ${syncedMedia} new media, ${syncedComments} new comments${partial ? ` (${commentFetchFailures} media skipped)` : ''}`);
 
             return reply.send({
-                success: true,
+                // success=false on partial fetch failures so the merchant's
+                // dashboard surfaces the issue instead of reporting a clean run
+                // when comments were silently dropped (rate limit, partial token
+                // revoke, etc.).
+                success: !partial,
                 synced: {
                     media: syncedMedia,
                     comments: syncedComments,
                 },
+                ...(partial ? { warnings: { commentFetchFailures } } : {}),
             });
         } catch (error) {
             request.log.error(error);

@@ -536,7 +536,7 @@ export class MessageProcessor {
             publishSSEEvent(userId, 'message:reply_sent', {
                 messageId: platformMessageId,
                 pageId: page.id,
-                replyMethod: replyMethod as 'template' | 'ai',
+                replyMethod: replyMethod as 'template' | 'ai' | 'post_reply',
                 replyText,
                 message: outgoingMessage,
                 senderName: senderName ?? null,

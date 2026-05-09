@@ -41,7 +41,7 @@ export interface SSEEventDataMap {
     'comment:reply_sent': {
         commentId: string;
         pageId: string;
-        replyMethod: 'template' | 'ai';
+        replyMethod: 'template' | 'ai' | 'post_reply';
         replyText: string;
         senderName: string | null;
     };
@@ -75,7 +75,7 @@ export interface SSEEventDataMap {
     'message:reply_sent': {
         messageId: string;
         pageId: string;
-        replyMethod: 'template' | 'ai';
+        replyMethod: 'template' | 'ai' | 'post_reply';
         replyText: string;
         message?: SSEMessageSnapshot;
         senderName: string | null;

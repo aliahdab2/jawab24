@@ -78,6 +78,11 @@ const EnvSchema = z.object({
     // Webhook callback URL for Facebook subscription verification
     WEBHOOK_CALLBACK_URL: z.string().default('https://jawab24.com/webhook'),
 
+    // NOTE: TRUSTED_GEO_HEADER_SOURCE is read directly from process.env in
+    // middleware/geo.ts (allowed values: 'cloudflare' | 'vercel' | 'nginx').
+    // Kept out of this schema so the middleware doesn't pull in the full
+    // env-validation chain on import.
+
     // Admin emails (comma-separated list)
     ADMIN_EMAILS: z.string().optional(),
 

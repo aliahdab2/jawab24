@@ -167,7 +167,7 @@ export interface CreateCommentDTO {
 export interface UpdateCommentDTO {
     replied?: boolean;
     replyText?: string;
-    replyMethod?: 'template' | 'ai' | 'manual';
+    replyMethod?: 'template' | 'ai' | 'manual' | 'post_reply';
     detectedLanguage?: string;
     replyLanguage?: string;
     repliedAt?: Date;

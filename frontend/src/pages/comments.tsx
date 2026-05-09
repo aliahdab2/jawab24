@@ -204,7 +204,7 @@ const CommentsPage: NextPageWithLayout = () => {
       return {
         total: statsData.total,
         actionRequired: statsData.actionRequired ?? statsData.unreplied,
-        autoReplied: statsData.byMethod.ai + statsData.byMethod.template,
+        autoReplied: statsData.byMethod.ai + statsData.byMethod.template + (statsData.byMethod.postReply ?? 0),
         handled: statsData.resolved ?? 0,
       };
     }

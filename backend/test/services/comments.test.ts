@@ -84,6 +84,7 @@ describe('CommentsService', () => {
                     template: 40,    // 30 + 10
                     ai: 35,          // 20 + 15
                     manual: 15,      // 10 + 5
+                    postReply: 0,
                 }
             });
         });
@@ -201,7 +202,7 @@ describe('CommentsService', () => {
                 resolved: 0,
                 repliedToday: 0,
                 replyRate: '0',
-                byMethod: { template: 0, ai: 0, manual: 0 }
+                byMethod: { template: 0, ai: 0, manual: 0, postReply: 0 }
             });
         });
     });
