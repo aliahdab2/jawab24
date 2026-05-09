@@ -17,6 +17,21 @@ interface AuthenticatedRequest extends FastifyRequest {
     user?: { userId: string; isAdmin?: boolean };
 }
 
+/**
+ * Convert a Stripe Unix timestamp (seconds) to a Date, or null if the value is
+ * missing/invalid. Stripe occasionally sends null for `current_period_*` and
+ * `trial_end` (e.g. paused subscriptions, or when a subscription item drives
+ * the period in newer API versions). Passing those to `new Date()` yields an
+ * Invalid Date, which Drizzle's timestamp encoder rejects with RangeError.
+ */
+function stripeTsToDate(ts: number | null | undefined): Date | null {
+    if (ts === null || ts === undefined) return null;
+    const ms = ts * 1000;
+    if (!Number.isFinite(ms)) return null;
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
 export class PaymentController {
     /**
      * Create Stripe Checkout Session
@@ -429,13 +444,15 @@ export class PaymentController {
             // Best-effort local mirror — the subscription.updated webhook is
             // authoritative and will re-write these fields, but updating now
             // means the UI reflects the change without waiting for the event.
+            const updatedPeriodStart = stripeTsToDate(updated.current_period_start);
+            const updatedPeriodEnd = stripeTsToDate(updated.current_period_end);
             await db
                 .update(subscriptions)
                 .set({
                     planId,
                     status: updated.status,
-                    currentPeriodStart: new Date(updated.current_period_start * 1000),
-                    currentPeriodEnd: new Date(updated.current_period_end * 1000),
+                    ...(updatedPeriodStart && { currentPeriodStart: updatedPeriodStart }),
+                    ...(updatedPeriodEnd && { currentPeriodEnd: updatedPeriodEnd }),
                     cancelAtPeriodEnd: updated.cancel_at_period_end,
                     updatedAt: new Date(),
                 })
@@ -779,11 +796,9 @@ export class PaymentController {
             paymentMethod: 'stripe',
             stripeCustomerId: stripeSubscription.customer as string,
             stripeCheckoutSessionId: session.id,
-            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-            trialEndsAt: stripeSubscription.trial_end
-                ? new Date(stripeSubscription.trial_end * 1000)
-                : null,
+            currentPeriodStart: stripeTsToDate(stripeSubscription.current_period_start),
+            currentPeriodEnd: stripeTsToDate(stripeSubscription.current_period_end),
+            trialEndsAt: stripeTsToDate(stripeSubscription.trial_end),
         }).returning({ id: subscriptions.id });
 
         request.log.info({ userId, subscriptionId: stripeSubscription.id, planId }, 'New subscription created');
@@ -826,9 +841,7 @@ export class PaymentController {
 
             const lang: 'ar' | 'en' = userSettings?.dashboardLanguage === 'en' ? 'en' : 'ar';
             const planName = plan?.name || 'Jawab24';
-            const trialEndsAt = stripeSubscription.trial_end
-                ? new Date(stripeSubscription.trial_end * 1000)
-                : null;
+            const trialEndsAt = stripeTsToDate(stripeSubscription.trial_end);
 
             const { subject, html } = subscriptionWelcomeEmailTemplate({
                 lang,
@@ -933,11 +946,13 @@ export class PaymentController {
 
         const updateValues: Partial<typeof subscriptions.$inferInsert> = {
             status: stripeSubscription.status,
-            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
             cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
             updatedAt: new Date(),
         };
+        const periodStart = stripeTsToDate(stripeSubscription.current_period_start);
+        const periodEnd = stripeTsToDate(stripeSubscription.current_period_end);
+        if (periodStart) updateValues.currentPeriodStart = periodStart;
+        if (periodEnd) updateValues.currentPeriodEnd = periodEnd;
         if (resolvedPlanId) {
             updateValues.planId = resolvedPlanId;
         }
@@ -997,8 +1012,8 @@ export class PaymentController {
         // On renewal Stripe advances current_period_start/end; we must mirror that
         // and reset quota — otherwise the previous period's usage row keeps blocking.
         const stripeSubscription = await stripeService.getSubscription(stripeSubscriptionId);
-        const periodStart = new Date(stripeSubscription.current_period_start * 1000);
-        const periodEnd = new Date(stripeSubscription.current_period_end * 1000);
+        const periodStart = stripeTsToDate(stripeSubscription.current_period_start);
+        const periodEnd = stripeTsToDate(stripeSubscription.current_period_end);
 
         // Update subscription status with retry logic for race conditions
         let retries = 3;
@@ -1009,8 +1024,8 @@ export class PaymentController {
                 .update(subscriptions)
                 .set({
                     status: 'active',
-                    currentPeriodStart: periodStart,
-                    currentPeriodEnd: periodEnd,
+                    ...(periodStart && { currentPeriodStart: periodStart }),
+                    ...(periodEnd && { currentPeriodEnd: periodEnd }),
                     updatedAt: new Date(),
                 })
                 .where(eq(subscriptions.externalSubscriptionId, stripeSubscriptionId))
@@ -1043,8 +1058,17 @@ export class PaymentController {
             return;
         }
 
-        // Reset quota for the new billing period.
-        await subscriptionsService.initializeUsagePeriod(updatedRow.userId, periodStart, periodEnd);
+        // Reset quota for the new billing period. Skip if Stripe didn't return
+        // valid period boundaries (rare — e.g. paused subs); the previous row
+        // remains in place and will be reset on the next renewal event.
+        if (periodStart && periodEnd) {
+            await subscriptionsService.initializeUsagePeriod(updatedRow.userId, periodStart, periodEnd);
+        } else {
+            request.log.warn(
+                { subscriptionId: stripeSubscriptionId },
+                'Skipping usage period reset - Stripe returned invalid current_period boundaries'
+            );
+        }
 
         // Drop the boolean status cache so a `past_due → active` recovery is
         // visible to the reply pipeline immediately, not after a 60s TTL.
