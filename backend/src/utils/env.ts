@@ -78,13 +78,10 @@ const EnvSchema = z.object({
     // Webhook callback URL for Facebook subscription verification
     WEBHOOK_CALLBACK_URL: z.string().default('https://jawab24.com/webhook'),
 
-    // Geo-header trust source (sanctions enforcement).
-    // Client-supplied geo headers (cf-ipcountry, x-vercel-ip-country, x-geo-country)
-    // are spoofable and MUST NOT be trusted unless we know a specific upstream proxy
-    // sets them. Set this to the active proxy ('cloudflare', 'vercel', or 'nginx')
-    // only when nginx/CDN strips inbound copies and re-sets the header itself.
-    // When unset (default), only geoip-lite resolution from request.ip is trusted.
-    TRUSTED_GEO_HEADER_SOURCE: z.enum(['cloudflare', 'vercel', 'nginx']).optional(),
+    // NOTE: TRUSTED_GEO_HEADER_SOURCE is read directly from process.env in
+    // middleware/geo.ts (allowed values: 'cloudflare' | 'vercel' | 'nginx').
+    // Kept out of this schema so the middleware doesn't pull in the full
+    // env-validation chain on import.
 
     // Admin emails (comma-separated list)
     ADMIN_EMAILS: z.string().optional(),

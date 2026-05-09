@@ -1,19 +1,19 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
+import { geoMiddleware } from '../../src/middleware/geo';
 import { isSanctionedGeo } from '../../src/utils/sanctions';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
-// env.ts validates at import time and reads TRUSTED_GEO_HEADER_SOURCE once.
-// Tests need to swap the value, so we mock the module.
+// geo.ts reads TRUSTED_GEO_HEADER_SOURCE from process.env on every call,
+// so swapping it between tests just requires setting/unsetting the variable.
 let mockedTrustedSource: 'cloudflare' | 'vercel' | 'nginx' | undefined;
-vi.mock('../../src/utils/env', () => ({
-    get env() {
-        return { TRUSTED_GEO_HEADER_SOURCE: mockedTrustedSource };
-    },
-}));
-
-// Dynamic import so the mock is in place before geo.ts evaluates.
-const { geoMiddleware } = await import('../../src/middleware/geo');
+function applyTrustedSource() {
+    if (mockedTrustedSource) {
+        process.env.TRUSTED_GEO_HEADER_SOURCE = mockedTrustedSource;
+    } else {
+        delete process.env.TRUSTED_GEO_HEADER_SOURCE;
+    }
+}
 
 // Mock Fastify Request and Reply
 const createMockRequest = (ip: string, headers: Record<string, string | string[] | undefined> = {}) => ({
@@ -32,9 +32,11 @@ const createMockReply = () => ({} as FastifyReply);
 describe('Geo Middleware & Sanctions (Real IP Examples)', () => {
     beforeEach(() => {
         mockedTrustedSource = undefined;
+        applyTrustedSource();
     });
     afterEach(() => {
         mockedTrustedSource = undefined;
+        applyTrustedSource();
     });
 
     it('should correctly identify Sweden IP (NOT sanctioned)', async () => {
@@ -121,6 +123,7 @@ describe('Geo Middleware & Sanctions (Real IP Examples)', () => {
 
     it('should trust cf-ipcountry header only when TRUSTED_GEO_HEADER_SOURCE=cloudflare', async () => {
         mockedTrustedSource = 'cloudflare';
+        applyTrustedSource();
         const req = createMockRequest('193.10.252.19', { // Sweden IP
             'cf-ipcountry': 'US',
         });
@@ -134,6 +137,7 @@ describe('Geo Middleware & Sanctions (Real IP Examples)', () => {
 
     it('should ignore x-geo-country header when TRUSTED_GEO_HEADER_SOURCE=cloudflare (mismatched proxy)', async () => {
         mockedTrustedSource = 'cloudflare';
+        applyTrustedSource();
         const req = createMockRequest('193.10.252.19', {
             'x-geo-country': 'US',
         });

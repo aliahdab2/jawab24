@@ -1,6 +1,12 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { env } from '../utils/env';
 import type { GeoLocation } from '../utils/sanctions';
+
+type TrustedGeoSource = 'cloudflare' | 'vercel' | 'nginx';
+const VALID_SOURCES: ReadonlySet<TrustedGeoSource> = new Set(['cloudflare', 'vercel', 'nginx']);
+function getTrustedSource(): TrustedGeoSource | undefined {
+    const raw = process.env.TRUSTED_GEO_HEADER_SOURCE;
+    return raw && VALID_SOURCES.has(raw as TrustedGeoSource) ? (raw as TrustedGeoSource) : undefined;
+}
 
 /**
  * Extend FastifyRequest to include geo property
@@ -23,7 +29,7 @@ declare module 'fastify' {
  * Default behavior: ignore all geo headers, resolve from request.ip via
  * geoip-lite. nginx must also strip these headers (defense in depth).
  */
-const HEADER_BY_SOURCE: Record<NonNullable<typeof env.TRUSTED_GEO_HEADER_SOURCE>, { country: string; region?: string }> = {
+const HEADER_BY_SOURCE: Record<TrustedGeoSource, { country: string; region?: string }> = {
     cloudflare: { country: 'cf-ipcountry' },
     vercel: { country: 'x-vercel-ip-country' },
     nginx: { country: 'x-geo-country', region: 'x-geo-region' },
@@ -37,7 +43,7 @@ export async function geoMiddleware(request: FastifyRequest, _reply: FastifyRepl
     };
 
     // Trusted-proxy header path. Only enabled when env explicitly opts in.
-    const trustedSource = env.TRUSTED_GEO_HEADER_SOURCE;
+    const trustedSource = getTrustedSource();
     if (trustedSource) {
         const headerNames = HEADER_BY_SOURCE[trustedSource];
         const country = request.headers[headerNames.country] as string | undefined;
