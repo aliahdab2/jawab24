@@ -306,14 +306,26 @@ rm -rf frontend/.next frontend/node_modules/.cache
 # using '**/api/**' patterns match the actual request URLs.
 # This only affects the local pre-deploy build — production builds on the server
 # use their own .env with the real API URL.
-if CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend > /dev/null 2>&1; then
+# Next.js 15 + i18n occasionally hits a flaky ENOENT during the export→server-pages
+# rename step (race condition in parallel static-page generation). Retry once with a
+# clean .next dir before declaring failure.
+build_frontend() {
+    CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend "$@"
+}
+
+if build_frontend > /dev/null 2>&1; then
     echo -e "${GREEN}   ✅ Frontend builds successfully${NC}"
 else
-    echo -e "${RED}   ❌ Frontend build failed!${NC}"
-    # Clean cache and show full error output for debugging
+    echo -e "${YELLOW}   ⚠️  Frontend build failed on first attempt — retrying with clean cache${NC}"
     rm -rf frontend/.next
-    CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npm run build --workspace=jawab24-frontend
-    exit 1
+    if build_frontend > /dev/null 2>&1; then
+        echo -e "${GREEN}   ✅ Frontend builds successfully (on retry)${NC}"
+    else
+        echo -e "${RED}   ❌ Frontend build failed after retry!${NC}"
+        rm -rf frontend/.next
+        build_frontend
+        exit 1
+    fi
 fi
 
 # Verify CSS output is non-trivial (catches silent Tailwind/PostCSS failures)
