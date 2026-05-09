@@ -856,6 +856,69 @@ describe('Subscriptions Service', () => {
             expect(result.remaining).toBe(0);
         });
 
+        it('should return usage.periodEnd as resetsAt when limit reached, not subscription.currentPeriodEnd', async () => {
+            const { db } = await import('../../src/db');
+
+            const usagePeriodEnd = new Date('2026-05-10T21:12:43Z');
+            const subscriptionPeriodEnd = new Date('2027-04-02T21:39:39Z');
+
+            let callCount = 0;
+            vi.mocked(db.select).mockImplementation(() => {
+                callCount++;
+                if (callCount === 1) {
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    orderBy: vi.fn().mockReturnValue({
+                                        limit: vi.fn().mockResolvedValue([{
+                                            subscription: {
+                                                id: 'sub_1', userId: 'user_1', planId: 'plan_1',
+                                                status: 'active', trialEndsAt: null,
+                                                currentPeriodStart: new Date('2026-04-02T21:39:39Z'),
+                                                currentPeriodEnd: subscriptionPeriodEnd,
+                                                canceledAt: null, cancelReason: null,
+                                                createdAt: new Date(), updatedAt: new Date(),
+                                            },
+                                            plan: {
+                                                id: 'plan_1', name: 'Pro', slug: 'pro', price: 1000,
+                                                maxPages: 5, maxAiRepliesPerMonth: 10000, trialDays: 0, facebookEnabled: true,
+                                                instagramEnabled: true, whatsappEnabled: false,
+                                                showBranding: false, prioritySupport: true,
+                                            },
+                                        }]),
+                                    }),
+                                }),
+                            }),
+                        }),
+                    } as any;
+                }
+                return {
+                    from: vi.fn().mockReturnValue({
+                        where: vi.fn().mockReturnValue({
+                            limit: vi.fn().mockResolvedValue([{
+                                id: 'usage_1',
+                                userId: 'user_1',
+                                periodStart: new Date('2026-04-10T21:12:43Z'),
+                                periodEnd: usagePeriodEnd,
+                                aiRepliesCount: 10000,
+                                totalCommentsProcessed: 0,
+                                totalMessagesProcessed: 0,
+                                dailyBreakdown: {},
+                                createdAt: new Date(),
+                                updatedAt: new Date(),
+                            }]),
+                        }),
+                    }),
+                } as any;
+            });
+
+            const result = await subscriptionsService.canUseAiReplies('user_1');
+            expect(result.allowed).toBe(false);
+            expect(result.resetsAt).toBe(usagePeriodEnd.toISOString());
+            expect(result.resetsAt).not.toBe(subscriptionPeriodEnd.toISOString());
+        });
+
         it('should allow when under AI reply limit', async () => {
             const { db } = await import('../../src/db');
 

@@ -441,6 +441,10 @@ export const subscriptionsService = {
         const limit = plan.maxAiRepliesPerMonth;
 
         if (used >= limit) {
+            // Reset is bound to the usage window (monthly), not the subscription
+            // period — yearly/manual subs have currentPeriodEnd up to a year out
+            // while quota actually resets every month.
+            const resetsAtSource = currentUsage?.periodEnd ?? subscription.currentPeriodEnd;
             return {
                 allowed: false,
                 reason: 'Monthly AI reply limit reached',
@@ -448,8 +452,8 @@ export const subscriptionsService = {
                 limit,
                 used,
                 remaining: 0,
-                resetsAt: subscription.currentPeriodEnd
-                    ? new Date(subscription.currentPeriodEnd).toISOString()
+                resetsAt: resetsAtSource
+                    ? new Date(resetsAtSource).toISOString()
                     : undefined,
             };
         }
