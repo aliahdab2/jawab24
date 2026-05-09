@@ -321,7 +321,11 @@ export class InstagramController {
 
             // Phase 2: Fetch comments per media (per-media IG Graph call is
             // unavoidable). Collect first, then batch the DB writes.
+            // Track per-media fetch failures so partial outages (rate limit,
+            // permission revoked on a subset of media) surface to the merchant
+            // instead of being reported as success: true with undercount.
             const collectedComments: Array<{ mediaPk: string; comment: InstagramComment }> = [];
+            let commentFetchFailures = 0;
             for (const item of igMedia) {
                 const mediaPk = mediaPkByPlatformId.get(item.id);
                 if (!mediaPk) continue;
@@ -334,6 +338,7 @@ export class InstagramController {
                         collectedComments.push({ mediaPk, comment });
                     }
                 } catch (commentsError) {
+                    commentFetchFailures++;
                     request.log.warn(`Failed to fetch comments for media ${item.id}: ${commentsError}`);
                 }
             }
@@ -375,14 +380,23 @@ export class InstagramController {
                 }
             }
 
-            request.log.info(`[Instagram] Sync complete: ${syncedMedia} new media, ${syncedComments} new comments`);
+            const partial = commentFetchFailures > 0;
+            if (partial) {
+                request.log.warn(`[Instagram] Sync completed with ${commentFetchFailures} per-media comment-fetch failures — comment count is undercounted`);
+            }
+            request.log.info(`[Instagram] Sync complete: ${syncedMedia} new media, ${syncedComments} new comments${partial ? ` (${commentFetchFailures} media skipped)` : ''}`);
 
             return reply.send({
-                success: true,
+                // success=false on partial fetch failures so the merchant's
+                // dashboard surfaces the issue instead of reporting a clean run
+                // when comments were silently dropped (rate limit, partial token
+                // revoke, etc.).
+                success: !partial,
                 synced: {
                     media: syncedMedia,
                     comments: syncedComments,
                 },
+                ...(partial ? { warnings: { commentFetchFailures } } : {}),
             });
         } catch (error) {
             request.log.error(error);
