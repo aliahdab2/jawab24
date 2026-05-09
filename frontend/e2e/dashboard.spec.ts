@@ -230,8 +230,10 @@ test.describe('Dashboard Page', () => {
       page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Command Center Smart Replies = analytics.byMethod.ai (25) + analytics.byMethod.template (11) = 36
-    await expect(page.getByText('36', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    // Smart Replies = analytics.byMethod.ai (25). Template/post_reply are
+    // counted separately — Smart Replies is AI-only so the tile honors the
+    // "Smart Replies disabled" banner when the AI quota is exhausted.
+    await expect(page.getByText('25', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
     // Replied Today should show 8 (5 comments + 3 messages)
     await expect(page.getByText('8', { exact: true }).first()).toBeVisible({ timeout: 15000 });
