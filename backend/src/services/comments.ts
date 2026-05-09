@@ -408,7 +408,11 @@ export class CommentsService {
     }
 
     /**
-     * Find or create comment from Facebook webhook
+     * Find or create comment from Facebook webhook.
+     *
+     * Idempotent against webhook retries. The unique constraint on
+     * facebook_comment_id is the authoritative race guard for concurrent
+     * first-time deliveries; the existence check is the fast path for retries.
      */
     async findOrCreateFromWebhook(
         postId: string,
@@ -425,17 +429,27 @@ export class CommentsService {
             return { comment: existing, isNew: false };
         }
 
-        const newComment = await this.createComment({
-            postId,
-            workspaceId,
-            facebookCommentId,
-            message,
-            fromId,
-            fromName,
-            messageTags,
-        });
-
-        return { comment: newComment, isNew: true };
+        try {
+            const newComment = await this.createComment({
+                postId,
+                workspaceId,
+                facebookCommentId,
+                message,
+                fromId,
+                fromName,
+                messageTags,
+            });
+            return { comment: newComment, isNew: true };
+        } catch (err) {
+            // 23505: lost the race; the winning row is now visible.
+            if ((err as { code?: string } | null)?.code === '23505') {
+                const winner = await this.getCommentByFacebookId(facebookCommentId);
+                if (winner) {
+                    return { comment: winner, isNew: false };
+                }
+            }
+            throw err;
+        }
     }
 
     /**

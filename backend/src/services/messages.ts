@@ -197,7 +197,12 @@ export class MessagesService {
     }
 
     /**
-     * Find or create a message from webhook
+     * Find or create a message from webhook.
+     *
+     * Idempotent against FB/IG webhook retries (which redeliver the same
+     * platform_message_id on 5xx/timeout). Optimistic existence check returns
+     * fast on retries; the unique constraint on platform_message_id is the
+     * authoritative race guard for two concurrent first-time deliveries.
      */
     async findOrCreateFromWebhook(
         pageId: string,
@@ -209,13 +214,11 @@ export class MessagesService {
         attachmentType?: string,
         platform?: string,
     ): Promise<{ message: Message; isNew: boolean }> {
-        // Check if message already exists
         const existing = await db.query.messages.findFirst({
             where: eq(messages.platformMessageId, platformMessageId),
         });
 
         if (existing) {
-            // Update senderName if we have one and the record doesn't
             if (senderName && !existing.senderName) {
                 await db.update(messages)
                     .set({ senderName })
@@ -225,20 +228,33 @@ export class MessagesService {
             return { message: this.mapToMessage(existing), isNew: false };
         }
 
-        // Create new message
-        const newMessage = await this.createMessage({
-            pageId,
-            workspaceId,
-            platformMessageId,
-            senderId,
-            senderName,
-            message: messageText,
-            direction: 'incoming',
-            platform,
-            ...(attachmentType ? { attachmentType } : {}),
-        });
-
-        return { message: newMessage, isNew: true };
+        try {
+            const newMessage = await this.createMessage({
+                pageId,
+                workspaceId,
+                platformMessageId,
+                senderId,
+                senderName,
+                message: messageText,
+                direction: 'incoming',
+                platform,
+                ...(attachmentType ? { attachmentType } : {}),
+            });
+            return { message: newMessage, isNew: true };
+        } catch (err) {
+            // 23505 = unique_violation. Lost the race against a concurrent
+            // webhook delivery of the same platform_message_id; the winner's
+            // row is now visible — refetch and treat as already-seen.
+            if ((err as { code?: string } | null)?.code === '23505') {
+                const winner = await db.query.messages.findFirst({
+                    where: eq(messages.platformMessageId, platformMessageId),
+                });
+                if (winner) {
+                    return { message: this.mapToMessage(winner), isNew: false };
+                }
+            }
+            throw err;
+        }
     }
 
     /**

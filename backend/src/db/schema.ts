@@ -397,7 +397,11 @@ export const messages = pgTable('messages', {
     // FK to conversations. Nullable during Tier A transition — will be NOT NULL after
     // backfill + a safety period (Tier B/C). New writes always set it.
     conversationId: uuid('conversation_id').references(() => conversations.id, { onDelete: 'cascade' }),
-    platformMessageId: varchar('platform_message_id', { length: 255 }).notNull(),
+    // UNIQUE: webhook idempotency. Facebook/Instagram retry the same mid on 5xx
+    // or timeout; concurrent retries previously raced past a check-then-insert and
+    // produced duplicate rows → duplicate replies. The unique constraint forces
+    // INSERT … ON CONFLICT semantics in services/messages.ts findOrCreateFromWebhook.
+    platformMessageId: varchar('platform_message_id', { length: 255 }).notNull().unique(),
     platform: varchar('platform', { length: 20 }).default('facebook'), // 'facebook' or 'instagram'
     senderId: varchar('sender_id', { length: 255 }).notNull(),
     // Legacy denormalized copy of conversations.sender_name. Kept during Tier A transition
