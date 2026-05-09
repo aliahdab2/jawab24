@@ -219,13 +219,15 @@ describe('Salla Service', () => {
                 'https://accounts.salla.sa/oauth2/token',
                 expect.objectContaining({
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                     body: expect.stringContaining('auth_code_abc'),
                 }),
             );
 
-            // Verify the body includes all required fields
-            const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+            // Verify the body is form-urlencoded with all required fields (RFC 6749)
+            const body = Object.fromEntries(
+                new URLSearchParams(mockFetch.mock.calls[0][1].body),
+            );
             expect(body).toEqual({
                 grant_type: 'authorization_code',
                 client_id: 'test_salla_client_id',
@@ -346,7 +348,9 @@ describe('Salla Service', () => {
                 }),
             );
 
-            const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+            const body = Object.fromEntries(
+                new URLSearchParams(mockFetch.mock.calls[0][1].body),
+            );
             expect(body.grant_type).toBe('refresh_token');
             expect(body.refresh_token).toBe('decrypted_refresh_token');
             expect(body.client_id).toBe('test_salla_client_id');

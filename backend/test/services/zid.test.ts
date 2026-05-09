@@ -315,7 +315,9 @@ describe('Zid Service', () => {
                 expect.objectContaining({ method: 'POST' }),
             );
 
-            const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+            const body = Object.fromEntries(
+                new URLSearchParams(mockFetch.mock.calls[0][1].body),
+            );
             expect(body.grant_type).toBe('refresh_token');
             expect(body.refresh_token).toBe('plain_refresh_token');
 
