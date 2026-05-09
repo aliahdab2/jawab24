@@ -25,6 +25,7 @@
   "pending": "Waiting in Queue",
   "aiReply": "Smart Reply",
   "postReply": "Post Reply",
+  "fallbackReply": "Auto reply",
   "minAgo": "min ago",
   "todayComments": "Today's Comments",
   "vsYesterday": "vs yesterday",

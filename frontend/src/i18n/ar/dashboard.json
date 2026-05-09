@@ -25,6 +25,7 @@
   "pending": "في انتظار الرد بالدور",
   "aiReply": "رد ذكي",
   "postReply": "رد البوست",
+  "fallbackReply": "رد تلقائي",
   "minAgo": "دقيقة",
   "todayComments": "تعليقات اليوم",
   "vsYesterday": "مقارنة بالأمس",

@@ -1,9 +1,9 @@
 import React from 'react';
 import clsx from 'clsx';
-import { Sparkles, UserCheck, Zap } from 'lucide-react';
+import { MessageSquare, Sparkles, UserCheck, Zap } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 
-export type ReplyMethod = 'ai' | 'manual' | 'template';
+export type ReplyMethod = 'ai' | 'manual' | 'template' | 'post_reply';
 
 export type ReplySourceVariant = 'compact' | 'detail' | 'avatar';
 
@@ -13,7 +13,7 @@ interface ReplySourceBadgeProps {
   className?: string;
 }
 
-const METHOD_KEYS: ReadonlySet<ReplyMethod> = new Set(['ai', 'manual', 'template']);
+const METHOD_KEYS: ReadonlySet<ReplyMethod> = new Set(['ai', 'manual', 'template', 'post_reply']);
 const isKnownMethod = (m: string | null | undefined): m is ReplyMethod =>
   !!m && METHOD_KEYS.has(m as ReplyMethod);
 
@@ -30,8 +30,12 @@ export const ReplySourceBadge = React.memo(function ReplySourceBadge({
   const config = {
     ai: { Icon: Sparkles, label: tDashboard('aiReply'), colorClass: 'reply-source-ai' },
     manual: { Icon: UserCheck, label: tc('manual'), colorClass: 'reply-source-manual' },
-    // 'template' replyMethod is the Post Reply (per-post keyword trigger) feature
-    template: { Icon: Zap, label: tDashboard('postReply'), colorClass: 'reply-source-template' },
+    // 'post_reply' = per-post keyword trigger (Post Reply feature).
+    post_reply: { Icon: Zap, label: tDashboard('postReply'), colorClass: 'reply-source-template' },
+    // 'template' = canned fallback (AI fallback when quota out, greeting, away message).
+    // Visually distinct from post_reply so merchants don't confuse a generic
+    // "thanks for your comment!" with a configured trigger reply.
+    template: { Icon: MessageSquare, label: tDashboard('fallbackReply'), colorClass: 'reply-source-template' },
   }[method];
 
   const { Icon, label, colorClass } = config;
