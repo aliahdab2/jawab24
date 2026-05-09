@@ -57,7 +57,7 @@
   "recentMessages": "Recent Messages",
   "noMessagesYet": "No recent messages. Messages will appear here once your pages receive DMs.",
   "commandCenter": {
-    "repliedToday": "Smart Replied Today",
+    "repliedToday": "Replies Today",
     "replyRate": "Reply Rate",
     "avgSpeed": "Avg Speed",
     "quotaWarning": "{percent}% of plan",
