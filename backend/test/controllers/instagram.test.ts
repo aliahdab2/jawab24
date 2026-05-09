@@ -331,7 +331,9 @@ describe('InstagramController', () => {
             ]);
             const mockValues = vi.fn().mockReturnValue({
                 onConflictDoUpdate: vi.fn().mockReturnValue({ returning: mockMediaReturning }),
-                onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+                onConflictDoNothing: vi.fn().mockReturnValue({
+                    returning: vi.fn().mockResolvedValue([{ id: 'new-comment-1' }]),
+                }),
             });
             vi.mocked(db.insert).mockReturnValue({ values: mockValues } as any);
 

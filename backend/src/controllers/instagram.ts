@@ -353,7 +353,12 @@ export class InstagramController {
                 );
 
                 if (newComments.length > 0) {
-                    await db
+                    // Race-safe: a concurrent webhook may have inserted the same
+                    // instagram_comment_id between our SELECT and INSERT.
+                    // .returning() counts only rows actually inserted (ON CONFLICT
+                    // DO NOTHING skips conflicting rows), so the reported count
+                    // stays accurate when we lose the race.
+                    const inserted = await db
                         .insert(instagramComments)
                         .values(newComments.map(({ mediaPk, comment }) => ({
                             mediaId: mediaPk,
@@ -364,10 +369,9 @@ export class InstagramController {
                             fromUsername: comment.from?.username,
                             createdTime: comment.timestamp ? new Date(comment.timestamp) : null,
                         })))
-                        // Race-safe: a concurrent webhook may have inserted the
-                        // same instagram_comment_id between our SELECT and INSERT.
-                        .onConflictDoNothing({ target: instagramComments.instagramCommentId });
-                    syncedComments = newComments.length;
+                        .onConflictDoNothing({ target: instagramComments.instagramCommentId })
+                        .returning({ id: instagramComments.id });
+                    syncedComments = inserted.length;
                 }
             }
 
