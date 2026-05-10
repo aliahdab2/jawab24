@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
+import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 import { Card, Toggle } from '@/components/ui';
 import { Sparkles, Check } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -83,7 +84,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
                   currentLang === 'ar' && 'italic-arabic',
                 )}
                 dir="auto"
-                maxLength={2000}
+                maxLength={MAX_TEMPLATE_MESSAGE_LENGTH}
                 rows={3}
                 placeholder={t('replyStyle.brandVoicePlaceholder')}
                 value={value}

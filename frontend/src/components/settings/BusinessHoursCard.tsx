@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 import { Card, Toggle, Select } from '@/components/ui';
 import {
   Clock,
@@ -57,7 +58,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
   const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
   const displayValue = isAutoTranslated ? '' : awayValue;
   const placeholder = isAutoTranslated && awayValue ? awayValue : t('awayMessagePlaceholder');
-  const maxChars = 2000;
+  const maxChars = MAX_TEMPLATE_MESSAGE_LENGTH;
 
   return (
     <Card className="border-none shadow-md shadow-surface-200/30 p-4 landscape:p-3 overflow-hidden">

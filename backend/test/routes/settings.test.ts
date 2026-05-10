@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
+import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 import settingsRoutes from '../../src/routes/settings';
 
 // Mock database
@@ -727,30 +728,63 @@ describe('Settings Routes', () => {
             expect(body.error).toBe('Bad Request');
         });
 
-        it('should validate away message length', async () => {
-            const { authService } = await import('../../src/services/auth');
+        // Regression: a customer with a 639-char greeting (saved before this validation
+        // existed) was unable to toggle ai_enabled because the frontend re-sent the
+        // entire settings payload — including the legacy greetingMessage. The 500-char
+        // cap rejected the whole PUT, blocking unrelated fields. The cap now matches
+        // the strictest platform limit (Instagram DM = 1000 chars).
+        const overLimit = 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1);
+        const atLimit = 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH);
 
+        it.each([
+            ['awayMessage'],
+            ['greetingMessage'],
+            ['brandVoiceNotes'],
+        ])('rejects %s longer than MAX_TEMPLATE_MESSAGE_LENGTH', async (field) => {
+            const { authService } = await import('../../src/services/auth');
             vi.mocked(authService.verifyToken).mockReturnValue({
                 userId: 'user_123',
                 facebookId: 'fb_123',
             });
 
-            const longMessage = 'a'.repeat(501); // Max is 500
-
             const response = await app.inject({
                 method: 'PUT',
                 url: '/settings',
-                headers: {
-                    authorization: 'Bearer valid_token',
-                },
-                payload: {
-                    awayMessage: longMessage,
-                },
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { [field]: overLimit },
             });
 
             expect(response.statusCode).toBe(400);
             const body = JSON.parse(response.body);
             expect(body.error).toBe('Bad Request');
+            expect(body.message).toContain(field);
+        });
+
+        it.each([
+            ['awayMessage'],
+            ['greetingMessage'],
+            ['brandVoiceNotes'],
+        ])('accepts %s exactly at MAX_TEMPLATE_MESSAGE_LENGTH', async (field) => {
+            const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+            vi.mocked(authService.verifyToken).mockReturnValue({
+                userId: 'user_123',
+                facebookId: 'fb_123',
+            });
+            vi.mocked(settingsService.updateSettings).mockResolvedValue({
+                id: 'settings_123',
+                userId: 'user_123',
+                [field]: atLimit,
+            } as never);
+
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { [field]: atLimit },
+            });
+
+            expect(response.statusCode).toBe(200);
         });
     });
 
