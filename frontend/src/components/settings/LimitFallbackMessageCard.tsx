@@ -108,14 +108,6 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
           })}
         </p>
       )}
-
-      {/* Off-state helper: only shown when toggle is off so the merchant
-          understands the consequence of the default state. */}
-      {!enabled && (
-        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-          {t('limitFallbackMessage.helperOff')}
-        </p>
-      )}
     </Card>
   );
 }
