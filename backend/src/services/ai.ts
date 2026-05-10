@@ -25,6 +25,7 @@ interface CacheContext {
     postMessage?: string;
     storePolicies?: string;
     replyStyle?: string;
+    brandVoiceNotes?: string;
     customerContext?: string;
 }
 
@@ -97,6 +98,10 @@ export class AiService {
             `p:${ctx.postMessage || ''}`,
             `sp:${ctx.storePolicies ? crypto.createHash('md5').update(ctx.storePolicies).digest('hex').slice(0, 8) : ''}`,
             `rs:${ctx.replyStyle || 'professional'}`,
+            // Brand voice notes scope cache so merchants who update guidelines see
+            // their changes reflected in repeat-question replies (not stuck on the
+            // 30-day TTL of the previous version).
+            `bvn:${ctx.brandVoiceNotes ? crypto.createHash('md5').update(ctx.brandVoiceNotes).digest('hex').slice(0, 8) : ''}`,
             // customerContext = substantive history/summary only (senderName is excluded).
             // This prevents fragmentation by commenter name while still scoping by real customer state.
             `cc:${ctx.customerContext ? crypto.createHash('md5').update(ctx.customerContext).digest('hex').slice(0, 8) : ''}`,
@@ -250,6 +255,7 @@ export class AiService {
             postMessage,
             storePolicies: request.context?.storePolicies,
             replyStyle: request.context?.replyStyle,
+            brandVoiceNotes: request.context?.brandVoiceNotes,
             customerContext: request.context?.customerContext,
         };
 
