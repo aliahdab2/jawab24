@@ -1,3 +1,5 @@
+import clsx from 'clsx';
+import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 import { Card } from '@/components/ui';
 import { MessageCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
@@ -12,6 +14,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
   const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
   const displayValue = isAutoTranslated ? '' : value;
   const placeholder = isAutoTranslated && value ? value : t('greetingMessagePlaceholder');
+  const maxChars = MAX_TEMPLATE_MESSAGE_LENGTH;
 
   return (
     <Card className="border-none shadow-lg shadow-theme-border/50 p-5 landscape:p-3">
@@ -29,7 +32,7 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
         className={`input min-h-[56px] landscape:min-h-[44px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic ${currentLang === 'ar' ? 'italic italic-arabic' : ''}`}
         placeholder={placeholder}
         dir={displayValue ? 'auto' : undefined}
-        maxLength={500}
+        maxLength={maxChars}
         value={displayValue}
         onChange={(e) => {
           const newValue = e.target.value;
@@ -43,8 +46,11 @@ export function GreetingMessageCard({ settings, setSettings }: SettingsCardProps
           });
         }}
       />
-      <p className="text-xs text-muted-foreground mt-1 text-end">
-        {displayValue.length}/500
+      <p className={clsx(
+        'text-xs mt-1 text-end font-medium',
+        displayValue.length > maxChars * 0.9 ? 'text-red-500' : 'text-muted-foreground',
+      )}>
+        {displayValue.length}/{maxChars}
       </p>
     </Card>
   );

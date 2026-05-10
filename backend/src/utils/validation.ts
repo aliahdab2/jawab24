@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 
 /**
  * Validation Schemas for API Requests
@@ -24,10 +25,10 @@ export const UpdateSettingsSchema = z.object({
         (tz) => { try { Intl.DateTimeFormat(undefined, { timeZone: tz }); return true; } catch { return false; } },
         { message: 'Invalid IANA timezone' }
     ).optional(),
-    awayMessage: z.string().max(500, 'Away message must be less than 500 characters').optional(),
+    awayMessage: z.string().max(MAX_TEMPLATE_MESSAGE_LENGTH, `Away message must be ${MAX_TEMPLATE_MESSAGE_LENGTH} characters or fewer`).optional(),
     awayMessageMulti: z.record(z.string()).optional(),
     replyDelay: z.number().int().min(0).max(300, 'Reply delay must be between 0-300 seconds').optional(),
-    greetingMessage: z.string().max(500, 'Greeting message must be less than 500 characters').optional(),
+    greetingMessage: z.string().max(MAX_TEMPLATE_MESSAGE_LENGTH, `Greeting message must be ${MAX_TEMPLATE_MESSAGE_LENGTH} characters or fewer`).optional(),
     greetingMessageMulti: z.record(z.string()).optional(),
     commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),
     dualReplyNudge: z.string().max(80).optional(),
@@ -38,7 +39,7 @@ export const UpdateSettingsSchema = z.object({
     messageEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     notificationsEnabled: z.boolean().optional(),
     replyStyle: z.enum(['professional', 'casual', 'enthusiastic']).optional(),
-    brandVoiceNotes: z.string().max(500, 'Brand voice notes must be less than 500 characters').optional(),
+    brandVoiceNotes: z.string().max(MAX_TEMPLATE_MESSAGE_LENGTH, `Brand voice notes must be ${MAX_TEMPLATE_MESSAGE_LENGTH} characters or fewer`).optional(),
     brandVoiceNotesMulti: z.record(z.string()).optional(),
     holdLowConfidence: z.boolean().optional(),
 });
