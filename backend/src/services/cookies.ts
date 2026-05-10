@@ -2,7 +2,7 @@ import { FastifyReply } from 'fastify';
 import crypto from 'crypto';
 import { config } from '../config';
 
-const TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;      // 7 days  — access token cookie
+const TOKEN_EXPIRY_MS = 15 * 60 * 1000;                // 15 min — must match ACCESS_TOKEN_EXPIRY in auth.ts
 const REFRESH_TOKEN_EXPIRY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — must match refreshToken.ts
 
 const isProduction = config.nodeEnv === 'production';
@@ -102,10 +102,10 @@ export class CookiesService {
             maxAge: TOKEN_EXPIRY_MS / 1000,
         });
 
-        // CSRF token (JS accessible)
+        // CSRF token (JS accessible) — matches access-token cookie lifetime
         reply.setCookie('csrfToken', csrfToken, {
             ...CSRF_COOKIE_OPTIONS,
-            maxAge: TOKEN_EXPIRY_MS / 1000, // Match access token (will be shorter now)
+            maxAge: TOKEN_EXPIRY_MS / 1000,
         });
     }
 
