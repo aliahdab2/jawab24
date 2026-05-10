@@ -83,7 +83,7 @@ export function ReplyStyleCard({ settings, setSettings }: SettingsCardProps) {
                   currentLang === 'ar' && 'italic-arabic',
                 )}
                 dir="auto"
-                maxLength={500}
+                maxLength={2000}
                 rows={3}
                 placeholder={t('replyStyle.brandVoicePlaceholder')}
                 value={value}
