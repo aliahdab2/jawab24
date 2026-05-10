@@ -36,6 +36,17 @@ const ACTIVE_STATUSES: ReadonlySet<SubscriptionStatus> = new Set(['active', 'tri
 const STATUS_CACHE_TTL = 60;
 
 /**
+ * Snap a date to 00:00:00 UTC. Used to align usage rollover to a calendar boundary
+ * instead of the exact subscription-start instant — merchants in MENA (UTC+3) see
+ * the reset happen overnight at 3 AM local, the lowest-activity window.
+ */
+export function startOfUtcDay(date: Date): Date {
+    const d = new Date(date);
+    d.setUTCHours(0, 0, 0, 0);
+    return d;
+}
+
+/**
  * Subscriptions Service - Manages user subscriptions and usage
  */
 // Shared SQL for subscription priority: Active/Trialing > Past Due > Others
@@ -213,6 +224,11 @@ export const subscriptionsService = {
      * Initialize usage tracking for a billing period
      */
     async initializeUsagePeriod(userId: string, periodStart: Date, periodEnd: Date): Promise<void> {
+        // Snap to UTC midnight so the quota window aligns with a calendar boundary,
+        // not the exact subscription-start instant.
+        const normalizedStart = startOfUtcDay(periodStart);
+        const normalizedEnd = startOfUtcDay(periodEnd);
+
         // Check if period already exists
         const existing = await db
             .select()
@@ -220,7 +236,7 @@ export const subscriptionsService = {
             .where(
                 and(
                     eq(usage.userId, userId),
-                    eq(usage.periodStart, periodStart)
+                    eq(usage.periodStart, normalizedStart)
                 )
             )
             .limit(1);
@@ -229,8 +245,8 @@ export const subscriptionsService = {
 
         await db.insert(usage).values({
             userId,
-            periodStart,
-            periodEnd,
+            periodStart: normalizedStart,
+            periodEnd: normalizedEnd,
             aiRepliesCount: 0,
             totalCommentsProcessed: 0,
             totalMessagesProcessed: 0,
