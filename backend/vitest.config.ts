@@ -41,6 +41,8 @@ export default defineConfig({
         // Deprecated re-export shims
         'src/lib/shopifySyncQueue.ts',
         'src/workers/shopifySyncWorker.ts',
+        // One-off ops/backfill scripts (run manually post-deploy, not unit-testable)
+        'src/scripts/**',
       ],
       thresholds: {
         // Thresholds are set ~3–5 points below current actuals.
