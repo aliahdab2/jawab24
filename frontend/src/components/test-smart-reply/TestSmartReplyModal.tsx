@@ -28,7 +28,7 @@ interface TestSmartReplyModalProps {
 }
 
 export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps) {
-  const t = useTranslations('pages');
+  const t = useTranslations('testSmartReply');
   const tCommon = useTranslations('common');
   const locale = useLocale();
   const dir = getLocaleDirection(locale);
@@ -109,11 +109,11 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
     } catch (err) {
       const axiosErr = err as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.status === 429) {
-        setError(t('testSmartReplyRateLimit'));
+        setError(t('rateLimit'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'AI_QUOTA_EXCEEDED') {
-        setError(t(iosOr('testSmartReplyQuotaExceededIOS', 'testSmartReplyQuotaExceeded')));
+        setError(t(iosOr('quotaExceededIOS', 'quotaExceeded')));
       } else {
-        setError(t('testSmartReplyError'));
+        setError(t('error'));
         captureError(err, 'Test smart reply failed', { tags: { page: 'pages', action: 'testReply' } });
       }
     } finally {
@@ -139,21 +139,21 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
         return (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400">
             <Sparkles className="w-3 h-3" />
-            {t('testSmartReplyMethodSmart')}
+            {t('methodSmart')}
           </span>
         );
       case 'template':
         return (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-600 dark:text-amber-400">
             <Zap className="w-3 h-3" />
-            {t('testSmartReplyMethodPreset')}
+            {t('methodPreset')}
           </span>
         );
       case 'skipped':
         return (
           <span className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
             <Ban className="w-3 h-3" />
-            {t('testSmartReplyMethodSkipped')}
+            {t('methodSkipped')}
           </span>
         );
       default:
@@ -180,7 +180,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
         {/* Compact header with channel toggle */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between px-4 md:px-6 py-2.5 md:py-3 border-b border-theme-border flex-shrink-0">
           <div className="flex items-center justify-between gap-3 min-w-0">
-            <h3 className="text-base font-semibold text-foreground truncate">{t('testSmartReply')}</h3>
+            <h3 className="text-base font-semibold text-foreground truncate">{t('title')}</h3>
             <button
               onClick={onClose}
               className="sm:hidden p-2 -me-2 rounded-lg hover:bg-muted text-muted-foreground transition-colors flex-shrink-0"
@@ -202,7 +202,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                 )}
               >
                 <MessageCircle className="w-3 h-3" />
-                {t('testSmartReplyDm')}
+                {t('dm')}
               </button>
               <button
                 onMouseDown={(e) => e.preventDefault()}
@@ -215,7 +215,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                 )}
               >
                 <MessageSquare className="w-3 h-3" />
-                {t('testSmartReplyComment')}
+                {t('comment')}
               </button>
             </div>
             <button
@@ -237,12 +237,12 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                 <Sparkles className="w-7 h-7 text-brand-500" />
               </div>
               <p className="text-sm text-muted-foreground text-center max-w-[250px] leading-relaxed">
-                {t('testSmartReplyDescription')}
+                {t('description')}
               </p>
               {!hasKb && (
                 <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                  <p className="text-xs text-amber-700 dark:text-amber-300">{t('testSmartReplyAddKbHint')}</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300">{t('addKbHint')}</p>
                 </div>
               )}
             </div>
@@ -265,11 +265,11 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                       don't render a phantom nudge that would never actually be posted. */}
                   {msg.role === 'assistant' && msg.commentReplyMode === 'dual' && msg.replyMethod !== 'skipped' && msg.nudgeText && (
                     <div className="flex flex-col gap-1 max-w-[90%] sm:max-w-[85%]">
-                      <span className="text-xs font-medium text-muted-foreground">{t('testSmartReplyNudge')}</span>
+                      <span className="text-xs font-medium text-muted-foreground">{t('nudge')}</span>
                       <div className="px-4 py-2.5 rounded-2xl rounded-bs-none bg-card text-sm text-foreground border border-theme-border shadow-sm" dir="auto">
                         {msg.nudgeText}
                       </div>
-                      <span className="text-xs font-medium text-muted-foreground mt-1">{t('testSmartReplyPrivate')}</span>
+                      <span className="text-xs font-medium text-muted-foreground mt-1">{t('private')}</span>
                     </div>
                   )}
 
@@ -283,7 +283,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                     dir="auto"
                   >
                     {msg.role === 'assistant' && msg.replyMethod === 'skipped'
-                      ? <span className="italic text-muted-foreground">{t('testSmartReplyNoReply')}</span>
+                      ? <span className="italic text-muted-foreground">{t('noReply')}</span>
                       : msg.content}
                   </div>
 
@@ -293,7 +293,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                       {getMethodBadge(msg.replyMethod)}
                       {msg.latencyMs != null && (
                         <span className="text-muted-foreground">
-                          {t('testSmartReplyResponseTime', { ms: msg.latencyMs })}
+                          {t('responseTime', { ms: msg.latencyMs })}
                         </span>
                       )}
                     </div>
@@ -304,7 +304,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
               {loading && (
                 <div className="flex items-center gap-2 max-w-[90%] sm:max-w-[85%] px-4 py-2.5 rounded-2xl rounded-bs-none bg-card text-sm text-muted-foreground border border-theme-border shadow-sm">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {t('testSmartReplyTesting')}
+                  {t('testing')}
                 </div>
               )}
             </div>
@@ -327,13 +327,13 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                   className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <FileText className="w-3 h-3" />
-                  {t('testSmartReplyAddPostContext')}
+                  {t('addPostContext')}
                   <ChevronDown className="w-3 h-3" />
                 </button>
               ) : (
                 <div className="space-y-1">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-medium text-muted-foreground">{t('testSmartReplyPostContext')}</label>
+                    <label className="text-xs font-medium text-muted-foreground">{t('postContext')}</label>
                     <button
                       onClick={() => { setShowPostContext(false); setPostContext(''); }}
                       className="text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -345,7 +345,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
                     dir="auto"
                     value={postContext}
                     onChange={e => setPostContext(e.target.value)}
-                    placeholder={t('testSmartReplyPostContextPlaceholder')}
+                    placeholder={t('postContextPlaceholder')}
                     maxLength={1000}
                     rows={2}
                     className="w-full px-3 py-2 text-sm bg-background border border-theme-border rounded-xl resize-none overscroll-contain placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-500"
@@ -364,7 +364,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
               value={question}
               onChange={e => setQuestion(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={t('testSmartReplyPlaceholder')}
+              placeholder={t('placeholder')}
               maxLength={500}
               rows={1}
               className="flex-1 min-w-0 resize-none overscroll-contain rounded-2xl border border-theme-border bg-background px-4 py-2.5 text-sm leading-5 text-foreground placeholder:text-muted-foreground focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:bg-card transition-colors outline-none h-[42px]"
@@ -394,7 +394,7 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
             )}
           >
             <Trash2 className="w-3 h-3" />
-            {t('testSmartReplyClear')}
+            {t('clear')}
           </button>
         </div>
       </div>

@@ -46,6 +46,7 @@ const PagesPage: NextPageWithLayout = () => {
   const tc = useTranslations('common');
   const tDash = useTranslations('dashboard');
   const tTime = useTranslations('time');
+  const tTest = useTranslations('testSmartReply');
   const { language } = useLanguage();
   const router = useRouter();
   const { isAuthenticated, fbToken } = useAuthStore();
@@ -578,8 +579,8 @@ const PagesPage: NextPageWithLayout = () => {
                         <FlaskConical className="w-5 h-5" />
                       </div>
                       <div className="text-start">
-                        <p className="text-sm font-bold text-foreground/70">{t('testSmartReply')}</p>
-                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{t('testSmartReplyDescription')}</p>
+                        <p className="text-sm font-bold text-foreground/70">{tTest('title')}</p>
+                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{tTest('description')}</p>
                       </div>
                     </div>
                     <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />

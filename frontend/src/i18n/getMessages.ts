@@ -43,6 +43,7 @@ import enSse           from './en/sse.json';
 import enSubscription  from './en/subscription.json';
 import enTeam          from './en/team.json';
 import enTerms         from './en/terms.json';
+import enTestSmartReply from './en/testSmartReply.json';
 import enTime          from './en/time.json';
 import enZid           from './en/zid.json';
 import enOrderNotifications from './en/orderNotifications.json';
@@ -91,6 +92,7 @@ import arSse           from './ar/sse.json';
 import arSubscription  from './ar/subscription.json';
 import arTeam          from './ar/team.json';
 import arTerms         from './ar/terms.json';
+import arTestSmartReply from './ar/testSmartReply.json';
 import arTime          from './ar/time.json';
 import arZid           from './ar/zid.json';
 import arOrderNotifications from './ar/orderNotifications.json';
@@ -143,6 +145,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/subscription': enSubscription, 'ar/subscription': arSubscription,
   'en/team': enTeam,             'ar/team': arTeam,
   'en/terms': enTerms,           'ar/terms': arTerms,
+  'en/testSmartReply': enTestSmartReply, 'ar/testSmartReply': arTestSmartReply,
   'en/time': enTime,             'ar/time': arTime,
   'en/zid': enZid,               'ar/zid': arZid,
   'en/orderNotifications': enOrderNotifications, 'ar/orderNotifications': arOrderNotifications,

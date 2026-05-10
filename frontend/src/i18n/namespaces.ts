@@ -56,8 +56,8 @@ export const PAGE_NAMESPACES = {
   messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'messages', 'settings'],
   leads:              [...DASHBOARD_LAYOUT, 'leads', 'export'],
 
-  pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'time', 'onboarding'],
-  settings:           [...DASHBOARD_LAYOUT, 'settings', 'team', 'time', 'logout'],
+  pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'testSmartReply', 'time', 'onboarding'],
+  settings:           [...DASHBOARD_LAYOUT, 'settings', 'team', 'testSmartReply', 'time', 'logout'],
   integrations:       [...DASHBOARD_LAYOUT, 'integrations', 'orderNotifications', 'ecommerceAnalytics', 'salla', 'shopify', 'zid'],
   ecommerceAnalytics: [...DASHBOARD_LAYOUT, 'ecommerceAnalytics', 'integrations'],
 
