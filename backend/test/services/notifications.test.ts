@@ -576,8 +576,10 @@ describe('NotificationService', () => {
             });
 
             const payload = spy.mock.calls[0][1];
-            expect(payload.bodies.ar).toContain('تم تمييز هذا الرد بواسطة الذكاء الاصطناعي');
+            expect(payload.bodies.ar).toContain('تم تمييز هذا الرد للمراجعة');
             expect(payload.bodies.ar).not.toContain('AI flagged');
+            // Project rule: never say "AI" / "ذكاء اصطناعي" in user-facing copy.
+            expect(payload.bodies.ar).not.toContain('الذكاء الاصطناعي');
         });
 
         it('should translate "Unknown" sender to Arabic', async () => {
