@@ -39,6 +39,12 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getLimitFallbackMessage: vi.fn().mockResolvedValue(null),
+    },
+}));
+
 describe('ReplyGenerator - Flagging System', () => {
     let generator: ReplyGenerator;
 
@@ -139,7 +145,7 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.replyMethod).toBe('template');
         });
 
-        it('should return fallback when AI limit is reached', async () => {
+        it('should return null + needsAttention=true at AI limit when no custom fallback is set (default-off)', async () => {
             const { subscriptionsService } = await import('../../src/services/subscriptions');
 
             vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
@@ -148,8 +154,10 @@ describe('ReplyGenerator - Flagging System', () => {
 
             const result = await generator.generateForComment(baseContext, true);
 
-            expect(result.replyText).toBe('Thank you for your comment!');
+            // Default-off: empty custom fallback ⇒ silent + flag for manual review
+            expect(result.replyText).toBeNull();
             expect(result.replyMethod).toBe('template');
+            expect(result.needsAttention).toBe(true);
         });
 
         it('should fetch post content lazily when postMessage is missing', async () => {
@@ -628,7 +636,7 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(result.needsAttention).toBe(false);
         });
 
-        it('should return fallback when AI limit is reached for messages', async () => {
+        it('should return null + needsAttention=true at AI limit when no custom fallback is set (default-off)', async () => {
             const { subscriptionsService } = await import('../../src/services/subscriptions');
 
             vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
@@ -637,8 +645,10 @@ describe('ReplyGenerator - Flagging System', () => {
 
             const result = await generator.generateForMessage(baseContext, true);
 
-            expect(result.replyText).toBe('Thank you for your message! We will get back to you soon.');
+            // Default-off: empty custom fallback ⇒ silent + flag for manual review
+            expect(result.replyText).toBeNull();
             expect(result.replyMethod).toBe('template');
+            expect(result.needsAttention).toBe(true);
         });
 
         it('should pass kbActiveVersion and conversationHistory to AI context', async () => {

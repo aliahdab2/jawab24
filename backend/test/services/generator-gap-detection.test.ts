@@ -43,6 +43,12 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getLimitFallbackMessage: vi.fn().mockResolvedValue(null),
+    },
+}));
+
 // Mock the RetrievalService class
 const mockRetrieve = vi.fn();
 const mockSetLogger = vi.fn();

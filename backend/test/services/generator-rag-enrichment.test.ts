@@ -60,6 +60,12 @@ vi.mock('../../src/services/subscriptions', () => ({
     },
 }));
 
+vi.mock('../../src/services/workspaceSettings', () => ({
+    workspaceSettingsService: {
+        getLimitFallbackMessage: vi.fn().mockResolvedValue(null),
+    },
+}));
+
 vi.mock('../../src/services/kb/gap-detector', () => ({
     gapDetectorService: {
         setLogger: vi.fn(),
