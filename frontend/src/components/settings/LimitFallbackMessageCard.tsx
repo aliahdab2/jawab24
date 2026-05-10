@@ -63,7 +63,9 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
 
       <InputFieldWrapper
         disabled={!enabled}
-        trailing={enabled ? <CharCounter value={charCount} max={maxChars} /> : null}
+        // Keep the counter visible when disabled but content exists — otherwise
+        // a stored 200-char message looks identical to an empty field while off.
+        trailing={(enabled || charCount > 0) ? <CharCounter value={charCount} max={maxChars} /> : null}
       >
         <textarea
           aria-label={t('limitFallbackMessage.title')}
