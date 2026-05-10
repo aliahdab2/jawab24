@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook, Instagram, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook, Instagram, ExternalLink, Users } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -46,6 +46,17 @@ interface CustomerDetail {
         periodStart: string | null;
         periodEnd: string | null;
         limit: number | null;
+    };
+    leads: {
+        total: number;
+        today: number;
+        last7d: number;
+        last30d: number;
+        byStatus: {
+            new: number;
+            contacted: number;
+            converted: number;
+        };
     };
 }
 
@@ -430,6 +441,50 @@ export default function AdminCustomerDetailPage() {
                                     </div>
                                 </div>
                             </div>
+                        </Card>
+
+                        {/* Leads Card — captured leads from messages and comments across all pages */}
+                        <Card>
+                            <div className="flex items-center gap-2 mb-4">
+                                <Users className="w-5 h-5 text-brand-500" />
+                                <h2 className="text-lg font-semibold text-foreground">
+                                    {t('customer.leadsTitle')}
+                                </h2>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                <div className="bg-background rounded-lg p-3">
+                                    <p className="text-xs text-muted-foreground">{t('customer.leadsTotal')}</p>
+                                    <p className="text-2xl font-bold text-foreground">{customer.leads.total.toLocaleString(intlLocale)}</p>
+                                </div>
+                                <div className="bg-background rounded-lg p-3">
+                                    <p className="text-xs text-muted-foreground">{t('customer.leadsToday')}</p>
+                                    <p className="text-2xl font-bold text-foreground">{customer.leads.today.toLocaleString(intlLocale)}</p>
+                                </div>
+                                <div className="bg-background rounded-lg p-3">
+                                    <p className="text-xs text-muted-foreground">{t('customer.leadsLast7d')}</p>
+                                    <p className="text-2xl font-bold text-foreground">{customer.leads.last7d.toLocaleString(intlLocale)}</p>
+                                </div>
+                                <div className="bg-background rounded-lg p-3">
+                                    <p className="text-xs text-muted-foreground">{t('customer.leadsLast30d')}</p>
+                                    <p className="text-2xl font-bold text-foreground">{customer.leads.last30d.toLocaleString(intlLocale)}</p>
+                                </div>
+                            </div>
+                            {customer.leads.total > 0 && (
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="bg-background rounded-lg p-3">
+                                        <p className="text-xs text-muted-foreground">{t('customer.leadsStatusNew')}</p>
+                                        <p className="text-lg font-bold text-foreground">{customer.leads.byStatus.new.toLocaleString(intlLocale)}</p>
+                                    </div>
+                                    <div className="bg-background rounded-lg p-3">
+                                        <p className="text-xs text-muted-foreground">{t('customer.leadsStatusContacted')}</p>
+                                        <p className="text-lg font-bold text-foreground">{customer.leads.byStatus.contacted.toLocaleString(intlLocale)}</p>
+                                    </div>
+                                    <div className="bg-background rounded-lg p-3">
+                                        <p className="text-xs text-muted-foreground">{t('customer.leadsStatusConverted')}</p>
+                                        <p className="text-lg font-bold text-foreground">{customer.leads.byStatus.converted.toLocaleString(intlLocale)}</p>
+                                    </div>
+                                </div>
+                            )}
                         </Card>
 
                         {/* AI Cost by Page — period-scoped breakdown of OpenAI spend per Facebook/Instagram page */}

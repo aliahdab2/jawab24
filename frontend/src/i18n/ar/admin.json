@@ -89,7 +89,15 @@
     "period_30d": "آخر 30 يوماً",
     "period_90d": "آخر 90 يوماً",
     "period_this_month": "هذا الشهر",
-    "period_last_month": "الشهر الماضي"
+    "period_last_month": "الشهر الماضي",
+    "leadsTitle": "العملاء المحتملون",
+    "leadsTotal": "الإجمالي",
+    "leadsToday": "اليوم",
+    "leadsLast7d": "آخر 7 أيام",
+    "leadsLast30d": "آخر 30 يوماً",
+    "leadsStatusNew": "جديد",
+    "leadsStatusContacted": "تم التواصل",
+    "leadsStatusConverted": "تحوّل لعميل"
   },
   "playground": {
     "title": "ساحة تجريب الذكاء الاصطناعي",

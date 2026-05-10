@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, emailUnsubscribes, leadDigestSends, emailSends, posts, instagramMedia } from '../db/schema';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, emailUnsubscribes, leadDigestSends, emailSends, posts, instagramMedia, leads, workspaceMembers } from '../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
@@ -332,6 +332,63 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         postRepliesCount = (fbCount?.count || 0) + (igCount?.count || 0);
                     }
 
+                    // Lead stats — capture leads from pages owned directly by user OR by any
+                    // workspace this user belongs to (covers shared workspaces).
+                    let leadStats = {
+                        total: 0,
+                        today: 0,
+                        last7d: 0,
+                        last30d: 0,
+                        byStatus: { new: 0, contacted: 0, converted: 0 },
+                    };
+                    const workspaceIdsRows = await db
+                        .select({ workspaceId: workspaceMembers.workspaceId })
+                        .from(workspaceMembers)
+                        .where(eq(workspaceMembers.userId, userId));
+                    const workspaceIds = workspaceIdsRows.map(r => r.workspaceId);
+
+                    const ownedPageIdsRows = await db
+                        .select({ id: pages.id })
+                        .from(pages)
+                        .where(
+                            workspaceIds.length > 0
+                                ? sql`${pages.userId} = ${userId} OR ${pages.workspaceId} IN (${sql.join(workspaceIds.map(w => sql`${w}`), sql`, `)})`
+                                : eq(pages.userId, userId)
+                        );
+                    const ownedPageIds = ownedPageIdsRows.map(r => r.id);
+
+                    if (ownedPageIds.length > 0) {
+                        const startOfToday = new Date(now);
+                        startOfToday.setHours(0, 0, 0, 0);
+                        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+                        const [agg] = await db
+                            .select({
+                                total: sql<number>`count(*)::int`,
+                                today: sql<number>`count(*) filter (where ${leads.createdAt} >= ${startOfToday})::int`,
+                                last7d: sql<number>`count(*) filter (where ${leads.createdAt} >= ${sevenDaysAgo})::int`,
+                                last30d: sql<number>`count(*) filter (where ${leads.createdAt} >= ${thirtyDaysAgo})::int`,
+                                statusNew: sql<number>`count(*) filter (where ${leads.status} = 'new')::int`,
+                                statusContacted: sql<number>`count(*) filter (where ${leads.status} = 'contacted')::int`,
+                                statusConverted: sql<number>`count(*) filter (where ${leads.status} = 'converted')::int`,
+                            })
+                            .from(leads)
+                            .where(inArray(leads.pageId, ownedPageIds));
+
+                        leadStats = {
+                            total: agg?.total || 0,
+                            today: agg?.today || 0,
+                            last7d: agg?.last7d || 0,
+                            last30d: agg?.last30d || 0,
+                            byStatus: {
+                                new: agg?.statusNew || 0,
+                                contacted: agg?.statusContacted || 0,
+                                converted: agg?.statusConverted || 0,
+                            },
+                        };
+                    }
+
                     return reply.send({
                         success: true,
                         data: {
@@ -351,6 +408,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                                 periodEnd: null,
                                 limit: subscription?.maxAiRepliesPerMonth || null,
                             },
+                            leads: leadStats,
                         },
                     });
                 } catch (error) {

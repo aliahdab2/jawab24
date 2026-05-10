@@ -89,7 +89,15 @@
     "period_30d": "Last 30 days",
     "period_90d": "Last 90 days",
     "period_this_month": "This month",
-    "period_last_month": "Last month"
+    "period_last_month": "Last month",
+    "leadsTitle": "Leads",
+    "leadsTotal": "Total",
+    "leadsToday": "Today",
+    "leadsLast7d": "Last 7 days",
+    "leadsLast30d": "Last 30 days",
+    "leadsStatusNew": "New",
+    "leadsStatusContacted": "Contacted",
+    "leadsStatusConverted": "Converted"
   },
   "playground": {
     "title": "Smart Reply Playground",
