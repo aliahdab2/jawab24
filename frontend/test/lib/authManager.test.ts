@@ -102,6 +102,98 @@ describe('AuthManager', () => {
 
             expect(result).toBe(false);
         });
+
+        // Regression: on native (mobile) the access token is sent as a Bearer
+        // header read from localStorage. If refresh succeeds but the new token
+        // isn't persisted, every subsequent request keeps sending the expired
+        // token and the user appears to be signed out after 15 min.
+        it('persists the refreshed token to localStorage on native', async () => {
+            localStorage.setItem('token', 'old-token');
+            const setState = vi.fn();
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: { isNativePlatform: () => true },
+            }));
+            vi.doMock('@/lib/store', () => ({ useAuthStore: { setState } }));
+
+            vi.resetModules();
+            AuthManagerModule = await import('@/lib/authManager');
+
+            const mockAxiosInstance = {
+                post: vi.fn().mockResolvedValue({
+                    data: { success: true, token: 'fresh-token' },
+                }),
+            } as unknown as AxiosInstance;
+
+            const result = await AuthManagerModule.authManager.refreshToken(mockAxiosInstance);
+
+            expect(result).toBe(true);
+            expect(localStorage.getItem('token')).toBe('fresh-token');
+            expect(setState).toHaveBeenCalledWith({ token: 'fresh-token' });
+        });
+
+        it('does NOT write to localStorage on web (cookies handle auth)', async () => {
+            localStorage.removeItem('token');
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: { isNativePlatform: () => false },
+            }));
+            const setState = vi.fn();
+            vi.doMock('@/lib/store', () => ({ useAuthStore: { setState } }));
+
+            vi.resetModules();
+            AuthManagerModule = await import('@/lib/authManager');
+
+            const mockAxiosInstance = {
+                post: vi.fn().mockResolvedValue({
+                    data: { success: true, token: 'fresh-token' },
+                }),
+            } as unknown as AxiosInstance;
+
+            const result = await AuthManagerModule.authManager.refreshToken(mockAxiosInstance);
+
+            expect(result).toBe(true);
+            expect(localStorage.getItem('token')).toBeNull();
+            expect(setState).not.toHaveBeenCalled();
+        });
+
+        it('does not clobber localStorage when refresh succeeds without a token field', async () => {
+            localStorage.setItem('token', 'old-token');
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: { isNativePlatform: () => true },
+            }));
+
+            vi.resetModules();
+            AuthManagerModule = await import('@/lib/authManager');
+
+            const mockAxiosInstance = {
+                post: vi.fn().mockResolvedValue({
+                    data: { success: true },
+                }),
+            } as unknown as AxiosInstance;
+
+            const result = await AuthManagerModule.authManager.refreshToken(mockAxiosInstance);
+
+            expect(result).toBe(true);
+            expect(localStorage.getItem('token')).toBe('old-token');
+        });
+
+        it('does not touch localStorage when refresh fails', async () => {
+            localStorage.setItem('token', 'old-token');
+            vi.doMock('@capacitor/core', () => ({
+                Capacitor: { isNativePlatform: () => true },
+            }));
+
+            vi.resetModules();
+            AuthManagerModule = await import('@/lib/authManager');
+
+            const mockAxiosInstance = {
+                post: vi.fn().mockResolvedValue({ data: { success: false } }),
+            } as unknown as AxiosInstance;
+
+            const result = await AuthManagerModule.authManager.refreshToken(mockAxiosInstance);
+
+            expect(result).toBe(false);
+            expect(localStorage.getItem('token')).toBe('old-token');
+        });
     });
 
     describe('logout', () => {

@@ -181,11 +181,35 @@ class AuthManager {
   /**
    * Attempt to refresh the access token
    * Returns true if refresh was successful, false otherwise
+   *
+   * On native (mobile), the new access token must be persisted to localStorage
+   * because requests authenticate via the `Authorization: Bearer` header rather
+   * than the HttpOnly cookie. Without this, every request after the 15-min
+   * access-token TTL keeps sending the expired Bearer token and 401s — making
+   * the session appear to drop even though refresh-token rotation succeeded.
    */
   async refreshToken(axiosInstance: AxiosInstance): Promise<boolean> {
     try {
       const response = await axiosInstance.post<RefreshResponse>('/auth/refresh');
-      return response.data?.success === true;
+      if (response.data?.success !== true) {
+        return false;
+      }
+
+      const newToken = response.data.token;
+      if (newToken && typeof window !== 'undefined') {
+        try {
+          const { Capacitor } = await import('@capacitor/core');
+          if (Capacitor.isNativePlatform()) {
+            localStorage.setItem('token', newToken);
+            const { useAuthStore } = await import('./store');
+            useAuthStore.setState({ token: newToken });
+          }
+        } catch (e) {
+          captureError(e, 'Failed to persist refreshed token', { tags: { context: 'auth-refresh' } });
+        }
+      }
+
+      return true;
     } catch {
       return false;
     }
