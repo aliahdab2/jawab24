@@ -405,11 +405,10 @@ const LeadsPage: NextPageWithLayout = () => {
   const pages = React.useMemo(() => pagesData ?? [], [pagesData]);
 
   // Persisted page filter — localStorage + URL sync (?page=<id>) + stale-selection
-  // cleanup. Same pattern as /comments and /messages, but `validateAgainst: 'all'`
-  // because leads exist on every connected page, not only auto-reply-enabled ones.
-  const { pageId: selectedPageId, updatePageId: setSelectedPageId, syncFromUrl } = usePageFilter(pages, {
+  // cleanup. Same shape as /comments and /messages: only auto-reply-enabled pages
+  // appear in the dropdown so disconnected pages don't clutter the picker.
+  const { pageId: selectedPageId, updatePageId: setSelectedPageId, validPages, syncFromUrl } = usePageFilter(pages, {
     storageKey: 'leads-page-filter',
-    validateAgainst: 'all',
   });
 
   // Restore from URL query (deep-link) on mount.
@@ -418,12 +417,12 @@ const LeadsPage: NextPageWithLayout = () => {
     syncFromUrl(router.query.page as string | undefined);
   }, [router.isReady, router.query.page, syncFromUrl]);
 
-  // Default to first page when nothing is stored and pages have loaded.
+  // Default to first valid page when nothing is stored and active pages have loaded.
   useEffect(() => {
-    if (!selectedPageId && pages.length > 0) {
-      setSelectedPageId(pages[0].id);
+    if (!selectedPageId && validPages.length > 0) {
+      setSelectedPageId(validPages[0].id);
     }
-  }, [pages, selectedPageId, setSelectedPageId]);
+  }, [validPages, selectedPageId, setSelectedPageId]);
 
   const { data: leadsData, isLoading, isError } = useQuery({
     queryKey: ['leads', selectedPageId, statusFilter],
@@ -575,7 +574,7 @@ const LeadsPage: NextPageWithLayout = () => {
           <Select
             value={selectedPageId}
             onChange={setSelectedPageId}
-            options={pages.map((p) => ({ value: p.id, label: p.name }))}
+            options={validPages.map((p) => ({ value: p.id, label: p.name }))}
             placeholder={t('selectPage')}
             aria-label={t('selectPage')}
           />
