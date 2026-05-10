@@ -96,15 +96,16 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBann
                     {/* Customize-fallback shortcut surfaces only at the wall — at 80% the merchant
                         should still upgrade rather than configure the post-limit message. Visible on
                         iOS too (informational, not a billing action). */}
+                    {/* Custom-styled to harmonize with the rose alert palette —
+                        the default Button secondary variant uses bg-card which clashes
+                        on this red banner. Inherits the banner's rose tone instead. */}
                     {isLimitReached && (
-                        <Link href="/settings#limit-fallback-message">
-                            <Button
-                                variant="secondary"
-                                size="sm"
-                                icon={<MessageSquareOff className="w-4 h-4" aria-hidden="true" />}
-                            >
-                                {tSub('limitBanner.customizeFallback')}
-                            </Button>
+                        <Link
+                            href="/settings#limit-fallback-message"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap bg-rose-100 text-rose-800 hover:bg-rose-200 dark:bg-rose-900/40 dark:text-rose-200 dark:hover:bg-rose-900/60 transition-colors"
+                        >
+                            <MessageSquareOff className="w-3.5 h-3.5" aria-hidden="true" />
+                            {tSub('limitBanner.customizeFallback')}
                         </Link>
                     )}
                     {/* Upgrade CTA hidden on iOS native (App Store Guideline 3.1.1). */}

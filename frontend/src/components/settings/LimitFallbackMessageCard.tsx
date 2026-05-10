@@ -79,7 +79,11 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
           )}
           rows={enabled ? 3 : 2}
           placeholder={placeholder}
-          dir="auto"
+          // Use dir=auto only when there's content. For an empty textarea
+          // dir=auto defaults to LTR, which left-aligns the Arabic placeholder
+          // in an Arabic UI. Inheriting from <html dir> keeps the placeholder
+          // RTL until the merchant types.
+          dir={displayValue ? 'auto' : undefined}
           maxLength={maxChars}
           value={displayValue}
           disabled={!enabled}
