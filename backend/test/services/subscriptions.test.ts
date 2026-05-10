@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { subscriptionsService } from '../../src/services/subscriptions';
+import { subscriptionsService, startOfUtcDay } from '../../src/services/subscriptions';
 
 // Mock plansService
 vi.mock('../../src/services/plans', () => ({
@@ -1321,6 +1321,31 @@ describe('isSubscriptionActive', () => {
 
             expect(getUsageSpy).toHaveBeenCalledWith('owner-1');
         });
+    });
+});
+
+describe('startOfUtcDay', () => {
+    it('snaps a mid-day UTC timestamp back to 00:00:00 UTC of the same day', () => {
+        const result = startOfUtcDay(new Date('2026-05-10T21:12:43.111Z'));
+        expect(result.toISOString()).toBe('2026-05-10T00:00:00.000Z');
+    });
+
+    it('keeps an already-midnight UTC timestamp unchanged', () => {
+        const result = startOfUtcDay(new Date('2026-05-10T00:00:00.000Z'));
+        expect(result.toISOString()).toBe('2026-05-10T00:00:00.000Z');
+    });
+
+    it('does not mutate the input date', () => {
+        const input = new Date('2026-05-10T21:12:43.111Z');
+        startOfUtcDay(input);
+        expect(input.toISOString()).toBe('2026-05-10T21:12:43.111Z');
+    });
+
+    it('uses UTC day, not local — a UTC+3 evening still maps to the UTC date', () => {
+        // 2026-05-10 23:30 UTC = 2026-05-11 02:30 in Riyadh (UTC+3)
+        // We want UTC midnight, not local midnight.
+        const result = startOfUtcDay(new Date('2026-05-10T23:30:00.000Z'));
+        expect(result.toISOString()).toBe('2026-05-10T00:00:00.000Z');
     });
 });
 
