@@ -15,6 +15,7 @@ export interface SettingsState {
   timezone: string;
   awayMessageMulti: Record<string, string>;
   greetingMessageMulti: Record<string, string>;
+  limitFallbackEnabled: boolean;
   limitFallbackMessageMulti: Record<string, string>;
   dualReplyNudgeMulti: Record<string, string>;
   brandVoiceNotesMulti: Record<string, string>;

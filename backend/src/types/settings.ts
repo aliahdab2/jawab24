@@ -26,7 +26,9 @@ export interface UserSettings {
     // Multilingual messages (JSONB)
     greetingMessageMulti?: Record<string, string> | null;
     awayMessageMulti?: Record<string, string> | null;
-    /** Custom reply when the monthly Smart Reply quota is exhausted. Empty → hardcoded fallback. */
+    /** Master switch — when false, no reply is sent at the monthly limit. */
+    limitFallbackEnabled: boolean;
+    /** Custom reply when the monthly Smart Reply quota is exhausted. Used only when limitFallbackEnabled is true. */
     limitFallbackMessageMulti?: Record<string, string> | null;
     dualReplyNudgeMulti?: Record<string, string> | null;
     dualReplyNudgeVariations?: Record<string, string[]> | null;
@@ -62,6 +64,7 @@ export interface UpdateSettingsDTO {
     // Multilingual messages
     greetingMessageMulti?: Record<string, string> | null;
     awayMessageMulti?: Record<string, string> | null;
+    limitFallbackEnabled?: boolean;
     limitFallbackMessageMulti?: Record<string, string> | null;
     dualReplyNudgeMulti?: Record<string, string> | null;
     dualReplyNudgeVariations?: Record<string, string[]> | null;

@@ -55,6 +55,7 @@ const INITIAL_SETTINGS: SettingsState = {
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   awayMessageMulti: {},
   greetingMessageMulti: {},
+  limitFallbackEnabled: false,
   limitFallbackMessageMulti: {},
   dualReplyNudgeMulti: {},
   brandVoiceNotesMulti: {},
@@ -116,6 +117,7 @@ const SettingsPage: NextPageWithLayout = () => {
         timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         awayMessageMulti: data.awayMessageMulti || {},
         greetingMessageMulti: data.greetingMessageMulti || {},
+        limitFallbackEnabled: data.limitFallbackEnabled ?? false,
         limitFallbackMessageMulti: data.limitFallbackMessageMulti || {},
         dualReplyNudgeMulti: data.dualReplyNudgeMulti || {},
         brandVoiceNotesMulti: data.brandVoiceNotesMulti || {},
@@ -299,9 +301,17 @@ const SettingsPage: NextPageWithLayout = () => {
 
           <HandoffPauseCard settings={settings} setSettings={setSettings} />
           <LowConfidenceHoldCard settings={settings} setSettings={setSettings} />
-          <GreetingMessageCard settings={settings} setSettings={setSettings} />
-          <div id="limit-fallback-message" className="scroll-mt-24">
-            <LimitFallbackMessageCard settings={settings} setSettings={setSettings} />
+
+          <div className="space-y-3">
+            <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+              {t('subsectionCustomReplies')}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-start">
+              <GreetingMessageCard settings={settings} setSettings={setSettings} />
+              <div id="limit-fallback-message" className="scroll-mt-24">
+                <LimitFallbackMessageCard settings={settings} setSettings={setSettings} />
+              </div>
+            </div>
           </div>
         </div>
       )}
