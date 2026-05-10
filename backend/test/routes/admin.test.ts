@@ -93,6 +93,8 @@ vi.mock('../../src/db/schema', () => ({
     instagramMedia: { pageId: 'pageId', triggerReply: 'triggerReply' },
     kbChunks: { pageId: 'pageId', kbVersion: 'kbVersion' },
     kbGaps: { id: 'id', pageId: 'pageId', queryText: 'qt', detectedIntent: 'di', occurrenceCount: 'oc', firstSeenAt: 'fsa', lastSeenAt: 'lsa', resolved: 'resolved' },
+    workspaceMembers: { workspaceId: 'workspaceId', userId: 'userId', role: 'role' },
+    leads: { id: 'id', pageId: 'pageId', status: 'status', createdAt: 'createdAt' },
 }));
 
 vi.mock('../../src/config', () => ({
@@ -880,13 +882,26 @@ describe('Admin Routes', () => {
                 where: vi.fn().mockResolvedValue([{ count: 6 }]),
             };
 
+            // Seventh + eighth: lead stats — workspace memberships + owned pages.
+            // Empty owned-page set short-circuits the leads aggregation query.
+            const workspaceMembersChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([]),
+            };
+            const ownedPagesChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([]),
+            };
+
             vi.mocked(db.select)
                 .mockReturnValueOnce(userChain as any)
                 .mockReturnValueOnce(subChain as any)
                 .mockReturnValueOnce(pagesChain as any)
                 .mockReturnValueOnce(usageChain as any)
                 .mockReturnValueOnce(fbPostsChain as any)
-                .mockReturnValueOnce(igMediaChain as any);
+                .mockReturnValueOnce(igMediaChain as any)
+                .mockReturnValueOnce(workspaceMembersChain as any)
+                .mockReturnValueOnce(ownedPagesChain as any);
 
             const response = await app.inject({
                 method: 'GET',
