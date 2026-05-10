@@ -105,23 +105,26 @@ describe('ReplyStyleCard', () => {
     }));
   });
 
-  it('counter renders against MAX_TEMPLATE_MESSAGE_LENGTH (not a hardcoded 500)', () => {
-    const filler = 'x'.repeat(120);
+  it('counter renders at 80%+ of MAX_TEMPLATE_MESSAGE_LENGTH (not a hardcoded 500)', () => {
+    // Counter is hidden below the 80% threshold to reduce visual noise; only appears
+    // when the merchant is approaching the limit. Test with a value above the threshold.
+    const charCount = Math.ceil(MAX_TEMPLATE_MESSAGE_LENGTH * 0.95);
+    const filler = 'x'.repeat(charCount);
     const current = makeSettings({ brandVoiceNotesMulti: { en: filler, sourceLang: 'en' } });
     render(<ReplyStyleCard settings={current} setSettings={vi.fn()} />);
 
     // The counter shows "<count>/<max>" — proves we use the shared constant, not 500.
-    expect(screen.getByText(`120/${MAX_TEMPLATE_MESSAGE_LENGTH}`)).toBeInTheDocument();
+    expect(screen.getByText(`${charCount}/${MAX_TEMPLATE_MESSAGE_LENGTH}`)).toBeInTheDocument();
     expect(MAX_TEMPLATE_MESSAGE_LENGTH).toBe(1000);
   });
 
-  it('tone dropdown changes settings.replyStyle', () => {
+  it('clicking a tone radio button changes settings.replyStyle', () => {
     let current = makeSettings();
     const setSettings = vi.fn((s: SettingsState) => { current = s; });
     render(<ReplyStyleCard settings={current} setSettings={setSettings} />);
 
-    const select = screen.getByLabelText(/Tone/i) as HTMLSelectElement;
-    fireEvent.change(select, { target: { value: 'casual' } });
+    const casual = screen.getByRole('radio', { name: /Casual/i });
+    fireEvent.click(casual);
 
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ replyStyle: 'casual' }));
   });
