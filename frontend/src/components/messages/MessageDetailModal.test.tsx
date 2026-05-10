@@ -436,7 +436,7 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      expect(screen.getByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).toBeInTheDocument();
+      expect(screen.getByText("Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).toBeInTheDocument();
       const textarea = screen.getByPlaceholderText('Type your reply...');
       expect(textarea).toHaveValue('AI suggested draft reply');
     });
@@ -454,7 +454,7 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
 
     it('does not show held reply banner when aiOriginalReply exists but flagReason is different', () => {
@@ -474,7 +474,7 @@ describe('MessageDetailModal', () => {
         />
       );
 
-      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
   });
 
