@@ -29,7 +29,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
   const charCount = displayValue.length;
 
   const hasAnyValue = Object.entries(settings.limitFallbackMessageMulti || {})
-    .some(([k, v]) => k !== 'sourceLang' && v && v.trim().length > 0);
+    .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
 
   return (
     <Card className="border-none shadow-lg shadow-theme-border/50 p-4 landscape:p-3">
@@ -70,6 +70,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
       >
         <textarea
           aria-label={t('limitFallbackMessage.title')}
+          aria-disabled={!enabled}
           className={clsx(
             'input w-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none transition-all duration-200',
             'placeholder:text-muted-foreground placeholder:italic',
@@ -78,7 +79,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
           )}
           rows={enabled ? 3 : 2}
           placeholder={placeholder}
-          dir={displayValue ? 'auto' : undefined}
+          dir="auto"
           maxLength={maxChars}
           value={displayValue}
           disabled={!enabled}
