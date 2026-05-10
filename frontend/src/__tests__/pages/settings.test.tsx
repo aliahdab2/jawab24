@@ -32,6 +32,12 @@ vi.mock('@/lib/api', () => ({
         get: vi.fn(),
         update: vi.fn(),
     },
+    pagesApi: {
+        // ReplyStyleCard fetches the first connected page on mount to display
+        // "Testing on: <name>" — return an empty list so this test stays focused
+        // on the infinite-loop / fetch-once contract for settingsApi.
+        getAll: vi.fn().mockResolvedValue({ data: [] }),
+    },
     api: {
         delete: vi.fn(),
     },
