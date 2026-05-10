@@ -97,11 +97,11 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBann
                         should still upgrade rather than configure the post-limit message. Visible on
                         iOS too (informational, not a billing action). */}
                     {isLimitReached && (
-                        <Link href={`/${locale}/settings#limit-fallback-message`}>
+                        <Link href="/settings#limit-fallback-message">
                             <Button
                                 variant="secondary"
                                 size="sm"
-                                icon={<MessageSquareOff className="w-4 h-4" />}
+                                icon={<MessageSquareOff className="w-4 h-4" aria-hidden="true" />}
                             >
                                 {tSub('limitBanner.customizeFallback')}
                             </Button>

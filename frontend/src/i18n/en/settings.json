@@ -176,8 +176,8 @@
     "desc": "Sent when customers message outside business hours"
   },
   "limitFallbackMessage": {
-    "title": "Backup Reply When Smart Replies Are Paused",
-    "desc": "Sent to customers when your monthly Smart Reply limit is reached. Keep it short and on-brand."
+    "title": "Backup Reply at Monthly Limit",
+    "desc": "When your monthly Smart Reply limit is reached, customers get this message. Leave empty to send no reply — flagged comments and messages will surface in your inbox for manual handling."
   },
   "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
   "aiDescriptionImproved": "Use Smart Replies to generate context-aware responses. When disabled, only preset replies work. Works with 'Reply to Comments' and 'Reply to Messages' settings above.",

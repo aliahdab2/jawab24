@@ -324,8 +324,15 @@ export class ReplyGenerator {
                     text, postMessage: contextPostMessage, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
+                // Default-off: only auto-reply at the limit if the merchant configured a
+                // custom fallback. Otherwise the comment surfaces in "Needs Attention"
+                // (commentProcessor's `no_reply_generated` path) so the merchant handles
+                // it manually instead of every customer getting a generic auto-reply.
                 const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
-                return { replyText: custom ?? t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
+                if (custom) {
+                    return { replyText: custom, replyMethod: 'template', needsAttention: false };
+                }
+                return { replyText: null, replyMethod: 'template', needsAttention: true };
             }
 
             // Fetch post content lazily if needed
@@ -408,8 +415,13 @@ export class ReplyGenerator {
                     text, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
+                // Default-off: only auto-reply at the limit if the merchant configured a
+                // custom fallback. Otherwise stay silent and flag for manual handling.
                 const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
-                return { replyText: custom ?? t('messageFallback', lang), replyMethod: 'template', needsAttention: false };
+                if (custom) {
+                    return { replyText: custom, replyMethod: 'template', needsAttention: false };
+                }
+                return { replyText: null, replyMethod: 'template', needsAttention: true };
             }
 
             if (pageId && senderId) {

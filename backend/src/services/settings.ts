@@ -233,7 +233,9 @@ export class SettingsService {
 
         const multi = userSettings.limitFallbackMessageMulti || {};
         const primary = multi[preferred];
-        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
+        // Skip the `sourceLang` metadata key (see workspaceSettings.getLimitFallbackMessage).
+        const fallback = Object.entries(multi)
+            .find(([k, v]) => k !== 'sourceLang' && v && v !== primary)?.[1] ?? null;
 
         return primary || fallback || null;
     }

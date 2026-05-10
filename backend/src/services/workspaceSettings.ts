@@ -266,7 +266,11 @@ export class WorkspaceSettingsService {
 
         const multi = settings.limitFallbackMessageMulti || {};
         const primary = multi[preferred];
-        const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
+        // Skip the `sourceLang` metadata key — handleSmartTranslation stores it
+        // alongside language entries, so a naive Object.values() can leak it
+        // (e.g. returning the literal "en" string) when only that key is set.
+        const fallback = Object.entries(multi)
+            .find(([k, v]) => k !== 'sourceLang' && v && v !== primary)?.[1] ?? null;
 
         return primary || fallback || null;
     }
