@@ -6,6 +6,7 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectLanguageCode } from '../../utils/language';
+import { t } from '../../utils/i18n';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger } from '../../types';
@@ -286,7 +287,14 @@ export class MessageProcessor {
                 const isOpener = isOpenerMessage(messageText);
 
                 if (isCustomConfigured || isOpener) {
-                    const greeting = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
+                    // For opener taps ("Get Started" / "بدء الاستخدام") we always need a
+                    // response — falling through to AI lets it treat the system phrase as
+                    // a real topic and reply with "how can I help you regarding 'getting
+                    // started'?". When the workspace has no configured greeting (older
+                    // workspaces created before seeding, or merchant cleared it), fall
+                    // back to the hardcoded default for the detected language.
+                    const configured = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
+                    const greeting = configured ?? (isOpener ? t('defaultGreeting', detectedLang) : null);
                     if (greeting) {
                         try {
                             await adapter.sendReply(page, senderId, greeting);
