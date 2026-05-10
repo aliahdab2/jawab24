@@ -324,15 +324,16 @@ export class ReplyGenerator {
                     text, postMessage: contextPostMessage, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
-                // Default-off: only auto-reply at the limit if the merchant configured a
-                // custom fallback. Otherwise the comment surfaces in "Needs Attention"
-                // (commentProcessor's `no_reply_generated` path) so the merchant handles
-                // it manually instead of every customer getting a generic auto-reply.
-                const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
-                if (custom) {
-                    return { replyText: custom, replyMethod: 'template', needsAttention: false };
+                // Master switch: when off (default), suppress the auto-reply and surface
+                // the comment in "Needs Attention" so the merchant handles it manually.
+                // When on, send the merchant's custom message — or the hardcoded translation
+                // if they enabled the toggle without writing one.
+                const wsSettings = await workspaceSettingsService.getSettings(context.workspaceId);
+                if (!wsSettings.limitFallbackEnabled) {
+                    return { replyText: null, replyMethod: 'template', needsAttention: true };
                 }
-                return { replyText: null, replyMethod: 'template', needsAttention: true };
+                const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
+                return { replyText: custom ?? t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
             }
 
             // Fetch post content lazily if needed
@@ -415,13 +416,14 @@ export class ReplyGenerator {
                     text, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
-                // Default-off: only auto-reply at the limit if the merchant configured a
-                // custom fallback. Otherwise stay silent and flag for manual handling.
-                const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
-                if (custom) {
-                    return { replyText: custom, replyMethod: 'template', needsAttention: false };
+                // Master switch: when off, suppress the auto-reply (silent + flag).
+                // When on, send custom or hardcoded translation.
+                const wsSettings = await workspaceSettingsService.getSettings(context.workspaceId);
+                if (!wsSettings.limitFallbackEnabled) {
+                    return { replyText: null, replyMethod: 'template', needsAttention: true };
                 }
-                return { replyText: null, replyMethod: 'template', needsAttention: true };
+                const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
+                return { replyText: custom ?? t('messageFallback', lang), replyMethod: 'template', needsAttention: false };
             }
 
             if (pageId && senderId) {

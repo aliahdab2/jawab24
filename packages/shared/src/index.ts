@@ -685,7 +685,9 @@ export interface WorkspaceSettings {
   timezone: string;
   greetingMessageMulti: Record<string, string>;
   awayMessageMulti: Record<string, string>;
-  /** Custom reply when the monthly Smart Reply quota is exhausted. Empty → hardcoded fallback. */
+  /** Master switch — when false, no reply is sent at the monthly limit (silent + flag). */
+  limitFallbackEnabled: boolean;
+  /** Custom reply when the monthly Smart Reply quota is exhausted. Used only when limitFallbackEnabled is true. */
   limitFallbackMessageMulti: Record<string, string>;
   dualReplyNudgeMulti: Record<string, string>;
   dualReplyNudgeVariations?: Record<string, string[]>;

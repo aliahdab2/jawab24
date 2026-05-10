@@ -50,9 +50,11 @@ vi.mock('../../../src/services/kb/gap-detector', () => ({
 // Returns the merchant's custom fallback in the resolved language; tests override
 // the implementation to also exercise the silent (no-custom) default-off path.
 const getLimitFallbackMessage = vi.fn();
+const getWorkspaceSettings = vi.fn().mockResolvedValue({ limitFallbackEnabled: true });
 vi.mock('../../../src/services/workspaceSettings', () => ({
     workspaceSettingsService: {
         getLimitFallbackMessage: (...args: unknown[]) => getLimitFallbackMessage(...args),
+        getSettings: (...args: unknown[]) => getWorkspaceSettings(...args),
     },
 }));
 
@@ -73,8 +75,9 @@ describe('ReplyGenerator – localized fallback when AI quota is exhausted', () 
     beforeEach(() => {
         vi.clearAllMocks();
         canUseAiReplies.mockResolvedValue({ allowed: false, reason: 'monthly_limit' });
-        // Default: merchant has configured a custom message in both languages.
+        // Default: toggle ON, merchant has configured a custom message in both languages.
         // The mock echoes the resolved language so we can assert language resolution.
+        getWorkspaceSettings.mockResolvedValue({ limitFallbackEnabled: true });
         getLimitFallbackMessage.mockImplementation((_workspaceId: string, lang: string) =>
             Promise.resolve(`CUSTOM-${lang}`),
         );
@@ -113,6 +116,8 @@ describe('ReplyGenerator – localized fallback when AI quota is exhausted', () 
 
     describe('generateForComment – quota exhausted (no custom fallback set, default-off)', () => {
         beforeEach(() => {
+            // Toggle off → silent + flag, regardless of message text.
+            getWorkspaceSettings.mockResolvedValue({ limitFallbackEnabled: false });
             getLimitFallbackMessage.mockResolvedValue(null);
         });
 
@@ -187,6 +192,8 @@ describe('ReplyGenerator – localized fallback when AI quota is exhausted', () 
 
     describe('generateForMessage – quota exhausted (no custom fallback set, default-off)', () => {
         beforeEach(() => {
+            // Toggle off → silent + flag, regardless of message text.
+            getWorkspaceSettings.mockResolvedValue({ limitFallbackEnabled: false });
             getLimitFallbackMessage.mockResolvedValue(null);
         });
 

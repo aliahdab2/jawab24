@@ -30,6 +30,7 @@ const DEFAULTS: WorkspaceSettings = {
     timezone: 'Asia/Damascus',
     greetingMessageMulti: {},
     awayMessageMulti: {},
+    limitFallbackEnabled: false,
     limitFallbackMessageMulti: {},
     dualReplyNudgeMulti: {},
     dualReplyNudgeVariations: {},

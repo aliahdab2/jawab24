@@ -289,6 +289,7 @@ export class SettingsService {
             // Multilingual messages (JSONB)
             awayMessageMulti: record.awayMessageMulti || {},
             greetingMessageMulti: record.greetingMessageMulti || {},
+            limitFallbackEnabled: record.limitFallbackEnabled ?? false,
             limitFallbackMessageMulti: record.limitFallbackMessageMulti || {},
             dualReplyNudgeMulti: record.dualReplyNudgeMulti || {},
             replyDelay: record.replyDelay ?? 0,

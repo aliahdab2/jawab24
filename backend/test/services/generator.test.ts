@@ -42,6 +42,9 @@ vi.mock('../../src/services/subscriptions', () => ({
 vi.mock('../../src/services/workspaceSettings', () => ({
     workspaceSettingsService: {
         getLimitFallbackMessage: vi.fn().mockResolvedValue(null),
+        // Default: toggle off → silent at limit (matches the new schema default
+        // and the existing default-off assertions in this file).
+        getSettings: vi.fn().mockResolvedValue({ limitFallbackEnabled: false }),
     },
 }));
 

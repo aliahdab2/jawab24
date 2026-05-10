@@ -7,7 +7,7 @@
   "viewPresetReplies": "View Preset Replies",
   "general": "General",
   "sectionAutoReply": "Auto-Reply",
-  "sectionAiPersonality": "AI Personality",
+  "sectionAiPersonality": "Reply Personality",
   "account": "Account",
   "notifications": "Notifications",
   "language": "Language",
@@ -106,7 +106,7 @@
   "preview": "Preview",
   "flowNewComment": "New Comment",
   "flowPublicReply": "Comment Reply",
-  "flowPrivateMessage": "AI Private Message",
+  "flowPrivateMessage": "Smart Reply (DM)",
   "commentsAutoReply": "Reply to Comments",
   "commentsAutoReplyDesc": "Auto reply to comments on your page",
   "commentsAutoReplyHelper": "When enabled, choose how to reply: on comments, via message, or both.",
@@ -175,9 +175,16 @@
     "title": "After-Hours Message",
     "desc": "Sent when customers message outside business hours"
   },
+  "subsectionCustomReplies": "Customer-facing replies",
   "limitFallbackMessage": {
     "title": "Backup Reply at Monthly Limit",
-    "desc": "When your monthly Smart Reply limit is reached, customers get this message. Leave empty to send no reply — flagged comments and messages will surface in your inbox for manual handling."
+    "desc": "Sent to customers when your monthly Smart Reply limit is reached.",
+    "statusActive": "Active",
+    "statusOff": "Off",
+    "toggleLabel": "Send a reply when the monthly limit is reached",
+    "helperOff": "Off — no reply is sent at the limit. Comments and DMs are flagged in your inbox for manual handling.",
+    "emptyOnPreview": "If left empty, customers will see: “{defaultText}”",
+    "defaultPreviewText": "Thank you for your comment!"
   },
   "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
   "aiDescriptionImproved": "Use Smart Replies to generate context-aware responses. When disabled, only preset replies work. Works with 'Reply to Comments' and 'Reply to Messages' settings above.",

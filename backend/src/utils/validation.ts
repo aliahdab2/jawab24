@@ -30,6 +30,7 @@ export const UpdateSettingsSchema = z.object({
     replyDelay: z.number().int().min(0).max(300, 'Reply delay must be between 0-300 seconds').optional(),
     greetingMessage: z.string().max(MAX_TEMPLATE_MESSAGE_LENGTH, `Greeting message must be ${MAX_TEMPLATE_MESSAGE_LENGTH} characters or fewer`).optional(),
     greetingMessageMulti: z.record(z.string()).optional(),
+    limitFallbackEnabled: z.boolean().optional(),
     limitFallbackMessageMulti: z.record(z.string()).optional(),
     commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),
     dualReplyNudge: z.string().max(80).optional(),
