@@ -25,6 +25,13 @@ vi.mock('@/components/ui', () => ({
       {enabled ? 'ON' : 'OFF'}
     </button>
   ),
+  InputFieldWrapper: ({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) => (
+    <div>{children}{trailing}</div>
+  ),
+  CharCounter: ({ value, max }: { value: string | number; max: number }) => {
+    const len = typeof value === 'string' ? value.length : value;
+    return <span>{len}/{max}</span>;
+  },
 }));
 
 // next-intl mock from setup.ts handles `useTranslations` automatically with real EN strings.

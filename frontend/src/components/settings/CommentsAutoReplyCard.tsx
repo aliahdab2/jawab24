@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import { Card, Toggle, Input, Select } from '@/components/ui';
+import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
 import {
   MessageSquare,
   MessageCircle,
@@ -153,45 +153,47 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
           >
             <div className="p-4 landscape:p-3 rounded-xl bg-brand-50/20 dark:bg-brand-950/20 border border-brand-200/50 dark:border-brand-800/40">
               <h4 className="font-bold text-brand-900 dark:text-brand-300 text-sm mb-3">{t('dualReplyConfigTitle.improved')}</h4>
-              <Input
-                aria-label={t('dualReplyConfigTitle.improved')}
-                value={(() => {
-                  const currentLang = settings.dashboardLanguage;
-                  const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
-                  const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
-                  const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-                  return isAutoTranslated ? '' : value;
-                })()}
-                onChange={(e) => {
-                  const value = e.target.value.slice(0, 80);
-                  const currentLang = settings.dashboardLanguage;
-                  setSettings({
-                    ...settings,
-                    dualReplyNudgeMulti: {
+              <InputFieldWrapper trailing={<CharCounter value={dualNudgeInput.length} max={80} />}>
+                <input
+                  type="text"
+                  aria-label={t('dualReplyConfigTitle.improved')}
+                  value={(() => {
+                    const currentLang = settings.dashboardLanguage;
+                    const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
+                    const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
+                    const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+                    return isAutoTranslated ? '' : value;
+                  })()}
+                  onChange={(e) => {
+                    const value = e.target.value.slice(0, 80);
+                    const currentLang = settings.dashboardLanguage;
+                    setSettings({
+                      ...settings,
+                      dualReplyNudgeMulti: {
                         ...settings.dualReplyNudgeMulti,
                         [currentLang]: value,
                         sourceLang: currentLang
-                    },
+                      },
+                    });
+                  }}
+                  placeholder={(() => {
+                    const currentLang = settings.dashboardLanguage;
+                    const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
+                    const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
+                    const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
+                    return isAutoTranslated && value ? value : t('publicReplyPlaceholder');
+                  })()}
+                  dir={dualNudgeInput ? 'auto' : undefined}
+                  maxLength={80}
+                  className={clsx(
+                    'w-full bg-transparent border-none p-3 pe-14 rounded-2xl text-sm',
+                    'placeholder:text-muted-foreground placeholder:italic',
+                    'focus:outline-none focus:ring-0',
+                  )}
+                />
+              </InputFieldWrapper>
 
-                  });
-                }}
-                placeholder={(() => {
-                  const currentLang = settings.dashboardLanguage;
-                  const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
-                  const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
-                  const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-                  return isAutoTranslated && value ? value : t('publicReplyPlaceholder');
-                })()}
-                className="bg-card !py-2.5 placeholder:text-muted-foreground placeholder:italic"
-                maxLength={80}
-              />
-
-              <div className="flex items-center justify-between text-xs mt-1.5">
-                <span className="text-brand-700 dark:text-brand-400 font-medium">{t('dualReplyConfigHelper')}</span>
-                <span className={`font-bold ${dualNudgeInput.length > 70 ? 'text-amber-500' : 'text-surface-500'}`}>
-                  {dualNudgeInput.length}/80
-                </span>
-              </div>
+              <p className="text-xs text-brand-700 dark:text-brand-400 font-medium mt-1.5">{t('dualReplyConfigHelper')}</p>
               <p className="text-xs text-muted-foreground mt-1">{t('dualReplyVariationsHint')}</p>
             </div>
           </div>

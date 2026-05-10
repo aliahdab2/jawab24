@@ -20,6 +20,13 @@ vi.mock('@/components/ui', () => ({
     </select>
   ),
   Input: (props: React.InputHTMLAttributes<HTMLInputElement>) => <input {...props} />,
+  InputFieldWrapper: ({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) => (
+    <div>{children}{trailing}</div>
+  ),
+  CharCounter: ({ value, max }: { value: string | number; max: number }) => {
+    const len = typeof value === 'string' ? value.length : value;
+    return <span>{len}/{max}</span>;
+  },
 }));
 
 function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {

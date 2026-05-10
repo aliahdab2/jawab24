@@ -66,6 +66,13 @@ vi.mock('@/components/ui', () => ({
             {options.map((o: { value: string; label: string }) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
     ),
+    InputFieldWrapper: ({ children, trailing }: { children: React.ReactNode; trailing?: React.ReactNode }) => (
+        <div>{children}{trailing}</div>
+    ),
+    CharCounter: ({ value, max }: { value: string | number; max: number }) => {
+        const len = typeof value === 'string' ? value.length : value;
+        return <span>{len}/{max}</span>;
+    },
 }));
 
 const mockedSettingsApi = vi.mocked(settingsApi);
