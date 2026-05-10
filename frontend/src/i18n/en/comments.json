@@ -51,7 +51,7 @@
   "needsAction": "Needs Action",
   "handled": "Handled",
   "autoReplied": "Auto-replied",
-  "heldReplyBanner": "AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.",
+  "heldReplyBanner": "Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.",
   "resolve": "Resolve",
   "resolved": "Handled",
   "unresolve": "Undo",
