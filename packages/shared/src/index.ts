@@ -34,7 +34,7 @@ export type { NormalizeOptions } from './utils/arabic-normalize';
 export { sanitizeUserInput } from './utils/sanitize';
 export { sanitizeKbContent } from './utils/sanitize-kb';
 export { matchesKeyword, testKeywordsMatch, parseKeywords } from './utils/keyword-matching';
-export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhoneFromText } from './utils/validation';
+export { PHONE_REGEX, EMAIL_REGEX, isValidPhone, isValidEmail, isValidContact, detectContactType, isArabicPhone, normalizeArabicIndic, extractPhoneFromText, extractPhonesFromText } from './utils/validation';
 
 // --- SSE Event Types ---
 export * from './sse-events';

@@ -44,15 +44,50 @@ export function normalizeArabicIndic(text: string): string {
   return text.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
 }
 
+import { findPhoneNumbersInText, type CountryCode } from 'libphonenumber-js';
+
 /**
- * Extract the first phone-like string from free text (Arabic/international formats).
- * Matches: +966xxxxxxxxx, 009665xxxxxxx, 05xxxxxxxx, ٠٥xxxxxxxx (Arabic-Indic normalized first).
- * Returns compact digit string (no spaces/dashes), or null if no match.
- * Used for lead detection only — NOT for E.164 validation.
+ * Default country used to interpret nationally-formatted phone numbers
+ * (e.g. "0935924472" → "+963935924472"). The lead extractor's customer base
+ * is predominantly Syrian; callers can override per-workspace later.
  */
-export function extractPhoneFromText(text: string): string | null {
+const DEFAULT_PHONE_COUNTRY: CountryCode = 'SY';
+
+/**
+ * Extract every phone-like string from free text and return them as E.164.
+ *
+ * Why this exists: customers regularly share both a mobile and a landline in
+ * one message (Levant convention). The previous regex-based implementation
+ * spanned whitespace between numbers and welded them into a single bogus
+ * 19-digit string. libphonenumber-js tokenizes correctly and validates each
+ * candidate against country-specific number plans.
+ */
+export function extractPhonesFromText(
+  text: string,
+  defaultCountry: CountryCode = DEFAULT_PHONE_COUNTRY,
+): string[] {
   const normalized = normalizeArabicIndic(text);
-  const match = normalized.match(/(?:\+|00)?\d[\d\s\-().]{7,18}\d/);
-  if (!match) return null;
-  return match[0].replace(/[\s\-().]/g, '');
+  const matches = findPhoneNumbersInText(normalized, defaultCountry);
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const m of matches) {
+    const e164 = m.number.number;
+    if (!seen.has(e164)) {
+      seen.add(e164);
+      result.push(e164);
+    }
+  }
+  return result;
+}
+
+/**
+ * Extract the first valid phone from free text as E.164 (e.g. "+963935924472").
+ * Returns null if no valid number is found.
+ * Used for lead detection only.
+ */
+export function extractPhoneFromText(
+  text: string,
+  defaultCountry: CountryCode = DEFAULT_PHONE_COUNTRY,
+): string | null {
+  return extractPhonesFromText(text, defaultCountry)[0] ?? null;
 }
