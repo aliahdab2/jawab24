@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import { Card, Input } from '@/components/ui';
+import { Card, InputFieldWrapper } from '@/components/ui';
 import {
   Clock,
   Check,
@@ -26,15 +26,21 @@ export function ReplyDelayCard({ settings, setSettings }: SettingsCardProps) {
         </div>
       </div>
       <div className="flex items-center gap-3 mb-2">
-        <Input
-          type="number"
-          min={0}
-          max={60}
-          aria-label={t('replyDelay.title')}
-          value={settings.replyDelay}
-          onChange={(e) => setSettings({ ...settings, replyDelay: Math.min(60, Math.max(0, parseInt(e.target.value) || 0)) })}
-          className="w-full py-4 landscape:py-2.5 text-center font-bold text-lg border-none bg-background focus:ring-2 focus:ring-brand-500"
-        />
+        <InputFieldWrapper className="w-full">
+          <input
+            type="number"
+            min={0}
+            max={60}
+            aria-label={t('replyDelay.title')}
+            value={settings.replyDelay}
+            onChange={(e) => setSettings({ ...settings, replyDelay: Math.min(60, Math.max(0, parseInt(e.target.value) || 0)) })}
+            className={clsx(
+              'w-full bg-transparent border-none p-3 rounded-2xl text-center font-bold text-lg',
+              'placeholder:text-muted-foreground placeholder:italic',
+              'focus:outline-none focus:ring-0',
+            )}
+          />
+        </InputFieldWrapper>
         <span className="text-sm font-bold text-muted-foreground uppercase tracking-widest">{t('seconds')}</span>
       </div>
       <div className="mt-2 flex gap-2 flex-wrap">

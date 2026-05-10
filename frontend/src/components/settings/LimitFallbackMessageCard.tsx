@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
-import { Card, Toggle } from '@/components/ui';
+import { Card, Toggle, InputFieldWrapper, CharCounter } from '@/components/ui';
 import { MessageSquareOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
@@ -61,25 +61,24 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
         />
       </div>
 
-      <div
-        className={clsx(
-          'relative rounded-2xl bg-background transition-all duration-200',
-          'focus-within:ring-2 focus-within:ring-brand-500/40',
-          !enabled && 'opacity-50',
-        )}
+      <InputFieldWrapper
+        disabled={!enabled}
+        trailing={enabled ? <CharCounter value={charCount} max={maxChars} /> : null}
       >
         <textarea
           aria-label={t('limitFallbackMessage.title')}
           aria-disabled={!enabled}
           className={clsx(
-            'input w-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none transition-all duration-200',
+            'w-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none',
             'placeholder:text-muted-foreground placeholder:italic',
             'focus:outline-none focus:ring-0',
             currentLang === 'ar' && 'italic italic-arabic',
           )}
           rows={enabled ? 3 : 2}
           placeholder={placeholder}
-          dir="auto"
+          // dir=auto only when content exists; an empty textarea with dir=auto
+          // defaults to LTR, which left-aligns an Arabic placeholder in an Arabic UI.
+          dir={displayValue ? 'auto' : undefined}
           maxLength={maxChars}
           value={displayValue}
           disabled={!enabled}
@@ -95,17 +94,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
             });
           }}
         />
-        {(charCount > 0 || enabled) && (
-          <span
-            className={clsx(
-              'absolute bottom-2 end-3 text-[10px] font-medium pointer-events-none',
-              charCount > maxChars * 0.9 ? 'text-red-500' : 'text-muted-foreground/70',
-            )}
-          >
-            {charCount}/{maxChars}
-          </span>
-        )}
-      </div>
+      </InputFieldWrapper>
 
       {/* Empty-on preview: tells the merchant exactly what gets sent when they
           enabled the feature without writing anything. Mirrors Gmail's vacation

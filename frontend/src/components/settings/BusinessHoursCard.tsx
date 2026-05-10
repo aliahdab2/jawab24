@@ -1,6 +1,6 @@
 import clsx from 'clsx';
 import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
-import { Card, Toggle, Select } from '@/components/ui';
+import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
 import {
   Clock,
   Zap,
@@ -196,11 +196,19 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
             </div>
           </div>
 
-          <div className="relative">
+          <InputFieldWrapper
+            disabled={!settings.businessHoursOnly}
+            trailing={<CharCounter value={displayValue.length} max={maxChars} />}
+          >
             <textarea
               disabled={!settings.businessHoursOnly}
               aria-label={t('awayMessage.title')}
-              className="input min-h-[72px] landscape:min-h-[44px] border-none bg-card focus:ring-2 focus:ring-brand-500 p-3 pb-7 rounded-xl text-sm placeholder:text-muted-foreground placeholder:italic w-full"
+              className={clsx(
+                'w-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none text-sm',
+                'placeholder:text-muted-foreground placeholder:italic',
+                'focus:outline-none focus:ring-0',
+              )}
+              rows={3}
               placeholder={placeholder}
               dir={displayValue ? 'auto' : undefined}
               maxLength={maxChars}
@@ -217,15 +225,7 @@ export function BusinessHoursCard({ settings, setSettings, currentTime }: Busine
                 });
               }}
             />
-            <span className={clsx(
-              'absolute bottom-2 end-3 text-[10px] font-medium',
-              displayValue.length > maxChars * 0.9
-                ? 'text-red-500'
-                : 'text-muted-foreground'
-            )}>
-              {displayValue.length}/{maxChars}
-            </span>
-          </div>
+          </InputFieldWrapper>
         </div>
       </div>
     </Card>

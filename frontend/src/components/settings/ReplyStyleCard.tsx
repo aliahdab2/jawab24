@@ -3,7 +3,7 @@ import dynamic from 'next/dynamic';
 import clsx from 'clsx';
 import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
-import { Card } from '@/components/ui';
+import { Card, InputFieldWrapper, CharCounter } from '@/components/ui';
 import { Sparkles, MessageSquare, ArrowRight, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
@@ -172,34 +172,32 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           </div>
         )}
 
-        <div className="relative">
+        <InputFieldWrapper
+          trailing={
+            value.length >= MAX_TEMPLATE_MESSAGE_LENGTH * 0.8
+              ? <CharCounter value={value.length} max={MAX_TEMPLATE_MESSAGE_LENGTH} />
+              : null
+          }
+        >
           <textarea
             id="brandVoiceNotes"
             ref={textareaRef}
             aria-label={t('replyStyle.brandVoice')}
             className={clsx(
-              'input min-h-[64px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-2.5 pb-5 rounded-xl placeholder:text-muted-foreground placeholder:italic w-full text-sm',
+              'w-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none text-sm',
+              'placeholder:text-muted-foreground placeholder:italic',
+              'focus:outline-none focus:ring-0',
               isAutoTranslated && 'text-muted-foreground italic',
               currentLang === 'ar' && 'italic-arabic',
             )}
-            dir="auto"
+            dir={value ? 'auto' : undefined}
             maxLength={MAX_TEMPLATE_MESSAGE_LENGTH}
             rows={3}
             placeholder={t('replyStyle.brandVoicePlaceholder')}
             value={value}
             onChange={(e) => updateValue(e.target.value)}
           />
-          {value.length >= MAX_TEMPLATE_MESSAGE_LENGTH * 0.8 && (
-            <span
-              className={clsx(
-                'pointer-events-none absolute bottom-1.5 end-2.5 text-[10px] tabular-nums',
-                value.length >= MAX_TEMPLATE_MESSAGE_LENGTH ? 'text-destructive' : 'text-muted-foreground',
-              )}
-            >
-              {value.length}/{MAX_TEMPLATE_MESSAGE_LENGTH}
-            </span>
-          )}
-        </div>
+        </InputFieldWrapper>
       </div>
 
       {/* Tone + Test — single compact row. */}
