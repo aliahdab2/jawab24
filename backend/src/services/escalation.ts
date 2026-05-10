@@ -101,10 +101,16 @@ function buildTitle(name: string | null, pageName: string | null): string {
  */
 async function resolveStuckSpamComments(): Promise<void> {
     // An item is considered spam-stuck if its entire message (trimmed) contains
-    // no Arabic or Latin letters — only dots, punctuation, whitespace, or emojis.
+    // no letter at all — only dots, punctuation, whitespace, emojis, @mentions,
+    // digits, or any combination thereof. Implemented as the inverse: if NO
+    // letter is present, the message is non-actionable noise.
+    // [[:alpha:]] is Postgres's locale-aware "any letter" class — it matches
+    // Arabic, Latin (incl. accented), Cyrillic, Hebrew, etc. That's safer than
+    // hardcoded ranges, which previously missed emoji-only DMs and would also
+    // miss accented Latin like "café".
     const spamCondition = sql`
-        trim(message) ~ '^[[:space:].…!?،؟@#*+=~^&%$|/\\\\]+$'
-        OR (trim(message) ~ '^@\\S+$')
+        trim(message) <> ''
+        AND trim(message) !~ '[[:alpha:]]'
     `;
     const stuckCondition = sql`created_at < NOW() - INTERVAL '10 minutes'`;
     const stuckMessageCondition = sql`created_time < NOW() - INTERVAL '10 minutes'`;

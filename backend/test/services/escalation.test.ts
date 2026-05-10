@@ -41,6 +41,7 @@ import { runEscalationSweep, startEscalationCron, stopEscalationCron } from '../
 import { db } from '../../src/db';
 import * as schema from '../../src/db/schema';
 import { notificationService } from '../../src/services/notifications';
+import { sql } from 'drizzle-orm';
 
 /**
  * Helper: mock the batch-query pattern used by escalateComments / escalateMessages.
@@ -111,7 +112,7 @@ describe('Escalation Service', () => {
             expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
         });
 
-        it('should resolve stuck spam/punctuation comments before escalation runs', async () => {
+        it('should resolve stuck spam/punctuation/emoji comments before escalation runs', async () => {
             mockBatchSelect([], []);
             const { setMock } = mockDbUpdate(3); // 3 stuck spam items resolved per table
 
@@ -134,6 +135,25 @@ describe('Escalation Service', () => {
 
             // No escalation notifications — the resolved rows never reached escalation
             expect(notificationService.sendNotificationToWorkspace).not.toHaveBeenCalled();
+        });
+
+        it('should use a letter-class regex that catches emojis (regression for 2026-05-10 sla_no_reply on 👍)', async () => {
+            mockBatchSelect([], []);
+            mockDbUpdate(0);
+
+            await runEscalationSweep();
+
+            // The previous regex was a hardcoded punctuation character class that
+            // missed emoji code points entirely — so 👍-only DMs slipped past the
+            // safety net and got incorrectly flagged sla_no_reply at 15 min. Ensure
+            // the SQL now uses Postgres's locale-aware [[:alpha:]] letter class so
+            // anything WITHOUT a letter (emoji, punctuation, @mention, digits) is
+            // resolved as stuck-spam.
+            const sqlCalls = vi.mocked((sql as unknown as { mock: { calls: [TemplateStringsArray][] } }).mock).calls;
+            const allFragments = sqlCalls.flatMap(([strings]) => Array.from(strings)).join(' ');
+            expect(allFragments).toContain('[[:alpha:]]');
+            // Negative-presence guards against a partial revert.
+            expect(allFragments).not.toContain('[[:space:].…');
         });
 
         it('should send individual notification per stale comment with customer context', async () => {
