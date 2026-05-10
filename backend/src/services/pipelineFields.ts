@@ -17,7 +17,7 @@ export const PIPELINE_FIELDS = [
     'businessHoursStart', 'businessHoursEnd', 'timezone',
     'aiEnabled', 'aiModel', 'commentReplyMode',
     'dualReplyNudge', 'dualReplyNudgeMulti', 'dualReplyNudgeVariations',
-    'replyDelay', 'greetingMessageMulti', 'awayMessageMulti',
+    'replyDelay', 'greetingMessageMulti', 'awayMessageMulti', 'limitFallbackMessageMulti',
     'handoffPauseDurationMinutes', 'commentEscalationMinutes',
     'messageEscalationMinutes', 'defaultReplyLanguage',
     'supportedLanguages', 'autoDetectLanguage',

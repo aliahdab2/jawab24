@@ -29,6 +29,7 @@ import {
   NotificationsCard,
   HandoffPauseCard,
   GreetingMessageCard,
+  LimitFallbackMessageCard,
   ReplyStyleCard,
   LowConfidenceHoldCard,
   DangerZone,
@@ -54,6 +55,7 @@ const INITIAL_SETTINGS: SettingsState = {
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   awayMessageMulti: {},
   greetingMessageMulti: {},
+  limitFallbackMessageMulti: {},
   dualReplyNudgeMulti: {},
   brandVoiceNotesMulti: {},
   awayMessage: '',
@@ -114,6 +116,7 @@ const SettingsPage: NextPageWithLayout = () => {
         timezone: data.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
         awayMessageMulti: data.awayMessageMulti || {},
         greetingMessageMulti: data.greetingMessageMulti || {},
+        limitFallbackMessageMulti: data.limitFallbackMessageMulti || {},
         dualReplyNudgeMulti: data.dualReplyNudgeMulti || {},
         brandVoiceNotesMulti: data.brandVoiceNotesMulti || {},
         awayMessage: data.awayMessage || '',
@@ -297,6 +300,9 @@ const SettingsPage: NextPageWithLayout = () => {
           <HandoffPauseCard settings={settings} setSettings={setSettings} />
           <LowConfidenceHoldCard settings={settings} setSettings={setSettings} />
           <GreetingMessageCard settings={settings} setSettings={setSettings} />
+          <div id="limit-fallback-message" className="scroll-mt-24">
+            <LimitFallbackMessageCard settings={settings} setSettings={setSettings} />
+          </div>
         </div>
       )}
 

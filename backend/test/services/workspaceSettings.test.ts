@@ -101,6 +101,7 @@ const FULL_JSONB = {
     replyDelay: 0,
     greetingMessageMulti: {},
     awayMessageMulti: {},
+    limitFallbackMessageMulti: {},
     handoffPauseDurationMinutes: 30,
     commentEscalationMinutes: 60,
     messageEscalationMinutes: 30,
@@ -419,6 +420,52 @@ describe('WorkspaceSettingsService', () => {
             }));
 
             expect(await service.getGreetingMessage(WS_ID, 'en')).toBeNull();
+        });
+    });
+
+    // ── getLimitFallbackMessage ───────────────────────────────────────────
+    describe('getLimitFallbackMessage', () => {
+        it('returns configured message for detected language', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                limitFallbackMessageMulti: { en: 'We hit our limit', ar: 'تجاوزنا الحد' },
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'en',
+            }));
+
+            expect(await service.getLimitFallbackMessage(WS_ID, 'en')).toBe('We hit our limit');
+            expect(await service.getLimitFallbackMessage(WS_ID, 'ar')).toBe('تجاوزنا الحد');
+        });
+
+        it('falls back to other language when preferred is missing', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                limitFallbackMessageMulti: { en: 'We hit our limit' },
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'ar',
+            }));
+
+            expect(await service.getLimitFallbackMessage(WS_ID, 'ar')).toBe('We hit our limit');
+        });
+
+        it('returns null when nothing configured (caller falls back to hardcoded)', async () => {
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                limitFallbackMessageMulti: {},
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'en',
+            }));
+
+            expect(await service.getLimitFallbackMessage(WS_ID, 'en')).toBeNull();
+        });
+
+        it('does not leak the sourceLang metadata key as a fallback message', async () => {
+            // Smart-translation stores `sourceLang` alongside language entries.
+            // A naive Object.values() would return the literal string 'en' to the customer.
+            vi.spyOn(service, 'getSettings').mockResolvedValue(partial({
+                limitFallbackMessageMulti: { sourceLang: 'en' } as Record<string, string>,
+                autoDetectLanguage: true,
+                defaultReplyLanguage: 'ar',
+            }));
+
+            expect(await service.getLimitFallbackMessage(WS_ID, 'ar')).toBeNull();
         });
     });
 

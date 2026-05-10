@@ -30,6 +30,7 @@ const DEFAULTS: WorkspaceSettings = {
     timezone: 'Asia/Damascus',
     greetingMessageMulti: {},
     awayMessageMulti: {},
+    limitFallbackMessageMulti: {},
     dualReplyNudgeMulti: {},
     dualReplyNudgeVariations: {},
     replyDelay: 0,
@@ -250,6 +251,26 @@ export class WorkspaceSettingsService {
         const multi = settings.greetingMessageMulti || {};
         const primary = multi[preferred];
         const fallback = Object.values(multi).find(v => v && v !== primary) ?? null;
+
+        return primary || fallback || null;
+    }
+
+    /**
+     * Get the merchant's custom fallback message for when the monthly Smart Reply
+     * quota is exhausted. Returns null when nothing is configured — caller falls
+     * back to the hardcoded `commentFallback` / `messageFallback` translation.
+     */
+    async getLimitFallbackMessage(workspaceId: string, detectedLanguage?: string): Promise<string | null> {
+        const settings = await this.getSettings(workspaceId);
+        const preferred = this.resolveLanguage(settings, detectedLanguage);
+
+        const multi = settings.limitFallbackMessageMulti || {};
+        const primary = multi[preferred];
+        // Skip the `sourceLang` metadata key — handleSmartTranslation stores it
+        // alongside language entries, so a naive Object.values() can leak it
+        // (e.g. returning the literal "en" string) when only that key is set.
+        const fallback = Object.entries(multi)
+            .find(([k, v]) => k !== 'sourceLang' && v && v !== primary)?.[1] ?? null;
 
         return primary || fallback || null;
     }

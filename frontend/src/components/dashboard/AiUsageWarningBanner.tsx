@@ -1,5 +1,6 @@
 import clsx from 'clsx';
-import { AlertTriangle, Sparkles, Info } from 'lucide-react';
+import Link from 'next/link';
+import { AlertTriangle, Sparkles, Info, MessageSquareOff } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
@@ -91,30 +92,46 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBann
                     </p>
                 </div>
 
-                {/* Action area hidden on iOS native (App Store Guideline 3.1.1). Banner remains informational. */}
-                {!isIOSNative() && (
-                    <div className="flex items-center gap-2 shrink-0">
-                        <UpgradeCTA className="block">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                    {/* Customize-fallback shortcut surfaces only at the wall — at 80% the merchant
+                        should still upgrade rather than configure the post-limit message. Visible on
+                        iOS too (informational, not a billing action). */}
+                    {isLimitReached && (
+                        <Link href="/settings#limit-fallback-message">
                             <Button
-                                variant="primary"
+                                variant="secondary"
                                 size="sm"
-                                icon={<Sparkles className="w-4 h-4" />}
+                                icon={<MessageSquareOff className="w-4 h-4" aria-hidden="true" />}
                             >
-                                {tSub('upgradePlan')}
+                                {tSub('limitBanner.customizeFallback')}
                             </Button>
-                        </UpgradeCTA>
-                        {isWarning && (
-                            <button
-                                type="button"
-                                onClick={dismiss}
-                                className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
-                                aria-label={tSub('limitBanner.dismissLabel')}
-                            >
-                                {tSub('limitBanner.dismiss')}
-                            </button>
-                        )}
-                    </div>
-                )}
+                        </Link>
+                    )}
+                    {/* Upgrade CTA hidden on iOS native (App Store Guideline 3.1.1). */}
+                    {!isIOSNative() && (
+                        <>
+                            <UpgradeCTA className="block">
+                                <Button
+                                    variant="primary"
+                                    size="sm"
+                                    icon={<Sparkles className="w-4 h-4" />}
+                                >
+                                    {tSub('upgradePlan')}
+                                </Button>
+                            </UpgradeCTA>
+                            {isWarning && (
+                                <button
+                                    type="button"
+                                    onClick={dismiss}
+                                    className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
+                                    aria-label={tSub('limitBanner.dismissLabel')}
+                                >
+                                    {tSub('limitBanner.dismiss')}
+                                </button>
+                            )}
+                        </>
+                    )}
+                </div>
             </div>
         </Card>
     );

@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "limit_fallback_message_multi" jsonb DEFAULT '{}'::jsonb;

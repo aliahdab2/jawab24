@@ -223,6 +223,24 @@ export class SettingsService {
     }
 
     /**
+     * Get the merchant's custom fallback message for when the monthly Smart Reply
+     * quota is exhausted. Returns null when nothing is configured — caller falls
+     * back to the hardcoded `commentFallback` / `messageFallback` translation.
+     */
+    async getLimitFallbackMessage(userId: string, detectedLanguage?: string): Promise<string | null> {
+        const userSettings = await this.getSettings(userId);
+        const preferred = this.resolveLanguage(userSettings, detectedLanguage);
+
+        const multi = userSettings.limitFallbackMessageMulti || {};
+        const primary = multi[preferred];
+        // Skip the `sourceLang` metadata key (see workspaceSettings.getLimitFallbackMessage).
+        const fallback = Object.entries(multi)
+            .find(([k, v]) => k !== 'sourceLang' && v && v !== primary)?.[1] ?? null;
+
+        return primary || fallback || null;
+    }
+
+    /**
      * Get the reply delay in seconds
      */
     async getReplyDelay(userId: string): Promise<number> {
@@ -271,6 +289,7 @@ export class SettingsService {
             // Multilingual messages (JSONB)
             awayMessageMulti: record.awayMessageMulti || {},
             greetingMessageMulti: record.greetingMessageMulti || {},
+            limitFallbackMessageMulti: record.limitFallbackMessageMulti || {},
             dualReplyNudgeMulti: record.dualReplyNudgeMulti || {},
             replyDelay: record.replyDelay ?? 0,
             commentEscalationMinutes: record.commentEscalationMinutes ?? 60,
