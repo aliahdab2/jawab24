@@ -10,6 +10,7 @@ export { NotificationsCard } from './NotificationsCard';
 export { HandoffPauseCard } from './HandoffPauseCard';
 export { GreetingMessageCard } from './GreetingMessageCard';
 export { ReplyStyleCard } from './ReplyStyleCard';
+export { LowConfidenceHoldCard } from './LowConfidenceHoldCard';
 export { DangerZone } from './DangerZone';
 export { TeamSection } from './TeamSection';
 export type { SettingsState, SettingsCardProps } from './types';

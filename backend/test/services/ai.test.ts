@@ -658,6 +658,66 @@ describe('AI Service', () => {
             expect(keyNoPost).not.toBe(keyWithPost);
         });
     });
+
+    describe('Brand-voice scoped exact cache', () => {
+        // The cache key was previously missing brandVoiceNotes — merchants who updated
+        // their voice could still hit stale 30-day cached replies for repeat questions.
+        // These tests pin the fix.
+        it('should produce different cache keys for different brand voice notes', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            await service.saveToCache('Do you deliver?', 'Yes within 2 days.', {
+                language: 'en', pageId: 'page-1', kbActiveVersion: 1,
+                brandVoiceNotes: 'Always mention free shipping over 200 SAR',
+            });
+            const keyFreeShipping = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('Do you deliver?', 'Yes within 2 days.', {
+                language: 'en', pageId: 'page-1', kbActiveVersion: 1,
+                brandVoiceNotes: 'Never recommend non-halal products',
+            });
+            const keyHalal = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(keyFreeShipping).not.toBe(keyHalal);
+        });
+
+        it('should produce same cache key for identical brand voice notes', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            const ctx = {
+                language: 'en', pageId: 'page-1', kbActiveVersion: 1,
+                brandVoiceNotes: 'Always mention our 30-day return policy',
+            };
+
+            await service.saveToCache('Do you accept returns?', 'Yes!', ctx);
+            const key1 = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('Do you accept returns?', 'Yes!', ctx);
+            const key2 = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(key1).toBe(key2);
+        });
+
+        it('should differentiate between no brand voice and any brand voice', async () => {
+            const { redis } = await import('../../src/lib/redis');
+
+            await service.saveToCache('Hello', 'Hi!', { language: 'en', pageId: 'page-1', kbActiveVersion: 1 });
+            const keyNoVoice = vi.mocked(redis.set).mock.calls[0][0];
+
+            vi.clearAllMocks();
+
+            await service.saveToCache('Hello', 'Hi!', {
+                language: 'en', pageId: 'page-1', kbActiveVersion: 1,
+                brandVoiceNotes: 'Be enthusiastic',
+            });
+            const keyWithVoice = vi.mocked(redis.set).mock.calls[0][0];
+
+            expect(keyNoVoice).not.toBe(keyWithVoice);
+        });
+    });
 });
 
 describe('AI Service - Semantic Cache Integration', () => {
