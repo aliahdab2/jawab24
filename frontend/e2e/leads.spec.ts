@@ -21,7 +21,11 @@ const BASE_USER = {
   hasEcommerceStore: false,
 };
 
-const MOCK_PAGE = { id: 'p1', name: 'Test Page', pageId: 'fb-p1' };
+// `autoReplyEnabled: true` is required: the leads picker (via `usePageFilter`)
+// matches /comments and /messages by listing only auto-reply-enabled pages,
+// so a mock page without this flag would be filtered out and `selectedPageId`
+// would never be set, hiding the export controls these tests verify.
+const MOCK_PAGE = { id: 'p1', name: 'Test Page', pageId: 'fb-p1', autoReplyEnabled: true };
 
 const MOCK_LEAD = {
   id: 'l1',
