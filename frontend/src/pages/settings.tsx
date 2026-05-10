@@ -30,6 +30,7 @@ import {
   HandoffPauseCard,
   GreetingMessageCard,
   ReplyStyleCard,
+  LowConfidenceHoldCard,
   DangerZone,
   TeamSection,
   CollapsibleSectionHeader,
@@ -248,7 +249,17 @@ const SettingsPage: NextPageWithLayout = () => {
         <>
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAiPersonality')}</p>
           <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
-            <ReplyStyleCard settings={settings} setSettings={setSettings} />
+            <ReplyStyleCard
+              settings={settings}
+              setSettings={setSettings}
+              hasChanges={hasChanges}
+              onScrollToAdvanced={() => {
+                setShowAdvanced(true);
+                requestAnimationFrame(() => {
+                  document.getElementById('advanced-settings-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                });
+              }}
+            />
           </div>
         </>
       )}
@@ -284,6 +295,7 @@ const SettingsPage: NextPageWithLayout = () => {
           </div>
 
           <HandoffPauseCard settings={settings} setSettings={setSettings} />
+          <LowConfidenceHoldCard settings={settings} setSettings={setSettings} />
           <GreetingMessageCard settings={settings} setSettings={setSettings} />
         </div>
       )}

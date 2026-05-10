@@ -1,0 +1,181 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
+import { ReplyStyleCard } from '@/components/settings/ReplyStyleCard';
+import type { SettingsState } from '@/components/settings/types';
+
+// Mock the lazy-loaded test modal — we don't need to render it for the
+// settings-card tests, only assert that the trigger button works.
+vi.mock('next/dynamic', () => ({
+  default: () => () => null,
+}));
+
+vi.mock('@/lib/api', () => ({
+  pagesApi: {
+    getAll: vi.fn(),
+  },
+}));
+
+vi.mock('@/components/ui', () => ({
+  Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  ),
+  Toggle: ({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean) => void }) => (
+    <button data-testid="toggle" onClick={() => onChange(!enabled)}>
+      {enabled ? 'ON' : 'OFF'}
+    </button>
+  ),
+}));
+
+// next-intl mock from setup.ts handles `useTranslations` automatically with real EN strings.
+
+import { pagesApi } from '@/lib/api';
+
+function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
+  return {
+    dashboardLanguage: 'en',
+    defaultReplyLanguage: 'ar',
+    autoDetectLanguage: true,
+    aiEnabled: true,
+    aiModel: 'gpt-4o-mini',
+    notificationsEnabled: false,
+    pushNotifications: false,
+    commentReplyMode: 'dual',
+    commentsAutoReply: true,
+    messagesAutoReply: true,
+    businessHoursOnly: false,
+    businessHoursStart: '09:00',
+    businessHoursEnd: '17:00',
+    timezone: 'UTC',
+    awayMessageMulti: {},
+    greetingMessageMulti: {},
+    dualReplyNudgeMulti: {},
+    awayMessage: '',
+    greetingMessage: '',
+    replyDelay: 0,
+    dualReplyNudge: '',
+    brandVoiceNotesMulti: {},
+    replyStyle: 'professional',
+    brandVoiceNotes: '',
+    holdLowConfidence: false,
+    commentEscalationMinutes: 30,
+    messageEscalationMinutes: 30,
+    handoffPauseDurationMinutes: 60,
+    ...overrides,
+  };
+}
+
+describe('ReplyStyleCard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default: no pages connected — keeps unrelated tests deterministic.
+    vi.mocked(pagesApi.getAll).mockResolvedValue({ data: [] } as never);
+  });
+
+  it('shows example chips only when brand voice is empty', () => {
+    let current = makeSettings();
+    const setSettings = vi.fn((s: SettingsState) => { current = s; });
+
+    const { rerender } = render(<ReplyStyleCard settings={current} setSettings={setSettings} />);
+
+    // Empty: chips visible
+    expect(screen.getByText(/Always mention free shipping over 200 SAR/i)).toBeInTheDocument();
+    expect(screen.getByText(/Never recommend non-halal products/i)).toBeInTheDocument();
+
+    // Non-empty: chips hidden
+    current = makeSettings({ brandVoiceNotesMulti: { en: 'something', sourceLang: 'en' } });
+    rerender(<ReplyStyleCard settings={current} setSettings={setSettings} />);
+    expect(screen.queryByText(/Always mention free shipping over 200 SAR/i)).not.toBeInTheDocument();
+  });
+
+  it('clicking an example chip inserts it into the textarea', () => {
+    let current = makeSettings();
+    const setSettings = vi.fn((s: SettingsState) => { current = s; });
+
+    render(<ReplyStyleCard settings={current} setSettings={setSettings} />);
+
+    const chip = screen.getByText(/Never recommend non-halal products/i);
+    fireEvent.click(chip);
+
+    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({
+      brandVoiceNotesMulti: expect.objectContaining({
+        en: 'Never recommend non-halal products',
+        sourceLang: 'en',
+      }),
+    }));
+  });
+
+  it('counter renders against MAX_TEMPLATE_MESSAGE_LENGTH (not a hardcoded 500)', () => {
+    const filler = 'x'.repeat(120);
+    const current = makeSettings({ brandVoiceNotesMulti: { en: filler, sourceLang: 'en' } });
+    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} />);
+
+    // The counter shows "<count>/<max>" — proves we use the shared constant, not 500.
+    expect(screen.getByText(`120/${MAX_TEMPLATE_MESSAGE_LENGTH}`)).toBeInTheDocument();
+    expect(MAX_TEMPLATE_MESSAGE_LENGTH).toBe(1000);
+  });
+
+  it('tone dropdown changes settings.replyStyle', () => {
+    let current = makeSettings();
+    const setSettings = vi.fn((s: SettingsState) => { current = s; });
+    render(<ReplyStyleCard settings={current} setSettings={setSettings} />);
+
+    const select = screen.getByLabelText(/Tone/i) as HTMLSelectElement;
+    fireEvent.change(select, { target: { value: 'casual' } });
+
+    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ replyStyle: 'casual' }));
+  });
+
+  it('test button is disabled when there are unsaved changes', () => {
+    const current = makeSettings();
+    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} hasChanges />);
+
+    const btn = screen.getByRole('button', { name: /Test with the AI/i });
+    expect(btn).toBeDisabled();
+    expect(screen.getByText(/Save settings to test/i)).toBeInTheDocument();
+  });
+
+  it('test button is enabled when there are no unsaved changes', () => {
+    const current = makeSettings();
+    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} hasChanges={false} />);
+
+    const btn = screen.getByRole('button', { name: /Test with the AI/i });
+    expect(btn).not.toBeDisabled();
+  });
+
+  it('shows "Testing on: <pageName>" once the first page is fetched', async () => {
+    vi.mocked(pagesApi.getAll).mockResolvedValueOnce({
+      data: [{ id: 'p1', name: 'Acme Riyadh' }],
+    } as never);
+
+    const current = makeSettings();
+    render(<ReplyStyleCard settings={current} setSettings={vi.fn()} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Testing on: Acme Riyadh/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows hold-relocation notice only when holdLowConfidence is on and not yet seen', () => {
+    // localStorage clean — notice should appear.
+    window.localStorage.removeItem('hold_relocation_seen');
+
+    const current = makeSettings({ holdLowConfidence: true });
+    const { rerender } = render(<ReplyStyleCard settings={current} setSettings={vi.fn()} />);
+
+    expect(screen.getByText(/moved to Advanced Settings/i)).toBeInTheDocument();
+
+    // Off: notice hidden.
+    const off = makeSettings({ holdLowConfidence: false });
+    rerender(<ReplyStyleCard settings={off} setSettings={vi.fn()} />);
+    expect(screen.queryByText(/moved to Advanced Settings/i)).not.toBeInTheDocument();
+
+    // localStorage flag set: notice hidden.
+    window.localStorage.setItem('hold_relocation_seen', '1');
+    const seen = makeSettings({ holdLowConfidence: true });
+    rerender(<ReplyStyleCard settings={seen} setSettings={vi.fn()} />);
+    expect(screen.queryByText(/moved to Advanced Settings/i)).not.toBeInTheDocument();
+
+    window.localStorage.removeItem('hold_relocation_seen');
+  });
+});
