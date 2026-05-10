@@ -258,8 +258,14 @@ export class InstagramService {
                 },
                 { params: { access_token: pageAccessToken } },
             );
-        } catch {
-            // Typing indicator is cosmetic — silently ignore failures
+        } catch (error) {
+            const igError = (error as { response?: { data?: unknown; status?: number } })?.response;
+            this.logger.warn('[Instagram] typing_on failed (non-fatal)', {
+                instagramAccountId,
+                recipientId,
+                status: igError?.status,
+                data: igError?.data,
+            });
         }
     }
 

@@ -312,8 +312,16 @@ export class FacebookService {
             }, {
                 params: { access_token: pageAccessToken },
             });
-        } catch {
-            // Typing indicator is cosmetic — silently ignore failures
+        } catch (error) {
+            // Typing indicator is cosmetic — never block the reply, but surface
+            // the underlying Meta error so we can spot regressions like dropped
+            // permissions or shape changes in the Graph API.
+            const fbError = (error as { response?: { data?: unknown; status?: number } })?.response;
+            this.logger.warn('[Facebook] typing_on failed (non-fatal)', {
+                recipientId,
+                status: fbError?.status,
+                data: fbError?.data,
+            });
         }
     }
 
