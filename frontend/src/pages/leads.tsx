@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactElement } from 'react';
+import { useRouter } from 'next/router';
+import { usePageFilter } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -369,7 +371,7 @@ const LeadsPage: NextPageWithLayout = () => {
 
   useEffect(() => { resetNewLeads(); }, [resetNewLeads]);
 
-  const [selectedPageId, setSelectedPageId] = useState<string>('');
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [exporting, setExporting] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
@@ -402,11 +404,26 @@ const LeadsPage: NextPageWithLayout = () => {
 
   const pages = React.useMemo(() => pagesData ?? [], [pagesData]);
 
+  // Persisted page filter — localStorage + URL sync (?page=<id>) + stale-selection
+  // cleanup. Same pattern as /comments and /messages, but `validateAgainst: 'all'`
+  // because leads exist on every connected page, not only auto-reply-enabled ones.
+  const { pageId: selectedPageId, updatePageId: setSelectedPageId, syncFromUrl } = usePageFilter(pages, {
+    storageKey: 'leads-page-filter',
+    validateAgainst: 'all',
+  });
+
+  // Restore from URL query (deep-link) on mount.
+  useEffect(() => {
+    if (!router.isReady) return;
+    syncFromUrl(router.query.page as string | undefined);
+  }, [router.isReady, router.query.page, syncFromUrl]);
+
+  // Default to first page when nothing is stored and pages have loaded.
   useEffect(() => {
     if (!selectedPageId && pages.length > 0) {
       setSelectedPageId(pages[0].id);
     }
-  }, [pages, selectedPageId]);
+  }, [pages, selectedPageId, setSelectedPageId]);
 
   const { data: leadsData, isLoading, isError } = useQuery({
     queryKey: ['leads', selectedPageId, statusFilter],
