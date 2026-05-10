@@ -47,7 +47,7 @@ interface CustomerDetail {
         periodEnd: string | null;
         limit: number | null;
     };
-    leads: {
+    leads?: {
         total: number;
         today: number;
         last7d: number;
@@ -59,6 +59,14 @@ interface CustomerDetail {
         };
     };
 }
+
+const EMPTY_LEADS = {
+    total: 0,
+    today: 0,
+    last7d: 0,
+    last30d: 0,
+    byStatus: { new: 0, contacted: 0, converted: 0 },
+} as const;
 
 interface Plan {
     id: string;
@@ -451,40 +459,47 @@ export default function AdminCustomerDetailPage() {
                                     {t('customer.leadsTitle')}
                                 </h2>
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-                                <div className="bg-background rounded-lg p-3">
-                                    <p className="text-xs text-muted-foreground">{t('customer.leadsTotal')}</p>
-                                    <p className="text-2xl font-bold text-foreground">{customer.leads.total.toLocaleString(intlLocale)}</p>
-                                </div>
-                                <div className="bg-background rounded-lg p-3">
-                                    <p className="text-xs text-muted-foreground">{t('customer.leadsToday')}</p>
-                                    <p className="text-2xl font-bold text-foreground">{customer.leads.today.toLocaleString(intlLocale)}</p>
-                                </div>
-                                <div className="bg-background rounded-lg p-3">
-                                    <p className="text-xs text-muted-foreground">{t('customer.leadsLast7d')}</p>
-                                    <p className="text-2xl font-bold text-foreground">{customer.leads.last7d.toLocaleString(intlLocale)}</p>
-                                </div>
-                                <div className="bg-background rounded-lg p-3">
-                                    <p className="text-xs text-muted-foreground">{t('customer.leadsLast30d')}</p>
-                                    <p className="text-2xl font-bold text-foreground">{customer.leads.last30d.toLocaleString(intlLocale)}</p>
-                                </div>
-                            </div>
-                            {customer.leads.total > 0 && (
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div className="bg-background rounded-lg p-3">
-                                        <p className="text-xs text-muted-foreground">{t('customer.leadsStatusNew')}</p>
-                                        <p className="text-lg font-bold text-foreground">{customer.leads.byStatus.new.toLocaleString(intlLocale)}</p>
-                                    </div>
-                                    <div className="bg-background rounded-lg p-3">
-                                        <p className="text-xs text-muted-foreground">{t('customer.leadsStatusContacted')}</p>
-                                        <p className="text-lg font-bold text-foreground">{customer.leads.byStatus.contacted.toLocaleString(intlLocale)}</p>
-                                    </div>
-                                    <div className="bg-background rounded-lg p-3">
-                                        <p className="text-xs text-muted-foreground">{t('customer.leadsStatusConverted')}</p>
-                                        <p className="text-lg font-bold text-foreground">{customer.leads.byStatus.converted.toLocaleString(intlLocale)}</p>
-                                    </div>
-                                </div>
-                            )}
+                            {(() => {
+                                const leads = customer.leads ?? EMPTY_LEADS;
+                                return (
+                                    <>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                                            <div className="bg-background rounded-lg p-3">
+                                                <p className="text-xs text-muted-foreground">{t('customer.leadsTotal')}</p>
+                                                <p className="text-2xl font-bold text-foreground">{leads.total.toLocaleString(intlLocale)}</p>
+                                            </div>
+                                            <div className="bg-background rounded-lg p-3">
+                                                <p className="text-xs text-muted-foreground">{t('customer.leadsToday')}</p>
+                                                <p className="text-2xl font-bold text-foreground">{leads.today.toLocaleString(intlLocale)}</p>
+                                            </div>
+                                            <div className="bg-background rounded-lg p-3">
+                                                <p className="text-xs text-muted-foreground">{t('customer.leadsLast7d')}</p>
+                                                <p className="text-2xl font-bold text-foreground">{leads.last7d.toLocaleString(intlLocale)}</p>
+                                            </div>
+                                            <div className="bg-background rounded-lg p-3">
+                                                <p className="text-xs text-muted-foreground">{t('customer.leadsLast30d')}</p>
+                                                <p className="text-2xl font-bold text-foreground">{leads.last30d.toLocaleString(intlLocale)}</p>
+                                            </div>
+                                        </div>
+                                        {leads.total > 0 && (
+                                            <div className="grid grid-cols-3 gap-3">
+                                                <div className="bg-background rounded-lg p-3">
+                                                    <p className="text-xs text-muted-foreground">{t('customer.leadsStatusNew')}</p>
+                                                    <p className="text-lg font-bold text-foreground">{leads.byStatus.new.toLocaleString(intlLocale)}</p>
+                                                </div>
+                                                <div className="bg-background rounded-lg p-3">
+                                                    <p className="text-xs text-muted-foreground">{t('customer.leadsStatusContacted')}</p>
+                                                    <p className="text-lg font-bold text-foreground">{leads.byStatus.contacted.toLocaleString(intlLocale)}</p>
+                                                </div>
+                                                <div className="bg-background rounded-lg p-3">
+                                                    <p className="text-xs text-muted-foreground">{t('customer.leadsStatusConverted')}</p>
+                                                    <p className="text-lg font-bold text-foreground">{leads.byStatus.converted.toLocaleString(intlLocale)}</p>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
                         </Card>
 
                         {/* AI Cost by Page — period-scoped breakdown of OpenAI spend per Facebook/Instagram page */}

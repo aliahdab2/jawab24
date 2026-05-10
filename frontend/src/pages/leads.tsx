@@ -569,16 +569,18 @@ const LeadsPage: NextPageWithLayout = () => {
 
       {/* Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
-        {/* Page selector */}
-        <div className="w-full sm:w-auto sm:min-w-[220px]">
-          <Select
-            value={selectedPageId}
-            onChange={setSelectedPageId}
-            options={validPages.map((p) => ({ value: p.id, label: p.name }))}
-            placeholder={t('selectPage')}
-            aria-label={t('selectPage')}
-          />
-        </div>
+        {/* Page selector — only shown when the merchant has 2+ pages (mirrors Messages/Comments) */}
+        {validPages.length > 1 && (
+          <div className="w-full sm:w-auto sm:min-w-[220px]">
+            <Select
+              value={selectedPageId}
+              onChange={setSelectedPageId}
+              options={validPages.map((p) => ({ value: p.id, label: p.name }))}
+              placeholder={t('selectPage')}
+              aria-label={t('selectPage')}
+            />
+          </div>
+        )}
 
         {/* Status filter tabs */}
         <div className="flex items-center gap-2 overflow-x-auto">
