@@ -595,22 +595,28 @@ export const subscriptionsService = {
     },
 
     /**
-     * Log AI token usage for cost tracking per store/page
+     * Record an AI quota-consumption event in the legacy `usage_logs` table.
+     *
+     * NOT the cost source of truth — that's `ai_usage_log` written by
+     * `services/aiUsageLog.ts#logAiUsage`. This event powers per-month quota
+     * enforcement (`maxAiRepliesPerMonth`) and old-style audit trails. Two
+     * separate tables, two separate purposes; the previous name `logAiUsage`
+     * collided with the cost logger and caused confusion.
      */
-    async logAiUsage(
+    async logQuotaEvent(
         userId: string,
         pageId: string | undefined,
         tokensUsed: number | undefined,
         model: string
     ): Promise<void> {
-        // gpt-4.1-mini pricing: ~$0.40 per 1M input tokens, ~$1.60 per 1M output tokens
-        // Using blended estimate of ~$0.80 per 1M total tokens
+        // Rough cost estimate kept on the legacy event for back-compat with
+        // existing usage_logs consumers; authoritative cost lives in ai_usage_log.
         const estimatedCost = tokensUsed ? (tokensUsed / 1_000_000) * 0.80 : 0;
 
-        await this.logUsageEvent(userId, 'ai_token_usage', {
+        await this.logUsageEvent(userId, 'ai_quota_consumed', {
             tokensUsed: tokensUsed || 0,
             model,
-            estimatedCostUsd: Math.round(estimatedCost * 1_000_000) / 1_000_000, // 6 decimal places
+            estimatedCostUsd: Math.round(estimatedCost * 1_000_000) / 1_000_000,
         }, pageId);
     },
 

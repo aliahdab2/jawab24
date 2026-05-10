@@ -1,5 +1,11 @@
-import OpenAI from 'openai';
 import { config } from '../../config';
+import { makeTrackedOpenAI } from '../openaiClient';
+
+/** Caller context for cost attribution. Passed through from the kb-upload route. */
+export interface VisionContext {
+    userId: string;
+    pageId?: string;
+}
 
 const SCANNED_PDF_THRESHOLD = 50; // chars — below this, PDF is likely scanned/image-based
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
@@ -209,7 +215,7 @@ async function renderPdfToImages(buffer: Buffer): Promise<Buffer[]> {
  * Used when pdf-parse output is unreliable (scanned pages, Arabic tables).
  * Requires OPENAI_API_KEY.
  */
-export async function extractFromPdfViaVision(buffer: Buffer): Promise<ExtractionResult> {
+export async function extractFromPdfViaVision(buffer: Buffer, ctx: VisionContext): Promise<ExtractionResult> {
     const apiKey = config.openai?.apiKey;
     if (!apiKey) {
         throw new Error('OpenAI API key not configured — cannot extract text from PDF via Vision');
@@ -222,7 +228,11 @@ export async function extractFromPdfViaVision(buffer: Buffer): Promise<Extractio
         return { text: '', method: 'gpt-vision', truncated: false };
     }
 
-    const openai = new OpenAI({ apiKey });
+    const openai = makeTrackedOpenAI(apiKey, {
+        userId: ctx.userId,
+        pageId: ctx.pageId,
+        pipeline: 'kb_file_extraction',
+    });
     const pageTexts: string[] = [];
     for (const png of pages) {
         const base64 = png.toString('base64');
@@ -250,7 +260,7 @@ export async function extractFromPdfViaVision(buffer: Buffer): Promise<Extractio
  * Extract text from an image (or scanned PDF page) using GPT-4o-mini Vision.
  * Requires OPENAI_API_KEY to be configured.
  */
-export async function extractFromImage(buffer: Buffer, mimeType: string): Promise<ExtractionResult> {
+export async function extractFromImage(buffer: Buffer, mimeType: string, ctx: VisionContext): Promise<ExtractionResult> {
     const apiKey = config.openai?.apiKey;
     if (!apiKey) {
         throw new Error('OpenAI API key not configured — cannot extract text from image');
@@ -261,7 +271,11 @@ export async function extractFromImage(buffer: Buffer, mimeType: string): Promis
     const base64 = buffer.toString('base64');
     const dataUrl = `data:${mimeType};base64,${base64}`;
 
-    const openai = new OpenAI({ apiKey });
+    const openai = makeTrackedOpenAI(apiKey, {
+        userId: ctx.userId,
+        pageId: ctx.pageId,
+        pipeline: 'kb_file_extraction',
+    });
     const response = await openai.chat.completions.create({
         model: VISION_MODEL,
         max_tokens: 4096,

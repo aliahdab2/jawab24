@@ -19,6 +19,11 @@
  * passes only when all checks succeed.
  */
 
+// Standalone eval script — intentionally bypasses ai_usage_log because it has
+// no real user context. Cost is incurred manually by the developer running
+// the eval and is not part of customer attribution; logging it would pollute
+// per-customer P&L with synthetic rows. Run cost is reported to stdout below.
+// eslint-disable-next-line no-restricted-imports
 import OpenAI from 'openai';
 import { EXTRACTION_PROMPT } from '../backend/src/services/leadExtractor';
 

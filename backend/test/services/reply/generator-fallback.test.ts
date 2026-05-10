@@ -39,7 +39,7 @@ vi.mock('../../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canUseAiReplies: (...args: unknown[]) => canUseAiReplies(...args),
         incrementAiReplies: vi.fn(),
-        logAiUsage: vi.fn(),
+        logQuotaEvent: vi.fn(),
     },
 }));
 

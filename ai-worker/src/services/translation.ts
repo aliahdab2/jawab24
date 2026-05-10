@@ -12,6 +12,14 @@ export interface TranslateResponse {
   translatedText: string;
   detectedLanguage?: string;
   tokensUsed: number;
+  /** Prompt tokens (input). Backend uses this to write `ai_usage_log`. */
+  tokensIn?: number;
+  /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at 50%). */
+  tokensInCached?: number;
+  /** Completion tokens (output). */
+  tokensOut?: number;
+  /** Model used — needed for accurate cost lookup at the consumer side. */
+  model?: string;
 }
 
 export class TranslationService {
@@ -86,7 +94,11 @@ export class TranslationService {
       return {
         translatedText,
         detectedLanguage,
-        tokensUsed
+        tokensUsed,
+        tokensIn: completion.usage?.prompt_tokens,
+        tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
+        tokensOut: completion.usage?.completion_tokens,
+        model: completion.model || config.openai.model,
       };
     } catch (error) {
       Sentry.captureException(error, {
@@ -105,7 +117,14 @@ export async function generateNudgeVariations(
   text: string,
   language: string,
   count = 10,
-): Promise<{ variations: string[]; tokensUsed: number }> {
+): Promise<{
+  variations: string[];
+  tokensUsed: number;
+  tokensIn?: number;
+  tokensInCached?: number;
+  tokensOut?: number;
+  model?: string;
+}> {
   const client = translationService.getClient();
 
   const langLabel = language === 'ar' ? 'Arabic' : 'English';
@@ -144,7 +163,14 @@ export async function generateNudgeVariations(
     variations = [text];
   }
 
-  return { variations, tokensUsed };
+  return {
+    variations,
+    tokensUsed,
+    tokensIn: completion.usage?.prompt_tokens,
+    tokensInCached: completion.usage?.prompt_tokens_details?.cached_tokens,
+    tokensOut: completion.usage?.completion_tokens,
+    model: completion.model || config.openai.model,
+  };
 }
 
 export const translationService = new TranslationService();

@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import { translateText } from '../services/translation';
-import { authenticate } from '../middleware/auth';
+import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { z } from 'zod';
 import { validateSchema } from '../utils/validation';
 
@@ -30,7 +30,8 @@ export const translationRoutes: FastifyPluginAsync = async (fastify) => {
       const result = await translateText({
         text,
         sourceLanguage: sourceLanguage || 'auto',
-        targetLanguage
+        targetLanguage,
+        userId: (request as AuthenticatedRequest).user?.userId,
       });
 
       return reply.send(result);

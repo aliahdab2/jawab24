@@ -41,6 +41,7 @@ const mockOpenAICreate = vi.fn();
 vi.mock('openai', () => ({
     default: vi.fn().mockImplementation(() => ({
         chat: { completions: { create: mockOpenAICreate } },
+        embeddings: { create: vi.fn() },
     })),
 }));
 
@@ -57,7 +58,15 @@ vi.mock('pdf-to-img', () => ({
 }));
 
 vi.mock('../../../src/config', () => ({
-    config: { openai: { apiKey: 'sk-test-key' } },
+    config: {
+        openai: { apiKey: 'sk-test-key' },
+        redis: { host: 'localhost', port: 6379, password: '' },
+    },
+}));
+
+// Stub redis client used inside aiUsageLog (only touched on log-failure paths).
+vi.mock('../../../src/lib/redis', () => ({
+    redis: { incr: vi.fn().mockResolvedValue(1) },
 }));
 
 // --- Import after mocks ---
@@ -278,7 +287,7 @@ describe('KB File Extractor', () => {
                 choices: [{ message: { content: 'Price List:\nItem A - 100 SAR' } }],
             });
 
-            const result = await extractFromImage(Buffer.from('fake-image'), 'image/jpeg');
+            const result = await extractFromImage(Buffer.from('fake-image'), 'image/jpeg', { userId: 'test-user' });
 
             expect(result.method).toBe('gpt-vision');
             expect(result.text).toContain('Price List');
@@ -293,7 +302,7 @@ describe('KB File Extractor', () => {
                 choices: [{ message: { content: 'text' } }],
             });
 
-            await extractFromImage(Buffer.from('test'), 'image/png');
+            await extractFromImage(Buffer.from('test'), 'image/png', { userId: 'test-user' });
 
             const messages = mockOpenAICreate.mock.calls[0][0].messages;
             const imageContent = messages[0].content.find((c: { type: string }) => c.type === 'image_url');
@@ -305,7 +314,7 @@ describe('KB File Extractor', () => {
                 choices: [{ message: { content: 'C'.repeat(20_000) } }],
             });
 
-            const result = await extractFromImage(Buffer.from('fake-image'), 'image/jpeg');
+            const result = await extractFromImage(Buffer.from('fake-image'), 'image/jpeg', { userId: 'test-user' });
 
             expect(result.text.length).toBe(MAX_OUTPUT_CHARS);
             expect(result.truncated).toBe(true);
@@ -316,7 +325,7 @@ describe('KB File Extractor', () => {
                 choices: [{ message: { content: '' } }],
             });
 
-            const result = await extractFromImage(Buffer.from('fake-image'), 'image/jpeg');
+            const result = await extractFromImage(Buffer.from('fake-image'), 'image/jpeg', { userId: 'test-user' });
 
             expect(result.text).toBe('');
         });
@@ -324,7 +333,7 @@ describe('KB File Extractor', () => {
         it('rejects files larger than 5MB', async () => {
             const bigBuffer = Buffer.alloc(6 * 1024 * 1024);
 
-            await expect(extractFromImage(bigBuffer, 'image/jpeg')).rejects.toThrow('exceeds 5MB limit');
+            await expect(extractFromImage(bigBuffer, 'image/jpeg', { userId: 'test-user' })).rejects.toThrow('exceeds 5MB limit');
         });
 
         it('throws when OpenAI API key is not configured', async () => {
@@ -333,7 +342,7 @@ describe('KB File Extractor', () => {
             const originalKey = config.openai?.apiKey;
             if (config.openai) config.openai.apiKey = '';
 
-            await expect(extractFromImage(Buffer.from('test'), 'image/jpeg'))
+            await expect(extractFromImage(Buffer.from('test'), 'image/jpeg', { userId: 'test-user' }))
                 .rejects.toThrow('OpenAI API key not configured');
 
             // Restore
@@ -350,7 +359,7 @@ describe('KB File Extractor', () => {
                 .mockResolvedValueOnce({ choices: [{ message: { content: 'Page 1: ICDL — 25,000 SAR' } }] })
                 .mockResolvedValueOnce({ choices: [{ message: { content: 'Page 2: Photoshop — 50,000 SAR' } }] });
 
-            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
 
             expect(result.method).toBe('gpt-vision');
             expect(mockOpenAICreate).toHaveBeenCalledTimes(2);
@@ -366,7 +375,7 @@ describe('KB File Extractor', () => {
             );
             mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'page' } }] });
 
-            await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+            await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
 
             expect(mockOpenAICreate).toHaveBeenCalledTimes(MAX_PDF_PAGES);
         });
@@ -375,7 +384,7 @@ describe('KB File Extractor', () => {
             mockPdfPages.mockReturnValue([Buffer.from('png-bytes')]);
             mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'ok' } }] });
 
-            await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+            await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
 
             const messages = mockOpenAICreate.mock.calls[0][0].messages;
             const img = messages[0].content.find((c: { type: string }) => c.type === 'image_url');
@@ -387,7 +396,7 @@ describe('KB File Extractor', () => {
             mockPdfPages.mockReturnValue([Buffer.from('p1'), Buffer.from('p2')]);
             mockOpenAICreate.mockResolvedValue({ choices: [{ message: { content: 'X'.repeat(10_000) } }] });
 
-            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
 
             expect(result.text.length).toBe(MAX_OUTPUT_CHARS);
             expect(result.truncated).toBe(true);
@@ -396,7 +405,7 @@ describe('KB File Extractor', () => {
         it('returns empty result when the PDF has no pages', async () => {
             mockPdfPages.mockReturnValue([]);
 
-            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'));
+            const result = await extractFromPdfViaVision(Buffer.from('fake-pdf'), { userId: 'test-user' });
 
             expect(result.text).toBe('');
             expect(mockOpenAICreate).not.toHaveBeenCalled();
@@ -405,7 +414,7 @@ describe('KB File Extractor', () => {
         it('rejects files larger than 5MB before rendering', async () => {
             const bigBuffer = Buffer.alloc(6 * 1024 * 1024);
 
-            await expect(extractFromPdfViaVision(bigBuffer)).rejects.toThrow('exceeds 5MB limit');
+            await expect(extractFromPdfViaVision(bigBuffer, { userId: 'test-user' })).rejects.toThrow('exceeds 5MB limit');
         });
 
         it('throws when OpenAI API key is not configured', async () => {
@@ -413,7 +422,7 @@ describe('KB File Extractor', () => {
             const originalKey = config.openai?.apiKey;
             if (config.openai) config.openai.apiKey = '';
 
-            await expect(extractFromPdfViaVision(Buffer.from('test')))
+            await expect(extractFromPdfViaVision(Buffer.from('test'), { userId: 'test-user' }))
                 .rejects.toThrow('OpenAI API key not configured');
 
             if (config.openai) config.openai.apiKey = originalKey || 'sk-test-key';

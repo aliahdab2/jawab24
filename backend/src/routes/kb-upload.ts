@@ -14,7 +14,7 @@ import {
     MAX_FILE_SIZE_BYTES,
     type ExtractionResult,
 } from '../services/kb/file-extractor';
-import OpenAI from 'openai';
+import { BadRequestError } from '../services/openaiClient';
 import { auth } from '../utils/swagger';
 import { redis } from '../lib/redis';
 
@@ -111,10 +111,12 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 if (!visionCheck.allowed) {
                     return reply.status(visionCheck.status).send(visionCheck.response);
                 }
+                // userId is guaranteed by the auth hook + the quota check above.
+                const userId = (request as AuthenticatedRequest).user!.userId;
                 // PDFs need per-page rasterization; images can go straight to Vision.
                 const result = mime === 'application/pdf'
-                    ? await extractFromPdfViaVision(buf)
-                    : await extractFromImage(buf, mime);
+                    ? await extractFromPdfViaVision(buf, { userId })
+                    : await extractFromImage(buf, mime, { userId });
                 await incrementVisionCounter(request);
                 return respondWith(result, extra);
             };
@@ -150,7 +152,7 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 // OpenAI rejected the file content (e.g. image bytes don't match
                 // a format Vision supports). Surface as 400 so the frontend can
                 // show a user-facing error instead of treating it as a bug.
-                if (error instanceof OpenAI.BadRequestError) {
+                if (error instanceof BadRequestError) {
                     request.log.warn({ err: error, fileName }, 'KB Vision rejected file');
                     return reply.status(400).send({
                         success: false,

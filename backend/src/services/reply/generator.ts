@@ -791,9 +791,11 @@ export class ReplyGenerator {
 
         await subscriptionsService.incrementAiReplies(userId);
 
-        // Log token usage for cost tracking (skip for cached responses)
+        // Record quota-consumption event in legacy `usage_logs` (NOT the cost
+        // source — `ai_usage_log` is written by ai.ts via logAiUsage). Skip
+        // for cached responses since no real tokens were consumed.
         if (!aiResponse.cached) {
-            await subscriptionsService.logAiUsage(userId, pageId, aiResponse.tokensUsed, aiResponse.model || DEFAULT_AI_MODEL);
+            await subscriptionsService.logQuotaEvent(userId, pageId, aiResponse.tokensUsed, aiResponse.model || DEFAULT_AI_MODEL);
         }
 
         // Record KB gap when the AI explicitly flags the info as missing.

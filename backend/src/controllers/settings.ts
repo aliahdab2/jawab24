@@ -166,7 +166,8 @@ export class SettingsController {
                             const translation = await translateText({
                                 text: sourceText,
                                 sourceLanguage: sourceLang as 'ar' | 'en',
-                                targetLanguage: targetLang as 'ar' | 'en'
+                                targetLanguage: targetLang as 'ar' | 'en',
+                                userId,
                             });
                             result[targetLang] = translation.translatedText;
                         } catch (e) {
@@ -219,7 +220,7 @@ export class SettingsController {
                         .filter(lang => nudgeMulti[lang])
                         .map(async (lang) => {
                             try {
-                                variations[lang] = await generateNudgeVariations(nudgeMulti[lang], lang);
+                                variations[lang] = await generateNudgeVariations(nudgeMulti[lang], lang, 10, { userId });
                             } catch (e) {
                                 request.log.error({ error: String(e) }, `Nudge variation generation failed (${lang})`);
                             }

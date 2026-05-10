@@ -25,6 +25,30 @@ export default tseslint.config(
             'no-var': 'error',
             'prefer-const': 'warn',
             'no-return-await': 'warn',
+            // Force every direct OpenAI call through `services/openaiClient`
+            // (`makeTrackedOpenAI`). The wrapper auto-logs to ai_usage_log;
+            // raw clients silently bypass cost attribution.
+            'no-restricted-imports': ['error', {
+                paths: [{
+                    name: 'openai',
+                    message: "Import `makeTrackedOpenAI` from 'src/services/openaiClient' instead. Raw OpenAI clients bypass ai_usage_log and break per-customer cost attribution.",
+                }],
+            }],
         },
+    },
+    {
+        // Wrapper module is the canonical place for raw OpenAI clients. The
+        // other files listed here are pre-existing call sites that already
+        // log to ai_usage_log via direct logAiUsage() calls — they're tracked,
+        // just not through the wrapper. Migrating them is a separate cleanup;
+        // for now they're allowed because they're not leaking. New files
+        // adding raw OpenAI imports MUST use the wrapper instead.
+        files: [
+            'src/services/openaiClient.ts',
+            'src/services/kb/embedding.ts',
+            'src/services/leadExtractor.ts',
+            'src/services/transcription.ts',
+        ],
+        rules: { 'no-restricted-imports': 'off' },
     },
 );
