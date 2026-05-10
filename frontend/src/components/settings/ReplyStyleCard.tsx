@@ -109,15 +109,12 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   };
 
   return (
-    <Card className="border-none shadow-md shadow-theme-border/30 p-4 landscape:p-3">
-      <div className="flex items-center gap-4 mb-4 landscape:mb-3">
-        <div className="w-12 h-12 rounded-xl icon-bg-brand flex items-center justify-center landscape:w-10 landscape:h-10">
-          <Sparkles className="w-5 h-5" />
+    <Card className="border-none shadow-sm shadow-theme-border/30 p-3">
+      <div className="flex items-center gap-2.5 mb-3">
+        <div className="w-8 h-8 rounded-lg icon-bg-brand flex items-center justify-center shrink-0">
+          <Sparkles className="w-4 h-4" />
         </div>
-        <div className="text-start">
-          <h4 className="font-bold text-foreground text-lg landscape:text-base">{t('replyStyle.title')}</h4>
-          <p className="text-xs text-muted-foreground font-medium landscape:hidden">{t('replyStyle.desc')}</p>
-        </div>
+        <h4 className="font-bold text-foreground text-sm text-start">{t('replyStyle.title')}</h4>
       </div>
 
       {/* Migration notice for merchants who used the old holdLowConfidence location. */}
@@ -146,108 +143,127 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
       )}
 
       {/* Brand voice notes — promoted to hero. */}
-      <div className="mb-5">
-        <div className="flex items-center justify-between mb-2">
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1.5">
           <label htmlFor="brandVoiceNotes" className="text-sm font-bold text-foreground">
             {t('replyStyle.brandVoice')}
           </label>
           {isAutoTranslated && (
-            <span className="text-xs text-muted-foreground">{t('replyStyle.autoTranslated')}</span>
+            <span className="text-[11px] text-muted-foreground">{t('replyStyle.autoTranslated')}</span>
           )}
         </div>
 
         {/* Examples — only when the field is empty, to teach the feature without nagging existing users. */}
         {isEmpty && (
-          <div className="mb-3">
-            <p className="text-xs text-muted-foreground mb-2">{t('replyStyle.examples')}</p>
-            <div className="flex flex-wrap gap-2">
-              {(['example1', 'example2', 'example3'] as const).map((key) => {
-                const example = t(`replyStyle.${key}`);
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => insertExample(example)}
-                    className="px-3 py-2 text-xs font-medium rounded-full bg-muted text-muted-foreground border border-theme-border hover:bg-muted/80 hover:text-foreground transition-colors min-h-[36px] active:scale-[0.98] text-start"
-                  >
-                    + {example}
-                  </button>
-                );
-              })}
-            </div>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {(['example1', 'example2', 'example3'] as const).map((key) => {
+              const example = t(`replyStyle.${key}`);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => insertExample(example)}
+                  className="px-2.5 py-1 text-[11px] font-medium rounded-full bg-muted text-muted-foreground border border-theme-border hover:bg-muted/80 hover:text-foreground transition-colors active:scale-[0.98] text-start"
+                >
+                  + {example}
+                </button>
+              );
+            })}
           </div>
         )}
 
-        <textarea
-          id="brandVoiceNotes"
-          ref={textareaRef}
-          aria-label={t('replyStyle.brandVoice')}
-          className={clsx(
-            'input min-h-[120px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-3 rounded-2xl placeholder:text-muted-foreground placeholder:italic w-full',
-            isAutoTranslated && 'text-muted-foreground italic',
-            currentLang === 'ar' && 'italic-arabic',
+        <div className="relative">
+          <textarea
+            id="brandVoiceNotes"
+            ref={textareaRef}
+            aria-label={t('replyStyle.brandVoice')}
+            className={clsx(
+              'input min-h-[64px] border-none bg-background focus:ring-2 focus:ring-brand-500 p-2.5 pb-5 rounded-xl placeholder:text-muted-foreground placeholder:italic w-full text-sm',
+              isAutoTranslated && 'text-muted-foreground italic',
+              currentLang === 'ar' && 'italic-arabic',
+            )}
+            dir="auto"
+            maxLength={MAX_TEMPLATE_MESSAGE_LENGTH}
+            rows={3}
+            placeholder={t('replyStyle.brandVoicePlaceholder')}
+            value={value}
+            onChange={(e) => updateValue(e.target.value)}
+          />
+          {value.length >= MAX_TEMPLATE_MESSAGE_LENGTH * 0.8 && (
+            <span
+              className={clsx(
+                'pointer-events-none absolute bottom-1.5 end-2.5 text-[10px] tabular-nums',
+                value.length >= MAX_TEMPLATE_MESSAGE_LENGTH ? 'text-destructive' : 'text-muted-foreground',
+              )}
+            >
+              {value.length}/{MAX_TEMPLATE_MESSAGE_LENGTH}
+            </span>
           )}
-          dir="auto"
-          maxLength={MAX_TEMPLATE_MESSAGE_LENGTH}
-          rows={5}
-          placeholder={t('replyStyle.brandVoicePlaceholder')}
-          value={value}
-          onChange={(e) => updateValue(e.target.value)}
-        />
-        <p className="text-xs text-muted-foreground mt-1 text-end">
-          {value.length}/{MAX_TEMPLATE_MESSAGE_LENGTH}
-        </p>
+        </div>
       </div>
 
-      {/* Tone — demoted from button row to a compact dropdown. Same data model. */}
-      <div className="mb-5 flex items-center gap-3">
-        <label htmlFor="replyStyleTone" className="text-sm font-medium text-foreground/80 shrink-0">
+      {/* Tone + Test — single compact row. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span id="replyStyleToneLabel" className="text-xs font-medium text-foreground/80 shrink-0">
           {t('replyStyle.tone')}
-        </label>
-        <select
-          id="replyStyleTone"
-          value={settings.replyStyle}
-          onChange={(e) => setSettings({ ...settings, replyStyle: e.target.value })}
-          className="input bg-background border border-theme-border rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 min-h-[40px]"
+        </span>
+        <div
+          role="radiogroup"
+          aria-labelledby="replyStyleToneLabel"
+          className="inline-flex p-0.5 rounded-lg bg-muted border border-theme-border"
         >
-          {STYLES.map((style) => (
-            <option key={style} value={style}>
-              {t(`replyStyle.${style}`)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {/* Test reply — opens the existing chat-style TestSmartReplyModal so the merchant
-          can preview how the AI uses their brand voice + tone. Reuses the modal already
-          launched from the pages list (single source of truth for the test flow). */}
-      <div className="pt-4 border-t border-theme-border">
-        {hasChanges && (
-          <p className="text-xs text-muted-foreground mb-2">{t('replyStyle.testSaveFirst')}</p>
-        )}
+          {STYLES.map((style) => {
+            const selected = settings.replyStyle === style;
+            return (
+              <button
+                key={style}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => setSettings({ ...settings, replyStyle: style })}
+                className={clsx(
+                  'px-2.5 py-1 text-xs font-medium rounded-md transition-all',
+                  selected
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t(`replyStyle.${style}`)}
+              </button>
+            );
+          })}
+        </div>
         <button
           type="button"
           onClick={openTestModal}
           disabled={hasChanges === true}
+          title={hasChanges ? t('replyStyle.testSaveFirst') : undefined}
           className={clsx(
-            'inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all min-h-[44px] active:scale-[0.98]',
+            'ms-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all active:scale-[0.98]',
             hasChanges === true
               ? 'bg-muted text-muted-foreground cursor-not-allowed'
-              : 'bg-brand-500 text-white hover:bg-brand-600 shadow-lg',
+              : 'bg-brand-500 text-white hover:bg-brand-600',
           )}
         >
-          <MessageSquare className="w-4 h-4" aria-hidden="true" />
+          <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" />
           {t('replyStyle.openTestModal')}
         </button>
-        {firstPage?.name && (
-          <p className="mt-2 text-xs text-muted-foreground" dir="auto">
-            {t('replyStyle.testingOnPage', { pageName: firstPage.name })}
-          </p>
-        )}
-        {testError && (
-          <p className="mt-2 text-sm text-destructive" role="alert">{testError}</p>
-        )}
       </div>
+      {(hasChanges || firstPage?.name || testError) && (
+        <div className="mt-1.5 text-end">
+          {hasChanges && (
+            <p className="text-[11px] text-muted-foreground">{t('replyStyle.testSaveFirst')}</p>
+          )}
+          {!hasChanges && firstPage?.name && (
+            <p className="text-[11px] text-muted-foreground" dir="auto">
+              {t('replyStyle.testingOnPage', { pageName: firstPage.name })}
+            </p>
+          )}
+          {testError && (
+            <p className="text-xs text-destructive" role="alert">{testError}</p>
+          )}
+        </div>
+      )}
 
       {testPage && (
         <TestSmartReplyModal
