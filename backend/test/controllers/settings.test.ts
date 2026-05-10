@@ -119,11 +119,12 @@ describe('SettingsController', () => {
             (mockRequest as any).body = updates;
             await settingsController.update(mockRequest as any, mockReply as any);
 
-            // Expect translateText to be called
+            // Expect translateText to be called with userId for cost attribution
             expect(translateText).toHaveBeenCalledWith({
                 text: "مرحبا",
                 sourceLanguage: "ar",
-                targetLanguage: "en"
+                targetLanguage: "en",
+                userId: "user-123",
             });
 
             // Expect updateSettings to be called with enriched data

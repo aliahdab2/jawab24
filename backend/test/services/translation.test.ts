@@ -7,7 +7,13 @@ vi.mock('../../src/config', () => ({
         ai: {
             serviceUrl: 'http://localhost:3002',
         },
+        redis: { host: 'localhost', port: 6379, password: '' },
     },
+}));
+
+// Stub redis used by aiUsageLog (only touched on log-failure paths).
+vi.mock('../../src/lib/redis', () => ({
+    redis: { incr: vi.fn().mockResolvedValue(1) },
 }));
 
 import { translateText, generateNudgeVariations } from '../../src/services/translation';
