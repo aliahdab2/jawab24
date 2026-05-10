@@ -101,6 +101,7 @@ const FULL_JSONB = {
     replyDelay: 0,
     greetingMessageMulti: {},
     awayMessageMulti: {},
+    limitFallbackEnabled: false,
     limitFallbackMessageMulti: {},
     handoffPauseDurationMinutes: 30,
     commentEscalationMinutes: 60,

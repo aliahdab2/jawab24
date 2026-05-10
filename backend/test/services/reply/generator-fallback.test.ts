@@ -116,6 +116,8 @@ describe('ReplyGenerator – localized fallback when AI quota is exhausted', () 
 
     describe('generateForComment – quota exhausted (no custom fallback set, default-off)', () => {
         beforeEach(() => {
+            // Toggle off → silent + flag, regardless of message text.
+            getWorkspaceSettings.mockResolvedValue({ limitFallbackEnabled: false });
             getLimitFallbackMessage.mockResolvedValue(null);
         });
 
@@ -190,6 +192,8 @@ describe('ReplyGenerator – localized fallback when AI quota is exhausted', () 
 
     describe('generateForMessage – quota exhausted (no custom fallback set, default-off)', () => {
         beforeEach(() => {
+            // Toggle off → silent + flag, regardless of message text.
+            getWorkspaceSettings.mockResolvedValue({ limitFallbackEnabled: false });
             getLimitFallbackMessage.mockResolvedValue(null);
         });
 
