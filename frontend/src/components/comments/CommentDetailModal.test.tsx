@@ -194,7 +194,7 @@ describe('CommentDetailModal', () => {
 
       renderModal({ comment: heldComment });
 
-      expect(screen.getByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).toBeInTheDocument();
+      expect(screen.getByText("Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).toBeInTheDocument();
       const textarea = screen.getByPlaceholderText('Type your reply here...');
       expect(textarea).toHaveValue('AI draft: Thanks for your interest!');
     });
@@ -202,7 +202,7 @@ describe('CommentDetailModal', () => {
     it('does not show held reply banner for normal unreplied comments', () => {
       renderModal();
 
-      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
 
     it('does not show held reply banner when flagReason is not held_low_confidence', () => {
@@ -215,7 +215,7 @@ describe('CommentDetailModal', () => {
 
       renderModal({ comment: flaggedComment });
 
-      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
 
     it('does not show held reply banner when comment is already replied', () => {
@@ -230,7 +230,7 @@ describe('CommentDetailModal', () => {
 
       renderModal({ comment: repliedComment });
 
-      expect(screen.queryByText("AI suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
+      expect(screen.queryByText("Jawab suggested this reply but wasn't confident enough to send it. Review, edit if needed, then send.")).not.toBeInTheDocument();
     });
   });
 
