@@ -100,19 +100,18 @@ export async function authenticate(request: AuthenticatedRequest, reply: Fastify
  * Required for all state-changing requests when using cookies
  */
 export async function csrfProtection(request: FastifyRequest, reply: FastifyReply) {
-    // Skip for non-cookie auth (e.g. mobile using Bearer)
-    if (request.headers.authorization) {
-        return;
-    }
-
     // Skip for safe methods
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) {
         return;
     }
 
-    // Skip for unauthenticated requests (no auth cookie = not logged in via cookies)
-    // CSRF only matters for cookie-authenticated sessions
-    // Note: request.cookies may be undefined if cookie plugin hasn't parsed yet
+    // CSRF only matters for cookie-authenticated sessions. If there is no auth cookie,
+    // the request is either pure Bearer (mobile/API) or unauthenticated — skip.
+    // Auth-source priority: enforce CSRF whenever the cookie is present, even if an
+    // Authorization header is also sent. The header alone must NOT short-circuit CSRF,
+    // because cookie auth is still a valid auth source server-side and the cookie rides
+    // the request automatically.
+    // Note: request.cookies may be undefined if cookie plugin hasn't parsed yet.
     if (!request.cookies?.token) {
         return;
     }

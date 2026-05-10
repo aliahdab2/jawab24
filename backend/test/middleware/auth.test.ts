@@ -116,10 +116,24 @@ describe('CSRF Protection Middleware', () => {
     };
   });
 
-  it('should skip for Bearer token auth (mobile)', async () => {
+  it('should skip for Bearer-only auth (mobile, no auth cookie)', async () => {
     mockRequest.headers.authorization = 'Bearer some-token';
+    mockRequest.cookies = {};
     await csrfProtection(mockRequest as FastifyRequest, mockReply as FastifyReply);
     expect(mockReply.status).not.toHaveBeenCalled();
+  });
+
+  it('should ENFORCE CSRF when both Authorization header AND auth cookie are present', async () => {
+    // Regression: the prior behavior short-circuited CSRF on any Authorization header,
+    // even if the cookie was the actual auth source. An attacker who can inject any
+    // header value (XSS / malicious extension) could then bypass CSRF entirely.
+    mockRequest.headers.authorization = 'Bearer some-token';
+    mockRequest.cookies = { token: 'valid-session' }; // no csrfToken
+    await csrfProtection(mockRequest as FastifyRequest, mockReply as FastifyReply);
+    expect(mockReply.status).toHaveBeenCalledWith(403);
+    expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'CSRF_INVALID',
+    }));
   });
 
   it('should skip for GET requests', async () => {

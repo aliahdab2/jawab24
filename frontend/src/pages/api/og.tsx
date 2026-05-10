@@ -1,5 +1,6 @@
 import { ImageResponse } from '@vercel/og';
 import type { NextRequest } from 'next/server';
+import { isRTLLocale } from '@/utils/locale';
 
 export const config = {
     runtime: 'edge',
@@ -9,6 +10,16 @@ const FONT_URLS = {
     en: 'https://fonts.googleapis.com/css2?family=Outfit:wght@700&display=swap',
     ar: 'https://fonts.googleapis.com/css2?family=Cairo:wght@700&display=swap',
 } as const;
+
+const BRAND_NAME: Record<'en' | 'ar', string> = {
+    en: 'Jawab24',
+    ar: 'جواب24',
+};
+
+const TAGLINE: Record<'en' | 'ar', string> = {
+    en: 'AI Auto-Reply',
+    ar: 'ردود تلقائية ذكية',
+};
 
 async function loadFont(locale: 'en' | 'ar'): Promise<ArrayBuffer> {
     const cssRes = await fetch(FONT_URLS[locale], {
@@ -25,7 +36,8 @@ export default async function handler(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const title = (searchParams.get('title') || 'Jawab24').slice(0, 140);
     const locale = searchParams.get('locale') === 'ar' ? 'ar' : 'en';
-    const isRTL = locale === 'ar';
+    const isRTL = isRTLLocale(locale);
+    const fontFamily = locale === 'ar' ? 'Cairo' : 'Outfit';
 
     const fontData = await loadFont(locale);
 
@@ -40,7 +52,7 @@ export default async function handler(req: NextRequest) {
                     justifyContent: 'space-between',
                     padding: '80px',
                     background: 'linear-gradient(135deg, #0d9488 0%, #115e59 100%)',
-                    fontFamily: locale === 'ar' ? 'Cairo' : 'Outfit',
+                    fontFamily,
                 }}
             >
                 <div
@@ -68,7 +80,7 @@ export default async function handler(req: NextRequest) {
                         J
                     </div>
                     <div style={{ display: 'flex', color: 'white', fontSize: '32px', fontWeight: 700 }}>
-                        {locale === 'ar' ? 'جواب24' : 'Jawab24'}
+                        {BRAND_NAME[locale]}
                     </div>
                 </div>
 
@@ -99,7 +111,7 @@ export default async function handler(req: NextRequest) {
                     }}
                 >
                     <div style={{ display: 'flex' }}>
-                        {locale === 'ar' ? 'ردود تلقائية ذكية' : 'AI Auto-Reply'}
+                        {TAGLINE[locale]}
                     </div>
                     <div style={{ display: 'flex' }}>jawab24.com</div>
                 </div>
@@ -110,7 +122,7 @@ export default async function handler(req: NextRequest) {
             height: 630,
             fonts: [
                 {
-                    name: locale === 'ar' ? 'Cairo' : 'Outfit',
+                    name: fontFamily,
                     data: fontData,
                     weight: 700,
                     style: 'normal',

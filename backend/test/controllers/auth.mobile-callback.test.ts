@@ -40,6 +40,7 @@ vi.mock('../../src/services/auth', () => ({
         generateToken: vi.fn().mockReturnValue('mock-jwt'),
     },
     ACCESS_TOKEN_EXPIRY: 900,
+    MOBILE_DEEP_LINK_TOKEN_EXPIRY: 7 * 24 * 60 * 60 * 1000,
 }));
 
 vi.mock('../../src/services/facebook', () => ({

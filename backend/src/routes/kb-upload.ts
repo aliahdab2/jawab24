@@ -17,6 +17,7 @@ import {
 import { BadRequestError } from '../services/openaiClient';
 import { auth } from '../utils/swagger';
 import { redis } from '../lib/redis';
+import { captureError } from '../utils/sentryHelpers';
 
 /** Base64 is ~33% larger than raw bytes */
 const MAX_BASE64_LENGTH = Math.ceil(MAX_FILE_SIZE_BYTES * 1.34);
@@ -171,7 +172,7 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
 
 type VisionCheckResult =
     | { allowed: true }
-    | { allowed: false; status: 403 | 429; response: Record<string, unknown> };
+    | { allowed: false; status: 403 | 429 | 503; response: Record<string, unknown> };
 
 /**
  * Check plan access (Business+) AND daily quota before calling GPT Vision.
@@ -208,8 +209,20 @@ async function checkVisionAccessAndQuota(request: FastifyRequest): Promise<Visio
                 },
             };
         }
-    } catch {
-        // Redis down — allow (fail open to avoid blocking users)
+    } catch (err) {
+        // Fail closed: GPT Vision is a real cost vector and quota is the only abuse guard.
+        // Without Redis we cannot enforce the daily cap, so reject rather than expose
+        // unbounded billing risk if Redis is down.
+        captureError(err, 'kb-upload quota check failed', { tags: { route: 'kb-upload-quota' }, extra: { userId } });
+        return {
+            allowed: false,
+            status: 503,
+            response: {
+                success: false,
+                error: 'quota_check_unavailable',
+                message: 'Image extraction is temporarily unavailable. Please try again in a moment.',
+            },
+        };
     }
 
     return { allowed: true };

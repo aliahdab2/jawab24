@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { authService, ACCESS_TOKEN_EXPIRY } from '../services/auth';
+import { authService, ACCESS_TOKEN_EXPIRY, MOBILE_DEEP_LINK_TOKEN_EXPIRY } from '../services/auth';
 import { cookiesService } from '../services/cookies';
 import { refreshTokenService } from '../services/refreshToken';
 import { facebookService } from '../services/facebook';
@@ -188,7 +188,11 @@ export class AuthController {
             );
 
             // 5. Generate JWT
-            const token = authService.generateToken(user);
+            // Web-redirect mobile callback: token is delivered via deep-link URL with no
+            // refresh-token round trip, so we issue a longer-lived token here. The native
+            // login path (POST /auth/facebook/native) gets the standard 15-min token + refresh.
+            // TODO: include a refresh token in the deep-link payload so this can drop to ACCESS_TOKEN_EXPIRY.
+            const token = authService.generateToken(user, MOBILE_DEEP_LINK_TOKEN_EXPIRY);
 
             // 6. Fetch settings + workspaces
             const [userSettings, workspaces] = await Promise.all([

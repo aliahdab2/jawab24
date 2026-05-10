@@ -15,9 +15,12 @@ import { subscriptionsService } from './subscriptions';
 import { captureError } from '../utils/sentryHelpers';
 // Secure JWT-like implementation using HMAC
 const ALGORITHM = 'sha256';
-const LEGACY_TOKEN_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days (Keep for backward compatibility)
 
 export const ACCESS_TOKEN_EXPIRY = 15 * 60 * 1000; // 15 minutes
+// Long-lived expiry used only by the web-redirect mobile callback, which delivers the
+// token via deep link and has no refresh-token round trip. Native mobile login uses
+// ACCESS_TOKEN_EXPIRY + refresh-token rotation; do not use this anywhere else.
+export const MOBILE_DEEP_LINK_TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000;
 
 export class AuthService {
     /** Encrypt token only when FACEBOOK_TOKEN_ENCRYPTION_KEY is configured. */
@@ -291,7 +294,7 @@ export class AuthService {
      * Generate secure token for user
      * Uses HMAC signature with expiry timestamp
      */
-    generateToken(user: User, expiryMs: number = LEGACY_TOKEN_EXPIRY_MS): string {
+    generateToken(user: User, expiryMs: number = ACCESS_TOKEN_EXPIRY): string {
         const payload: JWTPayload & { exp: number } = {
             userId: user.id,
             isAdmin: user.isAdmin || false,
