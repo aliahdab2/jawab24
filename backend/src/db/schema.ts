@@ -334,6 +334,9 @@ export const settings = pgTable('settings', {
     // Structure: { [lang: string]: string, sourceLang: string }
     greetingMessageMulti: jsonb('greeting_message_multi').$type<Record<string, string>>().default({}),
     awayMessageMulti: jsonb('away_message_multi').$type<Record<string, string>>().default({}),
+    // Custom reply sent to customers when the monthly Smart Reply quota is exhausted.
+    // Empty → falls back to hardcoded `commentFallback` / `messageFallback` translations.
+    limitFallbackMessageMulti: jsonb('limit_fallback_message_multi').$type<Record<string, string>>().default({}),
     dualReplyNudgeMulti: jsonb('dual_reply_nudge_multi').$type<Record<string, string>>().default({}),
     dualReplyNudgeVariations: jsonb('dual_reply_nudge_variations').$type<Record<string, string[]>>().default({}),
     replyDelay: integer('reply_delay').default(0), // seconds

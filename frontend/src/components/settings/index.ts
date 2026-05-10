@@ -9,6 +9,7 @@ export { ReplyDelayCard } from './ReplyDelayCard';
 export { NotificationsCard } from './NotificationsCard';
 export { HandoffPauseCard } from './HandoffPauseCard';
 export { GreetingMessageCard } from './GreetingMessageCard';
+export { LimitFallbackMessageCard } from './LimitFallbackMessageCard';
 export { ReplyStyleCard } from './ReplyStyleCard';
 export { LowConfidenceHoldCard } from './LowConfidenceHoldCard';
 export { DangerZone } from './DangerZone';

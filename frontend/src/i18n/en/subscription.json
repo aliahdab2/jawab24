@@ -24,6 +24,7 @@
     "scopeTooltip": "Counts every message Jawab processed, including filtered spam.",
     "resetsOn": "resets on {date}",
     "dismiss": "Dismiss",
-    "dismissLabel": "Dismiss usage warning"
+    "dismissLabel": "Dismiss usage warning",
+    "customizeFallback": "Customize fallback reply"
   }
 }

@@ -175,6 +175,11 @@
     "title": "After-Hours Message",
     "desc": "Sent when customers message outside business hours"
   },
+  "limitFallbackMessage": {
+    "title": "Backup Reply When Smart Replies Are Paused",
+    "desc": "Sent to customers when your monthly Smart Reply limit is reached. Keep it short and on-brand."
+  },
+  "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
   "aiDescriptionImproved": "Use Smart Replies to generate context-aware responses. When disabled, only preset replies work. Works with 'Reply to Comments' and 'Reply to Messages' settings above.",
   "autoTranslateTo": "Auto-translate to",
   "translationSuccess": "Translation completed!",

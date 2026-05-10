@@ -1,5 +1,5 @@
 {
-  "id": "ae6385ae-656a-427f-95c2-524cc789bc04",
+  "id": "01b1d165-e6bf-4d11-b58d-b43450c5660e",
   "prevId": "00ba9bdc-7435-4235-9dfc-a4aa35de4b41",
   "version": "5",
   "dialect": "pg",
@@ -4357,6 +4357,13 @@
         },
         "away_message_multi": {
           "name": "away_message_multi",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'::jsonb"
+        },
+        "limit_fallback_message_multi": {
+          "name": "limit_fallback_message_multi",
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false,

@@ -22,6 +22,10 @@ const DEFAULT_MESSAGES: Record<string, Record<string, string>> = {
         ar: t('dualNudgeDefault', 'ar'),
         en: t('dualNudgeDefault', 'en'),
     },
+    limitFallbackMessage: {
+        ar: t('commentFallback', 'ar'),
+        en: t('commentFallback', 'en'),
+    },
     brandVoiceNotes: {
         ar: '',
         en: '',
@@ -196,7 +200,16 @@ export class SettingsController {
                     'awayMessage'
                 );
             }
-            
+
+            // Apply logic for Limit-Reached Fallback Message
+            if (updates.limitFallbackMessageMulti) {
+                updates.limitFallbackMessageMulti = await handleSmartTranslation(
+                    updates.limitFallbackMessageMulti,
+                    currentSettings.limitFallbackMessageMulti,
+                    'limitFallbackMessage'
+                );
+            }
+
             // Apply logic for Dual Reply Nudge
             if (updates.dualReplyNudgeMulti) {
                 updates.dualReplyNudgeMulti = await handleSmartTranslation(

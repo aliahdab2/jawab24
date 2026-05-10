@@ -3,6 +3,7 @@ import type { AiGenerateRequest } from '../../types';
 import type { AiPipeline } from '../../types/aiPipeline';
 import { messagesService } from '../messages';
 import { subscriptionsService } from '../subscriptions';
+import { workspaceSettingsService } from '../workspaceSettings';
 import { postsService } from '../posts';
 import { config } from '../../config';
 import { AiGenerateResponse, RetrievedChunkContext, Logger, noopLogger } from '../../types';
@@ -323,7 +324,8 @@ export class ReplyGenerator {
                     text, postMessage: contextPostMessage, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
-                return { replyText: t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
+                const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
+                return { replyText: custom ?? t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
             }
 
             // Fetch post content lazily if needed
@@ -382,7 +384,8 @@ export class ReplyGenerator {
             text, postMessage: contextPostMessage, knowledgeBase,
             defaultReplyLanguage: context.defaultReplyLanguage,
         });
-        return { replyText: t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
+        const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
+        return { replyText: custom ?? t('commentFallback', lang), replyMethod: 'template', needsAttention: false };
     }
 
     /**
@@ -405,7 +408,8 @@ export class ReplyGenerator {
                     text, knowledgeBase,
                     defaultReplyLanguage: context.defaultReplyLanguage,
                 });
-                return { replyText: t('messageFallback', lang), replyMethod: 'template', needsAttention: false };
+                const custom = await workspaceSettingsService.getLimitFallbackMessage(context.workspaceId, lang);
+                return { replyText: custom ?? t('messageFallback', lang), replyMethod: 'template', needsAttention: false };
             }
 
             if (pageId && senderId) {
