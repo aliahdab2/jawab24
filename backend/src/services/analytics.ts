@@ -264,8 +264,19 @@ export class AnalyticsService {
     }
 
     async getAiUsage(userId: string, days: number = 30): Promise<AiUsageReport> {
+        return this.queryAiUsage(days, userId);
+    }
+
+    /** Platform-wide AI usage across all users — admin observability only. */
+    async getAiUsageGlobal(days: number = 30): Promise<AiUsageReport> {
+        return this.queryAiUsage(days, null);
+    }
+
+    private async queryAiUsage(days: number, userId: string | null): Promise<AiUsageReport> {
         const now = new Date();
         const since = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+        const userFilter = userId ? eq(aiUsageLog.userId, userId) : undefined;
 
         const [rows, intentRows] = await Promise.all([
             db
@@ -281,7 +292,7 @@ export class AnalyticsService {
                 })
                 .from(aiUsageLog)
                 .where(and(
-                    eq(aiUsageLog.userId, userId),
+                    userFilter,
                     gte(aiUsageLog.createdAt, since),
                 ))
                 .groupBy(aiUsageLog.model, sql`DATE(${aiUsageLog.createdAt})`)
@@ -298,7 +309,7 @@ export class AnalyticsService {
                 })
                 .from(aiUsageLog)
                 .where(and(
-                    eq(aiUsageLog.userId, userId),
+                    userFilter,
                     gte(aiUsageLog.createdAt, since),
                     isNotNull(aiUsageLog.intent),
                 ))

@@ -22,6 +22,19 @@ export class AnalyticsController {
         }
     }
 
+    async getAiUsageGlobal(request: FastifyRequest<{
+        Querystring: { days?: string }
+    }>, reply: FastifyReply) {
+        try {
+            const days = Math.min(Math.max(Number(request.query.days) || 30, 1), 365);
+            const report = await analyticsService.getAiUsageGlobal(days);
+            return reply.send(report);
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to fetch global AI usage' });
+        }
+    }
+
     async getOverview(request: FastifyRequest<{
         Querystring: {
             days?: string;

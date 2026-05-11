@@ -121,6 +121,24 @@ export default async function analyticsRoutes(fastify: FastifyInstance) {
          * Uses Node.js APIs directly (not prom-client JSON parsing) for reliability.
          * Shared health probes from utils/healthChecks.ts avoid duplication with /health.
          */
+        /**
+         * Platform-wide AI usage across all users (admin observability).
+         * GET /analytics/admin/ai-usage
+         */
+        adminRoutes.get('/admin/ai-usage', {
+            schema: {
+                tags: ['Analytics'],
+                summary: 'Get platform-wide AI token usage and cost breakdown',
+                security: auth,
+                querystring: {
+                    type: 'object',
+                    properties: {
+                        days: { type: 'number', default: 30, description: 'Lookback window in days (1-365)' },
+                    },
+                },
+            },
+        }, analyticsController.getAiUsageGlobal);
+
         adminRoutes.get('/system-health', {
             schema: {
                 tags: ['Analytics'],

@@ -348,6 +348,8 @@ export const analyticsApi = {
     api.get<AnalyticsOverview>('/analytics/overview', { params: days ? { days } : undefined }),
   getAiUsage: (days?: number) =>
     api.get<AiUsageReport>('/analytics/ai-usage', { params: days ? { days } : undefined }),
+  getAiUsageGlobal: (days?: number) =>
+    api.get<AiUsageReport>('/analytics/admin/ai-usage', { params: days ? { days } : undefined }),
   getSystemHealth: () =>
     api.get<SystemHealthReport>('/analytics/system-health'),
   getCacheStats: () =>
