@@ -122,9 +122,9 @@ export default function AdminObservabilityPage() {
   });
 
   const { data: aiUsage, isLoading: aiLoading } = useQuery<AiUsageReport>({
-    queryKey: ['admin', 'ai-usage', days],
+    queryKey: ['admin', 'ai-usage-global', days],
     queryFn: async () => {
-      const res = await analyticsApi.getAiUsage(days);
+      const res = await analyticsApi.getAiUsageGlobal(days);
       return res.data;
     },
     staleTime: 60_000,
