@@ -50,6 +50,9 @@ vi.mock('../../src/db', () => ({
                     }),
                 }),
                 where: vi.fn().mockReturnValue({
+                    orderBy: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([]),
+                    }),
                     limit: vi.fn().mockResolvedValue([]),
                 }),
             }),
@@ -832,18 +835,20 @@ describe('Subscriptions Service', () => {
                 return {
                     from: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([{
-                                id: 'usage_1',
-                                userId: 'user_1',
-                                periodStart: new Date(),
-                                periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                                aiRepliesCount: 60,
-                                totalCommentsProcessed: 0,
-                                totalMessagesProcessed: 0,
-                                dailyBreakdown: {},
-                                createdAt: new Date(),
-                                updatedAt: new Date(),
-                            }]),
+                            orderBy: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue([{
+                                    id: 'usage_1',
+                                    userId: 'user_1',
+                                    periodStart: new Date(),
+                                    periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                    aiRepliesCount: 60,
+                                    totalCommentsProcessed: 0,
+                                    totalMessagesProcessed: 0,
+                                    dailyBreakdown: {},
+                                    createdAt: new Date(),
+                                    updatedAt: new Date(),
+                                }]),
+                            }),
                         }),
                     }),
                 } as any;
@@ -896,18 +901,20 @@ describe('Subscriptions Service', () => {
                 return {
                     from: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([{
-                                id: 'usage_1',
-                                userId: 'user_1',
-                                periodStart: new Date('2026-04-10T21:12:43Z'),
-                                periodEnd: usagePeriodEnd,
-                                aiRepliesCount: 10000,
-                                totalCommentsProcessed: 0,
-                                totalMessagesProcessed: 0,
-                                dailyBreakdown: {},
-                                createdAt: new Date(),
-                                updatedAt: new Date(),
-                            }]),
+                            orderBy: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue([{
+                                    id: 'usage_1',
+                                    userId: 'user_1',
+                                    periodStart: new Date('2026-04-10T21:12:43Z'),
+                                    periodEnd: usagePeriodEnd,
+                                    aiRepliesCount: 10000,
+                                    totalCommentsProcessed: 0,
+                                    totalMessagesProcessed: 0,
+                                    dailyBreakdown: {},
+                                    createdAt: new Date(),
+                                    updatedAt: new Date(),
+                                }]),
+                            }),
                         }),
                     }),
                 } as any;
@@ -956,18 +963,20 @@ describe('Subscriptions Service', () => {
                 return {
                     from: vi.fn().mockReturnValue({
                         where: vi.fn().mockReturnValue({
-                            limit: vi.fn().mockResolvedValue([{
-                                id: 'usage_1',
-                                userId: 'user_1',
-                                periodStart: new Date(),
-                                periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                                aiRepliesCount: 30,
-                                totalCommentsProcessed: 0,
-                                totalMessagesProcessed: 0,
-                                dailyBreakdown: {},
-                                createdAt: new Date(),
-                                updatedAt: new Date(),
-                            }]),
+                            orderBy: vi.fn().mockReturnValue({
+                                limit: vi.fn().mockResolvedValue([{
+                                    id: 'usage_1',
+                                    userId: 'user_1',
+                                    periodStart: new Date(),
+                                    periodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                                    aiRepliesCount: 30,
+                                    totalCommentsProcessed: 0,
+                                    totalMessagesProcessed: 0,
+                                    dailyBreakdown: {},
+                                    createdAt: new Date(),
+                                    updatedAt: new Date(),
+                                }]),
+                            }),
                         }),
                     }),
                 } as any;
