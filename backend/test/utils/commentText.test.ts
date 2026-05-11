@@ -3,6 +3,7 @@ import {
     stripCommentNoise,
     hasMention,
     isPunctuationOnly,
+    isContentFree,
     stripTagsByOffsets,
     hasUserTag,
     hasOwnPageTag,
@@ -127,6 +128,44 @@ describe('isPunctuationOnly', () => {
     it('returns false for text with digits', () => {
         expect(isPunctuationOnly('123')).toBe(false);
         expect(isPunctuationOnly('. 5')).toBe(false);
+    });
+});
+
+describe('isContentFree', () => {
+    it('returns true for punctuation, emoji, and combinations', () => {
+        expect(isContentFree('.')).toBe(true);
+        expect(isContentFree('...')).toBe(true);
+        expect(isContentFree('❤️')).toBe(true);
+        expect(isContentFree('🎉🔥')).toBe(true);
+        expect(isContentFree('... 🎉')).toBe(true);
+    });
+
+    it('returns true for digit-only CTA tokens (any script)', () => {
+        // ASCII digits
+        expect(isContentFree('0')).toBe(true);
+        expect(isContentFree('000')).toBe(true);
+        expect(isContentFree('123')).toBe(true);
+        // Arabic-Indic digits — the لامار الشام case
+        expect(isContentFree('٠')).toBe(true);
+        expect(isContentFree('٠٠٠')).toBe(true);
+        // Mixed digits + punctuation/emoji
+        expect(isContentFree('٠٠٠ ❤️')).toBe(true);
+        expect(isContentFree('000.')).toBe(true);
+    });
+
+    it('returns false when any letter is present (any script)', () => {
+        expect(isContentFree('ok')).toBe(false);
+        expect(isContentFree('تم')).toBe(false);
+        expect(isContentFree('. ok')).toBe(false);
+        expect(isContentFree('٠٠ a')).toBe(false);
+        // Future-language coverage — \p{L} catches every script.
+        expect(isContentFree('好')).toBe(false);     // Chinese
+        expect(isContentFree('สวัสดี')).toBe(false); // Thai
+        expect(isContentFree('नमस्ते')).toBe(false); // Devanagari
+    });
+
+    it('returns false for empty string', () => {
+        expect(isContentFree('')).toBe(false);
     });
 });
 

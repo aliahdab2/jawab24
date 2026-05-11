@@ -2,6 +2,7 @@ import {
     stripCommentNoise,
     hasMention,
     isPunctuationOnly,
+    isContentFree,
     hasUserTag,
     hasOwnPageTag,
     stripTagsByOffsets,
@@ -115,13 +116,19 @@ export function resolveCommentLanguage(
 }
 
 /**
- * When a post's CTA is "comment a dot to get details" and the customer did exactly
- * that, a dual-reply DM must answer with actual details rather than classifying the
- * bare punctuation as spam. Replace the synthetic input with a post-language request
- * sentence so the downstream AI + RAG chain has something to work with.
+ * When a post's CTA is "comment a dot / zero / heart to get details" and the
+ * customer did exactly that, a dual-reply DM must answer with actual details
+ * rather than letting the bare token reach the AI as an unanswerable input.
+ * Replace the synthetic input with a post-language request sentence so the
+ * downstream AI + RAG chain has something to work with.
  *
- * Returns the (possibly rewritten) comment text. When no rewrite applies, returns
- * the input unchanged.
+ * Content-free detection covers any script: punctuation ("."), emoji ("❤️"),
+ * ASCII digits ("000"), Arabic-Indic digits ("٠٠٠"), or any combination. The
+ * \p{L} test naturally extends to future languages — no code change needed
+ * to support Chinese, Thai, Devanagari, etc.
+ *
+ * Returns the (possibly rewritten) comment text. When no rewrite applies,
+ * returns the input unchanged.
  */
 export function rewritePunctuationForDualDm(opts: {
     commentForAI: string;
@@ -133,7 +140,7 @@ export function rewritePunctuationForDualDm(opts: {
     if (effectiveChannel !== 'dm') return commentForAI;
     if (!postMessage) return commentForAI;
     const probe = commentForAI || rawText;
-    if (!isPunctuationOnly(probe.trim())) return commentForAI;
+    if (!isContentFree(probe.trim())) return commentForAI;
     // Use the shared language detector (same one driving everything else in the
     // pipeline) so the Arabic-vs-English decision stays consistent. `unknown` falls
     // through to English, which matches the old inline-regex behavior.
