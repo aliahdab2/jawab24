@@ -2922,6 +2922,35 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Ellipsis on Arabic CTA post — reply must be Arabic with actual KB info',
     },
+    // Regression: لامار الشام (2026-05-11). Customer typed "٠٠٠" on a course-offer post
+    // following the "علق بنقطة ❤️⭕️" CTA. Before fix: isPunctuationOnly rejected the
+    // Arabic-Indic digits (\p{N}), so rewritePunctuationForDualDm did NOT synthesise
+    // "أريد التفاصيل" and the AI saw raw "٠٠٠" → greeting + "not in KB" flag, even
+    // though the KB has every advertised course at 25k. Fix: isContentFree (no \p{L})
+    // covers digit-as-dot CTAs in any script. Mirrors the production flow (comment on
+    // a CTA post) — same shape as #305 with digits instead of an ellipsis.
+    {
+        id: 324, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',
+        message: '٠٠٠',
+        page: 'training',
+        postMessage: '#عروض 🔥❤️‍🔥\n#دورات بكلفة 25 الف #فقط (بالعملة القديمة)\nدورات ال ICDL 💻\nدورات الإسعافات الأولية 🥼\nدورات محاسبة الامين المبتدئ 💴📄\nشهـادات معتمدة ومصدقة في سوق العــمل 🥰\nلمعرفة التفاصيل علق بنقطة ❤️⭕️',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Thank you', 'thank you', 'Hello', 'hello', 'Hi ', 'How can I help', 'interest'],
+        },
+        notes: 'Arabic-Indic digit CTA "٠٠٠" on course-offer post — must NOT fall back to greeting; KB has all courses at 25k',
+    },
+    {
+        id: 325, category: 45, categoryName: 'Punctuation Comment Language', channel: 'comment',
+        message: '000',
+        page: 'training',
+        postMessage: 'دورة ICDL — تفاصيل الأسعار والمواعيد\nعلق ب0 لتصلك التفاصيل',
+        expected: {
+            replyMethod: ['ai'],
+            replyNotContains: ['Thank you', 'thank you', 'Hello', 'hello', 'How can I help'],
+        },
+        notes: 'ASCII-digit CTA "000" on Arabic CTA post — same content-free pattern, language-agnostic detection',
+    },
 
     // ===== Category 46: Facebook message_tags (user-tag vs page-tag) =====
     // Bug: customer tags a friend on an Arabic post — comment text is the friend's name

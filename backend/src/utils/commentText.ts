@@ -112,6 +112,21 @@ export function isPunctuationOnly(text: string): boolean {
 }
 
 /**
+ * Returns true when text has no letters in ANY script — covers punctuation,
+ * symbols, emojis, AND digits (ASCII "000", Arabic-Indic "٠٠٠", etc.). Used
+ * to detect content-free CTA tokens that act as engagement signals on posts
+ * like "علق بنقطة" — a customer typing "٠٠٠" or "000" is conceptually the
+ * same as typing "." and must be routed through the same enrichment path.
+ *
+ * Language-agnostic by construction: \p{L} covers every script Unicode knows
+ * (Arabic, Latin, Chinese, Thai, Devanagari, …), so this works for any future
+ * language without code changes.
+ */
+export function isContentFree(text: string): boolean {
+    return text.length > 0 && !/\p{L}/u.test(text);
+}
+
+/**
  * Returns true when we have strong reasons to believe the comment is NOT a
  * bare structured user-tag (and therefore no need to reach out to the Graph
  * API to verify). Inverted framing on purpose — if we're not confident the

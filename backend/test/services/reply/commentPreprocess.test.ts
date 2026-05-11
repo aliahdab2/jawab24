@@ -233,4 +233,24 @@ describe('rewritePunctuationForDualDm', () => {
         });
         expect(out).toBe('كم السعر؟');
     });
+
+    it('rewrites Arabic-Indic digit CTA "٠٠٠" on Arabic post (لامار الشام case)', () => {
+        const out = rewritePunctuationForDualDm({
+            commentForAI: '٠٠٠',
+            rawText: '٠٠٠',
+            postMessage: '#عروض 🔥 دورات بكلفة 25 الف فقط — ICDL، إسعافات، محاسبة الأمين. علق بنقطة ❤️⭕️',
+            effectiveChannel: 'dm',
+        });
+        expect(out).toBe('أريد التفاصيل');
+    });
+
+    it('rewrites ASCII-digit CTA "000" on English post', () => {
+        const out = rewritePunctuationForDualDm({
+            commentForAI: '000',
+            rawText: '000',
+            postMessage: 'New iPhone 15 — comment 0 to get pricing!',
+            effectiveChannel: 'dm',
+        });
+        expect(out).toBe('I want the details');
+    });
 });
