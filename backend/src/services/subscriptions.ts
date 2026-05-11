@@ -229,7 +229,23 @@ export const subscriptionsService = {
         const normalizedStart = startOfUtcDay(periodStart);
         const normalizedEnd = startOfUtcDay(periodEnd);
 
-        // Check if period already exists
+        // Close any still-open prior period so it can't overlap with the new one.
+        // On admin upgrade (and Stripe plan-change events that don't wait for the
+        // current period to end), the prior row's periodEnd is in the future —
+        // without this, getCurrentUsage's `periodStart <= now <= periodEnd` query
+        // can match the old maxed row instead of the fresh one.
+        await db
+            .update(usage)
+            .set({ periodEnd: normalizedStart, updatedAt: new Date() })
+            .where(
+                and(
+                    eq(usage.userId, userId),
+                    gte(usage.periodEnd, normalizedStart),
+                    sql`${usage.periodStart} < ${normalizedStart}`
+                )
+            );
+
+        // Check if period already exists (idempotency for webhook replays)
         const existing = await db
             .select()
             .from(usage)
@@ -260,6 +276,10 @@ export const subscriptionsService = {
     async getCurrentUsage(userId: string): Promise<Usage | null> {
         const now = new Date();
 
+        // Order by periodStart DESC so that if two rows briefly overlap (e.g. a
+        // mid-period upgrade), we always pick the most recently opened one
+        // instead of the older maxed-out row. initializeUsagePeriod closes the
+        // prior row, but this ordering is defense-in-depth.
         const result = await db
             .select()
             .from(usage)
@@ -270,6 +290,7 @@ export const subscriptionsService = {
                     gte(usage.periodEnd, now)
                 )
             )
+            .orderBy(desc(usage.periodStart))
             .limit(1);
 
         return result[0] ? this.mapToUsage(result[0]) : null;
