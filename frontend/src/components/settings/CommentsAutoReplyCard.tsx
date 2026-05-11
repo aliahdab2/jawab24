@@ -17,6 +17,12 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
   const [diagramKey, setDiagramKey] = useState(0);
 
   const dualNudgeInput = settings.dualReplyNudgeMulti?.[settings.dashboardLanguage] || '';
+  // Auto-translated entries blank the input (the stored text becomes the placeholder),
+  // so the textarea is visually empty even though dualNudgeInput is set. Direction must
+  // be based on the actually-rendered value, not the stored value.
+  const dualNudgeSourceLang = settings.dualReplyNudgeMulti?.sourceLang;
+  const dualNudgeIsAutoTranslated = !!(dualNudgeSourceLang && dualNudgeSourceLang !== 'manual' && dualNudgeSourceLang !== settings.dashboardLanguage);
+  const dualNudgeRenderedValue = dualNudgeIsAutoTranslated ? '' : dualNudgeInput;
 
   return (
     <Card className={clsx(
@@ -158,13 +164,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                 <input
                   type="text"
                   aria-label={t('dualReplyConfigTitle.improved')}
-                  value={(() => {
-                    const currentLang = settings.dashboardLanguage;
-                    const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
-                    const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
-                    const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-                    return isAutoTranslated ? '' : value;
-                  })()}
+                  value={dualNudgeRenderedValue}
                   onChange={(e) => {
                     const value = e.target.value.slice(0, 80);
                     const currentLang = settings.dashboardLanguage;
@@ -177,14 +177,8 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                       },
                     });
                   }}
-                  placeholder={(() => {
-                    const currentLang = settings.dashboardLanguage;
-                    const value = settings.dualReplyNudgeMulti?.[currentLang] || '';
-                    const sourceLang = settings.dualReplyNudgeMulti?.sourceLang;
-                    const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
-                    return isAutoTranslated && value ? value : t('publicReplyPlaceholder');
-                  })()}
-                  dir={dualNudgeInput ? 'auto' : getLocaleDirection(settings.dashboardLanguage)}
+                  placeholder={dualNudgeIsAutoTranslated && dualNudgeInput ? dualNudgeInput : t('publicReplyPlaceholder')}
+                  dir={dualNudgeRenderedValue ? 'auto' : getLocaleDirection(settings.dashboardLanguage)}
                   maxLength={80}
                   className={clsx(
                     'w-full bg-transparent border-none p-3 pe-14 rounded-2xl text-sm',
