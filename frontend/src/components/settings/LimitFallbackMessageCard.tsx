@@ -3,6 +3,7 @@ import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 import { Card, Toggle, InputFieldWrapper, CharCounter } from '@/components/ui';
 import { MessageSquareOff } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { getLocaleDirection } from '@/utils/locale';
 import type { SettingsCardProps } from './types';
 
 /**
@@ -32,7 +33,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
     .some(([k, v]) => k !== 'sourceLang' && typeof v === 'string' && v.trim().length > 0);
 
   return (
-    <Card className="border-none shadow-lg shadow-theme-border/50 p-4 landscape:p-3">
+    <Card className="border-none shadow-lg shadow-theme-border/50 p-4 landscape:p-3 h-full flex flex-col">
       <div className="flex items-start gap-3 mb-3 landscape:mb-2">
         <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 flex items-center justify-center shrink-0 landscape:w-9 landscape:h-9">
           <MessageSquareOff className="w-4 h-4" aria-hidden="true" />
@@ -62,6 +63,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
       </div>
 
       <InputFieldWrapper
+        className="flex-1"
         disabled={!enabled}
         // Keep the counter visible when disabled but content exists — otherwise
         // a stored 200-char message looks identical to an empty field while off.
@@ -71,16 +73,14 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
           aria-label={t('limitFallbackMessage.title')}
           aria-disabled={!enabled}
           className={clsx(
-            'w-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none',
+            'w-full h-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none min-h-[120px]',
             'placeholder:text-muted-foreground placeholder:italic',
             'focus:outline-none focus:ring-0',
             currentLang === 'ar' && 'italic italic-arabic',
           )}
-          rows={enabled ? 3 : 2}
+          rows={3}
           placeholder={placeholder}
-          // dir=auto only when content exists; an empty textarea with dir=auto
-          // defaults to LTR, which left-aligns an Arabic placeholder in an Arabic UI.
-          dir={displayValue ? 'auto' : undefined}
+          dir={displayValue ? 'auto' : getLocaleDirection(currentLang)}
           maxLength={maxChars}
           value={displayValue}
           disabled={!enabled}
