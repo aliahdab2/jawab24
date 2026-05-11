@@ -7,6 +7,7 @@ import { Card, InputFieldWrapper, CharCounter } from '@/components/ui';
 import { Sparkles, MessageSquare, ArrowRight, X } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
+import { getLocaleDirection } from '@/utils/locale';
 import type { SettingsCardProps } from './types';
 
 // Lazy-load the modal — keeps it out of the settings-page bundle until the merchant
@@ -173,6 +174,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
         )}
 
         <InputFieldWrapper
+          className="border border-theme-border hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
           trailing={
             value.length >= MAX_TEMPLATE_MESSAGE_LENGTH * 0.8
               ? <CharCounter value={value.length} max={MAX_TEMPLATE_MESSAGE_LENGTH} />
@@ -184,15 +186,15 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
             ref={textareaRef}
             aria-label={t('replyStyle.brandVoice')}
             className={clsx(
-              'w-full bg-transparent border-none p-3 pe-14 rounded-2xl resize-none text-sm',
+              'w-full bg-transparent border-none p-4 pe-14 rounded-2xl resize-y text-sm leading-relaxed min-h-[140px]',
               'placeholder:text-muted-foreground placeholder:italic',
               'focus:outline-none focus:ring-0',
               isAutoTranslated && 'text-muted-foreground italic',
               currentLang === 'ar' && 'italic-arabic',
             )}
-            dir={value ? 'auto' : undefined}
+            dir={value ? 'auto' : getLocaleDirection(currentLang)}
             maxLength={MAX_TEMPLATE_MESSAGE_LENGTH}
-            rows={3}
+            rows={5}
             placeholder={t('replyStyle.brandVoicePlaceholder')}
             value={value}
             onChange={(e) => updateValue(e.target.value)}

@@ -9,6 +9,7 @@ import {
   Mail,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { getLocaleDirection } from '@/utils/locale';
 import type { SettingsCardProps } from './types';
 
 export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardProps) {
@@ -183,7 +184,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                     const isAutoTranslated = sourceLang && sourceLang !== 'manual' && sourceLang !== currentLang;
                     return isAutoTranslated && value ? value : t('publicReplyPlaceholder');
                   })()}
-                  dir={dualNudgeInput ? 'auto' : undefined}
+                  dir={dualNudgeInput ? 'auto' : getLocaleDirection(settings.dashboardLanguage)}
                   maxLength={80}
                   className={clsx(
                     'w-full bg-transparent border-none p-3 pe-14 rounded-2xl text-sm',

@@ -157,7 +157,11 @@ const SettingsPage: NextPageWithLayout = () => {
         setLanguage(settings.dashboardLanguage as 'ar' | 'en');
       }
 
-      const response = await settingsApi.update(settings as unknown as Record<string, unknown>);
+      const editableSettings = { ...(settings as unknown as Record<string, unknown>) };
+      delete editableSettings.id;
+      delete editableSettings.userId;
+      delete editableSettings.pushNotifications;
+      const response = await settingsApi.update(editableSettings);
       const data = response.data;
       if (data) {
         const updatedSettings = { ...settings, ...data };
@@ -306,9 +310,9 @@ const SettingsPage: NextPageWithLayout = () => {
             <p className="text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
               {t('subsectionCustomReplies')}
             </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-stretch">
               <GreetingMessageCard settings={settings} setSettings={setSettings} />
-              <div id="limit-fallback-message" className="scroll-mt-24">
+              <div id="limit-fallback-message" className="scroll-mt-24 h-full">
                 <LimitFallbackMessageCard settings={settings} setSettings={setSettings} />
               </div>
             </div>
