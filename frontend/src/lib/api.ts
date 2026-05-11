@@ -240,9 +240,19 @@ export const commentsApi = {
 };
 
 // Settings API
+//
+// The backend route uses additionalProperties:false. Any server-managed field
+// the frontend echoes back from /settings (id, userId, pushNotifications) will
+// reject the entire PUT with 400. Strip them here so individual call sites
+// can't silently corrupt local state by sending a payload that gets rejected.
+const SERVER_MANAGED_SETTINGS_FIELDS = ['id', 'userId', 'pushNotifications'] as const;
 export const settingsApi = {
   get: () => api.get('/settings'),
-  update: (data: Record<string, unknown>) => api.put('/settings', data),
+  update: (data: Record<string, unknown>) => {
+    const payload = { ...data };
+    for (const field of SERVER_MANAGED_SETTINGS_FIELDS) delete payload[field];
+    return api.put('/settings', payload);
+  },
 };
 
 // Stats API

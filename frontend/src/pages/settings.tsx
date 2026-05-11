@@ -157,11 +157,7 @@ const SettingsPage: NextPageWithLayout = () => {
         setLanguage(settings.dashboardLanguage as 'ar' | 'en');
       }
 
-      const editableSettings = { ...(settings as unknown as Record<string, unknown>) };
-      delete editableSettings.id;
-      delete editableSettings.userId;
-      delete editableSettings.pushNotifications;
-      const response = await settingsApi.update(editableSettings);
+      const response = await settingsApi.update(settings as unknown as Record<string, unknown>);
       const data = response.data;
       if (data) {
         const updatedSettings = { ...settings, ...data };
@@ -221,7 +217,6 @@ const SettingsPage: NextPageWithLayout = () => {
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
         <LanguageSelector
           settings={settings}
-          initialSettings={initialSettings}
           setSettings={setSettings}
           setInitialSettings={setInitialSettings}
           setLanguage={setLanguage}

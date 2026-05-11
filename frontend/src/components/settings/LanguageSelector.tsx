@@ -7,7 +7,6 @@ import type { SettingsState } from './types';
 
 interface LanguageSelectorProps {
   settings: SettingsState;
-  initialSettings: SettingsState;
   setSettings: (settings: SettingsState) => void;
   setInitialSettings: (settings: SettingsState) => void;
   setLanguage: (lang: 'ar' | 'en') => void;
@@ -15,7 +14,6 @@ interface LanguageSelectorProps {
 
 export function LanguageSelector({
   settings,
-  initialSettings,
   setSettings,
   setInitialSettings,
   setLanguage,
@@ -24,11 +22,18 @@ export function LanguageSelector({
   const tc = useTranslations('common');
 
   const handleLanguageChange = async (lang: 'ar' | 'en') => {
+    // Don't optimistically commit state before the API: PR #91 added
+    // additionalProperties:false on the route, and a failure here used to
+    // leave settings.dashboardLanguage flipped while useLanguage.language
+    // didn't — desyncing every multi-language card and clobbering the
+    // user's unsaved typing on the next fetchSettings tick.
     const newSettings = { ...settings, dashboardLanguage: lang };
-    setSettings(newSettings);
-    setInitialSettings({ ...initialSettings, dashboardLanguage: lang });
     try {
-      await settingsApi.update(newSettings as unknown as Record<string, unknown>);
+      const response = await settingsApi.update(newSettings as unknown as Record<string, unknown>);
+      const data = response.data;
+      const next = data ? { ...newSettings, ...data } : newSettings;
+      setSettings(next);
+      setInitialSettings(next);
       setLanguage(lang);
     } catch {
       toast.error(tc('error'));
