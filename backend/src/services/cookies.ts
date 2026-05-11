@@ -23,10 +23,14 @@ export const CSRF_COOKIE_OPTIONS = {
     signed: false,   // No need to sign, it's a random token
 };
 
-// Refresh Token Cookie options (Strict path restriction)
+// Refresh Token Cookie options
+// Path must stay at '/' because the browser sees the request as `/api/auth/refresh`
+// (nginx rewrites `/api/*` → `/*` before the backend). A narrower Path like
+// `/auth/refresh` makes the browser drop the cookie on every refresh attempt.
+// HttpOnly + signed already protect the value; path-narrowing was only defense-in-depth.
 export const REFRESH_COOKIE_OPTIONS = {
     ...COOKIE_OPTIONS,
-    path: '/auth/refresh', // ONLY send to refresh endpoint
+    path: '/',
 };
 
 // Shopify pending install cookie (lax sameSite for cross-site redirect from Shopify)

@@ -35,8 +35,11 @@ describe('CookiesService', () => {
             expect(CSRF_COOKIE_OPTIONS.signed).toBe(false);
         });
 
-        it('REFRESH cookie should have restricted path', () => {
-            expect(REFRESH_COOKIE_OPTIONS.path).toBe('/auth/refresh');
+        it('REFRESH cookie path must be "/" so the browser sends it on /api/auth/refresh', () => {
+            // nginx rewrites /api/* → /* before reaching the backend, but the browser
+            // sees the request path as /api/auth/refresh. A narrower Path causes the
+            // browser to drop the cookie and every refresh returns 401.
+            expect(REFRESH_COOKIE_OPTIONS.path).toBe('/');
         });
     });
 
@@ -77,11 +80,11 @@ describe('CookiesService', () => {
     });
 
     describe('setRefreshTokenCookie', () => {
-        it('should set refresh token cookie with restricted path', () => {
+        it('should set refresh token cookie with root path', () => {
             service.setRefreshTokenCookie(mockReply as any, 'refresh-token-456');
 
             expect(mockReply.setCookie).toHaveBeenCalledWith('refreshToken', 'refresh-token-456', expect.objectContaining({
-                path: '/auth/refresh',
+                path: '/',
                 httpOnly: true,
                 signed: true,
             }));
@@ -104,7 +107,7 @@ describe('CookiesService', () => {
             expect(mockReply.clearCookie).toHaveBeenCalledWith('token', expect.objectContaining({ path: '/' }));
             expect(mockReply.clearCookie).toHaveBeenCalledWith('csrfToken', expect.objectContaining({ path: '/' }));
             expect(mockReply.clearCookie).toHaveBeenCalledWith('refreshToken', expect.objectContaining({
-                path: '/auth/refresh',
+                path: '/',
             }));
         });
     });
