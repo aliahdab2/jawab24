@@ -893,4 +893,80 @@ describe('Settings Routes', () => {
             expect(body.awayMessage).toBeNull();
         });
     });
+
+    // Regression: the route schema's `additionalProperties: false` previously
+    // rejected the full PUT whenever the frontend sent these fields, blocking
+    // saves entirely. These tests lock the route in as accepting them.
+    describe('PUT /settings - Field acceptance (regression)', () => {
+        const setupAuth = async (returnValue: Record<string, unknown> = {}) => {
+            const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+            vi.mocked(authService.verifyToken).mockReturnValue({ userId: 'user_123', facebookId: 'fb_123' });
+            vi.mocked(settingsService.updateSettings).mockResolvedValue({ id: 's', userId: 'user_123', ...returnValue } as never);
+            return settingsService;
+        };
+
+        it('accepts limitFallbackEnabled + limitFallbackMessageMulti', async () => {
+            const settingsService = await setupAuth({ limitFallbackEnabled: true });
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: {
+                    limitFallbackEnabled: true,
+                    limitFallbackMessageMulti: { ar: 'تجاوزنا الحد', sourceLang: 'ar' },
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(settingsService.updateSettings).toHaveBeenCalled();
+            const updates = vi.mocked(settingsService.updateSettings).mock.calls[0][1];
+            expect(updates.limitFallbackEnabled).toBe(true);
+            expect(updates.limitFallbackMessageMulti).toBeDefined();
+        });
+
+        it('accepts dualReplyNudgeVariations', async () => {
+            const settingsService = await setupAuth();
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: {
+                    dualReplyNudgeVariations: { ar: ['v1', 'v2'], en: ['v1', 'v2'] },
+                },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(settingsService.updateSettings).toHaveBeenCalled();
+        });
+
+        it('accepts onboardingCompletedAt as ISO string', async () => {
+            const settingsService = await setupAuth();
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { onboardingCompletedAt: new Date().toISOString() },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(settingsService.updateSettings).toHaveBeenCalled();
+            const updates = vi.mocked(settingsService.updateSettings).mock.calls[0][1];
+            expect(updates.onboardingCompletedAt).toBeDefined();
+        });
+
+        it('accepts onboardingCompletedAt as null', async () => {
+            const settingsService = await setupAuth();
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { onboardingCompletedAt: null },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(settingsService.updateSettings).toHaveBeenCalled();
+        });
+
+    });
 });

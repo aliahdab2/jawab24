@@ -44,6 +44,7 @@ export const UpdateSettingsSchema = z.object({
     brandVoiceNotes: z.string().max(MAX_TEMPLATE_MESSAGE_LENGTH, `Brand voice notes must be ${MAX_TEMPLATE_MESSAGE_LENGTH} characters or fewer`).optional(),
     brandVoiceNotesMulti: z.record(z.string()).optional(),
     holdLowConfidence: z.boolean().optional(),
+    onboardingCompletedAt: z.string().datetime().nullable().optional(),
 });
 
 // ==========================================
