@@ -1,0 +1,112 @@
+name: E2E — Payment & Checkout
+
+# Enforces the payment-critical Playwright suites on every PR and push to main.
+# These tests live in frontend/e2e/ but were previously unenforced — the only
+# Playwright workflow that runs in CI was visual snapshots. As a result the
+# payment specs could rot silently. This workflow closes that gap.
+#
+# Scope: the 4 specs that exercise the pricing → checkout → Stripe flow:
+#   - e2e/pricing.spec.ts       (plan cards, billing toggle, FAQ, sanctions copy)
+#   - e2e/payment.spec.ts       (unauthenticated redirect with planId)
+#   - e2e/payment-flow.spec.ts  (authenticated + checkout + plan-change paths)
+#   - e2e/checkout.spec.ts      (checkout page render, login prompt, errors)
+#
+# Path filter: only triggers on changes that could plausibly affect the flow.
+# Adjust if a new file area starts impacting payments.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'packages/shared/**'
+      - 'backend/src/controllers/payment.ts'
+      - 'backend/src/services/stripe.ts'
+      - 'backend/src/services/subscriptions.ts'
+      - 'backend/src/services/plans.ts'
+      - 'backend/src/routes/payment.ts'
+      - 'backend/src/routes/subscriptions.ts'
+      - 'backend/src/routes/plans.ts'
+      - '.github/workflows/e2e-payment.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'frontend/**'
+      - 'packages/shared/**'
+      - 'backend/src/controllers/payment.ts'
+      - 'backend/src/services/stripe.ts'
+      - 'backend/src/services/subscriptions.ts'
+      - 'backend/src/services/plans.ts'
+      - 'backend/src/routes/payment.ts'
+      - 'backend/src/routes/subscriptions.ts'
+      - 'backend/src/routes/plans.ts'
+      - '.github/workflows/e2e-payment.yml'
+
+# Cancel in-flight runs when a new commit lands on the same branch — saves CI minutes.
+concurrency:
+  group: e2e-payment-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  payment-specs:
+    name: Payment Playwright specs (chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared package
+        run: cd packages/shared && npm run build
+
+      - name: Build frontend (standalone, matches production output)
+        run: cd frontend && CI=true npx next build
+        env:
+          # Mocked at the Playwright route level — see frontend/playwright.config.ts
+          # env block. Port 4999 has no real server; every fetch is intercepted.
+          NEXT_PUBLIC_API_URL: http://localhost:4999/api
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
+          NEXT_PUBLIC_FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+
+      - name: Stage standalone static + public dirs
+        run: |
+          cp -r frontend/.next/static frontend/.next/standalone/frontend/.next/static
+          cp -r frontend/public frontend/.next/standalone/frontend/public
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Run payment Playwright specs
+        run: |
+          cd frontend
+          CI=true npx playwright test \
+            e2e/pricing.spec.ts \
+            e2e/payment.spec.ts \
+            e2e/payment-flow.spec.ts \
+            e2e/checkout.spec.ts \
+            --project=chromium \
+            --reporter=line
+
+      - name: Upload Playwright trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace-payment
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 14

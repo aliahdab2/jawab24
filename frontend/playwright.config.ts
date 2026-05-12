@@ -53,6 +53,18 @@ export default defineConfig({
     // `next start` does NOT work with standalone — must use the standalone server.js.
     // Monorepo layout puts it at .next/standalone/frontend/server.js.
     // Local: use dev server (reuseExistingServer reuses whatever is on :3001).
+    //
+    // LOCAL-DEV GOTCHA: `reuseExistingServer: !CI` will reuse a dev server you
+    // already started with plain `npm run dev`. That server WON'T have the
+    // env vars injected below (especially NEXT_PUBLIC_API_URL=localhost:4999/api),
+    // so the frontend will call the real backend on :3000 instead of the mocked
+    // :4999. Route mocks then fail to intercept, real /geo/check returns
+    // "sanctioned: true" (no public IP on localhost), and the pricing page
+    // renders the WhatsApp fallback instead of Subscribe buttons. Symptom:
+    // payment specs time out waiting for a Subscribe button that isn't there.
+    //
+    // If you hit this: kill the dev server on :3001 (or run with `CI=true`)
+    // and let Playwright spawn its own server with the right env.
     command: process.env.CI ? 'PORT=3001 node .next/standalone/frontend/server.js' : 'npm run dev',
     url: 'http://localhost:3001/en/login',
     timeout: 120 * 1000,
