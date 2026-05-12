@@ -65,6 +65,8 @@
     "smartRepliesTooltip": "الردود المُرسَلة خلال آخر 30 يوماً.",
     "planUsageTooltip": "الردود الذكية المستخدمة في دورة الفوترة الحالية. يُعاد ضبط العدّاد مع بداية الدورة القادمة.",
     "resetsOn": "يُعاد الضبط في {date}",
+    "replyRateTooltip": "نسبة الرسائل والتعليقات التي تم الرد عليها خلال آخر 30 يوماً.",
+    "avgSpeedTooltip": "متوسط الزمن بين رسالة العميل وردّك خلال آخر 30 يوماً.",
     "repliedTodayTooltip": "{comments, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}} + {messages, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالةً} other {# رسالة}}"
   },
   "smartBanner": {
