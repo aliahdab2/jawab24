@@ -1006,3 +1006,208 @@ describe('MessageProcessor — Product Card Follow-up', () => {
         expect(adapter.sendReply).toHaveBeenCalled();
     });
 });
+
+/**
+ * Regression suite for the webhook-prestore / isNew interaction.
+ *
+ * Bug: the webhook controller calls `findOrCreateFromWebhook` to persist the
+ * incoming message BEFORE enqueuing the worker job (see webhook.ts ~L336).
+ * When the worker later calls `adapter.storeIncomingMessage`, the row already
+ * exists, so `isNew` comes back false. Code paths that gated on
+ * `isNew && ...` therefore never executed under the normal webhook flow,
+ * silently dropping:
+ *   - the Messenger "Get Started" / "بدء الاستخدام" greeting handoff (AI
+ *     ended up answering the system phrase like a real customer question)
+ *   - the merchant's configured greeting on first contact
+ *   - the away-message auto-reply when messages auto-reply is disabled
+ *
+ * These tests pin the behavior with `isNew: false` (the real webhook flow)
+ * so a future regression that re-adds an `isNew` gate fails loudly here.
+ */
+describe('MessageProcessor — Greeting & Away with pre-stored webhook message', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'hi', createdTime: new Date() } as any,
+        ]);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'template', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'AI reply',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+    });
+
+    /** Webhook flow: message already persisted before worker runs → isNew=false. */
+    function webhookPreStoredAdapter(overrides: Partial<MessagePlatformAdapter> = {}) {
+        return createMockAdapter({
+            storeIncomingMessage: vi.fn().mockResolvedValue({
+                message: { id: 'msg-uuid', replied: false } as StoredMessage,
+                isNew: false,
+            }),
+            ...overrides,
+        });
+    }
+
+    it('fires opener greeting for Arabic "بدء الاستخدام" even when isNew=false (webhook pre-stored)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'default' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'بدء الاستخدام', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyMethod).toBe('template');
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', expect.any(String),
+        );
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('fires opener greeting for English "Get Started" even when isNew=false', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'default' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Get Started', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyMethod).toBe('template');
+        expect(adapter.sendReply).toHaveBeenCalled();
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('fires merchant-configured greeting on first incoming message when isNew=false', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'en' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome to our store!');
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'what are your prices?', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyMethod).toBe('template');
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'Welcome to our store!',
+        );
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('does NOT fire greeting on a non-opener message past the first one (regression: must still respect isFirstIncomingMessage)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'en' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome!');
+
+        const adapter = webhookPreStoredAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'what are your prices?', 'msg-1',
+        );
+
+        expect(adapter.sendReply).not.toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'Welcome!',
+        );
+        expect(replyGenerator.generateForMessage).toHaveBeenCalled();
+    });
+
+    it('still fires opener greeting on a repeat "Get Started" tap even though it is not the first message (button is always a system phrase)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'default' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'بدء الاستخدام', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyMethod).toBe('template');
+        expect(adapter.sendReply).toHaveBeenCalled();
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('sends the away message on first contact when auto-reply is off, even when isNew=false', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: false, replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'hello?', 'msg-1',
+        );
+
+        expect(result.success).toBe(false);
+        expect(result.error).toBe('Messages auto-reply disabled');
+        expect(adapter.sendAwayMessage).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'We are away — back soon!',
+        );
+    });
+
+    it('does NOT spam away message on subsequent messages from the same sender', async () => {
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: false, replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are away — back soon!');
+
+        const adapter = webhookPreStoredAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'still there?', 'msg-2',
+        );
+
+        expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
+    });
+});
