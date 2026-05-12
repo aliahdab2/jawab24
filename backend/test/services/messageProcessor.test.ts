@@ -946,7 +946,7 @@ describe('MessageProcessor — Product Card Follow-up', () => {
         );
 
         expect(result.success).toBe(true);
-        expect(adapter.sendReply).toHaveBeenCalledWith(expect.anything(), 'sender-1', 'Yes, here it is!');
+        expect(adapter.sendReply).toHaveBeenCalledWith(expect.anything(), 'sender-1', 'Yes, here it is!', 'msg-1');
         expect(adapter.sendProductCards).toHaveBeenCalledWith(expect.anything(), 'sender-1', [sampleCard]);
     });
 
@@ -1004,5 +1004,160 @@ describe('MessageProcessor — Product Card Follow-up', () => {
 
         expect(result.success).toBe(true);
         expect(adapter.sendReply).toHaveBeenCalled();
+    });
+});
+
+describe('MessageProcessor — Reaction short-circuit', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+    });
+
+    it('sends a love reaction for "شكراً" and skips the AI generator', async () => {
+        const adapter = createMockAdapter({ sendReaction: vi.fn().mockResolvedValue(undefined) });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'شكراً', 'm_thanks',
+        );
+
+        expect(result).toMatchObject({ success: true, replyMethod: 'reaction', replyText: '❤️' });
+        expect(adapter.sendReaction).toHaveBeenCalledWith(expect.anything(), 'sender-1', 'm_thanks', 'love');
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+    });
+
+    it('sends a like reaction for "ok"', async () => {
+        const adapter = createMockAdapter({ sendReaction: vi.fn().mockResolvedValue(undefined) });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'ok', 'm_ok',
+        );
+
+        expect(result).toMatchObject({ success: true, replyMethod: 'reaction', replyText: '👍' });
+        expect(adapter.sendReaction).toHaveBeenCalledWith(expect.anything(), 'sender-1', 'm_ok', 'like');
+    });
+
+    it('falls through to the AI path on adapters without sendReaction (Instagram)', async () => {
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'شكراً', createdTime: new Date() } as any,
+        ]);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'العفو!', replyMethod: 'ai', needsAttention: false,
+        });
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'r', pageId: 'page-uuid', platformMessageId: 'reply_1', senderId: 'sender-1',
+            senderName: null, message: 'العفو!', direction: 'outgoing', replied: true,
+            replyText: 'العفو!', replyMethod: 'ai', createdAt: new Date(), createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+
+        const adapter = createMockAdapter();
+        // Instagram-style adapter: no sendReaction
+        expect(adapter.sendReaction).toBeUndefined();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'شكراً', 'm_thanks',
+        );
+
+        expect(result.success).toBe(true);
+        expect(replyGenerator.generateForMessage).toHaveBeenCalled();
+        expect(adapter.sendReply).toHaveBeenCalledWith(expect.anything(), 'sender-1', 'العفو!', 'm_thanks');
+    });
+
+    it('does not react for non-ack messages', async () => {
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'how much does it cost?', createdTime: new Date() } as any,
+        ]);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '50 SAR', replyMethod: 'ai', needsAttention: false,
+        });
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'r', pageId: 'page-uuid', platformMessageId: 'reply_1', senderId: 'sender-1',
+            senderName: null, message: '50 SAR', direction: 'outgoing', replied: true,
+            replyText: '50 SAR', replyMethod: 'ai', createdAt: new Date(), createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+
+        const adapter = createMockAdapter({ sendReaction: vi.fn().mockResolvedValue(undefined) });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'how much does it cost?', 'm_q',
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReaction).not.toHaveBeenCalled();
+        expect(adapter.sendReply).toHaveBeenCalled();
+    });
+
+    it('skips reactions entirely when ENABLE_REACTION_REPLIES=false', async () => {
+        const original = process.env.ENABLE_REACTION_REPLIES;
+        process.env.ENABLE_REACTION_REPLIES = 'false';
+        try {
+            vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+                { id: 'msg-uuid', message: 'شكراً', createdTime: new Date() } as any,
+            ]);
+            vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+                replyText: 'العفو!', replyMethod: 'ai', needsAttention: false,
+            });
+            vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+                id: 'r', pageId: 'page-uuid', platformMessageId: 'reply_1', senderId: 'sender-1',
+                senderName: null, message: 'العفو!', direction: 'outgoing', replied: true,
+                replyText: 'العفو!', replyMethod: 'ai', createdAt: new Date(), createdTime: new Date(), repliedAt: new Date(),
+            } as any);
+            vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+
+            const adapter = createMockAdapter({ sendReaction: vi.fn().mockResolvedValue(undefined) });
+
+            await messageProcessor.processMessage(
+                adapter, 'page-1', 'sender-1', 'شكراً', 'm_thanks',
+            );
+
+            expect(adapter.sendReaction).not.toHaveBeenCalled();
+            expect(replyGenerator.generateForMessage).toHaveBeenCalled();
+        } finally {
+            if (original === undefined) delete process.env.ENABLE_REACTION_REPLIES;
+            else process.env.ENABLE_REACTION_REPLIES = original;
+        }
+    });
+
+    it('falls back to AI reply when reaction send fails', async () => {
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'شكراً', createdTime: new Date() } as any,
+        ]);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'العفو!', replyMethod: 'ai', needsAttention: false,
+        });
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'r', pageId: 'page-uuid', platformMessageId: 'reply_1', senderId: 'sender-1',
+            senderName: null, message: 'العفو!', direction: 'outgoing', replied: true,
+            replyText: 'العفو!', replyMethod: 'ai', createdAt: new Date(), createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+
+        const adapter = createMockAdapter({
+            sendReaction: vi.fn().mockRejectedValue(new Error('Graph 400')),
+        });
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'شكراً', 'm_thanks',
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReaction).toHaveBeenCalled();
+        expect(adapter.sendReply).toHaveBeenCalled(); // AI reply happened as fallback
     });
 });

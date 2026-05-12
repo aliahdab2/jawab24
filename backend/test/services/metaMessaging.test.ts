@@ -18,6 +18,16 @@ describe('metaMessaging', () => {
             });
         });
 
+        it('includes reply_to.mid when replyToMid is provided', () => {
+            const payload = buildMessagePayload('user-1', { text: 'Hi' }, { replyToMid: 'm_abc' });
+            expect(payload.reply_to).toEqual({ mid: 'm_abc' });
+        });
+
+        it('omits reply_to when replyToMid is undefined', () => {
+            const payload = buildMessagePayload('user-1', { text: 'Hi' });
+            expect(payload).not.toHaveProperty('reply_to');
+        });
+
         it('passes through messagingType and tag when provided', () => {
             const payload = buildMessagePayload(
                 'user-1',

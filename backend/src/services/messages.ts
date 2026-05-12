@@ -321,7 +321,7 @@ export class MessagesService {
     async markAsReplied(
         messageId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'reaction',
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,
@@ -397,7 +397,7 @@ export class MessagesService {
         workspaceId: string,
         senderId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'reaction',
         conn: DbConn = db,
         senderName?: string,
         originContentId?: string,
@@ -638,7 +638,7 @@ export class MessagesService {
         senderId: string,
         excludeMessageId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'reaction',
         conn: DbConn = db
     ): Promise<number> {
         const result = await conn.update(messages)
@@ -823,7 +823,7 @@ export class MessagesService {
             direction: record.direction as 'incoming' | 'outgoing',
             replied: record.replied ?? false,
             replyText: record.replyText,
-            replyMethod: record.replyMethod as 'template' | 'ai' | 'manual' | 'post_reply' | null,
+            replyMethod: record.replyMethod as 'template' | 'ai' | 'manual' | 'post_reply' | 'reaction' | null,
             createdTime: record.createdTime,
             repliedAt: record.repliedAt,
             createdAt: record.createdAt,

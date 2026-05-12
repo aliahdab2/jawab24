@@ -7,6 +7,7 @@ vi.mock('../../src/services/facebook', () => ({
         getSenderProfile: vi.fn(),
         sendTypingIndicator: vi.fn().mockResolvedValue(undefined),
         sendPrivateMessage: vi.fn().mockResolvedValue(undefined),
+        sendReaction: vi.fn().mockResolvedValue(undefined),
     },
 }));
 
@@ -184,8 +185,23 @@ describe('FacebookMessageAdapter — typing indicator', () => {
     it('sendReply sends message without calling typing (typing is handled by processor)', async () => {
         await adapter.sendReply(mockPage, 'recipient-1', 'Hello!');
 
-        expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('page-token', 'recipient-1', 'Hello!');
+        expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('page-token', 'recipient-1', 'Hello!', undefined);
         expect(facebookService.sendTypingIndicator).not.toHaveBeenCalled();
+    });
+
+    it('sendReply forwards incoming message id as reply_to.mid', async () => {
+        await adapter.sendReply(mockPage, 'recipient-1', 'Hello!', 'm_incoming_abc');
+
+        expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith(
+            'page-token', 'recipient-1', 'Hello!',
+            { replyToMid: 'm_incoming_abc' },
+        );
+    });
+
+    it('sendReaction delegates to facebookService.sendReaction', async () => {
+        await adapter.sendReaction(mockPage, 'recipient-1', 'm_abc', 'love');
+
+        expect(facebookService.sendReaction).toHaveBeenCalledWith('page-token', 'recipient-1', 'm_abc', 'love');
     });
 
     it('sendAwayMessage sends message without calling typing', async () => {

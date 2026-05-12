@@ -62,8 +62,26 @@ export interface MessagePlatformAdapter {
     /** Send typing indicator (cosmetic, fire-and-forget). Not all platforms support this. */
     sendTypingIndicator?(page: PlatformPage, senderId: string): Promise<void>;
 
-    /** Send a reply message to the sender */
-    sendReply(page: PlatformPage, senderId: string, text: string): Promise<void>;
+    /**
+     * Send a reply message to the sender.
+     * `incomingMessageId` (when provided) is the platform's `mid` for the
+     * customer's message we're replying to — Messenger uses it to render the
+     * reply as a quoted thread reply. Adapters whose platform doesn't support
+     * quoted replies (Instagram) ignore the parameter.
+     */
+    sendReply(page: PlatformPage, senderId: string, text: string, incomingMessageId?: string): Promise<void>;
+
+    /**
+     * Send an emoji reaction to a specific incoming message.
+     * Optional: not all platforms support reactions (Instagram DM API doesn't).
+     * The shared pipeline checks for this method's presence before calling.
+     */
+    sendReaction?(
+        page: PlatformPage,
+        senderId: string,
+        incomingMessageId: string,
+        reaction: 'like' | 'love',
+    ): Promise<void>;
 
     /**
      * Send rich product cards (Generic Template carousel) as a follow-up to a text reply.
@@ -83,7 +101,7 @@ export interface MessagePlatformAdapter {
     markAsReplied(
         messageId: string,
         replyText: string,
-        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply',
+        replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'reaction',
         needsAttention?: boolean,
         flagReason?: string,
         aiIntent?: string,

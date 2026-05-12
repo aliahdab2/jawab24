@@ -38,6 +38,7 @@ export type Outcome =
     | 'skipped_spam'
     | 'held_low_confidence'
     | 'greeting_sent'
+    | 'reaction_sent'
     | 'subscription_inactive'
     | 'lock_contention'
     | 'trigger_no_match'

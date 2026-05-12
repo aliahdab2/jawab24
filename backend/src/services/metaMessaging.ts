@@ -27,6 +27,12 @@ export type MessagingType = 'RESPONSE' | 'UPDATE' | 'MESSAGE_TAG';
 export interface SendMessageOptions {
     messagingType?: MessagingType;
     tag?: string;
+    /**
+     * Messenger `reply_to.mid` — when set, the outgoing message renders as a
+     * quoted reply to the referenced incoming message ID. Messenger-only;
+     * Instagram's DM API silently ignores it.
+     */
+    replyToMid?: string;
 }
 
 // Meta's documented limits for the Generic Template.
@@ -93,6 +99,7 @@ export function buildMessagePayload(
         message,
         messaging_type: opts?.messagingType ?? 'RESPONSE',
         ...(opts?.tag ? { tag: opts.tag } : {}),
+        ...(opts?.replyToMid ? { reply_to: { mid: opts.replyToMid } } : {}),
     };
 }
 

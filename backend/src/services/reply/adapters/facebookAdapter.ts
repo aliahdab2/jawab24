@@ -80,8 +80,22 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         await facebookService.sendTypingIndicator(page.accessToken, senderId);
     }
 
-    async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
-        await facebookService.sendPrivateMessage(page.accessToken, senderId, text);
+    async sendReply(page: PlatformPage, senderId: string, text: string, incomingMessageId?: string): Promise<void> {
+        await facebookService.sendPrivateMessage(
+            page.accessToken,
+            senderId,
+            text,
+            incomingMessageId ? { replyToMid: incomingMessageId } : undefined,
+        );
+    }
+
+    async sendReaction(
+        page: PlatformPage,
+        senderId: string,
+        incomingMessageId: string,
+        reaction: 'like' | 'love',
+    ): Promise<void> {
+        await facebookService.sendReaction(page.accessToken, senderId, incomingMessageId, reaction);
     }
 
     async sendProductCards(page: PlatformPage, senderId: string, cards: ProductCard[]): Promise<void> {

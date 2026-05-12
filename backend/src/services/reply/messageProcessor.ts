@@ -5,6 +5,7 @@ import { rateLimiter } from '../protection';
 import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
+import { maybeDispatchReaction } from './reactionDispatcher';
 import { detectLanguageCode } from '../../utils/language';
 import { t } from '../../utils/i18n';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
@@ -311,6 +312,23 @@ export class MessageProcessor {
                 }
             }
 
+            // 9c. Acknowledgment short-circuit — react with ❤️/👍 on short
+            // "thanks"/"ok" messages and skip the AI call. See reactionDispatcher.
+            const reactionOutcome = await maybeDispatchReaction({
+                adapter,
+                page,
+                senderId,
+                platformMessageId,
+                messageText,
+                storedMessageId: storedMessage.id,
+                pipeline,
+                logger: this.logger,
+                startedAt: t0,
+            });
+            if (reactionOutcome.handled && reactionOutcome.result) {
+                return reactionOutcome.result;
+            }
+
             // 10. Reply delay (doubles as consolidation window when > 0)
             if (replyDelay > 0) {
                 await this.delay(replyDelay * 1000);
@@ -450,7 +468,7 @@ export class MessageProcessor {
             // 13. Send reply
             let deliveryFailed = false;
             try {
-                await adapter.sendReply(page, senderId, replyText);
+                await adapter.sendReply(page, senderId, replyText, platformMessageId);
             } catch (error) {
                 deliveryFailed = true;
                 pipelineMetrics.record(pipeline, 'send_failed');

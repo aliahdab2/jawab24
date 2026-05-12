@@ -74,7 +74,7 @@ export interface Message {
   direction: 'incoming' | 'outgoing';
   replied: boolean;
   replyText: string | null;
-  replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | null;
+  replyMethod: 'template' | 'ai' | 'manual' | 'post_reply' | 'reaction' | null;
   createdAt: string | Date | null;
   createdTime?: string | Date | null;
   repliedAt?: string | Date | null;
@@ -405,7 +405,7 @@ export interface ReplyJobResult {
   skipped?: boolean;
   reason?: string;
   replyText?: string;
-  replyMethod?: 'template' | 'ai' | 'post_reply';
+  replyMethod?: 'template' | 'ai' | 'post_reply' | 'reaction';
   error?: string;
   needsAttention?: boolean;
   flagReason?: string;

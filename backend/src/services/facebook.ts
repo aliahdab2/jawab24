@@ -16,6 +16,20 @@ const traced = <T>(method: string, fn: () => Promise<T>) =>
 const FACEBOOK_GRAPH_API = GRAPH_API_BASE;
 const DEFAULT_TOKEN_EXPIRY_MS = 60 * 24 * 60 * 60 * 1000; // 60 days — Facebook long-lived token default
 
+// Graph API subcode for "message id is invalid" — returned when reply_to.mid
+// references a message Messenger can no longer thread against (deleted,
+// expired, or otherwise unreachable). We retry the send without the quote.
+const FB_INVALID_MID_SUBCODE = 2018278;
+
+function isInvalidMidError(error: unknown): boolean {
+    if (!axios.isAxiosError(error)) return false;
+    const fbError = (error.response?.data as { error?: { error_subcode?: number; message?: string } } | undefined)?.error;
+    if (fbError?.error_subcode === FB_INVALID_MID_SUBCODE) return true;
+    // Defensive fallback: some Graph variants surface the same condition only
+    // in the human-readable message. Keep the check narrow.
+    return typeof fbError?.message === 'string' && /reply_to/i.test(fbError.message) && /invalid/i.test(fbError.message);
+}
+
 // Fields shared by /me/accounts (primary) and /{page-id} (fallback) page fetches.
 // The `tasks` field is ONLY requestable on /me/accounts — Graph API rejects it on /{page-id}.
 const PAGE_BASE_FIELDS = 'id,name,access_token,category,about,phone,single_line_address,hours,website';
@@ -363,11 +377,71 @@ export class FacebookService {
         text: string,
         opts?: SendMessageOptions,
     ): Promise<void> {
-        try {
-            await traced('sendPrivateMessage', () =>
+        const post = (payload: Record<string, unknown>) =>
+            traced('sendPrivateMessage', () =>
                 fbAxios.post(
                     `${FACEBOOK_GRAPH_API}/me/messages`,
-                    buildMessagePayload(recipientId, { text }, opts),
+                    payload,
+                    { params: { access_token: pageAccessToken } },
+                ),
+            );
+
+        try {
+            await post(buildMessagePayload(recipientId, { text }, opts));
+        } catch (error) {
+            // When Facebook rejects the `reply_to.mid` (message deleted, older
+            // than the messaging window, or otherwise unreachable), retry the
+            // send once without the quote. Better an unquoted reply than a
+            // dropped reply. Subcode 2018278 = "message id is invalid".
+            if (opts?.replyToMid && isInvalidMidError(error)) {
+                this.logger.info('[Facebook] reply_to.mid rejected — retrying without quote', {
+                    recipientId,
+                    mid: opts.replyToMid,
+                });
+                const fallbackOpts = { ...opts, replyToMid: undefined };
+                try {
+                    await post(buildMessagePayload(recipientId, { text }, fallbackOpts));
+                    return;
+                } catch (retryError) {
+                    if (axios.isAxiosError(retryError)) {
+                        throw DmSendError.fromAxios(retryError, 'Facebook API error', { verboseDetail: true });
+                    }
+                    throw retryError;
+                }
+            }
+
+            if (axios.isAxiosError(error)) {
+                throw DmSendError.fromAxios(error, 'Facebook API error', { verboseDetail: true });
+            }
+            throw error;
+        }
+    }
+
+    /**
+     * Send a Messenger emoji reaction to a specific incoming message.
+     * Use this instead of `sendPrivateMessage` for short acknowledgments
+     * ("thanks", "ok") — Messenger renders the reaction inline on the
+     * customer's message and we avoid an OpenAI call.
+     *
+     * Facebook only supports a fixed set of reactions: 'like' | 'love' |
+     * 'smile' | 'wow' | 'sad' | 'angry' | 'dislike'. Instagram's API has no
+     * equivalent endpoint — callers must skip this for Instagram pages.
+     */
+    async sendReaction(
+        pageAccessToken: string,
+        recipientId: string,
+        messageId: string,
+        reaction: 'like' | 'love' | 'smile' | 'wow' | 'sad' | 'angry' | 'dislike',
+    ): Promise<void> {
+        try {
+            await traced('sendReaction', () =>
+                fbAxios.post(
+                    `${FACEBOOK_GRAPH_API}/me/messages`,
+                    {
+                        recipient: { id: recipientId },
+                        sender_action: 'react',
+                        payload: { message_id: messageId, reaction },
+                    },
                     { params: { access_token: pageAccessToken } },
                 ),
             );

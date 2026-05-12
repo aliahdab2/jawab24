@@ -655,6 +655,96 @@ describe('Facebook Service', () => {
         });
     });
 
+    describe('sendPrivateMessage', () => {
+        it('posts a plain message with no reply_to when replyToMid is not provided', async () => {
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: {} });
+
+            await service.sendPrivateMessage('token', 'user-1', 'Hello there');
+
+            expect(fbAxios.post).toHaveBeenCalledTimes(1);
+            const [, payload] = vi.mocked(fbAxios.post).mock.calls[0];
+            expect(payload).toEqual({
+                recipient: { id: 'user-1' },
+                message: { text: 'Hello there' },
+                messaging_type: 'RESPONSE',
+            });
+        });
+
+        it('includes reply_to.mid when replyToMid is provided', async () => {
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: {} });
+
+            await service.sendPrivateMessage('token', 'user-1', 'Quoted reply', { replyToMid: 'm_abc' });
+
+            expect(fbAxios.post).toHaveBeenCalledTimes(1);
+            const [, payload] = vi.mocked(fbAxios.post).mock.calls[0];
+            expect(payload).toMatchObject({
+                recipient: { id: 'user-1' },
+                message: { text: 'Quoted reply' },
+                reply_to: { mid: 'm_abc' },
+            });
+        });
+
+        it('retries without reply_to when Facebook rejects the mid (subcode 2018278)', async () => {
+            const invalidMidError = Object.assign(new Error('invalid mid'), {
+                isAxiosError: true,
+                response: { data: { error: { error_subcode: 2018278, message: 'reply_to mid invalid' } } },
+            });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+            vi.mocked(fbAxios.post)
+                .mockRejectedValueOnce(invalidMidError)
+                .mockResolvedValueOnce({ data: {} });
+
+            await service.sendPrivateMessage('token', 'user-1', 'Hi', { replyToMid: 'm_stale' });
+
+            expect(fbAxios.post).toHaveBeenCalledTimes(2);
+            const [, retryPayload] = vi.mocked(fbAxios.post).mock.calls[1];
+            expect(retryPayload).not.toHaveProperty('reply_to');
+        });
+
+        it('does not retry for unrelated errors when replyToMid is set', async () => {
+            const otherError = Object.assign(new Error('rate limited'), {
+                isAxiosError: true,
+                response: { data: { error: { code: 4, message: 'rate limit' } } },
+            });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+            vi.mocked(fbAxios.post).mockRejectedValueOnce(otherError);
+
+            await expect(
+                service.sendPrivateMessage('token', 'user-1', 'Hi', { replyToMid: 'm_x' }),
+            ).rejects.toThrow();
+            expect(fbAxios.post).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    describe('sendReaction', () => {
+        it('posts a react sender_action with the message id and reaction', async () => {
+            vi.mocked(fbAxios.post).mockResolvedValue({ data: {} });
+
+            await service.sendReaction('token', 'user-1', 'm_abc', 'love');
+
+            expect(fbAxios.post).toHaveBeenCalledTimes(1);
+            const [url, payload, options] = vi.mocked(fbAxios.post).mock.calls[0];
+            expect(url).toBe('https://graph.facebook.com/v18.0/me/messages');
+            expect(payload).toEqual({
+                recipient: { id: 'user-1' },
+                sender_action: 'react',
+                payload: { message_id: 'm_abc', reaction: 'love' },
+            });
+            expect(options).toEqual({ params: { access_token: 'token' } });
+        });
+
+        it('throws DmSendError on API failure', async () => {
+            const apiError = Object.assign(new Error('Forbidden'), {
+                isAxiosError: true,
+                response: { data: { error: { message: 'Permission denied' } } },
+            });
+            vi.mocked(axios.isAxiosError).mockReturnValue(true);
+            vi.mocked(fbAxios.post).mockRejectedValueOnce(apiError);
+
+            await expect(service.sendReaction('token', 'user-1', 'm_x', 'like')).rejects.toThrow();
+        });
+    });
+
     describe('getLongLivedToken', () => {
         it('should exchange short-lived token for long-lived token', async () => {
             const mockResponse = {
