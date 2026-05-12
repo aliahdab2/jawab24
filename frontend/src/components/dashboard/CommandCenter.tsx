@@ -4,6 +4,7 @@ import { Card } from '@/components/ui';
 import { Badge } from '@/components/ui/Badge';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatDuration } from '@/lib/formatDuration';
+import { formatQuotaResetDate } from '@/lib/formatDate';
 
 interface CommandCenterProps {
   smartReplies: number;
@@ -42,6 +43,9 @@ interface MetricCell {
   /** When set (0-100), renders a slim progress bar under the value. Used on the
    *  plan-usage tile so merchants can glance at "how full am I." */
   progressPercent?: number;
+  /** Tailwind class for the progress-bar fill — pre-resolved by the caller so
+   *  the severity thresholds (red/amber/brand) live in one place. */
+  progressBarClass?: string;
 }
 
 export function CommandCenter({
@@ -75,9 +79,7 @@ export function CommandCenter({
   // we fall back to last-30-days activity since there's no quota to show.
   const hasQuota = quota?.limit != null && quota.limit > 0;
   const quotaUsed = quota?.used ?? 0;
-  const resetDate = quotaResetsAt
-    ? new Date(quotaResetsAt).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
-    : null;
+  const resetDate = formatQuotaResetDate(quotaResetsAt, locale);
 
   const primaryValue = hasQuota && quota?.limit != null
     ? `${quotaUsed.toLocaleString()} / ${quota.limit.toLocaleString()}`
@@ -122,6 +124,7 @@ export function CommandCenter({
       tooltip: primaryTooltip,
       subtext: primarySubtext ?? undefined,
       progressPercent: hasQuota ? Math.min(100, quotaPercent) : undefined,
+      progressBarClass: isOverLimit ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-brand-500',
     },
     {
       label: tDash('commandCenter.repliedToday'),
@@ -249,14 +252,7 @@ export function CommandCenter({
                   aria-label={metric.label}
                 >
                   <div
-                    className={clsx(
-                      'h-full transition-[width] duration-500',
-                      metric.progressPercent >= 100
-                        ? 'bg-red-500'
-                        : metric.progressPercent > 75
-                          ? 'bg-amber-500'
-                          : 'bg-brand-500',
-                    )}
+                    className={clsx('h-full transition-[width] duration-500', metric.progressBarClass)}
                     style={{ width: `${Math.max(2, metric.progressPercent)}%` }}
                   />
                 </div>

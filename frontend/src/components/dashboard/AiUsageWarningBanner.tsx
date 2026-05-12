@@ -5,6 +5,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA } from '@/components/ui';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
 import { isIOSNative } from '@/lib/capacitor';
+import { formatQuotaResetDate } from '@/lib/formatDate';
 import type { UsageSummary } from '@jawab24/shared';
 
 interface AiUsageWarningBannerProps {
@@ -39,9 +40,7 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBann
     if (limit === null || (!isWarning && !isLimitReached)) return null;
     if (isWarning && dismissed) return null;
 
-    const resetDate = resetsAt
-        ? new Date(resetsAt).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
-        : null;
+    const resetDate = formatQuotaResetDate(resetsAt, locale);
 
     const palette = isLimitReached
         ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
