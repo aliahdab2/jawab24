@@ -9,10 +9,11 @@
  *
  * Idempotent and safe to run any time. SCAN-based — no KEYS *.
  *
- * Usage: ts-node scripts/flush-workspace-settings-cache.ts
+ * Usage (prod, after `npm run build`): node dist/scripts/flush-workspace-settings-cache.js
+ * Usage (dev):                          npx tsx src/scripts/flush-workspace-settings-cache.ts
  */
 import dotenv from 'dotenv';
-import { redis } from '../src/lib/redis';
+import { redis } from '../lib/redis';
 
 dotenv.config();
 
