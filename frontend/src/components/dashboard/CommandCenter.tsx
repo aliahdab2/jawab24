@@ -79,10 +79,12 @@ export function CommandCenter({
     ? new Date(quotaResetsAt).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
     : null;
 
-  const primaryValue = hasQuota
-    ? `${quotaUsed.toLocaleString(locale)} / ${quota!.limit!.toLocaleString(locale)}`
-    : smartReplies.toLocaleString(locale);
-  const primaryLabel = hasQuota ? tDash('commandCenter.planUsage') : tDash('aiReplies');
+  const primaryValue = hasQuota && quota?.limit != null
+    ? `${quotaUsed.toLocaleString()} / ${quota.limit.toLocaleString()}`
+    : smartReplies.toLocaleString();
+  // Keep the "Smart Replies" noun the merchant already knows — the subtext
+  // ("Resets X" vs "Last 30 days") clarifies which time window applies.
+  const primaryLabel = tDash('aiReplies');
   const primaryTooltip = hasQuota
     ? tDash('commandCenter.planUsageTooltip')
     : tDash('commandCenter.smartRepliesTooltip');

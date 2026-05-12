@@ -63,7 +63,6 @@
     "quotaWarning": "{percent}% of plan",
     "quotaExceeded": "Over limit",
     "smartRepliesTooltip": "Replies sent in the last 30 days.",
-    "planUsage": "Plan Usage",
     "planUsageTooltip": "Smart replies used this billing period. Resets at the start of your next cycle.",
     "resetsOn": "Resets {date}",
     "repliedTodayTooltip": "{comments, plural, one {# comment} other {# comments}} + {messages, plural, one {# message} other {# messages}}"
