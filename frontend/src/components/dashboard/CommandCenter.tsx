@@ -203,8 +203,8 @@ export function CommandCenter({
               )}
             >
               <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="text-2xl sm:text-3xl font-bold leading-none tracking-tight text-foreground">
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg sm:text-2xl md:text-3xl font-bold leading-none tracking-tight text-foreground whitespace-nowrap tabular-nums">
                     {metric.value}
                   </p>
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5 inline-flex items-center gap-1">
@@ -233,7 +233,7 @@ export function CommandCenter({
                   {metric.badge}
                 </div>
                 <div className={clsx(
-                  'w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex-shrink-0 flex items-center justify-center',
+                  'w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex-shrink-0 flex items-center justify-center',
                   metric.iconBg
                 )}>
                   <Icon className={clsx('w-4 h-4 sm:w-5 sm:h-5', metric.iconColor)} />
