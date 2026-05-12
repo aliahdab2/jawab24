@@ -255,7 +255,13 @@ export class MessageProcessor {
             if (!isMessagesEnabled) {
                 const customerLang = detectLanguageCode(messageText);
                 const awayMessage = await workspaceSettingsService.getAwayMessage(workspaceId, customerLang);
-                if (awayMessage && isNew) {
+                // Only send the away message on the customer's very first incoming message.
+                // The webhook controller pre-stores the message (see webhook.ts
+                // findOrCreateFromWebhook), so by the time the worker runs `isNew` is
+                // always false here — gating on it suppressed the away message entirely.
+                // Use isFirstIncomingMessage instead: count = 1 right after store → true
+                // exactly once per sender, preventing spam on repeat messages.
+                if (awayMessage && await messagesService.isFirstIncomingMessage(page.id, senderId)) {
                     try {
                         await adapter.sendAwayMessage(page, senderId, awayMessage);
                         await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, awayMessage, 'template');
@@ -273,26 +279,31 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Message already replied' };
             }
 
-            // 9b. Send Greeting Message on first message — narrow gate.
-            // Fires when EITHER:
-            //   (a) The text is a Messenger "Get Started" opener tap, OR
-            //   (b) The merchant manually configured a greeting (sourceLang !== 'default').
-            // The seeded default greeting only fires on opener taps so customers' real
-            // first questions ("what are your prices?") still go to AI as today.
-            if (isNew && await messagesService.isFirstIncomingMessage(page.id, senderId)) {
+            // 9b. Send Greeting Message — fires when EITHER:
+            //   (a) The text is a Messenger "Get Started" opener tap (any time, not just
+            //       first message — the button can be pressed repeatedly and is always a
+            //       system phrase, never a real question. Letting it through to AI yields
+            //       confused replies like "do you mean register for a course?"), OR
+            //   (b) This is the first incoming message AND the merchant manually configured
+            //       a greeting (sourceLang !== 'default'). Default seeded greetings only
+            //       fire on opener taps so real first questions still go to AI.
+            //
+            // NOTE: do NOT gate on `isNew` here. The webhook controller stores the message
+            // before enqueuing the worker job (see webhook.ts findOrCreateFromWebhook), so
+            // by the time we reach this code `storeIncomingMessage` re-finds the same row
+            // and returns isNew=false. Gating on isNew would make this entire block dead
+            // code for the normal webhook → worker path. `isFirstIncomingMessage` already
+            // gives us the "first message" semantics correctly (count = 1 after store).
+            const isOpener = isOpenerMessage(messageText);
+            const isFirstIncoming = await messagesService.isFirstIncomingMessage(page.id, senderId);
+
+            if (isOpener || isFirstIncoming) {
                 const detectedLang = detectLanguageCode(messageText);
                 const settings = await workspaceSettingsService.getSettings(workspaceId);
                 const greetingMulti = settings.greetingMessageMulti || {};
                 const isCustomConfigured = greetingMulti.sourceLang !== undefined && greetingMulti.sourceLang !== 'default';
-                const isOpener = isOpenerMessage(messageText);
 
-                if (isCustomConfigured || isOpener) {
-                    // For opener taps ("Get Started" / "بدء الاستخدام") we always need a
-                    // response — falling through to AI lets it treat the system phrase as
-                    // a real topic and reply with "how can I help you regarding 'getting
-                    // started'?". When the workspace has no configured greeting (older
-                    // workspaces created before seeding, or merchant cleared it), fall
-                    // back to the hardcoded default for the detected language.
+                if (isOpener || isCustomConfigured) {
                     const configured = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
                     const greeting = configured ?? (isOpener ? t('defaultGreeting', detectedLang) : null);
                     if (greeting) {
