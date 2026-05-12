@@ -2,7 +2,7 @@ import clsx from 'clsx';
 import { Sparkles, CheckCircle, Gauge, Timer, Info } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { Badge } from '@/components/ui/Badge';
-import { useTranslations } from 'next-intl';
+import { useTranslations, useLocale } from 'next-intl';
 import { formatDuration } from '@/lib/formatDuration';
 
 interface CommandCenterProps {
@@ -15,9 +15,13 @@ interface CommandCenterProps {
   hasError?: boolean;
   onRetry?: () => void;
   quota?: {
+    used: number;
     percentUsed: number;
     limit: number | null;
   };
+  /** ISO string — end of current billing period; shown as "resets {date}" under the
+   *  primary tile so merchants understand the quota is per-period, not all-time. */
+  quotaResetsAt?: string;
 }
 
 interface MetricCell {
@@ -32,6 +36,12 @@ interface MetricCell {
    *  next to the label. Used to disambiguate this metric from the plan-usage
    *  banner so users (and their customers) can tell which one is which. */
   tooltip?: string;
+  /** Small text under the label — used for "Resets {date}" on the plan-usage
+   *  tile, or "Last 30 days" when no quota exists. */
+  subtext?: string;
+  /** When set (0-100), renders a slim progress bar under the value. Used on the
+   *  plan-usage tile so merchants can glance at "how full am I." */
+  progressPercent?: number;
 }
 
 export function CommandCenter({
@@ -44,10 +54,12 @@ export function CommandCenter({
   hasError,
   onRetry,
   quota,
+  quotaResetsAt,
 }: CommandCenterProps) {
   const tDash = useTranslations('dashboard');
   const tErrors = useTranslations('errors');
   const tTime = useTranslations('time');
+  const locale = useLocale();
 
   const speedDisplay = avgSpeedSeconds != null
     ? formatDuration(avgSpeedSeconds, tTime)
@@ -58,9 +70,31 @@ export function CommandCenter({
   const isOverLimit = quotaPercent >= 100;
   const isWarning = quotaPercent > 75 && !isOverLimit;
 
-  // Build quota badge for Smart Replies cell
+  // Primary tile shows plan usage when the merchant has a quota — that's the
+  // actionable number (am I about to hit my limit?). When the plan is unlimited
+  // we fall back to last-30-days activity since there's no quota to show.
+  const hasQuota = quota?.limit != null && quota.limit > 0;
+  const quotaUsed = quota?.used ?? 0;
+  const resetDate = quotaResetsAt
+    ? new Date(quotaResetsAt).toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+    : null;
+
+  const primaryValue = hasQuota
+    ? `${quotaUsed.toLocaleString(locale)} / ${quota!.limit!.toLocaleString(locale)}`
+    : smartReplies.toLocaleString(locale);
+  const primaryLabel = hasQuota ? tDash('commandCenter.planUsage') : tDash('aiReplies');
+  const primaryTooltip = hasQuota
+    ? tDash('commandCenter.planUsageTooltip')
+    : tDash('commandCenter.smartRepliesTooltip');
+  const primarySubtext = hasQuota && resetDate
+    ? tDash('commandCenter.resetsOn', { date: resetDate })
+    : !hasQuota
+      ? tDash('last30Days')
+      : null;
+
+  // Quota badge: only when approaching / over limit. Overlimit takes precedence.
   let quotaBadge: React.ReactNode = null;
-  if (quota?.limit && quotaPercent > 75) {
+  if (hasQuota && quotaPercent > 75) {
     quotaBadge = (
       <Badge
         variant={isOverLimit ? 'error' : 'warning'}
@@ -76,14 +110,16 @@ export function CommandCenter({
 
   const metrics: MetricCell[] = [
     {
-      label: tDash('aiReplies'),
-      value: smartReplies.toLocaleString(),
+      label: primaryLabel,
+      value: primaryValue,
       icon: Sparkles,
       borderColor: isOverLimit ? 'border-s-red-500' : isWarning ? 'border-s-amber-500' : 'border-s-brand-500',
       iconBg: isOverLimit ? 'icon-bg-red-light' : isWarning ? 'icon-bg-amber-light' : 'icon-bg-brand-light',
       iconColor: '',
       badge: quotaBadge,
-      tooltip: tDash('commandCenter.smartRepliesTooltip'),
+      tooltip: primaryTooltip,
+      subtext: primarySubtext ?? undefined,
+      progressPercent: hasQuota ? Math.min(100, quotaPercent) : undefined,
     },
     {
       label: tDash('commandCenter.repliedToday'),
@@ -187,6 +223,11 @@ export function CommandCenter({
                         </span>
                       )}
                   </p>
+                  {metric.subtext && (
+                    <p className="text-[10px] sm:text-[11px] text-muted-foreground mt-1 normal-case tracking-normal font-normal">
+                      {metric.subtext}
+                    </p>
+                  )}
                   {metric.badge}
                 </div>
                 <div className={clsx(
@@ -196,6 +237,28 @@ export function CommandCenter({
                   <Icon className={clsx('w-4 h-4 sm:w-5 sm:h-5', metric.iconColor)} />
                 </div>
               </div>
+              {metric.progressPercent !== undefined && (
+                <div
+                  className="mt-3 h-1 rounded-full bg-surface-100 dark:bg-surface-800 overflow-hidden"
+                  role="progressbar"
+                  aria-valuenow={Math.round(metric.progressPercent)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label={metric.label}
+                >
+                  <div
+                    className={clsx(
+                      'h-full transition-[width] duration-500',
+                      metric.progressPercent >= 100
+                        ? 'bg-red-500'
+                        : metric.progressPercent > 75
+                          ? 'bg-amber-500'
+                          : 'bg-brand-500',
+                    )}
+                    style={{ width: `${Math.max(2, metric.progressPercent)}%` }}
+                  />
+                </div>
+              )}
             </div>
           );
         })}

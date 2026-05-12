@@ -63,6 +63,9 @@
     "quotaWarning": "{percent}% من الخطة",
     "quotaExceeded": "تجاوز الحد",
     "smartRepliesTooltip": "الردود المُرسَلة خلال آخر 30 يوماً.",
+    "planUsage": "استهلاك الباقة",
+    "planUsageTooltip": "الردود الذكية المستخدمة في دورة الفوترة الحالية. يُعاد ضبط العدّاد مع بداية الدورة القادمة.",
+    "resetsOn": "يُعاد الضبط في {date}",
     "repliedTodayTooltip": "{comments, plural, zero {لا تعليقات} one {تعليق واحد} two {تعليقان} few {# تعليقات} many {# تعليقاً} other {# تعليق}} + {messages, plural, zero {لا رسائل} one {رسالة واحدة} two {رسالتان} few {# رسائل} many {# رسالةً} other {# رسالة}}"
   },
   "smartBanner": {

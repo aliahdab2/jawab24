@@ -563,9 +563,11 @@ const DashboardPage: NextPageWithLayout = () => {
         hasError={sectionErrors.comments && sectionErrors.messages && sectionErrors.analytics}
         onRetry={refetchAll}
         quota={usage?.aiReplies ? {
+          used: usage.aiReplies.used,
           percentUsed: usage.aiReplies.percentUsed,
           limit: usage.aiReplies.limit,
         } : undefined}
+        quotaResetsAt={usage?.currentPeriod?.end}
       />
 
       {/* Inbox: Comments + Messages side by side */}

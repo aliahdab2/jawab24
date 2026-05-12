@@ -247,6 +247,27 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(subscriptionsService.incrementAiReplies).toHaveBeenCalledWith('user-123');
         });
 
+        it('should increment AI reply counter exactly once in dual mode (comment + DM nudge billed as 1)', async () => {
+            const { aiService } = await import('../../src/services/ai');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'Sure, here are the details.',
+                language: 'en',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            await generator.generateForComment(baseContext, true, 'dual');
+
+            expect(subscriptionsService.incrementAiReplies).toHaveBeenCalledTimes(1);
+            expect(subscriptionsService.incrementAiReplies).toHaveBeenCalledWith('user-123');
+        });
+
         it('should flag when AI returns OFFENSIVE intent', async () => {
             const { aiService } = await import('../../src/services/ai');
             const { subscriptionsService } = await import('../../src/services/subscriptions');
