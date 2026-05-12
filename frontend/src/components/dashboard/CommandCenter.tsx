@@ -147,6 +147,7 @@ export function CommandCenter({
       borderColor: 'border-s-amber-500',
       iconBg: 'icon-bg-amber-light',
       iconColor: '',
+      tooltip: tDash('commandCenter.replyRateTooltip'),
     },
     {
       label: tDash('commandCenter.avgSpeed'),
@@ -155,6 +156,7 @@ export function CommandCenter({
       borderColor: 'border-s-violet-500',
       iconBg: 'icon-bg-violet-light',
       iconColor: '',
+      tooltip: tDash('commandCenter.avgSpeedTooltip'),
     },
   ];
 
@@ -183,14 +185,9 @@ export function CommandCenter({
       role="region"
       aria-label={tDash('overview')}
     >
-      {/* Period Label */}
-      <div className="px-4 py-2.5 sm:px-5 border-b border-theme-border">
-        <span className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-surface-400 dark:text-surface-700">
-          {tDash('last30Days')}
-        </span>
-      </div>
-
-      {/* Metrics Grid */}
+      {/* Metrics Grid — tiles span different time windows (plan period vs
+          today vs last 30 days) so no global period banner; each tile
+          carries its own time anchor via subtext or tooltip. */}
       <div className="grid grid-cols-2 md:grid-cols-4">
         {metrics.map((metric, i) => {
           const Icon = metric.icon;
