@@ -428,6 +428,9 @@ describe('InstagramReplyService', () => {
         it('should send away message when auto-reply disabled and away message configured', async () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('We are currently away');
+            // Away message now gates on first incoming (not the legacy `isNew` flag which was
+            // always false under the webhook pre-store flow).
+            vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
             setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');
@@ -443,6 +446,7 @@ describe('InstagramReplyService', () => {
             vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(false);
             vi.mocked(workspaceSettingsService.getAwayMessage).mockResolvedValue('Away');
             vi.mocked(instagramService.sendDirectMessage).mockRejectedValue(new Error('blocked'));
+            vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
             setupDbForMessage();
 
             const result = await service.processMessage('ig-1', 'sender-1', 'hello', 'msg-1');

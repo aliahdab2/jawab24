@@ -193,7 +193,19 @@ AUDIT_FAILED=false
 # GHSA-r27j-894h-3w3p — icu-minify DoS via unsanitized `select` key lookup on Object.prototype
 # when precompile: true. Transitive via next-intl's precompile feature, which we don't use
 # (see GHSA-4c35-wcg5-mm9h above). Vulnerable code path is unreachable.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p"
+# GHSA-q6x5-8v7m-xcrf, GHSA-2pr8-phx7-x9h3, GHSA-66ff-xgx4-vchm, GHSA-fx83-v9x8-x52w,
+# GHSA-75px-5xx7-5xc7, GHSA-jvwf-75h9-cwgg, GHSA-685m-2w69-288q — seven protobufjs CVEs
+# (overlong UTF-8 decode, DoS via crafted field names, code injection through bytes-field
+# defaults, prototype injection, code-gen gadget after prototype pollution, DoS via unsafe
+# option paths, DoS via unbounded recursion). All transitive via firebase-admin ->
+# @google-cloud/firestore -> google-gax -> @grpc/proto-loader -> protobufjs. Reachability:
+# protobufjs only decodes messages exchanged with Google's Firestore service (a trusted
+# Google endpoint). We never parse user-supplied .proto files, never construct protobuf
+# messages from attacker-controlled bytes, and never expose protobuf endpoints to clients.
+# Patched versions exist (7.5.6+) but cannot be applied without breaking the typecheck via
+# pdfjs-dist semver-minor bump in the same lockfile regeneration. Track upstream
+# firebase-admin release that ships protobufjs >=7.5.6 transitively, then drop these.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
