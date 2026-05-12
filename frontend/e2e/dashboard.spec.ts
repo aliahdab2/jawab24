@@ -230,10 +230,10 @@ test.describe('Dashboard Page', () => {
       page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Smart Replies = analytics.byMethod.ai (25). Template/post_reply are
-    // counted separately — Smart Replies is AI-only so the tile honors the
-    // "Smart Replies disabled" banner when the AI quota is exhausted.
-    await expect(page.getByText('25', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    // Primary tile shows plan usage as "used / limit" when the merchant has
+    // a quota — actionable for upgrade decisions. Falls back to 30-day
+    // activity ("25") only for unlimited plans. MOCK_USAGE = 20 / 100.
+    await expect(page.getByText('20 / 100', { exact: true }).first()).toBeVisible({ timeout: 15000 });
 
     // Replied Today should show 8 (5 comments + 3 messages)
     await expect(page.getByText('8', { exact: true }).first()).toBeVisible({ timeout: 15000 });
