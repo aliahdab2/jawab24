@@ -15,6 +15,7 @@ vi.mock('../services/messages', () => ({
         storeOutgoingMessage: vi.fn(),
         getLastIncomingTextFromSender: vi.fn(),
         getSenderNameBySenderId: vi.fn(),
+        markAsResolved: vi.fn(),
     },
 }));
 
@@ -99,7 +100,11 @@ const mockLogger: Logger = {
 beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(pagesService.getPageByFacebookId).mockResolvedValue(mockPage as never);
-    vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValue(undefined as never);
+    vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValue({
+        message: { id: 'msg-uuid' } as never,
+        isNew: true,
+    } as never);
+    vi.mocked(messagesService.markAsResolved).mockResolvedValue(undefined as never);
     vi.mocked(messagesService.getLastIncomingTextFromSender).mockResolvedValue(null);
     vi.mocked(facebookMessageAdapter.fetchSenderName).mockResolvedValue('Test User');
 });
@@ -149,6 +154,47 @@ describe('handleNonTextMessage — sticker', () => {
 
         expect(messagesService.findOrCreateFromWebhook).not.toHaveBeenCalled();
         expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+    });
+
+    // Regression: a 👍 like-button (delivered as a sticker) used to get flagged as
+    // "needs attention" 15–30 min after arrival because the escalation cron's
+    // spam-cleanup pass keys off "no alphabetic letter in the message", and the
+    // stored placeholder "[Sticker]" contains letters. We now mark the row resolved
+    // at store time so escalation skips it.
+    it('marks the stored sticker row resolved so escalation does not flag it', async () => {
+        vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValueOnce({
+            message: { id: 'sticker-msg-uuid' } as never,
+            isNew: true,
+        } as never);
+
+        await handleNonTextMessage(
+            'fb-page-id',
+            { senderId: 'user-1', messageId: 'msg-1', attachmentType: 'sticker' },
+            'facebook',
+            mockLogger,
+        );
+
+        expect(messagesService.markAsResolved).toHaveBeenCalledWith('sticker-msg-uuid');
+        expect(messagesService.markAsResolved).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not re-resolve an already-stored sticker on webhook retry', async () => {
+        // isNew=false means the row already exists (Facebook redelivered the webhook).
+        // Re-marking resolved is a no-op semantically but would be a wasted DB write
+        // and could overwrite a merchant's manual unresolve action.
+        vi.mocked(messagesService.findOrCreateFromWebhook).mockResolvedValueOnce({
+            message: { id: 'sticker-msg-uuid' } as never,
+            isNew: false,
+        } as never);
+
+        await handleNonTextMessage(
+            'fb-page-id',
+            { senderId: 'user-1', messageId: 'msg-1', attachmentType: 'sticker' },
+            'facebook',
+            mockLogger,
+        );
+
+        expect(messagesService.markAsResolved).not.toHaveBeenCalled();
     });
 });
 
