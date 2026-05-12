@@ -934,6 +934,30 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
             }
         }
 
+        // SHADOW (measurement phase) — log when an active safety gate WOULD fire,
+        // but do not replace the reply yet. Lets us measure real-world firing rate
+        // (per merchant, per language) before committing to a customer-visible
+        // behavior change. Triggers: model self-reported low confidence, OR
+        // info_not_in_kb / price_not_in_kb flags, OR all on a question-type intent
+        // with a non-empty reply. Active gate (Phase 2) will gate on the same logic.
+        const SAFETY_GATE_QUESTION_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+        const wouldFireSafetyGate =
+            (parsed.confidence === 'low'
+                || flags.includes('info_not_in_kb')
+                || flags.includes('price_not_in_kb'))
+            && SAFETY_GATE_QUESTION_INTENTS.has(parsed.intent || '')
+            && (finalReply || '').trim().length > 0;
+
+        if (wouldFireSafetyGate) {
+            console.log(JSON.stringify({
+                event: 'safety_gate_would_fire',
+                intent: parsed.intent,
+                confidence: parsed.confidence,
+                flags,
+                reply_preview: (finalReply || '').slice(0, 80),
+            }));
+        }
+
         return { ...parsed, reply: finalReply, flags };
     }
 
