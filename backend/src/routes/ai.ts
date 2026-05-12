@@ -10,11 +10,15 @@ export default async function aiRoutes(fastify: FastifyInstance) {
         // Generate AI reply (stricter rate limit — calls OpenAI, costs money)
         const aiRateLimit = { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } };
 
+        // DEPRECATED: orphan endpoint, no known callers. Gated with the same cap
+        // check as /ai/generate-async until we're confident it can be deleted.
+        // See plan task 1.5 + JSDoc on aiController.generate.
         protectedRoutes.post('/ai/generate', {
             ...aiRateLimit,
             schema: {
                 tags: ['AI'],
-                summary: 'Generate an AI reply synchronously',
+                summary: 'Generate an AI reply synchronously (DEPRECATED — scheduled for removal)',
+                description: 'Deprecated. Use POST /ai/generate-async instead. Kept temporarily for backward safety; will be deleted once we confirm no integrations depend on it.',
                 security: auth,
             },
         }, aiController.generate);

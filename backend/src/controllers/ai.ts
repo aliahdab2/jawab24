@@ -7,14 +7,39 @@ import { authService } from '../services/auth';
 
 export class AiController {
     /**
-     * Generate AI reply for a comment
+     * Generate AI reply for a comment.
+     *
      * POST /ai/generate
+     *
+     * @deprecated Orphan endpoint — no caller in the frontend or any internal service
+     *             references it (grep-confirmed 2026-05-12). Kept temporarily and gated
+     *             with the same cap check as /ai/generate-async to prevent a JWT holder
+     *             from bypassing `canUseAiReplies`. Scheduled for deletion once we
+     *             confirm no integrations rely on it. See plan task 1.5.
      */
     async generate(request: FastifyRequest<{ Body: AiGenerateRequest }>, reply: FastifyReply) {
+        const user = (request as AuthenticatedRequest).user;
         const { comment, language, context } = request.body;
 
         if (!comment || comment.trim().length === 0) {
             return reply.status(400).send({ error: 'Comment is required' });
+        }
+
+        // Cap enforcement — mirrors generateAsync. Demo user bypass kept for parity.
+        const dbUser = user && config.demo.enabled ? await authService.getUserById(user.userId) : null;
+        if (user && dbUser?.facebookId !== config.demo.userFacebookId) {
+            const { subscriptionsService } = await import('../services/subscriptions');
+            const limitCheck = await subscriptionsService.canUseAiReplies(user.userId);
+
+            if (!limitCheck.allowed) {
+                return reply.status(403).send({
+                    error: limitCheck.reason || 'AI reply limit reached',
+                    code: limitCheck.code,
+                    limit: limitCheck.limit,
+                    used: limitCheck.used,
+                    resetsAt: limitCheck.resetsAt,
+                });
+            }
         }
 
         try {

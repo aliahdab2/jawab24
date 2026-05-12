@@ -58,6 +58,7 @@ export type NotificationType =
     | 'kb_gap'
     | 'provider_failover'
     | 'ai_usage_warning_80'
+    | 'ai_usage_warning_90'
     | 'ai_usage_limit_reached'
     | 'auto_reply_paused_billing'
     | 'refund_processed';
@@ -174,6 +175,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'You\'ve used {used} of {limit} Smart Replies this month. Upgrade your plan to avoid interruptions.',
             ar: 'لقد استخدمت {used} من {limit} رد ذكي هذا الشهر. قم بترقية باقتك لتجنب انقطاع الخدمة.',
+        },
+    },
+    ai_usage_warning_90: {
+        titles: { en: 'You\'ve used 90% of your monthly replies', ar: 'لقد استهلكت 90% من ردودك الشهرية' },
+        bodies: {
+            en: 'You\'ve used {used} of {limit} Smart Replies this month. For higher volume, contact us about an Agency plan.',
+            ar: 'لقد استخدمت {used} من {limit} رد ذكي هذا الشهر. للحجم الأعلى، تواصل معنا للحصول على باقة الوكالات.',
         },
     },
     ai_usage_limit_reached: {

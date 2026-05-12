@@ -2,9 +2,20 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import aiRoutes from '../../src/routes/ai';
 import { aiService } from '../../src/services/ai';
+import { subscriptionsService } from '../../src/services/subscriptions';
 
 // Mock services
 vi.mock('../../src/services/ai');
+vi.mock('../../src/services/subscriptions', () => ({
+    subscriptionsService: {
+        canUseAiReplies: vi.fn(),
+    },
+}));
+vi.mock('../../src/services/auth', () => ({
+    authService: {
+        getUserById: vi.fn().mockResolvedValue(null),
+    },
+}));
 vi.mock('../../src/middleware/auth', () => ({
     authenticate: async (req: any) => {
         req.user = { userId: 'test_user_id', facebookId: 'test_fb_id' };
@@ -19,6 +30,8 @@ describe('AI Routes', () => {
         app.register(aiRoutes);
         await app.ready();
         vi.clearAllMocks();
+        // Default: cap allows. Tests that assert the gate override this per-test.
+        vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 100, used: 5 });
     });
 
     describe('POST /ai/generate', () => {

@@ -11,7 +11,7 @@ import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, Limit
  * AI usage notification thresholds (percent of monthly limit).
  * Crossing one dispatches a one-time notification per subscription period.
  */
-export const AI_USAGE_THRESHOLDS = [80, 100] as const;
+export const AI_USAGE_THRESHOLDS = [80, 90, 100] as const;
 export type AiUsageThreshold = typeof AI_USAGE_THRESHOLDS[number];
 
 /**
@@ -28,6 +28,22 @@ export function computeCrossedAiThresholds(
         const boundary = (t / 100) * limit;
         return oldUsed < boundary && newUsed >= boundary;
     });
+}
+
+/**
+ * Map an AI-usage threshold to the notification template type fired at that boundary.
+ * 80% / 90% are warnings; 100% is the hard limit-reached notification. The 90%
+ * level exists so merchants nearing the cap get a sales-handoff prompt before the
+ * cut-off — see plan task 5.
+ */
+export function thresholdToNotificationType(
+    threshold: AiUsageThreshold,
+): 'ai_usage_warning_80' | 'ai_usage_warning_90' | 'ai_usage_limit_reached' {
+    switch (threshold) {
+        case 80: return 'ai_usage_warning_80';
+        case 90: return 'ai_usage_warning_90';
+        case 100: return 'ai_usage_limit_reached';
+    }
 }
 
 /** Statuses that allow AI reply generation. */
@@ -396,7 +412,7 @@ export const subscriptionsService = {
 
         await this.logUsageEvent(userId, 'ai_reply', { count });
 
-        // Dispatch threshold notifications (80%, 100%) — best-effort, never breaks the reply flow
+        // Dispatch threshold notifications (80%, 90%, 100%) — best-effort, never breaks the reply flow
         if (updated) {
             const newUsed = updated.aiRepliesCount ?? 0;
             await this.maybeNotifyAiUsageThreshold(userId, newUsed - count, newUsed, updated.periodStart);
@@ -404,7 +420,7 @@ export const subscriptionsService = {
     },
 
     /**
-     * Send 80%/100% AI-usage notifications once per subscription period.
+     * Send 80%/90%/100% AI-usage notifications once per subscription period.
      * Dedup is enforced in Redis keyed by userId + periodStart + threshold.
      * Errors are swallowed and reported — a notification failure must not break usage tracking.
      */
@@ -436,7 +452,7 @@ export const subscriptionsService = {
                 }
                 if (!firstCrossing) continue;
 
-                const type = threshold === 100 ? 'ai_usage_limit_reached' : 'ai_usage_warning_80';
+                const type = thresholdToNotificationType(threshold);
                 await notificationService.sendTemplateNotification(userId, type, {
                     used: String(newUsed),
                     limit: String(limit),

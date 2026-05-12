@@ -51,6 +51,11 @@ describe('AiController', () => {
     // ─── generate() ──────────────────────────────────────────────
 
     describe('generate', () => {
+        beforeEach(() => {
+            // Default: cap check passes. Override per-test where the gate is exercised.
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 100, used: 5 });
+        });
+
         it('should return AI reply for a valid comment', async () => {
             mockRequest.body = { comment: 'Great product!', language: 'en' };
             const mockResult = { reply: 'Thank you!', language: 'en', cached: false };
@@ -92,6 +97,29 @@ describe('AiController', () => {
             expect(mockReply.status).toHaveBeenCalledWith(500);
             expect(mockReply.send).toHaveBeenCalledWith({ error: 'Failed to generate AI reply' });
             expect(mockRequest.log!.error).toHaveBeenCalled();
+        });
+
+        // Cap-enforcement gate — mirrors generateAsync. Kept while /ai/generate is
+        // deprecated but not yet deleted; prevents JWT holders from bypassing the
+        // monthly AI reply cap via the sync endpoint.
+        it('should return 403 when the user is over their AI reply cap and never call aiService', async () => {
+            mockRequest.body = { comment: 'Hello' };
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({
+                allowed: false,
+                reason: 'Monthly AI reply limit reached',
+                code: 'ai_limit_reached',
+                limit: 10000,
+                used: 10000,
+            });
+
+            await aiController.generate(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(subscriptionsService.canUseAiReplies).toHaveBeenCalledWith('user-123');
+            expect(aiService.generateReply).not.toHaveBeenCalled();
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({
+                code: 'ai_limit_reached',
+            }));
         });
     });
 
