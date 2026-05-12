@@ -270,6 +270,10 @@ async function escalateMessages(): Promise<void> {
         .leftJoin(settings, eq(pages.userId, settings.userId))
         .where(and(
             eq(messages.replied, false),
+            // Skip rows already resolved — either by resolveStuckSpamComments (this same sweep)
+            // or by the producer (e.g. nonTextHandler marks stickers resolved at store time).
+            // Without this filter, a row resolved earlier in the sweep gets flagged anyway.
+            eq(messages.resolved, false),
             eq(messages.needsAttention, false),
             eq(messages.direction, 'incoming'),
             eq(pages.autoReplyEnabled, true),

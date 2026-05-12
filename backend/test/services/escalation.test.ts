@@ -22,7 +22,7 @@ vi.mock('../../src/services/notifications', () => ({
 vi.mock('../../src/db/schema', () => ({
     comments: { id: 'id', postId: 'post_id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', createdTime: 'created_time', createdAt: 'created_at', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
     instagramComments: { id: 'id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', createdAt: 'created_at', flagReason: 'flag_reason', updatedAt: 'updated_at', fromName: 'from_name', message: 'message' },
-    messages: { id: 'id', pageId: 'page_id', replied: 'replied', needsAttention: 'needs_attention', direction: 'direction', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at', senderName: 'sender_name', senderId: 'sender_id', message: 'message' },
+    messages: { id: 'id', pageId: 'page_id', replied: 'replied', resolved: 'resolved', needsAttention: 'needs_attention', direction: 'direction', createdTime: 'created_time', flagReason: 'flag_reason', updatedAt: 'updated_at', senderName: 'sender_name', senderId: 'sender_id', message: 'message' },
     pages: { id: 'id', userId: 'user_id', workspaceId: 'workspace_id', name: 'name', autoReplyEnabled: 'auto_reply_enabled' },
     posts: { id: 'id', pageId: 'page_id' },
     settings: { userId: 'user_id', commentEscalationMinutes: 'comment_escalation_minutes', messageEscalationMinutes: 'message_escalation_minutes' },
@@ -41,7 +41,7 @@ import { runEscalationSweep, startEscalationCron, stopEscalationCron } from '../
 import { db } from '../../src/db';
 import * as schema from '../../src/db/schema';
 import { notificationService } from '../../src/services/notifications';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 /**
  * Helper: mock the batch-query pattern used by escalateComments / escalateMessages.
@@ -154,6 +154,24 @@ describe('Escalation Service', () => {
             expect(allFragments).toContain('[[:alpha:]]');
             // Negative-presence guards against a partial revert.
             expect(allFragments).not.toContain('[[:space:].…');
+        });
+
+        // Regression: 👍 like-button arrives as a sticker, stored as "[Sticker]". The
+        // stuck-spam cleanup keys off "no alphabetic letter", so "[Sticker]" is NOT
+        // resolved by that pass. nonTextHandler marks it resolved at store time
+        // instead — but only works if escalateMessages actually honors resolved=false.
+        // Without this filter, every sticker would still get flagged at the SLA cutoff.
+        it('escalateMessages must filter on resolved=false (regression for sticker false-positives)', async () => {
+            mockBatchSelect([], []);
+            mockDbUpdate(0);
+
+            await runEscalationSweep();
+
+            const eqCalls = vi.mocked(eq).mock.calls;
+            const filtersOnResolvedFalse = eqCalls.some(
+                ([field, value]) => field === schema.messages.resolved && value === false,
+            );
+            expect(filtersOnResolvedFalse).toBe(true);
         });
 
         it('should send individual notification per stale comment with customer context', async () => {

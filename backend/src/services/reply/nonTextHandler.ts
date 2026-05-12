@@ -63,10 +63,17 @@ export async function handleNonTextMessage(
 
         // Stickers (including the Facebook 👍 thumbs-up like button) carry no conversational
         // intent — store silently in DB for chat history context but do NOT send a nudge.
+        // Mark resolved=true immediately so the escalation cron doesn't flag the row as
+        // "needs attention" after the SLA window. The spam-cleanup pass in escalation.ts
+        // can't catch this on its own because the stored placeholder "[Sticker]" contains
+        // alphabetic letters, so it fails the no-letters spam heuristic.
         if (attachmentType === 'sticker') {
-            await messagesService.findOrCreateFromWebhook(
+            const { message: stored, isNew } = await messagesService.findOrCreateFromWebhook(
                 page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker',
             );
+            if (isNew) {
+                await messagesService.markAsResolved(stored.id);
+            }
             logger.debug(`[${platform}] Sticker ignored (no nudge)`, { senderId, messageId });
             return;
         }

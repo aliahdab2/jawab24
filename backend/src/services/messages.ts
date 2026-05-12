@@ -661,6 +661,17 @@ export class MessagesService {
     }
 
     /**
+     * Mark a single message as resolved. Used by paths that store an incoming
+     * message but intentionally do not reply (e.g. stickers / 👍 like-button),
+     * so the escalation cron does not later flag it as "needs attention".
+     */
+    async markAsResolved(messageId: string): Promise<void> {
+        await db.update(messages)
+            .set({ resolved: true, updatedAt: new Date() })
+            .where(eq(messages.id, messageId));
+    }
+
+    /**
      * Resolve all unresolved incoming messages in a conversation.
      * Returns the number of messages resolved.
      */
