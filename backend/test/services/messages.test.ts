@@ -644,16 +644,16 @@ describe('MessagesService', () => {
     describe('getUnrepliedFromSender', () => {
         it('should return unreplied messages from sender in chronological order', async () => {
             const rows = [
-                mockDbRow({ id: 'msg-1', message: 'Hello' }),
-                mockDbRow({ id: 'msg-2', message: 'Are you there?' }),
+                mockDbRow({ id: 'msg-1', message: 'Hello', platformMessageId: 'fb-msg-1' }),
+                mockDbRow({ id: 'msg-2', message: 'Are you there?', platformMessageId: 'fb-msg-2' }),
             ];
             vi.mocked(db.query.messages.findMany).mockResolvedValue(rows as any);
 
             const result = await messagesService.getUnrepliedFromSender('page-1', 'sender-1');
 
             expect(result).toHaveLength(2);
-            expect(result[0]).toEqual({ id: 'msg-1', message: 'Hello' });
-            expect(result[1]).toEqual({ id: 'msg-2', message: 'Are you there?' });
+            expect(result[0]).toEqual({ id: 'msg-1', message: 'Hello', platformMessageId: 'fb-msg-1' });
+            expect(result[1]).toEqual({ id: 'msg-2', message: 'Are you there?', platformMessageId: 'fb-msg-2' });
         });
 
         it('should return empty array when no unreplied messages', async () => {

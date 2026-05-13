@@ -615,7 +615,7 @@ export class MessagesService {
     async getUnrepliedFromSender(
         pageId: string,
         senderId: string
-    ): Promise<{ id: string; message: string }[]> {
+    ): Promise<{ id: string; message: string; platformMessageId: string }[]> {
         const result = await db.query.messages.findMany({
             where: and(
                 eq(messages.pageId, pageId),
@@ -626,7 +626,7 @@ export class MessagesService {
             orderBy: [asc(messages.createdAt)],
             limit: 50,
         });
-        return result.map(r => ({ id: r.id, message: r.message }));
+        return result.map(r => ({ id: r.id, message: r.message, platformMessageId: r.platformMessageId }));
     }
 
     /**
