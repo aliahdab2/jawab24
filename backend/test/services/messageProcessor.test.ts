@@ -1211,3 +1211,98 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(adapter.sendAwayMessage).not.toHaveBeenCalled();
     });
 });
+
+// ─────────────────────────────────────────────────────────────
+// Orphan recheck — race condition fix
+// Complements eb7bda92: catches messages that arrived AFTER step 11
+// fetched unreplied but BEFORE the lock was released. Without this,
+// such messages bail at step 4b ('Lock held') and stay unreplied forever.
+// ─────────────────────────────────────────────────────────────
+describe('MessageProcessor — Orphan recheck (post-release safety net)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Reset getUnrepliedFromSender to empty default so leftover persistent
+        // implementations from prior describe blocks don't cause runaway recursion.
+        vi.mocked(messagesService.getUnrepliedFromSender).mockReset().mockResolvedValue([]);
+        pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'first reply',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+    });
+
+    function flushSetImmediate(): Promise<void> {
+        return new Promise(resolve => setImmediate(resolve));
+    }
+
+    it('re-triggers processing when a message arrived during AI generation (Ola race)', async () => {
+        // First call (msg1): only msg1 is unreplied (consolidation snapshot).
+        // Second call (after lock release): msg2 arrived during generation and is now orphaned.
+        // Third call (recursive re-trigger for msg2): nothing orphaned, recursion ends.
+        vi.mocked(messagesService.getUnrepliedFromSender)
+            .mockResolvedValueOnce([
+                { id: 'db-msg-1', message: 'تمام يعني بقدر اجي سجل فورا واحضر', platformMessageId: 'fb-msg-1' },
+            ])
+            .mockResolvedValueOnce([
+                { id: 'db-msg-2', message: 'العنوان', platformMessageId: 'fb-msg-2' },
+            ])
+            .mockResolvedValueOnce([
+                { id: 'db-msg-2', message: 'العنوان', platformMessageId: 'fb-msg-2' },
+            ])
+            .mockResolvedValueOnce([]);
+
+        const adapter = createMockAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'تمام يعني بقدر اجي سجل فورا واحضر', 'fb-msg-1',
+        );
+
+        // setImmediate is scheduled in finally — flush it so the recheck completes.
+        await flushSetImmediate();
+        await flushSetImmediate();
+
+        // Two replies generated: one for msg1, one for the orphan msg2.
+        expect(replyGenerator.generateForMessage).toHaveBeenCalledTimes(2);
+        const secondCallText = vi.mocked(replyGenerator.generateForMessage).mock.calls[1][0].text;
+        expect(secondCallText).toBe('العنوان');
+    });
+
+    it('does NOT re-trigger when no orphaned messages remain', async () => {
+        // First call: msg1 only. Second call (post-release recheck): nothing.
+        vi.mocked(messagesService.getUnrepliedFromSender)
+            .mockResolvedValueOnce([
+                { id: 'db-msg-1', message: 'hello', platformMessageId: 'fb-msg-1' },
+            ])
+            .mockResolvedValueOnce([]);
+
+        const adapter = createMockAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'hello', 'fb-msg-1',
+        );
+
+        await flushSetImmediate();
+        await flushSetImmediate();
+
+        // Only one AI generation — recheck found nothing.
+        expect(replyGenerator.generateForMessage).toHaveBeenCalledTimes(1);
+    });
+});

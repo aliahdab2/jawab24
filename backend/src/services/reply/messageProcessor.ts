@@ -205,6 +205,14 @@ export class MessageProcessor {
             }
             lap('4b-acquireLock');
 
+            // Track the platformMessageIds we handled at step 11 — used by the
+            // post-release orphan recheck (finally block) to exclude them and
+            // prevent re-processing of flagged/skipped messages that legitimately
+            // stay replied=false. Recheck only fires when step 11 was reached
+            // (early-return paths have no AI-generation race window).
+            const handledPlatformMessageIds = new Set<string>();
+            let didReachConsolidation = false;
+
             try {
             // Load settings early — needed for debounce gating and downstream checks
             const userSettings = await workspaceSettingsService.getSettings(workspaceId);
@@ -334,6 +342,8 @@ export class MessageProcessor {
             // skip would cause the newer message to be dropped: Worker 2 already bailed
             // at step 4b ("Lock held"), so nobody would process it.
             const unrepliedMessages = await messagesService.getUnrepliedFromSender(page.id, senderId);
+            for (const m of unrepliedMessages) handledPlatformMessageIds.add(m.platformMessageId);
+            didReachConsolidation = true;
             lap('11-consolidate');
 
             // Use latest message for template matching (reflects current intent),
@@ -601,6 +611,20 @@ export class MessageProcessor {
 
             } finally {
                 await releaseReplyLock(page.id, senderId, lockToken).catch(() => { /* TTL will auto-expire */ });
+
+                // Post-release safety net: catch messages that arrived AFTER step 11
+                // (during AI generation) and got orphaned at step 4b ('Lock held').
+                // Step 11 consolidation only sees messages that exist when it runs;
+                // anything arriving during the ~2-5s AI window slips through.
+                // Excludes IDs we already saw at step 11 so flagged/skipped messages
+                // (offensive, spam) that legitimately stay replied=false don't loop.
+                // Only fire when step 11 was reached — early-return paths (debounce,
+                // handoff, rate limit, away message) have no AI-generation race window.
+                if (didReachConsolidation) {
+                    setImmediate(() => {
+                        void this.recheckOrphanedMessages(adapter, platformPageId, page.id, senderId, handledPlatformMessageIds);
+                    });
+                }
             }
 
         } catch (error) {
@@ -619,6 +643,60 @@ export class MessageProcessor {
 
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Post-release orphan check.
+     *
+     * Closes the residual race left by eb7bda92: messages arriving AFTER step 11
+     * (during AI generation) bypass consolidation and their workers bail at the
+     * lock check, leaving them permanently unreplied.
+     *
+     * Runs after the parent worker has released its lock. Fetches any still-
+     * unreplied incoming messages from the sender and re-triggers processMessage
+     * for the newest one — its own step 11 will consolidate any earlier orphans.
+     *
+     * Fire-and-forget: errors are logged but do not surface to the caller.
+     */
+    private async recheckOrphanedMessages(
+        adapter: MessagePlatformAdapter,
+        platformPageId: string,
+        pageId: string,
+        senderId: string,
+        excludeIds: Set<string>,
+    ): Promise<void> {
+        try {
+            const allUnreplied = await messagesService.getUnrepliedFromSender(pageId, senderId);
+            // Exclude messages we already saw at step 11 — these are either flagged
+            // (offensive/needs_attention), silently skipped (spam), or already had
+            // a reply attempted but stayed replied=false for legitimate reasons.
+            // Re-processing them would cause infinite recursion.
+            const orphans = allUnreplied.filter(m => !excludeIds.has(m.platformMessageId));
+            if (orphans.length === 0) return;
+
+            const newest = orphans[orphans.length - 1];
+            this.logger.info(`[${adapter.platform}] orphan_recheck_triggered`, {
+                event: 'orphan_recheck',
+                pageId,
+                senderId,
+                orphanCount: orphans.length,
+                newestMessageId: newest.platformMessageId,
+            });
+
+            await this.processMessage(
+                adapter,
+                platformPageId,
+                senderId,
+                newest.message,
+                newest.platformMessageId,
+            );
+        } catch (err) {
+            this.logger.error(`[${adapter.platform}] orphan_recheck_failed`, {
+                pageId,
+                senderId,
+                error: err instanceof Error ? err.message : String(err),
+            });
+        }
     }
 
     /**
