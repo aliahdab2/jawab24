@@ -9,6 +9,7 @@
  */
 
 export { useEscapeKey } from './useEscapeKey';
+export { useClickOutside } from './useClickOutside';
 export { useIOSPaymentRedirect } from './useIOSPaymentRedirect';
 export { useLandscape } from './useLandscape';
 export { useBodyScrollLock } from './useBodyScrollLock';
