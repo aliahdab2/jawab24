@@ -546,14 +546,19 @@ echo "7️⃣  E2E tests..."
 # no HMR/Fast Refresh rewriting files mid-test (eliminates ENOENT race conditions).
 rm -rf frontend/test-results frontend/playwright-report frontend/blob-report
 
-# Safety: if .next is missing OR standalone is missing (e.g. last build was mobile/export),
-# rebuild with standalone output now.
+# Safety: if .next is missing OR standalone is missing (e.g. last build was mobile/export
+# or dev mode), rebuild with standalone output. Clean .next first — partial/dev artifacts
+# cause Next 15 incremental builds to "compile successfully" then fail page data collection
+# with PageNotFoundError on otherwise-valid pages.
 if [ ! -d "frontend/.next" ] || [ ! -d "frontend/.next/standalone" ]; then
     echo "   ⚠️  No standalone .next build found, building for E2E..."
+    rm -rf frontend/.next frontend/node_modules/.cache
     if ! (cd frontend && CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build) > /dev/null 2>&1; then
-        echo -e "${RED}   ❌ E2E build failed!${NC}"
-        (cd frontend && CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build)
-        exit 1
+        echo -e "${RED}   ❌ E2E build failed — retrying with clean cache${NC}"
+        rm -rf frontend/.next frontend/node_modules/.cache
+        if ! (cd frontend && CI=true NEXT_PUBLIC_API_URL=http://localhost:4999/api NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${STRIPE_PUBLISHABLE_KEY:-pk_test_placeholder} npx next build); then
+            exit 1
+        fi
     fi
 fi
 
