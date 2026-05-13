@@ -43,35 +43,65 @@ import type { NextPageWithLayout } from './_app';
 
 function RepliesBreakdownTooltip({ page }: { page: Page }) {
   const t = useTranslations('pages');
+  const [open, setOpen] = useState(false);
+  const wrapperRef = useRef<HTMLSpanElement>(null);
+  const panelId = `replies-breakdown-${page.id}`;
+
   const b = page.breakdown ?? { ai: 0, template: 0, postReply: 0, manual: 0 };
-  const total = page.commentsCount ?? 0;
-  const automated = b.ai + b.template + b.postReply;
-  const unhandled = Math.max(0, total - automated - b.manual);
   const rows: Array<{ label: string; value: number }> = [
     { label: t('breakdownAi'), value: b.ai },
     { label: t('breakdownGreetingAway'), value: b.template },
     { label: t('breakdownPostReply'), value: b.postReply },
     { label: t('breakdownManual'), value: b.manual },
-    { label: t('breakdownUnhandled'), value: unhandled },
   ];
+  const hasAny = rows.some((row) => row.value > 0);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (!wrapperRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open]);
+
+  if (!hasAny) return null;
+
   return (
-    <span className="relative group inline-flex">
-      <Info className="w-3.5 h-3.5 text-icon-muted cursor-help" aria-label={t('repliesBreakdownTitle')} />
-      <span
-        role="tooltip"
-        className="absolute bottom-full start-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 text-xs text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-56 text-start z-10"
+    <span ref={wrapperRef} className="relative inline-flex">
+      <button
+        type="button"
+        aria-label={t('repliesBreakdownTitle')}
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center justify-center rounded-full text-icon-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
       >
-        <span className="block font-semibold mb-1.5 text-center">{t('repliesBreakdownTitle')}</span>
-        {rows.map((row) => (
-          <span key={row.label} className="flex justify-between gap-2 py-0.5">
-            <span className="opacity-90">{row.label}</span>
-            <span className="font-mono font-semibold tabular-nums">{row.value.toLocaleString()}</span>
-          </span>
-        ))}
-        <span className="block mt-1.5 pt-1.5 border-t border-white/20 dark:border-surface-900/20 opacity-80 text-[10px] leading-snug">
-          {t('breakdownHint')}
+        <Info className="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+      {open && (
+        <span
+          id={panelId}
+          role="dialog"
+          aria-label={t('repliesBreakdownTitle')}
+          className="absolute bottom-full end-0 mb-2 px-3 py-2.5 text-xs bg-surface-800 text-white dark:bg-surface-100 dark:text-surface-900 rounded-lg shadow-lg w-[min(14rem,calc(100vw-2rem))] text-start z-20"
+        >
+          <span className="block font-semibold mb-1.5">{t('repliesBreakdownTitle')}</span>
+          {rows.map((row) => (
+            <span key={row.label} className="flex justify-between gap-2 py-0.5">
+              <span className="opacity-90">{row.label}</span>
+              <span className="font-mono font-semibold tabular-nums">{row.value.toLocaleString()}</span>
+            </span>
+          ))}
         </span>
-      </span>
+      )}
     </span>
   );
 }
