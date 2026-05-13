@@ -162,7 +162,10 @@
     "operatedBy": "Jawab24 is operated by:",
     "operatorName": "Jawab24 Team",
     "country": "Sweden",
-    "googlePlayAlt": "Get Jawab24 on Google Play"
+    "googlePlayAlt": "Get Jawab24 on Google Play",
+    "compareChatfuel": "Jawab24 vs Chatfuel",
+    "compareBotpress": "Jawab24 vs Botpress",
+    "compareSpeedly": "Jawab24 vs Speedly"
   },
   "images": {
     "dashboardPreview": "Dashboard Preview",

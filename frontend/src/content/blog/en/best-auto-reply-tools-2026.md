@@ -48,7 +48,7 @@ Simple, template-based chatbot builder. Chatfuel is the "easy entry point" — g
 
 However, it's purely rule-based. No AI reply generation means every possible customer question needs a pre-written answer. If a customer asks something you didn't anticipate, the bot falls back to a generic "I don't understand" response. No Arabic dialect support, no conversation context (each message is treated independently), no Salla or Zid integration.
 
-Free tier available, paid starts at $14.99/month.
+Free tier available, paid starts at $14.99/month. [See our full Jawab24 vs Chatfuel comparison →](/compare/chatfuel)
 
 ### Tidio
 
@@ -64,7 +64,7 @@ Developer-focused platform for building custom chatbots. Very flexible but requi
 
 Can support Arabic through custom NLP training, but there's no out-of-the-box dialect detection. No direct Shopify/Salla/Zid integration without custom development. The conversation context capabilities are powerful but require configuration. No price verification system.
 
-Free tier with usage limits.
+Free tier with usage limits. [See our full Jawab24 vs Botpress comparison →](/compare/botpress)
 
 ### Jawab24
 
@@ -82,7 +82,7 @@ The AI loads the **last 12 messages** in each conversation, so it understands co
 
 Native Shopify, Salla, and [Zid integration](/blog/zid-store-facebook-auto-reply) with automatic product sync. Currently supports English and Arabic (with 6 dialect families) — Turkish, Swedish, and German are coming soon. Confidence scoring with human review queue.
 
-Starts at $9/month.
+Starts at $15/month.
 
 ## Feature Comparison Table
 
@@ -103,7 +103,7 @@ Here's how the tools stack up across the features that matter most:
 | Angry customer alerts | No | No | No | No | Push notification |
 | Confidence scoring | No | No | No | No | Yes |
 | Auto-pause on manual reply | No | No | No | No | Yes |
-| Starting price | $15/mo | $14.99/mo | $29/mo | Free* | $9/mo |
+| Starting price | $15/mo | $14.99/mo | $29/mo | Free* | $15/mo |
 
 *Botpress free tier has usage limits.
 

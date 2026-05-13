@@ -111,6 +111,24 @@ export const COMPETITORS: Record<string, Competitor> = {
       startingPrice: { jawab24: '$15/mo', competitor: '$89/mo' },
     },
   },
+  speedly: {
+    slug: 'speedly',
+    name: 'Speedly',
+    website: 'https://speedly.ly',
+    features: {
+      arabicDialects: { jawab24: true, competitor: true },
+      aiSmartReplies: { jawab24: true, competitor: true },
+      shopifyIntegration: { jawab24: true, competitor: false },
+      sallaIntegration: { jawab24: true, competitor: false },
+      priceVerification: { jawab24: true, competitor: false },
+      knowledgeBaseRag: { jawab24: true, competitor: false },
+      confidenceScoring: { jawab24: true, competitor: false },
+      businessHours: { jawab24: true, competitor: true },
+      rtlInterface: { jawab24: true, competitor: true },
+      freeTrialDays: { jawab24: true, competitor: true },
+      startingPrice: { jawab24: '$15/mo', competitor: 'Subscription + AI credits' },
+    },
+  },
 };
 
 /** Get all competitor slugs for static path generation */

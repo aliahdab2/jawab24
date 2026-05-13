@@ -162,7 +162,10 @@
     "operatedBy": "يتم تشغيل Jawab24 بواسطة:",
     "operatorName": "فريق جواب٢٤",
     "country": "السويد",
-    "googlePlayAlt": "حمّل تطبيق جواب٢٤ من جوجل بلاي"
+    "googlePlayAlt": "حمّل تطبيق جواب٢٤ من جوجل بلاي",
+    "compareChatfuel": "مقارنة Jawab24 مع Chatfuel",
+    "compareBotpress": "مقارنة Jawab24 مع Botpress",
+    "compareSpeedly": "مقارنة Jawab24 مع Speedly"
   },
   "images": {
     "dashboardPreview": "معاينة لوحة التحكم",
