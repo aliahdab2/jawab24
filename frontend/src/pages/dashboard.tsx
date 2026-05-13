@@ -414,23 +414,6 @@ const DashboardPage: NextPageWithLayout = () => {
     }
   }, [loading, pagesLoading, pages.length, isOwner, userSettings, setOnboardingVisible]);
 
-  // Pre-build a Map for O(1) page name lookups (avoids O(n×m) find() in render loops)
-  const pageNameMap = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const page of pages) {
-      if (page.name) {
-        map.set(page.id, page.name);
-        if (page.facebookPageId) map.set(page.facebookPageId, page.name);
-      }
-    }
-    return map;
-  }, [pages]);
-
-  const getPageName = (pageId: string | null): string | null => {
-    if (!pageId) return null;
-    return pageNameMap.get(pageId) ?? null;
-  };
-
   // Handle onboarding completion — persist to server + localStorage
   // Only owners can update settings (PUT /settings is admin+)
   const markOnboardingDone = useCallback(() => {
@@ -618,10 +601,6 @@ const DashboardPage: NextPageWithLayout = () => {
                       ? `${comment.message.slice(0, 60)}...`
                       : (comment.message || '');
                     const timeLabel = getTimeLabel(comment.createdAt);
-                    // Page name shown only when multiple pages are connected — with one page,
-                    // the chip repeats the same value on every row and adds no information.
-                    // The Top Pages section below already groups activity by page.
-                    const commentPageName = connectedPages.length > 1 ? getPageName(comment.pageId) : null;
 
                     return (
                       <button
@@ -637,16 +616,9 @@ const DashboardPage: NextPageWithLayout = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-0.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-sm font-semibold text-foreground truncate">
-                                {comment.fromName || tc('unknownUser')}
-                              </span>
-                              {commentPageName && (
-                                <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 bg-muted rounded truncate max-w-[100px] flex-shrink-0">
-                                  {commentPageName}
-                                </span>
-                              )}
-                            </div>
+                            <span className="text-sm font-semibold text-foreground truncate min-w-0">
+                              {comment.fromName || tc('unknownUser')}
+                            </span>
                             {timeLabel && (
                               <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
                                 <Clock className="w-3 h-3" aria-hidden="true" />
@@ -711,8 +683,6 @@ const DashboardPage: NextPageWithLayout = () => {
                       : (msg.message || '');
                     const timeLabel = getTimeLabel(msg.createdTime || msg.createdAt);
 
-                    const msgPageName = connectedPages.length > 1 ? getPageName(msg.pageId) : null;
-
                     return (
                       <button
                         key={msg.id}
@@ -727,16 +697,9 @@ const DashboardPage: NextPageWithLayout = () => {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2 mb-0.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-sm font-semibold text-foreground truncate">
-                                {msg.senderName || tc('unknownUser')}
-                              </span>
-                              {msgPageName && (
-                                <span className="text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 bg-muted rounded truncate max-w-[100px] flex-shrink-0">
-                                  {msgPageName}
-                                </span>
-                              )}
-                            </div>
+                            <span className="text-sm font-semibold text-foreground truncate min-w-0">
+                              {msg.senderName || tc('unknownUser')}
+                            </span>
                             {timeLabel && (
                               <span className="text-[11px] text-muted-foreground whitespace-nowrap flex-shrink-0 flex items-center gap-1">
                                 <Clock className="w-3 h-3" aria-hidden="true" />
