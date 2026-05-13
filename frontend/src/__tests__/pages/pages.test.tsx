@@ -71,6 +71,7 @@ vi.mock('@/components/ui', () => ({
                 <button onClick={onConfirm}>{confirmText}</button>
             </div>
         ) : null,
+    InfoPopover: ({ children }: { children: React.ReactNode; label?: string }) => <>{children}</>,
 }));
 
 vi.mock('@/components/knowledge-base/KnowledgeBaseModal', () => ({
