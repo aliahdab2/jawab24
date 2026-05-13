@@ -162,7 +162,12 @@ To add a new language: extend the `Locale` type in `i18n.ts` — TypeScript will
 
 ### 14. Proper Fixes Only
 
-Fix root causes, not symptoms. No workarounds, no swallowed errors, no silenced types/tests/lint. If the cause is unknown, diagnose first, then fix. If a temporary mitigation is truly necessary, label it `// TEMP:` and open the proper-fix follow-up in the same PR.
+Fix root causes, not symptoms. No workarounds, no swallowed errors, no silenced types/tests/lint without justification.
+
+- If the cause is unknown, diagnose first.
+- "It works" is not enough — if the fix doesn't explain *why* the problem occurred, it's likely a symptom-fix. Race condition patched with `setTimeout(100)` instead of proper serialization is the classic example.
+- Narrowly-scoped escape hatches (e.g. `@ts-expect-error` for a known upstream bug, feature flags for gradual rollout) are OK **with** an inline comment explaining the reason.
+- Truly necessary temporary mitigations: label `// TEMP: <reason>` inline. Don't ship a TEMP without a documented path to the proper fix (linked issue, PR description, or clearly-scoped TODO). "We'll figure it out later" is not acceptable.
 
 ### 15. Documentation — Keep In Sync
 
