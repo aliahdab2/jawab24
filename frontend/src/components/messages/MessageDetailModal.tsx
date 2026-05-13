@@ -8,6 +8,7 @@ import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { renderMessageText } from '@/utils/renderMessageText';
+import { isKbRelatedFlag } from '@/utils/flagReason';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import { messagesApi } from '@/lib/api';
 import { useHandoffPauseDuration } from '@/hooks';
@@ -368,7 +369,9 @@ export function MessageDetailModal({
         <div
           className="px-4 pt-4 md:px-6 md:pt-6 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0"
         >
-          {conversation.needsHumanAttention && (
+          {/* Banner also shows when a KB-related flag is set, even after the AI
+              sent a fallback reply (which flips needsHumanAttention=false). */}
+          {(conversation.needsHumanAttention || isKbRelatedFlag(conversation.lastMessage.flagReason)) && (
             <NeedsAttentionBanner
               flagReason={conversation.lastMessage.flagReason}
               flagMeta={conversation.lastMessage.flagMeta}
