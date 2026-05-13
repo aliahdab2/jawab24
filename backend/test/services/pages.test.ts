@@ -526,7 +526,7 @@ describe('PagesService', () => {
 
             const result = await pagesService.getPages(workspaceId);
 
-            expect(mockRedisGet).toHaveBeenCalledWith(`stats:workspace:${workspaceId}`);
+            expect(mockRedisGet).toHaveBeenCalledWith(`stats:workspace:${workspaceId}:v2`);
             expect(result[0].commentsCount).toBe(5);
             expect(result[0].repliesCount).toBe(3);
             expect(result[0].replyRate).toBe(60);
@@ -572,7 +572,7 @@ describe('PagesService', () => {
             await pagesService.getPages(workspaceId);
 
             expect(mockRedisSet).toHaveBeenCalledWith(
-                `stats:workspace:${workspaceId}`,
+                `stats:workspace:${workspaceId}:v2`,
                 expect.any(String),
                 'EX',
                 300,

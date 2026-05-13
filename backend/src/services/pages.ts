@@ -238,18 +238,35 @@ export class PagesService {
             .orderBy(desc(pages.createdAt))
             .limit(100);
 
-        const emptyStats = { commentsCount: 0, repliesCount: 0, replyRate: 0, lastActivity: null as number | null };
+        type ReplyBreakdown = { ai: number; template: number; postReply: number; manual: number };
+        type PageStats = {
+            commentsCount: number;
+            repliesCount: number;
+            breakdown: ReplyBreakdown;
+            lastActivity: number | null;
+        };
+        const emptyBreakdown: ReplyBreakdown = { ai: 0, template: 0, postReply: 0, manual: 0 };
+        const emptyStats: PageStats & { replyRate: number } = {
+            commentsCount: 0, repliesCount: 0, breakdown: emptyBreakdown, replyRate: 0, lastActivity: null,
+        };
         if (workspacePages.length === 0) return workspacePages.map(p => ({ ...p, accessToken: maybeDecryptToken(p.accessToken), ...emptyStats }));
 
         // Stats are best-effort — if the query fails, pages still load with zeroed stats
         // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
         // Cache stats in Redis to avoid repeated GROUP BY aggregations on every dashboard load
-        const cacheKey = `stats:workspace:${workspaceId}`;
-        const statsMap = new Map<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>();
+        //
+        // `repliesCount` headline counts auto-replies only (ai + template + post_reply).
+        // Manual replies are tracked separately in `breakdown.manual` for the tooltip
+        // but excluded from the headline — the metric measures platform automation,
+        // not merchant-driven handling.
+        const cacheKey = `stats:workspace:${workspaceId}:v2`;
+        const statsMap = new Map<string, PageStats>();
+        const countByMethod = (table: typeof comments | typeof instagramComments | typeof messages, method: string) =>
+            sql<number>`count(*) FILTER (WHERE ${table.replied} = true AND ${table.replyMethod} = ${method})`;
         try {
             const cached = await redis.get(cacheKey).catch(() => null);
             if (cached) {
-                const parsed = JSON.parse(cached) as Record<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }>;
+                const parsed = JSON.parse(cached) as Record<string, PageStats>;
                 for (const [pageId, stats] of Object.entries(parsed)) {
                     statsMap.set(pageId, stats);
                 }
@@ -258,7 +275,10 @@ export class PagesService {
                     db.select({
                         pageId: pages.id,
                         commentsCount: count(),
-                        repliesCount: sql<number>`count(*) FILTER (WHERE ${comments.replied} = true AND ${comments.replyMethod} IN ('ai', 'template', 'post_reply'))`,
+                        aiCount: countByMethod(comments, 'ai'),
+                        templateCount: countByMethod(comments, 'template'),
+                        postReplyCount: countByMethod(comments, 'post_reply'),
+                        manualCount: countByMethod(comments, 'manual'),
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${comments.repliedAt}))`,
                     })
                         .from(comments)
@@ -270,7 +290,10 @@ export class PagesService {
                     db.select({
                         pageId: pages.id,
                         commentsCount: count(),
-                        repliesCount: sql<number>`count(*) FILTER (WHERE ${instagramComments.replied} = true AND ${instagramComments.replyMethod} IN ('ai', 'template', 'post_reply'))`,
+                        aiCount: countByMethod(instagramComments, 'ai'),
+                        templateCount: countByMethod(instagramComments, 'template'),
+                        postReplyCount: countByMethod(instagramComments, 'post_reply'),
+                        manualCount: countByMethod(instagramComments, 'manual'),
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${instagramComments.repliedAt}))`,
                     })
                         .from(instagramComments)
@@ -283,7 +306,10 @@ export class PagesService {
                     db.select({
                         pageId: pages.id,
                         commentsCount: count(),
-                        repliesCount: sql<number>`count(*) FILTER (WHERE ${messages.replied} = true AND ${messages.replyMethod} IN ('ai', 'template', 'post_reply'))`,
+                        aiCount: countByMethod(messages, 'ai'),
+                        templateCount: countByMethod(messages, 'template'),
+                        postReplyCount: countByMethod(messages, 'post_reply'),
+                        manualCount: countByMethod(messages, 'manual'),
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${messages.repliedAt}))`,
                     })
                         .from(messages)
@@ -294,11 +320,23 @@ export class PagesService {
 
                 const mergeRows = (rows: typeof fbRows) => {
                     for (const row of rows) {
-                        const existing = statsMap.get(row.pageId) ?? { commentsCount: 0, repliesCount: 0, lastActivity: null };
+                        const existing = statsMap.get(row.pageId) ?? {
+                            commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
+                        };
+                        const ai = Number(row.aiCount);
+                        const template = Number(row.templateCount);
+                        const postReply = Number(row.postReplyCount);
+                        const manual = Number(row.manualCount);
                         const rowActivity = row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : null;
                         statsMap.set(row.pageId, {
                             commentsCount: existing.commentsCount + Number(row.commentsCount),
-                            repliesCount: existing.repliesCount + Number(row.repliesCount),
+                            repliesCount: existing.repliesCount + ai + template + postReply,
+                            breakdown: {
+                                ai: existing.breakdown.ai + ai,
+                                template: existing.breakdown.template + template,
+                                postReply: existing.breakdown.postReply + postReply,
+                                manual: existing.breakdown.manual + manual,
+                            },
                             lastActivity: rowActivity
                                 ? (existing.lastActivity ? Math.max(existing.lastActivity, rowActivity) : rowActivity)
                                 : existing.lastActivity,
@@ -311,7 +349,7 @@ export class PagesService {
                 mergeRows(msgRows);
 
                 // Write to Redis cache (fire-and-forget, 60s TTL)
-                const cacheObj: Record<string, { commentsCount: number; repliesCount: number; lastActivity: number | null }> = {};
+                const cacheObj: Record<string, PageStats> = {};
                 for (const [pageId, stats] of statsMap) cacheObj[pageId] = stats;
                 redis.set(cacheKey, JSON.stringify(cacheObj), 'EX', STATS_CACHE_TTL).catch(() => {});
             }
@@ -320,7 +358,9 @@ export class PagesService {
         }
 
         return workspacePages.map(page => {
-            const stats = statsMap.get(page.id) || { commentsCount: 0, repliesCount: 0, lastActivity: null };
+            const stats = statsMap.get(page.id) ?? {
+                commentsCount: 0, repliesCount: 0, breakdown: { ...emptyBreakdown }, lastActivity: null,
+            };
             return {
                 ...page,
                 accessToken: maybeDecryptToken(page.accessToken),
