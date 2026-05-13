@@ -36,7 +36,7 @@
     "faqQ2": "Does ManyChat support Salla stores?",
     "faqA2": "No. ManyChat integrates with Shopify but does not support Salla. Jawab24 supports both Shopify and Salla natively.",
     "faqQ3": "Which is more affordable, Jawab24 or ManyChat?",
-    "faqA3": "Jawab24 starts at $9/month with smart replies, post replies, and e-commerce integration included. ManyChat Pro starts at $15/month."
+    "faqA3": "Both start at $15/month, but Jawab24's Starter plan includes 1,000 AI replies, Arabic dialect detection, Salla integration, and price hallucination detection at that price — features ManyChat does not offer at any tier."
   },
   "chatfuel": {
     "seoTitle": "Jawab24 vs Chatfuel: Best AI Auto-Reply for Arabic E-Commerce (2026)",
@@ -56,31 +56,46 @@
   "tidio": {
     "seoTitle": "Jawab24 vs Tidio: Best Auto-Reply for Arabic E-Commerce (2026)",
     "seoDescription": "Compare Jawab24 and Tidio for Facebook and Instagram auto-replies. See why Jawab24 is better for Arabic businesses — 70% cheaper with Salla integration, dialect support, and price verification.",
-    "subtitle": "Tidio is a general-purpose live chat and chatbot platform designed for websites. Jawab24 is purpose-built for Facebook and Instagram auto-replies — with Arabic dialect detection, Salla integration, and AI that verifies prices before sending. At $9/month vs $29/month, Jawab24 delivers more value for Arabic-speaking e-commerce businesses.",
-    "advantage1": "70% cheaper: Jawab24 starts at $9/month with smart replies, post replies, and e-commerce integration included. Tidio starts at $29/month — and its AI add-on (Lyro) costs an extra $39/month on top.",
+    "subtitle": "Tidio is a general-purpose live chat and chatbot platform designed for websites. Jawab24 is purpose-built for Facebook and Instagram auto-replies — with Arabic dialect detection, Salla integration, and AI that verifies prices before sending. At $15/month vs $29/month, Jawab24 delivers more value for Arabic-speaking e-commerce businesses.",
+    "advantage1": "Nearly half the price: Jawab24 starts at $15/month with smart replies, post replies, and e-commerce integration included. Tidio starts at $29/month — and its AI add-on (Lyro) costs an extra $39/month on top.",
     "advantage2": "Arabic-first: Jawab24 understands 6 Arabic dialect families (Gulf, Egyptian, Levantine, Maghrebi, Iraqi, MSA) and Franco-Arabic. Tidio has no Arabic dialect support.",
     "advantage3": "Native Salla integration: Jawab24 syncs your Salla product catalog for accurate Smart Replies. Tidio does not support Salla at all.",
     "advantage4": "Price verification: Jawab24's 2-tier system verifies every AI-generated price against your real catalog. Tidio has no price hallucination detection — its AI can invent prices.",
     "faqQ1": "Is Jawab24 better than Tidio for Facebook and Instagram auto-replies?",
     "faqA1": "Yes. Jawab24 is purpose-built for Facebook and Instagram with Arabic dialect support, Salla integration, and price verification. Tidio is primarily a website live chat tool that added social media as a secondary feature.",
     "faqQ2": "Why is Jawab24 so much cheaper than Tidio?",
-    "faqA2": "Jawab24 is focused on one thing — intelligent auto-replies for social media. Tidio bundles website chat, email, and other features you may not need. With Jawab24 at $9/month, you get smart replies, post replies, and e-commerce integration without paying for extras.",
+    "faqA2": "Jawab24 is focused on one thing — intelligent auto-replies for social media. Tidio bundles website chat, email, and other features you may not need. With Jawab24 at $15/month, you get smart replies, post replies, and e-commerce integration without paying for extras.",
     "faqQ3": "Does Tidio support Arabic dialects and Salla stores?",
     "faqA3": "No. Tidio has no Arabic dialect detection and does not integrate with Salla. Jawab24 is the only tool that supports 6 Arabic dialect families and both Shopify and Salla natively."
   },
   "botpress": {
     "seoTitle": "Jawab24 vs Botpress: Best Facebook & Instagram Auto-Reply for Arabic Businesses (2026)",
     "seoDescription": "Compare Jawab24 and Botpress for Facebook and Instagram auto-replies. See why Jawab24 is 90% cheaper, requires no coding, and is purpose-built for Arabic e-commerce with Salla and Shopify integration.",
-    "subtitle": "Botpress is a developer-focused chatbot platform that requires coding and flow building to set up. Jawab24 is a ready-to-use auto-reply system — connect your Facebook page, add your business info, and AI starts replying in minutes. No coding, no flow builders, no complex setup. At $9/month vs $89/month, Jawab24 is built for business owners, not developers.",
-    "advantage1": "90% cheaper: Jawab24 starts at $9/month all-inclusive. Botpress Plus costs $89/month plus separate AI usage fees that can grow unpredictably. Their Team plan is $495/month.",
+    "subtitle": "Botpress is a developer-focused chatbot platform that requires coding and flow building to set up. Jawab24 is a ready-to-use auto-reply system — connect your Facebook page, add your business info, and AI starts replying in minutes. No coding, no flow builders, no complex setup. At $15/month vs $89/month, Jawab24 is built for business owners, not developers.",
+    "advantage1": "83% cheaper: Jawab24 starts at $15/month all-inclusive. Botpress Plus costs $89/month plus separate AI usage fees that can grow unpredictably. Their Team plan is $495/month.",
     "advantage2": "Zero coding required: Jawab24 works out of the box — connect your page and Smart Replies start in minutes. Botpress requires building conversation flows, writing code, and developer involvement.",
     "advantage3": "Arabic-first: Jawab24 understands 6 Arabic dialect families and Franco-Arabic. Botpress has no Arabic dialect detection — it treats all Arabic the same.",
     "advantage4": "E-commerce ready: Jawab24 natively integrates with Shopify and Salla, syncing your product catalog for accurate Smart Replies. Botpress has no built-in e-commerce integration — you need Zapier or custom code.",
     "faqQ1": "Is Jawab24 better than Botpress for Facebook and Instagram auto-replies?",
     "faqA1": "For Arabic businesses, yes. Jawab24 is purpose-built for Facebook and Instagram with Arabic dialect support, e-commerce integration, and price verification. Botpress is a general-purpose chatbot platform that requires developer skills to set up and has no Arabic-specific features.",
     "faqQ2": "Why is Botpress so much more expensive than Jawab24?",
-    "faqA2": "Botpress is a developer platform for building custom chatbots across many channels. Its Plus plan costs $89/month plus AI usage fees on top. Jawab24 costs $9/month with Smart Replies included — no surprise bills. Jawab24 is focused on one thing: intelligent auto-replies for social media.",
+    "faqA2": "Botpress is a developer platform for building custom chatbots across many channels. Its Plus plan costs $89/month plus AI usage fees on top. Jawab24 costs $15/month with Smart Replies included — no surprise bills. Jawab24 is focused on one thing: intelligent auto-replies for social media.",
     "faqQ3": "Can I use Botpress without coding?",
     "faqA3": "Botpress has a visual flow builder, but users consistently report a steep learning curve, and advanced features require JavaScript coding. Jawab24 requires zero technical knowledge — connect your Facebook page, write your business info, and you are live."
+  },
+  "speedly": {
+    "seoTitle": "Jawab24 vs Speedly: AI Auto-Reply Comparison for Arabic Businesses (2026)",
+    "seoDescription": "Compare Jawab24 and Speedly for Facebook, Instagram, and WhatsApp auto-replies. Side-by-side on pricing, AI billing model, e-commerce integration, and Arabic features.",
+    "subtitle": "Speedly is an Arabic-only auto-reply platform serving the Libyan and broader Arab market. Jawab24 supports both Arabic and English with full RTL and LTR interfaces, plus native Shopify and Salla integration. The biggest practical pricing difference: Jawab24 includes AI usage in the subscription, while Speedly charges AI credits separately on top of the subscription.",
+    "advantage1": "All-inclusive pricing: Jawab24 bundles AI generation into the subscription, so you pay one predictable monthly bill. Speedly's pricing requires adding AI credits on top of the subscription, so your monthly cost grows with reply volume.",
+    "advantage2": "Native e-commerce integration: Jawab24 syncs product catalogs from Shopify and Salla so AI replies use real prices and availability. Speedly does not integrate with external e-commerce platforms — it offers a built-in store instead.",
+    "advantage3": "Price hallucination detection: Jawab24 verifies every AI-generated price against your product catalog before sending. This is a Jawab24-specific safeguard that prevents the AI from inventing prices in replies.",
+    "advantage4": "Knowledge Base with RAG: Jawab24 grounds replies in your verified business data through retrieval-augmented generation, with confidence scoring that holds uncertain replies for human review.",
+    "faqQ1": "How does pricing actually differ between Jawab24 and Speedly?",
+    "faqA1": "Jawab24's monthly subscription covers AI generation — one fixed bill regardless of how many replies the AI handles. Speedly's subscription does not include AI usage; you add AI credits separately, so your effective cost increases with reply volume. The right comparison depends on your monthly reply count.",
+    "faqQ2": "Does Speedly include AI usage in the subscription?",
+    "faqA2": "No. Per Speedly's own site, AI is activated by adding AI credits to your account separately from the subscription. Jawab24 includes AI generation in the subscription price — no separate credit purchases.",
+    "faqQ3": "Which is better for a Shopify or Salla store owner?",
+    "faqA3": "Jawab24, because it natively syncs your Shopify or Salla product catalog so AI replies quote real prices and availability. Speedly does not integrate with Shopify or Salla — it provides a built-in store instead, which means migrating off your existing platform."
   }
 }
