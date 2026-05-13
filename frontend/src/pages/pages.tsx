@@ -4,7 +4,7 @@ import { useRouter } from 'next/router';
 import clsx from 'clsx';
 import { Capacitor } from '@capacitor/core';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal } from '@/components/ui';
+import { Card, Button, Toggle, EmptyState, PageHeader, PageSkeleton, ConfirmationModal, InfoPopover } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore } from '@/lib/store';
@@ -21,7 +21,6 @@ import {
   ExternalLink,
   AlertTriangle,
   LinkIcon,
-  Info,
   FlaskConical
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -44,35 +43,24 @@ import type { NextPageWithLayout } from './_app';
 function RepliesBreakdownTooltip({ page }: { page: Page }) {
   const t = useTranslations('pages');
   const b = page.breakdown ?? { ai: 0, template: 0, postReply: 0, manual: 0 };
-  const total = page.commentsCount ?? 0;
-  const automated = b.ai + b.template + b.postReply;
-  const unhandled = Math.max(0, total - automated - b.manual);
   const rows: Array<{ label: string; value: number }> = [
     { label: t('breakdownAi'), value: b.ai },
     { label: t('breakdownGreetingAway'), value: b.template },
     { label: t('breakdownPostReply'), value: b.postReply },
     { label: t('breakdownManual'), value: b.manual },
-    { label: t('breakdownUnhandled'), value: unhandled },
   ];
+  if (!rows.some((row) => row.value > 0)) return null;
+
   return (
-    <span className="relative group inline-flex">
-      <Info className="w-3.5 h-3.5 text-icon-muted cursor-help" aria-label={t('repliesBreakdownTitle')} />
-      <span
-        role="tooltip"
-        className="absolute bottom-full start-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 text-xs text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-56 text-start z-10"
-      >
-        <span className="block font-semibold mb-1.5 text-center">{t('repliesBreakdownTitle')}</span>
-        {rows.map((row) => (
-          <span key={row.label} className="flex justify-between gap-2 py-0.5">
-            <span className="opacity-90">{row.label}</span>
-            <span className="font-mono font-semibold tabular-nums">{row.value.toLocaleString()}</span>
-          </span>
-        ))}
-        <span className="block mt-1.5 pt-1.5 border-t border-white/20 dark:border-surface-900/20 opacity-80 text-[10px] leading-snug">
-          {t('breakdownHint')}
+    <InfoPopover label={t('repliesBreakdownTitle')}>
+      <span className="block font-semibold mb-1.5">{t('repliesBreakdownTitle')}</span>
+      {rows.map((row) => (
+        <span key={row.label} className="flex justify-between gap-2 py-0.5">
+          <span className="opacity-90">{row.label}</span>
+          <span className="font-mono font-semibold tabular-nums">{row.value.toLocaleString()}</span>
         </span>
-      </span>
-    </span>
+      ))}
+    </InfoPopover>
   );
 }
 
@@ -521,12 +509,9 @@ const PagesPage: NextPageWithLayout = () => {
                               : t('instagramNotConnected')}
                           </p>
                           {!page.instagramUsername && (
-                            <span className="relative group">
-                              <Info className="w-3.5 h-3.5 text-icon-muted cursor-help" aria-label={t('instagramTooltip')} />
-                              <span className="absolute bottom-full start-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-56 text-center z-10">
-                                {t('instagramTooltip')}
-                              </span>
-                            </span>
+                            <InfoPopover label={t('instagramTooltip')}>
+                              <span className="block">{t('instagramTooltip')}</span>
+                            </InfoPopover>
                           )}
                         </div>
                       </div>

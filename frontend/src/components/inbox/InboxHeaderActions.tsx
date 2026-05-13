@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useCallback, useState, useRef } from 'react';
 import { ChevronDown, Check, Download, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
+import { useClickOutside } from '@/hooks';
 import type { Page } from '@jawab24/shared';
 
 // ─── Page-aware title (inline page switcher in the heading) ─────
@@ -29,17 +30,7 @@ export function InboxTitle({ title, activePages, pageId, onPageChange }: InboxTi
   const selectedPage = activePages.find(p => p.id === pageId);
   const showSelector = activePages.length > 1;
 
-  // Close on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [isOpen]);
+  useClickOutside(containerRef, useCallback(() => setIsOpen(false), []), isOpen);
 
 
   const handleSelect = (value: string) => {

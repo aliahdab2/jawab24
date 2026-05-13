@@ -60,8 +60,6 @@
   "breakdownGreetingAway": "Greeting & away",
   "breakdownPostReply": "Post replies",
   "breakdownManual": "Manual replies",
-  "breakdownUnhandled": "Not replied yet",
-  "breakdownHint": "Headline counts auto-replies only (smart + greeting/away + post replies). Manual replies are shown separately.",
   "reconnectRequired": "Reconnect Required",
   "reconnectDescription": "Access to this page was revoked in Facebook. Reconnect to resume auto-replies.",
   "reconnectFailed": "Reconnect failed. Please try again.",

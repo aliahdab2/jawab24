@@ -31,3 +31,4 @@ export { PauseBanner } from './PauseBanner';
 export { ThemeToggleButton } from './ThemeToggleButton';
 export { KeywordChipInput } from './KeywordChipInput';
 export { UpgradeCTA } from './UpgradeCTA';
+export { InfoPopover } from './InfoPopover';
