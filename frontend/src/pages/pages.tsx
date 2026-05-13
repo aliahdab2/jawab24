@@ -41,6 +41,41 @@ import { formatRelativeTime } from '@/utils/dateUtils';
 import { getPageAvatarUrl, getPageExternalUrl } from '@/utils/pageUrl';
 import type { NextPageWithLayout } from './_app';
 
+function RepliesBreakdownTooltip({ page }: { page: Page }) {
+  const t = useTranslations('pages');
+  const b = page.breakdown ?? { ai: 0, template: 0, postReply: 0, manual: 0 };
+  const total = page.commentsCount ?? 0;
+  const automated = b.ai + b.template + b.postReply;
+  const unhandled = Math.max(0, total - automated - b.manual);
+  const rows: Array<{ label: string; value: number }> = [
+    { label: t('breakdownAi'), value: b.ai },
+    { label: t('breakdownGreetingAway'), value: b.template },
+    { label: t('breakdownPostReply'), value: b.postReply },
+    { label: t('breakdownManual'), value: b.manual },
+    { label: t('breakdownUnhandled'), value: unhandled },
+  ];
+  return (
+    <span className="relative group inline-flex">
+      <Info className="w-3.5 h-3.5 text-icon-muted cursor-help" aria-label={t('repliesBreakdownTitle')} />
+      <span
+        role="tooltip"
+        className="absolute bottom-full start-1/2 -translate-x-1/2 mb-2 px-3 py-2.5 text-xs text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none w-56 text-start z-10"
+      >
+        <span className="block font-semibold mb-1.5 text-center">{t('repliesBreakdownTitle')}</span>
+        {rows.map((row) => (
+          <span key={row.label} className="flex justify-between gap-2 py-0.5">
+            <span className="opacity-90">{row.label}</span>
+            <span className="font-mono font-semibold tabular-nums">{row.value.toLocaleString()}</span>
+          </span>
+        ))}
+        <span className="block mt-1.5 pt-1.5 border-t border-white/20 dark:border-surface-900/20 opacity-80 text-[10px] leading-snug">
+          {t('breakdownHint')}
+        </span>
+      </span>
+    </span>
+  );
+}
+
 const PagesPage: NextPageWithLayout = () => {
   const t = useTranslations('pages');
   const tc = useTranslations('common');
@@ -516,7 +551,10 @@ const PagesPage: NextPageWithLayout = () => {
                     <p className="text-lg font-bold text-foreground leading-none">{(page.commentsCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center border-x border-theme-border">
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1.5">{tDash('autoReplies')}</p>
+                    <div className="flex items-center justify-center gap-1 mb-1.5">
+                      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">{t('repliesSent')}</p>
+                      <RepliesBreakdownTooltip page={page} />
+                    </div>
                     <p className="text-lg font-bold text-foreground leading-none">{(page.repliesCount || 0).toLocaleString()}</p>
                   </div>
                   <div className="py-3 text-center">
