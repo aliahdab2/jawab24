@@ -1,17 +1,14 @@
-import { useMemo } from 'react';
-import { isNativePlatform } from '@/lib/capacitor';
-import { loadAllNamespaces } from '@/i18n/getMessages';
-
 /**
- * On mobile (static export), translations are baked at build time for one locale.
- * This hook reloads the correct messages client-side when language changes,
- * so NextIntlClientProvider always receives the right translations.
+ * Web stub. Returns null because server-rendered pages already deliver the
+ * correct translations via `pageProps.messages` from `makeGetStaticProps`.
  *
- * Returns null on web (server-rendered pages already have correct messages).
+ * Native mobile builds (Capacitor static export) get a different
+ * implementation through a webpack alias configured in `next.config.js`:
+ *   `@/hooks/useMobileMessages` → `@/hooks/useMobileMessages.native`
+ *
+ * This split keeps `@/i18n/getMessages` and its ~150 kB of namespace JSONs
+ * out of the web client bundle entirely.
  */
-export function useMobileMessages(effectiveLocale: string) {
-  return useMemo(() => {
-    if (!isNativePlatform()) return null;
-    return loadAllNamespaces(effectiveLocale);
-  }, [effectiveLocale]);
+export function useMobileMessages(_effectiveLocale: string): null {
+  return null;
 }
