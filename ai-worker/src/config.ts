@@ -25,15 +25,6 @@ export const config = {
         topP: parseFloat(process.env.OPENAI_TOP_P || '0.9'),
         frequencyPenalty: parseFloat(process.env.OPENAI_FREQUENCY_PENALTY || '0.3'),
         presencePenalty: parseFloat(process.env.OPENAI_PRESENCE_PENALTY || '0.2'),
-        // Optional deterministic sampling seed. Unset in production (full sampling
-        // diversity); set during eval runs for reproducibility. OpenAI honours this
-        // best-effort and exposes `system_fingerprint` to detect cache drift.
-        seed: (() => {
-            const raw = process.env.OPENAI_SEED;
-            if (!raw) return undefined;
-            const parsed = parseInt(raw, 10);
-            return Number.isFinite(parsed) ? parsed : undefined;
-        })(),
         timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),
     },
 

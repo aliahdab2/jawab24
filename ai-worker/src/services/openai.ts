@@ -7,13 +7,6 @@ import { PROMPT_VERSION, MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
 const MAX_INPUT_TOKENS = parseInt(process.env.MAX_INPUT_TOKENS || '24000', 10);  // Hard cap on total input tokens (system + history + user message)
 
-/**
- * Intents where the customer is asking for something — used by post-processing
- * checks that key off "this is a question-shaped intent". Hoisted to module
- * scope so multiple checks share one source of truth.
- */
-const QUESTION_LIKE_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
-
 /** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
 function estimateTokens(text: string): number {
     return Math.ceil(text.length / 3.5);
@@ -134,7 +127,7 @@ GENERAL RESPONSE RULES:
 - Do NOT start every reply with a greeting. After the first exchange, skip "مرحباً" / "أهلاً" / "Hi" — go straight to the answer. Real agents don't greet on every message.
 - Vary your reply structure. Sometimes answer in one line. Sometimes ask a question back. Don't follow the same greeting→answer→closing pattern every time.
 - Match the customer's energy: if they write a quick short message, reply briefly. If they write a detailed message, give a detailed answer.
-- When you don't have the answer, acknowledge it warmly — open with phrasing that shows you care about not misleading them (e.g. express the wish to avoid giving wrong info, acknowledge the limit honestly, in the customer's own language and dialect). Vary how you say this — never settle into a single repeated opener. A subtle emoji can soften the tone when it fits. If relevant info exists in <business_knowledge>, offer what you DO have. If a phone/email is in <business_knowledge>, point them there. Never promise to follow up or get back to them — there is no human standing by.
+- When you don't have the answer, admit it directly and (if a phone/email is in <business_knowledge>) point them there. Never promise to follow up or get back to them — there is no human standing by to follow up.
 - NEVER end your reply with GENERIC offer-to-help closings. These phrases are a dead giveaway of a bot and must NOT appear: "إذا لزمك شي خبرني", "إذا احتجت شي أنا هنا", "لا تتردد بالتواصل", "أنا هنا لمساعدتك", "لا تتردد إذا عندك أسئلة", "feel free to ask", "let me know if you need anything", "don't hesitate to reach out", "I'm here to help", or any variation of these. Generic = no specific deliverable mentioned, just a vague "ask me anything".
 - HOWEVER, offering a SPECIFIC next step tied to KB content is fine and human-like — e.g. "تحب أبعتلك [اسم المستند/الخدمة من KB]؟" / "want me to send the [specific thing]?". The deliverable must match the business type and exist in KB context: a restaurant offers a menu/قائمة الطعام, a retail/electronics store offers a catalog/كتالوج, an institute offers a schedule or course list/جدول أو قائمة الدورات, a salon/clinic offers an appointment/موعد, a real-estate page offers a unit list/قائمة الوحدات, etc. Do NOT use a placeholder like "lecture schedule" if KB describes a restaurant, or "menu" if KB describes a training institute. The distinction vs banned generic closings: a concrete deliverable that fits the business = allowed; a vague "let me know if you want anything" = banned. For comments (public replies), skip both forms — answer and stop. For DMs, specific offers are OK when there's actually more KB content worth sending.
 - For Arabic messages: Reply in the SAME dialect the customer used. Match their style naturally (Egyptian, Levantine, Gulf, Maghrebi, Iraqi, or formal). Do NOT use formal Arabic when they use colloquial dialect.
@@ -145,7 +138,7 @@ CRITICAL SAFETY RULES (NEVER BREAK THESE):
 2. NEVER INVENT SPECIFICS: Do not invent or guess prices, product/course/service names, availability, stock levels, dates, deadlines, payment terms, payment methods (bank transfer, cash, credit card, مدى, Apple Pay, etc.), installment plans, delivery times, refund/return/warranty policies, or any specific numbers — unless explicitly stated in <business_knowledge>. If the business offers items in a category but names are not in KB, say you will check — do NOT make up names.
 3. NEVER CONFIRM WHAT KB DOESN'T SAY: Do not confirm availability, price, size, delivery coverage, warranty terms, tax invoices, or that any action has been completed — unless explicitly listed in <business_knowledge>. If a product seems similar but you're not 100% sure, ask for clarification rather than guessing.
 4. INVENTORY CAVEAT: Inventory data in <business_knowledge> reflects the last sync and may not be real-time. When answering stock/availability questions, share what the data says but add: "Please verify availability before ordering" (or Arabic equivalent). Never guarantee current stock.
-5. WHEN UNSURE → ADMIT HONESTLY: If the customer's question is NOT covered in <business_knowledge>, admit you don't have that info on hand with warmth — do NOT guess and do NOT promise a callback. Set confidence to "low" and add "info_not_in_kb" to flags. However, if KB clearly has the answer (address, hours, phone, prices, etc.), answer confidently without hedging.
+5. WHEN UNSURE → HEDGE: If the customer's question is NOT covered in <business_knowledge>, say "Let me check with the team" naturally — do NOT guess. Set confidence to "low" and add "info_not_in_kb" to flags. However, if KB clearly has the answer (address, hours, phone, prices, etc.), answer confidently without hedging.
 6. MANDATORY FLAG: If the customer's question is NOT explicitly covered anywhere in <business_knowledge>, you MUST set confidence to "low" and add "info_not_in_kb" to flags. If <business_knowledge> is empty or does not address their specific question, confidence MUST be "low" and flags MUST include "info_not_in_kb". Never guess.
 7. SPECIFIC PRODUCT HANDLING: If a customer asks about a specific product and you cannot find it clearly in <business_knowledge>, do NOT guess or assume. Reply: "Let me check that for you!" and ask for clarification. NEVER confirm availability, price, or size unless explicitly listed.
 8. NEVER make promises the business cannot verify ("guaranteed", "100% sure", "always available"). NEVER provide medical, legal, or financial advice. NEVER share personal customer data (business contact info from KB is OK).
@@ -165,7 +158,7 @@ Common confidence mistakes to avoid:
 - You gave a helpful-sounding reply but it doesn't actually answer their question → LOW
 - Customer asks about a RELATED but DIFFERENT concept (e.g., "certificate" vs "accreditation/اعتماد", "diploma" vs "training course", "warranty" vs "return policy") → LOW or MEDIUM, not high. Different concepts are NOT interchangeable even if they seem related.
 - Customer asks about a SPECIFIC course (e.g., "programming/برمجة", "design/تصميم") but KB only lists OTHER courses (e.g., Office applications, English) → LOW + info_not_in_kb. A related field is NOT the same course. Do NOT confirm the course exists unless its exact name appears in KB.
-- Customer asks "do you have X?" and X is NOT in KB → LOW + info_not_in_kb, even if you list other offerings from KB. Saying "we don't have X" is an INFERENCE from absence, not a KB fact. Only KB can confirm what is NOT offered — if KB is silent on X, admit honestly that you don't have that info rather than confirming absence.
+- Customer asks "do you have X?" and X is NOT in KB → LOW + info_not_in_kb, even if you list other offerings from KB. Saying "we don't have X" is an INFERENCE from absence, not a KB fact. Only KB can confirm what is NOT offered — if KB is silent on X, say "I'll check with the team" rather than confirming absence.
 - Customer asks for contact info (phone, email, address) and KB has it → HIGH, not low. Sharing verbatim KB data is the highest-confidence scenario.
 - Customer asks a vague follow-up ("give me details", "tell me more", "وش المدة؟", "كم سعرها؟") and conversation history + KB cover the topic → HIGH or MEDIUM, not low. The conversation context + KB provides the answer — the vagueness is resolved by the history.
 - Reply style (professional/casual/enthusiastic) changes TONE only — it must NOT affect confidence. If KB answers the question, confidence is HIGH regardless of style.
@@ -175,7 +168,7 @@ FINAL SELF-CHECK (MANDATORY BEFORE OUTPUT):
 Before producing the final JSON, verify:
 1. Is EVERY factual claim in your reply (prices, products, hours, locations, policies, availability) explicitly stated in <business_knowledge>?
    - If YES for all claims → proceed.
-   - If ANY claim is not in <business_knowledge> → remove or rephrase it, OR replace with an honest admission ("I don't have that info on hand"). Set confidence to "low" and add "info_not_in_kb" to flags. Never substitute a follow-up promise.
+   - If ANY claim is not in <business_knowledge> → remove or rephrase it, OR replace the reply with a hedging phrase (e.g., "Let me check with the team"). Set confidence to "low" and add "info_not_in_kb" to flags.
 2. Does your reply answer the customer's ACTUAL question, or does it answer a related but different question?
    - If it drifts → rewrite to address what they actually asked, or hedge if the answer is not in <business_knowledge>.
 3. Is the confidence level you chose consistent with rules 1 and 2 above?
@@ -186,19 +179,6 @@ IMPORTANT: Output a JSON object with these fields:
 - "reply": your reply text (string, no prefixes like "Reply:" or "Assistant:")
 - "intent": MUST be exactly one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT. No other values are accepted. Do NOT use "OTHER", "PRICE", "LOCATION", "HOURS", "PRODUCT", "INFO", or any custom intent.
 - "confidence": how confident you are in your reply ("high", "medium", or "low")
-- "requested_item_exists_in_kb": true if <business_knowledge> clearly contains enough information to directly answer the customer's request — even if the wording is paraphrased, generalized, or covers the customer's case under a broader category (e.g. "all accessories" covers a specific accessory). Set false ONLY when one of these holds: (a) the requested topic/category/service does not appear in KB at all, (b) answering would require inventing unsupported specifics, OR (c) your reply substitutes a different offering for what they actually asked.
-  Examples that are TRUE (KB has sufficient support, wording may differ):
-    - Customer "Do chargers have warranty?" + KB "All accessories include 1-year warranty" → true (KB covers the case under "accessories").
-    - Customer "Do you offer delivery?" + KB "Delivery available in Riyadh and Jeddah" → true.
-    - Customer "كم سعر دورة الإنجليزي؟" + KB "English course: 1500 SAR/month" → true.
-    - Customer "Where are you located?" + KB "Address: Riyadh, Al-Malaz district" → true.
-  Examples that are FALSE (KB doesn't cover the topic):
-    - Customer "هل عندكم دورة برمجة؟" + KB lists English/Office/Accounting only → false.
-    - Customer "what subscription packages do you have?" + KB lists per-course prices but no packages → false.
-    - Customer "shipping to Jeddah?" + KB only mentions Riyadh delivery → false.
-  This field MUST be present. For non-question intents (GREETING/COMPLIMENT/OFFENSIVE/SPAM_OR_IRRELEVANT), set true.
-- "used_related_substitution": true if your reply offers content related to but DIFFERENT from what the customer specifically asked for (e.g. you described products when they asked about courses, or you described per-course prices when they asked about subscription packages). false if your reply addresses the customer's exact request directly, or if no substitution applies. This field MUST be present. For non-question intents (GREETING/COMPLIMENT/COMPLAINT/OFFENSIVE/SPAM_OR_IRRELEVANT), set false — substitution is only meaningful when the customer asked for something.
-- "promises_follow_up": true if your reply tells the customer that you, the team, or anyone from the business will get back to them, follow up later, check and return, contact them, call them back, etc. — in ANY language (e.g. EN "I'll get back to you", AR "أرجعلك" / "سأتابع معك", SV "jag återkommer", DE "ich melde mich", FR "je reviens vers vous", ES "te contactaré", TR "size geri dönerim"). false otherwise. This field MUST be present. For non-question intents (GREETING/COMPLIMENT/OFFENSIVE/SPAM_OR_IRRELEVANT), set false unless your reply genuinely contains a future-action promise.
 - "hedging": true if your reply uses any hedge or deflection phrase — e.g. "I'll check", "let me confirm", "سأتحقق", "خليني أتحقق", "تواصل معنا", "contact us", or anything that signals you're redirecting rather than answering. false otherwise. This field MUST be present.
 - "language": the language code of your reply text. MUST be exactly one of: "ar" (Arabic), "en" (English), "sv" (Swedish), "de" (German), "fr" (French), "es" (Spanish), "tr" (Turkish). For any other language, use "en". This MUST match the actual language of the "reply" string. For empty replies (OFFENSIVE/SPAM_OR_IRRELEVANT), use the customer's message language.
 - "flags": an array of flag strings if applicable (empty array [] if none):
@@ -222,7 +202,7 @@ Customer: "كم سعر الباقة؟" | KB has: "باقة الورد - 150 ري
 
 Example 2 — Answer NOT in KB (admit honestly, redirect if a contact is in KB):
 Customer: "Do you deliver to Jeddah?" | KB has phone "+966 11 234 5678" but no delivery info
-{"reply":"I want to make sure I don't give you the wrong delivery info — best to reach us at +966 11 234 5678 to confirm 🙌","intent":"QUESTION","confidence":"low","hedging":true,"language":"en","flags":["info_not_in_kb"]}
+{"reply":"I don't have delivery info for Jeddah on hand — please contact us at +966 11 234 5678 to confirm.","intent":"QUESTION","confidence":"low","hedging":true,"language":"en","flags":["info_not_in_kb"]}
 
 Example 3 — Offensive message:
 Customer: "يا حمير"
@@ -230,7 +210,7 @@ Customer: "يا حمير"
 
 Example 4 — WHO question not in KB (no contact channel either — admit honestly, no false follow-up):
 Customer: "مين صاحب المعهد؟" | KB has courses & prices but NO owner info and NO phone/email
-{"reply":"صراحة ما عندي معلومة مؤكدة عن هالموضوع، وما بدي أعطيك جواب غلط 🙏","intent":"QUESTION","confidence":"low","hedging":true,"language":"ar","flags":["info_not_in_kb"]}
+{"reply":"للأسف ما عندي هذي المعلومة بالضبط 🙏","intent":"QUESTION","confidence":"low","hedging":true,"language":"ar","flags":["info_not_in_kb"]}
 
 Example 5 — Sarcasm (CRITICAL — positive words + negative meaning):
 Customer: "واو شو هالخدمة الرائعة 🙄"
@@ -250,7 +230,7 @@ Customer: "هل التوصيل مجاني لجدة؟" | KB says "توصيل مج
 
 Example 8 — Related but DIFFERENT concept (certificate vs accreditation — admit, no false follow-up):
 Customer: "Can I get a certificate?" | KB mentions "اعتماد" (accreditation) but NOT certificates, and no phone in KB
-{"reply":"Certificates aren't something I have solid info on — I'd rather not confirm than give you the wrong answer.","intent":"QUESTION","confidence":"low","hedging":true,"language":"en","flags":["info_not_in_kb"]}
+{"reply":"I don't have specific information about certificates — sorry I can't confirm.","intent":"QUESTION","confidence":"low","hedging":true,"language":"en","flags":["info_not_in_kb"]}
 
 Example 9 — Pricing enumeration (DM — list ALL available options):
 Customer: "شو أسعاركم؟" | KB has: "Starter $15/mo, Business $39/mo, Pro $79/mo"
@@ -370,7 +350,6 @@ export class OpenAIService {
                         top_p: config.openai.topP,
                         frequency_penalty: config.openai.frequencyPenalty,
                         presence_penalty: config.openai.presencePenalty,
-                        ...(config.openai.seed !== undefined ? { seed: config.openai.seed } : {}),
                         response_format: {
                             type: 'json_schema',
                             json_schema: {
@@ -379,23 +358,11 @@ export class OpenAIService {
                                 schema: {
                                     type: 'object',
                                     properties: {
-                                        // Field order matters: OpenAI strict json_schema is autoregressive,
-                                        // so diagnostic booleans must commit BEFORE `reply` is generated.
-                                        // That way the reply text is constrained by the KB-match decision
-                                        // instead of the model rationalising HIGH confidence after producing
-                                        // a fluent answer.
+                                        reply: { type: 'string' },
                                         intent: {
                                             type: 'string',
                                             enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
                                                    'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
-                                        },
-                                        requested_item_exists_in_kb: { type: 'boolean' },
-                                        used_related_substitution: { type: 'boolean' },
-                                        promises_follow_up: { type: 'boolean' },
-                                        hedging: { type: 'boolean' },
-                                        language: {
-                                            type: 'string',
-                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
                                         },
                                         confidence: {
                                             type: 'string',
@@ -405,19 +372,13 @@ export class OpenAIService {
                                             type: 'array',
                                             items: { type: 'string' },
                                         },
-                                        reply: { type: 'string' },
+                                        hedging: { type: 'boolean' },
+                                        language: {
+                                            type: 'string',
+                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
+                                        },
                                     },
-                                    required: [
-                                        'intent',
-                                        'requested_item_exists_in_kb',
-                                        'used_related_substitution',
-                                        'promises_follow_up',
-                                        'hedging',
-                                        'language',
-                                        'confidence',
-                                        'flags',
-                                        'reply',
-                                    ] as const,
+                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'language'] as const,
                                     additionalProperties: false,
                                 },
                             },
@@ -452,7 +413,7 @@ export class OpenAIService {
             const detectedLanguage = this.detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; promises_follow_up?: boolean; requested_item_exists_in_kb?: boolean; used_related_substitution?: boolean; language?: string };
+            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string };
             try {
                 parsed = JSON.parse(content);
             } catch {
@@ -825,7 +786,7 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
      */
     /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
     validateReply(
-        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; promises_follow_up?: boolean; requested_item_exists_in_kb?: boolean; used_related_substitution?: boolean; language?: string },
+        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string },
         request: GenerateRequest,
     ): { reply: string; intent?: string; confidence?: string; flags?: string[]; language?: string } {
         const flags = [...(parsed.flags || [])];
@@ -921,51 +882,12 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
             }
         }
 
-        // Check 3b: Schema-driven KB-match calibration. The model commits to
-        // `requested_item_exists_in_kb` and `used_related_substitution` BEFORE
-        // generating reply text (per the JSON-schema field order). We derive
-        // confidence and the info_not_in_kb flag deterministically from those
-        // booleans instead of trusting the model's `confidence` self-report,
-        // which conflates "my reply is fluent" with "the KB actually supports
-        // the asked-for thing". This is language-agnostic by construction.
-        if (QUESTION_LIKE_INTENTS.has(parsed.intent || '')) {
-            if (parsed.requested_item_exists_in_kb === false) {
-                parsed.confidence = 'low';
-                if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
-            } else if (parsed.used_related_substitution) {
-                // KB has the topic but the model gave a substitute → cap at medium.
-                if (parsed.confidence === 'high') parsed.confidence = 'medium';
-                if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
-            }
-        }
-
-        // Check 3c: Deterministic follow-up promise gate.
-        // The model self-reports `promises_follow_up` per the schema. The schema
-        // reordering plus the no-follow-up-promise rule should keep this false
-        // most of the time — Check 3c is the safety net when the model still emits
-        // a follow-up phrase. We don't rewrite the reply (the schema gate usually
-        // prevents the leak in the first place); we just enforce calibration and
-        // emit observability so we can track how often the safety net actually
-        // catches something.
-        if (parsed.promises_follow_up && QUESTION_LIKE_INTENTS.has(parsed.intent || '')) {
-            // Follow-up promises imply the model lacks KB-grounded certainty.
-            // Force low confidence regardless of the original self-report.
-            parsed.confidence = 'low';
-            if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
-            if (!flags.includes('false_follow_up_detected')) flags.push('false_follow_up_detected');
-            console.log(JSON.stringify({
-                event: 'false_follow_up_caught',
-                intent: parsed.intent,
-                language: parsed.language,
-                prompt_version: PROMPT_VERSION,
-            }));
-        }
-
         // Check 4: GPT-reported hedging — model signals its reply is a deflection ("I'll check", "contact us", etc.)
         // Language-agnostic: GPT evaluates its own reply in context, no regex maintenance needed.
         // Only applies to question-type intents — hedging on GREETING/COMPLIMENT replies is not meaningful.
-        if (parsed.hedging && QUESTION_LIKE_INTENTS.has(parsed.intent || '')) {
-            parsed.confidence = 'low';
+        const HEDGE_CHECK_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+        if (parsed.hedging && HEDGE_CHECK_INTENTS.has(parsed.intent || '')) {
+            parsed = { ...parsed, confidence: 'low' };
             if (!flags.includes('info_not_in_kb')) {
                 flags.push('info_not_in_kb');
             }
@@ -974,9 +896,10 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         // Check 5: Low confidence without info_not_in_kb flag
         // Per prompt rules: confidence=low means KB didn't answer the question → flag is mandatory.
         // Only for question-type intents — complaints, greetings, etc. can be low for other reasons.
+        const QUESTION_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
         if (
             parsed.confidence === 'low' &&
-            QUESTION_LIKE_INTENTS.has(parsed.intent || '') &&
+            QUESTION_INTENTS.has(parsed.intent || '') &&
             !flags.includes('info_not_in_kb')
         ) {
             flags.push('info_not_in_kb');

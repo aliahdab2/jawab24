@@ -1572,20 +1572,7 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
         expect(rf.type).toBe('json_schema');
         expect(rf.json_schema.name).toBe('ai_reply');
         expect(rf.json_schema.strict).toBe(true);
-        // Field order matters — diagnostic booleans must precede `reply` so the
-        // autoregressive schema forces the KB-match decision before reply text.
-        // See v41 schema-driven calibration (PR #119) and v42 wording (PR #120).
-        expect(rf.json_schema.schema.required).toEqual([
-            'intent',
-            'requested_item_exists_in_kb',
-            'used_related_substitution',
-            'promises_follow_up',
-            'hedging',
-            'language',
-            'confidence',
-            'flags',
-            'reply',
-        ]);
+        expect(rf.json_schema.schema.required).toEqual(['reply', 'intent', 'confidence', 'flags', 'hedging', 'language']);
         expect(rf.json_schema.schema.properties.intent.enum).toEqual([
             'QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
             'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',
