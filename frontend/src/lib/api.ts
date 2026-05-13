@@ -41,11 +41,22 @@ export const publicApi = axios.create({
 api.defaults.withCredentials = true;
 publicApi.defaults.withCredentials = true;
 
-// Add retry logic and timeout to both instances
-addRetryInterceptor(api, { retries: 3, retryDelay: 1000 });
-addRetryInterceptor(publicApi, { retries: 3, retryDelay: 1000 });
-addTimeoutConfig(api, 30000); // 30 seconds
-addTimeoutConfig(publicApi, 30000);
+// Add retry logic and timeout to both instances.
+// Tuned for weak-network UX: prior config (30s × 4 attempts) made stalled
+// requests block the UI for nearly 2 minutes before surfacing failure.
+addRetryInterceptor(api, { retries: 2, retryDelay: 500 });
+addRetryInterceptor(publicApi, { retries: 2, retryDelay: 500 });
+addTimeoutConfig(api, 15000);
+addTimeoutConfig(publicApi, 15000);
+
+/**
+ * Per-call override for endpoints known to legitimately exceed the default
+ * 15s timeout — AI generation, e-commerce product sync, OAuth handshakes,
+ * file extraction, audio transcription, bulk email send. These are
+ * non-idempotent POSTs that the retry interceptor will not retry, so the
+ * timeout must be long enough to let the operation finish.
+ */
+const LONG_RUNNING_TIMEOUT = 60000;
 
 /**
  * Request Interceptor - Adds auth token and CSRF token
@@ -137,11 +148,12 @@ export const pagesApi = {
   getById: (id: string) => api.get(`/pages/${id}`),
   toggle: (id: string, enabled: boolean) =>
     api.patch(`/pages/${id}/auto-reply`, { enabled }),
-  sync: () => api.post('/pages/sync'),
+  sync: (accessToken?: string) =>
+    api.post('/pages/sync', accessToken ? { accessToken } : undefined, { timeout: LONG_RUNNING_TIMEOUT }),
   getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
   dismissGap: (pageId: string, gapId: string) => api.post(`/pages/${pageId}/kb-gaps/${gapId}/dismiss`),
   testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string }) =>
-    api.post(`/pages/${pageId}/test-reply`, data),
+    api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };
 
 // Posts API
@@ -600,7 +612,7 @@ export const adminApi = {
     customerContext?: string;
     model?: string;
   }) => {
-    const response = await api.post('/admin/ai/playground', data);
+    const response = await api.post('/admin/ai/playground', data, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
 
@@ -639,7 +651,7 @@ export const adminApi = {
     // (AR/EN per recipient) instead of wrapping `body` in the generic shell.
     templateId?: string;
   }) => {
-    const response = await api.post('/admin/waitlist/send-email', data);
+    const response = await api.post('/admin/waitlist/send-email', data, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
 
@@ -701,7 +713,7 @@ export const adminApi = {
 // KB File Upload API — extract text from PDF, Word, image
 export const kbApi = {
   extractText: async (file: string, mimeType: string, fileName?: string) => {
-    const response = await api.post('/kb/extract-text', { file, mimeType, fileName });
+    const response = await api.post('/kb/extract-text', { file, mimeType, fileName }, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
 };
@@ -709,7 +721,7 @@ export const kbApi = {
 // Voice API — KB voice input transcription
 export const voiceApi = {
   transcribe: async (audio: string, mimeType: string = 'audio/webm', languageHint?: string, quality: 'fast' | 'accurate' = 'accurate') => {
-    const response = await api.post('/voice/transcribe', { audio, mimeType, languageHint, quality });
+    const response = await api.post('/voice/transcribe', { audio, mimeType, languageHint, quality }, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
 };
@@ -721,7 +733,7 @@ export const ecommerceApi = {
     return response.data;
   },
   connectStore: async (shopDomain: string) => {
-    const response = await api.post('/shopify/store/connect', { shopDomain });
+    const response = await api.post('/shopify/store/connect', { shopDomain }, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   disconnectStore: async () => {
@@ -729,11 +741,11 @@ export const ecommerceApi = {
     return response.data;
   },
   syncProducts: async () => {
-    const response = await api.post('/shopify/store/sync');
+    const response = await api.post('/shopify/store/sync', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   reregisterWebhooks: async () => {
-    const response = await api.post('/shopify/store/webhooks/reregister');
+    const response = await api.post('/shopify/store/webhooks/reregister', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   getProducts: async () => {
@@ -769,7 +781,7 @@ export const sallaApi = {
     return response.data;
   },
   connectStore: async () => {
-    const response = await api.post('/salla/store/connect');
+    const response = await api.post('/salla/store/connect', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   disconnectStore: async () => {
@@ -777,11 +789,11 @@ export const sallaApi = {
     return response.data;
   },
   syncProducts: async () => {
-    const response = await api.post('/salla/store/sync');
+    const response = await api.post('/salla/store/sync', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   reregisterWebhooks: async () => {
-    const response = await api.post('/salla/store/webhooks/reregister');
+    const response = await api.post('/salla/store/webhooks/reregister', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   getProducts: async () => {
@@ -805,7 +817,7 @@ export const zidApi = {
     return response.data;
   },
   connectStore: async () => {
-    const response = await api.post('/zid/store/connect');
+    const response = await api.post('/zid/store/connect', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   disconnectStore: async () => {
@@ -813,11 +825,11 @@ export const zidApi = {
     return response.data;
   },
   syncProducts: async () => {
-    const response = await api.post('/zid/store/sync');
+    const response = await api.post('/zid/store/sync', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   reregisterWebhooks: async () => {
-    const response = await api.post('/zid/store/webhooks/reregister');
+    const response = await api.post('/zid/store/webhooks/reregister', undefined, { timeout: LONG_RUNNING_TIMEOUT });
     return response.data;
   },
   getProducts: async () => {

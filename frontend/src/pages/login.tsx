@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { parsePhoneNumber } from 'libphonenumber-js';
 import { useCountdown } from '@/hooks';
 import { toast } from 'sonner';
 import Head from 'next/head';
@@ -33,6 +32,10 @@ import { getNextLocale, getLocalePath } from '@/utils/locale';
 import { DemoLoginButton } from '@/features/demo';
 import { PhoneInput } from '@/components/auth/PhoneInput';
 import { OtpInput, OTP_LENGTH } from '@/components/auth/OtpInput';
+
+// E.164 prefixes that Twilio cannot deliver SMS to (errorCode 15).
+// Extend here if Twilio's blocklist changes.
+const SMS_BLOCKED_PREFIXES = ['+963'] as const;
 import { useOtpRequest } from '@/hooks/useOtpRequest';
 
 const PHONE_AUTH_ENABLED = process.env.NEXT_PUBLIC_PHONE_AUTH_ENABLED === 'true';
@@ -84,14 +87,10 @@ export default function LoginPage() {
   // TEMP: remove when WhatsApp OTP ships. Vonage rejects SMS to Syria with
   // errorCode 15 (non-whitelisted destination), so block submit and direct the
   // user to Facebook login instead of a silent failure.
-  const smsBlocked = useMemo(() => {
-    if (!phoneE164) return false;
-    try {
-      return parsePhoneNumber(phoneE164)?.country === 'SY';
-    } catch {
-      return false;
-    }
-  }, [phoneE164]);
+  // Twilio errorCode 15 (non-whitelisted destination) blocks SMS to certain
+  // countries. Direct affected users to Facebook login instead of a silent
+  // failure. PhoneInput already emits E.164, so a prefix check is exact.
+  const smsBlocked = useMemo(() => SMS_BLOCKED_PREFIXES.some((p) => phoneE164.startsWith(p)), [phoneE164]);
 
   const handleVerifyOtp = useCallback(async (completedCode?: string) => {
     // onComplete passes the code directly; button click falls back to state

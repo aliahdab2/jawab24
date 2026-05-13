@@ -39,13 +39,13 @@ describe('API module setup', () => {
     });
 
     it('should call addRetryInterceptor for both instances', () => {
-        expect(addRetryInterceptor).toHaveBeenCalledWith(api, { retries: 3, retryDelay: 1000 });
-        expect(addRetryInterceptor).toHaveBeenCalledWith(publicApi, { retries: 3, retryDelay: 1000 });
+        expect(addRetryInterceptor).toHaveBeenCalledWith(api, { retries: 2, retryDelay: 500 });
+        expect(addRetryInterceptor).toHaveBeenCalledWith(publicApi, { retries: 2, retryDelay: 500 });
     });
 
     it('should call addTimeoutConfig for both instances', () => {
-        expect(addTimeoutConfig).toHaveBeenCalledWith(api, 30000);
-        expect(addTimeoutConfig).toHaveBeenCalledWith(publicApi, 30000);
+        expect(addTimeoutConfig).toHaveBeenCalledWith(api, 15000);
+        expect(addTimeoutConfig).toHaveBeenCalledWith(publicApi, 15000);
     });
 
     it('should set up auth interceptor via authManager', () => {

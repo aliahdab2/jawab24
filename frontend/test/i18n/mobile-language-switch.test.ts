@@ -91,9 +91,13 @@ describe('mobile language switching', () => {
   });
 
   describe('useMobileMessages hook', () => {
+    // Web bundles get `@/hooks/useMobileMessages` (returns null always); native
+    // builds get `@/hooks/useMobileMessages.native` (the real implementation)
+    // via the webpack alias in next.config.js. Tests load each variant directly.
+
     it('should return translated messages on native platform', async () => {
       mockIsNative = true;
-      const { useMobileMessages } = await import('@/hooks/useMobileMessages');
+      const { useMobileMessages } = await import('@/hooks/useMobileMessages.native');
       const { result } = renderHook(() => useMobileMessages('ar'));
 
       expect(result.current).not.toBeNull();
@@ -111,7 +115,7 @@ describe('mobile language switching', () => {
 
     it('should switch messages when locale changes on native', async () => {
       mockIsNative = true;
-      const { useMobileMessages } = await import('@/hooks/useMobileMessages');
+      const { useMobileMessages } = await import('@/hooks/useMobileMessages.native');
       const { result, rerender } = renderHook(
         ({ locale }) => useMobileMessages(locale),
         { initialProps: { locale: 'ar' } },

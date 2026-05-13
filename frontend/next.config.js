@@ -91,6 +91,33 @@ const nextConfig = {
       },
     ];
   },
+
+  webpack: (config, { webpack }) => {
+    // Mobile builds need the native useMobileMessages that statically imports
+    // all i18n namespaces for client-side language switching. Web builds get
+    // the stub (returns null), which keeps ~150 kB of namespace JSONs out of
+    // the client bundle.
+    //
+    // NormalModuleReplacementPlugin rewrites at module-request time, after
+    // tsconfig path mapping has resolved `@/...` aliases — a plain
+    // `resolve.alias` entry would miss because the request no longer matches.
+    if (isMobile) {
+      config.plugins.push(
+        new webpack.NormalModuleReplacementPlugin(
+          /[\\/]hooks[\\/]useMobileMessages(\.ts)?$/,
+          (resource) => {
+            if (!resource.request.includes('.native')) {
+              resource.request = resource.request.replace(
+                /useMobileMessages(\.ts)?$/,
+                'useMobileMessages.native$1',
+              );
+            }
+          },
+        ),
+      );
+    }
+    return config;
+  },
 }
 
 // Sentry configuration

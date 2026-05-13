@@ -81,7 +81,7 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       // If no pages found and we have a token, trigger a sync then re-read
       if (data.length === 0 && fbToken) {
         try {
-          await api.post('/pages/sync', { accessToken: fbToken });
+          await pagesApi.sync(fbToken);
           response = await pagesApi.getAll();
           data = Array.isArray(response.data)
             ? response.data
