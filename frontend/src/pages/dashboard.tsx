@@ -618,7 +618,10 @@ const DashboardPage: NextPageWithLayout = () => {
                       ? `${comment.message.slice(0, 60)}...`
                       : (comment.message || '');
                     const timeLabel = getTimeLabel(comment.createdAt);
-                    const commentPageName = getPageName(comment.pageId);
+                    // Page name shown only when multiple pages are connected — with one page,
+                    // the chip repeats the same value on every row and adds no information.
+                    // The Top Pages section below already groups activity by page.
+                    const commentPageName = connectedPages.length > 1 ? getPageName(comment.pageId) : null;
 
                     return (
                       <button
@@ -708,7 +711,7 @@ const DashboardPage: NextPageWithLayout = () => {
                       : (msg.message || '');
                     const timeLabel = getTimeLabel(msg.createdTime || msg.createdAt);
 
-                    const msgPageName = getPageName(msg.pageId);
+                    const msgPageName = connectedPages.length > 1 ? getPageName(msg.pageId) : null;
 
                     return (
                       <button
