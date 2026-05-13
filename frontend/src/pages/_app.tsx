@@ -509,11 +509,11 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
               {getLayout(<Component {...pageProps} />)}
               <Toaster
                 richColors
-                position="top-center"
+                position="bottom-center"
                 closeButton
                 duration={4000}
                 theme="system"
-                offset="calc(env(safe-area-inset-top, 16px) + 32px)"
+                offset="calc(env(safe-area-inset-bottom, 0px) + 80px)"
               />
               {showPushDeniedBanner && (
                 <PushDeniedBanner onDismiss={handleDismissPushDeniedBanner} />

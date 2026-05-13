@@ -87,12 +87,11 @@ export function CommandCenter({
   // Keep the "Smart Replies" noun the merchant already knows — the subtext
   // ("Resets X" vs "Last 30 days") clarifies which time window applies.
   const primaryLabel = tDash('aiReplies');
-  const baseTooltip = hasQuota
-    ? tDash('commandCenter.planUsageTooltip')
-    : tDash('commandCenter.smartRepliesTooltip');
   const primaryTooltip = hasQuota && resetDate
-    ? `${baseTooltip} · ${tDash('commandCenter.resetsOn', { date: resetDate })}`
-    : baseTooltip;
+    ? tDash('commandCenter.resetsOn', { date: resetDate })
+    : hasQuota
+      ? tDash('commandCenter.planUsageTooltip')
+      : tDash('commandCenter.smartRepliesTooltip');
   const primarySubtext = !hasQuota ? tDash('last30Days') : null;
 
   // Quota badge: only when approaching / over limit. Overlimit takes precedence.
@@ -201,9 +200,9 @@ export function CommandCenter({
                 i < 3 && 'md:border-e md:border-e-theme-border',
               )}
             >
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-start justify-between gap-2 flex-nowrap">
                 <div className="min-w-0 flex-1">
-                  <p className="text-lg sm:text-2xl md:text-3xl font-bold leading-none tracking-tight text-foreground whitespace-nowrap tabular-nums">
+                  <p className="text-base sm:text-2xl md:text-3xl font-bold leading-none tracking-tight text-foreground tabular-nums truncate">
                     {metric.value}
                   </p>
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5 inline-flex items-center gap-1">
@@ -232,10 +231,10 @@ export function CommandCenter({
                   {metric.badge}
                 </div>
                 <div className={clsx(
-                  'w-8 h-8 sm:w-10 sm:h-10 rounded-xl flex-shrink-0 flex items-center justify-center',
+                  'w-7 h-7 sm:w-10 sm:h-10 rounded-xl flex-shrink-0 flex items-center justify-center',
                   metric.iconBg
                 )}>
-                  <Icon className={clsx('w-4 h-4 sm:w-5 sm:h-5', metric.iconColor)} />
+                  <Icon className={clsx('w-3.5 h-3.5 sm:w-5 sm:h-5', metric.iconColor)} />
                 </div>
               </div>
               {metric.progressPercent !== undefined && (
