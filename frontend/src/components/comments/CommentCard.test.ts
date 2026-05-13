@@ -7,13 +7,13 @@ describe('translateFlagReason', () => {
         'offensive_or_abusive': 'Offensive or abusive',
         'angry_customer': 'Angry customer',
         'low_confidence': 'Needs your review',
-        'price_not_in_kb': 'Price missing from Business Info',
+        'price_not_in_kb': 'Please add price',
     };
     const mockTranslationsAr: Record<string, string> = {
         'offensive_or_abusive': 'محتوى مسيء',
         'angry_customer': 'عميل غاضب',
         'low_confidence': 'يحتاج مراجعتك',
-        'price_not_in_kb': 'سعر غير مضاف في معلوماتك',
+        'price_not_in_kb': 'ارجو إضافة السعر',
     };
 
     const tEn = (key: string) => mockTranslations[key] ?? key;

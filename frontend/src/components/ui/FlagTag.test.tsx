@@ -21,14 +21,14 @@ describe('FlagTag', () => {
 
   it('translates a single info_not_in_kb flag', () => {
     render(<FlagTag flagReason="info_not_in_kb" />);
-    expect(screen.getByText('Missing from Business Info')).toBeInTheDocument();
+    expect(screen.getByText('Please add info')).toBeInTheDocument();
   });
 
   // Regression: bug where FlagTag received "info_not_in_kb,low_confidence" and
   // rendered the raw combined string instead of the primary flag translation
   it('shows translated primary flag when flagReason contains comma-separated keys', () => {
     render(<FlagTag flagReason="info_not_in_kb,low_confidence" />);
-    expect(screen.getByText('Missing from Business Info')).toBeInTheDocument();
+    expect(screen.getByText('Please add info')).toBeInTheDocument();
     // Must NOT show the raw combined string
     expect(screen.queryByText('info_not_in_kb,low_confidence')).not.toBeInTheDocument();
     expect(screen.queryByText(/flagReason\./)).not.toBeInTheDocument();
@@ -37,7 +37,7 @@ describe('FlagTag', () => {
   it('prioritizes urgent flag over non-urgent when both present', () => {
     render(<FlagTag flagReason="info_not_in_kb,angry_customer" />);
     expect(screen.getByText('Angry customer')).toBeInTheDocument();
-    expect(screen.queryByText('Missing from Business Info')).not.toBeInTheDocument();
+    expect(screen.queryByText('Please add info')).not.toBeInTheDocument();
   });
 
   it('translates angry_customer flag', () => {
