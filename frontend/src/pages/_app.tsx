@@ -21,7 +21,7 @@ import { NotificationPrePrompt } from '@/components/ui/NotificationPrePrompt';
 import { PushDeniedBanner } from '@/components/ui/PushDeniedBanner';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { useSSE, useTheme } from '@/hooks';
-import { getLocaleDirection, getOGLocale, getOGAlternateLocales, isDefaultLocale } from '@/utils/locale';
+import { getLocaleDirection, getOGLocale, getOGAlternateLocales, isDefaultLocale, isRTLLocale } from '@/utils/locale';
 
 /**
  * Type for pages with persistent layouts
@@ -509,11 +509,13 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
               {getLayout(<Component {...pageProps} />)}
               <Toaster
                 richColors
-                position="bottom-center"
+                position="top-center"
                 closeButton
                 duration={4000}
                 theme="system"
-                offset="calc(env(safe-area-inset-bottom, 0px) + 80px)"
+                dir={isRTLLocale(effectiveLocale) ? 'rtl' : 'ltr'}
+                offset={{ top: '16px' }}
+                mobileOffset={{ top: 'calc(var(--sai-top, 24px) + 16px)' }}
               />
               {showPushDeniedBanner && (
                 <PushDeniedBanner onDismiss={handleDismissPushDeniedBanner} />
