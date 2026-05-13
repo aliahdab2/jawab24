@@ -81,17 +81,12 @@ export function CommandCenter({
   const quotaUsed = quota?.used ?? 0;
   const resetDate = formatQuotaResetDate(quotaResetsAt, locale);
 
-  // Compact notation ("1.1K / 10K", "12.5K / 50K") keeps the value readable on
-  // narrow phones for any plan size up to millions, while the full numbers stay
-  // in the tooltip for precision. Below 10K we still show the exact number so
-  // small-plan merchants see "1,080 / 5,000" without rounding.
-  const formatPlanValue = (n: number) =>
-    n >= 10000
-      ? new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(n)
-      : n.toLocaleString(locale);
-
-  const primaryValue = hasQuota && quota?.limit != null
-    ? `${formatPlanValue(quotaUsed)} / ${formatPlanValue(quota.limit)}`
+  // The "used" count is the actionable number — show it as the headline. The
+  // limit is context, so it lives in the subtext as "of {limit}". This avoids
+  // the layout problem from "used / limit" on one line where Arabic's "ألف" is
+  // much wider than "K" and overflows the card on mobile.
+  const primaryValue = hasQuota
+    ? quotaUsed.toLocaleString(locale)
     : smartReplies.toLocaleString(locale);
 
   const primaryLabel = tDash('aiReplies');
@@ -103,7 +98,11 @@ export function CommandCenter({
     : hasQuota
       ? planUsageDetail ?? tDash('commandCenter.planUsageTooltip')
       : tDash('commandCenter.smartRepliesTooltip');
-  const primarySubtext = !hasQuota ? tDash('last30Days') : null;
+  const primarySubtext = hasQuota && quota?.limit != null
+    ? tDash('commandCenter.planUsageOf', { limit: quota.limit.toLocaleString(locale) })
+    : !hasQuota
+      ? tDash('last30Days')
+      : null;
 
   // Quota badge: only when approaching / over limit. Overlimit takes precedence.
   let quotaBadge: React.ReactNode = null;
