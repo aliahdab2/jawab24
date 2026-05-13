@@ -836,11 +836,14 @@ const DashboardPage: NextPageWithLayout = () => {
 
           {/* KB Nudge Banner — gentle, non-blocking */}
           {!kbNudgeDismissed && (() => {
-            const allKbFilled = pages.every(p => (p.knowledgeBase || '').length >= 100);
+            const activePages = pages.filter(p => p.autoReplyEnabled || p.instagramAutoReplyEnabled);
+            if (activePages.length === 0) return null;
+
+            const allKbFilled = activePages.every(p => (p.knowledgeBase || '').length >= 100);
             if (allKbFilled) return null;
 
-            const hasEcommerce = pages.some(p => !!p.ecommerceStoreId);
-            const hasThinKb = pages.some(p => (p.knowledgeBase || '').length < 100);
+            const hasEcommerce = activePages.some(p => !!p.ecommerceStoreId);
+            const hasThinKb = activePages.some(p => (p.knowledgeBase || '').length < 100);
             if (!hasThinKb) return null;
 
             const isEcomVariant = hasEcommerce;
