@@ -81,16 +81,27 @@ export function CommandCenter({
   const quotaUsed = quota?.used ?? 0;
   const resetDate = formatQuotaResetDate(quotaResetsAt, locale);
 
+  // Compact notation ("1.1K / 10K", "12.5K / 50K") keeps the value readable on
+  // narrow phones for any plan size up to millions, while the full numbers stay
+  // in the tooltip for precision. Below 10K we still show the exact number so
+  // small-plan merchants see "1,080 / 5,000" without rounding.
+  const formatPlanValue = (n: number) =>
+    n >= 10000
+      ? new Intl.NumberFormat(locale, { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+      : n.toLocaleString(locale);
+
   const primaryValue = hasQuota && quota?.limit != null
-    ? `${quotaUsed.toLocaleString()} / ${quota.limit.toLocaleString()}`
-    : smartReplies.toLocaleString();
-  // Keep the "Smart Replies" noun the merchant already knows — the subtext
-  // ("Resets X" vs "Last 30 days") clarifies which time window applies.
+    ? `${formatPlanValue(quotaUsed)} / ${formatPlanValue(quota.limit)}`
+    : smartReplies.toLocaleString(locale);
+
   const primaryLabel = tDash('aiReplies');
-  const primaryTooltip = hasQuota && resetDate
-    ? tDash('commandCenter.resetsOn', { date: resetDate })
+  const planUsageDetail = hasQuota && quota?.limit != null
+    ? `${quotaUsed.toLocaleString(locale)} / ${quota.limit.toLocaleString(locale)}`
+    : null;
+  const primaryTooltip = hasQuota && resetDate && planUsageDetail
+    ? `${planUsageDetail} · ${tDash('commandCenter.resetsOn', { date: resetDate })}`
     : hasQuota
-      ? tDash('commandCenter.planUsageTooltip')
+      ? planUsageDetail ?? tDash('commandCenter.planUsageTooltip')
       : tDash('commandCenter.smartRepliesTooltip');
   const primarySubtext = !hasQuota ? tDash('last30Days') : null;
 
@@ -202,7 +213,7 @@ export function CommandCenter({
             >
               <div className="flex items-start justify-between gap-2 flex-nowrap">
                 <div className="min-w-0 flex-1">
-                  <p className="text-base sm:text-2xl md:text-3xl font-bold leading-none tracking-tight text-foreground tabular-nums truncate">
+                  <p className="text-lg sm:text-2xl md:text-3xl font-bold leading-none tracking-tight text-foreground tabular-nums whitespace-nowrap">
                     {metric.value}
                   </p>
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5 inline-flex items-center gap-1">
