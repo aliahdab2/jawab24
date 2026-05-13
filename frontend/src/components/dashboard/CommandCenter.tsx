@@ -87,14 +87,13 @@ export function CommandCenter({
   // Keep the "Smart Replies" noun the merchant already knows — the subtext
   // ("Resets X" vs "Last 30 days") clarifies which time window applies.
   const primaryLabel = tDash('aiReplies');
-  const primaryTooltip = hasQuota
+  const baseTooltip = hasQuota
     ? tDash('commandCenter.planUsageTooltip')
     : tDash('commandCenter.smartRepliesTooltip');
-  const primarySubtext = hasQuota && resetDate
-    ? tDash('commandCenter.resetsOn', { date: resetDate })
-    : !hasQuota
-      ? tDash('last30Days')
-      : null;
+  const primaryTooltip = hasQuota && resetDate
+    ? `${baseTooltip} · ${tDash('commandCenter.resetsOn', { date: resetDate })}`
+    : baseTooltip;
+  const primarySubtext = !hasQuota ? tDash('last30Days') : null;
 
   // Quota badge: only when approaching / over limit. Overlimit takes precedence.
   let quotaBadge: React.ReactNode = null;
