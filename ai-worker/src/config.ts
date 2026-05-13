@@ -28,7 +28,12 @@ export const config = {
         // Optional deterministic sampling seed. Unset in production (full sampling
         // diversity); set during eval runs for reproducibility. OpenAI honours this
         // best-effort and exposes `system_fingerprint` to detect cache drift.
-        seed: process.env.OPENAI_SEED ? parseInt(process.env.OPENAI_SEED, 10) : undefined,
+        seed: (() => {
+            const raw = process.env.OPENAI_SEED;
+            if (!raw) return undefined;
+            const parsed = parseInt(raw, 10);
+            return Number.isFinite(parsed) ? parsed : undefined;
+        })(),
         timeoutMs: parseInt(process.env.OPENAI_TIMEOUT_MS || '30000', 10),
     },
 

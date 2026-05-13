@@ -7,6 +7,13 @@ import { PROMPT_VERSION, MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
 const MAX_INPUT_TOKENS = parseInt(process.env.MAX_INPUT_TOKENS || '24000', 10);  // Hard cap on total input tokens (system + history + user message)
 
+/**
+ * Intents where the customer is asking for something — used by post-processing
+ * checks that key off "this is a question-shaped intent". Hoisted to module
+ * scope so multiple checks share one source of truth.
+ */
+const QUESTION_LIKE_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+
 /** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
 function estimateTokens(text: string): number {
     return Math.ceil(text.length / 3.5);
@@ -190,8 +197,8 @@ IMPORTANT: Output a JSON object with these fields:
     - Customer "what subscription packages do you have?" + KB lists per-course prices but no packages → false.
     - Customer "shipping to Jeddah?" + KB only mentions Riyadh delivery → false.
   This field MUST be present. For non-question intents (GREETING/COMPLIMENT/OFFENSIVE/SPAM_OR_IRRELEVANT), set true.
-- "used_related_substitution": true if your reply offers content related to but DIFFERENT from what the customer specifically asked for (e.g. you described products when they asked about courses, or you described per-course prices when they asked about subscription packages). false if your reply addresses the customer's exact request directly, or if no substitution applies. This field MUST be present.
-- "promises_follow_up": true if your reply tells the customer that you, the team, or anyone from the business will get back to them, follow up later, check and return, contact them, call them back, etc. — in ANY language (e.g. EN "I'll get back to you", AR "أرجعلك" / "سأتابع معك", SV "jag återkommer", DE "ich melde mich", FR "je reviens vers vous", ES "te contactaré", TR "size geri dönerim"). false otherwise. This field MUST be present.
+- "used_related_substitution": true if your reply offers content related to but DIFFERENT from what the customer specifically asked for (e.g. you described products when they asked about courses, or you described per-course prices when they asked about subscription packages). false if your reply addresses the customer's exact request directly, or if no substitution applies. This field MUST be present. For non-question intents (GREETING/COMPLIMENT/COMPLAINT/OFFENSIVE/SPAM_OR_IRRELEVANT), set false — substitution is only meaningful when the customer asked for something.
+- "promises_follow_up": true if your reply tells the customer that you, the team, or anyone from the business will get back to them, follow up later, check and return, contact them, call them back, etc. — in ANY language (e.g. EN "I'll get back to you", AR "أرجعلك" / "سأتابع معك", SV "jag återkommer", DE "ich melde mich", FR "je reviens vers vous", ES "te contactaré", TR "size geri dönerim"). false otherwise. This field MUST be present. For non-question intents (GREETING/COMPLIMENT/OFFENSIVE/SPAM_OR_IRRELEVANT), set false unless your reply genuinely contains a future-action promise.
 - "hedging": true if your reply uses any hedge or deflection phrase — e.g. "I'll check", "let me confirm", "سأتحقق", "خليني أتحقق", "تواصل معنا", "contact us", or anything that signals you're redirecting rather than answering. false otherwise. This field MUST be present.
 - "language": the language code of your reply text. MUST be exactly one of: "ar" (Arabic), "en" (English), "sv" (Swedish), "de" (German), "fr" (French), "es" (Spanish), "tr" (Turkish). For any other language, use "en". This MUST match the actual language of the "reply" string. For empty replies (OFFENSIVE/SPAM_OR_IRRELEVANT), use the customer's message language.
 - "flags": an array of flag strings if applicable (empty array [] if none):
@@ -921,8 +928,7 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         // booleans instead of trusting the model's `confidence` self-report,
         // which conflates "my reply is fluent" with "the KB actually supports
         // the asked-for thing". This is language-agnostic by construction.
-        const KB_MATCH_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
-        if (KB_MATCH_INTENTS.has(parsed.intent || '')) {
+        if (QUESTION_LIKE_INTENTS.has(parsed.intent || '')) {
             if (parsed.requested_item_exists_in_kb === false) {
                 parsed.confidence = 'low';
                 if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
@@ -935,13 +941,13 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
 
         // Check 3c: Deterministic follow-up promise gate.
         // The model self-reports `promises_follow_up` per the schema. The schema
-        // reordering plus rule 130 (no follow-up promises) should keep this false
+        // reordering plus the no-follow-up-promise rule should keep this false
         // most of the time — Check 3c is the safety net when the model still emits
         // a follow-up phrase. We don't rewrite the reply (the schema gate usually
         // prevents the leak in the first place); we just enforce calibration and
         // emit observability so we can track how often the safety net actually
         // catches something.
-        if (parsed.promises_follow_up && KB_MATCH_INTENTS.has(parsed.intent || '')) {
+        if (parsed.promises_follow_up && QUESTION_LIKE_INTENTS.has(parsed.intent || '')) {
             // Follow-up promises imply the model lacks KB-grounded certainty.
             // Force low confidence regardless of the original self-report.
             parsed.confidence = 'low';
@@ -958,9 +964,8 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         // Check 4: GPT-reported hedging — model signals its reply is a deflection ("I'll check", "contact us", etc.)
         // Language-agnostic: GPT evaluates its own reply in context, no regex maintenance needed.
         // Only applies to question-type intents — hedging on GREETING/COMPLIMENT replies is not meaningful.
-        const HEDGE_CHECK_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
-        if (parsed.hedging && HEDGE_CHECK_INTENTS.has(parsed.intent || '')) {
-            parsed = { ...parsed, confidence: 'low' };
+        if (parsed.hedging && QUESTION_LIKE_INTENTS.has(parsed.intent || '')) {
+            parsed.confidence = 'low';
             if (!flags.includes('info_not_in_kb')) {
                 flags.push('info_not_in_kb');
             }
@@ -969,10 +974,9 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         // Check 5: Low confidence without info_not_in_kb flag
         // Per prompt rules: confidence=low means KB didn't answer the question → flag is mandatory.
         // Only for question-type intents — complaints, greetings, etc. can be low for other reasons.
-        const QUESTION_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
         if (
             parsed.confidence === 'low' &&
-            QUESTION_INTENTS.has(parsed.intent || '') &&
+            QUESTION_LIKE_INTENTS.has(parsed.intent || '') &&
             !flags.includes('info_not_in_kb')
         ) {
             flags.push('info_not_in_kb');
