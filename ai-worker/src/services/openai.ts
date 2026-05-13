@@ -179,6 +179,19 @@ IMPORTANT: Output a JSON object with these fields:
 - "reply": your reply text (string, no prefixes like "Reply:" or "Assistant:")
 - "intent": MUST be exactly one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT. No other values are accepted. Do NOT use "OTHER", "PRICE", "LOCATION", "HOURS", "PRODUCT", "INFO", or any custom intent.
 - "confidence": how confident you are in your reply ("high", "medium", or "low")
+- "requested_item_exists_in_kb": true if <business_knowledge> clearly contains enough information to directly answer the customer's request — even if the wording is paraphrased, generalized, or covers the customer's case under a broader category (e.g. "all accessories" covers a specific accessory). Set false ONLY when one of these holds: (a) the requested topic/category/service does not appear in KB at all, (b) answering would require inventing unsupported specifics, OR (c) your reply substitutes a different offering for what they actually asked.
+  Examples that are TRUE (KB has sufficient support, wording may differ):
+    - Customer "Do chargers have warranty?" + KB "All accessories include 1-year warranty" → true (KB covers the case under "accessories").
+    - Customer "Do you offer delivery?" + KB "Delivery available in Riyadh and Jeddah" → true.
+    - Customer "كم سعر دورة الإنجليزي؟" + KB "English course: 1500 SAR/month" → true.
+    - Customer "Where are you located?" + KB "Address: Riyadh, Al-Malaz district" → true.
+  Examples that are FALSE (KB doesn't cover the topic):
+    - Customer "هل عندكم دورة برمجة؟" + KB lists English/Office/Accounting only → false.
+    - Customer "what subscription packages do you have?" + KB lists per-course prices but no packages → false.
+    - Customer "shipping to Jeddah?" + KB only mentions Riyadh delivery → false.
+  This field MUST be present. For non-question intents (GREETING/COMPLIMENT/OFFENSIVE/SPAM_OR_IRRELEVANT), set true.
+- "used_related_substitution": true if your reply offers content related to but DIFFERENT from what the customer specifically asked for (e.g. you described products when they asked about courses, or you described per-course prices when they asked about subscription packages). false if your reply addresses the customer's exact request directly, or if no substitution applies. This field MUST be present.
+- "promises_follow_up": true if your reply tells the customer that you, the team, or anyone from the business will get back to them, follow up later, check and return, contact them, call them back, etc. — in ANY language (e.g. EN "I'll get back to you", AR "أرجعلك" / "سأتابع معك", SV "jag återkommer", DE "ich melde mich", FR "je reviens vers vous", ES "te contactaré", TR "size geri dönerim"). false otherwise. This field MUST be present.
 - "hedging": true if your reply uses any hedge or deflection phrase — e.g. "I'll check", "let me confirm", "سأتحقق", "خليني أتحقق", "تواصل معنا", "contact us", or anything that signals you're redirecting rather than answering. false otherwise. This field MUST be present.
 - "language": the language code of your reply text. MUST be exactly one of: "ar" (Arabic), "en" (English), "sv" (Swedish), "de" (German), "fr" (French), "es" (Spanish), "tr" (Turkish). For any other language, use "en". This MUST match the actual language of the "reply" string. For empty replies (OFFENSIVE/SPAM_OR_IRRELEVANT), use the customer's message language.
 - "flags": an array of flag strings if applicable (empty array [] if none):
@@ -350,6 +363,7 @@ export class OpenAIService {
                         top_p: config.openai.topP,
                         frequency_penalty: config.openai.frequencyPenalty,
                         presence_penalty: config.openai.presencePenalty,
+                        ...(config.openai.seed !== undefined ? { seed: config.openai.seed } : {}),
                         response_format: {
                             type: 'json_schema',
                             json_schema: {
@@ -358,11 +372,23 @@ export class OpenAIService {
                                 schema: {
                                     type: 'object',
                                     properties: {
-                                        reply: { type: 'string' },
+                                        // Field order matters: OpenAI strict json_schema is autoregressive,
+                                        // so diagnostic booleans must commit BEFORE `reply` is generated.
+                                        // That way the reply text is constrained by the KB-match decision
+                                        // instead of the model rationalising HIGH confidence after producing
+                                        // a fluent answer.
                                         intent: {
                                             type: 'string',
                                             enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
                                                    'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
+                                        },
+                                        requested_item_exists_in_kb: { type: 'boolean' },
+                                        used_related_substitution: { type: 'boolean' },
+                                        promises_follow_up: { type: 'boolean' },
+                                        hedging: { type: 'boolean' },
+                                        language: {
+                                            type: 'string',
+                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
                                         },
                                         confidence: {
                                             type: 'string',
@@ -372,13 +398,19 @@ export class OpenAIService {
                                             type: 'array',
                                             items: { type: 'string' },
                                         },
-                                        hedging: { type: 'boolean' },
-                                        language: {
-                                            type: 'string',
-                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
-                                        },
+                                        reply: { type: 'string' },
                                     },
-                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'language'] as const,
+                                    required: [
+                                        'intent',
+                                        'requested_item_exists_in_kb',
+                                        'used_related_substitution',
+                                        'promises_follow_up',
+                                        'hedging',
+                                        'language',
+                                        'confidence',
+                                        'flags',
+                                        'reply',
+                                    ] as const,
                                     additionalProperties: false,
                                 },
                             },
@@ -413,7 +445,7 @@ export class OpenAIService {
             const detectedLanguage = this.detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
-            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string };
+            let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; promises_follow_up?: boolean; requested_item_exists_in_kb?: boolean; used_related_substitution?: boolean; language?: string };
             try {
                 parsed = JSON.parse(content);
             } catch {
@@ -786,7 +818,7 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
      */
     /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
     validateReply(
-        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string },
+        parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; promises_follow_up?: boolean; requested_item_exists_in_kb?: boolean; used_related_substitution?: boolean; language?: string },
         request: GenerateRequest,
     ): { reply: string; intent?: string; confidence?: string; flags?: string[]; language?: string } {
         const flags = [...(parsed.flags || [])];
@@ -880,6 +912,47 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
                     inputLang,
                 }));
             }
+        }
+
+        // Check 3b: Schema-driven KB-match calibration. The model commits to
+        // `requested_item_exists_in_kb` and `used_related_substitution` BEFORE
+        // generating reply text (per the JSON-schema field order). We derive
+        // confidence and the info_not_in_kb flag deterministically from those
+        // booleans instead of trusting the model's `confidence` self-report,
+        // which conflates "my reply is fluent" with "the KB actually supports
+        // the asked-for thing". This is language-agnostic by construction.
+        const KB_MATCH_INTENTS = new Set(['QUESTION', 'BUSINESS_INQUIRY', 'PURCHASE_INTENT']);
+        if (KB_MATCH_INTENTS.has(parsed.intent || '')) {
+            if (parsed.requested_item_exists_in_kb === false) {
+                parsed.confidence = 'low';
+                if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
+            } else if (parsed.used_related_substitution) {
+                // KB has the topic but the model gave a substitute → cap at medium.
+                if (parsed.confidence === 'high') parsed.confidence = 'medium';
+                if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
+            }
+        }
+
+        // Check 3c: Deterministic follow-up promise gate.
+        // The model self-reports `promises_follow_up` per the schema. The schema
+        // reordering plus rule 130 (no follow-up promises) should keep this false
+        // most of the time — Check 3c is the safety net when the model still emits
+        // a follow-up phrase. We don't rewrite the reply (the schema gate usually
+        // prevents the leak in the first place); we just enforce calibration and
+        // emit observability so we can track how often the safety net actually
+        // catches something.
+        if (parsed.promises_follow_up && KB_MATCH_INTENTS.has(parsed.intent || '')) {
+            // Follow-up promises imply the model lacks KB-grounded certainty.
+            // Force low confidence regardless of the original self-report.
+            parsed.confidence = 'low';
+            if (!flags.includes('info_not_in_kb')) flags.push('info_not_in_kb');
+            if (!flags.includes('false_follow_up_detected')) flags.push('false_follow_up_detected');
+            console.log(JSON.stringify({
+                event: 'false_follow_up_caught',
+                intent: parsed.intent,
+                language: parsed.language,
+                prompt_version: PROMPT_VERSION,
+            }));
         }
 
         // Check 4: GPT-reported hedging — model signals its reply is a deflection ("I'll check", "contact us", etc.)
