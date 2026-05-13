@@ -159,6 +159,32 @@ describe('AI Service', () => {
             });
 
             expect(result.reply).toBe('Thank you for your comment!');
+            expect(result.language).toBe('en');
+            expect(result.model).toBe('fallback');
+        });
+
+        it('should return Arabic fallback when the customer wrote Arabic', async () => {
+            vi.mocked(axios.post).mockRejectedValue(new Error('Service unavailable'));
+
+            const result = await service.generateReply({
+                comment: 'العنوان',
+            });
+
+            expect(result.reply).toBe('شكراً لتعليقك!');
+            expect(result.language).toBe('ar');
+            expect(result.model).toBe('fallback');
+        });
+
+        it('should fall back to request.language for script-less input', async () => {
+            vi.mocked(axios.post).mockRejectedValue(new Error('Service unavailable'));
+
+            const result = await service.generateReply({
+                comment: '👋👋👋',
+                language: 'ar',
+            });
+
+            expect(result.reply).toBe('شكراً لتعليقك!');
+            expect(result.language).toBe('ar');
             expect(result.model).toBe('fallback');
         });
 

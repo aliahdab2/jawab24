@@ -13,6 +13,8 @@ import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
+import { t } from '../utils/i18n';
+import { detectLanguageCode } from '../utils/language';
 import { classifyFallback, classifyFallbackIntent } from './reply/fallbackClassifier';
 import { notificationService } from './notifications';
 import type { AiPipeline } from '../types/aiPipeline';
@@ -68,6 +70,13 @@ function getEmbeddingProvider(): OpenAIEmbeddingProvider | null {
         _embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
     }
     return _embeddingProvider;
+}
+
+function resolveFallbackLang(request: AiGenerateRequest): 'ar' | 'en' {
+    const detected = detectLanguageCode(request.comment);
+    if (detected === 'ar') return 'ar';
+    if (detected !== 'unknown') return 'en';
+    return request.language === 'ar' ? 'ar' : 'en';
 }
 
 export class AiService {
@@ -288,9 +297,10 @@ export class AiService {
 
         // If AI is disabled, return a default message
         if (!config.ai.enabled) {
+            const lang = resolveFallbackLang(request);
             return {
-                reply: 'Thank you for your comment! We will get back to you soon.',
-                language: request.language || 'en',
+                reply: t('commentFallback', lang),
+                language: lang,
                 cached: false,
                 model: 'disabled',
             };
@@ -525,9 +535,10 @@ export class AiService {
 
             // Return fallback response enriched with lightweight classification
             const fallback = classifyFallback(request.comment);
+            const lang = resolveFallbackLang(request);
             return {
-                reply: 'Thank you for your comment!',
-                language: request.language || 'en',
+                reply: t('commentFallback', lang),
+                language: lang,
                 cached: false,
                 model: 'fallback',
                 intent: fallback.intent,
