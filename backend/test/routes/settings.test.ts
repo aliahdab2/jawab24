@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify, { FastifyInstance } from 'fastify';
-import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
+import { MAX_TEMPLATE_MESSAGE_LENGTH, UpdateSettingsSchema } from '@jawab24/shared';
 import settingsRoutes from '../../src/routes/settings';
 
 // Mock database
@@ -1025,6 +1025,105 @@ describe('Settings Routes', () => {
 
             expect(response.statusCode).toBe(400);
             expect(response.body).toContain('awayMessage');
+        });
+    });
+
+    describe('PUT /settings - Shared schema round-trip (drift prevention)', () => {
+        // The whole point of moving `UpdateSettingsSchema` to @jawab24/shared is
+        // that the frontend and backend agree byte-for-byte on what a valid
+        // settings payload looks like. Unit-testing the schema in isolation
+        // (packages/shared) doesn't catch:
+        //   - zodToJsonSchema producing JSON the Fastify+Ajv pipeline rejects
+        //   - A stale dist/ from an unbuilt shared package
+        //   - The controller's re-validation diverging from the route's gate
+        //
+        // These tests use the SAME schema instance the frontend would use,
+        // construct payloads from it, and PUT through the real Fastify route.
+        // Any drift between layers fails here.
+
+        const setupAuthAndService = async () => {
+            const { authService } = await import('../../src/services/auth');
+            const { settingsService } = await import('../../src/services/settings');
+            vi.mocked(authService.verifyToken).mockReturnValue({ userId: 'user_123', facebookId: 'fb_123' });
+            vi.mocked(settingsService.updateSettings).mockImplementation(async (_id, data) => ({
+                id: 's', userId: 'user_123', ...data,
+            } as never));
+            return settingsService;
+        };
+
+        it('a payload the shared schema accepts is also accepted by the Fastify route', async () => {
+            const settingsService = await setupAuthAndService();
+
+            // Build a non-trivial payload from constructs the frontend uses.
+            const validPayload = {
+                dashboardLanguage: 'en',
+                commentsAutoReply: true,
+                replyStyle: 'professional' as const,
+                replyDelay: 30,
+                commentEscalationMinutes: 45,
+                messageEscalationMinutes: 30,
+                handoffPauseDurationMinutes: 15,
+                businessHoursStart: '09:00',
+                businessHoursEnd: '18:00',
+                timezone: 'Asia/Riyadh',
+                awayMessage: 'We\'ll get back to you soon.',
+                dualReplyNudge: 'Check your DMs',
+            };
+
+            // Sanity: the shared schema must accept it (proves we built a
+            // genuinely valid payload, not one that accidentally bypasses Zod).
+            const parsed = UpdateSettingsSchema.safeParse(validPayload);
+            expect(parsed.success).toBe(true);
+
+            // The Fastify route — using the schema converted via zodToJsonSchema
+            // — must also accept it. If the conversion drops/distorts any rule,
+            // this fails.
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: validPayload,
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(settingsService.updateSettings).toHaveBeenCalled();
+            const forwardedBody = vi.mocked(settingsService.updateSettings).mock.calls[0][1];
+            // Every key we sent should reach the controller intact (no silent
+            // stripping of fields the shared schema declares).
+            for (const key of Object.keys(validPayload) as Array<keyof typeof validPayload>) {
+                expect(forwardedBody).toHaveProperty(key);
+            }
+        });
+
+        // Bad payloads constructed deliberately so each row exercises a
+        // different shared-schema rule. If Fastify-side validation diverges
+        // from Zod-side validation for any of these, the round-trip fails.
+        it.each([
+            ['dualReplyNudge too long', { dualReplyNudge: 'a'.repeat(81) }, 'dualReplyNudge'],
+            ['replyDelay out of range', { replyDelay: 999 }, 'replyDelay'],
+            ['awayMessage too long', { awayMessage: 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1) }, 'awayMessage'],
+            ['greetingMessage too long', { greetingMessage: 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1) }, 'greetingMessage'],
+            ['brandVoiceNotes too long', { brandVoiceNotes: 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1) }, 'brandVoiceNotes'],
+            ['commentEscalationMinutes below 5', { commentEscalationMinutes: 1 }, 'commentEscalationMinutes'],
+            ['messageEscalationMinutes above 1440', { messageEscalationMinutes: 2000 }, 'messageEscalationMinutes'],
+            ['unknown enum commentReplyMode', { commentReplyMode: 'mixed' }, 'commentReplyMode'],
+            ['unknown enum replyStyle', { replyStyle: 'snarky' }, 'replyStyle'],
+        ])('%s — shared schema rejects AND Fastify route rejects with field name', async (_label, badPayload, fieldName) => {
+            await setupAuthAndService();
+
+            // Both layers must agree the payload is invalid.
+            const sharedResult = UpdateSettingsSchema.safeParse(badPayload);
+            expect(sharedResult.success).toBe(false);
+
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: badPayload,
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(response.body).toContain(fieldName);
         });
     });
 });
