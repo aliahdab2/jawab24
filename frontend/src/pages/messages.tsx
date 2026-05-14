@@ -136,6 +136,7 @@ const MessagesPage: NextPageWithLayout = () => {
     selectedConversation,
     setSelectedConversation,
     handleReply,
+    handleReplyToConversation,
     handlePause,
     handleResume,
     handleResolve,
@@ -607,6 +608,7 @@ const MessagesPage: NextPageWithLayout = () => {
           conversation={selectedConversation}
           onClose={closeConversation}
           onReply={handleReply}
+          onReplyToConversation={handleReplyToConversation}
           onResolve={handleResolve}
           onUnresolve={handleUnresolve}
           onPause={handlePause}

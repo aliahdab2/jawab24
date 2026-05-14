@@ -56,6 +56,14 @@ export default async function messagesRoutes(fastify: FastifyInstance) {
             },
         }, messagesController.reply);
 
+        protectedRoutes.post('/messages/conversation/:senderId/reply', {
+            schema: {
+                tags: ['Messages'],
+                summary: 'Send a manual DM into an existing conversation',
+                security: auth,
+            },
+        }, messagesController.replyToConversation);
+
         protectedRoutes.post('/messages/conversation/:senderId/pause', {
             schema: {
                 tags: ['Messages'],

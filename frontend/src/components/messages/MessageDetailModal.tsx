@@ -32,6 +32,9 @@ interface MessageDetailModalProps {
   conversation: Conversation;
   onClose: () => void;
   onReply: (messageId: string, text: string) => void;
+  /** Conversation-level send used when the customer never DM'd (e.g., dual-mode comment
+   *  reply). When the modal has no incoming-message target, handleSend falls back to this. */
+  onReplyToConversation: (senderId: string, pageId: string, text: string) => void;
   onResolve: (senderId: string, pageId: string) => void;
   onUnresolve?: (senderId: string, pageId: string) => void;
   onPause: (senderId: string, pageId: string) => void;
@@ -50,6 +53,7 @@ export function MessageDetailModal({
   conversation,
   onClose,
   onReply,
+  onReplyToConversation,
   onResolve,
   onUnresolve,
   onPause,
@@ -191,10 +195,16 @@ export function MessageDetailModal({
   };
 
   const handleSend = () => {
-    if (!replyText.trim()) return;
+    const trimmed = replyText.trim();
+    if (!trimmed) return;
     const targetId = getReplyTargetMessageId();
-    if (!targetId) return;
-    onReply(targetId, replyText.trim());
+    // Comment-only customers (dual-mode reply path) have no incoming message anchor;
+    // fall back to the conversation-level endpoint using the customer's senderId.
+    if (targetId) {
+      onReply(targetId, trimmed);
+    } else {
+      onReplyToConversation(conversation.senderId, pageId, trimmed);
+    }
     setReplyText('');
     setSendError(null);
   };

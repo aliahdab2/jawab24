@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { messagesService } from '../services/messages';
+import { conversationsService } from '../services/conversations';
 import { pagesService, isPageDisconnected } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { instagramService } from '../services/instagram';
@@ -273,6 +274,113 @@ export class MessagesController {
 
         return reply.send(outgoing);
         // Unexpected errors propagate to the global errorHandler, which reports them to Sentry.
+    }
+
+    /**
+     * Send a manual DM into an existing conversation without targeting a specific
+     * incoming message. Used when the customer never sent a DM (e.g., dual-mode comment
+     * reply) so /messages/:id/reply has no message id to anchor on. Tenant safety: a
+     * conversations row must already exist for (pageId, senderId), proving prior contact.
+     * POST /messages/conversation/:senderId/reply
+     */
+    async replyToConversation(
+        request: FastifyRequest<{
+            Params: { senderId: string };
+            Body: { pageId: string; replyText: string; clientMessageId?: string };
+        }>,
+        reply: FastifyReply
+    ) {
+        const req = request as WorkspaceRequest;
+        if (!req.workspaceId) {
+            return reply.status(401).send({ error: 'Unauthorized' });
+        }
+        const { senderId } = request.params;
+        const { pageId, replyText, clientMessageId } = request.body;
+
+        if (!pageId) {
+            return reply.status(400).send({ error: 'pageId is required' });
+        }
+        if (!replyText || replyText.trim().length === 0) {
+            return reply.status(400).send({ error: 'Reply text is required' });
+        }
+        if (clientMessageId !== undefined && (typeof clientMessageId !== 'string' || clientMessageId.length === 0 || clientMessageId.length > 64)) {
+            return reply.status(400).send({ error: 'Invalid clientMessageId' });
+        }
+
+        // 1. Verify workspace owns the page
+        const page = await pagesService.getPage(req.workspaceId, pageId);
+        if (!page) {
+            return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
+        }
+
+        // 2. Tenant safety — require an existing conversation on this page.
+        // Without this guard, the endpoint could send DMs to arbitrary FB users using a
+        // page the merchant happens to own. The conversation row proves prior contact
+        // (either the customer messaged us, or we DM'd them via a dual-mode comment reply).
+        const conversation = await conversationsService.findByPageAndSender(pageId, senderId);
+        if (!conversation) {
+            throw new AppError(
+                'No conversation exists for this recipient on this page.',
+                404,
+                'CONVERSATION_NOT_FOUND'
+            );
+        }
+
+        // 3. Idempotency dedupe — same contract as /messages/:id/reply.
+        if (clientMessageId) {
+            const existing = await messagesService.findOutgoingByClientMessageId(pageId, clientMessageId);
+            if (existing) {
+                return reply.send(existing);
+            }
+        }
+
+        // 4. Disconnect sentinel — merchant must reconnect FB; 409 keeps Sentry quiet.
+        if (isPageDisconnected(page)) {
+            throw new AppError(
+                'This page is disconnected. Please reconnect via Facebook to resume replies.',
+                409,
+                'PAGE_DISCONNECTED'
+            );
+        }
+
+        // 5. Send via the platform indicated by the conversation row.
+        const platform: FbPlatform = conversation.platform === 'instagram' ? 'instagram' : 'facebook';
+        try {
+            if (platform === 'instagram' && page.instagramAccountId) {
+                await instagramService.sendDirectMessage(
+                    page.instagramAccountId,
+                    senderId,
+                    replyText.trim(),
+                    page.accessToken
+                );
+            } else {
+                await facebookService.sendPrivateMessage(
+                    page.accessToken,
+                    senderId,
+                    replyText.trim()
+                );
+            }
+        } catch (error) {
+            if (error instanceof DmSendError) {
+                throw mapDmErrorToAppError(error, platform);
+            }
+            throw error;
+        }
+
+        // 6. Store the outgoing message. No markAsReplied — there is no incoming row.
+        const outgoing = await messagesService.storeOutgoingMessage(
+            pageId,
+            req.workspaceId,
+            senderId,
+            replyText.trim(),
+            'manual',
+            undefined,
+            undefined,
+            undefined,
+            clientMessageId,
+        );
+
+        return reply.send(outgoing);
     }
 
     /**

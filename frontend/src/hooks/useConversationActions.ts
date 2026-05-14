@@ -15,6 +15,7 @@ const REPLY_ERROR_KEYS: Record<string, string> = {
   PAGE_DISCONNECTED: 'replyFailedPageDisconnected',
   DM_TRANSIENT: 'replyFailedTransient',
   DM_PLATFORM_AUTH: 'replyFailedPlatformAuth',
+  CONVERSATION_NOT_FOUND: 'replyFailedConversationNotFound',
 };
 
 /**
@@ -127,6 +128,64 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     sendReplyMutation.mutate({ messageId, text });
   }, [sendReplyMutation]);
 
+  // --- Reply to conversation (no incoming message anchor) ---
+  // Used when the customer never DM'd us — only a dual-mode comment reply was sent,
+  // so there is no incoming message id to target. Calls the conversation-level endpoint
+  // with the customer's senderId directly. Otherwise behaves identically to sendReplyMutation:
+  // same idempotency key, same axios-transient retry, same success/error UX.
+  const sendConversationReplyMutation = useMutation({
+    mutationFn: async ({ senderId, pageId, text }: { senderId: string; pageId: string; text: string }) => {
+      const clientMessageId = newClientMessageId();
+      const MAX_ATTEMPTS = 3;
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          const res = await messagesApi.replyToConversation(senderId, { pageId, replyText: text, clientMessageId });
+          return res.data;
+        } catch (err) {
+          lastError = err;
+          const isAxiosTransportFailure = axios.isAxiosError(err) && (isNetworkError(err) || isTimeoutError(err));
+          if (attempt < MAX_ATTEMPTS && isAxiosTransportFailure) {
+            await new Promise((r) => setTimeout(r, 1000 * attempt));
+            continue;
+          }
+          throw err;
+        }
+      }
+      throw lastError;
+    },
+    onSuccess: (outgoingMessage) => {
+      const conv = selectedConversation;
+      if (conv) {
+        queryClient.setQueryData<Message[]>(
+          ['conversation', conv.senderId, conv.lastMessage.pageId],
+          (old) => old ? [...old, outgoingMessage] : [outgoingMessage],
+        );
+      }
+      setSelectedConversation(prev => prev ? {
+        ...prev,
+        messages: [...prev.messages, outgoingMessage],
+        lastMessage: outgoingMessage,
+      } : null);
+      invalidateShared();
+    },
+    onError: (error: Error) => {
+      const backendCode = getBackendErrorCode(error);
+      toast.error(t(replyErrorTranslationKey(backendCode, error)));
+      const expectedCodes = new Set(['DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT', 'DM_PLATFORM_AUTH', 'PAGE_DISCONNECTED', 'CONVERSATION_NOT_FOUND']);
+      if (!backendCode || !expectedCodes.has(backendCode)) {
+        captureError(error, 'Failed to send manual reply to conversation', {
+          tags: { feature: 'messages.replyToConversation' },
+          extra: { backendCode },
+        });
+      }
+    },
+  });
+
+  const handleReplyToConversation = useCallback((senderId: string, pageId: string, text: string) => {
+    sendConversationReplyMutation.mutate({ senderId, pageId, text });
+  }, [sendConversationReplyMutation]);
+
   // --- Pause ---
   const pauseMutation = useMutation({
     mutationFn: async ({ senderId, pageId }: { senderId: string; pageId: string }) => {
@@ -221,11 +280,12 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     selectedConversation,
     setSelectedConversation,
     handleReply,
+    handleReplyToConversation,
     handlePause,
     handleResume,
     handleResolve,
     handleUnresolve,
-    isReplying: sendReplyMutation.isPending,
+    isReplying: sendReplyMutation.isPending || sendConversationReplyMutation.isPending,
     isPausing: pauseMutation.isPending,
     isResuming: resumeMutation.isPending,
   };
