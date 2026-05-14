@@ -6,6 +6,7 @@ import { Button, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
+import axios from 'axios';
 import { settingsApi, api } from '@/lib/api';
 import {
   Save,
@@ -172,8 +173,27 @@ const SettingsPage: NextPageWithLayout = () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      captureError(error, 'Failed to save settings', { tags: { page: 'settings', action: 'save' } });
-      toast.error(tc('error'));
+      // Surface backend validation details (Fastify schema 400s include the
+      // exact failing field/rule) — both to Sentry, so we can fix the root
+      // cause, and to the user, so they get actionable feedback instead of
+      // a generic toast.
+      let validationMessage: string | undefined;
+      let validationCode: string | undefined;
+      let statusCode: number | undefined;
+      if (axios.isAxiosError(error)) {
+        statusCode = error.response?.status;
+        const data = error.response?.data as
+          | { message?: string; code?: string }
+          | undefined;
+        validationMessage = data?.message;
+        validationCode = data?.code;
+      }
+
+      captureError(error, 'Failed to save settings', {
+        tags: { page: 'settings', action: 'save' },
+        extra: { statusCode, validationCode, validationMessage },
+      });
+      toast.error(validationMessage || tc('error'));
     } finally {
       setSaving(false);
     }
