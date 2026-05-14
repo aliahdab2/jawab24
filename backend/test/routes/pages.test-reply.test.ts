@@ -255,4 +255,70 @@ describe('POST /pages/:id/test-reply', () => {
         // Counter-assertion: no phantom nudge, matches production behavior.
         expect(body.data.nudgeText).toBeNull();
     });
+
+    // Regression: the test modal is a multi-turn chat UI. Each turn was sent as an isolated
+    // single-message request, so vague follow-ups ("يعني متوفرة"؟) lost their topic context
+    // and RAG retrieved the wrong KB chunk. conversationHistory now flows through for DM.
+    it('should pass conversationHistory through to buildPlaygroundContext for DM', async () => {
+        const { buildPlaygroundContext } = await import('../../src/services/reply/playgroundContext');
+        const history = [
+            { role: 'user' as const, content: 'دورة إعداد محاسب مالي' },
+            { role: 'assistant' as const, content: 'سعرها 150,000 ل.س، أيام الخميس 3-5 مساءً.' },
+        ];
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'يعني متوفرة', channel: 'dm', conversationHistory: history },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(buildPlaygroundContext).toHaveBeenCalledWith(
+            expect.objectContaining({ conversationHistory: history }),
+        );
+    });
+
+    it('should drop conversationHistory for comment channel (single-turn in production)', async () => {
+        const { buildPlaygroundContext } = await import('../../src/services/reply/playgroundContext');
+        const history = [
+            { role: 'user' as const, content: 'first' },
+            { role: 'assistant' as const, content: 'reply' },
+        ];
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'follow up', channel: 'comment', conversationHistory: history },
+        });
+
+        expect(response.statusCode).toBe(200);
+        expect(buildPlaygroundContext).toHaveBeenCalledWith(
+            expect.objectContaining({ conversationHistory: undefined }),
+        );
+    });
+
+    it('should return 400 if conversationHistory exceeds 20 messages', async () => {
+        const history = Array.from({ length: 21 }, (_, i) => ({
+            role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+            content: `msg ${i}`,
+        }));
+
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'test', channel: 'dm', conversationHistory: history },
+        });
+
+        expect(response.statusCode).toBe(400);
+    });
+
+    it('should return 400 if conversationHistory is not an array', async () => {
+        const response = await app.inject({
+            method: 'POST',
+            url: '/pages/page_1/test-reply',
+            payload: { question: 'test', channel: 'dm', conversationHistory: 'not-an-array' },
+        });
+
+        expect(response.statusCode).toBe(400);
+    });
 });

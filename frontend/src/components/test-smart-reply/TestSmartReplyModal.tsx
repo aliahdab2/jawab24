@@ -88,11 +88,18 @@ export function TestSmartReplyModal({ page, onClose }: TestSmartReplyModalProps)
     setError(null);
     setLoading(true);
 
+    // Multi-turn context: send prior turns so vague follow-ups like "كم سعرها؟"
+    // resolve against the actual topic. DM only — comments are single-turn in production.
+    const conversationHistory = channel === 'dm'
+      ? messages.slice(-20).map(m => ({ role: m.role, content: m.content }))
+      : undefined;
+
     try {
       const { data } = await pagesApi.testReply(page.id, {
         question: trimmed,
         channel,
         ...(channel === 'comment' && postContext.trim() ? { postMessage: postContext.trim() } : {}),
+        ...(conversationHistory && conversationHistory.length > 0 ? { conversationHistory } : {}),
       });
 
       const result = data.data;
