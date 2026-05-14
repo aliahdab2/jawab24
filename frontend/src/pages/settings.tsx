@@ -307,7 +307,6 @@ const SettingsPage: NextPageWithLayout = () => {
             <ReplyStyleCard
               settings={settings}
               setSettings={setSettings}
-              fieldErrors={fieldErrors}
               hasChanges={hasChanges}
               onScrollToAdvanced={() => {
                 setShowAdvanced(true);
@@ -343,7 +342,7 @@ const SettingsPage: NextPageWithLayout = () => {
       {/* Advanced Settings */}
       {showAdvanced && (
         <div id="advanced-settings-body" className="space-y-4 sm:space-y-6 landscape:space-y-4 animate-slide-up pb-4 sm:pb-6">
-          <BusinessHoursCard settings={settings} setSettings={setSettings} fieldErrors={fieldErrors} currentTime={currentTime} />
+          <BusinessHoursCard settings={settings} setSettings={setSettings} currentTime={currentTime} />
 
           <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-start">
             <ReplyDelayCard settings={settings} setSettings={setSettings} />
@@ -358,9 +357,9 @@ const SettingsPage: NextPageWithLayout = () => {
               {t('subsectionCustomReplies')}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 landscape:grid-cols-2 gap-4 items-stretch">
-              <GreetingMessageCard settings={settings} setSettings={setSettings} fieldErrors={fieldErrors} />
+              <GreetingMessageCard settings={settings} setSettings={setSettings} />
               <div id="limit-fallback-message" className="scroll-mt-24 h-full">
-                <LimitFallbackMessageCard settings={settings} setSettings={setSettings} fieldErrors={fieldErrors} />
+                <LimitFallbackMessageCard settings={settings} setSettings={setSettings} />
               </div>
             </div>
           </div>

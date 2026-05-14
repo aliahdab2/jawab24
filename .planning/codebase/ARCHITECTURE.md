@@ -370,6 +370,16 @@ Each service is independently deployable but shares:
    - `ecommerce-tools.ts` — product parsing, KB enrichment helpers
    - `utils/` — locale detection, formatting, validation
 
+6. **API Request Schemas (Zod, single source of truth)**:
+   - `schemas/settings.ts` — `UpdateSettingsSchema` for `PUT /api/settings`.
+     The backend route converts it to a Fastify JSON schema with
+     `zod-to-json-schema`; the backend controller re-validates as defense
+     in depth; the frontend `settings.tsx` save handler uses it to
+     pre-validate before sending (no more round-trip 400s for known-bad
+     payloads). Adding a new field requires changing the schema in this
+     one place — Fastify, the controller, and the frontend pre-validator
+     all pick it up automatically.
+
 ## Data Flow
 
 ### User Sends Comment on Facebook (Happy Path)

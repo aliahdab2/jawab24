@@ -9,21 +9,15 @@ import { auth } from '../utils/swagger';
 // Strip the `$schema` metadata so Ajv doesn't load it as a meta-schema. Inline
 // (`$refStrategy: 'none'`) keeps the schema flat — Fastify validates a single
 // object body, not a $ref graph.
-//
-// The cast bypasses a TS2589 ("excessively deep type instantiation") from
-// zod-to-json-schema's overload when introspecting a `.strict()` schema that
-// contains a `.refine()` predicate (the timezone field). Runtime behavior is
-// unchanged — we only sidestep the type-level recursion.
-const generateBodySchema = zodToJsonSchema as unknown as (
-    schema: unknown,
-    options: { target: string; $refStrategy: string },
-) => Record<string, unknown>;
-
 const updateSettingsBodySchema = (() => {
-    const generated = generateBodySchema(UpdateSettingsSchema, {
+    // @ts-expect-error TS2589: zod-to-json-schema's overload triggers
+    // "excessively deep type instantiation" when introspecting a `.strict()`
+    // schema that contains a `.refine()` predicate (the timezone field).
+    // Runtime behavior is unchanged.
+    const generated = zodToJsonSchema(UpdateSettingsSchema, {
         target: 'jsonSchema7',
         $refStrategy: 'none',
-    });
+    }) as Record<string, unknown>;
     delete generated.$schema;
     return generated;
 })();
