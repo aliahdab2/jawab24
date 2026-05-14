@@ -6,6 +6,7 @@ import { Button, PageHeader, PageSkeleton } from '@/components/ui';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
+import axios from 'axios';
 import { settingsApi, api } from '@/lib/api';
 import {
   Save,
@@ -172,7 +173,28 @@ const SettingsPage: NextPageWithLayout = () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      captureError(error, 'Failed to save settings', { tags: { page: 'settings', action: 'save' } });
+      // Forward backend validation details (Fastify schema 400s include the
+      // exact failing field/rule) to Sentry so we can triage the root cause.
+      // We deliberately do NOT show the raw English message to the user —
+      // an AR-locale user shouldn't see "body/dualReplyNudge must NOT have
+      // more than 80 characters". Keep the localized toast; rely on Sentry
+      // extras for diagnosis.
+      let validationMessage: string | undefined;
+      let validationCode: string | undefined;
+      let statusCode: number | undefined;
+      if (axios.isAxiosError(error)) {
+        statusCode = error.response?.status;
+        const data = error.response?.data as
+          | { message?: string; code?: string }
+          | undefined;
+        validationMessage = data?.message;
+        validationCode = data?.code;
+      }
+
+      captureError(error, 'Failed to save settings', {
+        tags: { page: 'settings', action: 'save' },
+        extra: { statusCode, validationCode, validationMessage },
+      });
       toast.error(tc('error'));
     } finally {
       setSaving(false);
