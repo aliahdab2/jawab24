@@ -33,6 +33,73 @@ function mapDmErrorToAppError(error: DmSendError, platform: FbPlatform): AppErro
     }
 }
 
+/**
+ * Send a manual DM via FB/IG and persist the outgoing row. Shared by /messages/:id/reply
+ * and /messages/conversation/:senderId/reply. Both paths need identical:
+ *   - empty-token disconnect check (409 keeps Sentry quiet vs FB errors)
+ *   - FB/IG branching by platform
+ *   - DmSendError → AppError mapping
+ *   - storeOutgoingMessage with the merchant's idempotency key
+ *
+ * Callers are responsible for tenant verification, idempotency dedupe lookup, and
+ * any extra steps unique to their flow (e.g., markAsReplied on the incoming row).
+ */
+async function sendAndStoreManualReply(opts: {
+    workspaceId: string;
+    page: { accessToken: string; instagramAccountId: string | null };
+    platform: FbPlatform;
+    pageId: string;
+    recipientId: string;
+    replyText: string;
+    clientMessageId?: string;
+}) {
+    const { workspaceId, page, platform, pageId, recipientId, replyText, clientMessageId } = opts;
+
+    // Empty accessToken is the disconnect sentinel set by pages sync / tokenRefresh
+    // when FB revokes the page. Merchant must reconnect.
+    if (isPageDisconnected(page)) {
+        throw new AppError(
+            'This page is disconnected. Please reconnect via Facebook to resume replies.',
+            409,
+            'PAGE_DISCONNECTED'
+        );
+    }
+
+    try {
+        if (platform === 'instagram' && page.instagramAccountId) {
+            await instagramService.sendDirectMessage(
+                page.instagramAccountId,
+                recipientId,
+                replyText,
+                page.accessToken
+            );
+        } else {
+            await facebookService.sendPrivateMessage(
+                page.accessToken,
+                recipientId,
+                replyText
+            );
+        }
+    } catch (error) {
+        if (error instanceof DmSendError) {
+            throw mapDmErrorToAppError(error, platform);
+        }
+        throw error;
+    }
+
+    return messagesService.storeOutgoingMessage(
+        pageId,
+        workspaceId,
+        recipientId,
+        replyText,
+        'manual',
+        undefined,
+        undefined,
+        undefined,
+        clientMessageId,
+    );
+}
+
 export class MessagesController {
     /**
      * Get all messages with pagination
@@ -220,57 +287,22 @@ export class MessagesController {
             }
         }
 
-        // 3. Send the reply via the appropriate platform API.
-        // Classify Graph API errors so expected conditions (window expired, customer blocked,
-        // rate limits) return proper 4xx/5xx codes rather than generic 500s that flood Sentry.
+        // 3. Send via FB/IG (with classified error mapping) and store the outgoing row.
+        const trimmed = replyText.trim();
         const platform: FbPlatform = message.platform === 'instagram' ? 'instagram' : 'facebook';
-        // Empty accessToken is the disconnect sentinel (set by pages sync / tokenRefresh
-        // when FB revokes the page). Merchant must reconnect — return 409 so the frontend
-        // can prompt and Sentry isn't flooded with 5xx noise.
-        if (isPageDisconnected(page)) {
-            throw new AppError(
-                'This page is disconnected. Please reconnect via Facebook to resume replies.',
-                409,
-                'PAGE_DISCONNECTED'
-            );
-        }
-        try {
-            if (platform === 'instagram' && page.instagramAccountId) {
-                await instagramService.sendDirectMessage(
-                    page.instagramAccountId,
-                    message.senderId,
-                    replyText.trim(),
-                    page.accessToken
-                );
-            } else {
-                await facebookService.sendPrivateMessage(
-                    page.accessToken,
-                    message.senderId,
-                    replyText.trim()
-                );
-            }
-        } catch (error) {
-            if (error instanceof DmSendError) {
-                throw mapDmErrorToAppError(error, platform);
-            }
-            throw error;
-        }
-
-        // 4. Mark the original message as replied (manual)
-        await messagesService.markAsReplied(message.id, replyText.trim(), 'manual');
-
-        // 5. Store the outgoing message (with idempotency key if the client supplied one)
-        const outgoing = await messagesService.storeOutgoingMessage(
-            message.pageId,
-            req.workspaceId,
-            message.senderId,
-            replyText.trim(),
-            'manual',
-            undefined,
-            undefined,
-            undefined,
+        const outgoing = await sendAndStoreManualReply({
+            workspaceId: req.workspaceId,
+            page,
+            platform,
+            pageId: message.pageId,
+            recipientId: message.senderId,
+            replyText: trimmed,
             clientMessageId,
-        );
+        });
+
+        // 4. Mark the original message as replied (manual). Only this path has an
+        // incoming row to mark — the conversation-level send skips this step.
+        await messagesService.markAsReplied(message.id, trimmed, 'manual');
 
         return reply.send(outgoing);
         // Unexpected errors propagate to the global errorHandler, which reports them to Sentry.
@@ -334,51 +366,19 @@ export class MessagesController {
             }
         }
 
-        // 4. Disconnect sentinel — merchant must reconnect FB; 409 keeps Sentry quiet.
-        if (isPageDisconnected(page)) {
-            throw new AppError(
-                'This page is disconnected. Please reconnect via Facebook to resume replies.',
-                409,
-                'PAGE_DISCONNECTED'
-            );
-        }
-
-        // 5. Send via the platform indicated by the conversation row.
+        // 4. Send via FB/IG (with classified error mapping) and store the outgoing row.
+        // Platform comes from the conversation row, not a message. No markAsReplied —
+        // there is no incoming row to mark.
         const platform: FbPlatform = conversation.platform === 'instagram' ? 'instagram' : 'facebook';
-        try {
-            if (platform === 'instagram' && page.instagramAccountId) {
-                await instagramService.sendDirectMessage(
-                    page.instagramAccountId,
-                    senderId,
-                    replyText.trim(),
-                    page.accessToken
-                );
-            } else {
-                await facebookService.sendPrivateMessage(
-                    page.accessToken,
-                    senderId,
-                    replyText.trim()
-                );
-            }
-        } catch (error) {
-            if (error instanceof DmSendError) {
-                throw mapDmErrorToAppError(error, platform);
-            }
-            throw error;
-        }
-
-        // 6. Store the outgoing message. No markAsReplied — there is no incoming row.
-        const outgoing = await messagesService.storeOutgoingMessage(
+        const outgoing = await sendAndStoreManualReply({
+            workspaceId: req.workspaceId,
+            page,
+            platform,
             pageId,
-            req.workspaceId,
-            senderId,
-            replyText.trim(),
-            'manual',
-            undefined,
-            undefined,
-            undefined,
+            recipientId: senderId,
+            replyText: replyText.trim(),
             clientMessageId,
-        );
+        });
 
         return reply.send(outgoing);
     }
