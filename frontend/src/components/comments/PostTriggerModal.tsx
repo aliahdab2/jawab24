@@ -151,6 +151,8 @@ export function PostTriggerModal({
             dir="auto"
             rows={4}
             maxLength={1000}
+            className="resize-none leading-relaxed"
+            style={{ fieldSizing: 'content', minHeight: '120px', maxHeight: '280px' } as React.CSSProperties}
           />
         </FormField>
       </div>
