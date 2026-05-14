@@ -8,96 +8,94 @@ import {
 } from '../validation';
 
 describe('extractPhoneFromText', () => {
-  describe('single number', () => {
-    it('extracts a Syrian mobile in national format', () => {
-      expect(extractPhoneFromText('رقمي 0935924472')).toBe('+963935924472');
+  describe('single number — preserves what the customer typed', () => {
+    it('extracts a national-format mobile as raw digits', () => {
+      expect(extractPhoneFromText('رقمي 0935924472')).toBe('0935924472');
     });
 
-    it('extracts a Syrian mobile in international format', () => {
-      expect(extractPhoneFromText('Call +963 93 592 4472 please')).toBe('+963935924472');
-    });
-
-    it('extracts a Syrian landline (Damascus)', () => {
-      expect(extractPhoneFromText('الأرضي 011 212 4470')).toBe('+963112124470');
+    it('extracts an international-format mobile when typed contiguously', () => {
+      expect(extractPhoneFromText('Call +963935924472 please')).toBe('+963935924472');
     });
 
     it('handles Arabic-Indic digits', () => {
-      expect(extractPhoneFromText('رقمي ٠٩٣٥٩٢٤٤٧٢')).toBe('+963935924472');
+      expect(extractPhoneFromText('رقمي ٠٩٣٥٩٢٤٤٧٢')).toBe('0935924472');
+    });
+
+    it('strips inline formatting characters within a contiguous run', () => {
+      expect(extractPhoneFromText('Call 555-123-4567 now')).toBe('5551234567');
     });
 
     it('returns null when no phone is present', () => {
       expect(extractPhoneFromText('شكراً جزيلاً')).toBeNull();
     });
 
-    it('does not match a 19-digit garbage string', () => {
-      // The exact mangled value the old regex produced for two-number input.
-      // libphonenumber should reject this as it doesn't fit any country's plan.
+    it('rejects an overlong digit string (>16 chars)', () => {
+      // 19 contiguous digits — no real number plan goes that long, this is
+      // either garbage or two welded numbers without a separator.
       expect(extractPhoneFromText('0935924472011212447')).toBeNull();
+    });
+
+    it('rejects a digit run that is too short to be a phone', () => {
+      // 6 digits — likely an order number or year + month, not a phone.
+      expect(extractPhoneFromText('reference 123456')).toBeNull();
     });
   });
 
-  describe('two numbers in one message — regression for mobile+landline welding', () => {
+  describe('two numbers in one message — regression for #81 welding bug', () => {
     it('does NOT weld a mobile and a landline separated by a space', () => {
+      // The original pre-#81 regex had \s inside the character class, which
+      // let it span whitespace and weld "0935924472 0112124470" into the
+      // 19-digit string "09359244720112124470". Removing \s from the class
+      // forces two separate matches.
       const result = extractPhoneFromText('للتواصل 0935924472 0112124470');
-      // The bug: old regex returned "0935924472011212447" (19 digits, garbage).
-      // Fixed: we return one valid number, never the concatenation.
-      expect(result).not.toBe('0935924472011212447');
-      expect(result).not.toBe('+9630935924472011212447');
-      expect(['+963935924472', '+963112124470']).toContain(result);
+      expect(result).not.toBe('09359244720112124470');
+      expect(['0935924472', '0112124470']).toContain(result);
     });
 
     it('extracts both numbers via extractPhonesFromText', () => {
       const phones = extractPhonesFromText('للتواصل 0935924472 0112124470');
-      expect(phones).toHaveLength(2);
-      expect(phones).toContain('+963935924472');
-      expect(phones).toContain('+963112124470');
+      expect(phones).toEqual(['0935924472', '0112124470']);
     });
 
     it('extracts both numbers when separated by Arabic prose', () => {
       const phones = extractPhonesFromText(
         'موبايلي 0935924472 وأرضي البيت 0112124470 للاستفسار',
       );
-      expect(phones).toContain('+963935924472');
-      expect(phones).toContain('+963112124470');
+      expect(phones).toEqual(['0935924472', '0112124470']);
     });
 
-    it('deduplicates identical numbers in the same message', () => {
+    it('deduplicates identical digit strings in the same message', () => {
+      expect(extractPhonesFromText('0935924472 أو 0935924472')).toEqual(['0935924472']);
+    });
+
+    it('treats national-format and international-format of the same number as distinct strings', () => {
+      // Without a country guess we cannot canonicalize, so the customer typing
+      // both forms produces two records. The merchant resolves it visually.
       const phones = extractPhonesFromText('0935924472 أو +963935924472');
-      expect(phones).toEqual(['+963935924472']);
+      expect(phones).toEqual(['0935924472', '+963935924472']);
     });
   });
 
-  describe('other Arabic countries', () => {
-    it('extracts a Saudi mobile when default country override is used', () => {
-      expect(extractPhoneFromText('+966501234567')).toBe('+966501234567');
+  describe('country-agnostic capture (regression: prod customer leads lost)', () => {
+    // Damascus-based workspace was silently dropping every non-Syrian DM
+    // because the libphonenumber gate rejected any digits that didn't fit
+    // Syria's plan. The fix: stop guessing country at the gate; capture
+    // whatever the customer typed and let the merchant interpret it.
+    it("captures an 11-digit Egyptian mobile (didn't fit Syria's 10-digit plan)", () => {
+      // The exact missing lead — 0989342323... is an Egyptian mobile pattern.
+      expect(extractPhoneFromText('الرقم ٠٩٨٩٣٤٢٣٤٢٣ الموبايل')).toBe('09893423423');
     });
 
-    it('accepts an explicit defaultCountry override', () => {
-      expect(extractPhoneFromText('0501234567', 'SA')).toBe('+966501234567');
+    it('captures a Saudi national-format mobile', () => {
+      expect(extractPhoneFromText('رقمي 0501234567')).toBe('0501234567');
     });
-  });
-});
 
-describe('isValidPhone', () => {
-  it('accepts E.164 phones', () => {
-    expect(isValidPhone('+963935924472')).toBe(true);
-    expect(isValidPhone('+966501234567')).toBe(true);
-  });
-
-  it('rejects non-E.164', () => {
-    expect(isValidPhone('0935924472')).toBe(false);
-    expect(isValidPhone('0935924472011212447')).toBe(false);
-  });
-});
-
-describe('isArabicPhone', () => {
-  it('returns true for Syrian/Saudi numbers', () => {
-    expect(isArabicPhone('+963935924472')).toBe(true);
-    expect(isArabicPhone('+966501234567')).toBe(true);
-  });
-
-  it('returns false for non-Arabic countries', () => {
-    expect(isArabicPhone('+15551234567')).toBe(false);
+    it("rejects garbage that's outside any phone-length range", () => {
+      // 13 digits — within range, so it IS captured as a phone candidate.
+      // The merchant will see it's malformed and discard the lead; we just
+      // refuse to silently drop the entire row over a digit-count guess.
+      expect(extractPhoneFromText('الارضي ٠١٢٢٢١٢٣٢١٢٣٤')).toBe('0122212321234');
+    });
   });
 });
 
@@ -106,7 +104,31 @@ describe('normalizeArabicIndic', () => {
     expect(normalizeArabicIndic('٠١٢٣٤٥٦٧٨٩')).toBe('0123456789');
   });
 
-  it('leaves ASCII digits untouched', () => {
-    expect(normalizeArabicIndic('hello 123')).toBe('hello 123');
+  it('leaves non-digit characters unchanged', () => {
+    expect(normalizeArabicIndic('رقمي ٠٩٣٥')).toBe('رقمي 0935');
+  });
+});
+
+describe('isArabicPhone', () => {
+  it('recognizes Syrian country code', () => {
+    expect(isArabicPhone('+963935924472')).toBe(true);
+  });
+
+  it('recognizes Egyptian country code', () => {
+    expect(isArabicPhone('+20989342323')).toBe(true);
+  });
+
+  it('rejects non-Arabic country codes', () => {
+    expect(isArabicPhone('+14155551234')).toBe(false);
+  });
+});
+
+describe('isValidPhone', () => {
+  it('accepts E.164', () => {
+    expect(isValidPhone('+963935924472')).toBe(true);
+  });
+
+  it('rejects national format', () => {
+    expect(isValidPhone('0935924472')).toBe(false);
   });
 });

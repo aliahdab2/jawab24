@@ -44,50 +44,56 @@ export function normalizeArabicIndic(text: string): string {
   return text.replace(/[٠١٢٣٤٥٦٧٨٩]/g, d => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
 }
 
-import { findPhoneNumbersInText, type CountryCode } from 'libphonenumber-js';
-
 /**
- * Default country used to interpret nationally-formatted phone numbers
- * (e.g. "0935924472" → "+963935924472"). The lead extractor's customer base
- * is predominantly Syrian; callers can override per-workspace later.
- */
-const DEFAULT_PHONE_COUNTRY: CountryCode = 'SY';
-
-/**
- * Extract every phone-like string from free text and return them as E.164.
+ * Match a phone-like digit run anywhere in text — no country, no plan validation.
  *
- * Why this exists: customers regularly share both a mobile and a landline in
- * one message (Levant convention). The previous regex-based implementation
- * spanned whitespace between numbers and welded them into a single bogus
- * 19-digit string. libphonenumber-js tokenizes correctly and validates each
- * candidate against country-specific number plans.
+ * Both the customer typing the number and the merchant reading it know what
+ * country it belongs to; we have no business second-guessing them. Storing
+ * exactly what the customer wrote (digits only, formatting stripped) keeps
+ * the lead record faithful and works with `tel:` everywhere. For WhatsApp
+ * click-to-chat the customer needs to have included `+countrycode` themselves.
+ *
+ * Shape: optional `+` or `00`, then 8–16 chars of digits / `- . ( )` bounded
+ * by digits on both ends. Whitespace is NOT permitted inside the digit run —
+ * that's the only thing that distinguishes this from the pre-#81 regex and
+ * is what prevented two adjacent numbers from being welded into a 19-digit
+ * garbage string. The size bound (8–16) is wide enough for every real-world
+ * national/international format and tight enough to reject overlong digit
+ * strings.
  */
-export function extractPhonesFromText(
-  text: string,
-  defaultCountry: CountryCode = DEFAULT_PHONE_COUNTRY,
-): string[] {
+const PHONE_LIKE_REGEX = /(?<!\d)(?:\+|00)?\d[\d\-().]{6,14}\d(?!\d)/g;
+
+/** Strip the formatting characters allowed inside the regex, preserve `+`. */
+function stripFormatting(s: string): string {
+  return s.replace(/[-().]/g, '');
+}
+
+/**
+ * Extract every phone-like digit run from free text, in the order they appear.
+ *
+ * Returns the strings exactly as the customer wrote them (Arabic-Indic digits
+ * normalized to ASCII, formatting characters removed, `+` and `00` prefixes
+ * preserved). Duplicates within the same message are de-duplicated.
+ */
+export function extractPhonesFromText(text: string): string[] {
   const normalized = normalizeArabicIndic(text);
-  const matches = findPhoneNumbersInText(normalized, defaultCountry);
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const m of matches) {
-    const e164 = m.number.number;
-    if (!seen.has(e164)) {
-      seen.add(e164);
-      result.push(e164);
+  for (const m of normalized.matchAll(PHONE_LIKE_REGEX)) {
+    const cleaned = stripFormatting(m[0]);
+    if (!seen.has(cleaned)) {
+      seen.add(cleaned);
+      result.push(cleaned);
     }
   }
   return result;
 }
 
 /**
- * Extract the first valid phone from free text as E.164 (e.g. "+963935924472").
- * Returns null if no valid number is found.
- * Used for lead detection only.
+ * Extract the first phone-like digit run from free text.
+ * Returns null if no phone-like sequence is present.
+ * Used as the cheap gate before AI lead extraction.
  */
-export function extractPhoneFromText(
-  text: string,
-  defaultCountry: CountryCode = DEFAULT_PHONE_COUNTRY,
-): string | null {
-  return extractPhonesFromText(text, defaultCountry)[0] ?? null;
+export function extractPhoneFromText(text: string): string | null {
+  return extractPhonesFromText(text)[0] ?? null;
 }
