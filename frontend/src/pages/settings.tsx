@@ -173,10 +173,12 @@ const SettingsPage: NextPageWithLayout = () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      // Surface backend validation details (Fastify schema 400s include the
-      // exact failing field/rule) — both to Sentry, so we can fix the root
-      // cause, and to the user, so they get actionable feedback instead of
-      // a generic toast.
+      // Forward backend validation details (Fastify schema 400s include the
+      // exact failing field/rule) to Sentry so we can triage the root cause.
+      // We deliberately do NOT show the raw English message to the user —
+      // an AR-locale user shouldn't see "body/dualReplyNudge must NOT have
+      // more than 80 characters". Keep the localized toast; rely on Sentry
+      // extras for diagnosis.
       let validationMessage: string | undefined;
       let validationCode: string | undefined;
       let statusCode: number | undefined;
@@ -193,7 +195,7 @@ const SettingsPage: NextPageWithLayout = () => {
         tags: { page: 'settings', action: 'save' },
         extra: { statusCode, validationCode, validationMessage },
       });
-      toast.error(validationMessage || tc('error'));
+      toast.error(tc('error'));
     } finally {
       setSaving(false);
     }
