@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockCreate = vi.fn();
 
+class MockAPIError extends Error {
+    status: number;
+    constructor(status: number, message: string) {
+        super(message);
+        this.status = status;
+    }
+}
+
 vi.mock('openai', () => {
     const MockOpenAI = vi.fn().mockImplementation(() => ({
         audio: {
@@ -12,11 +20,30 @@ vi.mock('openai', () => {
     }));
     return {
         default: MockOpenAI,
+        APIError: MockAPIError,
         toFile: vi.fn().mockImplementation((buffer: Buffer, name: string) =>
             Promise.resolve({ name, size: buffer.length }),
         ),
     };
 });
+
+/** Build a Response with audio/mp4 Content-Type so the sniff-or-header guard passes. */
+function audioResponse(body: Buffer | null, status = 200): Response {
+    return new Response(body, {
+        status,
+        headers: { 'content-type': 'audio/mp4' },
+    });
+}
+
+/** Build a buffer with a valid MP4 ftyp magic so sniffAudioFormat detects it. */
+function mp4Buffer(extra = 'payload'): Buffer {
+    return Buffer.concat([
+        Buffer.from([0, 0, 0, 0x20]), // box size
+        Buffer.from('ftypmp42', 'ascii'),
+        Buffer.from('\0\0\0\0', 'ascii'),
+        Buffer.from(extra, 'ascii'),
+    ]);
+}
 
 vi.mock('../../src/config', () => ({
     config: {
@@ -39,10 +66,7 @@ describe('TranscriptionService', () => {
     });
 
     it('should return transcribed text on success', async () => {
-        const audioBuffer = Buffer.from('fake-audio-data');
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-            new Response(audioBuffer, { status: 200 }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
         mockCreate.mockResolvedValueOnce({ text: 'كم سعر المنتج؟' });
 
         const result = await transcriptionService.transcribe('https://example.com/voice.mp4', 'ar');
@@ -59,9 +83,7 @@ describe('TranscriptionService', () => {
     });
 
     it('should not include a prompt parameter (avoids hallucination)', async () => {
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-            new Response(Buffer.from('audio'), { status: 200 }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
         mockCreate.mockResolvedValueOnce({ text: 'مرحبا' });
 
         await transcriptionService.transcribe('https://example.com/voice.mp4', 'ar');
@@ -72,9 +94,7 @@ describe('TranscriptionService', () => {
     });
 
     it('should omit prompt and language when no languageHint provided', async () => {
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-            new Response(Buffer.from('audio'), { status: 200 }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
         mockCreate.mockResolvedValueOnce({ text: 'hello' });
 
         await transcriptionService.transcribe('https://example.com/voice.mp4');
@@ -96,9 +116,7 @@ describe('TranscriptionService', () => {
     });
 
     it('should return null when transcription returns empty text', async () => {
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-            new Response(Buffer.from('audio'), { status: 200 }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
         mockCreate.mockResolvedValueOnce({ text: '  ' });
 
         const result = await transcriptionService.transcribe('https://example.com/silence.mp4');
@@ -107,9 +125,7 @@ describe('TranscriptionService', () => {
     });
 
     it('should return null when transcription API throws', async () => {
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-            new Response(Buffer.from('audio'), { status: 200 }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
         mockCreate.mockRejectedValueOnce(new Error('OpenAI API error'));
 
         const result = await transcriptionService.transcribe('https://example.com/voice.mp4');
@@ -137,9 +153,7 @@ describe('TranscriptionService', () => {
     });
 
     it('should always use gpt-4o-mini-transcribe regardless of quality param', async () => {
-        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-            new Response(Buffer.from('audio'), { status: 200 }),
-        );
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
         mockCreate.mockResolvedValueOnce({ text: 'transcribed text' });
 
         await transcriptionService.transcribe('https://example.com/voice.mp4', 'ar', 'accurate');
@@ -147,6 +161,62 @@ describe('TranscriptionService', () => {
         expect(mockCreate).toHaveBeenCalledWith(
             expect.objectContaining({ model: 'gpt-4o-mini-transcribe' }),
             expect.any(Object),
+        );
+    });
+
+    it('should reject HTML error pages from CDN without calling Whisper', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            new Response(Buffer.from('<!DOCTYPE html><html>Access denied</html>'), {
+                status: 200,
+                headers: { 'content-type': 'text/html' },
+            }),
+        );
+
+        const result = await transcriptionService.transcribe('https://example.com/expired.mp4');
+
+        expect(result).toBeNull();
+        expect(mockCreate).not.toHaveBeenCalled();
+    });
+
+    it('should swallow OpenAI 400 errors without alerting Sentry', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
+        mockCreate.mockRejectedValueOnce(new MockAPIError(400, 'Audio file might be corrupted'));
+
+        const { captureError } = await import('../../src/utils/sentryHelpers');
+        vi.mocked(captureError).mockClear();
+        const result = await transcriptionService.transcribe('https://example.com/corrupt.mp4');
+
+        expect(result).toBeNull();
+        expect(captureError).not.toHaveBeenCalled();
+    });
+
+    it('should still report non-400 OpenAI errors to Sentry', async () => {
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(audioResponse(mp4Buffer()));
+        mockCreate.mockRejectedValueOnce(new MockAPIError(500, 'Server error'));
+
+        const { captureError } = await import('../../src/utils/sentryHelpers');
+        vi.mocked(captureError).mockClear();
+        const result = await transcriptionService.transcribe('https://example.com/voice.mp4');
+
+        expect(result).toBeNull();
+        expect(captureError).toHaveBeenCalled();
+    });
+
+    it('should pick the file extension from sniffed magic bytes', async () => {
+        const oggBuffer = Buffer.concat([Buffer.from('OggS', 'ascii'), Buffer.alloc(20)]);
+        vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+            // Wrong Content-Type on purpose — sniffing should win.
+            new Response(oggBuffer, { status: 200, headers: { 'content-type': 'audio/mp4' } }),
+        );
+        mockCreate.mockResolvedValueOnce({ text: 'ok' });
+
+        await transcriptionService.transcribe('https://example.com/voice');
+
+        const { toFile } = await import('openai');
+        expect(toFile).toHaveBeenCalledWith(
+            expect.any(Buffer),
+            'voice.ogg',
+            { type: 'audio/ogg' },
         );
     });
 });

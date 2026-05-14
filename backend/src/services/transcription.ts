@@ -1,4 +1,4 @@
-import OpenAI, { toFile } from 'openai';
+import OpenAI, { APIError, toFile } from 'openai';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 
@@ -45,7 +45,49 @@ function mimeToExtension(mimeType: string): string {
     if (mimeType.includes('ogg')) return 'ogg';
     if (mimeType.includes('mpeg') || mimeType.includes('mp3')) return 'mp3';
     if (mimeType.includes('wav')) return 'wav';
+    if (mimeType.includes('aac')) return 'aac';
+    if (mimeType.includes('m4a') || mimeType.includes('x-m4a')) return 'm4a';
     return 'mp4';
+}
+
+/**
+ * Sniff the audio container from the buffer's magic bytes. Facebook's CDN
+ * occasionally serves voice attachments with a generic or wrong Content-Type,
+ * and Whisper rejects the file if extension/MIME don't match the actual bytes.
+ * Returns null if the buffer is not a recognized audio container (e.g. HTML
+ * error page returned by an expired CDN URL).
+ */
+function sniffAudioFormat(buffer: Buffer): { ext: string; mime: string } | null {
+    if (buffer.length < 12) return null;
+
+    // ISO BMFF (mp4/m4a): bytes 4..7 === 'ftyp'
+    if (buffer.subarray(4, 8).toString('ascii') === 'ftyp') {
+        const brand = buffer.subarray(8, 12).toString('ascii');
+        if (brand.startsWith('M4A') || brand === 'mp42') return { ext: 'm4a', mime: 'audio/mp4' };
+        return { ext: 'mp4', mime: 'audio/mp4' };
+    }
+    // OGG: 'OggS'
+    if (buffer.subarray(0, 4).toString('ascii') === 'OggS') return { ext: 'ogg', mime: 'audio/ogg' };
+    // EBML (WebM/Matroska): 1A 45 DF A3
+    if (buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3) {
+        return { ext: 'webm', mime: 'audio/webm' };
+    }
+    // RIFF/WAVE
+    if (
+        buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        buffer.subarray(8, 12).toString('ascii') === 'WAVE'
+    ) {
+        return { ext: 'wav', mime: 'audio/wav' };
+    }
+    // MP3: 'ID3' tag or MPEG sync (0xFF 0xFB/0xF3/0xF2)
+    if (buffer.subarray(0, 3).toString('ascii') === 'ID3') return { ext: 'mp3', mime: 'audio/mpeg' };
+    if (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0) {
+        // AAC ADTS shares the sync word; layer bits distinguish them
+        const layer = (buffer[1] >> 1) & 0x03;
+        if (layer === 0) return { ext: 'aac', mime: 'audio/aac' };
+        return { ext: 'mp3', mime: 'audio/mpeg' };
+    }
+    return null;
 }
 
 class TranscriptionService {
@@ -79,6 +121,7 @@ class TranscriptionService {
             const downloadTimer = setTimeout(() => downloadController.abort(), DOWNLOAD_TIMEOUT_MS);
 
             let audioBuffer: Buffer;
+            let contentType: string;
             try {
                 const response = await fetch(audioUrl, { signal: downloadController.signal });
                 if (!response.ok) {
@@ -100,6 +143,7 @@ class TranscriptionService {
                     return null;
                 }
 
+                contentType = (response.headers.get('content-type') || '').toLowerCase();
                 audioBuffer = Buffer.from(await response.arrayBuffer());
             } finally {
                 clearTimeout(downloadTimer);
@@ -107,12 +151,34 @@ class TranscriptionService {
 
             if (audioBuffer.length === 0 || audioBuffer.length > MAX_AUDIO_BYTES) return null;
 
+            // Validate that what we downloaded actually looks like audio. FB CDN
+            // occasionally returns HTML error pages or truncated buffers with a
+            // misleading Content-Type; sending those to Whisper produces a 400.
+            const sniffed = sniffAudioFormat(audioBuffer);
+            if (!sniffed && !contentType.startsWith('audio/') && !contentType.startsWith('video/')) {
+                // Not audio at all (likely HTML/JSON error page). Skip without
+                // paging Sentry, but warn so a wider CDN incident still leaves
+                // a trail in app logs.
+                console.warn('[transcription] skipped non-audio response', {
+                    contentType,
+                    byteLength: audioBuffer.length,
+                    firstBytes: audioBuffer.subarray(0, 16).toString('hex'),
+                });
+                return null;
+            }
+
+            // Prefer magic-byte sniffing over the Content-Type header — the bytes
+            // are authoritative. Fall back to the header when sniffing is
+            // inconclusive (e.g. an unrecognized codec inside an audio/* type).
+            const filename = sniffed ? `voice.${sniffed.ext}` : `voice.${mimeToExtension(contentType)}`;
+            const fileType = sniffed ? sniffed.mime : (contentType || 'audio/mp4');
+
             // 2. Send to transcription API with its own timeout
             const transcribeController = new AbortController();
             const transcribeTimer = setTimeout(() => transcribeController.abort(), WHISPER_TIMEOUT_MS);
 
             try {
-                const file = await toFile(audioBuffer, 'voice.mp4', { type: 'audio/mp4' });
+                const file = await toFile(audioBuffer, filename, { type: fileType });
                 const transcription = await client.audio.transcriptions.create(
                     buildTranscribeParams(file, languageHint),
                     { signal: transcribeController.signal },
@@ -126,6 +192,17 @@ class TranscriptionService {
                 clearTimeout(transcribeTimer);
             }
         } catch (error) {
+            // Whisper 400 means the audio bytes themselves are bad (truncated,
+            // unsupported codec, etc.). We already fall back gracefully, so
+            // don't page Sentry — but warn so a sudden spike (e.g. our own
+            // buffer handling regresses) remains visible in app logs.
+            if (error instanceof APIError && error.status === 400) {
+                console.warn('[transcription] OpenAI 400, returning null', {
+                    message: error.message,
+                });
+                return null;
+            }
+
             const isTimeout = error instanceof Error && error.name === 'AbortError';
             captureError(
                 error instanceof Error ? error : new Error(String(error)),
