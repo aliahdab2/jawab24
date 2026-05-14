@@ -34,4 +34,11 @@ export interface SettingsState {
 export interface SettingsCardProps {
   settings: SettingsState;
   setSettings: (settings: SettingsState) => void;
+  /**
+   * Field-level validation errors from the shared Zod schema, keyed by the
+   * top-level field name in `UpdateSettingsSchema` (e.g. `dualReplyNudge`,
+   * `awayMessage`). Set by the settings page when pre-submit validation
+   * fails. Cards render inline errors for fields they own.
+   */
+  fieldErrors?: Record<string, string>;
 }

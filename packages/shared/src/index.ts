@@ -1,5 +1,8 @@
 // Shared Types for Jawab24
 
+// --- Validation schemas (single source of truth across backend + frontend) ---
+export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settings';
+
 // --- Flag Reason Translations ---
 export { default as flagReasonEn } from './i18n/en/flagReason.json';
 export { default as flagReasonAr } from './i18n/ar/flagReason.json';
@@ -431,15 +434,9 @@ export const REPLY_QUEUE_NAME = 'reply-processing-queue';
 /** Default handoff pause duration (minutes) when a user manually replies to a customer */
 export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 
-/**
- * Max length for customer-facing message templates (greeting, away message).
- * Tied to Instagram DM limit (1000 chars) — the strictest platform we send to.
- * Anything longer would be rejected by Meta when delivering to IG threads.
- */
-export const MAX_TEMPLATE_MESSAGE_LENGTH = 1000;
-
-/** Default AI model used across backend and ai-worker services */
-export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
+// Re-exported from ./constants so they can be consumed by ./schemas/* without
+// circular imports back into this module.
+export { MAX_TEMPLATE_MESSAGE_LENGTH, DEFAULT_AI_MODEL } from './constants';
 
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
 export const PROMPT_VERSION = 'v40';

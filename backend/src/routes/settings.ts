@@ -1,8 +1,32 @@
 import { FastifyInstance } from 'fastify';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+import { UpdateSettingsSchema } from '@jawab24/shared';
 import { settingsController } from '../controllers/settings';
 import { authenticate } from '../middleware/auth';
 import { resolveWorkspace, requireRole } from '../middleware/workspace';
 import { auth } from '../utils/swagger';
+
+// Strip the `$schema` metadata so Ajv doesn't load it as a meta-schema. Inline
+// (`$refStrategy: 'none'`) keeps the schema flat — Fastify validates a single
+// object body, not a $ref graph.
+//
+// The cast bypasses a TS2589 ("excessively deep type instantiation") from
+// zod-to-json-schema's overload when introspecting a `.strict()` schema that
+// contains a `.refine()` predicate (the timezone field). Runtime behavior is
+// unchanged — we only sidestep the type-level recursion.
+const generateBodySchema = zodToJsonSchema as unknown as (
+    schema: unknown,
+    options: { target: string; $refStrategy: string },
+) => Record<string, unknown>;
+
+const updateSettingsBodySchema = (() => {
+    const generated = generateBodySchema(UpdateSettingsSchema, {
+        target: 'jsonSchema7',
+        $refStrategy: 'none',
+    });
+    delete generated.$schema;
+    return generated;
+})();
 
 export default async function settingsRoutes(fastify: FastifyInstance) {
     // --- Read: all workspace members ---
@@ -30,44 +54,10 @@ export default async function settingsRoutes(fastify: FastifyInstance) {
                 tags: ['Settings'],
                 summary: 'Update user settings',
                 security: auth,
-                body: {
-                    type: 'object',
-                    properties: {
-                        dashboardLanguage: { type: 'string', minLength: 2, maxLength: 10 },
-                        defaultReplyLanguage: { type: 'string', minLength: 2, maxLength: 10 },
-                        supportedLanguages: { type: 'array', items: { type: 'string', minLength: 2, maxLength: 10 } },
-                        autoDetectLanguage: { type: 'boolean' },
-                        aiEnabled: { type: 'boolean' },
-                        aiModel: { type: 'string' },
-                        commentsAutoReply: { type: 'boolean' },
-                        messagesAutoReply: { type: 'boolean' },
-                        businessHoursOnly: { type: 'boolean' },
-                        businessHoursStart: { type: 'string' },
-                        businessHoursEnd: { type: 'string' },
-                        timezone: { type: 'string', maxLength: 100 },
-                        awayMessage: { type: 'string', maxLength: 1000 },
-                        awayMessageMulti: { type: 'object' },
-                        replyDelay: { type: 'integer', minimum: 0, maximum: 300 },
-                        greetingMessage: { type: 'string', maxLength: 1000 },
-                        greetingMessageMulti: { type: 'object' },
-                        commentReplyMode: { type: 'string', enum: ['public', 'private', 'dual'] },
-                        dualReplyNudge: { type: 'string', maxLength: 80 },
-                        dualReplyNudgeMulti: { type: 'object' },
-                        dualReplyNudgeVariations: { type: 'object' },
-                        limitFallbackEnabled: { type: 'boolean' },
-                        limitFallbackMessageMulti: { type: 'object' },
-                        handoffPauseDurationMinutes: { type: 'integer', minimum: 5, maximum: 1440 },
-                        commentEscalationMinutes: { type: 'integer', minimum: 5, maximum: 1440 },
-                        messageEscalationMinutes: { type: 'integer', minimum: 5, maximum: 1440 },
-                        notificationsEnabled: { type: 'boolean' },
-                        replyStyle: { type: 'string', enum: ['professional', 'casual', 'enthusiastic'] },
-                        brandVoiceNotes: { type: 'string', maxLength: 1000 },
-                        brandVoiceNotesMulti: { type: 'object' },
-                        holdLowConfidence: { type: 'boolean' },
-                        onboardingCompletedAt: { type: ['string', 'null'] },
-                    },
-                    additionalProperties: false,
-                },
+                // Body schema is generated from the canonical Zod schema in
+                // `@jawab24/shared` (single source of truth shared with the
+                // frontend pre-submit validator).
+                body: updateSettingsBodySchema,
             },
         }, settingsController.update);
     });

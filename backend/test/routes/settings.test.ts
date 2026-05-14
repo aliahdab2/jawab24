@@ -969,4 +969,62 @@ describe('Settings Routes', () => {
         });
 
     });
+
+    describe('PUT /settings - Schema rejection (root-cause coverage)', () => {
+        const setupAuth = async () => {
+            const { authService } = await import('../../src/services/auth');
+            vi.mocked(authService.verifyToken).mockReturnValue({ userId: 'user_123', facebookId: 'fb_123' });
+        };
+
+        // Note: `additionalProperties: false` in the generated schema is
+        // currently a no-op at the Fastify layer because the global Ajv runs
+        // with `removeAdditional: true` (Fastify's default) — unknown keys are
+        // silently stripped, not rejected. The shared Zod schema has `.strict()`
+        // which the frontend uses to catch unknown keys pre-submit, and the
+        // controller's `validateSchema(UpdateSettingsSchema, …)` call would
+        // catch them server-side too — but since the body has already been
+        // stripped by Fastify, that re-check sees an empty object. Promoting
+        // server-side rejection to "400 + named field" requires changing the
+        // app-wide Ajv config (`removeAdditional: false`) which has blast
+        // radius on other routes; tracked for a follow-up PR.
+
+        it('rejects dualReplyNudge longer than 80 chars with 400', async () => {
+            await setupAuth();
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { dualReplyNudge: 'a'.repeat(81) },
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(response.body).toContain('dualReplyNudge');
+        });
+
+        it('rejects out-of-range replyDelay with 400', async () => {
+            await setupAuth();
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { replyDelay: 999 },
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(response.body).toContain('replyDelay');
+        });
+
+        it('rejects awayMessage longer than MAX_TEMPLATE_MESSAGE_LENGTH', async () => {
+            await setupAuth();
+            const response = await app.inject({
+                method: 'PUT',
+                url: '/settings',
+                headers: { authorization: 'Bearer valid_token' },
+                payload: { awayMessage: 'a'.repeat(MAX_TEMPLATE_MESSAGE_LENGTH + 1) },
+            });
+
+            expect(response.statusCode).toBe(400);
+            expect(response.body).toContain('awayMessage');
+        });
+    });
 });

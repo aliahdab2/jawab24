@@ -11,8 +11,9 @@ import {
 import { useTranslations } from 'next-intl';
 import { getLocaleDirection } from '@/utils/locale';
 import type { SettingsCardProps } from './types';
+import { InlineFieldError } from './InlineFieldError';
 
-export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardProps) {
+export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: SettingsCardProps) {
   const t = useTranslations('settings');
   const [diagramKey, setDiagramKey] = useState(0);
 
@@ -188,6 +189,7 @@ export function CommentsAutoReplyCard({ settings, setSettings }: SettingsCardPro
                 />
               </InputFieldWrapper>
 
+              <InlineFieldError message={fieldErrors?.dualReplyNudge ?? fieldErrors?.dualReplyNudgeMulti} />
               <p className="text-xs text-brand-700 dark:text-brand-400 font-medium mt-1.5">{t('dualReplyConfigHelper')}</p>
               <p className="text-xs text-muted-foreground mt-1">{t('dualReplyVariationsHint')}</p>
             </div>

@@ -310,6 +310,63 @@ test.describe('Settings Page', () => {
     await expect(textarea).toHaveValue('Hello! How can we help?');
   });
 
+  test('blocks PUT when pre-submit validation rejects an out-of-range field', async ({ page }) => {
+    // Mock the GET to seed state with a value that the shared schema would
+    // reject when the user clicks Save without changing it (we then bump it
+    // via the messagesAutoReply toggle to mark hasChanges = true). We force
+    // the bad value into state via a script after the page hydrates.
+    let putCount = 0;
+    await page.unroute('**/api/**');
+    await page.route('**/api/**', async (route) => {
+      const url = route.request().url();
+      const method = route.request().method();
+      if (url.includes('/settings') && method === 'PUT') {
+        putCount += 1;
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_SETTINGS) });
+      }
+      if (url.includes('/settings')) {
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          // Bad value: replyDelay above the 0-300 cap. The shared schema's
+          // pre-submit validator should refuse to send it.
+          body: JSON.stringify({ ...MOCK_SETTINGS, replyDelay: 9999 }),
+        });
+      }
+      if (url.includes('/auth/profile')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'u1', email: 'test@test.com', name: 'Test' }) });
+      }
+      if (url.includes('/subscription/usage')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { subscription: { plan: { name: 'Starter' }, status: 'active' }, aiReplies: { used: 5, limit: 100, percentUsed: 5 }, pages: { used: 1, limit: 1 } } }) });
+      }
+      if (url.includes('/workspaces/current/members')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'mem-1', userId: 'u1', role: 'owner', joinedAt: '2026-01-01', user: { id: 'u1', name: 'Test', email: 'test@test.com', picture: null } }]) });
+      }
+      if (url.includes('/workspaces/current/invites')) {
+        return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+      }
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+
+    await page.goto('/en/settings');
+
+    // Mark settings as changed by toggling something so Save enables.
+    const firstToggle = page.locator('[role="switch"]').first();
+    await expect(firstToggle).toBeVisible({ timeout: 15000 });
+    await firstToggle.click();
+
+    // Click Save — pre-submit validator should refuse to PUT.
+    const saveBtn = page.locator('button').filter({ hasText: t('common.save') }).first();
+    await expect(saveBtn).toBeEnabled({ timeout: 5000 });
+    await saveBtn.click();
+
+    // Wait briefly for the validator to short-circuit.
+    await page.waitForTimeout(500);
+
+    // No PUT should have fired — the bad payload never left the client.
+    expect(putCount).toBe(0);
+  });
+
   test('should not crash when APIs fail', async ({ page }) => {
     await page.route('**/api/**', async (route) => {
       const url = route.request().url();
