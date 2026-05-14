@@ -8,6 +8,7 @@ import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
 import { db } from '../../src/db';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../src/interfaces';
+import { DmSendError } from '../../src/utils/fbGraphErrors';
 
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
@@ -1305,4 +1306,29 @@ describe('MessageProcessor — Orphan recheck (post-release safety net)', () => 
         // Only one AI generation — recheck found nothing.
         expect(replyGenerator.generateForMessage).toHaveBeenCalledTimes(1);
     });
+});
+
+describe('MessageProcessor — transient error retry behavior', () => {
+    it('transient DM error rethrows so BullMQ retries — does NOT swallow as success:false', async () => {
+        // Mirror of the commentProcessor regression guard. DM-flow has the same outer
+        // catch that previously swallowed transient throws from sender.ts, defeating
+        // BullMQ retry. Without this, FB transient errors silently abandon DMs too.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'Hi!',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+        const transientError = new DmSendError(
+            'Facebook API error: (#-1) Unexpected internal error',
+            { code: -1, subcode: 2018012, type: 'OAuthException' },
+        );
+        const adapter = createMockAdapter({
+            sendReply: vi.fn().mockRejectedValue(transientError),
+        });
+
+        await expect(
+            messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1'),
+        ).rejects.toBe(transientError);
+    });
+
 });

@@ -21,6 +21,7 @@
   "sla_no_reply": "No reply after {minutes} min",
   "delivery_failed": "Reply not delivered",
   "send_failed": "Failed to send reply",
+  "send_failed_retries_exhausted": "Reply failed after retries — please reply manually",
   "dm_failed": "DM failed",
   "dm_failed_customer_refused": "DM failed — customer can't receive messages",
   "dm_failed_window_expired": "DM failed — 24-hour window expired",

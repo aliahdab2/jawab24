@@ -1,4 +1,5 @@
 import { Worker, Job, UnrecoverableError } from 'bullmq';
+import { eq } from 'drizzle-orm';
 import { config } from '../config';
 import { ReplyJobData, ReplyJobResult, REPLY_QUEUE_NAME } from '@jawab24/shared';
 import { replyService } from '../services/reply';
@@ -7,6 +8,10 @@ import { whatsappReplyService } from '../services/whatsappReply';
 import { enqueueComment, enqueueMessage } from '../lib/replyQueue';
 import { pipelineMetrics, Pipeline } from '../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../types';
+import { commentsService } from '../services/comments';
+import { messagesService } from '../services/messages';
+import { db } from '../db';
+import { messages } from '../db/schema';
 
 const MAX_HANDOFF_RETRIES = 3;
 
@@ -272,6 +277,77 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
 let worker: Worker<ReplyJobData, ReplyJobResult> | null = null;
 
 /**
+ * After BullMQ exhausts all retries for a reply job, flag the underlying
+ * comment/message row as needs_attention so the merchant sees it in the inbox.
+ * Without this, transient FB errors that don't recover (or any other thrown
+ * failure during processing) leave the row as replied=false /
+ * needs_attention=false / flag_reason=null — invisible to the merchant forever.
+ *
+ * Idempotent: only writes when the row exists, isn't already replied, and
+ * isn't already flagged.
+ *
+ * Defensive: all errors are caught — failures here must NEVER crash the worker.
+ * BullMQ fires 'failed' on every attempt; we act only on the final one.
+ *
+ * Scope: facebook_comment, facebook_message, instagram_message today.
+ * instagram_comment (separate table) and whatsapp_message can be added the same way.
+ */
+export async function flagStuckJobOnFinalFailure(
+    job: Job<ReplyJobData> | undefined,
+    err: Error,
+): Promise<void> {
+    if (!job) return;
+    const maxAttempts = job.opts?.attempts ?? 1;
+    if (job.attemptsMade < maxAttempts) return;
+
+    try {
+        const { jobType, commentId, messageId } = job.data;
+        const errorSummary = (err?.message ?? 'Unknown error').slice(0, 300);
+        const flagMeta = { send_failed_retries_exhausted: { error: errorSummary } };
+
+        if (jobType === 'facebook_comment' && commentId) {
+            const existing = await commentsService.getCommentByFacebookId(commentId);
+            if (existing && !existing.replied && !existing.needsAttention) {
+                await commentsService.updateComment(existing.id, {
+                    needsAttention: true,
+                    flagReason: 'send_failed_retries_exhausted',
+                    flagMeta,
+                });
+                logger.info('[ReplyWorker] Stuck comment flagged after retry exhaustion', {
+                    jobId: job.id,
+                    commentId: existing.id,
+                    platformCommentId: commentId,
+                });
+            }
+            return;
+        }
+
+        if ((jobType === 'facebook_message' || jobType === 'instagram_message') && messageId) {
+            const row = await db.query.messages.findFirst({
+                where: eq(messages.platformMessageId, messageId),
+            });
+            if (row && !row.replied && !row.needsAttention) {
+                await messagesService.flagMessage(row.id, 'send_failed_retries_exhausted', undefined, flagMeta);
+                logger.info('[ReplyWorker] Stuck message flagged after retry exhaustion', {
+                    jobId: job.id,
+                    messageId: row.id,
+                    platformMessageId: messageId,
+                });
+            }
+            return;
+        }
+
+        // instagram_comment / whatsapp_message: not covered yet — follow-up.
+    } catch (handlerErr) {
+        // Never throw from the failed-event handler — would destabilize the worker.
+        logger.error('[ReplyWorker] flagStuckJobOnFinalFailure threw — swallowed to keep worker alive', {
+            jobId: job?.id,
+            handlerError: handlerErr instanceof Error ? handlerErr.message : String(handlerErr),
+        });
+    }
+}
+
+/**
  * Start the reply worker
  */
 export function startWorker(workerLogger?: Logger): Worker<ReplyJobData, ReplyJobResult> {
@@ -300,12 +376,13 @@ export function startWorker(workerLogger?: Logger): Worker<ReplyJobData, ReplyJo
         });
     });
 
-    worker.on('failed', (job, err) => {
+    worker.on('failed', async (job, err) => {
         logger.error('[ReplyWorker] Job failed event', {
             jobId: job?.id,
             error: err.message,
             attemptsMade: job?.attemptsMade,
         });
+        await flagStuckJobOnFinalFailure(job, err);
     });
 
     worker.on('error', (err) => {

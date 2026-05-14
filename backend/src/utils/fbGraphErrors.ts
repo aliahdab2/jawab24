@@ -231,6 +231,20 @@ function isTransientAxiosStatus(status: number | undefined): boolean {
 }
 
 /**
+ * True when the error is a retry-worthy transient FB failure (rate limit, 5xx,
+ * -1/2018012 "Unexpected internal error", network blip). Reply pipeline catches
+ * (commentProcessor + messageProcessor) use this to decide whether to rethrow
+ * for BullMQ retry vs. swallow into success:false.
+ *
+ * Accepts the platform as a loose string so callers don't have to narrow it —
+ * unknown values fall back to 'facebook' (the dominant code path).
+ */
+export function isTransientFbError(err: unknown, platform: string): boolean {
+    const fbPlatform: FbPlatform = platform === 'instagram' ? 'instagram' : 'facebook';
+    return classifyDmError(err, fbPlatform).bucket === 'transient';
+}
+
+/**
  * Classify a DM-send error into a behavioral bucket. Accepts DmSendError
  * (preferred, structured), AxiosError (extracts from response.data.error),
  * or anything else (falls through to 'unknown').
