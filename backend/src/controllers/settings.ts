@@ -1,7 +1,8 @@
 import { FastifyReply } from 'fastify';
 import { settingsService } from '../services/settings';
 import { AuthenticatedRequest } from '../middleware/auth';
-import { validateSchema, UpdateSettingsSchema } from '../utils/validation';
+import { UpdateSettingsSchema } from '@jawab24/shared';
+import { validateSchema } from '../utils/validation';
 import { translateText, generateNudgeVariations } from '../services/translation';
 import type { UpdateSettingsDTO } from '../types/settings';
 import { auditLog } from '../services/auditLog';

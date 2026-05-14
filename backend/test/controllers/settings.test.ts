@@ -9,8 +9,12 @@ vi.mock('../../src/services/settings', () => ({
     },
 }));
 
+vi.mock('@jawab24/shared', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@jawab24/shared')>();
+    return { ...actual, UpdateSettingsSchema: { safeParse: vi.fn() } };
+});
+
 vi.mock('../../src/utils/validation', () => ({
-    UpdateSettingsSchema: { safeParse: vi.fn() },
     validateSchema: vi.fn(),
 }));
 

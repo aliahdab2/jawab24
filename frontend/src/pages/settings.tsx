@@ -7,6 +7,7 @@ import { useAuthStore, useUIStore } from '@/lib/store';
 import { toast } from 'sonner';
 import { useRouter } from 'next/router';
 import axios from 'axios';
+import { UpdateSettingsSchema } from '@jawab24/shared';
 import { settingsApi, api } from '@/lib/api';
 import {
   Save,
@@ -88,6 +89,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const hasChanges = JSON.stringify(settings) !== JSON.stringify(initialSettings);
 
@@ -151,6 +153,28 @@ const SettingsPage: NextPageWithLayout = () => {
   }, [isAuthenticated, fetchSettings]);
 
   const handleSave = async () => {
+    const editableSettings = { ...(settings as unknown as Record<string, unknown>) };
+    delete editableSettings.id;
+    delete editableSettings.userId;
+    delete editableSettings.pushNotifications;
+
+    // Pre-submit validation against the SAME Zod schema the backend enforces
+    // (`@jawab24/shared`). Lets us show inline field-level errors instead of
+    // a round-trip 400 + generic toast, and stops bad payloads from ever
+    // reaching the API.
+    const validation = UpdateSettingsSchema.safeParse(editableSettings);
+    if (!validation.success) {
+      const nextErrors: Record<string, string> = {};
+      for (const issue of validation.error.errors) {
+        const field = issue.path[0]?.toString();
+        if (field && !nextErrors[field]) nextErrors[field] = issue.message;
+      }
+      setFieldErrors(nextErrors);
+      toast.error(tc('error'));
+      return;
+    }
+    setFieldErrors({});
+
     setSaving(true);
     setSaved(false);
     try {
@@ -158,11 +182,7 @@ const SettingsPage: NextPageWithLayout = () => {
         setLanguage(settings.dashboardLanguage as 'ar' | 'en');
       }
 
-      const editableSettings = { ...(settings as unknown as Record<string, unknown>) };
-      delete editableSettings.id;
-      delete editableSettings.userId;
-      delete editableSettings.pushNotifications;
-      const response = await settingsApi.update(editableSettings);
+      const response = await settingsApi.update(validation.data as Record<string, unknown>);
       const data = response.data;
       if (data) {
         const updatedSettings = { ...settings, ...data };
@@ -193,7 +213,11 @@ const SettingsPage: NextPageWithLayout = () => {
 
       captureError(error, 'Failed to save settings', {
         tags: { page: 'settings', action: 'save' },
-        extra: { statusCode, validationCode, validationMessage },
+        extra: {
+          statusCode,
+          validationCode,
+          validationMessage,
+        },
       });
       toast.error(tc('error'));
     } finally {
@@ -254,7 +278,7 @@ const SettingsPage: NextPageWithLayout = () => {
       {/* Section: Auto-Reply */}
       <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAutoReply')}</p>
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
-        <CommentsAutoReplyCard settings={settings} setSettings={setSettings} />
+        <CommentsAutoReplyCard settings={settings} setSettings={setSettings} fieldErrors={fieldErrors} />
 
         {/* Messages & AI Toggles */}
         <div className="space-y-3 landscape:space-y-2">

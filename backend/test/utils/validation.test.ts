@@ -3,7 +3,6 @@ import {
     BusinessProfileSchema,
     CreatePlanSchema,
     UpdatePlanSchema,
-    UpdateSettingsSchema,
     PaginationSchema,
     UUIDSchema,
     validateSchema,
@@ -99,112 +98,9 @@ describe('Validation Schemas', () => {
         });
     });
 
-    describe('UpdateSettingsSchema', () => {
-        it('should accept valid escalation minutes', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                commentEscalationMinutes: 60,
-                messageEscalationMinutes: 30,
-            });
-            expect(result.success).toBe(true);
-        });
-
-        it('should reject escalation minutes below minimum (5)', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                commentEscalationMinutes: 2,
-            });
-            expect(result.success).toBe(false);
-        });
-
-        it('should reject escalation minutes above maximum (1440)', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                messageEscalationMinutes: 2000,
-            });
-            expect(result.success).toBe(false);
-        });
-
-        it('should reject non-integer escalation minutes', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                commentEscalationMinutes: 30.5,
-            });
-            expect(result.success).toBe(false);
-        });
-
-        it('should accept boundary values (5 and 1440)', () => {
-            const minResult = UpdateSettingsSchema.safeParse({ commentEscalationMinutes: 5 });
-            const maxResult = UpdateSettingsSchema.safeParse({ messageEscalationMinutes: 1440 });
-            expect(minResult.success).toBe(true);
-            expect(maxResult.success).toBe(true);
-        });
-
-        it('should accept all existing settings fields', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                dashboardLanguage: 'en',
-                commentsAutoReply: true,
-                replyDelay: 10,
-                commentEscalationMinutes: 45,
-                messageEscalationMinutes: 15,
-            });
-            expect(result.success).toBe(true);
-        });
-
-        it('should accept notificationsEnabled as boolean', () => {
-            const resultTrue = UpdateSettingsSchema.safeParse({
-                notificationsEnabled: true,
-            });
-            const resultFalse = UpdateSettingsSchema.safeParse({
-                notificationsEnabled: false,
-            });
-            expect(resultTrue.success).toBe(true);
-            expect(resultFalse.success).toBe(true);
-        });
-
-        it('should reject notificationsEnabled with non-boolean value', () => {
-            const resultString = UpdateSettingsSchema.safeParse({
-                notificationsEnabled: 'true',
-            });
-            const resultNumber = UpdateSettingsSchema.safeParse({
-                notificationsEnabled: 1,
-            });
-            expect(resultString.success).toBe(false);
-            expect(resultNumber.success).toBe(false);
-        });
-
-        it('should accept valid IANA timezone', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                timezone: 'Asia/Riyadh',
-            });
-            expect(result.success).toBe(true);
-        });
-
-        it('should accept various valid timezones', () => {
-            const validTimezones = ['America/New_York', 'Europe/London', 'Asia/Dubai', 'UTC', 'Pacific/Auckland'];
-            for (const tz of validTimezones) {
-                const result = UpdateSettingsSchema.safeParse({ timezone: tz });
-                expect(result.success).toBe(true);
-            }
-        });
-
-        it('should reject invalid timezone string', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                timezone: 'Invalid/Timezone',
-            });
-            expect(result.success).toBe(false);
-        });
-
-        it('should reject empty timezone string', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                timezone: '',
-            });
-            expect(result.success).toBe(false);
-        });
-
-        it('should reject timezone exceeding max length', () => {
-            const result = UpdateSettingsSchema.safeParse({
-                timezone: 'A'.repeat(101),
-            });
-            expect(result.success).toBe(false);
-        });
-    });
+    // Note: UpdateSettingsSchema tests have moved to
+    // packages/shared/src/schemas/__tests__/settings.test.ts — the schema is
+    // now owned by @jawab24/shared.
 
     describe('PaginationSchema', () => {
         it('should parse valid pagination params', () => {
