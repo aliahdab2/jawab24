@@ -156,7 +156,14 @@ class TranscriptionService {
             // misleading Content-Type; sending those to Whisper produces a 400.
             const sniffed = sniffAudioFormat(audioBuffer);
             if (!sniffed && !contentType.startsWith('audio/') && !contentType.startsWith('video/')) {
-                // Not audio at all (likely HTML/JSON error page). Skip silently.
+                // Not audio at all (likely HTML/JSON error page). Skip without
+                // paging Sentry, but warn so a wider CDN incident still leaves
+                // a trail in app logs.
+                console.warn('[transcription] skipped non-audio response', {
+                    contentType,
+                    byteLength: audioBuffer.length,
+                    firstBytes: audioBuffer.subarray(0, 16).toString('hex'),
+                });
                 return null;
             }
 
@@ -187,8 +194,14 @@ class TranscriptionService {
         } catch (error) {
             // Whisper 400 means the audio bytes themselves are bad (truncated,
             // unsupported codec, etc.). We already fall back gracefully, so
-            // don't page Sentry — alert only on real failures.
-            if (error instanceof APIError && error.status === 400) return null;
+            // don't page Sentry — but warn so a sudden spike (e.g. our own
+            // buffer handling regresses) remains visible in app logs.
+            if (error instanceof APIError && error.status === 400) {
+                console.warn('[transcription] OpenAI 400, returning null', {
+                    message: error.message,
+                });
+                return null;
+            }
 
             const isTimeout = error instanceof Error && error.name === 'AbortError';
             captureError(
