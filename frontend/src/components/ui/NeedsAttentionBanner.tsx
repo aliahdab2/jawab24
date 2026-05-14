@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { useTranslations, useLocale } from 'next-intl';
+import { useTranslations } from 'next-intl';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { FlagTag } from './FlagTag';
 import { isKbRelatedFlag, type FlagMetaShape } from '@/utils/flagReason';
@@ -19,7 +19,6 @@ interface NeedsAttentionBannerProps {
  */
 export function NeedsAttentionBanner({ flagReason, flagMeta, onKbLinkClick }: NeedsAttentionBannerProps) {
   const t = useTranslations('comments');
-  const locale = useLocale();
   const isKbFlag = isKbRelatedFlag(flagReason);
 
   return (
@@ -29,7 +28,10 @@ export function NeedsAttentionBanner({ flagReason, flagMeta, onKbLinkClick }: Ne
       <FlagTag flagReason={flagReason} flagMeta={flagMeta} />
       {isKbFlag && (
         <Link
-          href={`/${locale}/pages?openKb=true`}
+          // Plain href — Next.js i18n routing auto-prefixes the active locale.
+          // Manually prefixing produced /ar/ar/pages, which 404s and silently
+          // failed the "open KB modal" CTA from the message/comment detail modal.
+          href="/pages?openKb=true"
           onClick={onKbLinkClick}
           className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
         >

@@ -3106,6 +3106,76 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Full-URL guard: when AI sends a Shopify link, it must be the complete URL with the store subdomain (demo-electronics), not a generic myshopify.com fragment.',
     },
+
+    // -------------------------------------------------------------------------
+    // Category 49: Short Retrieval-Sensitive Queries (regression guard)
+    // -------------------------------------------------------------------------
+    // Background: v41 (PR #119, reverted) introduced schema-driven KB-match
+    // calibration that forced confidence=low + info_not_in_kb whenever the model
+    // committed `requested_item_exists_in_kb: false`. On short, ambiguous queries
+    // (single word, no question mark), the model would over-eagerly commit
+    // `false` even when the answer was plainly in the KB — leading to
+    // user-facing "ما عندي معلومة" replies for things like just "العنوان".
+    //
+    // These tests assert the bot can answer the SAME factual question across
+    // multiple short Arabic phrasings without falling back to "no info". A
+    // prompt change that re-introduces a strict-deny mechanism will tank this
+    // category before merchants notice.
+    {
+        id: 330, category: 49, categoryName: 'Short Retrieval-Sensitive Queries', channel: 'dm',
+        message: 'العنوان',
+        page: 'training',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['الرياض'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Single-word address query — must answer from location chunk.',
+    },
+    {
+        id: 331, category: 49, categoryName: 'Short Retrieval-Sensitive Queries', channel: 'dm',
+        message: 'وين العنوان',
+        page: 'training',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['الرياض'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: '2-word location query, different phrasing — must not regress on retrieval.',
+    },
+    {
+        id: 332, category: 49, categoryName: 'Short Retrieval-Sensitive Queries', channel: 'dm',
+        message: 'المكان وين',
+        page: 'training',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['الرياض'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Uses "المكان" instead of "العنوان" — synonym variant.',
+    },
+    {
+        id: 333, category: 49, categoryName: 'Short Retrieval-Sensitive Queries', channel: 'dm',
+        message: 'عنوانكم وين',
+        page: 'training',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['الرياض'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Possessive form — the actual phrasing that triggered the production incident.',
+    },
+    {
+        id: 334, category: 49, categoryName: 'Short Retrieval-Sensitive Queries', channel: 'dm',
+        message: 'العنوان لو سمحت',
+        page: 'training',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['الرياض'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Polite single-word query with closing — must not get classified as ambiguous.',
+    },
 ];
 
 // ---------------------------------------------------------------------------
