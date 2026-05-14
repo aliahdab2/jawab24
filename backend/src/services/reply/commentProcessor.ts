@@ -17,6 +17,7 @@ import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
 import { leadExtractorService } from '../leadExtractor';
+import { isTransientFbError } from '../../utils/fbGraphErrors';
 
 /**
  * Unified Comment Processor
@@ -557,6 +558,21 @@ export class CommentProcessor {
             }
 
         } catch (error) {
+            // Transient DM errors (FB rate limit, 5xx, -1/2018012 "Unexpected internal error",
+            // network blips) MUST bubble up so BullMQ retries the whole job — sender.ts
+            // throws these specifically to trigger retry. Swallowing them here marks the
+            // job "completed with failure" and BullMQ never retries, leaving the comment
+            // stuck as replied=false / needs_attention=false / flag_reason=null — invisible
+            // to the merchant and never re-attempted. Confirmed prod failure: Mohamad Shami
+            // "عنوان" 2026-05-14, DM hit FB -1/2018012, comment abandoned silently.
+            if (isTransientFbError(error, platform)) {
+                pipelineMetrics.record(pipeline, 'transient_error_retry');
+                this.logger.warn(`[${platform}] Transient error — rethrowing for BullMQ retry`, {
+                    platformCommentId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                throw error;
+            }
             pipelineMetrics.record(pipeline, 'error');
             this.logger.error(`[${platform}] Error processing comment`, {
                 platformCommentId,

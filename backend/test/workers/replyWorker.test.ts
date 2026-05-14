@@ -52,6 +52,35 @@ vi.mock('../../src/services/whatsappReply', () => ({
     whatsappReplyService: mockWhatsAppReplyService,
 }));
 
+const mockCommentsService = {
+    getCommentByFacebookId: vi.fn(),
+    updateComment: vi.fn(),
+};
+
+const mockMessagesService = {
+    flagMessage: vi.fn(),
+};
+
+const mockDb = {
+    query: {
+        messages: {
+            findFirst: vi.fn(),
+        },
+    },
+};
+
+vi.mock('../../src/services/comments', () => ({
+    commentsService: mockCommentsService,
+}));
+
+vi.mock('../../src/services/messages', () => ({
+    messagesService: mockMessagesService,
+}));
+
+vi.mock('../../src/db', () => ({
+    db: mockDb,
+}));
+
 vi.mock('../../src/services/pages', () => ({
     pagesService: mockPagesService,
 }));
@@ -541,5 +570,145 @@ describe('Reply Worker — Handoff Re-enqueue', () => {
             replyDelay: 45,
             handoffRetries: 1,
         }));
+    });
+});
+
+describe('Reply Worker — flagStuckJobOnFinalFailure', () => {
+    // Surfaces comments/messages stuck after BullMQ retries exhaust.
+    // Before this handler existed: transient FB errors that don't recover within
+    // 3 retries left the row as replied=false / needs_attention=false / flag_reason=null —
+    // invisible to the merchant forever (the prod failure for Mohamad Shami "عنوان" 2026-05-14).
+    let flagStuckJobOnFinalFailure: (job: Job<ReplyJobData> | undefined, err: Error) => Promise<void>;
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        vi.resetModules();
+        const module = await import('../../src/workers/replyWorker');
+        flagStuckJobOnFinalFailure = module.flagStuckJobOnFinalFailure;
+    });
+
+    function buildJob(overrides: Partial<{
+        jobType: string; commentId: string; messageId: string;
+        attemptsMade: number; maxAttempts: number;
+    }> = {}): any {
+        return {
+            id: 'job-1',
+            data: {
+                jobType: overrides.jobType ?? 'facebook_comment',
+                pageId: 'page-1',
+                commentId: overrides.commentId,
+                messageId: overrides.messageId,
+            },
+            attemptsMade: overrides.attemptsMade ?? 3,
+            opts: { attempts: overrides.maxAttempts ?? 3 },
+        };
+    }
+
+    it('returns silently when job is undefined', async () => {
+        await flagStuckJobOnFinalFailure(undefined, new Error('boom'));
+        expect(mockCommentsService.getCommentByFacebookId).not.toHaveBeenCalled();
+    });
+
+    it('does nothing on intermediate attempts (attemptsMade < maxAttempts)', async () => {
+        // BullMQ fires "failed" on every attempt — we must NOT flag mid-retry.
+        const job = buildJob({ attemptsMade: 1, maxAttempts: 3, commentId: 'fb-comment-1' });
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+        expect(mockCommentsService.getCommentByFacebookId).not.toHaveBeenCalled();
+        expect(mockCommentsService.updateComment).not.toHaveBeenCalled();
+    });
+
+    it('flags a stuck FB comment after final attempt — Mohamad Shami regression case', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-1', replied: false, needsAttention: false,
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-1' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('Facebook API error: (#-1) Unexpected internal error'));
+
+        expect(mockCommentsService.updateComment).toHaveBeenCalledWith('comment-uuid-1', {
+            needsAttention: true,
+            flagReason: 'send_failed_retries_exhausted',
+            flagMeta: {
+                send_failed_retries_exhausted: { error: 'Facebook API error: (#-1) Unexpected internal error' },
+            },
+        });
+    });
+
+    it('skips when comment already replied (idempotent)', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-2', replied: true, needsAttention: false,
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-2' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockCommentsService.updateComment).not.toHaveBeenCalled();
+    });
+
+    it('skips when comment already flagged (idempotent, preserves existing flag)', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-3', replied: false, needsAttention: true,
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-3' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockCommentsService.updateComment).not.toHaveBeenCalled();
+    });
+
+    it('flags a stuck FB DM after final attempt', async () => {
+        mockDb.query.messages.findFirst.mockResolvedValueOnce({
+            id: 'msg-uuid-1', replied: false, needsAttention: false,
+        });
+        const job = buildJob({ jobType: 'facebook_message', messageId: 'fb-msg-1' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockMessagesService.flagMessage).toHaveBeenCalledWith(
+            'msg-uuid-1',
+            'send_failed_retries_exhausted',
+            undefined,
+            { send_failed_retries_exhausted: { error: 'boom' } },
+        );
+    });
+
+    it('flags a stuck IG DM the same way as FB DM', async () => {
+        mockDb.query.messages.findFirst.mockResolvedValueOnce({
+            id: 'ig-msg-uuid-1', replied: false, needsAttention: false,
+        });
+        const job = buildJob({ jobType: 'instagram_message', messageId: 'ig-msg-1' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockMessagesService.flagMessage).toHaveBeenCalledWith(
+            'ig-msg-uuid-1',
+            'send_failed_retries_exhausted',
+            undefined,
+            expect.any(Object),
+        );
+    });
+
+    it('swallows handler errors so a downstream throw never crashes the worker', async () => {
+        // Defensive — failed handler must NEVER throw. A bad DB / Redis blip
+        // shouldn't take the worker down.
+        mockCommentsService.getCommentByFacebookId.mockRejectedValueOnce(new Error('db unreachable'));
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-x' });
+
+        await expect(
+            flagStuckJobOnFinalFailure(job, new Error('boom')),
+        ).resolves.toBeUndefined();
+    });
+
+    it('truncates very long error messages to 300 chars in flag_meta', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-trunc', replied: false, needsAttention: false,
+        });
+        const longError = 'x'.repeat(500);
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-trunc' });
+
+        await flagStuckJobOnFinalFailure(job, new Error(longError));
+
+        const callArg = mockCommentsService.updateComment.mock.calls[0][1];
+        expect(callArg.flagMeta.send_failed_retries_exhausted.error).toHaveLength(300);
     });
 });

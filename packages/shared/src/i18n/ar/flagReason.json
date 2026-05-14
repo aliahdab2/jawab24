@@ -21,6 +21,7 @@
   "sla_no_reply": "لم يتم الرد خلال {minutes} دقيقة",
   "delivery_failed": "لم يتم تسليم الرد",
   "send_failed": "فشل إرسال الرد",
+  "send_failed_retries_exhausted": "فشل إرسال الرد بعد عدة محاولات — يرجى الرد يدوياً",
   "dm_failed": "فشل إرسال الرسالة",
   "dm_failed_customer_refused": "فشل إرسال الرسالة — العميل لا يستقبل الرسائل",
   "dm_failed_window_expired": "فشل إرسال الرسالة — انتهت نافذة الـ 24 ساعة",

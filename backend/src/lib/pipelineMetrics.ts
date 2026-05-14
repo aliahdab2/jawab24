@@ -41,6 +41,7 @@ export type Outcome =
     | 'subscription_inactive'
     | 'lock_contention'
     | 'trigger_no_match'
+    | 'transient_error_retry'
     | 'error';
 
 const PREFIX = 'metrics:pipeline:';

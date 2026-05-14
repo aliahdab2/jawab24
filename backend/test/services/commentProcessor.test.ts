@@ -10,6 +10,7 @@ import { notificationService } from '../../src/services/notifications';
 import { publishSSEEvent } from '../../src/lib/eventBus';
 import { acquireReplyLock } from '../../src/lib/replyLock';
 import type { CommentPlatformAdapter, PlatformPage, ContentEntity, StoredComment, CommentReplyContext, SendCommentResult } from '../../src/interfaces';
+import { DmSendError } from '../../src/utils/fbGraphErrors';
 
 vi.mock('../../src/services/workspaceSettings');
 vi.mock('../../src/services/messages');
@@ -2117,6 +2118,33 @@ describe('CommentProcessor — template reply mode behavior', () => {
                 flagReason: 'rate_limited',
             });
             expect(result).toMatchObject({ success: false, error: 'Rate limited' });
+        });
+
+        it('transient DM error rethrows so BullMQ retries — does NOT swallow as success:false', async () => {
+            // Regression guard: in prod (2026-05-14) Mohamad Shami's comment "عنوان" hit a
+            // transient FB DM error (-1 / subcode 2018012, "Unexpected internal error").
+            // sender.ts:98 throws transient errors specifically so BullMQ retries the job.
+            // The outer catch in processComment was swallowing the throw and returning
+            // success:false — BullMQ then marked the job "completed with failure" and
+            // never retried, leaving the comment stuck as replied=false / needs_attention=false /
+            // flag_reason=null (invisible to merchant, never re-attempted).
+            const transientError = new DmSendError(
+                'Facebook API error: (#-1) Unexpected internal error',
+                { code: -1, subcode: 2018012, type: 'OAuthException' },
+            );
+            const adapter = createMockAdapter({
+                sendReply: vi.fn().mockRejectedValue(transientError),
+            });
+
+            await expect(
+                commentProcessor.processComment(
+                    adapter, 'page-1', 'content-1', 'comment-1', 'Hello', 'user-1', 'Alice',
+                ),
+            ).rejects.toBe(transientError);
+
+            // Transients must NOT be flagged — they're retry-worthy, not terminal failures.
+            // Flagging on every retry attempt would also create spurious Needs Attention noise.
+            expect(adapter.flagComment).not.toHaveBeenCalled();
         });
 
         it('workspace auto-reply disabled after store resolves + emits comment:skipped', async () => {

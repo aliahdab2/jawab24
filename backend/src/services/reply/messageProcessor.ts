@@ -23,6 +23,7 @@ import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
+import { isTransientFbError } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
 import { extractPostId } from '../../utils/instagram';
 
@@ -473,6 +474,13 @@ export class MessageProcessor {
             try {
                 await adapter.sendReply(page, senderId, replyText);
             } catch (error) {
+                // Transient FB errors (rate limit, 5xx, -1/2018012, network) MUST bubble
+                // up to BullMQ so the whole DM job retries — sender.ts throws these
+                // specifically to trigger retry. Flagging delivery_failed here would
+                // burn the retry and leave the customer with no reply on a recoverable error.
+                if (isTransientFbError(error, platform)) {
+                    throw error;
+                }
                 deliveryFailed = true;
                 pipelineMetrics.record(pipeline, 'send_failed');
                 this.logger.error(`[${platform}] Failed to send reply`, { error: String(error) });
@@ -628,6 +636,19 @@ export class MessageProcessor {
             }
 
         } catch (error) {
+            // Transient DM errors MUST bubble up so BullMQ retries the whole job — same
+            // rationale as commentProcessor.processComment: sender.ts throws transients
+            // (FB rate limit, 5xx, -1/2018012, network) specifically to trigger retry.
+            // Returning success:false here makes BullMQ mark the job "completed with
+            // failure" and never retry.
+            if (isTransientFbError(error, platform)) {
+                pipelineMetrics.record(pipeline, 'transient_error_retry');
+                this.logger.warn(`[${platform}] Transient error — rethrowing for BullMQ retry`, {
+                    messageId: platformMessageId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                throw error;
+            }
             pipelineMetrics.record(pipeline, 'error');
             this.logger.error(`[${platform}] Error processing message`, {
                 messageId: platformMessageId,
