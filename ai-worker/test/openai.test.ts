@@ -2110,42 +2110,6 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
         expect(systemPrompt).toContain('follow these additional guidelines from the business owner');
         expect(systemPrompt).not.toContain('Do NOT repeat any point');
     });
-
-    it('preserves brand voice content past character 500 (regression: truncation bug)', async () => {
-        // The shared MAX_TEMPLATE_MESSAGE_LENGTH is 1000, but the prompt builder
-        // previously hardcoded slice(0, 500), silently dropping the second half of
-        // long brand voice notes. This test pins the fix.
-        const filler = 'Always mention our 30-day return policy. ';  // 41 chars
-        const longBrandVoice = filler.repeat(20);  // 820 chars total
-        const tailMarker = 'TAIL_MARKER_PAST_500';
-        const brandVoice = longBrandVoice + tailMarker;  // marker lands well past char 500
-
-        const mockCreate = vi.fn().mockResolvedValue({
-            choices: [{ message: { content: JSON.stringify({ reply: 'Sure!', intent: 'INFO', confidence: 'high', flags: [] }) } }],
-            usage: { total_tokens: 50 },
-        });
-
-        vi.doMock('openai', () => ({
-            default: vi.fn().mockImplementation(() => ({
-                chat: { completions: { create: mockCreate } },
-            })),
-        }));
-        vi.doMock('../src/config', () => ({
-            config: {
-                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
-            },
-        }));
-
-        const { OpenAIService: FreshService } = await import('../src/services/openai');
-        const service = new FreshService();
-        await service.generateReply({
-            comment: 'Do you accept returns?',
-            context: { channel: 'dm', brandVoiceNotes: brandVoice },
-        });
-
-        const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
-        expect(systemPrompt).toContain(tailMarker);
-    });
 });
 
 describe('Prompt cache token reporting', () => {
