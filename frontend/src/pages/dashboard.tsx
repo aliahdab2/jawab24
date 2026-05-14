@@ -144,6 +144,7 @@ const DashboardPage: NextPageWithLayout = () => {
     selectedConversation,
     setSelectedConversation,
     handleReply: handleMessageReply,
+    handleReplyToConversation: handleMessageReplyToConversation,
     handlePause: handleMessagePause,
     handleResume: handleMessageResume,
     handleResolve: handleMessageResolve,
@@ -966,6 +967,7 @@ const DashboardPage: NextPageWithLayout = () => {
           conversation={selectedConversation}
           onClose={handleConversationModalClose}
           onReply={handleMessageReply}
+          onReplyToConversation={handleMessageReplyToConversation}
           onResolve={handleMessageResolve}
           onUnresolve={handleMessageUnresolve}
           onPause={handleMessagePause}

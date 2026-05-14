@@ -15,6 +15,7 @@ const REPLY_ERROR_KEYS: Record<string, string> = {
   PAGE_DISCONNECTED: 'replyFailedPageDisconnected',
   DM_TRANSIENT: 'replyFailedTransient',
   DM_PLATFORM_AUTH: 'replyFailedPlatformAuth',
+  CONVERSATION_NOT_FOUND: 'replyFailedConversationNotFound',
 };
 
 /**
@@ -58,74 +59,100 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     }
   }, [queryClient, extraInvalidateKeys]);
 
-  // --- Reply ---
-  const sendReplyMutation = useMutation({
-    mutationFn: async ({ messageId, text }: { messageId: string; text: string }) => {
-      // One idempotency key per logical send attempt — reused across retries so the
-      // backend dedupes if a prior attempt actually reached FB/IG but the response
-      // didn't make it back to the phone.
-      const clientMessageId = newClientMessageId();
-      const MAX_ATTEMPTS = 3;
-      let lastError: unknown;
-      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        try {
-          const res = await messagesApi.reply(messageId, text, clientMessageId);
-          return res.data;
-        } catch (err) {
-          lastError = err;
-          // Only retry transient transport failures from axios — a real backend error
-          // (4xx/5xx with a body, e.g. DM_WINDOW_EXPIRED) must surface immediately so the
-          // UI can react. The axios.isAxiosError guard prevents us from retrying generic
-          // Errors (e.g. test mocks, programmer errors) for 3 seconds before failing.
-          const isAxiosTransportFailure = axios.isAxiosError(err) && (isNetworkError(err) || isTimeoutError(err));
-          if (attempt < MAX_ATTEMPTS && isAxiosTransportFailure) {
-            await new Promise((r) => setTimeout(r, 1000 * attempt));
-            continue;
-          }
-          throw err;
+  // Both reply paths share the same retry + success + error UX. Only the actual
+  // network call differs (message-anchored vs conversation-anchored endpoint).
+  // Build the mutation options from a single sender function to avoid duplication.
+
+  // Codes the backend flags as expected platform conditions — these go to a toast
+  // but do NOT get captured to Sentry as errors. CONVERSATION_NOT_FOUND only applies
+  // to the conversation-level path but is harmless on the message-level path.
+  const EXPECTED_BACKEND_CODES = new Set([
+    'DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT',
+    'DM_PLATFORM_AUTH', 'PAGE_DISCONNECTED', 'CONVERSATION_NOT_FOUND',
+  ]);
+
+  // Retry only transient transport failures from axios. Backend errors (4xx/5xx with
+  // a body, e.g. DM_WINDOW_EXPIRED) surface immediately so the UI can react. The
+  // axios.isAxiosError guard prevents us from spinning for 3 seconds on generic Errors
+  // (test mocks, programmer errors).
+  const sendWithRetry = async <T>(send: (clientMessageId: string) => Promise<T>): Promise<T> => {
+    const clientMessageId = newClientMessageId();
+    const MAX_ATTEMPTS = 3;
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return await send(clientMessageId);
+      } catch (err) {
+        lastError = err;
+        const isAxiosTransportFailure = axios.isAxiosError(err) && (isNetworkError(err) || isTimeoutError(err));
+        if (attempt < MAX_ATTEMPTS && isAxiosTransportFailure) {
+          await new Promise((r) => setTimeout(r, 1000 * attempt));
+          continue;
         }
+        throw err;
       }
-      throw lastError;
-    },
-    onSuccess: (outgoingMessage) => {
-      // Update the modal's conversation query cache so fullMessages shows the reply instantly.
-      // We read selectedConversation outside setState to keep the updater pure.
-      const conv = selectedConversation;
-      if (conv) {
-        queryClient.setQueryData<Message[]>(
-          ['conversation', conv.senderId, conv.lastMessage.pageId],
-          (old) => old ? [...old, outgoingMessage] : [outgoingMessage],
-        );
-      }
-      setSelectedConversation(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, outgoingMessage],
-        lastMessage: outgoingMessage,
-      } : null);
-      invalidateShared();
-    },
-    onError: (error: Error) => {
-      // Pick a specific message so the agent knows whether this is a Facebook policy
-      // problem (window expired, page disconnected) versus a real network problem they
-      // can do something about. Generic "replyFailed" was misleading agents into thinking
-      // every failure was a connection issue.
-      const backendCode = getBackendErrorCode(error);
-      toast.error(t(replyErrorTranslationKey(backendCode, error)));
-      // Report to Sentry unless the backend flagged this as an expected platform condition
-      // (window expired, customer blocked, transient rate limit). Unknown/500s get captured.
-      const expectedCodes = new Set(['DM_WINDOW_EXPIRED', 'DM_CUSTOMER_UNAVAILABLE', 'DM_TRANSIENT', 'DM_PLATFORM_AUTH', 'PAGE_DISCONNECTED']);
-      if (!backendCode || !expectedCodes.has(backendCode)) {
-        captureError(error, 'Failed to send manual reply', {
-          tags: { feature: 'messages.reply' },
-          extra: { backendCode },
-        });
-      }
-    },
+    }
+    throw lastError;
+  };
+
+  // Identical success behavior for both reply paths: optimistically append the
+  // outgoing message into the conversation query cache and the in-flight selection.
+  const onReplySuccess = (outgoingMessage: Message) => {
+    const conv = selectedConversation;
+    if (conv) {
+      queryClient.setQueryData<Message[]>(
+        ['conversation', conv.senderId, conv.lastMessage.pageId],
+        (old) => old ? [...old, outgoingMessage] : [outgoingMessage],
+      );
+    }
+    setSelectedConversation(prev => prev ? {
+      ...prev,
+      messages: [...prev.messages, outgoingMessage],
+      lastMessage: outgoingMessage,
+    } : null);
+    invalidateShared();
+  };
+
+  // Identical error behavior: translated toast keyed by backend code, with Sentry
+  // capture suppressed for expected platform conditions.
+  const makeReplyErrorHandler = (featureTag: string, sentryMessage: string) => (error: Error) => {
+    const backendCode = getBackendErrorCode(error);
+    toast.error(t(replyErrorTranslationKey(backendCode, error)));
+    if (!backendCode || !EXPECTED_BACKEND_CODES.has(backendCode)) {
+      captureError(error, sentryMessage, { tags: { feature: featureTag }, extra: { backendCode } });
+    }
+  };
+
+  // --- Reply (message-anchored) ---
+  const sendReplyMutation = useMutation({
+    mutationFn: ({ messageId, text }: { messageId: string; text: string }) =>
+      sendWithRetry(async (clientMessageId) => {
+        const res = await messagesApi.reply(messageId, text, clientMessageId);
+        return res.data;
+      }),
+    onSuccess: onReplySuccess,
+    onError: makeReplyErrorHandler('messages.reply', 'Failed to send manual reply'),
   });
 
   const handleReply = useCallback((messageId: string, text: string) => {
     sendReplyMutation.mutate({ messageId, text });
   }, [sendReplyMutation]);
+
+  // --- Reply (conversation-anchored, no incoming message) ---
+  // Used when the customer never DM'd us — only a dual-mode comment reply was sent.
+  const sendConversationReplyMutation = useMutation({
+    mutationFn: ({ senderId, pageId, text }: { senderId: string; pageId: string; text: string }) =>
+      sendWithRetry(async (clientMessageId) => {
+        const res = await messagesApi.replyToConversation(senderId, { pageId, replyText: text, clientMessageId });
+        return res.data;
+      }),
+    onSuccess: onReplySuccess,
+    onError: makeReplyErrorHandler('messages.replyToConversation', 'Failed to send manual reply to conversation'),
+  });
+
+  const handleReplyToConversation = useCallback((senderId: string, pageId: string, text: string) => {
+    sendConversationReplyMutation.mutate({ senderId, pageId, text });
+  }, [sendConversationReplyMutation]);
 
   // --- Pause ---
   const pauseMutation = useMutation({
@@ -221,11 +248,12 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     selectedConversation,
     setSelectedConversation,
     handleReply,
+    handleReplyToConversation,
     handlePause,
     handleResume,
     handleResolve,
     handleUnresolve,
-    isReplying: sendReplyMutation.isPending,
+    isReplying: sendReplyMutation.isPending || sendConversationReplyMutation.isPending,
     isPausing: pauseMutation.isPending,
     isResuming: resumeMutation.isPending,
   };

@@ -458,6 +458,11 @@ export const messagesApi = {
       timeout: 60_000,
     }),
 
+  // Send a manual DM into an existing conversation without targeting a specific incoming
+  // message. Used when the customer never DM'd (e.g., dual-mode comment reply only).
+  replyToConversation: (senderId: string, payload: { pageId: string; replyText: string; clientMessageId?: string }) =>
+    api.post<Message>(`/messages/conversation/${senderId}/reply`, payload, { timeout: 60_000 }),
+
   // Conversation pause / human handoff
   pauseConversation: (senderId: string, pageId: string, durationMinutes?: number) =>
     api.post<{ pausedUntil: string }>(`/messages/conversation/${senderId}/pause`, { pageId, durationMinutes }),

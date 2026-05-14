@@ -77,6 +77,7 @@ function makeConversation(overrides: Partial<Conversation> = {}): Conversation {
 const defaultProps = {
   onClose: vi.fn(),
   onReply: vi.fn(),
+  onReplyToConversation: vi.fn(),
   onResolve: vi.fn(),
   onPause: vi.fn(),
   onResume: vi.fn(),
@@ -188,6 +189,66 @@ describe('MessageDetailModal', () => {
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
 
     expect(onReply).not.toHaveBeenCalled();
+  });
+
+  // Regression: dual-mode comment replies leave only an outgoing row in our DB, no
+  // incoming message. handleSend used to silently bail in this case. It must now fall
+  // back to the conversation-level endpoint with the customer's senderId.
+  it('falls back to onReplyToConversation when no incoming message exists', () => {
+    const onReply = vi.fn();
+    const onReplyToConversation = vi.fn();
+    // Outgoing-only conversation (bot's dual-mode comment reply DM)
+    const outgoing = makeMessage({
+      id: 'out-1',
+      pageId: 'page-uuid',
+      senderId: 'sender-99',
+      direction: 'outgoing',
+      replied: false,
+    });
+    const conv = makeConversation({
+      senderId: 'sender-99',
+      messages: [outgoing],
+      lastMessage: outgoing,
+    });
+
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        onReply={onReply}
+        onReplyToConversation={onReplyToConversation}
+        conversation={conv}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText('Type your reply...');
+    fireEvent.change(textarea, { target: { value: 'Manual override' } });
+    fireEvent.click(screen.getByLabelText('Reply'));
+
+    expect(onReply).not.toHaveBeenCalled();
+    expect(onReplyToConversation).toHaveBeenCalledWith('sender-99', 'page-uuid', 'Manual override');
+  });
+
+  it('uses onReply (not conversation fallback) when an incoming message exists', () => {
+    const onReply = vi.fn();
+    const onReplyToConversation = vi.fn();
+    // Normal case: an unreplied incoming message anchors the send.
+    const conv = makeConversation();
+
+    render(
+      <MessageDetailModal
+        {...defaultProps}
+        onReply={onReply}
+        onReplyToConversation={onReplyToConversation}
+        conversation={conv}
+      />
+    );
+
+    const textarea = screen.getByPlaceholderText('Type your reply...');
+    fireEvent.change(textarea, { target: { value: 'Hello' } });
+    fireEvent.click(screen.getByLabelText('Reply'));
+
+    expect(onReply).toHaveBeenCalledWith('1', 'Hello');
+    expect(onReplyToConversation).not.toHaveBeenCalled();
   });
 
   it('shows resolve button when conversation has any unresolved incoming message', () => {
@@ -583,6 +644,66 @@ describe('MessageDetailModal', () => {
       renderWithOutgoing('template');
       expect(screen.getByText('Auto reply')).toBeInTheDocument();
       expect(screen.queryByText('Post Reply')).not.toBeInTheDocument();
+    });
+  });
+
+  // Regression: dual-mode comment-reply flows leave a conversation in our DB that
+  // has only the bot's outgoing DM and no incoming message. handleSend used to bail
+  // silently in that case. Now it falls back to the conversation-level endpoint
+  // using the customer's senderId.
+  describe('no incoming message (dual-mode comment reply)', () => {
+    it('calls onReplyToConversation when the conversation has only outgoing messages', () => {
+      const outgoingOnly = makeMessage({
+        id: 'out-1',
+        direction: 'outgoing',
+        message: 'Bot DM nudge',
+        replyMethod: 'ai',
+        replied: true,
+      });
+      const conv = makeConversation({
+        messages: [outgoingOnly],
+        lastMessage: outgoingOnly,
+      });
+      const onReply = vi.fn();
+      const onReplyToConversation = vi.fn();
+
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          onReply={onReply}
+          onReplyToConversation={onReplyToConversation}
+          conversation={conv}
+        />
+      );
+
+      const textarea = screen.getByPlaceholderText('Type your reply...');
+      fireEvent.change(textarea, { target: { value: 'Manual reply' } });
+      fireEvent.click(screen.getByLabelText('Reply'));
+
+      expect(onReplyToConversation).toHaveBeenCalledWith('sender1', 'page1', 'Manual reply');
+      expect(onReply).not.toHaveBeenCalled();
+    });
+
+    it('still uses onReply (message-anchored) when an incoming message exists', () => {
+      // Regression guard for the primary path — no behavior change for normal DMs.
+      const onReply = vi.fn();
+      const onReplyToConversation = vi.fn();
+
+      render(
+        <MessageDetailModal
+          {...defaultProps}
+          onReply={onReply}
+          onReplyToConversation={onReplyToConversation}
+          conversation={makeConversation()}
+        />
+      );
+
+      const textarea = screen.getByPlaceholderText('Type your reply...');
+      fireEvent.change(textarea, { target: { value: 'Normal reply' } });
+      fireEvent.click(screen.getByLabelText('Reply'));
+
+      expect(onReply).toHaveBeenCalledWith('1', 'Normal reply');
+      expect(onReplyToConversation).not.toHaveBeenCalled();
     });
   });
 });

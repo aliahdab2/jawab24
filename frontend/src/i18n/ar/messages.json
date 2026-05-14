@@ -26,6 +26,7 @@
   "replyFailedPageDisconnected": "هذه الصفحة غير متصلة. يرجى إعادة الربط من الإعدادات.",
   "replyFailedTransient": "فيسبوك مشغول حالياً. يرجى المحاولة بعد قليل.",
   "replyFailedPlatformAuth": "فيسبوك سحب الصلاحية. يرجى إعادة ربط الصفحة من الإعدادات.",
+  "replyFailedConversationNotFound": "لا توجد محادثة سابقة مع هذا العميل على هذه الصفحة.",
   "replyFailedNetwork": "مشكلة في الاتصال. تحقق من الإنترنت وحاول مجدداً.",
   "replyFailedTimeout": "استغرق الطلب وقتاً طويلاً. تحقق من اتصالك وحاول مجدداً.",
   "voiceMessage": "رسالة صوتية",

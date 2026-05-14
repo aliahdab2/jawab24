@@ -29,6 +29,12 @@ vi.mock('../../src/services/pages', () => ({
         !!page && page.accessToken === '',
 }));
 
+vi.mock('../../src/services/conversations', () => ({
+    conversationsService: {
+        findByPageAndSender: vi.fn(),
+    },
+}));
+
 vi.mock('../../src/services/facebook', () => ({
     facebookService: { sendPrivateMessage: vi.fn() },
 }));
@@ -48,6 +54,7 @@ vi.mock('../../src/lib/replyQueue', () => ({
 import { messagesController } from '../../src/controllers/messages';
 import { messagesService } from '../../src/services/messages';
 import { pagesService } from '../../src/services/pages';
+import { conversationsService } from '../../src/services/conversations';
 import { facebookService } from '../../src/services/facebook';
 import { instagramService } from '../../src/services/instagram';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
@@ -672,6 +679,172 @@ describe('MessagesController', () => {
                 expect(messagesService.findOutgoingByClientMessageId).not.toHaveBeenCalled();
                 expect(facebookService.sendPrivateMessage).toHaveBeenCalled();
             });
+        });
+    });
+
+    // ─── replyToConversation ────────────────────────────────
+    //
+    // Send a manual DM without an incoming message anchor. Required for dual-mode
+    // comment replies where the customer never DM'd: our DB has only an outgoing row,
+    // so /messages/:id/reply has nothing to target. Tenant safety is the conversations
+    // row instead of the message row.
+
+    describe('replyToConversation', () => {
+        const mockPage = { id: 'page-uuid', accessToken: 'token-123', instagramAccountId: null };
+        const mockConversationFb = { id: 'conv-1', pageId: 'page-uuid', senderId: 'sender-1', platform: 'facebook' };
+        const mockOutgoing = { id: 'out-1', message: 'Hello' };
+
+        beforeEach(() => {
+            (mockRequest as any).params = { senderId: 'sender-1' };
+            (mockRequest as any).body = { pageId: 'page-uuid', replyText: 'Hello' };
+        });
+
+        it('sends via Facebook and stores outgoing message', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue(mockConversationFb as any);
+            vi.mocked(facebookService.sendPrivateMessage).mockResolvedValue(undefined as any);
+            vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(mockOutgoing as any);
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(facebookService.sendPrivateMessage).toHaveBeenCalledWith('token-123', 'sender-1', 'Hello');
+            expect(messagesService.storeOutgoingMessage).toHaveBeenCalledWith(
+                'page-uuid', 'test_workspace_id', 'sender-1', 'Hello', 'manual',
+                undefined, undefined, undefined, undefined,
+            );
+            // No incoming message to mark — markAsReplied must not be called.
+            expect(messagesService.markAsReplied).not.toHaveBeenCalled();
+            expect(mockReply.send).toHaveBeenCalledWith(mockOutgoing);
+        });
+
+        it('sends via Instagram when conversation platform is instagram', async () => {
+            const igPage = { ...mockPage, instagramAccountId: 'ig-acc-1' };
+            const igConv = { ...mockConversationFb, platform: 'instagram' };
+            vi.mocked(pagesService.getPage).mockResolvedValue(igPage as any);
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue(igConv as any);
+            vi.mocked(instagramService.sendDirectMessage).mockResolvedValue(undefined as any);
+            vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue(mockOutgoing as any);
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(instagramService.sendDirectMessage).toHaveBeenCalledWith('ig-acc-1', 'sender-1', 'Hello', 'token-123');
+            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+        });
+
+        it('returns 400 when pageId is missing', async () => {
+            (mockRequest as any).body = { replyText: 'Hello' };
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+        });
+
+        it('returns 400 when replyText is empty', async () => {
+            (mockRequest as any).body = { pageId: 'page-uuid', replyText: '   ' };
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+        });
+
+        it('returns 400 on invalid clientMessageId', async () => {
+            (mockRequest as any).body = { pageId: 'page-uuid', replyText: 'Hello', clientMessageId: 'x'.repeat(65) };
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+        });
+
+        it('returns 401 when no workspaceId on request', async () => {
+            (mockRequest as any).workspaceId = undefined;
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+        });
+
+        it('returns 403 when workspace does not own the page', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(null as any);
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            // Tenant safety: must not hit the conversation lookup or Graph API.
+            expect(conversationsService.findByPageAndSender).not.toHaveBeenCalled();
+            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+        });
+
+        it('throws 404 CONVERSATION_NOT_FOUND when no prior conversation exists', async () => {
+            // Tenant safety boundary: without a conversation row, the endpoint would let
+            // a merchant DM any FB user from any page they happen to own. The row proves
+            // prior legitimate contact on this page.
+            vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue(null as any);
+
+            let thrown: unknown;
+            try {
+                await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+            } catch (e) {
+                thrown = e;
+            }
+
+            expect(thrown).toBeInstanceOf(AppError);
+            expect((thrown as AppError).statusCode).toBe(404);
+            expect((thrown as AppError).code).toBe('CONVERSATION_NOT_FOUND');
+            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+            expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+        });
+
+        it('throws 409 PAGE_DISCONNECTED when accessToken is the empty-string sentinel', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue({ ...mockPage, accessToken: '' } as any);
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue(mockConversationFb as any);
+
+            let thrown: unknown;
+            try {
+                await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+            } catch (e) {
+                thrown = e;
+            }
+
+            expect(thrown).toBeInstanceOf(AppError);
+            expect((thrown as AppError).statusCode).toBe(409);
+            expect((thrown as AppError).code).toBe('PAGE_DISCONNECTED');
+            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+        });
+
+        it('dedupes via clientMessageId — returns stored outgoing without re-hitting Graph', async () => {
+            (mockRequest as any).body = { pageId: 'page-uuid', replyText: 'Hello', clientMessageId: 'cmid-1' };
+            const stored = { id: 'out-stored', message: 'Hello' };
+            vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue(mockConversationFb as any);
+            vi.mocked(messagesService.findOutgoingByClientMessageId).mockResolvedValue(stored as any);
+
+            await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+
+            expect(facebookService.sendPrivateMessage).not.toHaveBeenCalled();
+            expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+            expect(mockReply.send).toHaveBeenCalledWith(stored);
+        });
+
+        it('maps DmSendError window_expired to 409 DM_WINDOW_EXPIRED', async () => {
+            vi.mocked(pagesService.getPage).mockResolvedValue(mockPage as any);
+            vi.mocked(conversationsService.findByPageAndSender).mockResolvedValue(mockConversationFb as any);
+            vi.mocked(facebookService.sendPrivateMessage).mockRejectedValue(
+                new DmSendError('outside 24h window', { code: 10, subcode: 2018278 })
+            );
+
+            let thrown: unknown;
+            try {
+                await messagesController.replyToConversation(mockRequest as any, mockReply as any);
+            } catch (e) {
+                thrown = e;
+            }
+
+            expect(thrown).toBeInstanceOf(AppError);
+            expect((thrown as AppError).statusCode).toBe(409);
+            expect((thrown as AppError).code).toBe('DM_WINDOW_EXPIRED');
+            // Failed send must not be persisted.
+            expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
         });
     });
 
