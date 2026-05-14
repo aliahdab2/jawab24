@@ -439,7 +439,7 @@ export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 export { MAX_TEMPLATE_MESSAGE_LENGTH, DEFAULT_AI_MODEL } from './constants';
 
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
-export const PROMPT_VERSION = 'v40';
+export const PROMPT_VERSION = 'v36';
 
 /** The 8 valid AI intent categories. GPT must return one of these. */
 export const VALID_AI_INTENTS = [
