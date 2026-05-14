@@ -339,14 +339,14 @@ export class PagesController {
      * Test smart reply generation for a page
      * POST /pages/:id/test-reply
      */
-    async testReply(request: FastifyRequest<{ Params: { id: string }; Body: { question: string; channel: 'comment' | 'dm'; postMessage?: string } }>, reply: FastifyReply) {
+    async testReply(request: FastifyRequest<{ Params: { id: string }; Body: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] } }>, reply: FastifyReply) {
         const req = request as ResolvedWorkspaceRequest;
         if (!req.workspaceId) {
             return reply.status(401).send({ error: 'Unauthorized' });
         }
         const { workspaceOwnerId } = req;
         const { id } = request.params;
-        const { question, channel, postMessage } = request.body;
+        const { question, channel, postMessage, conversationHistory } = request.body;
         const startTime = Date.now();
 
         // 1. Validate input
@@ -361,6 +361,12 @@ export class PagesController {
         }
         if (postMessage && postMessage.length > 1000) {
             return reply.status(400).send({ error: 'postMessage must be 1000 characters or less' });
+        }
+        if (conversationHistory && !Array.isArray(conversationHistory)) {
+            return reply.status(400).send({ error: 'conversationHistory must be an array' });
+        }
+        if (conversationHistory && conversationHistory.length > 20) {
+            return reply.status(400).send({ error: 'conversationHistory must be 20 messages or less' });
         }
 
         // 2. Check AI quota
@@ -384,6 +390,7 @@ export class PagesController {
             // 4–6. Build playground context (shared with admin playground)
             const { playgroundInput, commentReplyMode, nudgeText } = await buildPlaygroundContext({
                 page, question, channel, postMessage,
+                conversationHistory: channel === 'dm' ? conversationHistory : undefined,
             });
 
             // 7. Generate reply via the same pipeline as production

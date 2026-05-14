@@ -152,7 +152,7 @@ export const pagesApi = {
     api.post('/pages/sync', accessToken ? { accessToken } : undefined, { timeout: LONG_RUNNING_TIMEOUT }),
   getKbGaps: (pageId: string) => api.get(`/pages/${pageId}/kb-gaps`),
   dismissGap: (pageId: string, gapId: string) => api.post(`/pages/${pageId}/kb-gaps/${gapId}/dismiss`),
-  testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string }) =>
+  testReply: (pageId: string, data: { question: string; channel: 'comment' | 'dm'; postMessage?: string; conversationHistory?: { role: 'user' | 'assistant'; content: string }[] }) =>
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };
 
