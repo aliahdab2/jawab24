@@ -335,6 +335,116 @@ describe('AI Service', () => {
         });
     });
 
+    describe('generateReply - belt-and-suspenders against ai-worker fallback_reply', () => {
+        // The ai-worker has an internal `getFallbackReply()` that returns a templated
+        // "Thanks, we'll get back to you" string with `flags: ['fallback_reply']` on a
+        // successful 200 response. Before this guard, that string was cached and shipped
+        // to customers as a real reply. Backend now rejects it pre-cache and lets the
+        // existing #137 catch/rethrow path retry or flag the row needs_attention.
+        it('should throw AiUnavailableError when ai-worker returns flags=["fallback_reply"]', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
+            vi.mocked(axios.post).mockResolvedValue({
+                data: {
+                    reply: 'شكراً لرسالتك إلى Test Page! سنرد عليك في أقرب وقت ممكن.',
+                    language: 'ar',
+                    confidence: 'low',
+                    flags: ['fallback_reply'],
+                },
+            });
+
+            await expect(service.generateReply({ comment: 'مرحبا' }))
+                .rejects.toThrow('ai-worker returned fallback_reply flag');
+        });
+
+        it('should NOT write to cache when fallback_reply flag is present', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+            vi.mocked(redis.set).mockResolvedValue('OK' as any);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
+            vi.mocked(axios.post).mockResolvedValue({
+                data: {
+                    reply: 'Thank you for your message to Test Page!',
+                    language: 'en',
+                    confidence: 'low',
+                    flags: ['fallback_reply'],
+                },
+            });
+
+            await expect(service.generateReply({ comment: 'hi' })).rejects.toThrow();
+
+            // redis.set must not have been called with an ai_reply cache key — the throw
+            // happens BEFORE saveToCache, so the fallback text never enters the cache.
+            const cacheSetCalls = vi.mocked(redis.set).mock.calls
+                .filter(call => typeof call[0] === 'string' && call[0].startsWith('cache:ai_reply:'));
+            expect(cacheSetCalls).toHaveLength(0);
+        });
+
+        it('should return normally when flags does NOT include fallback_reply', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
+            vi.mocked(axios.post).mockResolvedValue({
+                data: {
+                    reply: 'A real AI reply.',
+                    language: 'en',
+                    confidence: 'high',
+                    flags: ['some_other_flag'],
+                },
+            });
+
+            const result = await service.generateReply({ comment: 'Hello' });
+
+            expect(result.reply).toBe('A real AI reply.');
+            expect(result.flags).toEqual(['some_other_flag']);
+        });
+
+        it('should return normally when flags is empty or missing', async () => {
+            const { redis } = await import('../../src/lib/redis');
+            vi.mocked(redis.get).mockResolvedValue(null);
+
+            const { db } = await import('../../src/db');
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([]),
+                }),
+            } as any);
+
+            vi.mocked(axios.post).mockResolvedValue({
+                data: {
+                    reply: 'A real AI reply.',
+                    language: 'en',
+                },
+            });
+
+            const result = await service.generateReply({ comment: 'Hello' });
+
+            expect(result.reply).toBe('A real AI reply.');
+        });
+    });
+
     describe('getCacheStats', () => {
         it('should return cache statistics for both caches', async () => {
             const { db } = await import('../../src/db');
