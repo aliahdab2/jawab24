@@ -279,10 +279,11 @@ let worker: Worker<ReplyJobData, ReplyJobResult> | null = null;
 
 /**
  * Returns true when a row's existing flag_meta carries the `backfill_no_notify`
- * marker — set by the one-off backfill SQL that runs before this notification
- * trigger ships, so pre-existing stuck rows don't blast pushes the moment the
- * new code goes live. Kept as a permanent skip-flag so future bulk backfills
- * can opt out of notification too.
+ * marker. Today this is dead code in normal operation — the idempotency guard
+ * `!existing.needsAttention` already excludes the rows the deploy-time backfill
+ * SQL targets. Kept as a forward-looking opt-out for future bulk backfills that
+ * may pre-mark rows where `needsAttention=false`, and as a safety net if the
+ * idempotency guard is ever loosened.
  */
 function existingFlagMetaHasBackfillSkip(flagMeta: unknown): boolean {
     if (!flagMeta || typeof flagMeta !== 'object') return false;
