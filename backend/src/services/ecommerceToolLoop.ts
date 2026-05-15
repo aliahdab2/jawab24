@@ -28,6 +28,7 @@ import { executeToolCall } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
 import { buildProductCardsFromToolResults } from './reply/productCardBuilder';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { AiToolLoopExhaustedError } from '../utils/fbGraphErrors';
 import type { AiGenerateRequest, AiGenerateResponse } from '../types';
 import { VALID_TOOL_NAMES, type EcommerceToolCall, type EcommerceToolResult } from '@jawab24/shared';
 
@@ -222,11 +223,22 @@ export async function generateReplyWithTools(
                 continue;
             }
 
+            // AI is still asking for tools at the final round (or returned an
+            // empty reply). Throw rather than return an empty reply — sending a
+            // blank DM mid-conversation is just as bad as a templated fallback.
+            // The processor's outer catch treats this as transient via
+            // `isTransientAiError`, so BullMQ retries — a single inference run
+            // can get stuck; a fresh run may produce a final answer. After
+            // retries exhaust, the row is flagged needs_attention.
+            if (!roundData.reply) {
+                throw new AiToolLoopExhaustedError(MAX_TOOL_ROUNDS);
+            }
+
             // Final reply — attach product cards from any tool result that
             // referenced a product. Absent when no tool carries product data.
             const productCards = await buildProductCardsFromToolResults(storeId, allToolResults);
             return {
-                reply: roundData.reply || '',
+                reply: roundData.reply,
                 language: roundData.language || request.language || 'en',
                 cached: false,
                 intent: roundData.intent,
@@ -237,17 +249,19 @@ export async function generateReplyWithTools(
             };
         }
 
-        // Exhausted rounds without a final reply — shouldn't happen normally
-        return {
-            reply: '',
-            language: request.language || 'en',
-            cached: false,
-            intent: 'QUESTION',
-            confidence: 'low',
-            flags: ['tool_loop_exhausted'],
-            tokensUsed: totalTokens,
-        };
+        // Loop broke out because the AI returned only invalid tool names that
+        // were filtered out — no reply was ever produced. Same semantics as
+        // the in-loop exhaustion: throw so retry / flag handle it.
+        throw new AiToolLoopExhaustedError(MAX_TOOL_ROUNDS);
     } catch (error) {
+        // `AiToolLoopExhaustedError` is part of the new contract — let it
+        // propagate so the reply pipeline can retry / flag. Other errors
+        // (tool execution failure, axios error from /generate-with-tools) keep
+        // the existing graceful degradation: fall back to standard AI
+        // generation (no tools).
+        if (error instanceof AiToolLoopExhaustedError) {
+            throw error;
+        }
         captureError(error, 'E-commerce tool loop error', {
             tags: { service: 'ecommerce-tool-loop', storeId },
         });

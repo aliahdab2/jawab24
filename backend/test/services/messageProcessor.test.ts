@@ -1331,4 +1331,42 @@ describe('MessageProcessor — transient error retry behavior', () => {
         ).rejects.toBe(transientError);
     });
 
+    it('transient AI error rethrows so BullMQ retries — no fake fallback mid-conversation', async () => {
+        // Regression guard for the deploy-outage bug. When the ai-worker is briefly
+        // unreachable during a rolling deploy, aiService.generateReply throws and the
+        // error propagates through generateForMessage. The outer catch MUST rethrow
+        // so BullMQ retries the job — never substitute a canned "شكراً لرسالتك!"
+        // reply mid-conversation. After retries exhaust, flagStuckJobOnFinalFailure
+        // marks the row needs_attention.
+        const transientAiError = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:3002'), {
+            code: 'ECONNREFUSED',
+        });
+        vi.mocked(replyGenerator.generateForMessage).mockRejectedValue(transientAiError);
+
+        const adapter = createMockAdapter();
+
+        await expect(
+            messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1'),
+        ).rejects.toBe(transientAiError);
+        // Adapter.sendReply must not have been invoked — we never reached the send step.
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+    });
+
+    it('AiUnavailableError (AI_ENABLED=false misdeploy) rethrows so the row ends up flagged', async () => {
+        // AI_ENABLED=false is a permanent config decision, but we still treat the
+        // resulting AiUnavailableError as retry-worthy so flagStuckJobOnFinalFailure
+        // surfaces the row in needs_attention after retries exhaust. The alternative
+        // (return success:false here) would leave messages invisible to the merchant.
+        const { AiUnavailableError } = await import('../../src/utils/fbGraphErrors');
+        const aiUnavailable = new AiUnavailableError('AI_ENABLED is false');
+        vi.mocked(replyGenerator.generateForMessage).mockRejectedValue(aiUnavailable);
+
+        const adapter = createMockAdapter();
+
+        await expect(
+            messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1'),
+        ).rejects.toBe(aiUnavailable);
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+    });
+
 });

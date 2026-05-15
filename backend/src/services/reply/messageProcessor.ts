@@ -23,7 +23,7 @@ import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
-import { isTransientFbError } from '../../utils/fbGraphErrors';
+import { isTransientFbError, isTransientAiError } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
 import { extractPostId } from '../../utils/instagram';
 
@@ -641,7 +641,13 @@ export class MessageProcessor {
             // (FB rate limit, 5xx, -1/2018012, network) specifically to trigger retry.
             // Returning success:false here makes BullMQ mark the job "completed with
             // failure" and never retry.
-            if (isTransientFbError(error, platform)) {
+            //
+            // Same applies to transient AI errors (ai-worker unreachable during deploy,
+            // 5xx, circuit-open, tool-loop exhausted, AI_ENABLED=false misdeploy):
+            // rethrow so BullMQ retries — never substitute a "شكراً لرسالتك!" reply
+            // mid-conversation. After retries exhaust, `flagStuckJobOnFinalFailure` in
+            // replyWorker flags the message row needs_attention so the merchant handles it.
+            if (isTransientFbError(error, platform) || isTransientAiError(error)) {
                 pipelineMetrics.record(pipeline, 'transient_error_retry');
                 this.logger.warn(`[${platform}] Transient error — rethrowing for BullMQ retry`, {
                     messageId: platformMessageId,

@@ -626,18 +626,15 @@ describe('InstagramCommentAdapter', () => {
     });
 
     describe('getFallbackReply', () => {
-        it('should return English fallback by default', () => {
-            const fallback = adapter.getFallbackReply();
-
-            expect(fallback).not.toBeNull();
-            expect(fallback).toContain('Thank you');
-        });
-
-        it('should return Arabic fallback when lang is ar', () => {
-            const fallback = adapter.getFallbackReply('ar');
-
-            expect(fallback).not.toBeNull();
-            expect(fallback).toContain('شكراً');
+        it('should return null (matches Facebook adapter — no canned reply mid-conversation)', () => {
+            // Previously returned `t('instagramFallback', lang)` → "Thank you for
+            // your comment! 🙏" / "شكراً لتعليقك! 🙏". Sending that mid-conversation
+            // (e.g. when the generator skipped the reply because the AI was
+            // unavailable, the comment was flagged offensive, or confidence was
+            // low) was the same anti-pattern as ai.ts:530. The new contract:
+            // return null, so commentProcessor's no-reply branch flags the
+            // comment needs_attention and notifies the merchant.
+            expect(adapter.getFallbackReply()).toBeNull();
         });
     });
 });

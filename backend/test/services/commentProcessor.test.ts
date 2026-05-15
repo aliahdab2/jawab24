@@ -2147,6 +2147,32 @@ describe('CommentProcessor — template reply mode behavior', () => {
             expect(adapter.flagComment).not.toHaveBeenCalled();
         });
 
+        it('transient AI error rethrows so BullMQ retries — no fake "شكراً لتعليقك" reply', async () => {
+            // Regression guard for the deploy-outage bug. When the ai-worker is briefly
+            // unreachable during a rolling deploy, aiService.generateReply throws and the
+            // error propagates through generateForComment. The outer catch MUST rethrow
+            // so BullMQ retries — never substitute a canned templated reply
+            // mid-conversation. After retries exhaust, flagStuckJobOnFinalFailure
+            // surfaces the comment as needs_attention.
+            const transientAiError = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:3002'), {
+                code: 'ECONNREFUSED',
+            });
+            vi.mocked(replyGenerator.generateForComment).mockRejectedValueOnce(transientAiError);
+            const adapter = createMockAdapter();
+
+            await expect(
+                commentProcessor.processComment(
+                    adapter, 'page-1', 'content-1', 'comment-1', 'Hello', 'user-1', 'Alice',
+                ),
+            ).rejects.toBe(transientAiError);
+
+            // We never reached the send step. No fake reply was sent.
+            expect(adapter.sendReply).not.toHaveBeenCalled();
+            // Transients must NOT be flagged immediately — flagging happens on retry
+            // exhaustion via flagStuckJobOnFinalFailure in replyWorker.
+            expect(adapter.flagComment).not.toHaveBeenCalled();
+        });
+
         it('workspace auto-reply disabled after store resolves + emits comment:skipped', async () => {
             // Comment is stored so the merchant can still see it in the inbox,
             // but the pipeline exit must resolve — not leave it as "Pending".
