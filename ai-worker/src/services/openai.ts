@@ -2,6 +2,13 @@ import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { PROMPT_VERSION } from '@jawab24/shared';
+import {
+    AiClientNotConfiguredError,
+    AiTimeoutError,
+    AiRefusalError,
+    AiEmptyReplyError,
+    AI_TYPED_ERROR_NAMES,
+} from '../lib/errors';
 
 // Token budget constants (configurable via env vars for production tuning)
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
@@ -296,7 +303,11 @@ export class OpenAIService {
      */
     async generateReply(request: GenerateRequest): Promise<GenerateResponse> {
         if (!this.client) {
-            return this.getFallbackReply(request);
+            // Root cause is missing OPENAI_API_KEY at startup — should also fail
+            // the healthcheck. Throw a typed error so backend's reply pipeline
+            // catches it via isTransientAiError and the row reaches
+            // needs_attention via flagStuckJobOnFinalFailure.
+            throw new AiClientNotConfiguredError();
         }
 
         try {
@@ -357,9 +368,12 @@ export class OpenAIService {
                     }, { signal: controller.signal }),
                 );
             } catch (e) {
-                // Timeout fired — expected behaviour, not a production error
-                if (e instanceof OpenAI.APIUserAbortError) {
-                    return this.getFallbackReply(request);
+                // Timeout fired — typed throw so backend retries via BullMQ
+                // (transient — same input on retry usually succeeds). Check by
+                // name not instanceof so the catch survives tests that mock the
+                // `openai` package without providing the APIUserAbortError class.
+                if (e instanceof Error && e.name === 'APIUserAbortError') {
+                    throw new AiTimeoutError(config.openai.timeoutMs);
                 }
                 throw e;
             } finally {
@@ -367,8 +381,9 @@ export class OpenAIService {
             }
 
             // Structured-output refusal — model declined the request (policy violation).
-            // When strict json_schema is active, OpenAI may return `refusal` instead of content.
-            // Log to Sentry for observability and fall back to a safe canned reply.
+            // Non-transient: same input → same refusal. Throw with the refusal reason so
+            // backend can flag needs_attention immediately + notify the merchant who can
+            // adjust KB / brand voice / post content tripping the policy gate.
             const refusal = completion.choices[0]?.message?.refusal;
             if (refusal) {
                 Sentry.addBreadcrumb({
@@ -377,7 +392,7 @@ export class OpenAIService {
                     message: 'openai_structured_refusal',
                     data: { refusal, model: config.openai.model },
                 });
-                return this.getFallbackReply(request);
+                throw new AiRefusalError(refusal);
             }
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
@@ -400,8 +415,15 @@ export class OpenAIService {
             // Post-reply validation: catch issues the prompt alone can't prevent
             const validated = this.validateReply(parsed, request);
 
+            // Non-transient: the bot-words filter is deterministic, so retry will
+            // yield the same empty result. Surface to merchant as needs_attention
+            // so they can review brand voice / KB / prompt.
+            if (!validated.reply) {
+                throw new AiEmptyReplyError();
+            }
+
             return {
-                reply: validated.reply || this.getFallbackReply(request).reply,
+                reply: validated.reply,
                 // Prefer GPT's declared reply language (strict schema), fall back to input-based detection.
                 language: validated.language || request.language || detectedLanguage,
                 tokensUsed: completion.usage?.total_tokens,
@@ -413,8 +435,18 @@ export class OpenAIService {
                 flags: validated.flags,
             };
         } catch (error) {
+            // Preserve typed errors — they must reach backend's reconstruction
+            // logic with their `name` intact. Re-throw without wrapping.
+            // Check by name (not instanceof) to be robust against vitest module
+            // resetting that can null the class references mid-test.
+            if (error instanceof Error && AI_TYPED_ERROR_NAMES.has(error.name)) {
+                throw error;
+            }
+            // Anything else (network glitch, unknown OpenAI shape, etc.) is captured
+            // for triage and rethrown. Backend's catch will decide retry vs flag
+            // via the existing isTransientAiError classifier.
             Sentry.captureException(error instanceof Error ? error : new Error('OpenAI API error'), { tags: { service: 'openai' } });
-            return this.getFallbackReply(request);
+            throw error;
         }
     }
 
@@ -894,51 +926,6 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         }
 
         return { ...parsed, reply: finalReply, flags };
-    }
-
-    /**
-     * Get fallback reply when AI is unavailable
-     */
-    /** @internal Exposed for provider abstraction — do not call directly outside providers/index.ts */
-    getFallbackReply(request: GenerateRequest): GenerateResponse {
-        const language = this.resolveInputLanguage(request);
-        const channel = request.context?.channel
-            || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
-        const isDM = channel === 'dm';
-        const pageName = request.context?.pageName;
-
-        const commentFallbacks: Record<string, string> = pageName
-            ? {
-                ar: `شكراً لتواصلك مع ${pageName}! سيقوم فريقنا بالرد عليك قريباً.`,
-                sv: `Tack för att du kontaktar ${pageName}! Vårt team återkommer snart.`,
-                en: `Thank you for reaching out to ${pageName}! Our team will get back to you shortly.`,
-            }
-            : {
-                ar: 'شكراً لتواصلك معنا! سيقوم فريقنا بالرد عليك قريباً.',
-                sv: 'Tack för att du kontaktar oss! Vårt team återkommer snart.',
-                en: 'Thank you for reaching out! Our team will get back to you shortly.',
-            };
-
-        const messageFallbacks: Record<string, string> = pageName
-            ? {
-                ar: `شكراً لرسالتك إلى ${pageName}! سنرد عليك في أقرب وقت ممكن.`,
-                sv: `Tack för ditt meddelande till ${pageName}! Vi återkommer så snart som möjligt.`,
-                en: `Thank you for your message to ${pageName}! We'll respond as soon as possible.`,
-            }
-            : {
-                ar: 'شكراً لرسالتك! سنرد عليك في أقرب وقت ممكن. إذا كان استفسارك عاجلاً، يمكنك التواصل معنا مباشرة.',
-                sv: 'Tack för ditt meddelande! Vi återkommer så snart som möjligt. Om ditt ärende är brådskande, kontakta oss direkt.',
-                en: 'Thank you for your message! We\'ll respond as soon as possible. If your inquiry is urgent, feel free to contact us directly.',
-            };
-
-        const fallbacks = isDM ? messageFallbacks : commentFallbacks;
-
-        return {
-            reply: fallbacks[language] || fallbacks['en'],
-            language,
-            confidence: 'low',
-            flags: ['fallback_reply'],
-        };
     }
 }
 

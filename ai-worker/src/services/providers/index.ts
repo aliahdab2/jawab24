@@ -4,6 +4,7 @@ import { openaiService, type GenerateRequest, type GenerateResponse } from '../o
 import type { LLMProvider } from './types';
 import { OpenAIAdapter } from './openai-adapter';
 import { ClaudeAdapter } from './claude-adapter';
+import { AiClientNotConfiguredError } from '../../lib/errors';
 
 /**
  * Map of model IDs to the provider factory that creates them.
@@ -64,7 +65,7 @@ export async function generateReplyWithProvider(
     const provider = getProvider(modelId);
 
     if (!provider.isConfigured()) {
-        return openaiService.getFallbackReply(request);
+        throw new AiClientNotConfiguredError(modelId);
     }
 
     try {
@@ -119,6 +120,8 @@ export async function generateReplyWithProvider(
         };
     } catch (error) {
         console.error(`Provider ${provider.name} (${modelId}) error:`, error);
-        return openaiService.getFallbackReply(request);
+        // Rethrow — backend's catch decides retry-vs-flag via isTransientAiError.
+        // Returning a templated fake reply here is the bug we're removing.
+        throw error;
     }
 }
