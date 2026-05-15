@@ -384,6 +384,18 @@ export class AiService {
                 flags: response.data.flags,
             };
 
+            // Belt-and-suspenders: the ai-worker's internal `getFallbackReply` returns a
+            // templated "Thanks, we'll get back to you" string as a *successful* 200 with
+            // `flags: ['fallback_reply']`. That string used to ship to customers as if it
+            // were a real AI reply (and got cached, perpetuating the bug). Reject it here
+            // BEFORE the cache write so the existing #137 catch / rethrow path takes over:
+            // BullMQ retries; on exhaustion, `flagStuckJobOnFinalFailure` flags the row
+            // needs_attention. Stays in code forever — defense-in-depth even after the
+            // ai-worker fallback path is deleted.
+            if (aiMetadata.flags?.includes('fallback_reply')) {
+                throw new AiUnavailableError('ai-worker returned fallback_reply flag');
+            }
+
             // Save to exact cache (scoped by KB version + post context)
             // Skip for non-default models — different models produce different replies
             if (!isNonDefaultModel) {
