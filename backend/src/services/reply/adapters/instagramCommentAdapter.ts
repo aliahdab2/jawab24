@@ -263,8 +263,13 @@ export class InstagramCommentAdapter implements CommentPlatformAdapter {
         };
     }
 
-    getFallbackReply(lang = 'en'): string | null {
-        return t('instagramFallback', lang);
+    getFallbackReply(): string | null {
+        // No adapter-level fallback. When generator returns no reply (offensive,
+        // spam, low confidence, AI unavailable), commentProcessor's no-reply
+        // branch flags the comment needs_attention and notifies the merchant —
+        // matches the Facebook adapter's behavior and avoids sending a useless
+        // "شكراً لتعليقك! 🙏" mid-conversation.
+        return null;
     }
 }
 

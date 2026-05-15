@@ -188,4 +188,33 @@ describe('generateReplyWithTools', () => {
         expect(mockExecuteToolCall).toHaveBeenCalledTimes(1);
         expect(mockExecuteToolCall).toHaveBeenCalledWith('store-1', expect.objectContaining({ name: 'lookup_order' }));
     });
+
+    it('throws AiToolLoopExhaustedError when the AI keeps requesting tools past MAX_TOOL_ROUNDS', async () => {
+        // Previously this returned `reply: ''` with flag `tool_loop_exhausted`,
+        // which downstream would either send a blank DM or fail at the FB API.
+        // New contract: throw a typed error classified as transient so the reply
+        // pipeline retries (a fresh inference run may produce a final reply) and
+        // ultimately flags the row on retry exhaustion.
+        mockGetStoreById.mockResolvedValue({ isActive: true, platform: 'shopify' });
+
+        // Both rounds keep requesting tool calls — never returns a final reply.
+        mockAxiosPost.mockResolvedValue({
+            data: {
+                toolCalls: [{ name: 'lookup_order', arguments: { order_number: '1234' } }],
+                tokensUsed: 50,
+            },
+        });
+        mockExecuteToolCall.mockResolvedValue({
+            tool_name: 'lookup_order',
+            success: true,
+            data: { orderFound: true, orderNumber: '1234' },
+        });
+
+        const { AiToolLoopExhaustedError } = await import('../../src/utils/fbGraphErrors');
+        const request = { ...baseRequest, context: { ecommerceStoreId: 'store-1' } };
+
+        await expect(generateReplyWithTools(request)).rejects.toBeInstanceOf(
+            AiToolLoopExhaustedError,
+        );
+    });
 });

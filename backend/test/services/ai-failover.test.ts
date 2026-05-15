@@ -169,10 +169,13 @@ describe('AI Failover — Full Chain Integration', () => {
         const { AiService } = await import('../../src/services/ai');
         const service = new AiService();
 
-        // 3 failures → circuit opens, each returns static fallback
+        // 3 failures → circuit opens. New contract: each primary failure throws
+        // (no static fallback returned). The circuit breaker still counts these
+        // failures and trips after the threshold.
         for (let i = 0; i < 3; i++) {
-            const result = await service.generateReply({ comment: `test ${i}`, context: { userId: 'u1' } });
-            expect(result.model).toBe('fallback');
+            await expect(
+                service.generateReply({ comment: `test ${i}`, context: { userId: 'u1' } }),
+            ).rejects.toThrow();
         }
         expect(cb.isOpen()).toBe(true);
 
@@ -192,11 +195,13 @@ describe('AI Failover — Full Chain Integration', () => {
         const { AiService } = await import('../../src/services/ai');
         const service = new AiService();
 
-        // 2 timeouts → circuit opens
-        await service.generateReply({ comment: 'test 1', context: { userId: 'u1' } });
-        await service.generateReply({ comment: 'test 2', context: { userId: 'u1' } });
+        // 2 timeouts → circuit opens. New contract: throws on each timeout.
+        await expect(service.generateReply({ comment: 'test 1', context: { userId: 'u1' } })).rejects.toThrow();
+        await expect(service.generateReply({ comment: 'test 2', context: { userId: 'u1' } })).rejects.toThrow();
         expect(cb.isOpen()).toBe(true);
 
+        // Once the circuit is open, the failover provider kicks in and returns
+        // a real reply (this path is unchanged by the fallback removal).
         const result = await service.generateReply({ comment: 'after timeout', context: { userId: 'u1' } });
         expect(result.model).toBe(FALLBACK_MODEL);
         expect(result.flags).toContain('provider_failover');
@@ -213,15 +218,19 @@ describe('AI Failover — Full Chain Integration', () => {
         const { AiService } = await import('../../src/services/ai');
         const service = new AiService();
 
-        await service.generateReply({ comment: 'test 1', context: { userId: 'u1' } });
-        await service.generateReply({ comment: 'test 2', context: { userId: 'u1' } });
+        // Pre-trip the circuit. New contract: each call throws.
+        await expect(service.generateReply({ comment: 'test 1', context: { userId: 'u1' } })).rejects.toThrow();
+        await expect(service.generateReply({ comment: 'test 2', context: { userId: 'u1' } })).rejects.toThrow();
         expect(cb.isOpen()).toBe(true);
 
         const result = await service.generateReply({ comment: 'after rate limit', context: { userId: 'u1' } });
         expect(result.model).toBe(FALLBACK_MODEL);
     });
 
-    it('falls to static fallback when both GPT and Claude fail', async () => {
+    it('throws when both GPT and Claude fail (no fake fallback)', async () => {
+        // Previously the catch tail returned a templated "Thank you for your comment!"
+        // mid-conversation. New contract: rethrow so BullMQ retries or
+        // flagStuckJobOnFinalFailure marks the row needs_attention.
         const axiosPost = makeAxiosMock({
             primaryError: new Error('GPT down'),
             fallbackError: new Error('Claude also down'),
@@ -231,14 +240,14 @@ describe('AI Failover — Full Chain Integration', () => {
         const { AiService } = await import('../../src/services/ai');
         const service = new AiService();
 
-        // 1 failure → circuit opens
-        await service.generateReply({ comment: 'test', context: { userId: 'u1' } });
+        // 1 failure → circuit opens. Throws (no fallback).
+        await expect(service.generateReply({ comment: 'test', context: { userId: 'u1' } }))
+            .rejects.toThrow();
         expect(cb.isOpen()).toBe(true);
 
-        // Circuit open → Claude fails → static fallback
-        const result = await service.generateReply({ comment: 'both down', context: { userId: 'u1' } });
-        expect(result.reply).toBe('Thank you for your comment!');
-        expect(result.model).toBe('fallback');
+        // Circuit open → Claude fails → throws (no fallback substitution)
+        await expect(service.generateReply({ comment: 'both down', context: { userId: 'u1' } }))
+            .rejects.toThrow();
     });
 
     it('recovers to primary after circuit resets', async () => {
@@ -256,9 +265,11 @@ describe('AI Failover — Full Chain Integration', () => {
         const { AiService } = await import('../../src/services/ai');
         const service = new AiService();
 
-        // 2 failures → circuit opens
-        await service.generateReply({ comment: 'fail 1', context: { userId: 'u1' } });
-        await service.generateReply({ comment: 'fail 2', context: { userId: 'u1' } });
+        // 2 failures → circuit opens. New contract: each call throws (no
+        // fake fallback substitution). The circuit breaker still trips on
+        // the count of underlying failures.
+        await expect(service.generateReply({ comment: 'fail 1', context: { userId: 'u1' } })).rejects.toThrow();
+        await expect(service.generateReply({ comment: 'fail 2', context: { userId: 'u1' } })).rejects.toThrow();
         expect(cb.isOpen()).toBe(true);
 
         // Failover to Claude

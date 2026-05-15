@@ -296,3 +296,95 @@ export function classifyDmError(err: unknown, platform: FbPlatform): DmFailure {
     }
     return { bucket: 'unknown', rawMessage: String(err) };
 }
+
+/**
+ * Thrown by aiService.generateReply when AI is unavailable for a permanent
+ * (non-transient) reason — e.g. AI_ENABLED=false env config. Even though the
+ * cause is permanent, `isTransientAiError` returns true for this error so the
+ * row reaches needs_attention via the existing `flagStuckJobOnFinalFailure`
+ * mechanism after retries exhaust. The alternative (return success:false on
+ * first sight) would leave messages stuck without a flag — invisible to the
+ * merchant. The 3 wasted retries when AI is truly disabled are cheap insurance.
+ *
+ * What the merchant must NEVER see, regardless: a fake templated
+ * "Thank you for your message!" reply mid-conversation.
+ */
+export class AiUnavailableError extends Error {
+    constructor(message = 'AI is unavailable') {
+        super(message);
+        this.name = 'AiUnavailableError';
+    }
+}
+
+/**
+ * Thrown by the e-commerce tool loop when the AI keeps requesting tool calls
+ * past the configured round limit without producing a final reply. Treated as
+ * transient — a single inference run can get stuck; a retry may succeed.
+ */
+export class AiToolLoopExhaustedError extends Error {
+    readonly rounds: number;
+    constructor(rounds: number, message?: string) {
+        super(message ?? `E-commerce tool loop exhausted after ${rounds} rounds`);
+        this.name = 'AiToolLoopExhaustedError';
+        this.rounds = rounds;
+    }
+}
+
+/**
+ * True when an error raised from `aiService.generateReply` or the e-commerce
+ * tool loop should be rethrown so BullMQ retries the job. Mirrors
+ * `isTransientFbError`: reply-pipeline outer catches use this alongside the
+ * FB classifier.
+ *
+ * Genuinely transient (will succeed on retry):
+ *  - axios network error (no `error.response`) or 5xx response from the ai-worker
+ *  - Node socket-level errors: ECONNREFUSED, ETIMEDOUT, ENOTFOUND, EAI_AGAIN,
+ *    ECONNRESET, EPIPE
+ *  - AbortError / timed-out fetch
+ *  - CircuitOpenError thrown by the ai-worker circuit breaker
+ *  - `AiToolLoopExhaustedError` (one bad run; retry may produce a final reply)
+ *
+ * Permanent but still classified true here so the row is flagged on retry
+ * exhaustion (via `flagStuckJobOnFinalFailure`) instead of being silently
+ * swallowed into success:false where the merchant would never see it:
+ *  - `AiUnavailableError` (AI_ENABLED=false misdeploy)
+ *
+ * The 3 wasted retries for permanent errors are negligible compared to the
+ * cost of a message disappearing without a needs_attention flag.
+ *
+ * Returns false for unknown errors so the existing success:false path is
+ * preserved — preventing this change from accidentally widening retry scope.
+ */
+const TRANSIENT_NODE_ERR_CODES = new Set([
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'ECONNRESET',
+    'EPIPE',
+]);
+
+export function isTransientAiError(err: unknown): boolean {
+    if (err instanceof AiToolLoopExhaustedError) return true;
+    if (err instanceof AiUnavailableError) return true;
+
+    // Circuit breaker — checked by name to avoid a circular import on circuitBreaker.ts
+    if (err instanceof Error && err.name === 'CircuitOpenError') return true;
+
+    if (axios.isAxiosError(err)) {
+        if (!err.response) return true; // network-level failure (no HTTP response)
+        if (err.response.status >= 500 && err.response.status < 600) return true;
+        return false;
+    }
+
+    if (err instanceof Error) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (typeof code === 'string' && TRANSIENT_NODE_ERR_CODES.has(code)) return true;
+        if (err.name === 'AbortError') return true;
+        // Intentionally NOT matching on err.message — that would over-classify
+        // any error with "timeout" / "network" in its text (including ones
+        // raised from non-AI code paths like pagesService) as retry-worthy.
+    }
+
+    return false;
+}

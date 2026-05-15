@@ -17,7 +17,7 @@ import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
 import { leadExtractorService } from '../leadExtractor';
-import { isTransientFbError } from '../../utils/fbGraphErrors';
+import { isTransientFbError, isTransientAiError } from '../../utils/fbGraphErrors';
 
 /**
  * Unified Comment Processor
@@ -565,7 +565,11 @@ export class CommentProcessor {
             // stuck as replied=false / needs_attention=false / flag_reason=null — invisible
             // to the merchant and never re-attempted. Confirmed prod failure: Mohamad Shami
             // "عنوان" 2026-05-14, DM hit FB -1/2018012, comment abandoned silently.
-            if (isTransientFbError(error, platform)) {
+            //
+            // Same rationale for transient AI errors (ai-worker unreachable during deploy,
+            // 5xx, circuit-open, tool-loop exhausted): rethrow so BullMQ retries — never
+            // let the catch substitute a templated "شكراً لتعليقك!" reply mid-conversation.
+            if (isTransientFbError(error, platform) || isTransientAiError(error)) {
                 pipelineMetrics.record(pipeline, 'transient_error_retry');
                 this.logger.warn(`[${platform}] Transient error — rethrowing for BullMQ retry`, {
                     platformCommentId,

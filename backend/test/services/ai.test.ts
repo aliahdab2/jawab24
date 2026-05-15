@@ -151,41 +151,29 @@ describe('AI Service', () => {
             );
         });
 
-        it('should return fallback on AI service error', async () => {
+        it('should throw on AI service error (no fake fallback mid-conversation)', async () => {
+            // Previously this returned `t('commentFallback', lang)` — the bug that
+            // caused "شكراً لتعليقك!" to land mid-conversation during deploy outages.
+            // The contract now: rethrow so the reply pipeline retries or flags.
             vi.mocked(axios.post).mockRejectedValue(new Error('Service unavailable'));
 
-            const result = await service.generateReply({
-                comment: 'Hello!',
-            });
-
-            expect(result.reply).toBe('Thank you for your comment!');
-            expect(result.language).toBe('en');
-            expect(result.model).toBe('fallback');
+            await expect(service.generateReply({ comment: 'Hello!' }))
+                .rejects.toThrow('Service unavailable');
         });
 
-        it('should return Arabic fallback when the customer wrote Arabic', async () => {
+        it('should throw regardless of customer language (no localized fake reply)', async () => {
+            // Same contract for Arabic. Don't substitute "شكراً لتعليقك!" — throw.
             vi.mocked(axios.post).mockRejectedValue(new Error('Service unavailable'));
 
-            const result = await service.generateReply({
-                comment: 'العنوان',
-            });
-
-            expect(result.reply).toBe('شكراً لتعليقك!');
-            expect(result.language).toBe('ar');
-            expect(result.model).toBe('fallback');
+            await expect(service.generateReply({ comment: 'العنوان' }))
+                .rejects.toThrow('Service unavailable');
         });
 
-        it('should fall back to request.language for script-less input', async () => {
+        it('should throw for script-less input (no fake reply via request.language)', async () => {
             vi.mocked(axios.post).mockRejectedValue(new Error('Service unavailable'));
 
-            const result = await service.generateReply({
-                comment: '👋👋👋',
-                language: 'ar',
-            });
-
-            expect(result.reply).toBe('شكراً لتعليقك!');
-            expect(result.language).toBe('ar');
-            expect(result.model).toBe('fallback');
+            await expect(service.generateReply({ comment: '👋👋👋', language: 'ar' }))
+                .rejects.toThrow('Service unavailable');
         });
 
         it('should respect language parameter', async () => {
@@ -295,7 +283,10 @@ describe('AI Service', () => {
             expect(result.intent).toBe('GREETING');
         });
 
-        it('should return lightweight classification on fallback error response', async () => {
+        it('should throw on AI worker timeout (no silent fallback)', async () => {
+            // Previously: catch returned `model: 'fallback'` with lightweight
+            // classifier metadata. New contract: throw — the pipeline retries
+            // or flags rather than sending a fake reply.
             const { redis } = await import('../../src/lib/redis');
             vi.mocked(redis.get).mockResolvedValue(null);
 
@@ -308,15 +299,8 @@ describe('AI Service', () => {
 
             vi.mocked(axios.post).mockRejectedValue(new Error('timeout'));
 
-            const result = await service.generateReply({
-                comment: 'Hello',
-            });
-
-            expect(result.model).toBe('fallback');
-            // Fallback now includes lightweight keyword-based classification
-            expect(result.intent).toBe('GREETING');
-            expect(result.confidence).toBe('low');
-            expect(result.flags).toEqual([]);
+            await expect(service.generateReply({ comment: 'Hello' }))
+                .rejects.toThrow('timeout');
         });
 
         it('should handle AI worker response without flag fields (backward compat)', async () => {
@@ -1138,21 +1122,20 @@ describe('AI Service - Provider Failover', () => {
         expect(setCalls).toHaveLength(0);
     });
 
-    it('should fall through to static fallback when failover also fails', async () => {
+    it('should throw when both primary and failover fail (no fake fallback)', async () => {
+        // Previously: tail of the catch block returned `t('commentFallback', lang)`,
+        // landing "Thank you for your comment!" mid-conversation. New contract:
+        // rethrow so BullMQ retries the job and, if exhaustion is reached,
+        // flagStuckJobOnFinalFailure surfaces the message as needs_attention.
         setupFailoverMocks({ failoverError: new Error('Claude API also down') });
 
         const { AiService: FreshService } = await import('../../src/services/ai');
         const service = new FreshService();
 
-        const result = await service.generateReply({
+        await expect(service.generateReply({
             comment: 'Hello',
             context: { userId: 'user-1' },
-        });
-
-        expect(result.reply).toBe('Thank you for your comment!');
-        expect(result.model).toBe('fallback');
-        // Should have lightweight classification from fallbackClassifier
-        expect(result.intent).toBe('GREETING');
+        })).rejects.toThrow();
     });
 
     it('should not write to cache during failover', async () => {
@@ -1201,7 +1184,11 @@ describe('AI Service (disabled)', () => {
         vi.resetModules();
     });
 
-    it('should return default message when AI is disabled', async () => {
+    it('should throw AiUnavailableError when AI_ENABLED=false (no fake fallback)', async () => {
+        // Previously returned a hardcoded "Thank you" reply with model: 'disabled'.
+        // That would land mid-conversation if the env var was ever misdeployed.
+        // New contract: throw — the reply pipeline retries and (after retries
+        // exhaust) flags the row needs_attention so the merchant handles it.
         vi.doMock('../../src/config', () => ({
             config: {
                 ai: {
@@ -1214,14 +1201,11 @@ describe('AI Service (disabled)', () => {
         }));
 
         const { AiService: DisabledAiService } = await import('../../src/services/ai');
+        const { AiUnavailableError } = await import('../../src/utils/fbGraphErrors');
         const disabledService = new DisabledAiService();
 
-        const result = await disabledService.generateReply({
-            comment: 'Hello!',
-        });
-
-        expect(result.reply).toContain('Thank you');
-        expect(result.model).toBe('disabled');
+        await expect(disabledService.generateReply({ comment: 'Hello!' }))
+            .rejects.toBeInstanceOf(AiUnavailableError);
     });
 });
 

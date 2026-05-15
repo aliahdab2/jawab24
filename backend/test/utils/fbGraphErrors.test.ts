@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { AxiosError, AxiosHeaders } from 'axios';
-import { classifyDmError, DmSendError } from '../../src/utils/fbGraphErrors';
+import {
+    classifyDmError,
+    DmSendError,
+    isTransientAiError,
+    AiUnavailableError,
+    AiToolLoopExhaustedError,
+} from '../../src/utils/fbGraphErrors';
 
 function makeAxiosError(status: number, data: unknown, message = 'axios error'): AxiosError {
     const err = new AxiosError(message, String(status));
@@ -216,5 +222,83 @@ describe('DmSendError.fromAxios', () => {
         const dm = DmSendError.fromAxios(axiosErr, 'Facebook API error');
         expect(dm.code).toBeUndefined();
         expect(dm.subcode).toBeUndefined();
+    });
+});
+
+describe('isTransientAiError — retry-worthy classifier for AI-side failures', () => {
+    // The deploy-outage bug fix: ai.ts catch + ecommerceToolLoop exhaustion now
+    // throw instead of returning a templated reply. The reply pipeline calls this
+    // classifier to decide whether to rethrow for BullMQ retry or fall through
+    // to success:false. Everything that should retry must classify as true here.
+
+    it('returns true for AiToolLoopExhaustedError (one bad inference run — retry may succeed)', () => {
+        expect(isTransientAiError(new AiToolLoopExhaustedError(2))).toBe(true);
+    });
+
+    it('returns true for AiUnavailableError so the row reaches needs_attention via retry exhaustion', () => {
+        // AI_ENABLED=false is a permanent config decision, but we still classify
+        // it as transient so flagStuckJobOnFinalFailure can surface the row.
+        // Returning false here would leave messages stuck as success:false with
+        // no flag — invisible to the merchant.
+        expect(isTransientAiError(new AiUnavailableError())).toBe(true);
+    });
+
+    it('returns true for CircuitOpenError (checked by name to avoid circular import)', () => {
+        const err = new Error('Circuit breaker is open');
+        err.name = 'CircuitOpenError';
+        expect(isTransientAiError(err)).toBe(true);
+    });
+
+    it('returns true for axios network errors (no response)', () => {
+        const err = new AxiosError('connect ECONNREFUSED', 'ECONNREFUSED');
+        expect(isTransientAiError(err)).toBe(true);
+    });
+
+    it('returns true for axios 5xx responses', () => {
+        const err = makeAxiosError(503, { message: 'unavailable' });
+        expect(isTransientAiError(err)).toBe(true);
+    });
+
+    it('returns false for axios 4xx responses (validation / permanent)', () => {
+        const err = makeAxiosError(400, { message: 'bad request' });
+        expect(isTransientAiError(err)).toBe(false);
+    });
+
+    it.each(['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EAI_AGAIN', 'ECONNRESET', 'EPIPE'])(
+        'returns true for Node socket-level errors (%s)',
+        (code) => {
+            const err = Object.assign(new Error(`fail ${code}`), { code });
+            expect(isTransientAiError(err)).toBe(true);
+        },
+    );
+
+    it('returns true for AbortError (timed-out fetch)', () => {
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        expect(isTransientAiError(err)).toBe(true);
+    });
+
+    it('returns FALSE for plain Error messages without structured signals (avoids over-classifying non-AI errors)', () => {
+        // Previously a regex matched /timeout|aborted|socket hang up|network/i on
+        // err.message — but that caused non-AI errors (e.g. pagesService throwing
+        // a plain `new Error('timeout')`) to be misclassified as AI transients
+        // and rethrown, breaking unrelated error paths. The classifier now
+        // requires a structured signal: code, name, or known error class.
+        expect(isTransientAiError(new Error('Request timeout after 30s'))).toBe(false);
+        expect(isTransientAiError(new Error('socket hang up'))).toBe(false);
+        expect(isTransientAiError(new Error('network connection refused'))).toBe(false);
+    });
+
+    it('returns false for plain validation / parse errors (permanent, no retry benefit)', () => {
+        expect(isTransientAiError(new SyntaxError('Unexpected token in JSON'))).toBe(false);
+        expect(isTransientAiError(new TypeError('invalid argument'))).toBe(false);
+        expect(isTransientAiError(new Error('Schema validation failed'))).toBe(false);
+    });
+
+    it('returns false for non-Error values (string, undefined, null)', () => {
+        expect(isTransientAiError('something broke')).toBe(false);
+        expect(isTransientAiError(undefined)).toBe(false);
+        expect(isTransientAiError(null)).toBe(false);
+        expect(isTransientAiError(42)).toBe(false);
     });
 });

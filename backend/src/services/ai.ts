@@ -13,9 +13,8 @@ import { semanticCacheService } from './kb/semantic-cache';
 import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
-import { t } from '../utils/i18n';
-import { detectLanguageCode } from '../utils/language';
-import { classifyFallback, classifyFallbackIntent } from './reply/fallbackClassifier';
+import { classifyFallbackIntent } from './reply/fallbackClassifier';
+import { AiUnavailableError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import type { AiPipeline } from '../types/aiPipeline';
 
@@ -69,13 +68,6 @@ function getEmbeddingProvider(): OpenAIEmbeddingProvider | null {
         _embeddingProvider = new OpenAIEmbeddingProvider(config.openai.apiKey);
     }
     return _embeddingProvider;
-}
-
-function resolveFallbackLang(request: AiGenerateRequest): 'ar' | 'en' {
-    const detected = detectLanguageCode(request.comment);
-    if (detected === 'ar') return 'ar';
-    if (detected !== 'unknown') return 'en';
-    return request.language === 'ar' ? 'ar' : 'en';
 }
 
 export class AiService {
@@ -289,15 +281,13 @@ export class AiService {
             }
         }
 
-        // If AI is disabled, return a default message
+        // AI globally disabled (AI_ENABLED=false). Throw rather than return a
+        // hardcoded "Thank you" — that would land mid-conversation as if the
+        // bot intentionally sent a useless reply. The processor's outer catch
+        // rethrows for BullMQ retry; after retries exhaust, the row is flagged
+        // needs_attention so the merchant handles the message manually.
         if (!config.ai.enabled) {
-            const lang = resolveFallbackLang(request);
-            return {
-                reply: t('commentFallback', lang),
-                language: lang,
-                cached: false,
-                model: 'disabled',
-            };
+            throw new AiUnavailableError('AI_ENABLED is false');
         }
 
         // Layer 2: Semantic cache (only when we have pageId + kbActiveVersion)
@@ -527,18 +517,13 @@ export class AiService {
                 });
             }
 
-            // Return fallback response enriched with lightweight classification
-            const fallback = classifyFallback(request.comment);
-            const lang = resolveFallbackLang(request);
-            return {
-                reply: t('commentFallback', lang),
-                language: lang,
-                cached: false,
-                model: 'fallback',
-                intent: fallback.intent,
-                confidence: fallback.confidence,
-                flags: fallback.flags,
-            };
+            // Primary AI failed and (either there was no failover, or the
+            // failover provider also failed). Rethrow so the reply pipeline
+            // catches `isTransientAiError` and BullMQ retries the job —
+            // a deploy-window blip should not become a permanent fake
+            // "Thank you" reply mid-conversation. After retries exhaust,
+            // `flagStuckJobOnFinalFailure` flags the row needs_attention.
+            throw error;
         }
     }
 
