@@ -77,6 +77,14 @@ vi.mock('../../src/services/messages', () => ({
     messagesService: mockMessagesService,
 }));
 
+const mockNotificationService = {
+    sendTemplateNotificationToWorkspace: vi.fn().mockResolvedValue(undefined),
+};
+
+vi.mock('../../src/services/notifications', () => ({
+    notificationService: mockNotificationService,
+}));
+
 vi.mock('../../src/db', () => ({
     db: mockDb,
 }));
@@ -710,5 +718,138 @@ describe('Reply Worker — flagStuckJobOnFinalFailure', () => {
 
         const callArg = mockCommentsService.updateComment.mock.calls[0][1];
         expect(callArg.flagMeta.send_failed_retries_exhausted.error).toHaveLength(300);
+    });
+
+    // Notification trigger on final retry exhaustion (PR A — stops silent failures).
+    // Until this PR, flagStuckJobOnFinalFailure flagged the row but sent no push —
+    // merchants only saw stuck items if they happened to visit the dashboard.
+
+    it('fires flagged_reply notification when a stuck FB comment is flagged', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-1', workspaceId: 'ws-1', fromName: 'Manar Alokla',
+            replied: false, needsAttention: false, flagMeta: null,
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-1' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockNotificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+            'ws-1',
+            'flagged_reply',
+            { senderName: 'Manar Alokla', reason: 'send_failed_retries_exhausted' },
+            expect.objectContaining({
+                commentId: 'comment-uuid-1',
+                type: 'comment',
+                deepLink: '/comments?filter=flagged',
+            }),
+        );
+    });
+
+    it('fires flagged_reply notification when a stuck DM is flagged', async () => {
+        mockDb.query.messages.findFirst.mockResolvedValueOnce({
+            id: 'msg-uuid-1', workspaceId: 'ws-2', senderName: 'Sarah',
+            replied: false, needsAttention: false, flagMeta: null,
+        });
+        const job = buildJob({ jobType: 'facebook_message', messageId: 'fb-msg-1' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockNotificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+            'ws-2',
+            'flagged_reply',
+            { senderName: 'Sarah', reason: 'send_failed_retries_exhausted' },
+            expect.objectContaining({
+                messageId: 'msg-uuid-1',
+                type: 'message',
+                deepLink: '/messages?filter=flagged',
+            }),
+        );
+    });
+
+    it('does NOT fire notification on intermediate attempts', async () => {
+        // BullMQ fires "failed" every retry — notification must only fire on the final one.
+        const job = buildJob({ attemptsMade: 1, maxAttempts: 3, commentId: 'fb-comment-mid' });
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+        expect(mockNotificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
+    });
+
+    it('does NOT fire notification when comment was already replied (no flag wrote)', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-already', workspaceId: 'ws-1',
+            replied: true, needsAttention: false,
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-already' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockCommentsService.updateComment).not.toHaveBeenCalled();
+        expect(mockNotificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
+    });
+
+    it('skips notification when row carries backfill_no_notify marker (R8)', async () => {
+        // The one-off SQL backfill that runs before this trigger ships marks
+        // pre-existing stuck rows with `flag_meta.backfill_no_notify = true` so
+        // the notification doesn't burst-fire for old incidents the merchant
+        // already knows about.
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-backfill', workspaceId: 'ws-1', fromName: 'X',
+            replied: false, needsAttention: false,
+            flagMeta: { backfill_no_notify: true },
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-backfill' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        // Row IS flagged (so the dashboard tile counts it)
+        expect(mockCommentsService.updateComment).toHaveBeenCalled();
+        // But notification is suppressed
+        expect(mockNotificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
+    });
+
+    it('skips notification when workspaceId is missing — does not throw', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-no-ws', workspaceId: null, fromName: 'X',
+            replied: false, needsAttention: false, flagMeta: null,
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-no-ws' });
+
+        await expect(
+            flagStuckJobOnFinalFailure(job, new Error('boom')),
+        ).resolves.toBeUndefined();
+        expect(mockNotificationService.sendTemplateNotificationToWorkspace).not.toHaveBeenCalled();
+    });
+
+    it('falls back to "a customer" when senderName is missing', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-no-name', workspaceId: 'ws-3', fromName: null,
+            replied: false, needsAttention: false, flagMeta: null,
+        });
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-no-name' });
+
+        await flagStuckJobOnFinalFailure(job, new Error('boom'));
+
+        expect(mockNotificationService.sendTemplateNotificationToWorkspace).toHaveBeenCalledWith(
+            'ws-3',
+            'flagged_reply',
+            { senderName: 'a customer', reason: 'send_failed_retries_exhausted' },
+            expect.any(Object),
+        );
+    });
+
+    it('swallows a thrown notification error so the worker survives', async () => {
+        mockCommentsService.getCommentByFacebookId.mockResolvedValueOnce({
+            id: 'comment-uuid-notif-fail', workspaceId: 'ws-4', fromName: 'X',
+            replied: false, needsAttention: false, flagMeta: null,
+        });
+        mockNotificationService.sendTemplateNotificationToWorkspace.mockRejectedValueOnce(
+            new Error('FCM down'),
+        );
+        const job = buildJob({ jobType: 'facebook_comment', commentId: 'fb-comment-notif-fail' });
+
+        await expect(
+            flagStuckJobOnFinalFailure(job, new Error('boom')),
+        ).resolves.toBeUndefined();
+        // Row was still flagged
+        expect(mockCommentsService.updateComment).toHaveBeenCalled();
     });
 });

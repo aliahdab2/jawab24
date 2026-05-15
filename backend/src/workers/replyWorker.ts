@@ -10,6 +10,7 @@ import { pipelineMetrics, Pipeline } from '../lib/pipelineMetrics';
 import { Logger, noopLogger } from '../types';
 import { commentsService } from '../services/comments';
 import { messagesService } from '../services/messages';
+import { notificationService } from '../services/notifications';
 import { db } from '../db';
 import { messages } from '../db/schema';
 
@@ -277,6 +278,56 @@ async function processJob(job: Job<ReplyJobData>): Promise<ReplyJobResult> {
 let worker: Worker<ReplyJobData, ReplyJobResult> | null = null;
 
 /**
+ * Returns true when a row's existing flag_meta carries the `backfill_no_notify`
+ * marker — set by the one-off backfill SQL that runs before this notification
+ * trigger ships, so pre-existing stuck rows don't blast pushes the moment the
+ * new code goes live. Kept as a permanent skip-flag so future bulk backfills
+ * can opt out of notification too.
+ */
+function existingFlagMetaHasBackfillSkip(flagMeta: unknown): boolean {
+    if (!flagMeta || typeof flagMeta !== 'object') return false;
+    return (flagMeta as Record<string, unknown>).backfill_no_notify === true;
+}
+
+/**
+ * Fire-and-forget notification when a row is flagged stuck. Reuses the existing
+ * `flagged_reply` template (5-min cooldown handles burst dedupe). Never throws.
+ *
+ * Failure modes intentionally swallowed: the row is already flagged at this point;
+ * a missing push is recoverable (merchant still sees the dashboard tile), but a
+ * thrown error from the worker's failed-event handler would destabilise BullMQ.
+ */
+function notifyStuckRow(
+    workspaceId: string | null | undefined,
+    senderName: string | null | undefined,
+    target: { type: 'comment' | 'message'; id: string; backfillNoNotify: boolean },
+): void {
+    if (!workspaceId) {
+        logger.warn('[ReplyWorker] Skipping stuck-row notification: missing workspaceId', { target });
+        return;
+    }
+    if (target.backfillNoNotify) {
+        logger.info('[ReplyWorker] Skipping stuck-row notification: backfill_no_notify set', { target });
+        return;
+    }
+    notificationService.sendTemplateNotificationToWorkspace(
+        workspaceId,
+        'flagged_reply',
+        { senderName: senderName || 'a customer', reason: 'send_failed_retries_exhausted' },
+        {
+            [target.type === 'comment' ? 'commentId' : 'messageId']: target.id,
+            type: target.type,
+            deepLink: target.type === 'comment' ? '/comments?filter=flagged' : '/messages?filter=flagged',
+        },
+    ).catch(err => {
+        logger.error('[ReplyWorker] Stuck-row notification fire-and-forget threw', {
+            error: err instanceof Error ? err.message : String(err),
+            target,
+        });
+    });
+}
+
+/**
  * After BullMQ exhausts all retries for a reply job, flag the underlying
  * comment/message row as needs_attention so the merchant sees it in the inbox.
  * Without this, transient FB errors that don't recover (or any other thrown
@@ -318,6 +369,11 @@ export async function flagStuckJobOnFinalFailure(
                     commentId: existing.id,
                     platformCommentId: commentId,
                 });
+                notifyStuckRow(existing.workspaceId, existing.fromName, {
+                    type: 'comment',
+                    id: existing.id,
+                    backfillNoNotify: existingFlagMetaHasBackfillSkip(existing.flagMeta),
+                });
             }
             return;
         }
@@ -332,6 +388,11 @@ export async function flagStuckJobOnFinalFailure(
                     jobId: job.id,
                     messageId: row.id,
                     platformMessageId: messageId,
+                });
+                notifyStuckRow(row.workspaceId, row.senderName, {
+                    type: 'message',
+                    id: row.id,
+                    backfillNoNotify: existingFlagMetaHasBackfillSkip(row.flagMeta),
                 });
             }
             return;
