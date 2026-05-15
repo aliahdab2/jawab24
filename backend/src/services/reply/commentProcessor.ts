@@ -17,7 +17,12 @@ import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
 import { leadExtractorService } from '../leadExtractor';
-import { isTransientFbError, isTransientAiError } from '../../utils/fbGraphErrors';
+import {
+    isTransientFbError,
+    isTransientAiError,
+    needsImmediateAttention,
+    AiRefusalError,
+} from '../../utils/fbGraphErrors';
 
 /**
  * Unified Comment Processor
@@ -558,6 +563,56 @@ export class CommentProcessor {
             }
 
         } catch (error) {
+            // Refusal / empty-after-filter are deterministic — retry will produce the
+            // same failure. Flag the comment needs_attention immediately with the
+            // specific reason and notify the merchant so they can fix the underlying
+            // KB / brand-voice / policy issue. No rethrow → no BullMQ retry.
+            if (needsImmediateAttention(error)) {
+                const isRefusal = error instanceof AiRefusalError;
+                const flagReason = isRefusal ? 'ai_refused' : 'ai_empty_reply';
+                const flagMeta = isRefusal
+                    ? { ai_refused: { reason: error.refusalReason } }
+                    : { ai_empty_reply: { reason: 'AI reply was empty after content filtering' } };
+
+                try {
+                    // Scope: facebook_comment only. Instagram comments live in a
+                    // separate table — same gap as flagStuckJobOnFinalFailure
+                    // (replyWorker.ts:343). Documented follow-up.
+                    const existing = await commentsService.getCommentByFacebookId(platformCommentId);
+                    if (existing && !existing.replied && !existing.needsAttention) {
+                        await commentsService.updateComment(existing.id, {
+                            needsAttention: true,
+                            flagReason,
+                            flagMeta,
+                        });
+                        // workspaceId pulled from the comment row (denormalized from pages.workspace_id)
+                        // since the try-block scope's workspaceId isn't reachable from this catch.
+                        notificationService.sendTemplateNotificationToWorkspace(
+                            existing.workspaceId,
+                            'flagged_reply',
+                            { senderName: fromName || existing.fromName || 'Unknown', reason: flagReason },
+                            { commentId: existing.id, type: 'comment', deepLink: '/comments?filter=flagged' },
+                        ).catch(err => this.logger.error('[CommentProcessor] AI-failed notification failed', { err }));
+                    }
+                } catch (flagErr) {
+                    this.logger.error('[CommentProcessor] Failed to flag for ai_refused/empty', {
+                        flagErr: flagErr instanceof Error ? flagErr.message : String(flagErr),
+                        platformCommentId,
+                    });
+                }
+
+                pipelineMetrics.record(pipeline, 'ai_failed_immediate_flag');
+                this.logger.warn(`[${platform}] AI ${flagReason} — flagged immediately, no retry`, {
+                    platformCommentId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                return {
+                    success: false,
+                    commentId: platformCommentId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                };
+            }
+
             // Transient DM errors (FB rate limit, 5xx, -1/2018012 "Unexpected internal error",
             // network blips) MUST bubble up so BullMQ retries the whole job — sender.ts
             // throws these specifically to trigger retry. Swallowing them here marks the
