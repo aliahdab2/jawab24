@@ -6,6 +6,10 @@ import {
     isTransientAiError,
     AiUnavailableError,
     AiToolLoopExhaustedError,
+    AiTimeoutError,
+    AiRefusalError,
+    AiEmptyReplyError,
+    needsImmediateAttention,
 } from '../../src/utils/fbGraphErrors';
 
 function makeAxiosError(status: number, data: unknown, message = 'axios error'): AxiosError {
@@ -300,5 +304,55 @@ describe('isTransientAiError — retry-worthy classifier for AI-side failures', 
         expect(isTransientAiError(undefined)).toBe(false);
         expect(isTransientAiError(null)).toBe(false);
         expect(isTransientAiError(42)).toBe(false);
+    });
+
+    // PR B additions — typed errors propagated from ai-worker over HTTP.
+    // Backend's ai.ts reconstructs these from `error.response.data.error.name`.
+
+    it('returns true for AiTimeoutError (network blip — retry usually succeeds)', () => {
+        expect(isTransientAiError(new AiTimeoutError(30000))).toBe(true);
+    });
+
+    it('returns false for AiRefusalError (deterministic — same input → same refusal, no retry)', () => {
+        expect(isTransientAiError(new AiRefusalError('policy violation: hate speech'))).toBe(false);
+    });
+
+    it('returns false for AiEmptyReplyError (bot-words filter is deterministic — same input → same empty)', () => {
+        expect(isTransientAiError(new AiEmptyReplyError())).toBe(false);
+    });
+});
+
+describe('needsImmediateAttention — bypass retry, flag merchant directly', () => {
+    // Refusal + empty-after-filter won't fix themselves on retry. Surface to the
+    // merchant immediately so they can review KB / brand voice / policy.
+
+    it('returns true for AiRefusalError', () => {
+        expect(needsImmediateAttention(new AiRefusalError('policy: violence'))).toBe(true);
+    });
+
+    it('returns true for AiEmptyReplyError', () => {
+        expect(needsImmediateAttention(new AiEmptyReplyError())).toBe(true);
+    });
+
+    it('returns false for AiTimeoutError (retryable, not "needs attention now")', () => {
+        expect(needsImmediateAttention(new AiTimeoutError(30000))).toBe(false);
+    });
+
+    it('returns false for AiUnavailableError (lets retry exhaustion + flag path handle it)', () => {
+        expect(needsImmediateAttention(new AiUnavailableError())).toBe(false);
+    });
+
+    it('returns false for AiToolLoopExhaustedError (retryable)', () => {
+        expect(needsImmediateAttention(new AiToolLoopExhaustedError(2))).toBe(false);
+    });
+
+    it('returns false for plain Error', () => {
+        expect(needsImmediateAttention(new Error('something else'))).toBe(false);
+    });
+
+    it('returns false for non-Error values', () => {
+        expect(needsImmediateAttention(undefined)).toBe(false);
+        expect(needsImmediateAttention(null)).toBe(false);
+        expect(needsImmediateAttention('refusal')).toBe(false);
     });
 });

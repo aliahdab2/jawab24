@@ -331,6 +331,46 @@ export class AiToolLoopExhaustedError extends Error {
 }
 
 /**
+ * Thrown when ai-worker's OpenAI request times out (APIUserAbortError). Transient
+ * because the same input on retry usually succeeds — a network blip, a load spike
+ * at OpenAI, or our own `OPENAI_TIMEOUT_MS` being too tight.
+ */
+export class AiTimeoutError extends Error {
+    constructor(timeoutMs?: number, message?: string) {
+        super(message ?? `AI request timed out${timeoutMs ? ` after ${timeoutMs}ms` : ''}`);
+        this.name = 'AiTimeoutError';
+    }
+}
+
+/**
+ * Thrown when OpenAI's structured-output guard returns a `refusal` field instead
+ * of generating content. Non-transient: the same input produces the same refusal
+ * on retry. Surface to merchant as needs_attention with the refusal reason so
+ * they can fix KB / brand voice / post content that's tripping the policy gate.
+ */
+export class AiRefusalError extends Error {
+    readonly refusalReason: string;
+    constructor(refusalReason: string, message?: string) {
+        super(message ?? `OpenAI refused to generate a reply: ${refusalReason}`);
+        this.name = 'AiRefusalError';
+        this.refusalReason = refusalReason;
+    }
+}
+
+/**
+ * Thrown when post-generation validation strips the reply down to <10 chars
+ * (bot-words filter at openai.ts:880-892). Non-transient: the filter is
+ * deterministic, so the same input produces the same empty result. Surface to
+ * merchant as needs_attention so they can review prompt/brand voice/KB.
+ */
+export class AiEmptyReplyError extends Error {
+    constructor(message = 'AI reply was empty after content filtering') {
+        super(message);
+        this.name = 'AiEmptyReplyError';
+    }
+}
+
+/**
  * True when an error raised from `aiService.generateReply` or the e-commerce
  * tool loop should be rethrown so BullMQ retries the job. Mirrors
  * `isTransientFbError`: reply-pipeline outer catches use this alongside the
@@ -367,6 +407,13 @@ const TRANSIENT_NODE_ERR_CODES = new Set([
 export function isTransientAiError(err: unknown): boolean {
     if (err instanceof AiToolLoopExhaustedError) return true;
     if (err instanceof AiUnavailableError) return true;
+    if (err instanceof AiTimeoutError) return true;
+
+    // Non-transient: same input → same refusal / same empty filter result.
+    // Retrying wastes API calls AND delays the needs_attention flag the merchant
+    // needs to act on the underlying KB / brand-voice / policy issue.
+    if (err instanceof AiRefusalError) return false;
+    if (err instanceof AiEmptyReplyError) return false;
 
     // Circuit breaker — checked by name to avoid a circular import on circuitBreaker.ts
     if (err instanceof Error && err.name === 'CircuitOpenError') return true;
@@ -387,4 +434,14 @@ export function isTransientAiError(err: unknown): boolean {
     }
 
     return false;
+}
+
+/**
+ * True when an AI error should bypass BullMQ retry and immediately flag the row
+ * as needs_attention. Used by commentProcessor / messageProcessor outer catches:
+ * refusal / empty-after-filter won't fix themselves on retry, and the merchant
+ * needs to see the failure so they can adjust KB / brand voice / post content.
+ */
+export function needsImmediateAttention(err: unknown): boolean {
+    return err instanceof AiRefusalError || err instanceof AiEmptyReplyError;
 }
