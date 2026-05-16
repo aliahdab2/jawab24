@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
+import { createDebouncedInvalidator } from '@/lib/queryInvalidation';
 import type { SSEEvent, Page, Comment } from '@jawab24/shared';
 import type { Message } from '@/lib/api';
 
@@ -59,6 +60,22 @@ const TOAST_THROTTLE = 5_000;
 const NATIVE_POLL_INTERVAL = 60_000;
 
 /**
+ * Trailing-edge debounce window for list/stats query invalidations triggered
+ * by SSE events. A burst of N events within this window coalesces into a
+ * single refetch per queryKey. Short enough to feel real-time, long enough
+ * to absorb natural bursts (AI worker flush, webhook waves) that previously
+ * self-induced 429s against the nginx api_limit.
+ */
+const SSE_INVALIDATE_DEBOUNCE_MS = 400;
+/**
+ * Hard cap on how long a queued invalidation can be delayed by repeated
+ * resets. Prevents a sustained event stream from starving the UI of updates
+ * indefinitely — after MAX_WAIT, the pending refetch fires even if more
+ * events keep arriving.
+ */
+const SSE_INVALIDATE_MAX_WAIT_MS = 2_000;
+
+/**
  * Real-time updates hook.
  *
  * - **Web**: SSE (EventSource) for instant updates.
@@ -86,6 +103,14 @@ export function useSSE(): void {
     const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const lastToastRef = useRef(0);
+    // Debounced list/stats invalidator: coalesces SSE-event-driven invalidations
+    // so a burst of events causes one refetch per queryKey instead of N. Without
+    // this, busy pages on /messages or /comments self-induce nginx 429s.
+    const debouncedRef = useRef<ReturnType<typeof createDebouncedInvalidator> | null>(null);
+    if (debouncedRef.current === null) {
+        debouncedRef.current = createDebouncedInvalidator(queryClient, SSE_INVALIDATE_DEBOUNCE_MS, SSE_INVALIDATE_MAX_WAIT_MS);
+    }
+    const debouncedInvalidate = debouncedRef.current.invalidate;
     // Keep a ref to router so event handlers always see the current value
     // without making connectSSE depend on router (which changes on every navigation).
     const routerRef = useRef(router);
@@ -108,6 +133,23 @@ export function useSSE(): void {
         [],
     );
 
+    /**
+     * Stats badge invalidates from anywhere (visible in sidebar/nav). The
+     * paginated list only needs to refresh when the user is actually on that
+     * page — otherwise the next navigation triggers a fresh fetch anyway.
+     * Wraps the repeated debounced-invalidate pattern used by every list-style
+     * SSE handler (comments, messages, leads).
+     */
+    const invalidateListAndStats = useCallback(
+        (opts: { listKey: readonly unknown[]; statsKey: readonly unknown[]; pageRoute: string }) => {
+            debouncedInvalidate(opts.statsKey);
+            if (isOnPage(opts.pageRoute)) {
+                debouncedInvalidate(opts.listKey, { trimInfinite: true });
+            }
+        },
+        [debouncedInvalidate, isOnPage],
+    );
+
     // ── Web: SSE via EventSource ──────────────────────────────────────
 
     const connectSSE = useCallback(() => {
@@ -124,16 +166,15 @@ export function useSSE(): void {
         });
 
         // --- Comment events ---
+        // Invalidations are debounced (see SSE_INVALIDATE_DEBOUNCE_MS) so a burst
+        // of events coalesces into a single refetch per queryKey. List/stats
+        // queries are filtered server aggregates — reconstructing them from
+        // individual event payloads is fragile, so debounce + refetch is the
+        // correct pattern instead of optimistic patching here.
         es.addEventListener('comment:received', (e) => {
             try {
                 const event: SSEEvent<'comment:received'> = JSON.parse(e.data);
-                // Stats badge is visible everywhere — always refresh
-                queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-                // List only needs refresh when the user is on the comments page;
-                // navigating there later will trigger a refetch automatically
-                if (isOnPage('/comments')) {
-                    queryClient.invalidateQueries({ queryKey: ['comments'] });
-                }
+                invalidateListAndStats({ listKey: ['comments'], statsKey: ['comments-stats'], pageRoute: '/comments' });
                 if (!isOnPage('/comments') && isActivePageId(queryClient.getQueryData<Page[]>(['pages']), event.data.pageId)) {
                     incrementUnreadComments();
                     showToast(
@@ -148,10 +189,7 @@ export function useSSE(): void {
             try {
                 const event: SSEEvent<'comment:reply_sent'> = JSON.parse(e.data);
                 const { replyMethod } = event.data;
-                queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-                if (isOnPage('/comments')) {
-                    queryClient.invalidateQueries({ queryKey: ['comments'] });
-                }
+                invalidateListAndStats({ listKey: ['comments'], statsKey: ['comments-stats'], pageRoute: '/comments' });
                 if (!isOnPage('/comments') && replyMethod === 'ai') {
                     const name = event.data.senderName?.trim();
                     showToast(name ? t('aiRepliedCommentNamed', { name }) : t('aiRepliedComment'));
@@ -160,12 +198,7 @@ export function useSSE(): void {
         });
 
         es.addEventListener('comment:reply_failed', () => {
-            // Stats badge always needs to refresh
-            queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
-            // List only needs refresh when the user is on the comments page
-            if (isOnPage('/comments')) {
-                queryClient.invalidateQueries({ queryKey: ['comments'] });
-            }
+            invalidateListAndStats({ listKey: ['comments'], statsKey: ['comments-stats'], pageRoute: '/comments' });
         });
 
         // Comment intentionally not replied to (friend-tag, spam, offensive).
@@ -176,7 +209,7 @@ export function useSSE(): void {
             try {
                 const event: SSEEvent<'comment:skipped'> = JSON.parse(e.data);
                 const { commentId } = event.data;
-                queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
+                debouncedInvalidate(['comments-stats']);
                 queryClient.setQueriesData<InfiniteData<{ data: Comment[]; pagination: { nextCursor?: string | null } }>>(
                     { queryKey: ['comments'] },
                     (old) => {
@@ -196,15 +229,14 @@ export function useSSE(): void {
         });
 
         // --- Message events ---
+        // Same rationale as comment events: debounce list/stats invalidations so
+        // bursts (AI worker flushing replies, webhook waves) collapse into one
+        // refetch per queryKey. Conversation-detail patches stay direct
+        // (setQueriesData) since they're surgical, not refetches.
         es.addEventListener('message:received', (e) => {
             try {
                 const event: SSEEvent<'message:received'> = JSON.parse(e.data);
-                // Stats badge always needs to refresh
-                queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-                // List and conversation only refresh when user is on the messages page
-                if (isOnPage('/messages')) {
-                    queryClient.invalidateQueries({ queryKey: ['messages'] });
-                }
+                invalidateListAndStats({ listKey: ['messages'], statsKey: ['messages-stats'], pageRoute: '/messages' });
                 appendToConversationCache(queryClient, event.data.message as Message | undefined, event.data.senderId);
                 if (!isOnPage('/messages') && isActivePageId(queryClient.getQueryData<Page[]>(['pages']), event.data.pageId)) {
                     incrementUnreadMessages();
@@ -219,13 +251,7 @@ export function useSSE(): void {
         es.addEventListener('message:reply_sent', (e) => {
             try {
                 const event: SSEEvent<'message:reply_sent'> = JSON.parse(e.data);
-                // Stats badge always needs to refresh
-                queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-                // List only refreshes when user is on the messages page;
-                // appendToConversationCache handles the detail view surgically
-                if (isOnPage('/messages')) {
-                    queryClient.invalidateQueries({ queryKey: ['messages'] });
-                }
+                invalidateListAndStats({ listKey: ['messages'], statsKey: ['messages-stats'], pageRoute: '/messages' });
                 const replyMsg = event.data.message as Message | undefined;
                 appendToConversationCache(queryClient, replyMsg, replyMsg?.senderId ?? '');
                 if (!isOnPage('/messages') && event.data.replyMethod === 'ai') {
@@ -236,30 +262,22 @@ export function useSSE(): void {
         });
 
         es.addEventListener('message:reply_failed', () => {
-            // Stats badge always needs to refresh
-            queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
-            // List and conversation only refresh when user is on the messages page
+            invalidateListAndStats({ listKey: ['messages'], statsKey: ['messages-stats'], pageRoute: '/messages' });
             if (isOnPage('/messages')) {
-                queryClient.invalidateQueries({ queryKey: ['messages'] });
-                queryClient.invalidateQueries({ queryKey: ['conversation'] });
+                debouncedInvalidate(['conversation']);
             }
         });
 
         // --- Usage ---
         es.addEventListener('usage:updated', () => {
-            queryClient.invalidateQueries({ queryKey: ['subscription-usage'] });
+            debouncedInvalidate(['subscription-usage']);
         });
 
         // --- Leads ---
         es.addEventListener('lead:captured', (e) => {
             try {
                 const event: SSEEvent<'lead:captured'> = JSON.parse(e.data);
-                // Count badge always needs to refresh
-                queryClient.invalidateQueries({ queryKey: ['leads-count'] });
-                // List only refreshes when user is on the leads page
-                if (isOnPage('/leads')) {
-                    queryClient.invalidateQueries({ queryKey: ['leads'] });
-                }
+                invalidateListAndStats({ listKey: ['leads'], statsKey: ['leads-count'], pageRoute: '/leads' });
                 if (!isOnPage('/leads')) {
                     incrementNewLeads();
                     showToast(
@@ -299,6 +317,8 @@ export function useSSE(): void {
         isOnPage,
         showToast,
         t,
+        debouncedInvalidate,
+        invalidateListAndStats,
     ]);
 
     // ── Native mobile: lightweight polling ─────────────────────────────
@@ -356,6 +376,7 @@ export function useSSE(): void {
                 clearInterval(pollTimerRef.current);
                 pollTimerRef.current = null;
             }
+            debouncedRef.current?.flush();
             setSSEStatus('disconnected');
         };
     }, [isAuthenticated, connectSSE, startPolling, setSSEStatus]);

@@ -15,6 +15,7 @@ const PostTriggerModal = dynamic(() => import('@/components/comments/PostTrigger
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useDebounce, usePageFilter, useDeepLinkResource } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
+import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import {
   MessageSquare,
   Search,
@@ -357,7 +358,7 @@ const CommentsPage: NextPageWithLayout = () => {
   const handleResolve = useCallback(async (commentId: string) => {
     try {
       await commentsApi.resolve(commentId);
-      queryClient.invalidateQueries({ queryKey: ['comments'] });
+      invalidateInfiniteListFresh(queryClient, ['comments']);
       queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
       toast.success(t('resolveSuccess'));
     } catch (err) {
@@ -369,7 +370,7 @@ const CommentsPage: NextPageWithLayout = () => {
   const handleUnresolve = useCallback(async (commentId: string) => {
     try {
       await commentsApi.unresolve(commentId);
-      queryClient.invalidateQueries({ queryKey: ['comments'] });
+      invalidateInfiniteListFresh(queryClient, ['comments']);
       queryClient.invalidateQueries({ queryKey: ['comments-stats'] });
       toast.success(t('unresolveSuccess'));
     } catch (err) {
