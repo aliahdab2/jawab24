@@ -50,7 +50,10 @@ export function InfoPopover({ label, children, panelWidth = 'md', triggerClassNa
           setOpen((v) => !v);
         }}
         className={clsx(
-          'inline-flex items-center justify-center rounded-full text-icon-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
+          // p-2 -m-2 expands the tap area to 30×30 (≥ WCAG AA 24×24) without
+          // affecting surrounding layout. Keep this paired — changing only one
+          // breaks either accessibility or visual spacing.
+          'inline-flex items-center justify-center p-2 -m-2 rounded-full text-icon-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
           triggerClassName,
         )}
       >

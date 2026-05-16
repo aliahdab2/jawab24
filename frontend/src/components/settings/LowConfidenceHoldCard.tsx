@@ -1,6 +1,7 @@
 import { ShieldCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Card, Toggle } from '@/components/ui';
+import { TitleWithInfo } from './TitleWithInfo';
 import type { SettingsCardProps } from './types';
 
 export function LowConfidenceHoldCard({ settings, setSettings }: SettingsCardProps) {
@@ -14,9 +15,14 @@ export function LowConfidenceHoldCard({ settings, setSettings }: SettingsCardPro
         </div>
         <div className="flex-1 text-start">
           <div className="flex items-center justify-between gap-3 mb-1">
-            <h3 className="font-bold text-foreground text-base landscape:text-sm">
-              {t('replyStyle.holdLowConfidence')}
-            </h3>
+            <TitleWithInfo
+              info={t('replyStyle.holdLowConfidenceInfo')}
+              infoLabel={t('replyStyle.holdLowConfidence')}
+            >
+              <h3 className="font-bold text-foreground text-base landscape:text-sm">
+                {t('replyStyle.holdLowConfidence')}
+              </h3>
+            </TitleWithInfo>
             <Toggle
               enabled={settings.holdLowConfidence}
               onChange={(v) => setSettings({ ...settings, holdLowConfidence: v })}

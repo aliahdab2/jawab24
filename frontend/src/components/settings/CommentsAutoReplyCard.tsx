@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import clsx from 'clsx';
 import { Card, Toggle, Select, InputFieldWrapper, CharCounter } from '@/components/ui';
+import { TitleWithInfo } from './TitleWithInfo';
 import {
   MessageSquare,
   MessageCircle,
@@ -36,9 +37,10 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
             <MessageSquare className="w-4 h-4" />
           </div>
           <div className="text-start">
-            <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900 dark:text-brand-300' : 'text-foreground'}`}>{t('commentsAutoReply')}</h3>
+            <TitleWithInfo info={t('commentsAutoReplyInfo')} infoLabel={t('commentsAutoReply')}>
+              <h3 className={`font-bold text-lg landscape:text-base ${settings.commentsAutoReply ? 'text-brand-900 dark:text-brand-300' : 'text-foreground'}`}>{t('commentsAutoReply')}</h3>
+            </TitleWithInfo>
             <p className="text-sm text-muted-foreground font-medium landscape:text-xs">{t('commentsAutoReplyDesc')}</p>
-            <p className="text-xs text-muted-foreground mt-1 landscape:hidden">{t('commentsAutoReplyHelper')}</p>
           </div>
         </div>
         <Toggle

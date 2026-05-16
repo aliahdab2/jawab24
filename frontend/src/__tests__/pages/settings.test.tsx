@@ -80,6 +80,9 @@ vi.mock('@/components/ui', () => ({
         const len = typeof value === 'string' ? value.length : value;
         return <span>{len}/{max}</span>;
     },
+    InfoPopover: ({ label, children }: { label: string; children: React.ReactNode }) => (
+        <button type="button" aria-label={label}>{children}</button>
+    ),
 }));
 
 const mockedSettingsApi = vi.mocked(settingsApi);
