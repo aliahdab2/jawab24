@@ -8,8 +8,6 @@ import { isKbRelatedFlag, type FlagMetaShape } from '@/utils/flagReason';
 interface NeedsAttentionBannerProps {
   flagReason: string | null | undefined;
   flagMeta?: FlagMetaShape | null;
-  /** Fires when the user clicks the "Add to Business Info" link — typically closes the surrounding modal. */
-  onKbLinkClick?: () => void;
 }
 
 /**
@@ -17,7 +15,7 @@ interface NeedsAttentionBannerProps {
  * Renders the flag reason (angry_customer, price_not_in_kb, low_confidence, etc.)
  * and a deep-link CTA when the flag is KB-related.
  */
-export function NeedsAttentionBanner({ flagReason, flagMeta, onKbLinkClick }: NeedsAttentionBannerProps) {
+export function NeedsAttentionBanner({ flagReason, flagMeta }: NeedsAttentionBannerProps) {
   const t = useTranslations('comments');
   const isKbFlag = isKbRelatedFlag(flagReason);
 
@@ -31,8 +29,13 @@ export function NeedsAttentionBanner({ flagReason, flagMeta, onKbLinkClick }: Ne
           // Plain href — Next.js i18n routing auto-prefixes the active locale.
           // Manually prefixing produced /ar/ar/pages, which 404s and silently
           // failed the "open KB modal" CTA from the message/comment detail modal.
+          // No onClick to close the parent modal: the host page's close
+          // handler (closeConversation in /messages, onClose in /comments)
+          // fires router.back()/replace(), which races with Link's
+          // router.push and silently swallows the navigation. The route
+          // change to /pages unmounts the host page (and its modal) on
+          // its own — no manual close needed.
           href="/pages?openKb=true"
-          onClick={onKbLinkClick}
           className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
         >
           <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />

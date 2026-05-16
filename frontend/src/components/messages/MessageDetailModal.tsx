@@ -385,7 +385,6 @@ export function MessageDetailModal({
             <NeedsAttentionBanner
               flagReason={conversation.lastMessage.flagReason}
               flagMeta={conversation.lastMessage.flagMeta}
-              onKbLinkClick={onClose}
             />
           )}
 
