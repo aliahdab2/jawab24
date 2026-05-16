@@ -62,6 +62,14 @@ export interface MessagePlatformAdapter {
     /** Send typing indicator (cosmetic, fire-and-forget). Not all platforms support this. */
     sendTypingIndicator?(page: PlatformPage, senderId: string): Promise<void>;
 
+    /**
+     * Clear the typing indicator on abort paths (skip/hold/empty/delivery-failed).
+     * Optional: platforms without a typing indicator can omit this. The happy
+     * path doesn't need it — sending the actual message auto-clears typing on
+     * Messenger and Instagram.
+     */
+    sendTypingOff?(page: PlatformPage, senderId: string): Promise<void>;
+
     /** Send a reply message to the sender */
     sendReply(page: PlatformPage, senderId: string, text: string): Promise<void>;
 

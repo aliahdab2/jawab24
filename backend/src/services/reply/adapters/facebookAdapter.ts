@@ -80,6 +80,10 @@ export class FacebookMessageAdapter implements MessagePlatformAdapter {
         await facebookService.sendTypingIndicator(page.accessToken, senderId);
     }
 
+    async sendTypingOff(page: PlatformPage, senderId: string): Promise<void> {
+        await facebookService.sendTypingOff(page.accessToken, senderId);
+    }
+
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
         await facebookService.sendPrivateMessage(page.accessToken, senderId, text);
     }

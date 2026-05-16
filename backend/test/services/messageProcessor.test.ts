@@ -6,6 +6,7 @@ import { conversationsService } from '../../src/services/conversations';
 import { replyGenerator } from '../../src/services/reply/generator';
 import { rateLimiter } from '../../src/services/protection';
 import { pipelineMetrics } from '../../src/lib/pipelineMetrics';
+import { redis } from '../../src/lib/redis';
 import { db } from '../../src/db';
 import type { MessagePlatformAdapter, PlatformPage, StoredMessage } from '../../src/interfaces';
 import { DmSendError } from '../../src/utils/fbGraphErrors';
@@ -1369,4 +1370,229 @@ describe('MessageProcessor — transient error retry behavior', () => {
         expect(adapter.sendReply).not.toHaveBeenCalled();
     });
 
+});
+
+// ─────────────────────────────────────────────────────────────
+// Typing indicator leak guards
+// Regression suite for the "typing forever" DM bug: typing_on must
+// only fire on the path where the bot will actually send a reply.
+// If typing fires on a skip/hold/no-reply path, Facebook keeps the
+// indicator on for ~20s with no message arriving — and BullMQ retries
+// can keep extending it. Each test below pins one early-return path.
+// ─────────────────────────────────────────────────────────────
+describe('MessageProcessor — typing indicator must not leak on skip paths', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(messagesService.getUnrepliedFromSender).mockReset().mockResolvedValue([
+            { id: 'msg-uuid', message: 'hello', platformMessageId: 'msg-1', createdTime: new Date() } as any,
+        ]);
+        pipelineMetrics.reset();
+
+        vi.mocked(workspaceSettingsService.isAutoReplyEnabledFromSettings).mockReturnValue(true);
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+            holdLowConfidence: false,
+        } as any);
+        vi.mocked(messagesService.isPaused).mockResolvedValue(false);
+        vi.mocked(messagesService.hasNewerUnrepliedMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.markAsReplied).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.flagMessage).mockResolvedValue(undefined as any);
+        vi.mocked(messagesService.storeOutgoingMessage).mockResolvedValue({
+            id: 'reply-uuid', pageId: 'page-uuid', platformMessageId: 'reply_123',
+            senderId: 'sender-1', senderName: null, message: '', direction: 'outgoing',
+            replied: true, replyText: '', replyMethod: 'ai', createdAt: new Date(),
+            createdTime: new Date(), repliedAt: new Date(),
+        } as any);
+        vi.mocked(messagesService.markOlderMessagesAsReplied).mockResolvedValue(0);
+        vi.mocked(rateLimiter.check).mockResolvedValue({ allowed: true, count: 1 } as any);
+
+        // Default redis.set returns 'OK' so the typing-dedup NX guard lets typing
+        // fire once. Retry-dedup test overrides this with NX semantics.
+        vi.mocked(redis.set).mockResolvedValue('OK' as any);
+    });
+
+    it('fires typing_on before AI generation and does NOT call typing_off on the happy path', async () => {
+        // Typing exists to mask AI generation latency, so it must fire BEFORE the
+        // generator runs. On success, the outgoing message itself dismisses the
+        // indicator, so an explicit typing_off would be a redundant API call.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'sure, here are our hours',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hours?', 'msg-1');
+
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendReply).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).not.toHaveBeenCalled();
+
+        const typingOrder = sendTypingIndicator.mock.invocationCallOrder[0];
+        const generatorOrder = vi.mocked(replyGenerator.generateForMessage).mock.invocationCallOrder[0];
+        const replyOrder = sendReply.mock.invocationCallOrder[0];
+        expect(typingOrder).toBeLessThan(generatorOrder);
+        expect(generatorOrder).toBeLessThan(replyOrder);
+    });
+
+    it('clears typing_on with typing_off when reply is silently skipped (SPAM_OR_IRRELEVANT)', async () => {
+        // Typing was shown before AI gen; AI classified as spam → no reply sent.
+        // Without typing_off the customer sees "typing…" for ~20s with nothing
+        // arriving. With typing_off it clears immediately.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'SPAM_OR_IRRELEVANT',
+        } as any);
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', '🔥🔥🔥', 'msg-1');
+
+        expect(sendReply).not.toHaveBeenCalled();
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears typing_on with typing_off when reply is flagged offensive', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: true,
+            flagReason: 'offensive',
+            aiIntent: 'OFFENSIVE',
+        } as any);
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'abusive text', 'msg-1');
+
+        expect(sendReply).not.toHaveBeenCalled();
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears typing_on with typing_off when reply is held for low-confidence review', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid',
+            userId: 'user-uuid',
+            aiEnabled: true,
+            messagesAutoReply: true,
+            replyDelay: 0,
+            holdLowConfidence: true,
+        } as any);
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'tentative answer',
+            replyMethod: 'ai',
+            needsAttention: false,
+            confidence: 'low',
+        } as any);
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'ambiguous question', 'msg-1');
+
+        expect(sendReply).not.toHaveBeenCalled();
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears typing_on with typing_off when the generator returns an empty reply', async () => {
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1');
+
+        expect(sendReply).not.toHaveBeenCalled();
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears typing_on with typing_off when sendReply fails non-transiently (delivery_failed)', async () => {
+        // sendReply throws a non-transient error → pipeline marks delivery_failed
+        // and returns success:false without retrying. Typing was already shown
+        // before AI gen, so the abort path must clear it.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'a fine reply',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendTypingOff = vi.fn().mockResolvedValue(undefined);
+        // Permanent error (not transient) — DmSendError with a 400 won't retry.
+        const nonTransient = new DmSendError(
+            'permanent send failure',
+            400,
+            { error: { code: 100 } },
+        );
+        const sendReply = vi.fn().mockRejectedValue(nonTransient);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
+
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-1');
+
+        expect(result.success).toBe(false);
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+        expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT re-fire typing_on across BullMQ retries of the same messageId', async () => {
+        // BullMQ retries reuse the same platformMessageId. Each typing_on resets
+        // Facebook's 20s auto-clear timer; without dedup, 3 retries spaced 2/4/8s
+        // would extend the indicator past 30s ("typing forever" across attempts).
+        // Simulate NX semantics: first SET succeeds (returns 'OK'), subsequent
+        // SETs on the same key return null (already held).
+        const heldKeys = new Set<string>();
+        vi.mocked(redis.set).mockImplementation(async (...args: any[]) => {
+            const [key, , , , flag] = args;
+            if (flag === 'NX' && heldKeys.has(key)) return null;
+            if (flag === 'NX') heldKeys.add(key);
+            return 'OK';
+        });
+
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: 'reply',
+            replyMethod: 'ai',
+            needsAttention: false,
+        });
+
+        const sendTypingIndicator = vi.fn().mockResolvedValue(undefined);
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendTypingIndicator, sendReply });
+
+        // Three attempts of the same messageId (BullMQ retry).
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-retry-1');
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-retry-1');
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'hello', 'msg-retry-1');
+
+        // Typing fires exactly once across all three attempts.
+        expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
+    });
 });

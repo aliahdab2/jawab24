@@ -241,32 +241,54 @@ export class InstagramService {
     }
 
     /**
-     * Send a direct message reply to a user (requires instagram_business_manage_messages)
-     * Note: Can only message users who have messaged the account first
+     * Send a sender_action to Instagram DM. Cosmetic — never blocks the reply.
+     * Failures surface as warn so we can spot regressions like dropped
+     * permissions or Graph API shape changes.
      */
-    async sendTypingIndicator(
+    private async sendSenderAction(
         instagramAccountId: string,
         recipientId: string,
         pageAccessToken: string,
+        action: 'typing_on' | 'typing_off',
     ): Promise<void> {
         try {
             await axios.post(
                 `${INSTAGRAM_GRAPH_API}/me/messages`,
                 {
                     recipient: { id: recipientId },
-                    sender_action: 'typing_on',
+                    sender_action: action,
                 },
                 { params: { access_token: pageAccessToken } },
             );
         } catch (error) {
             const igError = (error as { response?: { data?: unknown; status?: number } })?.response;
-            this.logger.warn('[Instagram] typing_on failed (non-fatal)', {
+            this.logger.warn(`[Instagram] ${action} failed (non-fatal)`, {
                 instagramAccountId,
                 recipientId,
                 status: igError?.status,
                 data: igError?.data,
             });
         }
+    }
+
+    async sendTypingIndicator(
+        instagramAccountId: string,
+        recipientId: string,
+        pageAccessToken: string,
+    ): Promise<void> {
+        return this.sendSenderAction(instagramAccountId, recipientId, pageAccessToken, 'typing_on');
+    }
+
+    /**
+     * Clear the "typing..." indicator. Used on abort paths where typing_on was
+     * fired but no reply will follow — Instagram's auto-clear is also ~20s.
+     */
+    async sendTypingOff(
+        instagramAccountId: string,
+        recipientId: string,
+        pageAccessToken: string,
+    ): Promise<void> {
+        return this.sendSenderAction(instagramAccountId, recipientId, pageAccessToken, 'typing_off');
     }
 
     async sendDirectMessage(

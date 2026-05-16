@@ -6,6 +6,7 @@ vi.mock('../../src/services/facebook', () => ({
     facebookService: {
         getSenderProfile: vi.fn(),
         sendTypingIndicator: vi.fn().mockResolvedValue(undefined),
+        sendTypingOff: vi.fn().mockResolvedValue(undefined),
         sendPrivateMessage: vi.fn().mockResolvedValue(undefined),
     },
 }));
@@ -179,6 +180,12 @@ describe('FacebookMessageAdapter — typing indicator', () => {
         await adapter.sendTypingIndicator(mockPage, 'recipient-1');
 
         expect(facebookService.sendTypingIndicator).toHaveBeenCalledWith('page-token', 'recipient-1');
+    });
+
+    it('sendTypingOff delegates to facebookService', async () => {
+        await adapter.sendTypingOff(mockPage, 'recipient-1');
+
+        expect(facebookService.sendTypingOff).toHaveBeenCalledWith('page-token', 'recipient-1');
     });
 
     it('sendReply sends message without calling typing (typing is handled by processor)', async () => {
