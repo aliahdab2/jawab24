@@ -6,6 +6,7 @@ import { leadExtractorService } from '../../src/services/leadExtractor';
 vi.mock('../../src/services/leadExtractor', () => ({
     leadExtractorService: {
         getLeadsByPage: vi.fn(),
+        getAllLeadsForExport: vi.fn(),
         updateLeadStatus: vi.fn(),
         deleteLead: vi.fn(),
         getNewLeadsCount: vi.fn(),
@@ -101,6 +102,50 @@ describe('Leads Routes', () => {
                 'page_1',
                 expect.objectContaining({ status: undefined }),
             );
+        });
+    });
+
+    describe('GET /leads/export', () => {
+        it('returns every lead (no 200 cap) for a page', async () => {
+            const manyLeads = Array.from({ length: 250 }, (_, i) => ({ ...MOCK_LEAD, id: `lead_${i}` }));
+            vi.mocked(leadExtractorService.getAllLeadsForExport).mockResolvedValue(manyLeads as any);
+
+            const res = await app.inject({ method: 'GET', url: '/leads/export?pageId=page_1' });
+
+            expect(res.statusCode).toBe(200);
+            const body = JSON.parse(res.body);
+            expect(body.data).toHaveLength(250);
+            expect(leadExtractorService.getAllLeadsForExport).toHaveBeenCalledWith(
+                'page_1',
+                expect.objectContaining({ status: undefined }),
+            );
+        });
+
+        it('forwards a valid status filter to the service', async () => {
+            vi.mocked(leadExtractorService.getAllLeadsForExport).mockResolvedValue([]);
+
+            await app.inject({ method: 'GET', url: '/leads/export?pageId=page_1&status=new' });
+
+            expect(leadExtractorService.getAllLeadsForExport).toHaveBeenCalledWith(
+                'page_1',
+                expect.objectContaining({ status: 'new' }),
+            );
+        });
+
+        it('drops invalid status values rather than rejecting', async () => {
+            vi.mocked(leadExtractorService.getAllLeadsForExport).mockResolvedValue([]);
+
+            await app.inject({ method: 'GET', url: '/leads/export?pageId=page_1&status=bogus' });
+
+            expect(leadExtractorService.getAllLeadsForExport).toHaveBeenCalledWith(
+                'page_1',
+                expect.objectContaining({ status: undefined }),
+            );
+        });
+
+        it('returns 400 when pageId is missing', async () => {
+            const res = await app.inject({ method: 'GET', url: '/leads/export' });
+            expect(res.statusCode).toBe(400);
         });
     });
 

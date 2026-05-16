@@ -16,6 +16,14 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
         schema: { tags: ['Leads'], summary: 'Get new leads count for a page', security: auth },
     }, leadsController.getCount.bind(leadsController));
 
+    fastify.get('/leads/export', {
+        schema: {
+            tags: ['Leads'],
+            summary: 'Export all leads for a page (uncapped, used by CSV download)',
+            security: auth,
+        },
+    }, leadsController.exportLeads.bind(leadsController));
+
     fastify.patch('/leads/:id/status', {
         schema: { tags: ['Leads'], summary: 'Update lead status', security: auth },
     }, leadsController.updateStatus.bind(leadsController));
