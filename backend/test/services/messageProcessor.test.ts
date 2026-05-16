@@ -1018,7 +1018,7 @@ describe('MessageProcessor — Product Card Follow-up', () => {
  * exists, so `isNew` comes back false. Code paths that gated on
  * `isNew && ...` therefore never executed under the normal webhook flow,
  * silently dropping:
- *   - the Messenger "Get Started" / "بدء الاستخدام" greeting handoff (AI
+ *   - the Messenger "Get Started" / "بدء الاستخدام" opener suppression (AI
  *     ended up answering the system phrase like a real customer question)
  *   - the merchant's configured greeting on first contact
  *   - the away-message auto-reply when messages auto-reply is disabled
@@ -1064,7 +1064,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         });
     }
 
-    it('fires opener greeting for Arabic "بدء الاستخدام" even when isNew=false (webhook pre-stored)', async () => {
+    it('silently suppresses Arabic "بدء الاستخدام" opener when no custom greeting is configured', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
@@ -1081,13 +1081,13 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
 
         expect(result.success).toBe(true);
         expect(result.replyMethod).toBe('template');
-        expect(adapter.sendReply).toHaveBeenCalledWith(
-            expect.anything(), 'sender-1', expect.any(String),
-        );
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+        expect(messagesService.markAsReplied).toHaveBeenCalledWith('msg-uuid', '', 'template');
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 
-    it('fires opener greeting for English "Get Started" even when isNew=false', async () => {
+    it('silently suppresses English "Get Started" opener when no custom greeting is configured', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
@@ -1104,7 +1104,30 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
 
         expect(result.success).toBe(true);
         expect(result.replyMethod).toBe('template');
-        expect(adapter.sendReply).toHaveBeenCalled();
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('still fires merchant-configured greeting on opener tap when sourceLang is set', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'ar' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('مرحباً بك في متجرنا');
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'بدء الاستخدام', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReply).toHaveBeenCalledWith(
+            expect.anything(), 'sender-1', 'مرحباً بك في متجرنا',
+        );
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 
@@ -1152,7 +1175,49 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(replyGenerator.generateForMessage).toHaveBeenCalled();
     });
 
-    it('still fires opener greeting on a repeat "Get Started" tap even though it is not the first message (button is always a system phrase)', async () => {
+    it('silently suppresses opener when custom greeting is configured but lookup returns empty (does NOT leak system phrase to AI)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'en' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue(null);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Get Started', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyMethod).toBe('template');
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('silently suppresses opener when configured greeting send throws (does NOT leak system phrase to AI)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'en' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome!');
+
+        const adapter = webhookPreStoredAdapter();
+        vi.mocked(adapter.sendReply).mockRejectedValueOnce(new Error('FB API down'));
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Get Started', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.replyMethod).toBe('template');
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('still silently suppresses a repeat opener tap even though it is not the first message (button is always a system phrase)', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
@@ -1169,7 +1234,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
 
         expect(result.success).toBe(true);
         expect(result.replyMethod).toBe('template');
-        expect(adapter.sendReply).toHaveBeenCalled();
+        expect(adapter.sendReply).not.toHaveBeenCalled();
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 
