@@ -3,7 +3,7 @@ import { useRouter } from 'next/router';
 import { usePageFilter } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA } from '@/components/ui';
 import { SidePanel } from '@/components/ui/SidePanel';
@@ -30,6 +30,10 @@ import { makeGetStaticProps } from '@/i18n/getMessages';
 import { PAGE_NAMESPACES } from '@/i18n/namespaces';
 
 type StatusFilter = LeadStatus | 'all';
+
+// Page size for the infinite-scroll list. Matches MESSAGES_PER_PAGE / COMMENTS_PER_PAGE
+// so all three list pages have consistent paging behaviour.
+const LEADS_PER_PAGE = 50;
 
 // ── Lead card (mobile, swipeable) ─────────────────────────────────────────────
 
@@ -424,41 +428,55 @@ const LeadsPage: NextPageWithLayout = () => {
     }
   }, [validPages, selectedPageId, setSelectedPageId]);
 
-  const { data: leadsData, isLoading, isError } = useQuery({
+  const {
+    data: leadsData,
+    isLoading,
+    isError,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['leads', selectedPageId, statusFilter],
-    queryFn: () =>
+    queryFn: ({ pageParam }) =>
       leadsApi.getByPage(selectedPageId, {
         status: statusFilter === 'all' ? undefined : statusFilter,
-        limit: 200,
+        limit: LEADS_PER_PAGE,
+        offset: pageParam,
       }).then((r) => r.data),
+    initialPageParam: 0 as number,
+    // Offset pagination: next page exists only when the last batch was a full page.
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.data.length < LEADS_PER_PAGE ? undefined : allPages.length * LEADS_PER_PAGE,
     enabled: !!selectedPageId,
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   });
 
-  const leads = React.useMemo(() => leadsData?.data ?? [], [leadsData]);
-  const total = leadsData?.total ?? 0;
+  const leads = React.useMemo(
+    () => leadsData?.pages.flatMap((p) => p.data) ?? [],
+    [leadsData],
+  );
+  // Backend returns `total` on every paginated response, so the first page is
+  // authoritative even as more pages stream in.
+  const total = leadsData?.pages[0]?.total ?? 0;
 
-  const dynamicKeys = React.useMemo(() => {
-    const seen = new Set<string>();
-    const keys: string[] = [];
-    for (const lead of leads) {
-      for (const f of lead.extractedData?.fields ?? []) {
-        if (!seen.has(f.key)) { seen.add(f.key); keys.push(f.key); }
-      }
-    }
-    return keys;
-  }, [leads]);
-
-  const dynamicLabels = React.useMemo(() => {
-    const labels: Record<string, string> = {};
-    for (const key of dynamicKeys) {
-      for (const lead of leads) {
-        const f = lead.extractedData?.fields?.find((x) => x.key === key);
-        if (f) { labels[key] = isRTLLocale(language) ? f.label_ar : f.label_en; break; }
-      }
-    }
-    return labels;
-  }, [dynamicKeys, leads, language]);
+  // Auto-fetch next page when the sentinel scrolls into view. Same pattern as
+  // messages.tsx / comments.tsx — kept inline rather than extracted to a shared
+  // hook (out of scope for this PR; see follow-ups).
+  const loadMoreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
+          fetchNextPage();
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' },
+    );
+    observer.observe(loadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   const statusMutation = useMutation({
     mutationFn: ({ lead, status }: { lead: Lead; status: LeadStatus }) =>
@@ -491,12 +509,36 @@ const LeadsPage: NextPageWithLayout = () => {
   });
 
   const handleExport = async () => {
-    if (!leads.length || exporting) return;
+    if (!total || exporting) return;
     setExporting(true);
     try {
+      // Fetch ALL leads server-side so the CSV doesn't depend on how far the
+      // user has scrolled. Without this, merchants with >50 leads would
+      // silently export only the rows currently in the infinite-scroll cache.
+      const exportResp = await leadsApi.getAllForExport(
+        selectedPageId,
+        statusFilter === 'all' ? undefined : statusFilter,
+      );
+      const allLeads = exportResp.data.data;
+
+      // Recompute dynamic columns from the full set — some columns might only
+      // appear in leads that weren't loaded into the scroll list yet.
+      const exportDynamicKeys: string[] = [];
+      const exportDynamicLabels: Record<string, string> = {};
+      const seen = new Set<string>();
+      for (const lead of allLeads) {
+        for (const f of lead.extractedData?.fields ?? []) {
+          if (!seen.has(f.key)) {
+            seen.add(f.key);
+            exportDynamicKeys.push(f.key);
+            exportDynamicLabels[f.key] = isRTLLocale(language) ? f.label_ar : f.label_en;
+          }
+        }
+      }
+
       const staticHeaders = [t('name'), t('phone'), t('status'), t('intent'), t('source'), t('createdAt')];
-      const dynamicHeaders = dynamicKeys.map((k) => dynamicLabels[k] ?? k);
-      const rows = leads.map((lead) => {
+      const dynamicHeaders = exportDynamicKeys.map((k) => exportDynamicLabels[k] ?? k);
+      const rows = allLeads.map((lead) => {
         const fieldMap = Object.fromEntries((lead.extractedData?.fields ?? []).map((f) => [f.key, f.value]));
         const sourceLabel = lead.sourceType === 'comment' ? t('sourceComment') : t('sourceMessage');
         const statusKey = STATUS_LABEL_KEY[lead.status] as Parameters<typeof t>[0] | undefined;
@@ -507,7 +549,7 @@ const LeadsPage: NextPageWithLayout = () => {
           lead.extractedData?.summary ?? '',
           sourceLabel,
           formatDateForExport(lead.createdAt, language),
-          ...dynamicKeys.map((k) => fieldMap[k] ?? ''),
+          ...exportDynamicKeys.map((k) => fieldMap[k] ?? ''),
         ];
       });
       const dateStamp = new Date().toISOString().slice(0, 10);
@@ -541,7 +583,7 @@ const LeadsPage: NextPageWithLayout = () => {
         description={t('description')}
         action={
           selectedPageId ? (
-            <div className={leads.length === 0 ? 'invisible pointer-events-none' : undefined}>
+            <div className={total === 0 ? 'invisible pointer-events-none' : undefined}>
               {canExport ? (
                 <button
                   onClick={handleExport}
@@ -663,6 +705,15 @@ const LeadsPage: NextPageWithLayout = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Infinite-scroll sentinel — IntersectionObserver triggers fetchNextPage when this enters the viewport. */}
+          <div ref={loadMoreRef} className="pt-6 pb-2" aria-hidden={!hasNextPage}>
+            {isFetchingNextPage && (
+              <div className="flex justify-center" aria-busy="true">
+                <Loader2 className="w-5 h-5 animate-spin text-brand-400" aria-hidden="true" />
+              </div>
+            )}
           </div>
         </>
       )}

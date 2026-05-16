@@ -33,6 +33,33 @@ export class LeadsController {
         return reply.send(result);
     }
 
+    /**
+     * GET /leads/export?pageId=&status=
+     * Returns every lead for the page so CSV export isn't capped by the
+     * paginated list endpoint. No `limit` — server iterates internally.
+     */
+    async exportLeads(
+        request: FastifyRequest<{
+            Querystring: { pageId: string; status?: string };
+        }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const { pageId, status } = request.query;
+
+        if (!pageId) return reply.status(400).send({ error: 'pageId is required' });
+
+        const page = await pagesService.getPage(req.workspaceId, pageId);
+        if (!page) return reply.status(404).send({ error: 'Page not found' });
+
+        const validStatus = status && (VALID_STATUSES as string[]).includes(status)
+            ? (status as LeadStatus)
+            : undefined;
+
+        const data = await leadExtractorService.getAllLeadsForExport(pageId, { status: validStatus });
+        return reply.send({ data });
+    }
+
     /** PATCH /leads/:id/status */
     async updateStatus(
         request: FastifyRequest<{

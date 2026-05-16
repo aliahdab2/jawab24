@@ -903,6 +903,11 @@ export const leadsApi = {
   getByPage: (pageId: string, params?: { status?: LeadStatus; limit?: number; offset?: number }) =>
     api.get<LeadsPaginatedResponse>('/leads', { params: { pageId, ...params } }),
 
+  /** Fetch all leads for export. Bypasses the paginated list's per-request cap so
+   *  CSV downloads aren't silently truncated when the merchant has >200 leads. */
+  getAllForExport: (pageId: string, status?: LeadStatus) =>
+    api.get<{ data: Lead[] }>('/leads/export', { params: { pageId, ...(status ? { status } : {}) } }),
+
   getCount: (pageId: string) =>
     api.get<{ count: number }>('/leads/count', { params: { pageId } }),
 

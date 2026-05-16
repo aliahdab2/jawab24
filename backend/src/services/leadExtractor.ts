@@ -332,6 +332,32 @@ class LeadExtractorService {
         return { data: rows as LeadRecord[], total };
     }
 
+    /**
+     * Fetch every lead for a page (optionally filtered) in one call — used by CSV
+     * export so the download isn't capped by the paginated list endpoint.
+     * Iterates the existing paginated query in 500-row chunks to avoid loading
+     * an unbounded result set into memory in a single SQL round-trip.
+     */
+    async getAllLeadsForExport(
+        pageId: string,
+        options: { status?: LeadStatus } = {},
+    ): Promise<LeadRecord[]> {
+        const CHUNK = 500;
+        const all: LeadRecord[] = [];
+        let offset = 0;
+        for (;;) {
+            const { data } = await this.getLeadsByPage(pageId, {
+                status: options.status,
+                limit: CHUNK,
+                offset,
+            });
+            all.push(...data);
+            if (data.length < CHUNK) break;
+            offset += CHUNK;
+        }
+        return all;
+    }
+
     async getNewLeadsCount(pageId: string): Promise<number> {
         const [{ value }] = await db
             .select({ value: count() })
