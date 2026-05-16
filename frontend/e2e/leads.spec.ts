@@ -100,7 +100,7 @@ function mockAPIs(
     }
     if (url.includes('/leads')) {
       const leads = hasLeads ? [MOCK_LEAD] : [];
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: leads, meta: { total: leads.length, page: 1, limit: 200 } }) });
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: leads, total: leads.length }) });
     }
     if (url.includes('/workspaces/current/members')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'mem-1', userId: 'u1', role: 'owner', joinedAt: '2026-01-01', user: BASE_USER }]) });
