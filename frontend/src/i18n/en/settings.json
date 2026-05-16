@@ -59,7 +59,8 @@
     "testingOnPage": "Testing on: {pageName}",
     "testingOnLabel": "Testing on:",
     "holdLowConfidence": "Review Uncertain Replies",
-    "holdLowConfidenceDesc": "When the AI can't find the answer in your Knowledge Base, it will hold the reply for you to review and send manually — instead of sending a vague \"let me check\" response automatically.",
+    "holdLowConfidenceDesc": "Hold replies the AI isn't sure about for your review.",
+    "holdLowConfidenceInfo": "When the AI can't find the answer in your Knowledge Base, it holds the reply for you to send manually — instead of sending a vague \"let me check\" response.",
     "holdMovedNotice": "Review Uncertain Replies moved to Advanced Settings",
     "holdMovedAction": "Go to Advanced Settings",
     "holdMovedDismiss": "Got it"
@@ -70,7 +71,7 @@
   "loadErrorDesc": "We're showing this screen instead of defaults so a save doesn't overwrite your saved settings. Check your connection and try again.",
   "dangerZone": "Delete Account",
   "deleteAccount": "Delete Account",
-  "deleteAccountWarning": "Warning: This action will permanently delete your account and all associated data, including connected pages and preset replies. This cannot be undone.",
+  "deleteAccountWarning": "Warning: This action will permanently delete your account and all associated data, including connected pages and settings. This cannot be undone.",
   "deleteConfirmLabel": "Type \"DELETE\" to confirm",
   "deleteConfirmPlaceholder": "DELETE",
   "businessHoursError": {
@@ -112,7 +113,7 @@
   "flowPrivateMessage": "Smart Reply (DM)",
   "commentsAutoReply": "Reply to Comments",
   "commentsAutoReplyDesc": "Auto reply to comments on your page",
-  "commentsAutoReplyHelper": "When enabled, choose how to reply: on comments, via message, or both.",
+  "commentsAutoReplyInfo": "Choose below how Jawab24 replies: a public comment, a private message, or both.",
   "messagesAutoReply": "Reply to Messages",
   "messagesAutoReplyDesc": "Auto reply to private messages",
   "businessHoursDesc": "Auto-reply during work hours, send away message outside",
@@ -152,7 +153,8 @@
   },
   "handoffPause": {
     "title": "Pause Auto-Reply When I Reply Manually",
-    "desc": "When you manually reply to a message, auto-reply pauses to prevent duplicate responses. Choose how long.",
+    "desc": "Pauses auto-reply while you handle the conversation yourself.",
+    "info": "After you reply manually to a customer, Jawab24 stops sending auto-replies on that conversation for the duration below — so the customer doesn't get two replies for the same message.",
     "warning": "Ⅱ️ Prevents sending double replies to the same customer",
     "why": "Why? Prevents sending double replies to the same customer."
   },
@@ -190,7 +192,8 @@
     "defaultPreviewText": "Thank you for your comment!"
   },
   "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
-  "aiDescriptionImproved": "Use Smart Replies to generate context-aware responses. When disabled, only preset replies work. Works with the 'Reply to Comments' and 'Reply to Messages' settings below.",
+  "aiDescriptionImproved": "AI-generated, context-aware replies.",
+  "aiDescriptionInfo": "When on, Jawab24 generates each reply based on the comment or message, your Knowledge Base, and your brand voice. Turn off to stop all AI replies — the channel toggles below will have no effect.",
   "autoTranslateTo": "Auto-translate to",
   "translationSuccess": "Translation completed!",
   "translationFailed": "Translation failed. Please try again.",

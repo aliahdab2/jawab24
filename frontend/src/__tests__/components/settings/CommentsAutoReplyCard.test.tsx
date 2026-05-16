@@ -19,6 +19,9 @@ vi.mock('@/components/ui', () => ({
     <div>{children}{trailing}</div>
   ),
   CharCounter: ({ value, max }: { value: number; max: number }) => <span>{value}/{max}</span>,
+  InfoPopover: ({ label, children }: { label: string; children: React.ReactNode }) => (
+    <button type="button" aria-label={label}>{children}</button>
+  ),
 }));
 
 function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {

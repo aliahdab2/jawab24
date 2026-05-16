@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Card } from '@/components/ui';
+import { TitleWithInfo } from './TitleWithInfo';
 import type { SettingsCardProps } from './types';
 
 export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
@@ -25,7 +26,9 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
           <AlertTriangle className="w-6 h-6 landscape:w-5 landscape:h-5" />
         </div>
         <div className="text-start">
-          <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('handoffPause.title')}</h3>
+          <TitleWithInfo info={t('handoffPause.info')} infoLabel={t('handoffPause.title')}>
+            <h3 className="font-bold text-foreground text-base landscape:text-sm">{t('handoffPause.title')}</h3>
+          </TitleWithInfo>
           <p className="text-xs text-amber-700 dark:text-amber-300 font-bold">{t('handoffPause.warning')}</p>
         </div>
       </div>

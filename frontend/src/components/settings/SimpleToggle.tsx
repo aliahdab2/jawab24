@@ -1,6 +1,7 @@
 import React from 'react';
 import clsx from 'clsx';
 import { Toggle } from '@/components/ui';
+import { TitleWithInfo } from './TitleWithInfo';
 
 interface SimpleToggleProps {
   icon: React.ReactNode;
@@ -14,6 +15,10 @@ interface SimpleToggleProps {
    * one prominent toggle per section so the visual hierarchy stays meaningful.
    */
   prominent?: boolean;
+  /** Long-form explanation shown in an InfoPopover next to the title. */
+  info?: React.ReactNode;
+  /** Accessible label for the info trigger button. */
+  infoLabel?: string;
 }
 
 export function SimpleToggle({
@@ -23,6 +28,8 @@ export function SimpleToggle({
   enabled,
   onChange,
   prominent = false,
+  info,
+  infoLabel,
 }: SimpleToggleProps) {
   return (
     <div
@@ -48,15 +55,17 @@ export function SimpleToggle({
           {icon}
         </div>
         <div className="text-start min-w-0">
-          <p
-            className={clsx(
-              'font-bold',
-              prominent ? 'text-base landscape:text-sm' : '',
-              enabled ? 'text-brand-900 dark:text-brand-300' : 'text-foreground',
-            )}
-          >
-            {title}
-          </p>
+          <TitleWithInfo info={info} infoLabel={infoLabel ?? title}>
+            <p
+              className={clsx(
+                'font-bold',
+                prominent ? 'text-base landscape:text-sm' : '',
+                enabled ? 'text-brand-900 dark:text-brand-300' : 'text-foreground',
+              )}
+            >
+              {title}
+            </p>
+          </TitleWithInfo>
           <p className="text-xs font-medium text-muted-foreground leading-relaxed">{description}</p>
         </div>
       </div>

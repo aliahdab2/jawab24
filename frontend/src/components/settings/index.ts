@@ -1,5 +1,6 @@
 export { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
 export { SimpleToggle } from './SimpleToggle';
+export { TitleWithInfo } from './TitleWithInfo';
 export { OrderNotificationsCard } from './OrderNotificationsCard';
 export { LanguageSelector } from './LanguageSelector';
 export { ThemeSelector } from './ThemeSelector';

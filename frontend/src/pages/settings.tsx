@@ -325,6 +325,7 @@ const SettingsPage: NextPageWithLayout = () => {
           icon={<Sparkles className="w-7 h-7 landscape:w-6 landscape:h-6" />}
           title={t('enableAI')}
           description={t('aiDescriptionImproved')}
+          info={t('aiDescriptionInfo')}
           enabled={settings.aiEnabled}
           onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
           prominent
