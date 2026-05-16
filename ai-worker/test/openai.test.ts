@@ -1486,6 +1486,65 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('language_mismatch');
     });
 
+    it('should NOT flag language_mismatch when only ASSISTANT history is Arabic (dual-DM opener)', async () => {
+        // Regression from production screenshot 2026-05-16:
+        // Dual-DM flow — customer commented on a post (Arabic), bot replied via DM in
+        // Arabic. Customer's first DM reply is "Icdl" (low-confidence Latin). The DM
+        // thread contains ONLY the assistant's Arabic message — no prior user messages.
+        // resolveInputLanguage currently filters `role === 'user'`, so the Arabic
+        // assistant message is ignored, the chain falls through to the bare "Icdl",
+        // detects 'en', and the Arabic reply is wrongly flagged language_mismatch.
+        // Expected: the assistant's Arabic turn must count as a language anchor.
+        setupMock(JSON.stringify({
+            reply: 'دورة ICDL مدتها شهر، عندنا ٨ جلسات',
+            intent: 'QUESTION',
+            confidence: 'high',
+            language: 'ar',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Icdl',
+            context: {
+                conversationHistory: [
+                    { role: 'assistant', content: 'عنا عدة دورات بسعر 25 ألف ل.س بالعملة القديمة، منها ICDL، الإسعافات الأولية. حابب تعرف عن أي دورة بالتحديد؟' },
+                ],
+            },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
+    it('should anchor on user history (Arabic) over assistant drift (English)', async () => {
+        // Locks in user-priority in the two-pass resolver: if the bot accidentally
+        // drifted to English in a prior reply, the customer's earlier Arabic message
+        // must still win as the language anchor — assistant history is only consulted
+        // when no user history has a script signal.
+        setupMock(JSON.stringify({
+            reply: 'دورة ICDL مدتها شهر',
+            intent: 'QUESTION',
+            confidence: 'high',
+            language: 'ar',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Icdl',
+            context: {
+                conversationHistory: [
+                    { role: 'user', content: 'مرحبا بدي أعرف عن الدورات' },
+                    { role: 'assistant', content: 'Hello! How can I help you today?' },
+                ],
+            },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
     // Other language mismatch cases (emoji/punctuation) are covered by eval tests
     // (Cat 41: Language Mismatch Guard, 4 tests) which test the full production pipeline.
 

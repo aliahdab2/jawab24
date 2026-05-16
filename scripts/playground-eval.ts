@@ -2765,6 +2765,51 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Fire emojis on Arabic engagement post — reply should be Arabic, no language_mismatch flag',
     },
+    // Cases 335-337: Dual-DM-opener language anchor — customer's first DM reply after
+    // an assistant-only Arabic opener. Regression coverage for the 2026-05-16 production
+    // bug where "Icdl" after an Arabic dual-DM opener got an English reply because the
+    // language resolver filtered out assistant history.
+    {
+        id: 335, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: 'Icdl',
+        page: 'training',
+        conversationHistory: [
+            { role: 'assistant', content: 'عنا عدة دورات بسعر 25 ألف ل.س بالعملة القديمة، منها ICDL، الإسعافات الأولية. حابب تعرف عن أي دورة بالتحديد؟' },
+        ],
+        expected: {
+            flagsAbsent: ['language_mismatch'],
+            replyNotContains: ['session', 'available', 'schedule', 'starts'],
+        },
+        notes: 'Dual-DM opener: bot opened in Arabic, customer\'s first DM reply is "Icdl" (low-conf Latin). Reply must stay in Arabic — assistant history is the language anchor.',
+    },
+    {
+        id: 336, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: '👍',
+        page: 'training',
+        conversationHistory: [
+            { role: 'assistant', content: 'أهلاً بك! كيف يمكنني مساعدتك اليوم؟' },
+        ],
+        expected: {
+            flagsAbsent: ['language_mismatch'],
+            replyNotContains: ['Hello', 'help', 'how can'],
+        },
+        notes: 'Dual-DM opener: emoji-only first customer reply. No language signal in current msg; must anchor on assistant\'s Arabic opener.',
+    },
+    {
+        id: 337, category: 41, categoryName: 'Language Mismatch Guard', channel: 'dm',
+        message: 'please reply in English',
+        page: 'training',
+        conversationHistory: [
+            { role: 'assistant', content: 'أهلاً بك! كيف يمكنني مساعدتك اليوم؟' },
+        ],
+        expected: {
+            flagsAbsent: ['language_mismatch'],
+            // Case-sensitive substring match (reply.includes), so cover both cases.
+            // Common English reply patterns: "Sure", "Of course", "How can I", "I can help", "Yes".
+            replyContainsAny: ['Sure', 'sure', 'Of course', 'How can', 'I can', 'Yes', 'help', 'assist'],
+        },
+        notes: 'Counter-test: genuine high-confidence English switch must override the Arabic assistant anchor. Locks in that the < 0.6 threshold still respects intentional switches. Verified live reply: "Sure! How can I assist you today?"',
+    },
 
     // ===== Category 42: Brand Voice No Repetition =====
     // Verifies the AI does NOT repeat brand voice notes (offers, promotions, phrases)

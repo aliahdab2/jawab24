@@ -463,15 +463,17 @@ export class ReplyGenerator {
                 );
 
                 // Language resolution: for low-confidence Latin detection (short acronyms
-                // like "ICDL", "ok", "yes") mid-conversation, defer to the ai-worker's
-                // history-first chain so a customer chatting in Arabic doesn't get flipped
-                // to English by a single Latin token. High-confidence detection (Arabic
-                // script, or Latin with common English words) still takes effect — preserving
-                // legitimate mid-conversation language switches.
+                // like "ICDL", "ok", "yes") with ANY prior context in the DM thread, defer
+                // to the ai-worker's history-first chain. Prior context includes assistant
+                // messages — the bot's prior turn is what the customer is responding to, so
+                // it's a valid language anchor (matters for dual-DM openers where the bot
+                // sent the first DM and the customer's first reply is a Latin token).
+                // High-confidence detection (Arabic script, or Latin with common English
+                // words) still takes effect — preserving legitimate language switches.
                 const { language: msgLang, confidence: msgConfidence } = detectLanguage(text);
-                const hasPriorUserMessages = historyForAI.some(m => m.role === 'user');
+                const hasPriorHistory = historyForAI.length > 0;
                 const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;
-                const deferToHistory = isLowConfidenceLatin && hasPriorUserMessages;
+                const deferToHistory = isLowConfidenceLatin && hasPriorHistory;
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),

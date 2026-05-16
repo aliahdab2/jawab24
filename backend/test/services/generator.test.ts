@@ -852,6 +852,61 @@ describe('ReplyGenerator - Flagging System', () => {
             expect(aiCall.language).not.toBe('en');
         });
 
+        it('should defer to assistant history when customer\'s first DM reply is a low-confidence Latin token (dual-DM opener)', async () => {
+            // Regression from production screenshot 2026-05-16:
+            // Customer commented on a post (Arabic). Jawab replied via dual-DM in Arabic.
+            // Customer's FIRST DM message back was "Icdl" (low-confidence Latin). Bot replied
+            // in English, listing schedules — wrong language because there are no prior USER
+            // messages in the DM thread, only the assistant's Arabic opener.
+            // Expected: the assistant's Arabic message must count as a language anchor.
+            const { aiService } = await import('../../src/services/ai');
+            const { messagesService } = await import('../../src/services/messages');
+            const { subscriptionsService } = await import('../../src/services/subscriptions');
+            const language = await import('../../src/utils/language');
+
+            vi.mocked(subscriptionsService.canUseAiReplies).mockResolvedValue({ allowed: true, limit: 1500, used: 100, remaining: 1400 } as any);
+            vi.mocked(subscriptionsService.incrementAiReplies).mockResolvedValue(undefined);
+
+            // "Icdl" — Latin, no common English words → confidence 0.5
+            vi.mocked(language.detectLanguageCode).mockReturnValue('en');
+            vi.mocked(language.detectLanguage).mockReturnValue({
+                language: 'en', confidence: 0.5, script: 'Latin', isRTL: false,
+            });
+
+            // Dual-DM opener: only the assistant's Arabic message is in DM history.
+            // No prior user messages (customer's original Arabic comment was on the post,
+            // not in the DM thread).
+            vi.mocked(messagesService.getConversationHistory).mockResolvedValue([
+                { role: 'assistant', content: 'عنا عدة دورات بسعر 25 ألف ل.س بالعملة القديمة، منها ICDL، الإسعافات الأولية. حابب تعرف عن أي دورة بالتحديد؟' },
+            ]);
+
+            vi.mocked(aiService.generateReply).mockResolvedValue({
+                reply: 'دورة ICDL مدتها شهر...',
+                language: 'ar',
+                cached: false,
+                intent: 'QUESTION',
+                confidence: 'high',
+                flags: [],
+            });
+
+            vi.spyOn(generator as any, 'resolveKnowledge').mockResolvedValue({
+                retrievedChunks: undefined,
+                effectiveKB: undefined,
+                queryEmbedding: undefined,
+                ragAttempted: false,
+            });
+
+            await generator.generateForMessage({
+                ...baseContext,
+                text: 'Icdl',
+            }, true);
+
+            // Must NOT pass language: 'en'. The assistant's Arabic message in DM history
+            // is a sufficient language anchor — the customer is replying to it.
+            const aiCall = vi.mocked(aiService.generateReply).mock.calls[0][0];
+            expect(aiCall.language).not.toBe('en');
+        });
+
         it('should still pass language for high-confidence English (user switches language mid-chat)', async () => {
             // Counter-test: if the customer writes a genuine English sentence mid-Arabic-chat,
             // we must respect the language switch. High-confidence English detection
