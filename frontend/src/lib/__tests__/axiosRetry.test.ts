@@ -23,22 +23,47 @@ describe('axiosRetry', () => {
         vi.clearAllTimers();
     });
 
+    /** Count actual outbound HTTP attempts (not the callback invocations, which
+     *  may differ when axios-mock-adapter wraps rejected callbacks). */
+    function countAttempts(): { calls: () => number } {
+        let count = 0;
+        axiosInstance.interceptors.request.use((config) => {
+            count++;
+            return config;
+        });
+        return { calls: () => count };
+    }
+
     describe('addRetryInterceptor', () => {
-        it('should retry on network errors', async () => {
+        it('should retry on transport failures (no response)', async () => {
+            addRetryInterceptor(axiosInstance, { retries: 2, retryDelay: 100 });
+            const counter = countAttempts();
+            mock.onGet('/test').networkErrorOnce();
+            mock.onGet('/test').networkErrorOnce();
+            mock.onGet('/test').reply(200, { success: true });
+
+            const response = await axiosInstance.get('/test');
+            expect(response.status).toBe(200);
+            expect(counter.calls()).toBe(3); // Initial + 2 retries
+        });
+
+        it('should NOT retry on 5xx (React Query owns HTTP retries — see _app.tsx)', async () => {
             addRetryInterceptor(axiosInstance, { retries: 2, retryDelay: 100 });
 
             let attemptCount = 0;
             mock.onGet('/test').reply(() => {
                 attemptCount++;
-                if (attemptCount < 3) {
-                    return [500, { error: 'Server error' }];
-                }
-                return [200, { success: true }];
+                return [503, { error: 'Service unavailable' }];
             });
 
-            const response = await axiosInstance.get('/test');
-            expect(response.status).toBe(200);
-            expect(attemptCount).toBe(3); // Initial + 2 retries
+            try {
+                await axiosInstance.get('/test');
+                expect(true).toBe(false); // should not reach
+            } catch {
+                // No axios-layer retry on 5xx — prevents axios × React Query
+                // amplification that previously turned one 503 into 9 HTTP requests.
+                expect(attemptCount).toBe(1);
+            }
         });
 
         it('should not retry on 4xx errors', async () => {
@@ -59,29 +84,36 @@ describe('axiosRetry', () => {
             }
         });
 
-        it('should respect max retries', async () => {
-            addRetryInterceptor(axiosInstance, { retries: 3, retryDelay: 100 });
+        it('should not retry POST even on transport failure (non-idempotent)', async () => {
+            addRetryInterceptor(axiosInstance, { retries: 2, retryDelay: 100 });
+            const counter = countAttempts();
+            mock.onPost('/test').networkError();
 
-            let attemptCount = 0;
-            mock.onGet('/test').reply(() => {
-                attemptCount++;
-                return [500, { error: 'Server error' }];
-            });
+            try {
+                await axiosInstance.post('/test', {});
+                expect(true).toBe(false);
+            } catch {
+                expect(counter.calls()).toBe(1); // POST never retried
+            }
+        });
+
+        it('should respect max retries on transport failures', async () => {
+            addRetryInterceptor(axiosInstance, { retries: 3, retryDelay: 100 });
+            const counter = countAttempts();
+            mock.onGet('/test').networkError();
 
             try {
                 await axiosInstance.get('/test');
-                // Should not reach here
                 expect(true).toBe(false);
             } catch {
-                expect(attemptCount).toBe(4); // Initial + 3 retries
+                expect(counter.calls()).toBe(4); // Initial + 3 retries
             }
         });
 
         it('should use exponential backoff', async () => {
             vi.useFakeTimers();
             addRetryInterceptor(axiosInstance, { retries: 2, retryDelay: 1000 });
-
-            mock.onGet('/test').reply(500);
+            mock.onGet('/test').networkError();
 
             const promise = axiosInstance.get('/test').catch(() => { });
 

@@ -15,7 +15,13 @@ interface RetryConfig {
 }
 
 /**
- * Default retry configuration
+ * Default retry configuration.
+ *
+ * Axios retries are restricted to *transport-level* failures (no response received).
+ * HTTP status retries (5xx, etc.) are owned by React Query so the two layers cannot
+ * multiply each other. A previous double-retry setup (axios 3× × React Query 3×)
+ * amplified a single 503 into 9 HTTP requests per query and triggered nginx
+ * rate-limit storms that looked like server outages.
  */
 const DEFAULT_RETRY_CONFIG: RetryConfig = {
     retries: 3,
@@ -26,8 +32,9 @@ const DEFAULT_RETRY_CONFIG: RetryConfig = {
         if (method && ['delete', 'post', 'patch'].includes(method)) {
             return false;
         }
-        // Retry on network errors or 5xx server errors (GET/PUT only)
-        return !error.response || (error.response.status >= 500 && error.response.status < 600);
+        // Retry only on transport failures (no HTTP response). HTTP-level errors
+        // (5xx, 429, etc.) are React Query's responsibility — see _app.tsx queryClient.
+        return !error.response;
     },
 };
 
