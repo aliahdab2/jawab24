@@ -35,7 +35,7 @@ export function LimitFallbackMessageCard({ settings, setSettings }: SettingsCard
   return (
     <Card className="border-none shadow-lg shadow-theme-border/50 p-4 landscape:p-3 h-full flex flex-col">
       <div className="flex items-start gap-3 mb-3 landscape:mb-2">
-        <div className="w-11 h-11 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 flex items-center justify-center shrink-0 landscape:w-9 landscape:h-9">
+        <div className="w-11 h-11 rounded-xl icon-bg-amber flex items-center justify-center shrink-0 landscape:w-9 landscape:h-9">
           <MessageSquareOff className="w-4 h-4" aria-hidden="true" />
         </div>
         <div className="flex-1 min-w-0 text-start">

@@ -1,13 +1,13 @@
 import { ShieldCheck } from 'lucide-react';
 import { useTranslations } from 'next-intl';
-import { Toggle } from '@/components/ui';
+import { Card, Toggle } from '@/components/ui';
 import type { SettingsCardProps } from './types';
 
 export function LowConfidenceHoldCard({ settings, setSettings }: SettingsCardProps) {
   const t = useTranslations('settings');
 
   return (
-    <div className="rounded-2xl bg-card border border-theme-border p-5 landscape:p-3 shadow-md">
+    <Card padding="none" className="border-none shadow-md shadow-theme-border/30 p-5 landscape:p-3">
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-2xl icon-bg-brand flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl shrink-0">
           <ShieldCheck className="w-6 h-6 landscape:w-5 landscape:h-5" />
@@ -28,6 +28,6 @@ export function LowConfidenceHoldCard({ settings, setSettings }: SettingsCardPro
           </p>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

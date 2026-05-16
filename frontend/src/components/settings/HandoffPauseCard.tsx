@@ -4,6 +4,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { Card } from '@/components/ui';
 import type { SettingsCardProps } from './types';
 
 export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
@@ -18,7 +19,7 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
   ];
 
   return (
-    <div className="rounded-2xl bg-card border border-theme-border p-5 landscape:p-3 shadow-md">
+    <Card padding="none" className="border-none shadow-md shadow-theme-border/30 p-5 landscape:p-3">
       <div className="flex items-center gap-4 mb-4 landscape:mb-3">
         <div className="w-12 h-12 rounded-2xl icon-bg-amber flex items-center justify-center landscape:w-10 landscape:h-10 landscape:rounded-xl">
           <AlertTriangle className="w-6 h-6 landscape:w-5 landscape:h-5" />
@@ -47,6 +48,6 @@ export function HandoffPauseCard({ settings, setSettings }: SettingsCardProps) {
           </button>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
