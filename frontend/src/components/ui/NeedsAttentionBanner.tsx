@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { AlertTriangle, ExternalLink } from 'lucide-react';
 import { FlagTag } from './FlagTag';
 import { isKbRelatedFlag, type FlagMetaShape } from '@/utils/flagReason';
+import { KB_DEEP_LINK } from '@/lib/routes';
 
 interface NeedsAttentionBannerProps {
   flagReason: string | null | undefined;
@@ -26,16 +27,13 @@ export function NeedsAttentionBanner({ flagReason, flagMeta }: NeedsAttentionBan
       <FlagTag flagReason={flagReason} flagMeta={flagMeta} />
       {isKbFlag && (
         <Link
-          // Plain href — Next.js i18n routing auto-prefixes the active locale.
-          // Manually prefixing produced /ar/ar/pages, which 404s and silently
-          // failed the "open KB modal" CTA from the message/comment detail modal.
           // No onClick to close the parent modal: the host page's close
           // handler (closeConversation in /messages, onClose in /comments)
           // fires router.back()/replace(), which races with Link's
           // router.push and silently swallows the navigation. The route
           // change to /pages unmounts the host page (and its modal) on
           // its own — no manual close needed.
-          href="/pages?openKb=true"
+          href={KB_DEEP_LINK}
           className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
         >
           <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />

@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, HeldReplyBanner, ReplySourceBadge } from '@/components/ui';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -17,7 +17,6 @@ import {
   User,
   X,
   Send,
-  Bot,
   CheckCircle,
   Undo2,
   Mic,
@@ -388,12 +387,7 @@ export function MessageDetailModal({
             />
           )}
 
-          {heldMessage && (
-            <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
-              <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>{tComments('heldReplyBanner')}</span>
-            </div>
-          )}
+          {heldMessage && <HeldReplyBanner />}
 
           {sendError && (
             <div className="mb-3 px-3 py-2 rounded-lg alert-error text-xs font-medium">
