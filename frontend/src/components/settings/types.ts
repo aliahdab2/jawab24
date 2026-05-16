@@ -15,6 +15,8 @@ export interface SettingsState {
   timezone: string;
   awayMessageMulti: Record<string, string>;
   greetingMessageMulti: Record<string, string>;
+  /** When false, the configured greeting is never sent on first contact. */
+  greetingMessageEnabled: boolean;
   limitFallbackEnabled: boolean;
   limitFallbackMessageMulti: Record<string, string>;
   dualReplyNudgeMulti: Record<string, string>;

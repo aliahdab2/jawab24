@@ -692,6 +692,8 @@ export interface WorkspaceSettings {
   businessHoursEnd: string;
   timezone: string;
   greetingMessageMulti: Record<string, string>;
+  /** When false, the configured greeting is never sent — AI handles the first message directly. */
+  greetingMessageEnabled: boolean;
   awayMessageMulti: Record<string, string>;
   /** Master switch — when false, no reply is sent at the monthly limit (silent + flag). */
   limitFallbackEnabled: boolean;

@@ -62,6 +62,7 @@ export const UpdateSettingsSchema = z.object({
         .max(MAX_TEMPLATE_MESSAGE_LENGTH, `Greeting message must be ${MAX_TEMPLATE_MESSAGE_LENGTH} characters or fewer`)
         .optional(),
     greetingMessageMulti: z.record(z.string()).optional(),
+    greetingMessageEnabled: z.boolean().optional(),
     limitFallbackEnabled: z.boolean().optional(),
     limitFallbackMessageMulti: z.record(z.string()).optional(),
     commentReplyMode: z.enum(['public', 'private', 'dual']).optional(),

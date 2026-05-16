@@ -167,11 +167,16 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 ║                   ▼                                                     ║
 ║  ┌─────────────────────────────────────────┐                            ║
 ║  │  STEP 4: GREETING GATE (DMs only)        │                            ║
-║  │  • Only on first-ever DM from sender   │                            ║
-║  │  • Detect customer language             │                            ║
-║  │  • Send greeting → mark replied → STOP │                            ║
-║  │    (no AI processing after greeting)   │                            ║
-║  │  • On failure: fall through to AI      │                            ║
+║  │  Fires on opener tap OR first real msg  │                            ║
+║  │  when greetingMessageEnabled=true AND   │                            ║
+║  │  configured text is non-empty:           │                            ║
+║  │  • Send greeting → mark replied → STOP  │                            ║
+║  │                                          │                            ║
+║  │  Opener taps with toggle off / empty:   │                            ║
+║  │  • Silently suppress (never reach AI)    │                            ║
+║  │  Opener rows are excluded from the      │                            ║
+║  │  first-message count so a tap + reply   │                            ║
+║  │  flow doesn't burn the slot.             │                            ║
 ║  └────────────────┬────────────────────────┘                            ║
 ║                   │                                                     ║
 ║                   ▼                                                     ║
@@ -877,7 +882,8 @@ This ensures pipeline metrics and downstream guards still function even without 
 | **replyStyle** | enum | 'professional' | `professional` / `casual` / `enthusiastic` |
 | **brandVoiceNotes** | text | '' | Custom brand voice guidelines (500 char max) |
 | **holdLowConfidence** | boolean | false | Hold low-confidence AI replies for review |
-| **greetingMessageMulti** | JSONB | seeded | `{ar: "...", en: "...", sourceLang: 'default'}` - first msg to new customer. Seeded at workspace creation (`workspace.ts:createWorkspace`) and backfilled for legacy rows by migration `0095_backfill_default_greeting`. Strings come from `i18n.t('defaultGreeting', lang)` and match the settings UI placeholder so what merchants see in the empty field is what gets sent. |
+| **greetingMessageMulti** | JSONB | seeded | `{ar: "...", en: "...", sourceLang: 'default'}` - first msg to new customer. Seeded at workspace creation (`workspace.ts:createWorkspace`) and backfilled for legacy rows by migration `0095_backfill_default_greeting`. Strings come from `i18n.t('defaultGreeting', lang)` and match the settings UI placeholder so what merchants see in the empty field is what gets sent. **Sending is gated by `greetingMessageEnabled`** — the text alone no longer triggers a send. |
+| **greetingMessageEnabled** | boolean | false | Master switch for the greeting message. New merchants default to off (AI handles first message). Migration `0103_lovely_polaris` flips this to true for existing merchants whose `greetingMessageMulti.sourceLang` was already customized, preserving deploy-day behavior. |
 | **awayMessageMulti** | JSONB | {} | `{ar: "...", en: "..."}` - sent when off/outside hours |
 | **defaultReplyLanguage** | enum | 'ar' | Default if auto-detect fails |
 | **autoDetectLanguage** | boolean | true | Detect customer language from message |

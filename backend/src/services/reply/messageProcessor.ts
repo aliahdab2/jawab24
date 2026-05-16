@@ -315,18 +315,30 @@ export class MessageProcessor {
 
             // 9b. Handle Messenger "Get Started" opener + first-contact greeting.
             //
-            // Three sub-cases:
-            //   (a) Opener tap ("Get Started" / "بدء الاستخدام") with NO merchant-
-            //       configured greeting → silently swallow. Customers complained the
-            //       default seeded greeting felt spammy/robotic. The button is always
-            //       a system phrase (never a real question), so we still must NOT let
-            //       it through to AI (otherwise GPT replies "do you mean register for
-            //       a course?"). We mark replied + return early, with no Send API call.
-            //   (b) Merchant manually configured a greeting (sourceLang !== 'default')
-            //       AND this is either an opener tap or the first incoming message →
-            //       send the configured greeting. This is an explicit merchant choice,
-            //       so we respect it.
-            //   (c) Anything else → fall through to the AI pipeline.
+            // Industry-standard flow (Intercom / Drift / ManyChat / Tidio): the
+            // Messenger "Get Started" / "بدء الاستخدام" button is designed by
+            // Facebook to kick off the conversation. We use it as the natural
+            // greeting trigger when the merchant has configured one. This also
+            // avoids the "ask twice" UX where the greeting steals the answer
+            // slot from a real first question (Fofa screenshot scenario).
+            //
+            // Branches:
+            //   (1) Opener tap OR real first incoming message
+            //       + greetingMessageEnabled=true + non-empty configured text
+            //       → send the configured greeting and return.
+            //   (2) Opener tap + (toggle off OR empty configured text)
+            //       → silently suppress. Never let the "Get Started" / system
+            //       phrase reach the AI; it produces confused replies.
+            //   (3) Real first message + (toggle off OR empty configured text)
+            //       → fall through to the AI pipeline.
+            //
+            // `isFirstIncomingMessage` counts ALL incoming rows including opener
+            // taps. That's deliberate: once the opener tap fires the greeting
+            // (branch 1) or is silently suppressed (branch 2), the opener row
+            // still exists in the inbox. The customer's next real message then
+            // sees `isFirstIncoming=false` and falls through to AI — preventing
+            // a double-greeting. Filtering opener rows out of the count caused
+            // that bug, so the filter was removed.
             //
             // NOTE: do NOT gate on `isNew` here. The webhook controller stores the message
             // before enqueuing the worker job (see webhook.ts findOrCreateFromWebhook), so
@@ -338,42 +350,40 @@ export class MessageProcessor {
             const isFirstIncoming = await messagesService.isFirstIncomingMessage(page.id, senderId);
 
             if (isOpener || isFirstIncoming) {
-                const detectedLang = detectLanguageCode(messageText);
                 const settings = await workspaceSettingsService.getSettings(workspaceId);
-                const greetingMulti = settings.greetingMessageMulti || {};
-                const isCustomConfigured = greetingMulti.sourceLang !== undefined && greetingMulti.sourceLang !== 'default';
 
-                // (b) Merchant-configured greeting → send it.
-                if (isCustomConfigured) {
+                // (1) Toggle on + configured text → send greeting.
+                if (settings.greetingMessageEnabled) {
+                    const detectedLang = detectLanguageCode(messageText);
                     const configured = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
                     if (configured) {
                         try {
                             await adapter.sendReply(page, senderId, configured);
                             await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, configured, 'template');
                             await messagesService.markAsReplied(storedMessage.id, configured, 'template');
-                            this.logger.info(`[${platform}] Sent greeting message`, { senderId, source: isOpener ? 'opener' : 'configured' });
+                            this.logger.info(`[${platform}] Sent greeting message`, { senderId, source: isOpener ? 'opener' : 'first_message' });
                             pipelineMetrics.record(pipeline, 'greeting_sent');
                             return { success: true, messageId: platformMessageId, replyText: configured, replyMethod: 'template' as const };
                         } catch (error) {
-                            // Non-opener case: let AI handle the first message instead.
-                            // Opener case: handled by the silent-suppression block below
+                            // Greeting send failed. For real messages, fall through to
+                            // AI so the customer's first message still gets answered.
+                            // For openers, the silent-suppress branch below catches it
                             // so the system phrase never reaches AI.
                             this.logger.error(`[${platform}] Failed to send greeting message`, { error: String(error), willFallbackToAI: !isOpener });
                         }
                     }
                 }
 
-                // (a) Opener tap reached here either because no custom greeting is
-                // configured, the configured greeting lookup returned empty, or the
-                // send above threw. In all cases: do NOT let the system phrase
-                // ("Get Started" / "بدء الاستخدام") reach the AI — it produces
-                // confused replies. Silently mark replied and return.
+                // (2) Opener reaching here = toggle off, empty text, or send failed.
+                // Never let the opener system phrase reach AI — silent + return.
                 if (isOpener) {
                     await messagesService.markAsReplied(storedMessage.id, '', 'template');
                     this.logger.info(`[${platform}] Suppressed opener tap silently`, { senderId });
                     pipelineMetrics.record(pipeline, 'greeting_suppressed');
                     return { success: true, messageId: platformMessageId, replyText: '', replyMethod: 'template' as const };
                 }
+
+                // (3) Real first message + greeting disabled/empty → fall through to AI.
             }
 
             // 10. Reply delay (doubles as consolidation window when > 0)

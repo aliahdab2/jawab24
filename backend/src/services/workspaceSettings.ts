@@ -29,6 +29,7 @@ const DEFAULTS: WorkspaceSettings = {
     businessHoursEnd: '18:00',
     timezone: 'Asia/Damascus',
     greetingMessageMulti: {},
+    greetingMessageEnabled: false,
     awayMessageMulti: {},
     limitFallbackEnabled: false,
     limitFallbackMessageMulti: {},
