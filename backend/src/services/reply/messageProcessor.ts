@@ -6,7 +6,6 @@ import { notificationService } from '../notifications';
 import { replyGenerator, shouldSkipReply, shouldSilentlySkip, shouldUseFallback, PRICE_FALLBACK, resolveFallbackLanguage } from './generator';
 import { isOpenerMessage } from './openerPatterns';
 import { detectLanguageCode } from '../../utils/language';
-import { t } from '../../utils/i18n';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import * as typingIndicator from './typingIndicator';
@@ -299,14 +298,20 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'Message already replied' };
             }
 
-            // 9b. Send Greeting Message — fires when EITHER:
-            //   (a) The text is a Messenger "Get Started" opener tap (any time, not just
-            //       first message — the button can be pressed repeatedly and is always a
-            //       system phrase, never a real question. Letting it through to AI yields
-            //       confused replies like "do you mean register for a course?"), OR
-            //   (b) This is the first incoming message AND the merchant manually configured
-            //       a greeting (sourceLang !== 'default'). Default seeded greetings only
-            //       fire on opener taps so real first questions still go to AI.
+            // 9b. Handle Messenger "Get Started" opener + first-contact greeting.
+            //
+            // Three sub-cases:
+            //   (a) Opener tap ("Get Started" / "بدء الاستخدام") with NO merchant-
+            //       configured greeting → silently swallow. Customers complained the
+            //       default seeded greeting felt spammy/robotic. The button is always
+            //       a system phrase (never a real question), so we still must NOT let
+            //       it through to AI (otherwise GPT replies "do you mean register for
+            //       a course?"). We mark replied + return early, with no Send API call.
+            //   (b) Merchant manually configured a greeting (sourceLang !== 'default')
+            //       AND this is either an opener tap or the first incoming message →
+            //       send the configured greeting. This is an explicit merchant choice,
+            //       so we respect it.
+            //   (c) Anything else → fall through to the AI pipeline.
             //
             // NOTE: do NOT gate on `isNew` here. The webhook controller stores the message
             // before enqueuing the worker job (see webhook.ts findOrCreateFromWebhook), so
@@ -323,22 +328,36 @@ export class MessageProcessor {
                 const greetingMulti = settings.greetingMessageMulti || {};
                 const isCustomConfigured = greetingMulti.sourceLang !== undefined && greetingMulti.sourceLang !== 'default';
 
-                if (isOpener || isCustomConfigured) {
+                // (b) Merchant-configured greeting → send it.
+                if (isCustomConfigured) {
                     const configured = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
-                    const greeting = configured ?? (isOpener ? t('defaultGreeting', detectedLang) : null);
-                    if (greeting) {
+                    if (configured) {
                         try {
-                            await adapter.sendReply(page, senderId, greeting);
-                            await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, greeting, 'template');
-                            await messagesService.markAsReplied(storedMessage.id, greeting, 'template');
+                            await adapter.sendReply(page, senderId, configured);
+                            await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, configured, 'template');
+                            await messagesService.markAsReplied(storedMessage.id, configured, 'template');
                             this.logger.info(`[${platform}] Sent greeting message`, { senderId, source: isOpener ? 'opener' : 'configured' });
                             pipelineMetrics.record(pipeline, 'greeting_sent');
-                            return { success: true, messageId: platformMessageId, replyText: greeting, replyMethod: 'template' as const };
+                            return { success: true, messageId: platformMessageId, replyText: configured, replyMethod: 'template' as const };
                         } catch (error) {
-                            this.logger.error(`[${platform}] Failed to send greeting message — falling back to AI`, { error: String(error) });
-                            // Continue to AI reply as fallback
+                            // Non-opener case: let AI handle the first message instead.
+                            // Opener case: handled by the silent-suppression block below
+                            // so the system phrase never reaches AI.
+                            this.logger.error(`[${platform}] Failed to send greeting message`, { error: String(error), willFallbackToAI: !isOpener });
                         }
                     }
+                }
+
+                // (a) Opener tap reached here either because no custom greeting is
+                // configured, the configured greeting lookup returned empty, or the
+                // send above threw. In all cases: do NOT let the system phrase
+                // ("Get Started" / "بدء الاستخدام") reach the AI — it produces
+                // confused replies. Silently mark replied and return.
+                if (isOpener) {
+                    await messagesService.markAsReplied(storedMessage.id, '', 'template');
+                    this.logger.info(`[${platform}] Suppressed opener tap silently`, { senderId });
+                    pipelineMetrics.record(pipeline, 'greeting_suppressed');
+                    return { success: true, messageId: platformMessageId, replyText: '', replyMethod: 'template' as const };
                 }
             }
 
