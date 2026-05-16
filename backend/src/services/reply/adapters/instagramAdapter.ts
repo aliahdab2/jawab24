@@ -80,6 +80,11 @@ export class InstagramMessageAdapter implements MessagePlatformAdapter {
         await instagramService.sendTypingIndicator(page.platformAccountId, senderId, page.accessToken);
     }
 
+    async sendTypingOff(page: PlatformPage, senderId: string): Promise<void> {
+        if (!page.platformAccountId) return;
+        await instagramService.sendTypingOff(page.platformAccountId, senderId, page.accessToken);
+    }
+
     async sendReply(page: PlatformPage, senderId: string, text: string): Promise<void> {
         if (!page.platformAccountId) {
             throw new Error('Page has no Instagram account ID');

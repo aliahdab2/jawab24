@@ -22,6 +22,7 @@ vi.mock('../../src/services/pages', () => ({
 vi.mock('../../src/services/instagram', () => ({
     instagramService: {
         sendTypingIndicator: vi.fn().mockResolvedValue(undefined),
+        sendTypingOff: vi.fn().mockResolvedValue(undefined),
         sendDirectMessage: vi.fn().mockResolvedValue('msg-id-123'),
     },
 }));
@@ -174,6 +175,39 @@ describe('InstagramMessageAdapter', () => {
     describe('platform', () => {
         it('reports instagram as platform', () => {
             expect(adapter.platform).toBe('instagram');
+        });
+    });
+
+    describe('typing indicator', () => {
+        const mockPage = {
+            id: 'page-uuid',
+            userId: 'user-uuid',
+            workspaceId: 'ws-uuid',
+            name: 'Test IG Account',
+            accessToken: 'ig-token',
+            knowledgeBase: null,
+            kbActiveVersion: null,
+            autoReplyEnabled: true,
+            platformAccountId: 'ig-account-1',
+        };
+
+        it('sendTypingIndicator delegates to instagramService with account id + token', async () => {
+            const { instagramService } = await import('../../src/services/instagram');
+            await adapter.sendTypingIndicator(mockPage, 'recipient-1');
+            expect(instagramService.sendTypingIndicator).toHaveBeenCalledWith('ig-account-1', 'recipient-1', 'ig-token');
+        });
+
+        it('sendTypingOff delegates to instagramService with account id + token', async () => {
+            const { instagramService } = await import('../../src/services/instagram');
+            await adapter.sendTypingOff(mockPage, 'recipient-1');
+            expect(instagramService.sendTypingOff).toHaveBeenCalledWith('ig-account-1', 'recipient-1', 'ig-token');
+        });
+
+        it('sendTypingOff no-ops when platformAccountId is missing', async () => {
+            const { instagramService } = await import('../../src/services/instagram');
+            vi.mocked(instagramService.sendTypingOff).mockClear();
+            await adapter.sendTypingOff({ ...mockPage, platformAccountId: undefined }, 'recipient-1');
+            expect(instagramService.sendTypingOff).not.toHaveBeenCalled();
         });
     });
 });

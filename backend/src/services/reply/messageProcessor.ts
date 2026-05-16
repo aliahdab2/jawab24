@@ -9,6 +9,7 @@ import { detectLanguageCode } from '../../utils/language';
 import { t } from '../../utils/i18n';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
+import * as typingIndicator from './typingIndicator';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
 import { posts, instagramMedia, messages } from '../../db/schema';
@@ -218,6 +219,11 @@ export class MessageProcessor {
             // (early-return paths have no AI-generation race window).
             const handledPlatformMessageIds = new Set<string>();
             let didReachConsolidation = false;
+            // Track typing-indicator lifecycle so abort paths can clear it.
+            // Without this, Facebook keeps "typing..." visible for ~20s after
+            // we abandon a reply, surfacing as the "typing forever" UX bug.
+            let typingShown = false;
+            let replySent = false;
 
             try {
             // Load settings early — needed for debounce gating and downstream checks
@@ -361,10 +367,10 @@ export class MessageProcessor {
                 ? unrepliedMessages.map(m => m.message).join('\n')
                 : messageText;
 
-            // 11b. Send typing indicator before AI generation so customer sees "typing..."
-            if (adapter.sendTypingIndicator) {
-                try { await adapter.sendTypingIndicator(page, senderId); } catch { /* cosmetic */ }
-            }
+            // 11b. Show "typing..." before AI generation so the customer sees activity
+            // during the 1-3s wait. See typingIndicator.ts for the full contract
+            // (retry dedup, abort-path cleanup).
+            typingShown = await typingIndicator.show(adapter, page, senderId, platformMessageId);
 
             // 11c. If this DM thread originated from a comment on a post, carry the
             // post text into the generator context (same field the comment pipeline
@@ -478,6 +484,9 @@ export class MessageProcessor {
             let deliveryFailed = false;
             try {
                 await adapter.sendReply(page, senderId, replyText);
+                // Messenger/Instagram auto-clear the typing indicator when a message
+                // arrives, so no explicit typing_off needed on the happy path.
+                replySent = true;
             } catch (error) {
                 // Transient FB errors (rate limit, 5xx, -1/2018012, network) MUST bubble
                 // up to BullMQ so the whole DM job retries — sender.ts throws these
@@ -624,6 +633,14 @@ export class MessageProcessor {
 
             } finally {
                 await releaseReplyLock(page.id, senderId, lockToken).catch(() => { /* TTL will auto-expire */ });
+
+                // Clear the typing indicator if we showed one but never sent a reply
+                // (spam-skip, hold, empty AI output, non-transient delivery failure,
+                // transient error rethrow). The happy path's outgoing message
+                // dismisses the indicator automatically.
+                if (typingShown && !replySent) {
+                    typingIndicator.clear(adapter, page, senderId);
+                }
 
                 // Post-release safety net: catch messages that arrived AFTER step 11
                 // (during AI generation) and got orphaned at step 4b ('Lock held').

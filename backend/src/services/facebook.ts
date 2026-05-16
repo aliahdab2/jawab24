@@ -302,27 +302,44 @@ export class FacebookService {
         }
     }
     /**
-     * Send typing indicator to show "typing..." in the conversation
+     * Send a sender_action to Messenger. Cosmetic — never blocks the reply.
+     * Failures surface as warn so we can spot regressions like dropped
+     * permissions or Graph API shape changes.
      */
-    async sendTypingIndicator(pageAccessToken: string, recipientId: string): Promise<void> {
+    private async sendSenderAction(
+        pageAccessToken: string,
+        recipientId: string,
+        action: 'typing_on' | 'typing_off',
+    ): Promise<void> {
         try {
             await axios.post(`${FACEBOOK_GRAPH_API}/me/messages`, {
                 recipient: { id: recipientId },
-                sender_action: 'typing_on',
+                sender_action: action,
             }, {
                 params: { access_token: pageAccessToken },
             });
         } catch (error) {
-            // Typing indicator is cosmetic — never block the reply, but surface
-            // the underlying Meta error so we can spot regressions like dropped
-            // permissions or shape changes in the Graph API.
             const fbError = (error as { response?: { data?: unknown; status?: number } })?.response;
-            this.logger.warn('[Facebook] typing_on failed (non-fatal)', {
+            this.logger.warn(`[Facebook] ${action} failed (non-fatal)`, {
                 recipientId,
                 status: fbError?.status,
                 data: fbError?.data,
             });
         }
+    }
+
+    /** Show "typing..." while the bot is preparing a reply. */
+    async sendTypingIndicator(pageAccessToken: string, recipientId: string): Promise<void> {
+        return this.sendSenderAction(pageAccessToken, recipientId, 'typing_on');
+    }
+
+    /**
+     * Clear the "typing..." indicator. Used on abort paths (spam, hold, empty)
+     * where typing_on was sent but no reply will follow — without this the
+     * indicator stays visible for ~20s until Messenger's auto-clear timer fires.
+     */
+    async sendTypingOff(pageAccessToken: string, recipientId: string): Promise<void> {
+        return this.sendSenderAction(pageAccessToken, recipientId, 'typing_off');
     }
 
     /**
