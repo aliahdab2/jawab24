@@ -4,10 +4,11 @@ import clsx from 'clsx';
 import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
 import { Card, InputFieldWrapper, CharCounter } from '@/components/ui';
-import { Sparkles, MessageSquare, ArrowRight, X } from 'lucide-react';
+import { Sparkles, MessageSquare, ArrowRight, X, ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { pagesApi } from '@/lib/api';
 import { getLocaleDirection } from '@/utils/locale';
+import { usePersistedBoolean } from '@/hooks/usePersistedBoolean';
 import type { SettingsCardProps } from './types';
 
 // Lazy-load the modal — keeps it out of the settings-page bundle until the merchant
@@ -37,6 +38,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   const [testError, setTestError] = useState<string | null>(null);
   const [holdNoticeDismissed, setHoldNoticeDismissed] = useState(true);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const [expanded, setExpanded] = usePersistedBoolean('settings:replyStyle:expanded', true);
 
   // Show migration notice once per merchant who currently uses holdLowConfidence.
   // Re-evaluates on toggle so flipping holdLowConfidence off hides the notice.
@@ -80,11 +82,13 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
   };
 
   // Fetch pages once on mount so we can:
-  // (1) show "Testing on: <name>" before the merchant clicks (multi-page transparency),
-  // (2) use that cached page on click without a second network round-trip.
+  // (1) show which page the test will run against (multi-page transparency),
+  // (2) let merchants with multiple pages pick which one to test on,
+  // (3) avoid a second network round-trip on click.
   // Mirrors the canonical accessor from pages.tsx — backend returns Page[] directly,
   // some legacy paths wrap as { data: Page[] }.
-  const [firstPage, setFirstPage] = useState<Page | null>(null);
+  const [pages, setPages] = useState<Page[]>([]);
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     pagesApi.getAll().then((response) => {
@@ -92,31 +96,62 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
       const data = Array.isArray(response.data)
         ? response.data
         : (Array.isArray(response.data?.data) ? response.data.data : []);
-      const pages = data as Page[];
-      setFirstPage(pages[0] ?? null);
+      const fetched = data as Page[];
+      setPages(fetched);
+      setSelectedPageId((prev) => prev ?? fetched[0]?.id ?? null);
     }).catch(() => {
       // Silent — the test button itself will surface a real error if invoked.
     });
     return () => { cancelled = true; };
   }, []);
 
+  const selectedPage = pages.find((p) => p.id === selectedPageId) ?? pages[0] ?? null;
+
   const openTestModal = () => {
     setTestError(null);
-    if (!firstPage?.id) {
+    if (!selectedPage?.id) {
       setTestError(t('replyStyle.testNoPages'));
       return;
     }
-    setTestPage(firstPage);
+    setTestPage(selectedPage);
   };
+
+  const toneLabel = t(`replyStyle.${settings.replyStyle}` as const);
+  const previewText = value.trim().slice(0, 60);
 
   return (
     <Card className="border-none shadow-sm shadow-theme-border/30 p-3">
-      <div className="flex items-center gap-2.5 mb-3">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
+        aria-controls="reply-style-body"
+        className="w-full flex items-center gap-2.5 mb-3 text-start rounded-lg -m-1 p-1 hover:bg-muted/50 transition-colors"
+      >
         <div className="w-8 h-8 rounded-lg icon-bg-brand flex items-center justify-center shrink-0">
           <Sparkles className="w-4 h-4" />
         </div>
-        <h4 className="font-bold text-foreground text-sm text-start">{t('replyStyle.title')}</h4>
-      </div>
+        <div className="flex-1 min-w-0">
+          <h4 className="font-bold text-foreground text-sm text-start">{t('replyStyle.title')}</h4>
+          {!expanded && (
+            <p className="text-[11px] text-muted-foreground truncate mt-0.5" dir="auto">
+              {toneLabel}
+              {previewText && <span className="mx-1.5 opacity-50">·</span>}
+              {previewText}
+              {value.trim().length > 60 && '…'}
+            </p>
+          )}
+        </div>
+        <ChevronDown
+          className={clsx(
+            'w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform',
+            expanded && 'rotate-180',
+          )}
+          aria-hidden="true"
+        />
+      </button>
+
+      <div id="reply-style-body" hidden={!expanded}>
 
       {/* Migration notice for merchants who used the old holdLowConfidence location. */}
       {!holdNoticeDismissed && (
@@ -249,21 +284,38 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
           {t('replyStyle.openTestModal')}
         </button>
       </div>
-      {(hasChanges || firstPage?.name || testError) && (
-        <div className="mt-1.5 text-end">
+      {(hasChanges || selectedPage?.name || testError) && (
+        <div className="mt-1.5 flex items-center justify-end gap-1.5 flex-wrap">
           {hasChanges && (
             <p className="text-[11px] text-muted-foreground">{t('replyStyle.testSaveFirst')}</p>
           )}
-          {!hasChanges && firstPage?.name && (
+          {!hasChanges && selectedPage?.name && pages.length > 1 && (
+            <label className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5" dir="auto">
+              {t('replyStyle.testingOnLabel')}
+              <select
+                value={selectedPage.id}
+                onChange={(e) => setSelectedPageId(e.target.value)}
+                className="bg-transparent border border-theme-border rounded-md px-1.5 py-0.5 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-brand-400 max-w-[12rem] truncate"
+                dir="auto"
+              >
+                {pages.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </label>
+          )}
+          {!hasChanges && selectedPage?.name && pages.length <= 1 && (
             <p className="text-[11px] text-muted-foreground" dir="auto">
-              {t('replyStyle.testingOnPage', { pageName: firstPage.name })}
+              {t('replyStyle.testingOnPage', { pageName: selectedPage.name })}
             </p>
           )}
           {testError && (
-            <p className="text-xs text-destructive" role="alert">{testError}</p>
+            <p className="text-xs text-destructive w-full text-end" role="alert">{testError}</p>
           )}
         </div>
       )}
+
+      </div>
 
       {testPage && (
         <TestSmartReplyModal

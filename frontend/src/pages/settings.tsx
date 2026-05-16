@@ -87,6 +87,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const [initialSettings, setInitialSettings] = useState<SettingsState>({ ...INITIAL_SETTINGS, dashboardLanguage: language });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saved, setSaved] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -102,6 +103,7 @@ const SettingsPage: NextPageWithLayout = () => {
   const fetchSettings = useCallback(async () => {
     try {
       setLoading(true);
+      setLoadError(false);
       const response = await settingsApi.get();
       const data = response.data;
 
@@ -140,6 +142,12 @@ const SettingsPage: NextPageWithLayout = () => {
       setSettings(newSettings);
       setInitialSettings(newSettings);
     } catch (error) {
+      // CRITICAL: do NOT silently swallow this. If the fetch fails (offline, 5xx),
+      // the page would otherwise show INITIAL_SETTINGS defaults to the user. They
+      // could then "save" and overwrite their real DB settings with defaults
+      // (e.g. commentReplyMode flipping from 'dual' back to 'public').
+      // We surface a banner + block saving until a successful reload.
+      setLoadError(true);
       captureError(error, 'Failed to fetch settings', { tags: { page: 'settings' } });
     } finally {
       setLoading(false);
@@ -153,6 +161,14 @@ const SettingsPage: NextPageWithLayout = () => {
   }, [isAuthenticated, fetchSettings]);
 
   const handleSave = async () => {
+    // Hard guard: if the initial fetch failed, the on-screen settings are
+    // INITIAL_SETTINGS defaults, not the user's saved values. Saving would
+    // overwrite real DB data with defaults. Block until reload succeeds.
+    if (loadError) {
+      toast.error(t('loadErrorTitle'));
+      return;
+    }
+
     const editableSettings = { ...(settings as unknown as Record<string, unknown>) };
     delete editableSettings.id;
     delete editableSettings.userId;
@@ -253,6 +269,29 @@ const SettingsPage: NextPageWithLayout = () => {
 
   if (loading) {
     return <PageSkeleton />;
+  }
+
+  // Hard-fail UI when the initial fetch failed. We deliberately render NOTHING
+  // editable — letting the user interact with INITIAL_SETTINGS defaults would
+  // let them save defaults over their real data (e.g. commentReplyMode back to
+  // 'public' after an offline reload).
+  if (loadError) {
+    return (
+      <div className="pb-24 landscape:pb-20">
+        <PageHeader title={t('title')} description={t('pageContext')} />
+        <div className="mt-8 p-6 rounded-2xl alert-error border text-center">
+          <h2 className="font-bold text-foreground text-base mb-1">{t('loadErrorTitle')}</h2>
+          <p className="text-sm text-muted-foreground mb-4">{t('loadErrorDesc')}</p>
+          <button
+            type="button"
+            onClick={fetchSettings}
+            className="px-4 py-2 rounded-lg bg-brand-500 text-white text-sm font-bold hover:bg-brand-600 active:scale-[0.98] transition-all"
+          >
+            {tc('tryAgain')}
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
