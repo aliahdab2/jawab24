@@ -8,10 +8,10 @@
  * Anchored whole-string match (after trim, ignoring trailing punctuation/emoji)
  * so it cannot match inside longer phrases like "I started having a problem".
  *
- * Used by messageProcessor step 9b to decide whether to send the seeded
- * default greeting on a first message. Merchants who manually configured a
- * greeting (sourceLang !== 'default') always get the configured greeting
- * regardless of opener-match — this preserves their existing UX.
+ * Used by messageProcessor step 9b: opener taps trigger the configured greeting
+ * when `greetingMessageEnabled=true` (Facebook designed the button to kick off
+ * the conversation, so the greeting is the natural response). Otherwise they're
+ * silently suppressed so the system phrase never reaches the AI.
  */
 const OPENER_PATTERN = /^(get\s?started|بدء\s?الاستخدام)[\s!.؟?]*$/i;
 

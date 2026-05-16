@@ -333,6 +333,11 @@ export const settings = pgTable('settings', {
     // Multilingual Messages (JSONB)
     // Structure: { [lang: string]: string, sourceLang: string }
     greetingMessageMulti: jsonb('greeting_message_multi').$type<Record<string, string>>().default({}),
+    // Master switch for the greeting message. When false (default for new
+    // merchants) the configured greeting never fires — the AI handles the
+    // first message directly. Set true by the migration for existing
+    // merchants whose greetingMessageMulti was already customized.
+    greetingMessageEnabled: boolean('greeting_message_enabled').notNull().default(false),
     awayMessageMulti: jsonb('away_message_multi').$type<Record<string, string>>().default({}),
     // Master switch: when true, customers receive a reply at the monthly limit
     // (the custom message below if set, otherwise the hardcoded translation).

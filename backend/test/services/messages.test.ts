@@ -1123,14 +1123,16 @@ describe('MessagesService', () => {
     // ───────────────────────────────────────────
     describe('isFirstIncomingMessage', () => {
         function mockSelectChain(rows: Record<string, unknown>[]) {
+            const whereMock = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue(rows),
+            });
             const chain = {
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue(rows),
-                    }),
+                    where: whereMock,
                 }),
             };
             vi.mocked(db.select).mockReturnValueOnce(chain as any);
+            return { whereMock };
         }
 
         it('should return true when no prior incoming messages exist', async () => {
@@ -1156,6 +1158,28 @@ describe('MessagesService', () => {
             mockSelectChain([]);
             const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
             expect(result).toBe(true);
+        });
+
+        // ── Counts ALL incoming rows, including opener taps ─────────────────
+        // The opener-row exclusion that previously lived here was removed: it
+        // caused a double-greeting bug where (a) the opener tap fired the
+        // greeting, then (b) the customer's next real message ALSO fired the
+        // greeting because the filtered count made it look like the first
+        // message. Counting opener rows means the next real message sees
+        // `isFirstIncoming=false` and goes straight to AI.
+        it('does NOT filter opener rows out of the count (opener consumes the first-message slot)', async () => {
+            const { whereMock } = mockSelectChain([{ id: 'msg-opener' }, { id: 'msg-real' }]);
+
+            const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
+
+            // 2 rows returned → returns false (not the first message anymore).
+            expect(result).toBe(false);
+
+            // The WHERE clause must NOT contain the opener literals — they're
+            // counted like any other incoming message.
+            const values = collectSqlValues(whereMock.mock.calls[0]);
+            expect(values).not.toContain('بدء الاستخدام');
+            expect(values.some(v => typeof v === 'string' && v.toLowerCase() === 'get started')).toBe(false);
         });
     });
 

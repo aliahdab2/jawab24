@@ -174,7 +174,9 @@
   },
   "greetingMessage": {
     "title": "First Message to New Customers",
-    "desc": "Sent when a customer messages you for the first time"
+    "desc": "Sent when a customer messages you for the first time",
+    "enabledLabel": "Send a greeting on first contact",
+    "enabledDescription": "When off, the AI handles the first message directly"
   },
   "awayMessage": {
     "title": "After-Hours Message",

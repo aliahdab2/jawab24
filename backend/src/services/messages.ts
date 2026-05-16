@@ -282,6 +282,12 @@ export class MessagesService {
     async isFirstIncomingMessage(pageId: string, senderId: string): Promise<boolean> {
         // Fetch at most 2 rows — if fewer than 2 exist, this is the first conversation.
         // Uses the composite idx_messages_sender_inbox index and short-circuits early.
+        //
+        // Opener taps ("Get Started" / "بدء الاستخدام") count toward the total on
+        // purpose: when the opener fires the configured greeting (or an away message),
+        // the customer's next real message must see `isFirstIncoming=false` so the
+        // greeting/away message does NOT fire again. Filtering opener rows out here
+        // would cause a double-greeting / away-message-spam bug.
         const rows = await db
             .select({ id: messages.id })
             .from(messages)

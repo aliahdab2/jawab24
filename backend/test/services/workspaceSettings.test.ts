@@ -100,6 +100,7 @@ const FULL_JSONB = {
     dualReplyNudgeVariations: {},
     replyDelay: 0,
     greetingMessageMulti: {},
+    greetingMessageEnabled: false,
     awayMessageMulti: {},
     limitFallbackEnabled: false,
     limitFallbackMessageMulti: {},
