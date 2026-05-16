@@ -193,7 +193,7 @@
   },
   "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
   "aiDescriptionImproved": "AI-generated, context-aware replies.",
-  "aiDescriptionInfo": "When on, Jawab24 generates each reply based on the comment or message, your Knowledge Base, and your brand voice. Turn off to stop all AI replies — the channel toggles below will have no effect.",
+  "aiDescriptionInfo": "When on, Jawab24 generates each reply based on the comment or message, your Knowledge Base, and your brand voice. Turn off to stop AI replies — the channel toggles below still apply, and Jawab24 will send your default fallback message instead.",
   "autoTranslateTo": "Auto-translate to",
   "translationSuccess": "Translation completed!",
   "translationFailed": "Translation failed. Please try again.",

@@ -1,4 +1,6 @@
 {
+  "ai_refused": "AI declined to reply",
+  "ai_empty_reply": "AI returned an empty reply",
   "offensive_or_abusive": "Offensive or abusive",
   "angry_customer": "Angry customer",
   "low_confidence": "Needs your review",

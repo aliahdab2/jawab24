@@ -7,6 +7,7 @@ import { isNetworkError, isTimeoutError } from '@/lib/axiosRetry';
 import { newClientMessageId } from '@/lib/uuid';
 import { useTranslations } from 'next-intl';
 import { captureError, getBackendErrorCode } from '@/lib/sentryHelpers';
+import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import type { Conversation } from '@/components/messages';
 
 const REPLY_ERROR_KEYS: Record<string, string> = {
@@ -54,8 +55,12 @@ export function useConversationActions(opts: UseConversationActionsOptions = {})
     queryClient.invalidateQueries({ queryKey: ['messages-stats'] });
     queryClient.invalidateQueries({ queryKey: ['conversation'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard-needs-action-comments'] });
+    // Callers pass infinite-query list keys here (e.g. ['messages']). Trim
+    // cached pages to the first one before invalidating so we don't refetch
+    // every loaded page (see invalidateInfiniteListFresh JSDoc). Safe for
+    // non-infinite keys too — the helper is a no-op for them.
     for (const key of extraInvalidateKeys) {
-      queryClient.invalidateQueries({ queryKey: key });
+      invalidateInfiniteListFresh(queryClient, key);
     }
   }, [queryClient, extraInvalidateKeys]);
 

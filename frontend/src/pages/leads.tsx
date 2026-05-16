@@ -9,6 +9,7 @@ import { PageHeader, EmptyState, ConfirmationModal, Select, UpgradeCTA } from '@
 import { SidePanel } from '@/components/ui/SidePanel';
 import { useUIStore } from '@/lib/store';
 import { leadsApi, pagesApi, subscriptionApi, type Lead, type LeadStatus } from '@/lib/api';
+import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import type { Page, UsageSummary } from '@jawab24/shared';
 import {
   Users,
@@ -487,7 +488,7 @@ const LeadsPage: NextPageWithLayout = () => {
       } else {
         toast.success(t('statusUpdated'), { id: 'lead-status' });
       }
-      queryClient.invalidateQueries({ queryKey: ['leads', selectedPageId] });
+      invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
     },
     onError: (err) => {
       captureError(err, 'Failed to update lead status');
@@ -500,7 +501,7 @@ const LeadsPage: NextPageWithLayout = () => {
     onSuccess: () => {
       toast.success(t('deleteSuccess'));
       setLeadToDelete(null);
-      queryClient.invalidateQueries({ queryKey: ['leads', selectedPageId] });
+      invalidateInfiniteListFresh(queryClient, ['leads', selectedPageId]);
     },
     onError: (err) => {
       captureError(err, 'Failed to delete lead');
