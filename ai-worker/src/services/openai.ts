@@ -737,18 +737,30 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
     }
 
     /**
-     * Resolve the effective input language using the same history-first chain
-     * as buildDynamicSystemSuffix. Prevents a single short Latin token mid-Arabic
-     * conversation (e.g. "ICDI", "ok") from flipping inputLang to 'en' and
-     * spuriously triggering language_mismatch.
+     * Resolve the effective input language.
+     *
+     * Walk order: explicit override → user history (preferred anchor) → assistant
+     * history (fallback when only the bot has spoken, e.g. dual-DM opener) →
+     * current message → post → KB → default → 'en'.
+     *
+     * User history takes priority over assistant history so that bot drift (e.g.
+     * an accidental English reply mid-Arabic conversation) does not lock the
+     * resolved language away from the customer's expressed preference.
+     *
+     * Prevents a single short Latin token (e.g. "ICDI", "ok") from flipping
+     * inputLang to 'en' and spuriously triggering language_mismatch.
      */
     private resolveInputLanguage(request: GenerateRequest): string {
-        return request.language
-            || request.context?.conversationHistory
-                ?.filter(m => m.role === 'user' && /[a-zA-Z؀-ۿ]/.test(m.content))
+        const history = request.context?.conversationHistory ?? [];
+        const fromRole = (role: 'user' | 'assistant') =>
+            history
+                .filter(m => m.role === role && /[a-zA-Z؀-ۿ]/.test(m.content))
                 .reverse()
                 .map(m => this.detectLanguage(m.content))
-                .find(Boolean)
+                .find(Boolean);
+        return request.language
+            || fromRole('user')
+            || fromRole('assistant')
             || this.detectLanguageOrNull(request.comment)
             || this.detectLanguageOrNull(request.context?.postMessage || '')
             || this.detectLanguageOrNull(this.getKBText(request) || '')
