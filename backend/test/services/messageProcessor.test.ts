@@ -1109,7 +1109,7 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 
-    it('still fires merchant-configured greeting on opener tap when sourceLang is set', async () => {
+    it('silently suppresses Arabic opener even when a custom greeting is configured (merchant complaint reproduction)', async () => {
         vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
             id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
             messagesAutoReply: true, replyDelay: 0,
@@ -1125,9 +1125,32 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         );
 
         expect(result.success).toBe(true);
-        expect(adapter.sendReply).toHaveBeenCalledWith(
-            expect.anything(), 'sender-1', 'مرحباً بك في متجرنا',
+        expect(result.replyMethod).toBe('template');
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
+        expect(messagesService.markAsReplied).toHaveBeenCalledWith('msg-uuid', '', 'template');
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('silently suppresses English "Get Started" opener even when a custom greeting is configured', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'en' },
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(true);
+        vi.mocked(workspaceSettingsService.getGreetingMessage).mockResolvedValue('Welcome to our store!');
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'Get Started', 'msg-1',
         );
+
+        expect(result.success).toBe(true);
+        expect(result.replyMethod).toBe('template');
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(messagesService.storeOutgoingMessage).not.toHaveBeenCalled();
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 

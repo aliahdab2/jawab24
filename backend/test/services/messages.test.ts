@@ -1123,14 +1123,16 @@ describe('MessagesService', () => {
     // ───────────────────────────────────────────
     describe('isFirstIncomingMessage', () => {
         function mockSelectChain(rows: Record<string, unknown>[]) {
+            const whereMock = vi.fn().mockReturnValue({
+                limit: vi.fn().mockResolvedValue(rows),
+            });
             const chain = {
                 from: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        limit: vi.fn().mockResolvedValue(rows),
-                    }),
+                    where: whereMock,
                 }),
             };
             vi.mocked(db.select).mockReturnValueOnce(chain as any);
+            return { whereMock };
         }
 
         it('should return true when no prior incoming messages exist', async () => {
@@ -1156,6 +1158,23 @@ describe('MessagesService', () => {
             mockSelectChain([]);
             const result = await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
             expect(result).toBe(true);
+        });
+
+        // ── Opener-tap exclusion (merchant complaint reproduction) ──────────
+        // The webhook controller pre-stores the "Get Started" / "بدء الاستخدام"
+        // tap as a regular incoming row. If we count it, the customer's REAL
+        // first message is treated as their second and the greeting branch
+        // never fires. The query must exclude opener literals server-side.
+        it('excludes opener literals ("Get Started" / "بدء الاستخدام") from the SQL WHERE clause', async () => {
+            const { whereMock } = mockSelectChain([]);
+
+            await messagesService.isFirstIncomingMessage('page-1', 'sender-1');
+
+            const whereArgs = whereMock.mock.calls[0];
+            const values = collectSqlValues(whereArgs);
+            expect(values).toContain('بدء الاستخدام');
+            // The English literal is case-folded in SQL — assert either casing.
+            expect(values.some(v => typeof v === 'string' && v.toLowerCase() === 'get started')).toBe(true);
         });
     });
 

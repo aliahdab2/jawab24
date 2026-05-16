@@ -1,4 +1,4 @@
-import { eq, desc, asc, and, sql, ne, isNotNull, count, max } from 'drizzle-orm';
+import { eq, desc, asc, and, sql, ne, isNotNull, count, max, notInArray } from 'drizzle-orm';
 import { db } from '../db';
 import { messages, pages, conversations } from '../db/schema';
 import { ConversationMessage } from '../types';
@@ -282,6 +282,14 @@ export class MessagesService {
     async isFirstIncomingMessage(pageId: string, senderId: string): Promise<boolean> {
         // Fetch at most 2 rows — if fewer than 2 exist, this is the first conversation.
         // Uses the composite idx_messages_sender_inbox index and short-circuits early.
+        //
+        // Opener taps ("Get Started" / "بدء الاستخدام") are excluded from the count.
+        // The webhook controller pre-stores them as regular incoming rows, but they
+        // are system phrases — replyProcessor silently suppresses them. Counting them
+        // would consume the first-message slot and prevent the merchant's configured
+        // greeting from firing on the customer's REAL first message. Literals mirror
+        // OPENER_PATTERN in backend/src/services/reply/openerPatterns.ts — keep them
+        // in sync.
         const rows = await db
             .select({ id: messages.id })
             .from(messages)
@@ -289,6 +297,10 @@ export class MessagesService {
                 eq(messages.pageId, pageId),
                 eq(messages.senderId, senderId),
                 eq(messages.direction, 'incoming'),
+                notInArray(
+                    sql`lower(trim(${messages.message}))`,
+                    ['get started', 'بدء الاستخدام', 'getstarted', 'بدءالاستخدام'],
+                ),
             ))
             .limit(2);
         return rows.length <= 1;
