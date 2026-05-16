@@ -203,11 +203,26 @@ export class MessageProcessor {
 
             // 4b. Acquire distributed lock — prevents two workers from replying to
             //     the same sender simultaneously (covers greeting race + reply race).
+            //
+            //     Re-enqueue on contention rather than dropping. The lock is scoped
+            //     per (pageId, senderId), so contention here means DIFFERENT messages
+            //     from the same sender — typically the second of a rapid pair, OR
+            //     simultaneous retries after a shared handoff-pause expiry. If the
+            //     lock-holder skips its own message at step 5 ("newer pending")
+            //     expecting THIS one to consolidate, dropping THIS one strands the
+            //     conversation with no reply at all. A brief delay lets the holder
+            //     finish; the retry then runs as the consolidating worker.
+            //     Bounded by MAX_HANDOFF_RETRIES in replyWorker.
             const lockToken = await acquireReplyLock(page.id, senderId);
             if (!lockToken) {
                 pipelineMetrics.record(pipeline, 'lock_contention');
-                this.logger.info(`[${platform}] Lock held — another worker handling`, { senderId, pageId: page.id });
-                return { success: false, messageId: platformMessageId, error: 'Lock held by another worker' };
+                this.logger.info(`[${platform}] Lock held — re-enqueuing for retry`, { senderId, pageId: page.id });
+                return {
+                    success: false,
+                    messageId: platformMessageId,
+                    error: 'Lock held by another worker',
+                    handoffDelayMs: 2000,
+                };
             }
             lap('4b-acquireLock');
 
