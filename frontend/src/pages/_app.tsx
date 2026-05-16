@@ -6,6 +6,7 @@ import Head from 'next/head';
 import { useRouter } from 'next/router';
 import { NextIntlClientProvider } from 'next-intl';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { isAxiosError } from 'axios';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import { AppShell } from '@/components/layout/AppShell';
@@ -56,7 +57,14 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
         gcTime: 10 * 60 * 1000,
         refetchOnWindowFocus: true,
         refetchOnReconnect: true,
-        retry: 2,
+        // Single retry layer for HTTP errors (axios only retries transport failures).
+        // 4xx is a client error — retrying makes things worse, especially 429 which
+        // means we're already being throttled. 5xx/network: up to 2 retries.
+        retry: (failureCount, error) => {
+          const status = isAxiosError(error) ? error.response?.status : undefined;
+          if (typeof status === 'number' && status >= 400 && status < 500) return false;
+          return failureCount < 2;
+        },
         retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
       },
     },
