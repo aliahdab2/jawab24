@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations } from 'next-intl';
 import { isNativePlatform } from '@/lib/capacitor';
-import { trimInfinitePagesToFirst } from '@/lib/queryInvalidation';
+import { createDebouncedInvalidator } from '@/lib/queryInvalidation';
 import type { SSEEvent, Page, Comment } from '@jawab24/shared';
 import type { Message } from '@/lib/api';
 
@@ -74,62 +74,6 @@ const SSE_INVALIDATE_DEBOUNCE_MS = 400;
  * events keep arriving.
  */
 const SSE_INVALIDATE_MAX_WAIT_MS = 2_000;
-
-/**
- * Create a per-queryKey debounced invalidator with a max-wait cap. Returns
- * the invalidate function plus flush() to clear pending timers on unmount.
- *
- * Behavior: each invalidate() resets the trailing-edge timer (debounceMs),
- * but the refetch is forced after maxWaitMs from the first queued call so
- * a sustained event stream cannot starve the UI indefinitely.
- *
- * `trimInfinite: true` resets matching infinite queries to their first page
- * before invalidating — use for `['messages']` / `['comments']` list keys.
- */
-function createDebouncedInvalidator(qc: QueryClient, debounceMs: number, maxWaitMs: number) {
-    interface Pending {
-        trailing: ReturnType<typeof setTimeout>;
-        maxWait: ReturnType<typeof setTimeout>;
-        trimInfinite: boolean;
-    }
-    const pending = new Map<string, Pending>();
-
-    const fire = (key: string, queryKey: readonly unknown[], trimInfinite: boolean) => {
-        const entry = pending.get(key);
-        if (!entry) return;
-        clearTimeout(entry.trailing);
-        clearTimeout(entry.maxWait);
-        pending.delete(key);
-        if (trimInfinite) trimInfinitePagesToFirst(qc, queryKey);
-        qc.invalidateQueries({ queryKey });
-    };
-
-    const invalidate = (queryKey: readonly unknown[], opts?: { trimInfinite?: boolean }) => {
-        const key = JSON.stringify(queryKey);
-        const trimInfinite = opts?.trimInfinite ?? false;
-        const existing = pending.get(key);
-        if (existing) {
-            clearTimeout(existing.trailing);
-            existing.trailing = setTimeout(() => fire(key, queryKey, existing.trimInfinite), debounceMs);
-            // Preserve trimInfinite if any caller in the burst requested it.
-            existing.trimInfinite = existing.trimInfinite || trimInfinite;
-            return;
-        }
-        const trailing = setTimeout(() => fire(key, queryKey, trimInfinite), debounceMs);
-        const maxWait = setTimeout(() => fire(key, queryKey, pending.get(key)?.trimInfinite ?? trimInfinite), maxWaitMs);
-        pending.set(key, { trailing, maxWait, trimInfinite });
-    };
-
-    const flush = () => {
-        for (const entry of pending.values()) {
-            clearTimeout(entry.trailing);
-            clearTimeout(entry.maxWait);
-        }
-        pending.clear();
-    };
-
-    return { invalidate, flush };
-}
 
 /**
  * Real-time updates hook.
