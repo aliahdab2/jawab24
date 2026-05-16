@@ -415,10 +415,23 @@ export class OpenAIService {
             // Post-reply validation: catch issues the prompt alone can't prevent
             const validated = this.validateReply(parsed, request);
 
-            // Non-transient: the bot-words filter is deterministic, so retry will
-            // yield the same empty result. Surface to merchant as needs_attention
-            // so they can review brand voice / KB / prompt.
-            if (!validated.reply) {
+            // Empty reply has two distinct meanings, and only one is a failure:
+            //
+            //   1. INTENTIONAL — OFFENSIVE / SPAM_OR_IRRELEVANT: the prompt explicitly
+            //      instructs GPT to return reply:"" for these intents (see L99-100
+            //      and the few-shot example at L187). Downstream `shouldSkipReply`
+            //      in generator.ts handles them silently. Returning empty reply here
+            //      is the contract — not an error.
+            //
+            //   2. FAILURE — bot-words filter stripped a real reply down to <10 chars,
+            //      OR GPT failed to produce content for a normal intent. Throw so
+            //      the merchant gets needs_attention with the specific reason.
+            //
+            // PR B (#139) initially threw for ALL empty replies, which spammed Sentry
+            // and merchant notifications with every legitimate "ignore the troll"
+            // case (107 events in 3h on a single page after deploy). Intent-aware.
+            const isIntentionalEmpty = validated.intent === 'OFFENSIVE' || validated.intent === 'SPAM_OR_IRRELEVANT';
+            if (!validated.reply && !isIntentionalEmpty) {
                 throw new AiEmptyReplyError();
             }
 
