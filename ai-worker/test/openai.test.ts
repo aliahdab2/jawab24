@@ -1489,13 +1489,14 @@ describe('OpenAI Service - Post-Reply Validation', () => {
     // Other language mismatch cases (emoji/punctuation) are covered by eval tests
     // (Cat 41: Language Mismatch Guard, 4 tests) which test the full production pipeline.
 
-    it('should throw AiEmptyReplyError for OFFENSIVE/SPAM intent with empty reply', async () => {
-        // PR B contract change: an empty reply at validation time now throws
-        // AiEmptyReplyError unconditionally. The pre-PR-B behavior (return the
-        // empty reply with flags so language-mismatch wouldn't be re-added) is
-        // gone — OFFENSIVE/SPAM intents produce no reply, and "no reply" is now
-        // a needs_attention event that the merchant decides what to do with.
-        // The language-mismatch logic for empty replies is therefore moot.
+    it('should NOT throw AiEmptyReplyError for OFFENSIVE intent with empty reply (intentional empty)', async () => {
+        // Post-PR-B hotfix: empty reply for OFFENSIVE / SPAM_OR_IRRELEVANT is the
+        // contract (prompt explicitly tells GPT to return "" for these), so
+        // throwing AiEmptyReplyError was wrong — it spammed Sentry and merchant
+        // notifications with every legitimate "ignore the troll" case
+        // (107 events in 3h on a single page after the original PR B deploy).
+        // Downstream `shouldSkipReply` in generator.ts handles silent-skip; the
+        // ai-worker just returns empty reply normally for these intents.
         setupMock(JSON.stringify({
             reply: '',
             intent: 'OFFENSIVE',
@@ -1504,10 +1505,49 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({ comment: 'يا حمير' });
+
+        expect(result.reply).toBe('');
+        expect(result.intent).toBe('OFFENSIVE');
+        expect(result.flags).toContain('offensive_or_abusive');
+    });
+
+    it('should NOT throw AiEmptyReplyError for SPAM_OR_IRRELEVANT intent with empty reply', async () => {
+        // Same hotfix rationale as OFFENSIVE — empty reply is intentional.
+        setupMock(JSON.stringify({
+            reply: '',
+            intent: 'SPAM_OR_IRRELEVANT',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+
+        const result = await service.generateReply({ comment: 'follow me @spam' });
+
+        expect(result.reply).toBe('');
+        expect(result.intent).toBe('SPAM_OR_IRRELEVANT');
+    });
+
+    it('STILL throws AiEmptyReplyError when empty reply has a non-skip intent (e.g. QUESTION)', async () => {
+        // Regression guard for the original PR B contract: empty reply WITH a
+        // normal intent (QUESTION, GREETING, etc.) is still a failure — the
+        // bot-words filter stripped real content. Surface to merchant.
+        setupMock(JSON.stringify({
+            reply: '',
+            intent: 'QUESTION',
+            confidence: 'medium',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
         const { AiEmptyReplyError } = await import('../src/lib/errors');
         const service = new FreshService();
 
-        await expect(service.generateReply({ comment: 'يا حمير' }))
+        await expect(service.generateReply({ comment: 'ما هو سعر الدورة؟' }))
             .rejects.toBeInstanceOf(AiEmptyReplyError);
     });
 });

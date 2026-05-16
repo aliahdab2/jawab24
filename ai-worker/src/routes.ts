@@ -7,7 +7,7 @@ import { Sentry } from './lib/sentry';
 import { config } from './config';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { EcommerceToolResult } from '@jawab24/shared';
-import { serializeTypedAiError } from './lib/errors';
+import { serializeTypedAiError, AI_TYPED_ERROR_NAMES } from './lib/errors';
 
 /**
  * If the error is one of our typed AI errors, send a structured 500 the backend
@@ -19,6 +19,21 @@ function sendTypedAiErrorIfMatched(reply: FastifyReply, error: unknown): boolean
     if (!typed) return false;
     reply.status(500).send({ error: typed });
     return true;
+}
+
+/**
+ * Typed AI errors are contract-defined failure modes (refusal, timeout, empty,
+ * unconfigured), not unexpected exceptions. They are surfaced to the merchant
+ * via the backend's needs_attention path with all relevant context. Capturing
+ * them to Sentry as separate events floods alerts with normal-operation noise
+ * (post-deploy: 107 OFFENSIVE-empty events + 12 Claude-unconfigured events in
+ * 3h, all of which were legitimate behavior, not bugs).
+ *
+ * Use this guard before Sentry.captureException — fall through to capture only
+ * for unexpected errors that genuinely need on-call attention.
+ */
+function isExpectedTypedAiError(error: unknown): boolean {
+    return error instanceof Error && AI_TYPED_ERROR_NAMES.has(error.name);
 }
 
 async function routes(server: FastifyInstance) {
@@ -66,7 +81,9 @@ async function routes(server: FastifyInstance) {
                 return reply.send(result);
             } catch (error) {
                 request.log.error(error, 'Failed to generate reply with provider');
-                Sentry.captureException(error, { extra: { comment, language, model } });
+                if (!isExpectedTypedAiError(error)) {
+                    Sentry.captureException(error, { extra: { comment, language, model } });
+                }
                 if (sendTypedAiErrorIfMatched(reply, error)) return;
                 return reply.status(500).send({ error: 'Failed to generate reply' });
             }
@@ -78,7 +95,9 @@ async function routes(server: FastifyInstance) {
             return reply.send(result);
         } catch (error) {
             request.log.error(error, 'Failed to generate reply');
-            Sentry.captureException(error, { extra: { comment, language } });
+            if (!isExpectedTypedAiError(error)) {
+                Sentry.captureException(error, { extra: { comment, language } });
+            }
             if (sendTypedAiErrorIfMatched(reply, error)) return;
             return reply.status(500).send({ error: 'Failed to generate reply' });
         }
@@ -97,7 +116,9 @@ async function routes(server: FastifyInstance) {
             return reply.send(result);
         } catch (error) {
             request.log.error(error, 'Failed to generate reply with tools');
-            Sentry.captureException(error, { extra: { comment, language } });
+            if (!isExpectedTypedAiError(error)) {
+                Sentry.captureException(error, { extra: { comment, language } });
+            }
             if (sendTypedAiErrorIfMatched(reply, error)) return;
             return reply.status(500).send({ error: 'Failed to generate reply with tools' });
         }
@@ -123,7 +144,9 @@ async function routes(server: FastifyInstance) {
             return reply.send(result);
         } catch (error) {
             request.log.error(error, 'Failed to generate reply with tool results');
-            Sentry.captureException(error, { extra: { toolCount: toolResults.length } });
+            if (!isExpectedTypedAiError(error)) {
+                Sentry.captureException(error, { extra: { toolCount: toolResults.length } });
+            }
             if (sendTypedAiErrorIfMatched(reply, error)) return;
             return reply.status(500).send({ error: 'Failed to generate reply with tool results' });
         }
