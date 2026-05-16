@@ -12,7 +12,7 @@ import { settingsApi, api } from '@/lib/api';
 import {
   Save,
   MessageCircle,
-  WandSparkles,
+  Sparkles,
   Check,
   Settings2,
 } from 'lucide-react';
@@ -322,7 +322,7 @@ const SettingsPage: NextPageWithLayout = () => {
             replies are generated at all. Channel-level toggles (Comments,
             Messages) follow underneath. */}
         <SimpleToggle
-          icon={<WandSparkles className="w-7 h-7 landscape:w-6 landscape:h-6" />}
+          icon={<Sparkles className="w-7 h-7 landscape:w-6 landscape:h-6" />}
           title={t('enableAI')}
           description={t('aiDescriptionImproved')}
           enabled={settings.aiEnabled}
