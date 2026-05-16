@@ -12,7 +12,7 @@ import { settingsApi, api } from '@/lib/api';
 import {
   Save,
   MessageCircle,
-  Bot,
+  WandSparkles,
   Check,
   Settings2,
 } from 'lucide-react';
@@ -317,9 +317,21 @@ const SettingsPage: NextPageWithLayout = () => {
       {/* Section: Auto-Reply */}
       <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAutoReply')}</p>
       <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
+        {/* AI master switch — promoted to top of the section because it gates
+            whether the AI Personality section appears below and whether smart
+            replies are generated at all. Channel-level toggles (Comments,
+            Messages) follow underneath. */}
+        <SimpleToggle
+          icon={<WandSparkles className="w-7 h-7 landscape:w-6 landscape:h-6" />}
+          title={t('enableAI')}
+          description={t('aiDescriptionImproved')}
+          enabled={settings.aiEnabled}
+          onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
+          prominent
+        />
+
         <CommentsAutoReplyCard settings={settings} setSettings={setSettings} fieldErrors={fieldErrors} />
 
-        {/* Messages & AI Toggles */}
         <div className="space-y-3 landscape:space-y-2">
           <SimpleToggle
             icon={<MessageCircle className="w-6 h-6 landscape:w-5 landscape:h-5" />}
@@ -327,13 +339,6 @@ const SettingsPage: NextPageWithLayout = () => {
             description={t('messagesAutoReplyDesc')}
             enabled={settings.messagesAutoReply}
             onChange={(enabled) => setSettings({ ...settings, messagesAutoReply: enabled })}
-          />
-          <SimpleToggle
-            icon={<Bot className="w-6 h-6 landscape:w-5 landscape:h-5" />}
-            title={t('enableAI')}
-            description={t('aiDescriptionImproved')}
-            enabled={settings.aiEnabled}
-            onChange={(enabled) => setSettings({ ...settings, aiEnabled: enabled })}
           />
         </div>
       </div>

@@ -18,7 +18,7 @@ export function ThemeSelector() {
   const { theme, setTheme } = useTheme();
 
   return (
-    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] dark:shadow-[0_10px_30px_rgba(0,0,0,0.3)] p-5 landscape:p-3">
+    <Card className="border-none shadow-card-soft p-5 landscape:p-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-2xl bg-brand-600/10 text-brand-600 flex items-center justify-center flex-shrink-0 landscape:w-10 landscape:h-10 landscape:rounded-xl">

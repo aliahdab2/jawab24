@@ -371,7 +371,7 @@ export function OrderNotificationsCard({ storeId }: { storeId: string }) {
   if (loading || !draft || !saved) return null;
 
   return (
-    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4">
+    <Card className="border-none shadow-card-soft p-6 landscape:p-4">
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
