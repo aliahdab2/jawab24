@@ -11,7 +11,7 @@ import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
-import { posts, instagramMedia } from '../../db/schema';
+import { posts, instagramMedia, messages } from '../../db/schema';
 import { eq } from 'drizzle-orm';
 import type { MessagePlatformAdapter, MessageResult } from '../../interfaces';
 import { enrichPageContext } from './contextEnricher';
@@ -23,7 +23,12 @@ import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
-import { isTransientFbError, isTransientAiError } from '../../utils/fbGraphErrors';
+import {
+    isTransientFbError,
+    isTransientAiError,
+    needsImmediateAttention,
+    AiRefusalError,
+} from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
 import { extractPostId } from '../../utils/instagram';
 
@@ -636,6 +641,51 @@ export class MessageProcessor {
             }
 
         } catch (error) {
+            // AI refusal / empty-after-filter — deterministic, no retry value. Flag
+            // the message row immediately with the specific reason and notify the
+            // merchant. They can act on the refusal reason or empty-filter signal
+            // by adjusting KB / brand voice / policy. No rethrow → no BullMQ retry.
+            if (needsImmediateAttention(error)) {
+                const isRefusal = error instanceof AiRefusalError;
+                const flagReason = isRefusal ? 'ai_refused' : 'ai_empty_reply';
+                const flagMeta = isRefusal
+                    ? { ai_refused: { reason: error.refusalReason } }
+                    : { ai_empty_reply: { reason: 'AI reply was empty after content filtering' } };
+
+                try {
+                    const row = await db.query.messages.findFirst({
+                        where: eq(messages.platformMessageId, platformMessageId),
+                    });
+                    if (row && !row.replied && !row.needsAttention) {
+                        await messagesService.flagMessage(row.id, flagReason, undefined, flagMeta);
+                        // workspaceId + senderName pulled from the message row since the
+                        // try-block scope's locals aren't reachable from this catch.
+                        notificationService.sendTemplateNotificationToWorkspace(
+                            row.workspaceId,
+                            'flagged_reply',
+                            { senderName: row.senderName || senderId || 'Unknown', reason: flagReason },
+                            { messageId: row.id, type: 'message', deepLink: '/messages?filter=flagged' },
+                        ).catch(err => this.logger.error('[MessageProcessor] AI-failed notification failed', { err }));
+                    }
+                } catch (flagErr) {
+                    this.logger.error('[MessageProcessor] Failed to flag for ai_refused/empty', {
+                        flagErr: flagErr instanceof Error ? flagErr.message : String(flagErr),
+                        platformMessageId,
+                    });
+                }
+
+                pipelineMetrics.record(pipeline, 'ai_failed_immediate_flag');
+                this.logger.warn(`[${platform}] AI ${flagReason} — flagged immediately, no retry`, {
+                    platformMessageId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                return {
+                    success: false,
+                    messageId: platformMessageId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                };
+            }
+
             // Transient DM errors MUST bubble up so BullMQ retries the whole job — same
             // rationale as commentProcessor.processComment: sender.ts throws transients
             // (FB rate limit, 5xx, -1/2018012, network) specifically to trigger retry.

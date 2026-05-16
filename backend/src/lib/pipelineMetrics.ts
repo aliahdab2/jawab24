@@ -42,6 +42,7 @@ export type Outcome =
     | 'lock_contention'
     | 'trigger_no_match'
     | 'transient_error_retry'
+    | 'ai_failed_immediate_flag'
     | 'error';
 
 const PREFIX = 'metrics:pipeline:';

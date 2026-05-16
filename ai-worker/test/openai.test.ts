@@ -294,7 +294,10 @@ describe('OpenAI Service - Structured JSON Response', () => {
         expect(result.flags).toEqual(['invalid_json']);
     });
 
-    it('should use fallback reply text when JSON reply field is empty', async () => {
+    it('should throw AiEmptyReplyError when validated reply is empty', async () => {
+        // PR B contract: no string fallback. Empty after content filter →
+        // typed throw so backend flags needs_attention immediately (filter is
+        // deterministic; retry would yield the same empty result).
         const jsonResponse = JSON.stringify({
             reply: '',
             intent: 'GREETING',
@@ -321,14 +324,17 @@ describe('OpenAI Service - Structured JSON Response', () => {
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const { AiEmptyReplyError } = await import('../src/lib/errors');
         const service = new FreshService();
-        const result = await service.generateReply({ comment: 'Hi!' });
 
-        // Should use fallback when parsed reply is empty
-        expect(result.reply).toContain('Thank you');
+        await expect(service.generateReply({ comment: 'Hi!' }))
+            .rejects.toBeInstanceOf(AiEmptyReplyError);
     });
 
-    it('should return confidence: low and flags: [fallback_reply] on API error', async () => {
+    it('should rethrow OpenAI API errors (no fake fallback reply)', async () => {
+        // PR B contract: API errors propagate to the backend, which decides
+        // retry-vs-flag via isTransientAiError. Returning a templated string
+        // here was the bug we're fixing.
         vi.doMock('openai', () => ({
             default: vi.fn().mockImplementation(() => ({
                 chat: {
@@ -346,11 +352,9 @@ describe('OpenAI Service - Structured JSON Response', () => {
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
         const service = new FreshService();
-        const result = await service.generateReply({ comment: 'Hello' });
 
-        expect(result.confidence).toBe('low');
-        expect(result.flags).toEqual(['fallback_reply']);
-        expect(result.reply).toContain('Thank you');
+        await expect(service.generateReply({ comment: 'Hello' }))
+            .rejects.toThrow('API error');
     });
 });
 
@@ -641,20 +645,22 @@ describe('OpenAI Service - Conversation Fallback', () => {
         vi.resetModules();
     });
 
-    it('should return message-specific fallback when conversationHistory is present', async () => {
+    it('should throw AiClientNotConfiguredError instead of fabricating a DM reply', async () => {
+        // PR B contract: no templated reply when OPENAI_API_KEY is missing.
+        // Throw a typed error so backend's reply pipeline catches it via
+        // isTransientAiError → BullMQ retries → needs_attention flag.
         vi.doMock('../src/config', () => ({
             config: { openai: { apiKey: '', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const { AiClientNotConfiguredError } = await import('../src/lib/errors');
         const service = new FreshService();
-        const result = await service.generateReply({
+
+        await expect(service.generateReply({
             comment: 'Hello',
             context: { conversationHistory: [{ role: 'user' as const, content: 'Previous' }] },
-        });
-
-        // Message fallback contains "message", comment fallback contains "reaching out"
-        expect(result.reply).toContain('message');
+        })).rejects.toBeInstanceOf(AiClientNotConfiguredError);
     });
 });
 
@@ -663,52 +669,49 @@ describe('OpenAI Service (unconfigured)', () => {
         vi.resetModules();
     });
 
-    it('should return fallback when not configured', async () => {
-        // Re-mock with empty API key
+    it('should throw AiClientNotConfiguredError when no API key is configured', async () => {
+        // PR B contract: no string fallback. Missing API key is an ops incident —
+        // healthcheck should already be failing — but per-request we throw a
+        // typed error rather than fabricating a reply.
         vi.doMock('../src/config', () => ({
             config: {
-                openai: {
-                    apiKey: '',
-                    model: 'gpt-4.1-mini',
-                    maxTokens: 150,
-                    temperature: 0.7,
-                },
+                openai: { apiKey: '', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7 },
             },
         }));
 
         const { OpenAIService: UnconfiguredService } = await import('../src/services/openai');
+        const { AiClientNotConfiguredError } = await import('../src/lib/errors');
         const unconfiguredService = new UnconfiguredService();
 
-        const result = await unconfiguredService.generateReply({
-            comment: 'Hello!',
-        });
-
-        expect(result.reply).toContain('Thank you');
-        expect(result.language).toBe('en');
+        await expect(unconfiguredService.generateReply({ comment: 'Hello!' }))
+            .rejects.toBeInstanceOf(AiClientNotConfiguredError);
     });
 
-    it('should include pageName in fallback when provided', async () => {
+    it('should NOT include pageName in any fabricated reply (page name was part of the leaked template)', async () => {
+        // Regression guard: the May 15 customer leak interpolated the page name
+        // into a templated "Thanks, we'll get back to you" string. PR B
+        // eliminates the codepath entirely — verify no thrown error carries
+        // the page name in its message either.
         vi.doMock('../src/config', () => ({
             config: {
-                openai: {
-                    apiKey: '',
-                    model: 'gpt-4.1-mini',
-                    maxTokens: 150,
-                    temperature: 0.7,
-                },
+                openai: { apiKey: '', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7 },
             },
         }));
 
         const { OpenAIService: UnconfiguredService } = await import('../src/services/openai');
         const unconfiguredService = new UnconfiguredService();
 
-        const result = await unconfiguredService.generateReply({
-            comment: 'Hello!',
-            context: { pageName: 'My Store' },
-        });
-
-        expect(result.reply).toContain('My Store');
-        expect(result.reply).toContain('Thank you');
+        try {
+            await unconfiguredService.generateReply({
+                comment: 'Hello!',
+                context: { pageName: 'My Store' },
+            });
+            throw new Error('expected generateReply to throw');
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            expect(message).not.toContain('My Store');
+            expect(message).not.toContain('Thank you for your message');
+        }
     });
 });
 
@@ -905,19 +908,21 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
         logSpy.mockRestore();
     });
 
-    it('should use channel=dm for fallback when channel is explicitly dm', async () => {
+    it('should throw on unconfigured client regardless of explicit channel=dm context', async () => {
+        // Replaces the old "use channel=dm for fallback" test — there is no
+        // fallback codepath anymore. Channel is irrelevant; throw is unconditional.
         vi.doMock('../src/config', () => ({
             config: { openai: { apiKey: '', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7 } },
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const { AiClientNotConfiguredError } = await import('../src/lib/errors');
         const service = new FreshService();
-        const result = await service.generateReply({
+
+        await expect(service.generateReply({
             comment: 'Hello',
             context: { channel: 'dm' },
-        });
-
-        expect(result.reply).toContain('message');
+        })).rejects.toBeInstanceOf(AiClientNotConfiguredError);
     });
 });
 
@@ -1158,6 +1163,10 @@ describe('OpenAI Service - Prompt Injection Sanitization', () => {
     });
 
     it('should instruct no reply for SPAM_OR_IRRELEVANT intent', async () => {
+        // Asserts on the system prompt sent to the model, not the result.
+        // With PR B, an empty reply now throws AiEmptyReplyError — but the
+        // prompt is captured during the mocked completion call (before the
+        // throw), so we catch and continue to the assertion.
         let capturedMessages: any[] = [];
 
         vi.doMock('openai', () => ({
@@ -1178,7 +1187,9 @@ describe('OpenAI Service - Prompt Injection Sanitization', () => {
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
         const service = new FreshService();
-        await service.generateReply({ comment: 'follow me @spam' });
+        // SPAM intent intentionally produces empty reply, which now throws — that's fine,
+        // we only care about the prompt that was sent.
+        await service.generateReply({ comment: 'follow me @spam' }).catch(() => undefined);
 
         const systemPrompt = capturedMessages[0].content;
         expect(systemPrompt).toContain('SPAM_OR_IRRELEVANT');
@@ -1478,7 +1489,13 @@ describe('OpenAI Service - Post-Reply Validation', () => {
     // Other language mismatch cases (emoji/punctuation) are covered by eval tests
     // (Cat 41: Language Mismatch Guard, 4 tests) which test the full production pipeline.
 
-    it('should NOT check language mismatch for empty replies (OFFENSIVE/SPAM)', async () => {
+    it('should throw AiEmptyReplyError for OFFENSIVE/SPAM intent with empty reply', async () => {
+        // PR B contract change: an empty reply at validation time now throws
+        // AiEmptyReplyError unconditionally. The pre-PR-B behavior (return the
+        // empty reply with flags so language-mismatch wouldn't be re-added) is
+        // gone — OFFENSIVE/SPAM intents produce no reply, and "no reply" is now
+        // a needs_attention event that the merchant decides what to do with.
+        // The language-mismatch logic for empty replies is therefore moot.
         setupMock(JSON.stringify({
             reply: '',
             intent: 'OFFENSIVE',
@@ -1487,13 +1504,11 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         }));
 
         const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const { AiEmptyReplyError } = await import('../src/lib/errors');
         const service = new FreshService();
-        const result = await service.generateReply({
-            comment: 'يا حمير',
-        });
 
-        expect(result.flags).not.toContain('language_mismatch');
-        expect(result.flags).toContain('offensive_or_abusive');
+        await expect(service.generateReply({ comment: 'يا حمير' }))
+            .rejects.toBeInstanceOf(AiEmptyReplyError);
     });
 });
 

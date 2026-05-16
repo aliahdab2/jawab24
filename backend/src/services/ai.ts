@@ -14,7 +14,7 @@ import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
-import { AiUnavailableError } from '../utils/fbGraphErrors';
+import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import type { AiPipeline } from '../types/aiPipeline';
 
@@ -527,6 +527,37 @@ export class AiService {
                 this.logger.error('AI Service error', {
                     error: error instanceof Error ? error.message : String(error),
                 });
+            }
+
+            // Reconstruct typed AI errors from the ai-worker's 500 response body
+            // so the processor's outer catch can branch correctly:
+            //   - AiRefusalError / AiEmptyReplyError → immediate needs_attention (no retry)
+            //   - AiTimeoutError / AiUnavailableError → BullMQ retry → exhaustion flag
+            // Reconstruction is by error.name (matches the existing CircuitOpenError
+            // convention) so we avoid coupling to ai-worker's class identity.
+            if (axios.isAxiosError(error) && error.response?.data?.error) {
+                const wireError = error.response.data.error as { name?: unknown; message?: unknown; refusalReason?: unknown };
+                const name = typeof wireError.name === 'string' ? wireError.name : undefined;
+                const message = typeof wireError.message === 'string' ? wireError.message : undefined;
+                const refusalReason = typeof wireError.refusalReason === 'string' ? wireError.refusalReason : undefined;
+
+                if (name) {
+                    Sentry.setTag('aiErrorClass', name);
+                    switch (name) {
+                        case 'AiRefusalError':
+                            throw new AiRefusalError(refusalReason ?? 'unknown', message);
+                        case 'AiTimeoutError':
+                            throw new AiTimeoutError(undefined, message);
+                        case 'AiEmptyReplyError':
+                            throw new AiEmptyReplyError(message);
+                        case 'AiClientNotConfiguredError':
+                            // ai-worker's "no client" maps to backend's AiUnavailableError
+                            // (same semantics: permanent-but-flag-via-retry-exhaustion).
+                            throw new AiUnavailableError(message);
+                    }
+                    // Unknown name: fall through to generic rethrow below — don't
+                    // over-classify by inventing a typed error we don't recognize.
+                }
             }
 
             // Primary AI failed and (either there was no failover, or the

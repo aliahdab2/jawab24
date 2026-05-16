@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { openaiService, GenerateRequest } from './services/openai';
 import { generateWithTools, generateWithToolResults, type ToolEnabledResponse } from './services/ecommerceToolHandler';
 import { translationService, generateNudgeVariations, type TranslateRequest } from './services/translation';
@@ -7,6 +7,19 @@ import { Sentry } from './lib/sentry';
 import { config } from './config';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { EcommerceToolResult } from '@jawab24/shared';
+import { serializeTypedAiError } from './lib/errors';
+
+/**
+ * If the error is one of our typed AI errors, send a structured 500 the backend
+ * can reconstruct by `name`; otherwise fall through to the generic 500 message.
+ * Returns true when handled.
+ */
+function sendTypedAiErrorIfMatched(reply: FastifyReply, error: unknown): boolean {
+    const typed = serializeTypedAiError(error);
+    if (!typed) return false;
+    reply.status(500).send({ error: typed });
+    return true;
+}
 
 async function routes(server: FastifyInstance) {
     // Health check (no rate limit)
@@ -54,6 +67,7 @@ async function routes(server: FastifyInstance) {
             } catch (error) {
                 request.log.error(error, 'Failed to generate reply with provider');
                 Sentry.captureException(error, { extra: { comment, language, model } });
+                if (sendTypedAiErrorIfMatched(reply, error)) return;
                 return reply.status(500).send({ error: 'Failed to generate reply' });
             }
         }
@@ -65,6 +79,7 @@ async function routes(server: FastifyInstance) {
         } catch (error) {
             request.log.error(error, 'Failed to generate reply');
             Sentry.captureException(error, { extra: { comment, language } });
+            if (sendTypedAiErrorIfMatched(reply, error)) return;
             return reply.status(500).send({ error: 'Failed to generate reply' });
         }
     });
@@ -83,6 +98,7 @@ async function routes(server: FastifyInstance) {
         } catch (error) {
             request.log.error(error, 'Failed to generate reply with tools');
             Sentry.captureException(error, { extra: { comment, language } });
+            if (sendTypedAiErrorIfMatched(reply, error)) return;
             return reply.status(500).send({ error: 'Failed to generate reply with tools' });
         }
     });
@@ -108,6 +124,7 @@ async function routes(server: FastifyInstance) {
         } catch (error) {
             request.log.error(error, 'Failed to generate reply with tool results');
             Sentry.captureException(error, { extra: { toolCount: toolResults.length } });
+            if (sendTypedAiErrorIfMatched(reply, error)) return;
             return reply.status(500).send({ error: 'Failed to generate reply with tool results' });
         }
     });
