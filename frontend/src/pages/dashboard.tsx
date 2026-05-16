@@ -14,6 +14,7 @@ import { useLanguage } from '@/i18n/hooks';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
 import { subscriptionApi, settingsApi, pagesApi, commentsApi, messagesApi, analyticsApi, api } from '@/lib/api';
+import { KB_DEEP_LINK } from '@/lib/routes';
 import type { AnalyticsOverview } from '@/lib/api';
 import {
   MessageSquare,
@@ -879,7 +880,7 @@ const DashboardPage: NextPageWithLayout = () => {
                     {isEcomVariant ? t('kbNudgeEcomBody') : t('kbNudgeBody')}
                   </p>
                   <div className="flex items-center gap-3 mt-2">
-                    <Link href="/pages?openKb=true">
+                    <Link href={KB_DEEP_LINK}>
                       <Button size="sm" variant="primary" className="text-xs">
                         {t('kbNudgeCta')}
                       </Button>

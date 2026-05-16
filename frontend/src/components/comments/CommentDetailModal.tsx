@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
-import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
+import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, HeldReplyBanner, ReplySourceBadge } from '@/components/ui';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -20,7 +20,6 @@ import { getCommentExternalUrl } from '@/utils/pageUrl';
 import { formatFullTime, formatMessageTime } from '@/utils/dateUtils';
 import {
   Sparkles,
-  Bot,
   X,
   Send,
   Loader2,
@@ -280,12 +279,7 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
           )}
 
           {/* Held reply banner */}
-          {isHeldReply && (
-            <div className="flex items-start gap-2 mb-3 px-3 py-2.5 rounded-lg status-warning border text-sm">
-              <Bot className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <span>{t('heldReplyBanner')}</span>
-            </div>
-          )}
+          {isHeldReply && <HeldReplyBanner />}
 
           {/* Compose row — only when unreplied or needs attention */}
           {showComposeRow && (
