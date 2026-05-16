@@ -32,9 +32,7 @@ export function SimpleToggle({
         enabled
           ? clsx(
               'bg-brand-50/30 dark:bg-brand-950/20 border-brand-100 dark:border-brand-800/40',
-              prominent
-                ? 'shadow-[0_10px_30px_rgba(16,185,129,0.12)] dark:shadow-[0_10px_30px_rgba(16,185,129,0.06)] ring-1 ring-brand-200/50 dark:ring-brand-700/30'
-                : 'shadow-sm',
+              prominent ? 'shadow-card-glow' : 'shadow-sm',
             )
           : 'bg-card border-theme-border',
       )}

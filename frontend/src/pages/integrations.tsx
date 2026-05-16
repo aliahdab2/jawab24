@@ -211,7 +211,7 @@ function ConnectedStoreCard({
   };
 
   return (
-    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4">
+    <Card className="border-none shadow-card-soft p-6 landscape:p-4">
       <div className="flex items-center gap-3 mb-4">
         <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10', platform.iconClass)}>
           {platform.icon}
@@ -348,7 +348,7 @@ function DisconnectedCard({ platform, store }: { platform: PlatformConfig; store
   };
 
   return (
-    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] p-6 landscape:p-4">
+    <Card className="border-none shadow-card-soft p-6 landscape:p-4">
       <div className="flex items-center gap-3 mb-4">
         <div className={clsx('w-12 h-12 rounded-2xl flex items-center justify-center landscape:w-10 landscape:h-10 opacity-60', platform.iconClass)}>
           {platform.icon}
@@ -410,7 +410,7 @@ function NotConnectedCard({ platform }: { platform: PlatformConfig }) {
   };
 
   return (
-    <Card className="border-none shadow-[0_10px_30px_rgba(0,0,0,0.04)] overflow-hidden">
+    <Card className="border-none shadow-card-soft overflow-hidden">
       <div className="p-6 landscape:p-4">
         {/* Header */}
         <div className="flex items-center gap-3 mb-4">

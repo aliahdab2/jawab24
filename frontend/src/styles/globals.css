@@ -782,6 +782,32 @@
     text-transform: uppercase;
     letter-spacing: 0.05em;
   }
+
+  /* Card shadow tokens — single source of truth.
+   *
+   * Why: the same two drop-shadow patterns were inlined as arbitrary Tailwind
+   * values (`shadow-[0_10px_30px_rgba(...)]`) across 6+ components. That bypassed
+   * the design system, prevented theming, and required a global grep to change
+   * the brand shadow. These semantic classes centralize both.
+   *
+   * Use `shadow-card-soft` for default raised cards (~6 sites).
+   * Use `shadow-card-glow` for highlighted/enabled hero cards — adds a brand
+   * tint and a 1px brand ring; pair with `border-none` so the ring shows. */
+  .shadow-card-soft {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.04);
+  }
+  .dark .shadow-card-soft {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .shadow-card-glow {
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.12);
+    @apply ring-1 ring-brand-200/50;
+  }
+  .dark .shadow-card-glow {
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.06);
+    @apply ring-brand-700/30;
+  }
 }
 
 @layer utilities {

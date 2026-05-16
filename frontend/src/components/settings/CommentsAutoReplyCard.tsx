@@ -28,7 +28,7 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
   return (
     <Card className={clsx(
       "border-none transition-all duration-300 p-4 landscape:p-3",
-      settings.commentsAutoReply ? 'ring-1 ring-brand-200/50 dark:ring-brand-700/30 shadow-[0_10px_30px_rgba(16,185,129,0.12)] dark:shadow-[0_10px_30px_rgba(16,185,129,0.06)]' : 'shadow-[0_10px_30px_rgba(0,0,0,0.04)]'
+      settings.commentsAutoReply ? 'shadow-card-glow' : 'shadow-card-soft'
     )}>
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
