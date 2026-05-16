@@ -126,12 +126,20 @@ describe('useSSE', () => {
         mockPathname = '/dashboard';
         MockEventSource.instance = null;
         vi.clearAllMocks();
+        // Fake only timer APIs (not Date) so the SSE invalidation debouncer
+        // (createDebouncedInvalidator, 400ms trailing) can be flushed by tests
+        // without disturbing Date-based toast throttling.
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
     });
 
     afterEach(() => {
         unmount();
         unmount = () => {};
+        vi.useRealTimers();
     });
+
+    /** Advance past the SSE invalidation debounce window so queued refetches fire. */
+    const flushDebounce = () => act(() => { vi.advanceTimersByTime(500); });
 
     // ── Connection lifecycle ───────────────────────────────────────────────────
 
@@ -154,7 +162,7 @@ describe('useSSE', () => {
         const { unmount: u } = await mountSSE();
         unmount = u;
 
-        act(() => { MockEventSource.instance!.dispatch('connected', {}); });
+        act(() => { MockEventSource.instance!.dispatch('connected', {}); }); flushDebounce();
 
         expect(mockSetSSEStatus).toHaveBeenCalledWith('connected');
     });
@@ -171,6 +179,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', fromName: 'Ali', message: 'Hello',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments-stats'] });
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments'] });
@@ -186,6 +195,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', fromName: 'Ali', message: 'Hello',
             });
         });
+        flushDebounce();
 
         expect(mockIncrementUnreadComments).not.toHaveBeenCalled();
         expect(mockToast).not.toHaveBeenCalled();
@@ -203,6 +213,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', fromName: 'Ali', message: 'Hello',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments-stats'] });
         // The list must NOT be invalidated when user is not on the comments page
@@ -220,6 +231,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', fromName: 'Noor', message: 'Hi!',
             });
         });
+        flushDebounce();
 
         expect(mockIncrementUnreadComments).toHaveBeenCalledTimes(1);
         expect(mockToast).toHaveBeenCalledTimes(1);
@@ -236,6 +248,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', replyMethod: 'ai', replyText: 'Thanks!',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments-stats'] });
     });
@@ -250,13 +263,9 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', replyMethod: 'ai', replyText: 'Thanks!',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments'] });
-        // No surgical patching — invalidation is the new contract.
-        expect(mockSetQueriesData).not.toHaveBeenCalledWith(
-            { queryKey: ['comments'] },
-            expect.any(Function),
-        );
     });
 
     it('comment:reply_sent NOT on /comments → does not invalidate the comments list (badge stats handled separately)', async () => {
@@ -269,6 +278,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', replyMethod: 'ai', replyText: 'Thanks!',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['comments'] });
         expect(mockSetQueriesData).not.toHaveBeenCalledWith(
@@ -287,6 +297,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', replyMethod: 'ai', replyText: 'Sure!',
             });
         });
+        flushDebounce();
 
         expect(mockToast).toHaveBeenCalledTimes(1);
     });
@@ -301,6 +312,7 @@ describe('useSSE', () => {
                 commentId: 'c1', pageId: 'p1', replyMethod: 'template', replyText: 'Sure!',
             });
         });
+        flushDebounce();
 
         expect(mockToast).not.toHaveBeenCalled();
     });
@@ -312,7 +324,7 @@ describe('useSSE', () => {
         const { unmount: u } = await mountSSE();
         unmount = u;
 
-        act(() => { MockEventSource.instance!.dispatch('comment:reply_failed', {}); });
+        act(() => { MockEventSource.instance!.dispatch('comment:reply_failed', {}); }); flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments-stats'] });
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments'] });
@@ -323,7 +335,7 @@ describe('useSSE', () => {
         const { unmount: u } = await mountSSE();
         unmount = u;
 
-        act(() => { MockEventSource.instance!.dispatch('comment:reply_failed', {}); });
+        act(() => { MockEventSource.instance!.dispatch('comment:reply_failed', {}); }); flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['comments-stats'] });
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['comments'] });
@@ -341,6 +353,7 @@ describe('useSSE', () => {
                 messageId: 'm1', pageId: 'p1', senderId: 's1', senderName: 'Ali',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages-stats'] });
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages'] });
@@ -356,6 +369,7 @@ describe('useSSE', () => {
                 messageId: 'm1', pageId: 'p1', senderId: 's1', senderName: 'Ali',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages-stats'] });
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['messages'] });
@@ -373,6 +387,7 @@ describe('useSSE', () => {
                 messageId: 'm1', pageId: 'p1', replyMethod: 'ai', replyText: 'Hello!',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages-stats'] });
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages'] });
@@ -388,6 +403,7 @@ describe('useSSE', () => {
                 messageId: 'm1', pageId: 'p1', replyMethod: 'ai', replyText: 'Hello!',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages-stats'] });
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['messages'] });
@@ -400,7 +416,7 @@ describe('useSSE', () => {
         const { unmount: u } = await mountSSE();
         unmount = u;
 
-        act(() => { MockEventSource.instance!.dispatch('message:reply_failed', {}); });
+        act(() => { MockEventSource.instance!.dispatch('message:reply_failed', {}); }); flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages-stats'] });
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages'] });
@@ -412,7 +428,7 @@ describe('useSSE', () => {
         const { unmount: u } = await mountSSE();
         unmount = u;
 
-        act(() => { MockEventSource.instance!.dispatch('message:reply_failed', {}); });
+        act(() => { MockEventSource.instance!.dispatch('message:reply_failed', {}); }); flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['messages-stats'] });
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['messages'] });
@@ -431,6 +447,7 @@ describe('useSSE', () => {
                 leadId: 'l1', pageId: 'p1', senderName: 'Noor', phone: '+966500000000',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads-count'] });
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads'] });
@@ -446,6 +463,7 @@ describe('useSSE', () => {
                 leadId: 'l1', pageId: 'p1', senderName: 'Noor', phone: '+966500000000',
             });
         });
+        flushDebounce();
 
         expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['leads-count'] });
         expect(mockInvalidateQueries).not.toHaveBeenCalledWith({ queryKey: ['leads'] });
