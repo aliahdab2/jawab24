@@ -190,7 +190,7 @@
     "defaultPreviewText": "Thank you for your comment!"
   },
   "limitFallbackMessagePlaceholder": "Thanks for reaching out! We'll get back to you shortly.",
-  "aiDescriptionImproved": "Use Smart Replies to generate context-aware responses. When disabled, only preset replies work. Works with 'Reply to Comments' and 'Reply to Messages' settings above.",
+  "aiDescriptionImproved": "Use Smart Replies to generate context-aware responses. When disabled, only preset replies work. Works with the 'Reply to Comments' and 'Reply to Messages' settings below.",
   "autoTranslateTo": "Auto-translate to",
   "translationSuccess": "Translation completed!",
   "translationFailed": "Translation failed. Please try again.",
