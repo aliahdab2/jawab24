@@ -25,6 +25,7 @@ const MOCK_SETTINGS = {
   awayMessage: '',
   greetingMessage: '',
   greetingMessageMulti: { ar: '', en: '', sourceLang: 'default' },
+  greetingMessageEnabled: true,
   awayMessageMulti: { ar: '', en: '', sourceLang: 'default' },
   dualReplyNudgeMulti: { ar: '', en: '', sourceLang: 'default' },
   replyDelay: 0,
@@ -241,12 +242,11 @@ test.describe('Settings Page', () => {
     await expect(advancedBtn).toBeVisible({ timeout: 15000 });
     await advancedBtn.click();
 
-    // Find the greeting message textarea (last textarea on the page, in the greeting card)
+    // Find the greeting message textarea by its aria-label. Robust to DOM
+    // restructuring in the card (we used to traverse parent divs).
     const greetingHeading = page.locator('h4').filter({ hasText: t('settings.greetingMessage.title') }).first();
     await expect(greetingHeading).toBeVisible({ timeout: 10000 });
-
-    // The textarea is a sibling of the heading's parent div, inside the same card
-    const textarea = greetingHeading.locator('../../..').locator('textarea');
+    const textarea = page.getByLabel(t('settings.greetingMessage.title'), { exact: true });
     await expect(textarea).toBeVisible();
 
     // Type a full message — should retain all characters (not reset after each keystroke)
@@ -273,6 +273,7 @@ test.describe('Settings Page', () => {
           body: JSON.stringify({
             ...MOCK_SETTINGS,
             greetingMessageMulti: { ar: 'مرحبا بكم', en: 'Welcome', sourceLang: 'ar' },
+            greetingMessageEnabled: true,
           }),
         });
       }
@@ -299,7 +300,8 @@ test.describe('Settings Page', () => {
     await advancedBtn.click();
 
     const greetingHeading = page.locator('h4').filter({ hasText: t('settings.greetingMessage.title') }).first();
-    const textarea = greetingHeading.locator('../../..').locator('textarea');
+    await expect(greetingHeading).toBeVisible({ timeout: 10000 });
+    const textarea = page.getByLabel(t('settings.greetingMessage.title'), { exact: true });
     await expect(textarea).toBeVisible();
 
     // Auto-translated field should start empty (translated text shown as placeholder)
