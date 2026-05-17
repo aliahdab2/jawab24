@@ -9,7 +9,7 @@ import {
     AiEmptyReplyError,
     AI_TYPED_ERROR_NAMES,
 } from '../lib/errors';
-import { recordAiAttempt, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 
 // Token budget constants (configurable via env vars for production tuning)
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
@@ -385,6 +385,11 @@ export class OpenAIService {
             } finally {
                 clearTimeout(timeout);
             }
+            // OpenAI call resolved successfully (refusal/empty-reply guards below
+            // may still reject the result, but the API call itself returned and
+            // was billed — that's the semantics of `returns`). Counterpart to
+            // the `recordAiAttempt` above; together they bound real API traffic.
+            recordAiReturn(request.context?.pipeline, config.openai.model);
 
             // Structured-output refusal — model declined the request (policy violation).
             // Non-transient: same input → same refusal. Throw with the refusal reason so

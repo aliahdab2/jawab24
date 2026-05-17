@@ -22,6 +22,7 @@ export type FailedBeforeLogClass =
     | 'AiRefusalError'
     | 'AiTimeoutError'
     | 'OpenAIApiError'
+    | 'AiWorkerUnreachable'   // backend → ai-worker hop failed (axios error, circuit open)
     | 'ZeroTokens'
     | 'MissingUserId'
     | 'Other';

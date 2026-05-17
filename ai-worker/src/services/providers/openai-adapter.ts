@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/node';
 import { config } from '../../config';
 import type { LLMProvider, LLMChatParams, LLMChatResult, LLMMessage } from './types';
 import { AI_REPLY_JSON_SCHEMA } from './types';
-import { recordAiAttempt, recordAiFailedBeforeLog } from '../../lib/aiMetrics';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../../lib/aiMetrics';
 
 export class OpenAIAdapter implements LLMProvider {
     readonly name = 'openai';
@@ -53,6 +53,7 @@ export class OpenAIAdapter implements LLMProvider {
                     },
                 }, { signal: controller.signal }),
             );
+            recordAiReturn(undefined, this.modelId);
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
             return {

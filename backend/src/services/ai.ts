@@ -7,7 +7,7 @@ import { eq, sql, count } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis, redisScanDelete } from '../lib/redis';
-import { recordAiAttempt, recordAiReturn } from '../lib/aiMetrics';
+import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { normalizeArabic, DEFAULT_AI_MODEL, PROMPT_VERSION } from '@jawab24/shared';
 import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
@@ -357,9 +357,15 @@ export class AiService {
         }
 
         // Layer 3: Full AI worker call (protected by circuit breaker)
+        //
+        // No `recordAiAttempt`/`recordAiReturn` here — those are emitted at the
+        // ai-worker's own OpenAI call site (ai-worker/src/services/openai.ts).
+        // The axios hop is internal HTTP, not an OpenAI API call, so counting
+        // it here would double-count `attempts` (and the math would diverge
+        // from the OpenAI dashboard request count by ~2×). The hop's *failure*
+        // mode is still tracked — see the catch block below.
         const primaryModel = isNonDefaultModel ? (request.model as string) : (config.ai.model || DEFAULT_AI_MODEL);
         try {
-            recordAiAttempt(pipeline, primaryModel);
             const response = await aiWorkerCircuit.execute(() =>
                 Sentry.startSpan(
                     { name: 'ai.worker.http', op: 'http.client' },
@@ -378,7 +384,6 @@ export class AiService {
                     ),
                 )
             );
-            recordAiReturn(pipeline, primaryModel);
 
             const aiReply = response.data.reply;
             const detectedLanguage = response.data.language || request.language || 'en';
@@ -445,6 +450,12 @@ export class AiService {
                 tokensUsed: response.data.tokensUsed,
             };
         } catch (error) {
+            // Surface hop-level failure (axios error, timeout, circuit-open) as a
+            // distinct error_class so the script can separate worker-hop failures
+            // from OpenAI-call failures. Without this, a backend → ai-worker
+            // outage looks like missing instrumentation in the breakdown.
+            recordAiFailedBeforeLog(pipeline, primaryModel, 'AiWorkerUnreachable');
+
             if (error instanceof CircuitOpenError) {
                 this.logger.warn('AI circuit breaker open — attempting provider failover');
 
@@ -453,7 +464,9 @@ export class AiService {
                 // it's OpenAI that's down. The fallback uses Claude (different API key, different provider).
                 try {
                     const fallbackModel = config.ai.fallbackModel;
-                    recordAiAttempt('failover', fallbackModel);
+                    // Failover hop: same rule as primary — no `attempts`/`returns`
+                    // here (ai-worker emits them at the actual OpenAI call site).
+                    // Only the hop's *failure* mode is tracked, in the inner catch.
                     const failoverResponse = await Sentry.startSpan(
                         { name: 'ai.failover.http', op: 'http.client', attributes: { 'ai.model': fallbackModel } },
                         () => axios.post<WorkerGenerateResponse>(
@@ -470,7 +483,6 @@ export class AiService {
                             },
                         ),
                     );
-                    recordAiReturn('failover', fallbackModel);
 
                     this.logger.info('Provider failover succeeded', { model: fallbackModel });
                     Sentry.captureMessage('AI provider failover active', {
@@ -527,6 +539,9 @@ export class AiService {
                     this.logger.error('Provider failover also failed', {
                         error: failoverError instanceof Error ? failoverError.message : String(failoverError),
                     });
+                    // Hop-level failure on the failover route too — same signal
+                    // semantics as the primary catch above.
+                    recordAiFailedBeforeLog('failover', config.ai.fallbackModel, 'AiWorkerUnreachable');
                     // Fall through to static fallback below
                 }
             } else {

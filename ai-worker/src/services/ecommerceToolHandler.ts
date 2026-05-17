@@ -12,7 +12,7 @@
  * The AI never receives sensitive data until the backend confirms identity.
  */
 import OpenAI from 'openai';
-import { recordAiAttempt, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { openaiService, type GenerateRequest, type GenerateResponse } from './openai';
@@ -235,6 +235,7 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
         } finally {
             clearTimeout(timeout);
         }
+        recordAiReturn(request.context?.pipeline, config.openai.model);
 
         const choice = completion.choices[0];
 
@@ -339,6 +340,7 @@ export async function generateWithToolResults(
         } finally {
             clearTimeout(timeout);
         }
+        recordAiReturn(request.context?.pipeline, config.openai.model);
 
         const choice = completion.choices[0];
 

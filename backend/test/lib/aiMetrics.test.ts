@@ -39,6 +39,13 @@ describe('createAiMetrics (shared factory)', () => {
         );
     });
 
+    it('supports AiWorkerUnreachable for backend ↔ ai-worker hop failures', () => {
+        metrics.recordAiFailedBeforeLog('dm_reply', 'gpt-4.1-mini', 'AiWorkerUnreachable');
+        expect(incr).toHaveBeenCalledExactlyOnceWith(
+            'metrics:ai:failed_before_log:dm_reply:gpt-4.1-mini:AiWorkerUnreachable',
+        );
+    });
+
     it('falls back to "unknown" when pipeline is undefined', () => {
         metrics.recordAiAttempt(undefined, 'gpt-4.1-mini');
         expect(incr).toHaveBeenCalledExactlyOnceWith('metrics:ai:attempts:unknown:gpt-4.1-mini');

@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { recordAiAttempt, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
 
@@ -90,6 +90,7 @@ export class TranslationService {
         temperature: 0.3,
         max_tokens: 300
       });
+      recordAiReturn('translation', config.openai.model);
 
       const translatedText = completion.choices[0]?.message?.content?.trim() || '';
       const tokensUsed = completion.usage?.total_tokens || 0;
@@ -156,6 +157,7 @@ export async function generateNudgeVariations(
     recordAiFailedBeforeLog('translation', config.openai.model, 'OpenAIApiError');
     throw err;
   }
+  recordAiReturn('translation', config.openai.model);
 
   const raw = completion.choices[0]?.message?.content?.trim() || '[]';
   const tokensUsed = completion.usage?.total_tokens || 0;
