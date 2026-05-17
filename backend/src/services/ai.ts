@@ -15,6 +15,7 @@ import { OpenAIEmbeddingProvider } from './kb/embedding';
 import { aiWorkerCircuit, CircuitOpenError } from '../lib/circuitBreaker';
 import { captureError } from '../utils/sentryHelpers';
 import { classifyFallbackIntent } from './reply/fallbackClassifier';
+import { getModelForUser } from './aiModelResolver';
 import { AiUnavailableError, AiTimeoutError, AiRefusalError, AiEmptyReplyError } from '../utils/fbGraphErrors';
 import { notificationService } from './notifications';
 import type { AiPipeline } from '../types/aiPipeline';
@@ -28,6 +29,12 @@ interface CacheContext {
     storePolicies?: string;
     replyStyle?: string;
     customerContext?: string;
+    /**
+     * Model resolved for the request. Included in the cache key so workspaces
+     * on a per-customer override (e.g. gpt-4o) don't read replies generated
+     * by the default model (gpt-4.1-mini). Omitted/undefined means "default".
+     */
+    model?: string;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -102,6 +109,10 @@ export class AiService {
             // customerContext = substantive history/summary only (senderName is excluded).
             // This prevents fragmentation by commenter name while still scoping by real customer state.
             `cc:${ctx.customerContext ? crypto.createHash('md5').update(ctx.customerContext).digest('hex').slice(0, 8) : ''}`,
+            // Different models can produce materially different replies for the same input
+            // (verbosity, refusal patterns, JSON adherence). Scope cache by model so a
+            // workspace overridden to gpt-4o never reads a gpt-4.1-mini-generated reply.
+            `m:${ctx.model || DEFAULT_AI_MODEL}`,
             `pv:${PROMPT_VERSION}`,
         ].join(':');
 
@@ -245,6 +256,16 @@ export class AiService {
         // of silent — the original "always NULL" failure mode is what we are fixing.
         const pipeline: AiPipeline = request.context?.pipeline ?? 'unknown';
 
+        // Model resolution. Caller may pin the model explicitly (playground A/B,
+        // failover) — that wins. Otherwise look up the workspace's configured
+        // override from settings.ai_model (cached, falls back to DEFAULT on miss
+        // or invalid value). Centralizing this here means generateForComment /
+        // generateForMessage / tool-loop callers don't each need to repeat the
+        // resolution; they just pass `userId` in context.
+        const resolvedModel = request.model
+            ? request.model
+            : await getModelForUser(userId);
+
         const cacheCtx: CacheContext = {
             language: request.language,
             pageId,
@@ -253,23 +274,21 @@ export class AiService {
             storePolicies: request.context?.storePolicies,
             replyStyle: request.context?.replyStyle,
             customerContext: request.context?.customerContext,
+            model: resolvedModel,
         };
-
-        // Non-default model (playground A/B) → skip all caches (different models produce different replies)
-        const isNonDefaultModel = !!request.model && request.model !== DEFAULT_AI_MODEL;
 
         // DM conversations with history → skip all caches.
         // The right answer depends on what was said earlier; a cached reply generated
         // without conversation context would ignore prior exchanges and cause hallucinations.
         const hasConversationHistory = (request.context?.conversationHistory?.length ?? 0) > 0;
 
-        // Layer 1: Exact cache (scoped per page + KB version + post context)
-        if (!isNonDefaultModel && !hasConversationHistory) {
+        // Layer 1: Exact cache (scoped per page + KB version + post context + model)
+        if (!hasConversationHistory) {
             const cachedData = await this.checkCache(request.comment, cacheCtx);
             if (cachedData) {
-                // Fire-and-forget: log zero-cost cache hit
+                // Fire-and-forget: log zero-cost cache hit under the workspace's resolved model.
                 if (userId) {
-                    logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline, intent: cachedData.intent ?? null }).catch(() => {});
+                    logAiUsage({ userId, pageId, model: resolvedModel, tokensIn: 0, tokensOut: 0, cached: true, pipeline, intent: cachedData.intent ?? null }).catch(() => {});
                 }
                 return {
                     reply: cachedData.reply,
@@ -295,7 +314,7 @@ export class AiService {
         let queryEmbedding: number[] | null = request.context?.queryEmbedding || null;
         let detectedPreGptIntent: string | null = null;
 
-        if (!isNonDefaultModel && pageId && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+        if (pageId && kbActiveVersion !== null && kbActiveVersion !== undefined) {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
                 // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
@@ -330,14 +349,14 @@ export class AiService {
                         { name: 'ai.cache.semantic', op: 'cache.get' },
                         () => semanticCacheService.check(
                             pageId, queryEmbedding as number[], detectedPreGptIntent ?? '', kbActiveVersion,
-                            request.context?.channel, request.context?.replyStyle,
+                            request.context?.channel, request.context?.replyStyle, resolvedModel,
                         ),
                     );
 
                     if (semanticHit) {
                         // Fire-and-forget: log zero-cost semantic cache hit
                         if (userId) {
-                            logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn: 0, tokensOut: 0, cached: true, pipeline, intent: semanticHit.intent ?? null }).catch((err) => captureError(err, 'semantic cache usage log failed'));
+                            logAiUsage({ userId, pageId, model: resolvedModel, tokensIn: 0, tokensOut: 0, cached: true, pipeline, intent: semanticHit.intent ?? null }).catch((err) => captureError(err, 'semantic cache usage log failed'));
                         }
                         return {
                             reply: semanticHit.reply,
@@ -364,7 +383,8 @@ export class AiService {
         // it here would double-count `attempts` (and the math would diverge
         // from the OpenAI dashboard request count by ~2×). The hop's *failure*
         // mode is still tracked — see the catch block below.
-        const primaryModel = isNonDefaultModel ? (request.model as string) : (config.ai.model || DEFAULT_AI_MODEL);
+        const primaryModel = resolvedModel;
+        const isNonDefaultModel = resolvedModel !== DEFAULT_AI_MODEL;
         try {
             const response = await aiWorkerCircuit.execute(() =>
                 Sentry.startSpan(
@@ -375,7 +395,11 @@ export class AiService {
                             comment: request.comment,
                             language: request.language,
                             context: request.context,
-                            ...(isNonDefaultModel ? { model: request.model } : {}),
+                            // Only forward `model` when non-default so the ai-worker's `/generate`
+                            // route keeps using its unchanged production path for default-model
+                            // workspaces. The provider-abstraction path is taken only when
+                            // an explicit non-default model is set on the request.
+                            ...(isNonDefaultModel ? { model: resolvedModel } : {}),
                         },
                         {
                             timeout: 30000,
@@ -405,23 +429,23 @@ export class AiService {
                 throw new AiUnavailableError('ai-worker returned fallback_reply flag');
             }
 
-            // Save to exact cache (scoped by KB version + post context)
-            // Skip for non-default models — different models produce different replies
-            if (!isNonDefaultModel) {
-                const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
-                await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
-            }
+            // Save to exact cache (scoped by KB version + post context + model).
+            // All models cache to their own bucket now — no more skip-when-non-default.
+            const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
+            await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
 
-            // Fire-and-forget: log real token usage
+            // Fire-and-forget: log real token usage under the workspace's resolved model
+            // so per-customer cost tracking reflects the actual model billed.
             if (userId) {
                 const tokensIn = response.data.tokensIn ?? 0;
                 const tokensOut = response.data.tokensOut ?? 0;
                 const cachedInputTokens = response.data.tokensInCached ?? 0;
-                logAiUsage({ userId, pageId, model: config.ai.model || DEFAULT_AI_MODEL, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline, intent: aiMetadata.intent ?? null }).catch(() => {});
+                logAiUsage({ userId, pageId, model: resolvedModel, tokensIn, cachedInputTokens, tokensOut, cached: false, pipeline, intent: aiMetadata.intent ?? null }).catch(() => {});
             }
 
-            // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent and non-default models
-            if (!isNonDefaultModel && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
+            // Model is stored in metadata so check-time can filter to same-model entries.
+            if (pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,
@@ -431,6 +455,7 @@ export class AiService {
                     kbActiveVersion,
                     channel: request.context?.channel,
                     replyStyle: request.context?.replyStyle,
+                    model: isNonDefaultModel ? resolvedModel : undefined,
                     metadata: { confidence: response.data.confidence, flags: response.data.flags, intent: response.data.intent },
                 }).catch(err => {
                     this.logger.error('Semantic cache save failed', {
@@ -443,7 +468,7 @@ export class AiService {
                 reply: aiReply,
                 language: detectedLanguage,
                 cached: false,
-                model: isNonDefaultModel ? request.model : config.ai.model,
+                model: resolvedModel,
                 intent: response.data.intent,
                 confidence: response.data.confidence,
                 flags: response.data.flags,

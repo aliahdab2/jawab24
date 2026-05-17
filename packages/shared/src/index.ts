@@ -436,7 +436,13 @@ export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 
 // Re-exported from ./constants so they can be consumed by ./schemas/* without
 // circular imports back into this module.
-export { MAX_TEMPLATE_MESSAGE_LENGTH, DEFAULT_AI_MODEL } from './constants';
+export {
+    MAX_TEMPLATE_MESSAGE_LENGTH,
+    DEFAULT_AI_MODEL,
+    ALLOWED_AI_MODELS,
+    isAllowedAiModel,
+    type AllowedAiModel,
+} from './constants';
 
 // --- Phase 6.5 P1 diagnostic counters ---
 export {
