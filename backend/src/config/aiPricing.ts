@@ -17,6 +17,10 @@ export const AI_PRICING = {
     'gpt-4.1': { inputPer1K: 0.002, cachedInputPer1K: 0.0005, outputPer1K: 0.008 },
     'gpt-5-mini': { inputPer1K: 0.00025, cachedInputPer1K: 0.000025, outputPer1K: 0.002 },
     'gpt-5-nano': { inputPer1K: 0.00005, cachedInputPer1K: 0.000005, outputPer1K: 0.0004 },
+    // gpt-5.4 family — short-context prices (OpenAI's pricing page lists "-" for the
+    // long-context column on both mini and nano, so only the short-context rates exist).
+    'gpt-5.4-mini': { inputPer1K: 0.00075, cachedInputPer1K: 0.000075, outputPer1K: 0.0045 },
+    'gpt-5.4-nano': { inputPer1K: 0.0002, cachedInputPer1K: 0.00002, outputPer1K: 0.00125 },
     'gpt-4o-mini-transcribe': { inputPer1K: 0.00125, outputPer1K: 0.005 },
     'text-embedding-3-small': { inputPer1K: 0.00002, outputPer1K: 0 },
     'claude-haiku-4-5-20251001': { inputPer1K: 0.0008, outputPer1K: 0.004 },
