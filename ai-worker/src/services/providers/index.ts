@@ -16,10 +16,8 @@ const MODEL_PROVIDERS: Record<string, () => LLMProvider> = {
     'gpt-4.1-nano': () => new OpenAIAdapter('gpt-4.1-nano'),
     'gpt-4.1': () => new OpenAIAdapter('gpt-4.1'),
     'gpt-4o-mini': () => new OpenAIAdapter('gpt-4o-mini'),
-    'gpt-5-nano': () => new OpenAIAdapter('gpt-5-nano'),
     'gpt-5-mini': () => new OpenAIAdapter('gpt-5-mini'),
-    'gpt-5.4-mini': () => new OpenAIAdapter('gpt-5.4-mini'),
-    'gpt-5.4-nano': () => new OpenAIAdapter('gpt-5.4-nano'),
+    'gpt-5-nano': () => new OpenAIAdapter('gpt-5-nano'),
     // Claude models
     'claude-haiku-4-5-20251001': () => new ClaudeAdapter('claude-haiku-4-5-20251001'),
     'claude-sonnet-4-20250514': () => new ClaudeAdapter('claude-sonnet-4-20250514'),
