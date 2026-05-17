@@ -8,9 +8,10 @@ import { redis } from '../lib/redis';
 import { publishSSEEvent } from '../lib/eventBus';
 import { messagesService } from './messages';
 import { logAiUsage } from './aiUsageLog';
+import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
-import { extractPhoneFromText } from '@jawab24/shared';
+import { extractPhoneFromText, DEFAULT_AI_MODEL } from '@jawab24/shared';
 import type { LeadExtractedData, LeadStatus } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 
@@ -213,7 +214,15 @@ class LeadExtractorService {
         const prompt = EXTRACTION_PROMPT.replace('<CONVERSATION>', conversation);
         const client = this.getClient();
 
-        const model = 'gpt-4.1-mini';
+        // Per-customer model override: lead extraction speaks the OpenAI SDK
+        // directly (no provider abstraction here — there's no tool use, just a
+        // JSON-mode completion). The current allowlist is OpenAI-only, but the
+        // `startsWith('gpt-')` guard is defense-in-depth in case the allowlist
+        // ever grows to include non-OpenAI models — Claude IDs would 404 here,
+        // and lead extraction must keep working even for a customer routed to
+        // a non-OpenAI model on the reply pipeline.
+        const resolved = await getModelForUser(logCtx.userId);
+        const model = resolved.startsWith('gpt-') ? resolved : DEFAULT_AI_MODEL;
         recordAiAttempt('lead_extraction', model);
         let response;
         try {

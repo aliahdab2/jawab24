@@ -305,6 +305,28 @@ Each service is independently deployable but shares:
    - `anthropic.ts` — Anthropic Claude integration (alternative provider)
    - Providers (`src/services/providers/`) — provider abstraction layer
 
+   **Per-customer model override:** backend's `aiModelResolver.getModelForUser(userId)`
+   reads `settings.ai_model` (allowlisted in `packages/shared/ALLOWED_AI_MODELS`,
+   silent fallback to `DEFAULT_AI_MODEL` on miss/invalid). Resolved model is
+   forwarded to the ai-worker `/generate` route only when non-default — the
+   ai-worker then routes through the provider abstraction. Resolver result is
+   LRU-cached (60s TTL) so the lookup costs nothing per reply. The cache key in
+   `services/ai.ts` includes model, so two workspaces on different models do
+   not share cached replies.
+
+   **Known limitations:**
+   - E-commerce tool-loop replies (`/generate-with-tools`) still use the
+     default model regardless of override; threading the override through
+     tool calls requires provider-abstraction support for OpenAI function
+     calling and is deferred.
+   - The allowlist is **OpenAI-only.** The ai-worker has a `ClaudeAdapter`,
+     but `ANTHROPIC_API_KEY` is not present in production env files
+     (`env/ai.env` lacks the entry; the running container confirms
+     `ANTHROPIC_API_KEY=MISSING`). The pre-existing circuit-breaker
+     failover-to-Claude path in `services/ai.ts` is also affected and
+     does not actually fail over today — fix that separately by
+     provisioning the key and adding a real Anthropic integration test.
+
 6. **Prompt System** (v19 — current):
    - **System prompt** — role definition, behavior rules, safety guidelines
    - **User prompt** — comment text + context + KB + customer data

@@ -33,6 +33,11 @@ vi.mock('../../src/lib/redis', () => ({ redis: { incr: vi.fn(), expire: vi.fn() 
 vi.mock('../../src/lib/eventBus', () => ({ publishSSEEvent: vi.fn() }));
 vi.mock('../../src/services/messages', () => ({ messagesService: {} }));
 vi.mock('../../src/utils/sentryHelpers', () => ({ captureError: vi.fn() }));
+// Stub model resolver — per-user override isn't the subject under test here.
+vi.mock('../../src/services/aiModelResolver', () => ({
+    getModelForUser: vi.fn().mockResolvedValue('gpt-4.1-mini'),
+    clearAiModelCache: vi.fn(),
+}));
 
 // callExtractionAI is private — invoke it through a small accessor so we test
 // the production code path rather than re-implementing it.
@@ -73,6 +78,47 @@ describe('leadExtractor cost logging', () => {
             cached: false,
             pipeline: 'lead_extraction',
         });
+    });
+
+    it('uses an overridden OpenAI model when the resolver returns one', async () => {
+        const resolverMod = await import('../../src/services/aiModelResolver');
+        vi.mocked(resolverMod.getModelForUser).mockResolvedValueOnce('gpt-4o-mini');
+
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '+1234', fields: [] }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        const callExtractionAI = (leadExtractorService as unknown as {
+            callExtractionAI: (c: string, p: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+        }).callExtractionAI.bind(leadExtractorService);
+
+        await callExtractionAI('Customer: hi', '+1234', { userId: 'u-override', pageId: 'p1' });
+
+        expect(openaiCreateMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4o-mini' }));
+        expect(logAiUsageMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4o-mini' }));
+    });
+
+    it('falls back to default when the resolver returns a non-OpenAI model (Claude)', async () => {
+        // Lead extraction calls the OpenAI SDK directly; Claude IDs would 404.
+        // The guard must fall back to DEFAULT_AI_MODEL so the pipeline keeps working
+        // for Claude-overridden customers.
+        const resolverMod = await import('../../src/services/aiModelResolver');
+        vi.mocked(resolverMod.getModelForUser).mockResolvedValueOnce('claude-haiku-4-5-20251001');
+
+        openaiCreateMock.mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ phone: '+1234', fields: [] }) } }],
+            usage: { prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 0 } },
+        });
+
+        const callExtractionAI = (leadExtractorService as unknown as {
+            callExtractionAI: (c: string, p: string, ctx: { userId: string; pageId: string }) => Promise<unknown>;
+        }).callExtractionAI.bind(leadExtractorService);
+
+        await callExtractionAI('Customer: hi', '+1234', { userId: 'u-claude', pageId: 'p1' });
+
+        expect(openaiCreateMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4.1-mini' }));
+        expect(logAiUsageMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4.1-mini' }));
     });
 
     it('skips logging when OpenAI returns no usage (defensive)', async () => {

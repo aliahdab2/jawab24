@@ -61,6 +61,14 @@ vi.mock('../../src/lib/redis', () => ({
     redisScanDelete: vi.fn().mockResolvedValue(0),
 }));
 
+// Mock aiModelResolver — auto-resolve falls back to default so existing tests
+// (which don't set request.model) behave identically to pre-resolver behavior.
+// The resolver itself has dedicated tests in aiModelResolver.test.ts.
+vi.mock('../../src/services/aiModelResolver', () => ({
+    getModelForUser: vi.fn().mockResolvedValue('gpt-4.1-mini'),
+    clearAiModelCache: vi.fn(),
+}));
+
 // Mock circuit breaker — pass-through so existing tests are unaffected
 vi.mock('../../src/lib/circuitBreaker', () => ({
     aiWorkerCircuit: {
@@ -192,6 +200,88 @@ describe('AI Service', () => {
             });
 
             expect(result.language).toBe('ar');
+        });
+    });
+
+    describe('generateReply - per-user model resolution', () => {
+        // Pull the mocked resolver so each test can shape its return value.
+        // The vi.mock at top-of-file replaces the real one with a stub.
+        let getModelForUser: ReturnType<typeof vi.fn>;
+        beforeEach(async () => {
+            const mod = await import('../../src/services/aiModelResolver');
+            getModelForUser = vi.mocked(mod.getModelForUser);
+            // Default to gpt-4.1-mini (the project's DEFAULT_AI_MODEL).
+            getModelForUser.mockResolvedValue('gpt-4.1-mini');
+        });
+
+        it('does NOT forward `model` to ai-worker when resolved is the default', async () => {
+            vi.mocked(axios.post).mockResolvedValue({
+                data: { reply: 'ok', language: 'en' },
+            });
+            getModelForUser.mockResolvedValue('gpt-4.1-mini');
+
+            await service.generateReply({
+                comment: 'hi',
+                context: { userId: 'u-default' },
+            });
+
+            const [, body] = vi.mocked(axios.post).mock.calls[0];
+            // Default-model workspace keeps using the ai-worker's unchanged
+            // production path — no `model` field on the body.
+            expect(body).not.toHaveProperty('model');
+        });
+
+        it('forwards resolved model to ai-worker when non-default', async () => {
+            vi.mocked(axios.post).mockResolvedValue({
+                data: { reply: 'ok', language: 'en' },
+            });
+            getModelForUser.mockResolvedValue('gpt-4o-mini');
+
+            const result = await service.generateReply({
+                comment: 'hi',
+                context: { userId: 'u-override' },
+            });
+
+            const [, body] = vi.mocked(axios.post).mock.calls[0];
+            expect(body).toMatchObject({ model: 'gpt-4o-mini' });
+            // Response should reflect the resolved model so downstream cost
+            // tracking + observability uses the real billed model.
+            expect(result.model).toBe('gpt-4o-mini');
+            expect(getModelForUser).toHaveBeenCalledWith('u-override');
+        });
+
+        it('caller-provided request.model wins over the resolver (playground path)', async () => {
+            vi.mocked(axios.post).mockResolvedValue({
+                data: { reply: 'ok', language: 'en' },
+            });
+            // Settings would resolve to gpt-4o-mini, but caller explicitly
+            // requested gpt-4.1-nano (e.g. A/B test in playground).
+            getModelForUser.mockResolvedValue('gpt-4o-mini');
+
+            const result = await service.generateReply({
+                comment: 'hi',
+                model: 'gpt-4.1-nano',
+                context: { userId: 'u-playground' },
+            });
+
+            // Resolver must NOT be consulted when the request already pins a model.
+            expect(getModelForUser).not.toHaveBeenCalled();
+            const [, body] = vi.mocked(axios.post).mock.calls[0];
+            expect(body).toMatchObject({ model: 'gpt-4.1-nano' });
+            expect(result.model).toBe('gpt-4.1-nano');
+        });
+
+        it('falls back to default when no userId is present', async () => {
+            vi.mocked(axios.post).mockResolvedValue({
+                data: { reply: 'ok', language: 'en' },
+            });
+
+            await service.generateReply({ comment: 'hi' });
+
+            // Resolver is called with undefined and returns default — no model
+            // field is forwarded.
+            const [, body] = vi.mocked(axios.post).mock.calls[0];
+            expect(body).not.toHaveProperty('model');
         });
     });
 
@@ -944,7 +1034,8 @@ describe('AI Service - Semantic Cache Integration', () => {
         // But should still check semantic cache
         expect(mockSemCache.check).toHaveBeenCalledTimes(1);
         // The embedding passed to check should be the pre-computed one
-        expect(mockSemCache.check).toHaveBeenCalledWith('page-1', preComputed, expect.any(String), 1, undefined, undefined);
+        // 7th arg is the resolved model (DEFAULT_AI_MODEL since no override set).
+        expect(mockSemCache.check).toHaveBeenCalledWith('page-1', preComputed, expect.any(String), 1, undefined, undefined, 'gpt-4.1-mini');
     });
 
     it('should save to semantic cache with pre-GPT intent after AI call', async () => {

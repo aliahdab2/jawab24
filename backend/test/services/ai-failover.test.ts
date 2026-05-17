@@ -105,6 +105,13 @@ function setupMocks(opts: {
         sql: vi.fn().mockReturnValue('sql-mock'),
     }));
 
+    // Auto-resolve in ai.ts queries settings.ai_model; stub it to default
+    // so the failover-chain tests focus on the circuit/provider behavior only.
+    vi.doMock('../../src/services/aiModelResolver', () => ({
+        getModelForUser: vi.fn().mockResolvedValue('gpt-4.1-mini'),
+        clearAiModelCache: vi.fn(),
+    }));
+
     vi.doMock('axios', () => ({ default: { post: opts.axiosPost } }));
 
     vi.doMock('../../src/config', () => ({

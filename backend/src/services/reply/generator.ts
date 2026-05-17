@@ -377,6 +377,7 @@ export class ReplyGenerator {
 
             const resolvedLang = resolveCommentLanguage(commentForAI, postMessage, effectiveKB);
 
+            // Model is resolved inside aiService.generateReply via userId.
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
@@ -474,6 +475,7 @@ export class ReplyGenerator {
                 const hasPriorHistory = historyForAI.length > 0;
                 const isLowConfidenceLatin = msgLang === 'en' && msgConfidence < 0.6;
                 const deferToHistory = isLowConfidenceLatin && hasPriorHistory;
+                // Model is resolved inside aiService.generateReply via userId.
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
