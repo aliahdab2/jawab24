@@ -59,7 +59,12 @@ vi.mock('../../../src/services/workspaceSettings', () => ({
 }));
 
 vi.mock('../../../src/config', () => ({
-    config: { ragMode: 'off', openai: { apiKey: '' } },
+    config: {
+        ragMode: 'off',
+        openai: { apiKey: '' },
+        // lib/redis reads this at module import (aiMetrics → lib/redis transitively).
+        redis: { host: 'localhost', port: 6379 },
+    },
 }));
 
 const baseCtx = {

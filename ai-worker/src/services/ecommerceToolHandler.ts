@@ -12,6 +12,7 @@
  * The AI never receives sensitive data until the backend confirms identity.
  */
 import OpenAI from 'openai';
+import { recordAiAttempt, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { openaiService, type GenerateRequest, type GenerateResponse } from './openai';
@@ -215,6 +216,7 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
 
+        recordAiAttempt(request.context?.pipeline, config.openai.model);
         let completion: OpenAI.ChatCompletion;
         try {
             completion = await Sentry.startSpan(
@@ -227,6 +229,9 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
                     tools: ECOMMERCE_TOOLS,
                 }, { signal: controller.signal }),
             );
+        } catch (err) {
+            recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'OpenAIApiError');
+            throw err;
         } finally {
             clearTimeout(timeout);
         }
@@ -313,6 +318,7 @@ export async function generateWithToolResults(
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
 
+        recordAiAttempt(request.context?.pipeline, config.openai.model);
         let completion: OpenAI.ChatCompletion;
         try {
             completion = await Sentry.startSpan(
@@ -327,6 +333,9 @@ export async function generateWithToolResults(
                     tools: ECOMMERCE_TOOLS,
                 }, { signal: controller.signal }),
             );
+        } catch (err) {
+            recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'OpenAIApiError');
+            throw err;
         } finally {
             clearTimeout(timeout);
         }

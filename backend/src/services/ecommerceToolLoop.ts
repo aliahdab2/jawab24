@@ -24,6 +24,7 @@ import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { aiService } from './ai';
 import { logAiUsage } from './aiUsageLog';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { executeToolCall } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
 import { buildProductCardsFromToolResults } from './reply/productCardBuilder';
@@ -58,6 +59,7 @@ const VALID_TOOL_SET: Set<string> = new Set(VALID_TOOL_NAMES);
 
 /** Fire-and-forget ai_usage_log write for one ai-worker tool-loop round. */
 function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolResponse): void {
+    const model = data.model || config.ai.model || DEFAULT_AI_MODEL;
     const userId = request.context?.userId;
     if (!userId) {
         // No userId → can't attribute. Surface as a breadcrumb so a future plumbing
@@ -68,6 +70,7 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
             message: 'ecommerce_tools usage skipped: no userId in context',
             data: { pageId: request.context?.pageId },
         });
+        recordAiFailedBeforeLog('ecommerce_tools', model, 'MissingUserId');
         return;
     }
     const tokensIn = data.tokensIn ?? 0;
@@ -83,6 +86,7 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
             message: 'ecommerce_tools usage skipped: worker reported zero tokens',
             data: { pageId: request.context?.pageId, model: data.model },
         });
+        recordAiFailedBeforeLog('ecommerce_tools', model, 'ZeroTokens');
         return;
     }
     logAiUsage({
@@ -129,8 +133,10 @@ export async function generateReplyWithTools(
         return aiService.generateReply(request);
     }
 
+    const toolLoopModel = config.ai.model || DEFAULT_AI_MODEL;
     try {
         // Step 1: Call AI worker with tools enabled
+        recordAiAttempt('ecommerce_tools', toolLoopModel);
         const toolResponse = await axios.post<AiWorkerToolResponse>(
             `${config.ai.serviceUrl}/generate-with-tools`,
             {
@@ -139,6 +145,7 @@ export async function generateReplyWithTools(
                 context: {
                     ...request.context,
                     ecommerceToolsEnabled: true,
+                    pipeline: 'ecommerce_tools',
                 },
             },
             {
@@ -146,6 +153,7 @@ export async function generateReplyWithTools(
                 headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
             },
         );
+        recordAiReturn('ecommerce_tools', toolLoopModel);
 
         const data = toolResponse.data;
         logToolRoundUsage(request, data);
@@ -196,13 +204,14 @@ export async function generateReplyWithTools(
             allToolResults.push(...lastToolResults);
 
             // Send results back to AI worker
+            recordAiAttempt('ecommerce_tools', toolLoopModel);
             const finalResponse = await axios.post<AiWorkerToolResponse>(
                 `${config.ai.serviceUrl}/generate-with-tool-results`,
                 {
                     originalRequest: {
                         comment: request.comment,
                         language: request.language,
-                        context: request.context,
+                        context: { ...request.context, pipeline: 'ecommerce_tools' },
                     },
                     toolResults: lastToolResults,
                     originalToolCalls: validToolCalls,
@@ -212,6 +221,7 @@ export async function generateReplyWithTools(
                     headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
                 },
             );
+            recordAiReturn('ecommerce_tools', toolLoopModel);
 
             const roundData = finalResponse.data;
             logToolRoundUsage(request, roundData);

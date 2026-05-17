@@ -8,6 +8,7 @@ import { redis } from '../lib/redis';
 import { publishSSEEvent } from '../lib/eventBus';
 import { messagesService } from './messages';
 import { logAiUsage } from './aiUsageLog';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { noopLogger } from '../types/logger';
 import { extractPhoneFromText } from '@jawab24/shared';
 import type { LeadExtractedData, LeadStatus } from '@jawab24/shared';
@@ -213,13 +214,21 @@ class LeadExtractorService {
         const client = this.getClient();
 
         const model = 'gpt-4.1-mini';
-        const response = await client.chat.completions.create({
-            model,
-            messages: [{ role: 'user', content: prompt }],
-            temperature: 0,
-            max_tokens: 500,
-            response_format: { type: 'json_object' },
-        });
+        recordAiAttempt('lead_extraction', model);
+        let response;
+        try {
+            response = await client.chat.completions.create({
+                model,
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0,
+                max_tokens: 500,
+                response_format: { type: 'json_object' },
+            });
+        } catch (err) {
+            recordAiFailedBeforeLog('lead_extraction', model, 'OpenAIApiError');
+            throw err;
+        }
+        recordAiReturn('lead_extraction', model);
 
         // Fire-and-forget cost log — same pattern as ai.ts:398
         const usage = response.usage;

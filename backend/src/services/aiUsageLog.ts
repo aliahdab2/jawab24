@@ -9,6 +9,7 @@ import { db } from '../db';
 import { aiUsageLog } from '../db/schema';
 import { redis } from '../lib/redis';
 import { PRICING_VERSION, estimateCostUsd } from '../config/aiPricing';
+import { recordAiLogged } from '../lib/aiMetrics';
 import type { AiPipeline } from '../types/aiPipeline';
 
 /**
@@ -55,6 +56,7 @@ export async function logAiUsage(opts: LogAiUsageOptions): Promise<void> {
             intent: opts.intent ?? null,
             pricingVersion: PRICING_VERSION,
         });
+        recordAiLogged(opts.pipeline, opts.model);
     } catch (err) {
         Sentry.addBreadcrumb({
             category: 'ai_usage_log',

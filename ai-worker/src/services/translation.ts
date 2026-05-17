@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { recordAiAttempt, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
 
@@ -77,8 +78,10 @@ export class TranslationService {
     const targetName = langNames[targetLanguage] ?? targetLanguage;
     const systemPrompt = `You are a professional translator. Translate the following text from ${sourceName} to ${targetName}. Maintain the tone, style, and any emojis. Return ONLY the translated text without any explanations.`;
 
+    recordAiAttempt('translation', config.openai.model);
+    let completion;
     try {
-      const completion = await this.client.chat.completions.create({
+      completion = await this.client.chat.completions.create({
         model: config.openai.model,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -101,6 +104,7 @@ export class TranslationService {
         model: completion.model || config.openai.model,
       };
     } catch (error) {
+      recordAiFailedBeforeLog('translation', config.openai.model, 'OpenAIApiError');
       Sentry.captureException(error, {
         extra: { text: text.substring(0, 100), sourceLang, targetLanguage }
       });
@@ -136,15 +140,22 @@ export async function generateNudgeVariations(
     `Return ONLY a JSON array of ${count} strings — no markdown, no explanation.`,
   ].join(' ');
 
-  const completion = await client.chat.completions.create({
-    model: config.openai.model,
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: text },
-    ],
-    temperature: 0.9,
-    max_tokens: 800,
-  });
+  recordAiAttempt('translation', config.openai.model);
+  let completion;
+  try {
+    completion = await client.chat.completions.create({
+      model: config.openai.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text },
+      ],
+      temperature: 0.9,
+      max_tokens: 800,
+    });
+  } catch (err) {
+    recordAiFailedBeforeLog('translation', config.openai.model, 'OpenAIApiError');
+    throw err;
+  }
 
   const raw = completion.choices[0]?.message?.content?.trim() || '[]';
   const tokensUsed = completion.usage?.total_tokens || 0;

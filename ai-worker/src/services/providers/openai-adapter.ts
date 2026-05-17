@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/node';
 import { config } from '../../config';
 import type { LLMProvider, LLMChatParams, LLMChatResult, LLMMessage } from './types';
 import { AI_REPLY_JSON_SCHEMA } from './types';
+import { recordAiAttempt, recordAiFailedBeforeLog } from '../../lib/aiMetrics';
 
 export class OpenAIAdapter implements LLMProvider {
     readonly name = 'openai';
@@ -29,6 +30,9 @@ export class OpenAIAdapter implements LLMProvider {
         const timeout = setTimeout(() => controller.abort(), params.timeoutMs);
 
         try {
+            // Pipeline not plumbed to LLMChatParams (non-default-model path is admin/playground only,
+            // low traffic). Counter key falls back to 'unknown' — acceptable noise for this surface.
+            recordAiAttempt(undefined, this.modelId);
             const completion = await Sentry.startSpan(
                 { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
                 () => this.client!.chat.completions.create({
@@ -58,6 +62,9 @@ export class OpenAIAdapter implements LLMProvider {
                 tokensOut: completion.usage?.completion_tokens,
                 tokensTotal: completion.usage?.total_tokens,
             };
+        } catch (err) {
+            recordAiFailedBeforeLog(undefined, this.modelId, 'OpenAIApiError');
+            throw err;
         } finally {
             clearTimeout(timeout);
         }
