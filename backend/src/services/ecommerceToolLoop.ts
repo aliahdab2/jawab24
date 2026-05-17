@@ -41,7 +41,7 @@ interface AiWorkerToolResponse {
     model?: string;
     tokensUsed?: number;
     tokensIn?: number;
-    /** Subset of tokensIn that hit OpenAI's prompt cache (billed at 50%). */
+    /** Subset of tokensIn that hit OpenAI's prompt cache (billed at the model's cached rate — see aiPricing.ts). */
     tokensInCached?: number;
     tokensOut?: number;
     intent?: string;
