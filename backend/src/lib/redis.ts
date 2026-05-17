@@ -11,10 +11,15 @@ export const isRedisAuthFailed = () => redisAuthFailed;
 // Create a shared Redis instance.
 // Redis command tracing is handled automatically by @sentry/node v10+
 // which instruments ioredis out of the box (spans for every command).
+// `config.redis` is optional at import time so test files that mock `../config`
+// without a `redis` block (transcription, translation, etc.) can transitively
+// load this module via aiMetrics without crashing — the real connection never
+// opens in those tests anyway (lazyConnect + no command invoked).
+const redisCfg = config.redis ?? { host: 'localhost', port: 6379 };
 export const redis = new Redis({
-    host: config.redis.host,
-    port: config.redis.port,
-    password: config.redis.password,
+    host: redisCfg.host,
+    port: redisCfg.port,
+    password: redisCfg.password,
     lazyConnect: true, // Don't connect immediately on import
     retryStrategy(times) {
         // Stop retrying immediately on auth failures — they won't resolve

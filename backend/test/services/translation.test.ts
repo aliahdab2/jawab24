@@ -80,6 +80,7 @@ describe('Translation Service', () => {
                     text: 'Hello',
                     sourceLanguage: 'en',
                     targetLanguage: 'ar',
+                    context: { pipeline: 'translation' },
                 },
                 { timeout: 30000 },
             );
@@ -198,7 +199,7 @@ describe('Translation Service', () => {
             expect(result).toEqual(variations);
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 'http://localhost:3002/generate-variations',
-                { text: 'test message', language: 'ar', count: 5 },
+                { text: 'test message', language: 'ar', count: 5, context: { pipeline: 'translation' } },
                 { timeout: 30000 },
             );
         });

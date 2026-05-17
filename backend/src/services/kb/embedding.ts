@@ -4,6 +4,7 @@ import type { EmbeddingProvider, EmbeddingLogContext } from './interfaces';
 import type { Logger } from '../../types/logger';
 import { noopLogger } from '../../types/logger';
 import { logAiUsage } from '../aiUsageLog';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../../lib/aiMetrics';
 
 const EMBEDDING_MODEL = 'text-embedding-3-small';
 const EMBEDDING_DIMENSIONS = 512;
@@ -60,18 +61,28 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
 
     async embed(text: string, logCtx?: EmbeddingLogContext): Promise<number[]> {
         const safeText = truncateForEmbedding(text, this.logger);
-        const response = await withRetry(() =>
-            this.client.embeddings.create({
-                model: EMBEDDING_MODEL,
-                input: safeText,
-                dimensions: EMBEDDING_DIMENSIONS,
-            }),
-            this.logger,
-        );
+        const pipeline = logCtx?.pipeline;
+        recordAiAttempt(pipeline, EMBEDDING_MODEL);
+        let response;
+        try {
+            response = await withRetry(() =>
+                this.client.embeddings.create({
+                    model: EMBEDDING_MODEL,
+                    input: safeText,
+                    dimensions: EMBEDDING_DIMENSIONS,
+                }),
+                this.logger,
+            );
+        } catch (err) {
+            recordAiFailedBeforeLog(pipeline, EMBEDDING_MODEL, 'OpenAIApiError');
+            throw err;
+        }
+        recordAiReturn(pipeline, EMBEDDING_MODEL);
         if (logCtx && response.usage) {
             logEmbeddingUsage(logCtx, response.usage.prompt_tokens ?? 0);
         } else if (!logCtx) {
             warnUnattributedEmbedding('embed', response.usage?.prompt_tokens ?? 0);
+            recordAiFailedBeforeLog(pipeline, EMBEDDING_MODEL, 'MissingUserId');
         }
         return response.data[0].embedding;
     }
@@ -80,21 +91,31 @@ export class OpenAIEmbeddingProvider implements EmbeddingProvider {
         if (texts.length === 0) return [];
 
         const results: number[][] = [];
+        const pipeline = logCtx?.pipeline;
         for (let i = 0; i < texts.length; i += MAX_BATCH_SIZE) {
             const batch = texts.slice(i, i + MAX_BATCH_SIZE).map(t => truncateForEmbedding(t, this.logger));
             this.logger.debug('Embedding batch', { batchStart: i, batchSize: batch.length, totalTexts: texts.length });
-            const response = await withRetry(() =>
-                this.client.embeddings.create({
-                    model: EMBEDDING_MODEL,
-                    input: batch,
-                    dimensions: EMBEDDING_DIMENSIONS,
-                }),
-                this.logger,
-            );
+            recordAiAttempt(pipeline, EMBEDDING_MODEL);
+            let response;
+            try {
+                response = await withRetry(() =>
+                    this.client.embeddings.create({
+                        model: EMBEDDING_MODEL,
+                        input: batch,
+                        dimensions: EMBEDDING_DIMENSIONS,
+                    }),
+                    this.logger,
+                );
+            } catch (err) {
+                recordAiFailedBeforeLog(pipeline, EMBEDDING_MODEL, 'OpenAIApiError');
+                throw err;
+            }
+            recordAiReturn(pipeline, EMBEDDING_MODEL);
             if (logCtx && response.usage) {
                 logEmbeddingUsage(logCtx, response.usage.prompt_tokens ?? 0);
             } else if (!logCtx) {
                 warnUnattributedEmbedding('embedBatch', response.usage?.prompt_tokens ?? 0);
+                recordAiFailedBeforeLog(pipeline, EMBEDDING_MODEL, 'MissingUserId');
             }
             const sorted = response.data.sort((a, b) => a.index - b.index);
             results.push(...sorted.map(d => d.embedding));

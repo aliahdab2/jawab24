@@ -7,6 +7,7 @@ import { eq, sql, count } from 'drizzle-orm';
 import { config } from '../config';
 import { AiGenerateRequest, AiGenerateResponse, Logger, noopLogger } from '../types';
 import { redis, redisScanDelete } from '../lib/redis';
+import { recordAiAttempt, recordAiReturn } from '../lib/aiMetrics';
 import { normalizeArabic, DEFAULT_AI_MODEL, PROMPT_VERSION } from '@jawab24/shared';
 import { detectIntent } from './kb/intent-detector';
 import { semanticCacheService } from './kb/semantic-cache';
@@ -356,7 +357,9 @@ export class AiService {
         }
 
         // Layer 3: Full AI worker call (protected by circuit breaker)
+        const primaryModel = isNonDefaultModel ? (request.model as string) : (config.ai.model || DEFAULT_AI_MODEL);
         try {
+            recordAiAttempt(pipeline, primaryModel);
             const response = await aiWorkerCircuit.execute(() =>
                 Sentry.startSpan(
                     { name: 'ai.worker.http', op: 'http.client' },
@@ -375,6 +378,7 @@ export class AiService {
                     ),
                 )
             );
+            recordAiReturn(pipeline, primaryModel);
 
             const aiReply = response.data.reply;
             const detectedLanguage = response.data.language || request.language || 'en';
@@ -449,6 +453,7 @@ export class AiService {
                 // it's OpenAI that's down. The fallback uses Claude (different API key, different provider).
                 try {
                     const fallbackModel = config.ai.fallbackModel;
+                    recordAiAttempt('failover', fallbackModel);
                     const failoverResponse = await Sentry.startSpan(
                         { name: 'ai.failover.http', op: 'http.client', attributes: { 'ai.model': fallbackModel } },
                         () => axios.post<WorkerGenerateResponse>(
@@ -465,6 +470,7 @@ export class AiService {
                             },
                         ),
                     );
+                    recordAiReturn('failover', fallbackModel);
 
                     this.logger.info('Provider failover succeeded', { model: fallbackModel });
                     Sentry.captureMessage('AI provider failover active', {

@@ -1,6 +1,7 @@
 import OpenAI, { APIError, toFile } from 'openai';
 import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 
 /** Maximum time to download audio from Facebook/Instagram CDN */
 const DOWNLOAD_TIMEOUT_MS = 10_000;
@@ -179,10 +180,12 @@ class TranscriptionService {
 
             try {
                 const file = await toFile(audioBuffer, filename, { type: fileType });
+                recordAiAttempt('transcription', MODEL_TRANSCRIBE);
                 const transcription = await client.audio.transcriptions.create(
                     buildTranscribeParams(file, languageHint),
                     { signal: transcribeController.signal },
                 );
+                recordAiReturn('transcription', MODEL_TRANSCRIBE);
 
                 const text = transcription.text?.trim();
                 if (!text) return null;
@@ -192,6 +195,7 @@ class TranscriptionService {
                 clearTimeout(transcribeTimer);
             }
         } catch (error) {
+            recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, 'OpenAIApiError');
             // Whisper 400 means the audio bytes themselves are bad (truncated,
             // unsupported codec, etc.). We already fall back gracefully, so
             // don't page Sentry — but warn so a sudden spike (e.g. our own
@@ -239,16 +243,19 @@ class TranscriptionService {
 
         try {
             const file = await toFile(audioBuffer, `voice.${ext}`, { type: mimeType });
+            recordAiAttempt('transcription', MODEL_TRANSCRIBE);
             const transcription = await client.audio.transcriptions.create(
                 buildTranscribeParams(file, languageHint),
                 { signal: controller.signal },
             );
+            recordAiReturn('transcription', MODEL_TRANSCRIBE);
 
             const text = transcription.text?.trim();
             if (!text) return null;
 
             return { text };
         } catch (error) {
+            recordAiFailedBeforeLog('transcription', MODEL_TRANSCRIBE, 'OpenAIApiError');
             const isTimeout = error instanceof Error && error.name === 'AbortError';
             captureError(
                 error instanceof Error ? error : new Error(String(error)),

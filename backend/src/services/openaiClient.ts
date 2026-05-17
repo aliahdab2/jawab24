@@ -13,6 +13,7 @@
  */
 import OpenAI, { APIError, BadRequestError, RateLimitError } from 'openai';
 import { logAiUsage } from './aiUsageLog';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import type { AiPipeline } from '../types/aiPipeline';
 
 /**
@@ -58,7 +59,16 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
 
     const chatCreate = client.chat.completions.create.bind(client.chat.completions);
     const trackedChatCreate = (async (...args: Parameters<typeof chatCreate>) => {
-        const response = await chatCreate(...(args as Parameters<typeof chatCreate>));
+        const requestedModel = (args[0] as { model: string }).model;
+        recordAiAttempt(ctx.pipeline, requestedModel);
+        let response;
+        try {
+            response = await chatCreate(...(args as Parameters<typeof chatCreate>));
+        } catch (err) {
+            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, 'OpenAIApiError');
+            throw err;
+        }
+        recordAiReturn(ctx.pipeline, requestedModel);
         // Streaming responses return an AsyncIterable, not a usage object — skip.
         // All current callers use the non-streaming path.
         if (response && typeof response === 'object' && 'usage' in response && 'model' in response) {
@@ -81,7 +91,16 @@ export function makeTrackedOpenAI(apiKey: string, ctx: TrackedOpenAIContext): Tr
 
     const embedCreate = client.embeddings.create.bind(client.embeddings);
     const trackedEmbedCreate = (async (...args: Parameters<typeof embedCreate>) => {
-        const response = await embedCreate(...(args as Parameters<typeof embedCreate>));
+        const requestedModel = (args[0] as { model: string }).model;
+        recordAiAttempt(ctx.pipeline, requestedModel);
+        let response;
+        try {
+            response = await embedCreate(...(args as Parameters<typeof embedCreate>));
+        } catch (err) {
+            recordAiFailedBeforeLog(ctx.pipeline, requestedModel, 'OpenAIApiError');
+            throw err;
+        }
+        recordAiReturn(ctx.pipeline, requestedModel);
         const modelUsed = response.model || (args[0] as { model: string }).model;
         logAiUsage({
             userId: ctx.userId,

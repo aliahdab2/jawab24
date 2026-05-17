@@ -3,6 +3,7 @@ import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { config } from '../config';
 import { tracedExternalCall } from '../utils/tracing';
 import { logAiUsage } from './aiUsageLog';
+import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 
 export interface TranslateRequest {
   text: string;
@@ -36,20 +37,23 @@ export async function translateText(request: TranslateRequest): Promise<Translat
   const { text, sourceLanguage, targetLanguage, userId, pageId } = request;
 
   try {
+    recordAiAttempt('translation', DEFAULT_AI_MODEL);
     const response = await tracedExternalCall('translation', 'translate', () =>
       axios.post<TranslateResponse>(
         `${config.ai.serviceUrl}/translate`,
         {
           text,
           sourceLanguage: sourceLanguage || 'auto',
-          targetLanguage
+          targetLanguage,
+          context: { pipeline: 'translation' },
         },
         { timeout: 30000 },
       ),
     );
+    const data = response.data;
+    recordAiReturn('translation', data.model || DEFAULT_AI_MODEL);
 
     if (userId) {
-      const data = response.data;
       logAiUsage({
         userId,
         pageId,
@@ -60,6 +64,8 @@ export async function translateText(request: TranslateRequest): Promise<Translat
         cached: false,
         pipeline: 'translation',
       }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
+    } else {
+      recordAiFailedBeforeLog('translation', data.model || DEFAULT_AI_MODEL, 'MissingUserId');
     }
 
     return response.data;
@@ -83,6 +89,7 @@ export async function generateNudgeVariations(
   ctx?: { userId?: string; pageId?: string },
 ): Promise<string[]> {
   try {
+    recordAiAttempt('translation', DEFAULT_AI_MODEL);
     const response = await tracedExternalCall('translation', 'generateVariations', () =>
       axios.post<{
         variations: string[];
@@ -93,13 +100,14 @@ export async function generateNudgeVariations(
         model?: string;
       }>(
         `${config.ai.serviceUrl}/generate-variations`,
-        { text, language, count },
+        { text, language, count, context: { pipeline: 'translation' } },
         { timeout: 30000 },
       ),
     );
+    const data = response.data;
+    recordAiReturn('translation', data.model || DEFAULT_AI_MODEL);
 
     if (ctx?.userId) {
-      const data = response.data;
       logAiUsage({
         userId: ctx.userId,
         pageId: ctx.pageId,
@@ -110,6 +118,8 @@ export async function generateNudgeVariations(
         cached: false,
         pipeline: 'translation',
       }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
+    } else {
+      recordAiFailedBeforeLog('translation', data.model || DEFAULT_AI_MODEL, 'MissingUserId');
     }
 
     return response.data.variations;

@@ -160,6 +160,27 @@ System-level strings sent to customers (nudges, fallbacks, placeholders) live in
 
 To add a new language: extend the `Locale` type in `i18n.ts` — TypeScript will flag every missing translation.
 
+### 13c. AI Call Lifecycle Counters (Phase 6.5 diagnostic)
+
+Four Redis counters per AI call, emitted fire-and-forget. Helpers live in `backend/src/lib/aiMetrics.ts` and `ai-worker/src/lib/aiMetrics.ts`.
+
+Key shape: `metrics:ai:{stage}:{pipeline}:{model}[:{error_class}]`
+
+| Stage | Emitted from | Meaning |
+|-------|--------------|---------|
+| `attempts` | ai-worker before `chat.completions.create`; backend before direct OpenAI calls or axios POST to ai-worker | "We're about to call the API" |
+| `returns` | backend after axios returns / direct call resolves | "API call succeeded; tokens received" |
+| `logged` | backend in `aiUsageLog.ts` after `db.insert` succeeds | "Cost row landed in `ai_usage_log`" |
+| `failed_before_log` | any catch/guard that bypasses `logAiUsage` | "Call cost incurred (or guard tripped) but no row" |
+
+Gap analysis (read with `scripts/phase6_5_breakdown.ts`):
+- `attempts − returns` → ai-worker / network failures (worker pipelines) **or** SDK silent retries (direct-call pipelines: `lead_extraction`, `kb_*`, `embedding_*`, `transcription`)
+- `returns − logged` → backend log misses (missing userId, zero-token guards, swallowed errors)
+
+`error_class` enum: `AiEmptyReplyError`, `AiRefusalError`, `AiTimeoutError`, `OpenAIApiError`, `ZeroTokens`, `MissingUserId`, `Other`.
+
+Emits never block AI calls — `redis.incr(key).catch(() => {})` is the entire pattern. The counters are diagnostic; they do not gate, retry, or fall back.
+
 ### 14. Proper Fixes Only
 
 Fix root causes, not symptoms. No workarounds, no swallowed errors, no silenced types/tests/lint without justification.

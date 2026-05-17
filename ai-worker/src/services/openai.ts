@@ -9,6 +9,7 @@ import {
     AiEmptyReplyError,
     AI_TYPED_ERROR_NAMES,
 } from '../lib/errors';
+import { recordAiAttempt, recordAiFailedBeforeLog } from '../lib/aiMetrics';
 
 // Token budget constants (configurable via env vars for production tuning)
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
@@ -239,6 +240,8 @@ export interface GenerateRequest {
     comment: string;
     language?: string;
     context?: {
+        /** Backend-side tag used for Phase 6.5 diagnostic counters. Opaque here. */
+        pipeline?: string;
         postMessage?: string;
         pageName?: string;
         previousReplies?: string[];
@@ -320,6 +323,7 @@ export class OpenAIService {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
 
+            recordAiAttempt(request.context?.pipeline, config.openai.model);
             let completion: OpenAI.ChatCompletion;
             try {
                 completion = await Sentry.startSpan(
@@ -373,8 +377,10 @@ export class OpenAIService {
                 // name not instanceof so the catch survives tests that mock the
                 // `openai` package without providing the APIUserAbortError class.
                 if (e instanceof Error && e.name === 'APIUserAbortError') {
+                    recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'AiTimeoutError');
                     throw new AiTimeoutError(config.openai.timeoutMs);
                 }
+                recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'OpenAIApiError');
                 throw e;
             } finally {
                 clearTimeout(timeout);
@@ -392,6 +398,7 @@ export class OpenAIService {
                     message: 'openai_structured_refusal',
                     data: { refusal, model: config.openai.model },
                 });
+                recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'AiRefusalError');
                 throw new AiRefusalError(refusal);
             }
 
@@ -432,6 +439,7 @@ export class OpenAIService {
             // case (107 events in 3h on a single page after deploy). Intent-aware.
             const isIntentionalEmpty = validated.intent === 'OFFENSIVE' || validated.intent === 'SPAM_OR_IRRELEVANT';
             if (!validated.reply && !isIntentionalEmpty) {
+                recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'AiEmptyReplyError');
                 throw new AiEmptyReplyError();
             }
 
