@@ -6,17 +6,20 @@
  *   2. costUsd is computed from the pricing table for the model.
  *   3. Embedding rows pass tokensOut=0 and still log a non-zero cost.
  *   4. DB failures never throw — they increment a Redis drop counter and
- *      add a Sentry breadcrumb instead.
+ *      capture the exception to Sentry instead.
+ *   5. Successful inserts fire recordAiLogged so the Phase 6.5 P1
+ *      `metrics:ai:logged:*` counters reflect actual DB writes.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Hoisted so the vi.mock factories below (which run before imports) can see them.
-const { valuesMock, insertMock, redisIncrMock, sentryAddBreadcrumbMock } = vi.hoisted(() => {
+const { valuesMock, insertMock, redisIncrMock, sentryCaptureExceptionMock, recordAiLoggedMock } = vi.hoisted(() => {
     const valuesMock = vi.fn().mockResolvedValue(undefined);
     const insertMock = vi.fn().mockReturnValue({ values: valuesMock });
     const redisIncrMock = vi.fn().mockResolvedValue(1);
-    const sentryAddBreadcrumbMock = vi.fn();
-    return { valuesMock, insertMock, redisIncrMock, sentryAddBreadcrumbMock };
+    const sentryCaptureExceptionMock = vi.fn();
+    const recordAiLoggedMock = vi.fn();
+    return { valuesMock, insertMock, redisIncrMock, sentryCaptureExceptionMock, recordAiLoggedMock };
 });
 
 vi.mock('../../src/db', () => ({ db: { insert: insertMock } }));
@@ -27,8 +30,14 @@ vi.mock('../../src/lib/redis', () => ({
 }));
 vi.mock('@sentry/node', async () => {
     const actual = await vi.importActual<typeof import('@sentry/node')>('@sentry/node');
-    return { ...actual, addBreadcrumb: sentryAddBreadcrumbMock };
+    return { ...actual, captureException: sentryCaptureExceptionMock };
 });
+vi.mock('../../src/lib/aiMetrics', () => ({
+    recordAiLogged: recordAiLoggedMock,
+    recordAiAttempt: vi.fn(),
+    recordAiReturn: vi.fn(),
+    recordAiFailedBeforeLog: vi.fn(),
+}));
 
 import { logAiUsage } from '../../src/services/ai';
 
@@ -36,7 +45,8 @@ beforeEach(() => {
     valuesMock.mockClear();
     insertMock.mockClear();
     redisIncrMock.mockClear();
-    sentryAddBreadcrumbMock.mockClear();
+    sentryCaptureExceptionMock.mockClear();
+    recordAiLoggedMock.mockClear();
     valuesMock.mockResolvedValue(undefined);
 });
 
@@ -123,8 +133,9 @@ describe('logAiUsage', () => {
         expect(row.costUsd).toBe(0);
     });
 
-    it('on DB failure: increments redis drop counter, adds Sentry breadcrumb, never throws', async () => {
-        valuesMock.mockRejectedValueOnce(new Error('DB unavailable'));
+    it('on DB failure: increments redis drop counter, captures exception to Sentry, never throws', async () => {
+        const dbErr = new Error('column "pricing_version" of relation "ai_usage_log" does not exist');
+        valuesMock.mockRejectedValueOnce(dbErr);
 
         await expect(logAiUsage({
             userId: 'u', model: 'gpt-4.1-mini', tokensIn: 100, tokensOut: 50,
@@ -132,10 +143,14 @@ describe('logAiUsage', () => {
         })).resolves.toBeUndefined();
 
         expect(redisIncrMock).toHaveBeenCalledWith('metrics:pipeline:ai_usage_log.dropped');
-        expect(sentryAddBreadcrumbMock).toHaveBeenCalledTimes(1);
-        const breadcrumb = sentryAddBreadcrumbMock.mock.calls[0]![0]!;
-        expect(breadcrumb.category).toBe('ai_usage_log');
-        expect(breadcrumb.data.pipeline).toBe('eval');
+        expect(sentryCaptureExceptionMock).toHaveBeenCalledTimes(1);
+        const [capturedErr, captureOpts] = sentryCaptureExceptionMock.mock.calls[0]!;
+        expect(capturedErr).toBe(dbErr);
+        expect(captureOpts).toMatchObject({
+            level: 'warning',
+            tags: { source: 'ai_usage_log' },
+            extra: { pipeline: 'eval', model: 'gpt-4.1-mini' },
+        });
     });
 
     it('on DB AND redis failure: silently discards, still does not throw', async () => {
@@ -147,7 +162,33 @@ describe('logAiUsage', () => {
             cached: false, pipeline: 'eval',
         })).resolves.toBeUndefined();
 
-        expect(sentryAddBreadcrumbMock).toHaveBeenCalledTimes(1);
+        expect(sentryCaptureExceptionMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires recordAiLogged after a successful insert (Phase 6.5 P1 logged counter contract)', async () => {
+        // Defensive against future regressions where someone reorders or
+        // accidentally moves the recordAiLogged call outside the try block.
+        // Prod symptom would be: metrics:ai:logged:* keys stop populating
+        // while attempts/returns continue — same fail mode that PR #163's
+        // diagnostic surface was built to detect.
+        await logAiUsage({
+            userId: 'u', model: 'gpt-4.1-mini', tokensIn: 100, tokensOut: 50,
+            cached: false, pipeline: 'dm_reply',
+        });
+
+        expect(recordAiLoggedMock).toHaveBeenCalledTimes(1);
+        expect(recordAiLoggedMock).toHaveBeenCalledWith('dm_reply', 'gpt-4.1-mini');
+    });
+
+    it('does NOT fire recordAiLogged when the insert throws', async () => {
+        valuesMock.mockRejectedValueOnce(new Error('DB unavailable'));
+
+        await logAiUsage({
+            userId: 'u', model: 'gpt-4.1-mini', tokensIn: 100, tokensOut: 50,
+            cached: false, pipeline: 'dm_reply',
+        });
+
+        expect(recordAiLoggedMock).not.toHaveBeenCalled();
     });
 
     it('every AiPipeline value produces a row with that pipeline tag', async () => {
