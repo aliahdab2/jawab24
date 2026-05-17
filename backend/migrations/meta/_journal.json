@@ -722,6 +722,13 @@
       "when": 1778955707154,
       "tag": "0103_lovely_polaris",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "5",
+      "when": 1779018690374,
+      "tag": "0104_optimal_stellaris",
+      "breakpoints": true
     }
   ]
 }

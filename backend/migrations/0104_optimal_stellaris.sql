@@ -1,0 +1,1 @@
+ALTER TABLE "ai_usage_log" ADD COLUMN "pricing_version" varchar(16) DEFAULT 'v1' NOT NULL;

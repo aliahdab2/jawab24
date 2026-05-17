@@ -8,7 +8,7 @@ import * as Sentry from '@sentry/node';
 import { db } from '../db';
 import { aiUsageLog } from '../db/schema';
 import { redis } from '../lib/redis';
-import { estimateCostUsd } from '../config/aiPricing';
+import { PRICING_VERSION, estimateCostUsd } from '../config/aiPricing';
 import type { AiPipeline } from '../types/aiPipeline';
 
 /**
@@ -21,7 +21,7 @@ export interface LogAiUsageOptions {
     pageId?: string;
     model: string;
     tokensIn: number;
-    /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at 50%). */
+    /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at the model's cached rate). */
     cachedInputTokens?: number;
     tokensOut: number;
     cached: boolean;
@@ -53,6 +53,7 @@ export async function logAiUsage(opts: LogAiUsageOptions): Promise<void> {
             cached: opts.cached,
             pipeline: opts.pipeline,
             intent: opts.intent ?? null,
+            pricingVersion: PRICING_VERSION,
         });
     } catch (err) {
         Sentry.addBreadcrumb({

@@ -84,11 +84,11 @@ describe('logAiUsage', () => {
     });
 
     it('persists cachedInputTokens and discounts cost when prompt cache hits', async () => {
-        // gpt-4.1-mini: 2000 in (1500 cached → 50% off), 200 out
-        // Fresh: 500/1000 * 0.0004        = 0.0002
-        // Cached: 1500/1000 * 0.0004 * 0.5 = 0.0003
-        // Output: 200/1000 * 0.0016        = 0.00032
-        // Total                            = 0.00082
+        // gpt-4.1-mini: 2000 in (1500 cached → 75% off, $0.0001/1K), 200 out
+        // Fresh:  500/1000  * 0.0004  = 0.0002
+        // Cached: 1500/1000 * 0.0001  = 0.00015
+        // Output: 200/1000  * 0.0016  = 0.00032
+        // Total                       = 0.00067
         await logAiUsage({
             userId: 'u', model: 'gpt-4.1-mini',
             tokensIn: 2000, cachedInputTokens: 1500, tokensOut: 200,
@@ -96,7 +96,8 @@ describe('logAiUsage', () => {
         });
         const row = valuesMock.mock.calls[0]![0]!;
         expect(row.cachedInputTokens).toBe(1500);
-        expect(row.costUsd).toBeCloseTo(0.00082, 6);
+        expect(row.costUsd).toBeCloseTo(0.00067, 6);
+        expect(row.pricingVersion).toBe('v2');
     });
 
     it('defaults cachedInputTokens to 0 when caller omits it (back-compat)', async () => {
