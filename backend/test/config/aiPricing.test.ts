@@ -102,6 +102,15 @@ describe('AI Pricing', () => {
             expect(cost).toBeCloseTo(0.0001 + 0.000075 + 0.00008, 10);
         });
 
+        it('dated alias gpt-4.1-mini-2025-04-14 prices identically to gpt-4.1-mini', () => {
+            const args: [string, number, number, number] = ['', 2000, 1000, 1500];
+            const aliasCost = estimateCostUsd('gpt-4.1-mini-2025-04-14', args[1], args[2], args[3]);
+            const baseCost = estimateCostUsd('gpt-4.1-mini', args[1], args[2], args[3]);
+            expect(aliasCost).toBe(baseCost);
+            // And it must NOT fall through to the unknown-model zero path.
+            expect(aliasCost).toBeGreaterThan(0);
+        });
+
         it('gpt-4.1: cached tokens billed at 75% off', () => {
             // 1000 in (1000 cached) + 500 out
             // Cached: 1000/1000 * 0.0005 = 0.0005

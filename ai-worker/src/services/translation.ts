@@ -14,7 +14,7 @@ export interface TranslateResponse {
   tokensUsed: number;
   /** Prompt tokens (input). Backend uses this to write `ai_usage_log`. */
   tokensIn?: number;
-  /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at 50%). */
+  /** Subset of `tokensIn` that hit OpenAI's prompt cache (billed at the model's cached rate — see backend aiPricing.ts). */
   tokensInCached?: number;
   /** Completion tokens (output). */
   tokensOut?: number;
