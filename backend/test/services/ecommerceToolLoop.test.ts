@@ -47,6 +47,8 @@ vi.mock('@sentry/node', () => ({
 vi.mock('../../src/config', () => ({
     config: {
         ai: { serviceUrl: 'http://localhost:3002' },
+        // lib/redis reads this at module import (aiMetrics → lib/redis transitively).
+        redis: { host: 'localhost', port: 6379 },
     },
 }));
 

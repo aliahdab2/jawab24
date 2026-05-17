@@ -438,6 +438,14 @@ export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 // circular imports back into this module.
 export { MAX_TEMPLATE_MESSAGE_LENGTH, DEFAULT_AI_MODEL } from './constants';
 
+// --- Phase 6.5 P1 diagnostic counters ---
+export {
+    createAiMetrics,
+    type AiMetrics,
+    type AiMetricsRedis,
+    type FailedBeforeLogClass,
+} from './aiMetrics';
+
 /** Bump when the system prompt changes — used by both ai-worker (telemetry) and backend (cache key). */
 export const PROMPT_VERSION = 'v36';
 

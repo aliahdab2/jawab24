@@ -48,6 +48,9 @@ function mp4Buffer(extra = 'payload'): Buffer {
 vi.mock('../../src/config', () => ({
     config: {
         openai: { apiKey: 'test-key' },
+        // lib/redis reads this at module import (aiMetrics → lib/redis transitively).
+        // lazyConnect: true on the real client means no connection opens in tests.
+        redis: { host: 'localhost', port: 6379 },
     },
 }));
 
