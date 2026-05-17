@@ -35,8 +35,8 @@ describe('i18n hooks - pure utility functions', () => {
   });
 
   describe('getIntlLocale', () => {
-    it('should return "ar-SA" for Arabic', () => {
-      expect(getIntlLocale('ar')).toBe('ar-SA');
+    it('should return Arabic locale with Latin digits for Arabic', () => {
+      expect(getIntlLocale('ar')).toBe('ar-SA-u-nu-latn');
     });
 
     it('should return "en-US" for English', () => {
