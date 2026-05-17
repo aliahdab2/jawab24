@@ -34,7 +34,7 @@ function PostCard({ post, featured = false }: { post: PostWithMeta; featured?: b
             {t(`category.${post.category}` as 'category.guides' | 'category.comparisons' | 'category.integrations')}
           </span>
           <span className="text-xs text-muted-foreground">
-            {new Date(post.date).toLocaleDateString(locale === 'en' ? 'en-US' : 'ar-SA', {
+            {new Date(post.date).toLocaleDateString(locale === 'en' ? 'en-US' : 'ar-SA-u-nu-latn', {
               year: 'numeric',
               month: 'long',
               day: 'numeric',

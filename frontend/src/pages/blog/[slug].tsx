@@ -246,7 +246,7 @@ export default function BlogPostPage({
   const slug = post.slug;
 
   const formattedDate = new Date(post.date).toLocaleDateString(
-    locale === 'en' ? 'en-US' : 'ar-SA',
+    locale === 'en' ? 'en-US' : 'ar-SA-u-nu-latn',
     { year: 'numeric', month: 'long', day: 'numeric' },
   );
 

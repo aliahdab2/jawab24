@@ -9,7 +9,8 @@ import { getLocaleDirection } from '@/utils/locale';
 export type Language = 'ar' | 'en';
 
 const DATE_LOCALES: Record<string, Locale> = { ar, en: enUS };
-const INTL_LOCALES: Record<string, string> = { ar: 'ar-SA', en: 'en-US' };
+// `-u-nu-latn` forces Latin digits even in Arabic UI — product decision to keep numerals consistent across languages.
+const INTL_LOCALES: Record<string, string> = { ar: 'ar-SA-u-nu-latn', en: 'en-US' };
 
 /** Get date-fns locale for a language string (standalone, for non-component code) */
 export function getDateLocale(language: string): Locale {

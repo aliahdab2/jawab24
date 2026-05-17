@@ -391,7 +391,7 @@ export default function AdminPlaygroundPage() {
     }, [contextExpanded, autoResizeContext]);
 
     const formatTime = (date: Date) => {
-        return date.toLocaleTimeString(language === 'ar' ? 'ar-SA' : 'en-US', {
+        return date.toLocaleTimeString(language === 'ar' ? 'ar-SA-u-nu-latn' : 'en-US', {
             hour: '2-digit',
             minute: '2-digit',
         });
