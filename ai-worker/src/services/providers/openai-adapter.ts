@@ -3,7 +3,7 @@ import * as Sentry from '@sentry/node';
 import { config } from '../../config';
 import type { LLMProvider, LLMChatParams, LLMChatResult, LLMMessage } from './types';
 import { AI_REPLY_JSON_SCHEMA } from './types';
-import { recordAiAttempt, recordAiFailedBeforeLog } from '../../lib/aiMetrics';
+import { withAiMetrics } from '../../lib/aiMetrics';
 
 export class OpenAIAdapter implements LLMProvider {
     readonly name = 'openai';
@@ -25,6 +25,7 @@ export class OpenAIAdapter implements LLMProvider {
         if (!this.client) {
             throw new Error('OpenAI client not configured');
         }
+        const client = this.client;
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), params.timeoutMs);
@@ -32,26 +33,27 @@ export class OpenAIAdapter implements LLMProvider {
         try {
             // Pipeline not plumbed to LLMChatParams (non-default-model path is admin/playground only,
             // low traffic). Counter key falls back to 'unknown' — acceptable noise for this surface.
-            recordAiAttempt(undefined, this.modelId);
-            const completion = await Sentry.startSpan(
-                { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
-                () => this.client!.chat.completions.create({
-                    model: this.modelId,
-                    messages: params.messages as OpenAI.ChatCompletionMessageParam[],
-                    max_tokens: params.maxTokens,
-                    temperature: params.temperature,
-                    ...(params.topP !== undefined && { top_p: params.topP }),
-                    ...(params.frequencyPenalty !== undefined && { frequency_penalty: params.frequencyPenalty }),
-                    ...(params.presencePenalty !== undefined && { presence_penalty: params.presencePenalty }),
-                    response_format: {
-                        type: 'json_schema',
-                        json_schema: {
-                            name: 'ai_reply',
-                            strict: true,
-                            schema: AI_REPLY_JSON_SCHEMA,
+            const completion = await withAiMetrics(undefined, this.modelId, () =>
+                Sentry.startSpan(
+                    { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
+                    () => client.chat.completions.create({
+                        model: this.modelId,
+                        messages: params.messages as OpenAI.ChatCompletionMessageParam[],
+                        max_tokens: params.maxTokens,
+                        temperature: params.temperature,
+                        ...(params.topP !== undefined && { top_p: params.topP }),
+                        ...(params.frequencyPenalty !== undefined && { frequency_penalty: params.frequencyPenalty }),
+                        ...(params.presencePenalty !== undefined && { presence_penalty: params.presencePenalty }),
+                        response_format: {
+                            type: 'json_schema',
+                            json_schema: {
+                                name: 'ai_reply',
+                                strict: true,
+                                schema: AI_REPLY_JSON_SCHEMA,
+                            },
                         },
-                    },
-                }, { signal: controller.signal }),
+                    }, { signal: controller.signal }),
+                ),
             );
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
@@ -62,9 +64,6 @@ export class OpenAIAdapter implements LLMProvider {
                 tokensOut: completion.usage?.completion_tokens,
                 tokensTotal: completion.usage?.total_tokens,
             };
-        } catch (err) {
-            recordAiFailedBeforeLog(undefined, this.modelId, 'OpenAIApiError');
-            throw err;
         } finally {
             clearTimeout(timeout);
         }

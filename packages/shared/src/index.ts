@@ -441,6 +441,7 @@ export { MAX_TEMPLATE_MESSAGE_LENGTH, DEFAULT_AI_MODEL } from './constants';
 // --- Phase 6.5 P1 diagnostic counters ---
 export {
     createAiMetrics,
+    withAiMetrics,
     type AiMetrics,
     type AiMetricsRedis,
     type FailedBeforeLogClass,

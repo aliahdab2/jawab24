@@ -22,6 +22,7 @@ export type FailedBeforeLogClass =
     | 'AiRefusalError'
     | 'AiTimeoutError'
     | 'OpenAIApiError'
+    | 'AiWorkerUnreachable'   // backend → ai-worker hop failed (axios error, circuit open)
     | 'ZeroTokens'
     | 'MissingUserId'
     | 'Other';
@@ -43,6 +44,42 @@ export interface AiMetrics {
         model: string,
         errorClass: FailedBeforeLogClass,
     ): void;
+}
+
+/**
+ * Wrap an OpenAI SDK call (or any awaitable) with the three-stage emit
+ * protocol: attempts → returns / failed_before_log. Replaces the hand-rolled
+ * `recordAiAttempt → try { ... } catch { recordAiFailedBeforeLog; throw } → recordAiReturn`
+ * boilerplate that previously lived at six ai-worker sites + the backend
+ * direct-call sites.
+ *
+ * The helper enforces the contract by construction — you cannot forget
+ * `recordAiReturn` because the helper always emits it on success, and you
+ * cannot emit `attempts` without also emitting one of `returns` /
+ * `failed_before_log` because both terminal branches are wired here.
+ *
+ * @param errorClassifier  Optional. Maps a thrown error to a FailedBeforeLogClass.
+ *                         Defaults to 'OpenAIApiError'. Call sites with richer
+ *                         error vocabulary (timeouts, refusals) pass their own.
+ */
+export async function withAiMetrics<T>(
+    metrics: AiMetrics,
+    pipeline: string | undefined,
+    model: string,
+    fn: () => Promise<T>,
+    errorClassifier?: (err: unknown) => FailedBeforeLogClass,
+): Promise<T> {
+    metrics.recordAiAttempt(pipeline, model);
+    let result: T;
+    try {
+        result = await fn();
+    } catch (err) {
+        const cls = errorClassifier ? errorClassifier(err) : 'OpenAIApiError';
+        metrics.recordAiFailedBeforeLog(pipeline, model, cls);
+        throw err;
+    }
+    metrics.recordAiReturn(pipeline, model);
+    return result;
 }
 
 export function createAiMetrics(redis: AiMetricsRedis): AiMetrics {

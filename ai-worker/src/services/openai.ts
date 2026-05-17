@@ -9,7 +9,7 @@ import {
     AiEmptyReplyError,
     AI_TYPED_ERROR_NAMES,
 } from '../lib/errors';
-import { recordAiAttempt, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiFailedBeforeLog, withAiMetrics } from '../lib/aiMetrics';
 
 // Token budget constants (configurable via env vars for production tuning)
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
@@ -323,68 +323,81 @@ export class OpenAIService {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
 
-            recordAiAttempt(request.context?.pipeline, config.openai.model);
             let completion: OpenAI.ChatCompletion;
             try {
-                completion = await Sentry.startSpan(
-                    { name: 'ai.llm.call', op: 'ai' },
-                    () => this.client!.chat.completions.create({
-                        model: config.openai.model,
-                        messages,
-                        max_tokens: config.openai.maxTokens,
-                        temperature: config.openai.temperature,
-                        top_p: config.openai.topP,
-                        frequency_penalty: config.openai.frequencyPenalty,
-                        presence_penalty: config.openai.presencePenalty,
-                        response_format: {
-                            type: 'json_schema',
-                            json_schema: {
-                                name: 'ai_reply',
-                                strict: true,
-                                schema: {
-                                    type: 'object',
-                                    properties: {
-                                        reply: { type: 'string' },
-                                        intent: {
-                                            type: 'string',
-                                            enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
-                                                   'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
+                // withAiMetrics handles attempts / returns / failed_before_log emit.
+                // The outer catch only re-throws timeouts as typed AiTimeoutError
+                // (backend's BullMQ uses the type to decide retry).
+                completion = await withAiMetrics(
+                    request.context?.pipeline,
+                    config.openai.model,
+                    () => Sentry.startSpan(
+                        { name: 'ai.llm.call', op: 'ai' },
+                        () => this.client!.chat.completions.create({
+                            model: config.openai.model,
+                            messages,
+                            max_tokens: config.openai.maxTokens,
+                            temperature: config.openai.temperature,
+                            top_p: config.openai.topP,
+                            frequency_penalty: config.openai.frequencyPenalty,
+                            presence_penalty: config.openai.presencePenalty,
+                            response_format: {
+                                type: 'json_schema',
+                                json_schema: {
+                                    name: 'ai_reply',
+                                    strict: true,
+                                    schema: {
+                                        type: 'object',
+                                        properties: {
+                                            reply: { type: 'string' },
+                                            intent: {
+                                                type: 'string',
+                                                enum: ['QUESTION', 'COMPLIMENT', 'COMPLAINT', 'PURCHASE_INTENT',
+                                                       'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT'],
+                                            },
+                                            confidence: {
+                                                type: 'string',
+                                                enum: ['high', 'medium', 'low'],
+                                            },
+                                            flags: {
+                                                type: 'array',
+                                                items: { type: 'string' },
+                                            },
+                                            hedging: { type: 'boolean' },
+                                            language: {
+                                                type: 'string',
+                                                enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
+                                            },
                                         },
-                                        confidence: {
-                                            type: 'string',
-                                            enum: ['high', 'medium', 'low'],
-                                        },
-                                        flags: {
-                                            type: 'array',
-                                            items: { type: 'string' },
-                                        },
-                                        hedging: { type: 'boolean' },
-                                        language: {
-                                            type: 'string',
-                                            enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
-                                        },
+                                        required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'language'] as const,
+                                        additionalProperties: false,
                                     },
-                                    required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'language'] as const,
-                                    additionalProperties: false,
                                 },
                             },
-                        },
-                    }, { signal: controller.signal }),
+                        }, { signal: controller.signal }),
+                    ),
+                    // Custom classifier — timeouts get a distinct error_class so
+                    // the breakdown script can separate them from generic API errors.
+                    // Check by name (not instanceof) so tests can mock `openai`
+                    // without providing the real APIUserAbortError class.
+                    (e) => (e instanceof Error && e.name === 'APIUserAbortError'
+                        ? 'AiTimeoutError'
+                        : 'OpenAIApiError'),
                 );
             } catch (e) {
-                // Timeout fired — typed throw so backend retries via BullMQ
-                // (transient — same input on retry usually succeeds). Check by
-                // name not instanceof so the catch survives tests that mock the
-                // `openai` package without providing the APIUserAbortError class.
+                // withAiMetrics already emitted failed_before_log. Re-throw the
+                // typed AiTimeoutError so backend BullMQ classifies it correctly.
                 if (e instanceof Error && e.name === 'APIUserAbortError') {
-                    recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'AiTimeoutError');
                     throw new AiTimeoutError(config.openai.timeoutMs);
                 }
-                recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'OpenAIApiError');
                 throw e;
             } finally {
                 clearTimeout(timeout);
             }
+            // recordAiReturn emitted inside withAiMetrics on success. The
+            // post-receive guards below (refusal, empty reply, hedging) run
+            // *after* — they fire recordAiFailedBeforeLog explicitly because
+            // the OpenAI call was billed but the content is unusable.
 
             // Structured-output refusal — model declined the request (policy violation).
             // Non-transient: same input → same refusal. Throw with the refusal reason so
