@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createAiMetrics, type AiMetricsRedis } from '@jawab24/shared';
+import { createAiMetrics, withAiMetrics, type AiMetricsRedis } from '@jawab24/shared';
 
 // The shared factory is pure — inject a fake redis directly. No vi.mock of
 // '../../src/lib/redis' needed; this is the test that proves the DI surface
@@ -78,5 +78,79 @@ describe('createAiMetrics (shared factory)', () => {
         incr.mockReturnValueOnce(42 as unknown as Promise<number>);
         expect(() => metrics.recordAiAttempt('dm_reply', 'gpt-4.1-mini')).not.toThrow();
         expect(incr).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('withAiMetrics', () => {
+    let incr: ReturnType<typeof vi.fn>;
+    let metrics: ReturnType<typeof createAiMetrics>;
+
+    beforeEach(() => {
+        incr = vi.fn().mockResolvedValue(1);
+        metrics = createAiMetrics({ incr });
+    });
+
+    it('emits attempts before fn runs and returns after fn resolves', async () => {
+        const order: string[] = [];
+        incr.mockImplementation((key: string) => {
+            order.push(key);
+            return Promise.resolve(1);
+        });
+        const result = await withAiMetrics(metrics, 'dm_reply', 'gpt-4.1-mini', async () => {
+            order.push('fn');
+            return 'ok';
+        });
+        expect(result).toBe('ok');
+        expect(order).toEqual([
+            'metrics:ai:attempts:dm_reply:gpt-4.1-mini',
+            'fn',
+            'metrics:ai:returns:dm_reply:gpt-4.1-mini',
+        ]);
+    });
+
+    it('emits failed_before_log with default OpenAIApiError when fn throws', async () => {
+        const err = new Error('boom');
+        await expect(
+            withAiMetrics(metrics, 'lead_extraction', 'gpt-4.1-mini', async () => { throw err; }),
+        ).rejects.toBe(err);
+        expect(incr).toHaveBeenCalledWith('metrics:ai:attempts:lead_extraction:gpt-4.1-mini');
+        expect(incr).toHaveBeenCalledWith('metrics:ai:failed_before_log:lead_extraction:gpt-4.1-mini:OpenAIApiError');
+        expect(incr).not.toHaveBeenCalledWith('metrics:ai:returns:lead_extraction:gpt-4.1-mini');
+    });
+
+    it('honors a custom errorClassifier', async () => {
+        const abort = Object.assign(new Error('timeout'), { name: 'APIUserAbortError' });
+        await expect(
+            withAiMetrics(
+                metrics,
+                'dm_reply',
+                'gpt-4.1-mini',
+                async () => { throw abort; },
+                (e) => (e instanceof Error && e.name === 'APIUserAbortError' ? 'AiTimeoutError' : 'OpenAIApiError'),
+            ),
+        ).rejects.toBe(abort);
+        expect(incr).toHaveBeenCalledWith('metrics:ai:failed_before_log:dm_reply:gpt-4.1-mini:AiTimeoutError');
+    });
+
+    it('returns the wrapped value unchanged (preserves identity)', async () => {
+        const obj = { id: 42, payload: [1, 2, 3] };
+        const got = await withAiMetrics(metrics, 'dm_reply', 'gpt-4.1-mini', async () => obj);
+        expect(got).toBe(obj);
+    });
+
+    it('falls back to pipeline=unknown when caller passes undefined', async () => {
+        await withAiMetrics(metrics, undefined, 'gpt-4.1-mini', async () => 1);
+        expect(incr).toHaveBeenCalledWith('metrics:ai:attempts:unknown:gpt-4.1-mini');
+        expect(incr).toHaveBeenCalledWith('metrics:ai:returns:unknown:gpt-4.1-mini');
+    });
+
+    it('still rethrows even when the redis fake itself throws on emit', async () => {
+        incr.mockImplementation(() => { throw new Error('redis down'); });
+        const err = new Error('fn boom');
+        // The metrics layer must swallow its own errors but the fn's error
+        // must still propagate.
+        await expect(
+            withAiMetrics(metrics, 'dm_reply', 'gpt-4.1-mini', async () => { throw err; }),
+        ).rejects.toBe(err);
     });
 });

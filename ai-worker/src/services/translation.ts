@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { withAiMetrics } from '../lib/aiMetrics';
 import { config } from '../config';
 import * as Sentry from '@sentry/node';
 
@@ -51,6 +51,9 @@ export class TranslationService {
     if (!this.client) {
       throw new Error('OPENAI_API_KEY is not configured — cannot perform translation');
     }
+    // Capture into a local so the narrowing survives into the withAiMetrics
+    // arrow closure (TS gives up on `this.client` narrowing across closures).
+    const client = this.client;
 
     const { text, sourceLanguage, targetLanguage } = request;
 
@@ -78,19 +81,18 @@ export class TranslationService {
     const targetName = langNames[targetLanguage] ?? targetLanguage;
     const systemPrompt = `You are a professional translator. Translate the following text from ${sourceName} to ${targetName}. Maintain the tone, style, and any emojis. Return ONLY the translated text without any explanations.`;
 
-    recordAiAttempt('translation', config.openai.model);
-    let completion;
     try {
-      completion = await this.client.chat.completions.create({
-        model: config.openai.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: text }
-        ],
-        temperature: 0.3,
-        max_tokens: 300
-      });
-      recordAiReturn('translation', config.openai.model);
+      const completion = await withAiMetrics('translation', config.openai.model, () =>
+        client.chat.completions.create({
+          model: config.openai.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: text }
+          ],
+          temperature: 0.3,
+          max_tokens: 300
+        }),
+      );
 
       const translatedText = completion.choices[0]?.message?.content?.trim() || '';
       const tokensUsed = completion.usage?.total_tokens || 0;
@@ -105,7 +107,8 @@ export class TranslationService {
         model: completion.model || config.openai.model,
       };
     } catch (error) {
-      recordAiFailedBeforeLog('translation', config.openai.model, 'OpenAIApiError');
+      // withAiMetrics already emitted failed_before_log; this catch is for
+      // Sentry attribution + caller-friendly error wrapping (unchanged).
       Sentry.captureException(error, {
         extra: { text: text.substring(0, 100), sourceLang, targetLanguage }
       });
@@ -141,10 +144,8 @@ export async function generateNudgeVariations(
     `Return ONLY a JSON array of ${count} strings — no markdown, no explanation.`,
   ].join(' ');
 
-  recordAiAttempt('translation', config.openai.model);
-  let completion;
-  try {
-    completion = await client.chat.completions.create({
+  const completion = await withAiMetrics('translation', config.openai.model, () =>
+    client.chat.completions.create({
       model: config.openai.model,
       messages: [
         { role: 'system', content: systemPrompt },
@@ -152,12 +153,8 @@ export async function generateNudgeVariations(
       ],
       temperature: 0.9,
       max_tokens: 800,
-    });
-  } catch (err) {
-    recordAiFailedBeforeLog('translation', config.openai.model, 'OpenAIApiError');
-    throw err;
-  }
-  recordAiReturn('translation', config.openai.model);
+    }),
+  );
 
   const raw = completion.choices[0]?.message?.content?.trim() || '[]';
   const tokensUsed = completion.usage?.total_tokens || 0;

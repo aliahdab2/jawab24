@@ -12,7 +12,7 @@
  * The AI never receives sensitive data until the backend confirms identity.
  */
 import OpenAI from 'openai';
-import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { withAiMetrics } from '../lib/aiMetrics';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
 import { openaiService, type GenerateRequest, type GenerateResponse } from './openai';
@@ -216,26 +216,23 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
 
-        recordAiAttempt(request.context?.pipeline, config.openai.model);
         let completion: OpenAI.ChatCompletion;
         try {
-            completion = await Sentry.startSpan(
-                { name: 'ai.llm.call.tools', op: 'ai' },
-                () => client.chat.completions.create({
-                    model: config.openai.model,
-                    messages,
-                    max_tokens: config.openai.maxTokens,
-                    temperature: config.openai.temperature,
-                    tools: ECOMMERCE_TOOLS,
-                }, { signal: controller.signal }),
+            completion = await withAiMetrics(request.context?.pipeline, config.openai.model, () =>
+                Sentry.startSpan(
+                    { name: 'ai.llm.call.tools', op: 'ai' },
+                    () => client.chat.completions.create({
+                        model: config.openai.model,
+                        messages,
+                        max_tokens: config.openai.maxTokens,
+                        temperature: config.openai.temperature,
+                        tools: ECOMMERCE_TOOLS,
+                    }, { signal: controller.signal }),
+                ),
             );
-        } catch (err) {
-            recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'OpenAIApiError');
-            throw err;
         } finally {
             clearTimeout(timeout);
         }
-        recordAiReturn(request.context?.pipeline, config.openai.model);
 
         const choice = completion.choices[0];
 
@@ -319,28 +316,25 @@ export async function generateWithToolResults(
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), config.openai.timeoutMs);
 
-        recordAiAttempt(request.context?.pipeline, config.openai.model);
         let completion: OpenAI.ChatCompletion;
         try {
-            completion = await Sentry.startSpan(
-                { name: 'ai.llm.call.tools.final', op: 'ai' },
-                () => client.chat.completions.create({
-                    model: config.openai.model,
-                    messages: allMessages,
-                    max_tokens: config.openai.maxTokens,
-                    temperature: config.openai.temperature,
-                    // Include tools so AI can call verify_and_get_* in Phase 2
-                    // NOTE: Cannot use response_format: json_schema with tools — parse JSON manually
-                    tools: ECOMMERCE_TOOLS,
-                }, { signal: controller.signal }),
+            completion = await withAiMetrics(request.context?.pipeline, config.openai.model, () =>
+                Sentry.startSpan(
+                    { name: 'ai.llm.call.tools.final', op: 'ai' },
+                    () => client.chat.completions.create({
+                        model: config.openai.model,
+                        messages: allMessages,
+                        max_tokens: config.openai.maxTokens,
+                        temperature: config.openai.temperature,
+                        // Include tools so AI can call verify_and_get_* in Phase 2
+                        // NOTE: Cannot use response_format: json_schema with tools — parse JSON manually
+                        tools: ECOMMERCE_TOOLS,
+                    }, { signal: controller.signal }),
+                ),
             );
-        } catch (err) {
-            recordAiFailedBeforeLog(request.context?.pipeline, config.openai.model, 'OpenAIApiError');
-            throw err;
         } finally {
             clearTimeout(timeout);
         }
-        recordAiReturn(request.context?.pipeline, config.openai.model);
 
         const choice = completion.choices[0];
 
