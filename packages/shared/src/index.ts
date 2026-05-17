@@ -448,8 +448,11 @@ export {
 export {
     createAiMetrics,
     withAiMetrics,
+    normalizeModelTag,
     type AiMetrics,
     type AiMetricsRedis,
+    type AiMetricsStage,
+    type CreateAiMetricsOptions,
     type FailedBeforeLogClass,
 } from './aiMetrics';
 
