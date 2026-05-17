@@ -247,6 +247,47 @@ Backend infrastructure is fully built and running in production (see Completed W
 
 ---
 
+## Phase 7: Posts-first Surface (Post Reply pre-emptive config)
+
+**Impact**: High | **Effort**: Medium | **Backend readiness**: Partial (Instagram `getMedia` exists, Facebook list missing)
+
+**Problem:** Today the only entry point to configure a Post Reply (trigger keyword + reply) is a button on a comment card. Jawab24 only learns a Facebook/Instagram post exists when its first comment arrives (`postsService.findOrCreateFromWebhook`). So the very first commenter on an engagement post — the customer the merchant *designed the campaign for* — always misses Post Reply and gets an AI fallback instead. Confirmed in production 2026-05-17: Najem Al Deen commented "تفاصيل" exactly matching the merchant's intended keyword, but the post row was created at `20:43:38.784` (same instant as his comment) and the merchant configured the trigger 7 minutes later. Industry pattern (ManyChat, Chatfuel) is posts-first: merchants browse their pages' recent posts and configure automations *before* publishing or before any comment arrives.
+
+**Approach:** New top-level **Posts** surface in the sidebar. On open, backend syncs recent posts from FB/IG Graph API per connected page (15-min Redis cache, on-demand only — no cron). Reuses existing `usePageFilter` hook for multi-page workspaces and existing `PostTriggerModal` for configuration. Comment-level button stays as discovery shortcut. After save, modal shows forward-only notice: *"Applies to new comments. N already-received comments won't get this reply."*
+
+### 7.1 Backend: Graph API list + sync service
+- `facebookService.listPagePosts(token, limit=25)` — `GET /me/posts?fields=id,message,created_time,permalink_url,full_picture` (page-scoped token)
+- `instagramService.getMedia()` already exists
+- `postsService.syncRecentPostsForPage(pageId)` — upserts via existing `findOrCreateFromWebhook` shape, 15-min Redis cache key `posts:sync:{pageId}`
+- Drizzle migration adds `thumbnailUrl`, `permalinkUrl`, `lastSyncedAt` to `posts` and `instagramMedia` tables
+
+### 7.2 Backend: list endpoint sync hook
+- `GET /posts` and `GET /pages/:pageId/posts` accept `?sync=1` query — awaits `syncRecentPostsForPage` before DB read
+- No new endpoints; no route changes
+
+### 7.3 Frontend: Posts page + nav entry
+- New `/posts` route with `DashboardLayout`, horizontal scrollable page chips (reuses `usePageFilter`), grid of `PostCard` components
+- `PostCard` shows thumbnail + text preview + page badge + Post Reply status pill, tap opens `PostTriggerModal`
+- New `posts` i18n namespace (full 4-step registration per AI_INSTRUCTIONS.md §5)
+- Sidebar nav entry added between Pages and Integrations
+
+### 7.4 Forward-only notice + comment-level shortcut
+- `PATCH /posts/:id/trigger` response includes `commentsWithoutReplyCount`
+- `PostTriggerModal` shows ICU-pluralized notice after save
+- Comment-card Post Reply button kept as discovery shortcut (opens same modal)
+
+### 7.5 Out of scope (deliberately deferred)
+- Retroactive "send to N existing comments" action — fast-follow after v1 proves out
+- Workspace/page-level default Post Reply ("apply to every new post")
+- Background cron sync (on-demand + Redis is sufficient for v1)
+- Posts page analytics, bulk operations
+
+**Full implementation plan:** `.planning/POSTS_SURFACE_PLAN.md` — file-by-file breakdown including line-level references and end-to-end verification steps.
+
+**Tracking issue:** [#165](https://github.com/aliahdab2/jawab24/issues/165)
+
+---
+
 ## Competitive Analysis Summary
 
 ### Supported Platforms

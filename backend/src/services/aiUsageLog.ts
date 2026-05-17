@@ -58,11 +58,16 @@ export async function logAiUsage(opts: LogAiUsageOptions): Promise<void> {
         });
         recordAiLogged(opts.pipeline, opts.model);
     } catch (err) {
-        Sentry.addBreadcrumb({
-            category: 'ai_usage_log',
+        // Previously this was a silent breadcrumb — surfaced nothing in Sentry
+        // unless an unrelated exception was captured later in the same scope.
+        // During Phase 6.5 P1 diagnostics we discovered `ai_usage_log.dropped`
+        // counted thousands of failures with zero visibility into the cause
+        // (most likely prod schema drift vs. an in-flight migration). Capture
+        // the actual exception so the root cause is queryable in Sentry.
+        Sentry.captureException(err, {
             level: 'warning',
-            message: 'ai_usage_log insert failed',
-            data: { pipeline: opts.pipeline, model: opts.model, error: err instanceof Error ? err.message : String(err) },
+            tags: { source: 'ai_usage_log' },
+            extra: { pipeline: opts.pipeline, model: opts.model },
         });
         try {
             await redis.incr('metrics:pipeline:ai_usage_log.dropped');

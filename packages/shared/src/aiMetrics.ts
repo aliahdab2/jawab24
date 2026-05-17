@@ -27,6 +27,8 @@ export type FailedBeforeLogClass =
     | 'MissingUserId'
     | 'Other';
 
+export type AiMetricsStage = 'attempts' | 'returns' | 'logged' | 'failed_before_log';
+
 /**
  * Minimal Redis surface used by the counter — only `incr`. Lets callers pass
  * any client (ioredis, a test fake, a no-op) without dragging the full type.
@@ -44,6 +46,39 @@ export interface AiMetrics {
         model: string,
         errorClass: FailedBeforeLogClass,
     ): void;
+}
+
+/**
+ * Optional diagnostic hooks for `createAiMetrics`. Both backend and ai-worker
+ * pass an `onMissingPipeline` callback so the host can surface the offending
+ * call site (e.g. via Sentry) without coupling this shared module to any
+ * specific observability SDK.
+ */
+export interface CreateAiMetricsOptions {
+    /**
+     * Fires the first time an emit lands with `pipeline === undefined`.
+     * Used to identify call sites that should be tagged. Implementations
+     * should rate-limit themselves — this is invoked per emit, but for
+     * diagnostic purposes one capture per (stage, model) per process is
+     * usually enough.
+     */
+    onMissingPipeline?: (stage: AiMetricsStage, model: string) => void;
+}
+
+/**
+ * Strip a dated model snapshot suffix (e.g. `-2025-04-14`) so the counter
+ * key shape uses the rolling alias regardless of which side of an OpenAI
+ * call resolved the model name.
+ *
+ * Same logical call must produce the same key — `attempts` and `logged`
+ * are emitted from different sites (the SDK call site uses the alias passed
+ * in, but the response's `completion.model` returns the dated snapshot).
+ * Normalizing at emit time makes the invariant structural.
+ *
+ * Models without a dated suffix pass through unchanged.
+ */
+export function normalizeModelTag(model: string): string {
+    return model.replace(/-\d{4}-\d{2}-\d{2}$/, '');
 }
 
 /**
@@ -82,7 +117,10 @@ export async function withAiMetrics<T>(
     return result;
 }
 
-export function createAiMetrics(redis: AiMetricsRedis): AiMetrics {
+export function createAiMetrics(
+    redis: AiMetricsRedis,
+    options: CreateAiMetricsOptions = {},
+): AiMetrics {
     function emit(key: string): void {
         try {
             const result = redis.incr(key);
@@ -95,18 +133,44 @@ export function createAiMetrics(redis: AiMetricsRedis): AiMetrics {
         }
     }
 
+    function notifyMissingPipeline(stage: AiMetricsStage, model: string): void {
+        const cb = options.onMissingPipeline;
+        if (!cb) return;
+        try {
+            cb(stage, model);
+        } catch {
+            // Diagnostic hook must never block emit.
+        }
+    }
+
+    function tagPipeline(pipeline: string | undefined, stage: AiMetricsStage, model: string): string {
+        if (pipeline === undefined) {
+            notifyMissingPipeline(stage, model);
+            return 'unknown';
+        }
+        return pipeline;
+    }
+
     return {
         recordAiAttempt(pipeline, model) {
-            emit(`${PREFIX}:attempts:${pipeline ?? 'unknown'}:${model}`);
+            const m = normalizeModelTag(model);
+            const p = tagPipeline(pipeline, 'attempts', m);
+            emit(`${PREFIX}:attempts:${p}:${m}`);
         },
         recordAiReturn(pipeline, model) {
-            emit(`${PREFIX}:returns:${pipeline ?? 'unknown'}:${model}`);
+            const m = normalizeModelTag(model);
+            const p = tagPipeline(pipeline, 'returns', m);
+            emit(`${PREFIX}:returns:${p}:${m}`);
         },
         recordAiLogged(pipeline, model) {
-            emit(`${PREFIX}:logged:${pipeline ?? 'unknown'}:${model}`);
+            const m = normalizeModelTag(model);
+            const p = tagPipeline(pipeline, 'logged', m);
+            emit(`${PREFIX}:logged:${p}:${m}`);
         },
         recordAiFailedBeforeLog(pipeline, model, errorClass) {
-            emit(`${PREFIX}:failed_before_log:${pipeline ?? 'unknown'}:${model}:${errorClass}`);
+            const m = normalizeModelTag(model);
+            const p = tagPipeline(pipeline, 'failed_before_log', m);
+            emit(`${PREFIX}:failed_before_log:${p}:${m}:${errorClass}`);
         },
     };
 }
