@@ -176,9 +176,11 @@ Key shape: `metrics:ai:{stage}:{pipeline}:{model}[:{error_class}]`
 **One canonical emit site per logical event.** When an instrumented call crosses the backend ↔ ai-worker boundary, *only the ai-worker side* emits `attempts` / `returns`. The backend's axios hop is internal HTTP, not an OpenAI request, so emitting from both sites would silently double-count attempts (only visible at production scale, never in unit tests). The backend's role on the hop is limited to `failed_before_log` with `AiWorkerUnreachable` when the hop itself fails.
 
 Gap analysis (read with `scripts/phase6_5_breakdown.ts`):
-- `attempts − returns` → SDK silent retries (direct-call pipelines) **or** OpenAI errors (worker pipelines)
-- `returns − logged` → backend log misses (missing userId, zero-token guards, swallowed errors); also goes *negative* when internal cache hits log without an OpenAI call — that's the cache-hit volume signal
-- `attempts == 0 && logged > 0` → all traffic served from internal cache (exact / semantic)
+- `attempts − returns` → SDK silent retries (direct-call pipelines) **or** OpenAI errors that throw before completion resolves (timeouts, 5xx)
+- `returns − logged` → backend log misses **OR** response-received-but-rejected events. `recordAiReturn` fires the instant `chat.completions.create` resolves (the call was billed); refusal / empty-reply / hedging guards run *after* and throw before `logAiUsage` is reached. So a refusal looks like `attempts=1, returns=1, failed_before_log:AiRefusalError=1, logged=0` — that's correct, and the `R−L` gap measures "response received, content rejected" plus traditional log misses (missing userId, ZeroTokens guards, swallowed errors)
+- `returns − logged < 0` (logged > returns) → internal cache hits. `logAiUsage(cached:true)` fires `recordAiLogged` without an OpenAI call; the magnitude of the negative gap *is* the cache-hit volume for that pipeline
+- `attempts == 0 && logged > 0` → all traffic in window served from internal cache (exact-cache Layer-1 hits return before Layer-2 / embedding is reached, so `embedding_cache` can also legitimately stay at 0 even with comment_reply traffic)
+- `failed_before_log:*:AiWorkerUnreachable > 0` → backend → ai-worker hop failed (axios error, circuit-open). This is a separate signal from OpenAI-side errors — the hop never reached the OpenAI call site at all
 
 `error_class` enum: `AiEmptyReplyError`, `AiRefusalError`, `AiTimeoutError`, `OpenAIApiError`, `AiWorkerUnreachable`, `ZeroTokens`, `MissingUserId`, `Other`.
 

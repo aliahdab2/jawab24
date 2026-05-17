@@ -24,7 +24,7 @@ import { config } from '../config';
 import { captureError } from '../utils/sentryHelpers';
 import { aiService } from './ai';
 import { logAiUsage } from './aiUsageLog';
-import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 import { executeToolCall } from './ecommerceActions';
 import { getStoreById } from './ecommerce';
 import { buildProductCardsFromToolResults } from './reply/productCardBuilder';
@@ -135,8 +135,10 @@ export async function generateReplyWithTools(
 
     const toolLoopModel = config.ai.model || DEFAULT_AI_MODEL;
     try {
-        // Step 1: Call AI worker with tools enabled
-        recordAiAttempt('ecommerce_tools', toolLoopModel);
+        // Step 1: Call AI worker with tools enabled.
+        // No recordAiAttempt/recordAiReturn at this hop — ai-worker
+        // (ecommerceToolHandler.ts) is the canonical emit site. Hop-level
+        // failure is tracked via recordAiFailedBeforeLog in the catch below.
         const toolResponse = await axios.post<AiWorkerToolResponse>(
             `${config.ai.serviceUrl}/generate-with-tools`,
             {
@@ -153,7 +155,6 @@ export async function generateReplyWithTools(
                 headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
             },
         );
-        recordAiReturn('ecommerce_tools', toolLoopModel);
 
         const data = toolResponse.data;
         logToolRoundUsage(request, data);
@@ -203,8 +204,8 @@ export async function generateReplyWithTools(
             );
             allToolResults.push(...lastToolResults);
 
-            // Send results back to AI worker
-            recordAiAttempt('ecommerce_tools', toolLoopModel);
+            // Send results back to AI worker — same protocol: ai-worker
+            // emits attempts/returns, backend tracks hop failures only.
             const finalResponse = await axios.post<AiWorkerToolResponse>(
                 `${config.ai.serviceUrl}/generate-with-tool-results`,
                 {
@@ -221,7 +222,6 @@ export async function generateReplyWithTools(
                     headers: request.context?.pageId ? { 'X-Workspace-Id': request.context.pageId } : undefined,
                 },
             );
-            recordAiReturn('ecommerce_tools', toolLoopModel);
 
             const roundData = finalResponse.data;
             logToolRoundUsage(request, roundData);
@@ -272,6 +272,10 @@ export async function generateReplyWithTools(
         if (error instanceof AiToolLoopExhaustedError) {
             throw error;
         }
+        // Hop-level failure (axios error, tool execution failure). Tag with
+        // the same error_class as other hop failures so the breakdown script
+        // can attribute the silent fallback to the right source.
+        recordAiFailedBeforeLog('ecommerce_tools', toolLoopModel, 'AiWorkerUnreachable');
         captureError(error, 'E-commerce tool loop error', {
             tags: { service: 'ecommerce-tool-loop', storeId },
         });

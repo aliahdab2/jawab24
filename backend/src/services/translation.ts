@@ -3,7 +3,7 @@ import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { config } from '../config';
 import { tracedExternalCall } from '../utils/tracing';
 import { logAiUsage } from './aiUsageLog';
-import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
+import { recordAiFailedBeforeLog } from '../lib/aiMetrics';
 
 export interface TranslateRequest {
   text: string;
@@ -37,7 +37,10 @@ export async function translateText(request: TranslateRequest): Promise<Translat
   const { text, sourceLanguage, targetLanguage, userId, pageId } = request;
 
   try {
-    recordAiAttempt('translation', DEFAULT_AI_MODEL);
+    // No recordAiAttempt/recordAiReturn here — the ai-worker emits them at the
+    // OpenAI call site (ai-worker/src/services/translation.ts). Emitting at the
+    // axios hop would double-count attempts. The hop's *failure* mode is
+    // tracked in the catch below.
     const response = await tracedExternalCall('translation', 'translate', () =>
       axios.post<TranslateResponse>(
         `${config.ai.serviceUrl}/translate`,
@@ -51,7 +54,6 @@ export async function translateText(request: TranslateRequest): Promise<Translat
       ),
     );
     const data = response.data;
-    recordAiReturn('translation', data.model || DEFAULT_AI_MODEL);
 
     if (userId) {
       logAiUsage({
@@ -70,6 +72,7 @@ export async function translateText(request: TranslateRequest): Promise<Translat
 
     return response.data;
   } catch (error) {
+    recordAiFailedBeforeLog('translation', DEFAULT_AI_MODEL, 'AiWorkerUnreachable');
     if (axios.isAxiosError(error)) {
       throw new Error(`Translation failed: ${error.response?.data?.error || error.message}`);
     }
@@ -89,7 +92,8 @@ export async function generateNudgeVariations(
   ctx?: { userId?: string; pageId?: string },
 ): Promise<string[]> {
   try {
-    recordAiAttempt('translation', DEFAULT_AI_MODEL);
+    // No recordAiAttempt/recordAiReturn here — same reason as translateText:
+    // ai-worker is the canonical emit site.
     const response = await tracedExternalCall('translation', 'generateVariations', () =>
       axios.post<{
         variations: string[];
@@ -105,7 +109,6 @@ export async function generateNudgeVariations(
       ),
     );
     const data = response.data;
-    recordAiReturn('translation', data.model || DEFAULT_AI_MODEL);
 
     if (ctx?.userId) {
       logAiUsage({
@@ -124,6 +127,7 @@ export async function generateNudgeVariations(
 
     return response.data.variations;
   } catch (error) {
+    recordAiFailedBeforeLog('translation', DEFAULT_AI_MODEL, 'AiWorkerUnreachable');
     if (axios.isAxiosError(error)) {
       throw new Error(`Variation generation failed: ${error.response?.data?.error || error.message}`);
     }

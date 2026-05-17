@@ -15,9 +15,22 @@
  *   metrics:ai:logged:{pipeline}:{model}
  *   metrics:ai:failed_before_log:{pipeline}:{model}:{error_class}
  *
- * Gap analysis:
- *   attempts - returns  → ai-worker / SDK / network failures (incl. SDK silent retries)
- *   returns  - logged   → backend log misses (guards, missing userId, swallowed errors)
+ * Gap analysis (full interpretation in AI_INSTRUCTIONS.md §13c):
+ *   attempts - returns  → SDK silent retries (direct-call paths) OR OpenAI errors
+ *                         that throw before `chat.completions.create` resolves
+ *   returns  - logged   → response-received-but-rejected events (refusal / empty
+ *                         reply / hedging guards trip *after* recordAiReturn but
+ *                         *before* logAiUsage) PLUS traditional log misses
+ *                         (missing userId, ZeroTokens guards, swallowed errors)
+ *   returns  - logged   → goes NEGATIVE when internal cache hits log without
+ *                         issuing an OpenAI call; the magnitude *is* the cache-
+ *                         hit volume for that pipeline
+ *   attempts == 0 && logged > 0 → 100% internal-cache served in this window
+ *
+ * Hop failures (backend → ai-worker axios) surface as a dedicated error_class
+ * `AiWorkerUnreachable` under failed_before_log — they do NOT inflate the
+ * attempts-returns gap, because attempts is emitted on the ai-worker side only
+ * (the hop never reached the OpenAI call site).
  *
  * Direct-call sites (lead extractor, kb embedding, kb file extractor, transcription)
  * emit attempts AND returns inside backend — for those the attempts→returns delta
