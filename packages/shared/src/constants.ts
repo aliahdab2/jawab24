@@ -30,6 +30,8 @@ export const ALLOWED_AI_MODELS = [
     'gpt-4o-mini',
     'gpt-5-mini',
     'gpt-5-nano',
+    'gpt-5.4-mini',
+    'gpt-5.4-nano',
 ] as const;
 
 export type AllowedAiModel = (typeof ALLOWED_AI_MODELS)[number];
