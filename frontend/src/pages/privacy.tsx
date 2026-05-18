@@ -9,18 +9,23 @@ export default function PrivacyPolicy() {
     {
       title: t('collectTitle'),
       text: t('collectText'),
-      items: [t('collectItem1'), t('collectItem2'), t('collectItem3'), t('collectItem4')]
+      items: [t('collectItem1'), t('collectItem2'), t('collectItem3'), t('collectItem4'), t('collectItem5'), t('collectItem6')]
     },
     {
       title: t('useTitle'),
       text: t('useText'),
-      items: [t('useItem1'), t('useItem2'), t('useItem3'), t('useItem4')]
+      items: [t('useItem1'), t('useItem2'), t('useItem3'), t('useItem4'), t('useItem5'), t('useItem6')]
     },
     { title: t('geoTitle'), text: t('geoText') },
     {
       title: t('shareTitle'),
       text: t('shareText'),
-      items: [t('shareItem1'), t('shareItem2'), t('shareItem3')]
+      items: [t('shareItem1'), t('shareItem2'), t('shareItem3'), t('shareItem4'), t('shareItem5'), t('shareItem6'), t('shareItem7')]
+    },
+    {
+      title: t('ecommerceTitle'),
+      text: t('ecommerceText'),
+      items: [t('ecommerceItem1'), t('ecommerceItem2'), t('ecommerceItem3'), t('ecommerceItem4'), t('ecommerceItem5'), t('ecommerceItem6')]
     },
     { title: t('securityTitle'), text: t('securityText') },
     { title: t('retentionTitle'), text: t('retentionText') },
@@ -32,7 +37,7 @@ export default function PrivacyPolicy() {
     {
       title: t('deletionTitle'),
       text: t('deletionText'),
-      items: [t('deletionItem1'), t('deletionItem2'), t('deletionItem3')]
+      items: [t('deletionItem1'), t('deletionItem2'), t('deletionItem3'), t('deletionItem4')]
     },
     { title: t('changesTitle'), text: t('changesText') },
     {
