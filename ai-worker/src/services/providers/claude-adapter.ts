@@ -36,15 +36,19 @@ export class ClaudeAdapter implements LLMProvider {
         try {
             const response = await Sentry.startSpan(
                 { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
-                () => this.client!.messages.create({
-                    model: this.modelId,
-                    system: systemMessage,
-                    messages: conversationMessages,
-                    max_tokens: params.maxTokens,
-                    temperature: params.temperature,
-                    ...(params.topP !== undefined && { top_p: params.topP }),
-                    // Note: Anthropic API does not support frequency_penalty / presence_penalty
-                }, { signal: controller.signal }),
+                () => {
+                    // Anthropic rejects sending both temperature and top_p — pick one.
+                    // Original behavior always sent temperature; preserve that as the
+                    // primary control and drop top_p when both are set.
+                    return this.client!.messages.create({
+                        model: this.modelId,
+                        system: systemMessage,
+                        messages: conversationMessages,
+                        max_tokens: params.maxTokens,
+                        temperature: params.temperature,
+                        // Note: Anthropic API does not support frequency_penalty / presence_penalty
+                    }, { signal: controller.signal });
+                },
             );
 
             let content = '';

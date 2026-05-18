@@ -34,23 +34,41 @@ export class OpenAIAdapter implements LLMProvider {
             const completion = await withAiMetrics(params.pipeline, this.modelId, () =>
                 Sentry.startSpan(
                     { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
-                    () => client.chat.completions.create({
-                        model: this.modelId,
-                        messages: params.messages as OpenAI.ChatCompletionMessageParam[],
-                        max_tokens: params.maxTokens,
-                        temperature: params.temperature,
-                        ...(params.topP !== undefined && { top_p: params.topP }),
-                        ...(params.frequencyPenalty !== undefined && { frequency_penalty: params.frequencyPenalty }),
-                        ...(params.presencePenalty !== undefined && { presence_penalty: params.presencePenalty }),
-                        response_format: {
-                            type: 'json_schema',
-                            json_schema: {
-                                name: 'ai_reply',
-                                strict: true,
-                                schema: AI_REPLY_JSON_SCHEMA,
+                    () => {
+                        const isReasoningModel = /^(gpt-5|o1|o3|o4)/i.test(this.modelId);
+                        const base: OpenAI.ChatCompletionCreateParamsNonStreaming = {
+                            model: this.modelId,
+                            messages: params.messages as OpenAI.ChatCompletionMessageParam[],
+                            response_format: {
+                                type: 'json_schema',
+                                json_schema: {
+                                    name: 'ai_reply',
+                                    strict: true,
+                                    schema: AI_REPLY_JSON_SCHEMA,
+                                },
                             },
-                        },
-                    }, { signal: controller.signal }),
+                        };
+                        const body: OpenAI.ChatCompletionCreateParamsNonStreaming = isReasoningModel
+                            ? {
+                                ...base,
+                                max_completion_tokens: params.maxTokens,
+                                // gpt-5 / o-series default to 'medium' reasoning_effort,
+                                // which consumes most of max_completion_tokens on hidden
+                                // reasoning and starves the JSON output. 'minimal' makes
+                                // gpt-5-mini behave like a standard chat model.
+                                reasoning_effort: 'minimal',
+                                // Note: gpt-5 / o-series reject custom temperature/top_p/penalties.
+                            }
+                            : {
+                                ...base,
+                                max_tokens: params.maxTokens,
+                                temperature: params.temperature,
+                                ...(params.topP !== undefined && { top_p: params.topP }),
+                                ...(params.frequencyPenalty !== undefined && { frequency_penalty: params.frequencyPenalty }),
+                                ...(params.presencePenalty !== undefined && { presence_penalty: params.presencePenalty }),
+                            };
+                        return client.chat.completions.create(body, { signal: controller.signal });
+                    },
                 ),
             );
 
