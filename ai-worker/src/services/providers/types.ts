@@ -16,6 +16,9 @@ export interface LLMChatParams {
     topP?: number;
     frequencyPenalty?: number;
     presencePenalty?: number;
+    /** Phase 6.5 diagnostic tag — propagated to `withAiMetrics` so non-default-model
+     *  traffic routes to the right pipeline counter instead of `unknown`. */
+    pipeline?: string;
 }
 
 export interface LLMChatResult {
