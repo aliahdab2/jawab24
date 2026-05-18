@@ -112,8 +112,9 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
                 if (!visionCheck.allowed) {
                     return reply.status(visionCheck.status).send(visionCheck.response);
                 }
-                // userId is guaranteed by the auth hook + the quota check above.
-                const userId = (request as AuthenticatedRequest).user!.userId;
+                // userId is validated inside checkVisionAccessAndQuota and carried
+                // forward in the result — narrows safely without a non-null assertion.
+                const { userId } = visionCheck;
                 // PDFs need per-page rasterization; images can go straight to Vision.
                 const result = mime === 'application/pdf'
                     ? await extractFromPdfViaVision(buf, { userId })
@@ -171,7 +172,7 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
 // --- Vision access + daily quota helpers ---
 
 type VisionCheckResult =
-    | { allowed: true }
+    | { allowed: true; userId: string }
     | { allowed: false; status: 403 | 429 | 503; response: Record<string, unknown> };
 
 /**
@@ -225,7 +226,7 @@ async function checkVisionAccessAndQuota(request: FastifyRequest): Promise<Visio
         };
     }
 
-    return { allowed: true };
+    return { allowed: true, userId };
 }
 
 /**

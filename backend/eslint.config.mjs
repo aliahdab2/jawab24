@@ -51,4 +51,12 @@ export default tseslint.config(
         ],
         rules: { 'no-restricted-imports': 'off' },
     },
+    {
+        // Operator CLI scripts: console.log is the intended I/O for these
+        // tools (they're invoked manually, not served as part of the app).
+        // Forcing them through Fastify's logger would make them harder to
+        // read and pipe.
+        files: ['src/scripts/**/*.ts'],
+        rules: { 'no-console': 'off' },
+    },
 );
