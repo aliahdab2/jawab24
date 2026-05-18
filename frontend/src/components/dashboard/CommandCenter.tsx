@@ -1,6 +1,6 @@
 import clsx from 'clsx';
-import { Sparkles, CheckCircle, Gauge, Timer, Info } from 'lucide-react';
-import { Card } from '@/components/ui';
+import { Sparkles, CheckCircle, Gauge, Timer } from 'lucide-react';
+import { Card, InfoPopover } from '@/components/ui';
 import { Badge } from '@/components/ui/Badge';
 import { useTranslations, useLocale } from 'next-intl';
 import { formatDuration } from '@/lib/formatDuration';
@@ -218,19 +218,11 @@ export function CommandCenter({
                   <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground dark:text-surface-700 mt-1.5 inline-flex items-center gap-1">
                       {metric.label}
                       {metric.tooltip && (
-                        <span className="relative group inline-flex">
-                          <Info className="w-3 h-3 text-icon-muted cursor-help" aria-label={metric.tooltip} />
-                          <span className={clsx(
-                            'absolute bottom-full mb-1.5 px-2.5 py-1.5 text-[11px] font-normal normal-case tracking-normal text-white bg-surface-800 dark:bg-surface-200 dark:text-surface-900 rounded-md shadow-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none w-48 text-start z-10 leading-snug',
-                            // Anchor to the inward side of each mobile column so the tooltip never overflows the viewport.
-                            // On md+ (4-col grid) we revert to centered.
-                            i % 2 === 0
-                              ? 'start-0 md:start-1/2 md:-translate-x-1/2'
-                              : 'end-0 md:start-1/2 md:end-auto md:-translate-x-1/2',
-                          )}>
+                        <InfoPopover label={metric.label} panelWidth="sm">
+                          <span className="block normal-case tracking-normal font-normal leading-snug">
                             {metric.tooltip}
                           </span>
-                        </span>
+                        </InfoPopover>
                       )}
                   </p>
                   {metric.subtext && (

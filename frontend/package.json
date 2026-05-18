@@ -48,6 +48,7 @@
     "@capacitor/status-bar": "^8.0.0",
     "@capgo/capacitor-audio-recorder": "^8.0.12",
     "@jawab24/shared": "*",
+    "@radix-ui/react-popover": "^1.1.15",
     "@sentry/nextjs": "^10.48.0",
     "@stripe/react-stripe-js": "^3.10.0",
     "@stripe/stripe-js": "^2.4.0",

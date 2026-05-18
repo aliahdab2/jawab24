@@ -94,6 +94,22 @@ describe('nginx.conf - www redirect (CSP guard)', () => {
     expect(connectSrc).not.toBeNull();
     expect((connectSrc as RegExpMatchArray)[1]).toContain("'self'");
   });
+
+  /**
+   * GA4 beacons go to regional collection endpoints (region1.google-analytics.com,
+   * etc.), NOT to www.google-analytics.com. Without a wildcard, the browser
+   * blocks the `/g/collect` request and we lose analytics data silently.
+   * Test guards against a future "tighten the wildcard" pass.
+   */
+  it('CSP connect-src allows GA4 regional collection endpoints', () => {
+    const cspMatch = nginxConf.match(/Content-Security-Policy\s+"([^"]+)"/);
+    const csp = (cspMatch as RegExpMatchArray)[1];
+    const connectSrc = (csp.match(/connect-src\s+([^;]+)/) as RegExpMatchArray)[1];
+
+    expect(connectSrc).toContain('https://*.google-analytics.com');
+    expect(connectSrc).toContain('https://*.analytics.google.com');
+    expect(connectSrc).toContain('https://*.googletagmanager.com');
+  });
 });
 
 describe('deploy scripts - nginx upstream keepalive', () => {

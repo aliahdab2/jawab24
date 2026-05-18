@@ -141,7 +141,6 @@ export interface PageReplyBreakdown {
   ai: number;
   template: number;
   postReply: number;
-  manual: number;
 }
 
 export interface Page {
@@ -175,9 +174,7 @@ export interface Page {
   // Computed/joined fields
   commentsCount?: number;
   repliesCount?: number;
-  // Per-method breakdown — sums to repliesCount + manual.
-  // headline `repliesCount` excludes manual (measures automation only);
-  // breakdown surfaces every method for the tooltip.
+  // Per-method auto-reply breakdown — sums to `repliesCount`.
   breakdown?: PageReplyBreakdown;
   replyRate?: number;
   lastActivity?: number;

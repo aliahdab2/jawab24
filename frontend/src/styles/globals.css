@@ -39,6 +39,12 @@
     --sai-bottom: env(safe-area-inset-bottom, 28px);
     --sai-left: env(safe-area-inset-left, 0px);
     --sai-right: env(safe-area-inset-right, 0px);
+
+    /* Toast top offset — single source of truth for both the sonner Toaster
+       mobileOffset (set on the React component) and the .is-native override
+       below. Floors to 12px on no-notch viewports, then adds a 16px buffer so
+       toasts never hug the status bar / notch. */
+    --toast-offset-top: calc(max(var(--sai-top), 12px) + 16px);
     
     /* Landscape side padding - uses actual safe area or minimum 44px */
     --sai-side-landscape: 44px;
@@ -1463,8 +1469,8 @@
    Sonner uses --offset-top (desktop >600px) and --mobile-offset-top (mobile ≤600px).
    We override both so toasts always clear the status bar on native platforms. */
 .is-native [data-sonner-toaster][data-y-position="top"] {
-  --offset-top: var(--sai-top) !important;
-  --mobile-offset-top: var(--sai-top) !important;
+  --offset-top: var(--toast-offset-top) !important;
+  --mobile-offset-top: var(--toast-offset-top) !important;
 }
 
 /* Native apps: use injected variable (Android WebView doesn't report env() correctly) */
