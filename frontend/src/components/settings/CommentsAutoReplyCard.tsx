@@ -70,7 +70,7 @@ export function CommentsAutoReplyCard({ settings, setSettings, fieldErrors }: Se
               setDiagramKey(prev => prev + 1);
             }}
             options={[
-              { value: 'dual', label: `${t('commentReplyMode.dual')} (${t('recommended')})` },
+              { value: 'dual', label: t('commentReplyMode.dual'), badge: t('recommended') },
               { value: 'public', label: t('commentReplyMode.publicOnly') },
               { value: 'private', label: t('commentReplyMode.privateOnly') },
             ]}

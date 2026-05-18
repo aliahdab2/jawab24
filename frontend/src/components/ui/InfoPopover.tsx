@@ -1,7 +1,9 @@
 import { Info } from 'lucide-react';
 import * as Popover from '@radix-ui/react-popover';
 import clsx from 'clsx';
+import { useLocale } from 'next-intl';
 import type { ReactNode } from 'react';
+import { getLocaleDirection } from '@/utils/locale';
 
 interface InfoPopoverProps {
   /** Accessible label for the trigger and panel. */
@@ -25,6 +27,8 @@ const PANEL_WIDTHS: Record<'sm' | 'md', string> = {
  * panel never gets clipped by overflow ancestors or pushed off-screen.
  */
 export function InfoPopover({ label, children, panelWidth = 'md', triggerClassName }: InfoPopoverProps) {
+  const locale = useLocale();
+  const dir = getLocaleDirection(locale);
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
@@ -49,6 +53,7 @@ export function InfoPopover({ label, children, panelWidth = 'md', triggerClassNa
           align="center"
           sideOffset={6}
           collisionPadding={8}
+          dir={dir}
           aria-label={label}
           className={clsx(
             'px-3 py-2.5 text-xs bg-surface-800 text-white dark:bg-surface-100 dark:text-surface-900 rounded-lg shadow-lg text-start z-50',

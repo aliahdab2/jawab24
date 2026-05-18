@@ -9,11 +9,11 @@ import { InfoPopover } from '@/components/ui';
  */
 export function RepliesBreakdownTooltip({ page }: { page: Page }) {
   const t = useTranslations('pages');
-  const b = page.breakdown ?? { ai: 0, template: 0, postReply: 0 };
+  const b = page.breakdown;
   const rows: Array<{ label: string; value: number }> = [
-    { label: t('breakdownAi'), value: b.ai },
-    { label: t('breakdownGreetingAway'), value: b.template },
-    { label: t('breakdownPostReply'), value: b.postReply },
+    { label: t('breakdownAi'), value: b?.ai ?? 0 },
+    { label: t('breakdownGreetingAway'), value: b?.template ?? 0 },
+    { label: t('breakdownPostReply'), value: b?.postReply ?? 0 },
   ];
   if (!rows.some((row) => row.value > 0)) return null;
 

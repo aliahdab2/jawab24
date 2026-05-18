@@ -73,6 +73,17 @@ describe('RepliesBreakdownTooltip', () => {
     expect(breakdown.ai + breakdown.template + breakdown.postReply).toBe(repliesCount);
   });
 
+  it('survives a partial breakdown (e.g. stale Redis cache missing fields)', () => {
+    render(
+      <RepliesBreakdownTooltip
+        page={{ ...basePage, breakdown: { ai: 5 } as unknown as Page['breakdown'] }}
+      />,
+    );
+    openPopover();
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(screen.getAllByText('0')).toHaveLength(2);
+  });
+
   it('renders even if only one of the three counters is non-zero', () => {
     render(
       <RepliesBreakdownTooltip

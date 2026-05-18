@@ -5,6 +5,7 @@ import clsx from 'clsx';
 interface SelectOption {
   value: string;
   label: string;
+  badge?: string;
 }
 
 interface SelectProps {
@@ -19,6 +20,19 @@ interface SelectProps {
   disabled?: boolean;
   /** Compact mode for inline filter bars — smaller padding, pill shape, muted background */
   compact?: boolean;
+}
+
+function LabelWithBadge({ label, badge }: { label: string; badge?: string }) {
+  return (
+    <span className="flex-1 flex items-center gap-2 min-w-0">
+      <span className="truncate">{label}</span>
+      {badge && (
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full status-brand flex-shrink-0">
+          {badge}
+        </span>
+      )}
+    </span>
+  );
 }
 
 /**
@@ -96,9 +110,10 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
           className
         )}
       >
-        <span className="truncate flex-1">
-          {selectedOption ? selectedOption.label : placeholder}
-        </span>
+        <LabelWithBadge
+          label={selectedOption ? selectedOption.label : (placeholder ?? '')}
+          badge={selectedOption?.badge}
+        />
         <ChevronDown 
           className={clsx(
             "w-4 h-4 text-surface-500 transition-transform flex-shrink-0",
@@ -136,7 +151,7 @@ export function Select({ value, onChange, options, placeholder, label, 'aria-lab
                   idx > 0 && "border-t border-theme-border/50"
                 )}
               >
-                <span className="truncate">{option.label}</span>
+                <LabelWithBadge label={option.label} badge={option.badge} />
                 {option.value === value && (
                   <Check className="w-4 h-4 text-brand-600 flex-shrink-0" />
                 )}
