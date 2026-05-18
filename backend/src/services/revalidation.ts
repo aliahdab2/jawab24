@@ -39,7 +39,7 @@ export async function revalidatePublicPages(paths: string[]): Promise<void> {
             );
             return;
         }
-        console.info(`[revalidation] Revalidated: ${paths.join(', ')}`);
+        // Success path is silent — failures already log via console.warn above.
     } catch (err) {
         console.warn(
             `[revalidation] Request failed for paths ${paths.join(', ')}:`,
