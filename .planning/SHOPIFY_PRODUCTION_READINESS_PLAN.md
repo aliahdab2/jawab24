@@ -1,8 +1,10 @@
 # Close Best-Practice Gaps in Shopify Install + Sync Pipeline
 
-> **Status:** Planned 2026-04-25, ready to execute in a new Claude session.
+> **Status:** ✅ **CLOSED 2026-05-19.** All five fixes shipped in commit `b5ff88d2` (A-1.5, A-1.9, B-3.1) + observability wrapper at `backend/src/controllers/shopify.ts:19-36`. Frontend `webhookHealth` UI shipped in `ff2d6324`. 17/17 regression tests pass in `backend/test/regression/shopify-install-bugs.test.ts` (zero `it.todo` remaining). The "open bugs" described below are **historical** — kept for context only.
+>
+> **Originally planned:** 2026-04-25
 > **Origin:** Follow-up to the dogfood session of `docs/testing/SHOPIFY_TEST_PLAN.md` Sections A + B (commits `723872b9` and earlier).
-> **How to resume:** Open a new Claude Code session in this repo and say "execute `.planning/SHOPIFY_PRODUCTION_READINESS_PLAN.md`" — the assistant will read this file as the source of truth.
+> **Historical resume instruction:** Do NOT re-execute this plan — its work is already in production. See `docs/testing/SHOPIFY_TEST_PLAN.md` bug log for the closed status of each item.
 
 ---
 

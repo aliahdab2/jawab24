@@ -1,24 +1,25 @@
 # Shopify Launch Validation Plan
 
-> **Status:** Drafted 2026-04-25, ready to execute.
-> **Purpose:** Validate that the production-readiness fixes (commits since `723872b9` + the open work in this branch) actually work against a real Shopify dev store before submitting to App Review.
-> **Source code state:** Backend code-complete (3197 tests passing). Frontend "Re-register webhooks" CTA + `webhookHealth` badge **not yet implemented** — gates Section 4.3.
+> **Status:** Drafted 2026-04-25. **Code-readiness refreshed 2026-05-19** — all engineering items below are now shipped (see §0). Plan is **ready to execute against a real Shopify dev store**; remaining work is the live dogfood pass + listing assets.
+> **Purpose:** Validate that the production-readiness fixes work against a real Shopify dev store before submitting to App Review.
 
 ---
 
-## 0. Readiness assessment
+## 0. Readiness assessment (refreshed 2026-05-19)
 
 | Layer | State | Confidence |
 |---|---|---|
-| Code shape (tsc, lint, unit + regression tests) | Complete | High — all green |
-| Install pipeline (Section A in `SHOPIFY_TEST_PLAN.md`) | Untested since fixes landed | Low — re-run required |
-| Incremental update pipeline (Section B) | Untested since fixes landed | Low — re-run required |
-| Failure-recovery code (retry queue, persist-on-throw, re-register endpoint) | **Never run live** in this codebase | None — must exercise |
+| Code shape (tsc, lint, unit + regression tests) | Complete | High — all green; 17/17 regression tests pass |
+| Install pipeline (Section A in `SHOPIFY_TEST_PLAN.md`) | Untested since fixes landed | Low — re-run required (live dogfood pass) |
+| Incremental update pipeline (Section B) | Untested since fixes landed | Low — re-run required (live dogfood pass) |
+| Failure-recovery code (retry queue, persist-on-throw, re-register endpoint) | Shipped (`b5ff88d2`). `webhookRetryQueue.ts` + `webhookRetryWorker.ts` in tree; `registerWebhooksWithPersist` used by Shopify, Salla, Zid install paths | Medium — code shipped, never exercised live |
 | AI reply correctness with store data | Not validated end-to-end | Unknown |
-| Frontend `webhookHealth` badge + Re-register button | Not built | N/A — gated work |
+| Frontend `webhookHealth` badge + Re-register button | ✅ **Shipped** (`ff2d6324`) — see `frontend/src/pages/integrations.tsx:226-250`. Pending/failed banners + Re-register button + i18n + accessibility | High — code shipped, needs live state verification |
 | Shopify mandatory-webhook compliance (GDPR + uninstall) | Existing tests pass; no live verification | Medium |
+| Sentry observability on webhook handlers | ✅ **Shipped**. `wrapWebhook` helper at `backend/src/controllers/shopify.ts:19-36` tags every 5xx with `service: shopify, webhook: <name>` | High |
+| Order webhook coverage (orders/create, orders/updated, orders/fulfilled) | ✅ **Shipped**. See `backend/src/services/shopify.ts:105-112` | High |
 
-**Verdict for App Store submission:** **Not ready** until Sections 3, 4, 5, 6 below pass. Submitting today risks rejection on app reviewer install/uninstall flows.
+**Verdict for App Store submission (2026-05-19):** **Code-ready.** Submission is now gated on (a) live dogfood pass of Sections 3–6 against a real Shopify dev store, (b) privacy policy update covering Salla + Shopify processor disclosures, (c) listing assets + reviewer test-path doc.
 
 ---
 
