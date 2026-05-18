@@ -230,10 +230,11 @@ test.describe('Dashboard Page', () => {
       page.locator('h1').filter({ hasText: t('dashboard.greeting') }).first()
     ).toBeVisible({ timeout: 15000 });
 
-    // Primary tile shows plan usage as "used / limit" when the merchant has
-    // a quota — actionable for upgrade decisions. Falls back to 30-day
-    // activity ("25") only for unlimited plans. MOCK_USAGE = 20 / 100.
-    await expect(page.getByText('20 / 100', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    // Primary tile (MOCK_USAGE = 20 / 100). Since PR #118 the headline shows
+    // only the used count ("20") with the limit as a muted subtext ("of 100")
+    // so Arabic compact numerals don't overflow. Assert both parts separately.
+    await expect(page.getByText('20', { exact: true }).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('of 100')).toBeVisible({ timeout: 15000 });
 
     // Replied Today should show 8 (5 comments + 3 messages)
     await expect(page.getByText('8', { exact: true }).first()).toBeVisible({ timeout: 15000 });

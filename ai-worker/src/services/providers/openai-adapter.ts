@@ -31,9 +31,7 @@ export class OpenAIAdapter implements LLMProvider {
         const timeout = setTimeout(() => controller.abort(), params.timeoutMs);
 
         try {
-            // Pipeline not plumbed to LLMChatParams (non-default-model path is admin/playground only,
-            // low traffic). Counter key falls back to 'unknown' — acceptable noise for this surface.
-            const completion = await withAiMetrics(undefined, this.modelId, () =>
+            const completion = await withAiMetrics(params.pipeline, this.modelId, () =>
                 Sentry.startSpan(
                     { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
                     () => client.chat.completions.create({

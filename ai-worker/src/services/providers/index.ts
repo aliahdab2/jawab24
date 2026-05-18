@@ -83,6 +83,7 @@ export async function generateReplyWithProvider(
             frequencyPenalty: config.openai.frequencyPenalty,
             presencePenalty: config.openai.presencePenalty,
             timeoutMs: config.openai.timeoutMs,
+            pipeline: request.context?.pipeline,
         });
 
         // Parse structured JSON response

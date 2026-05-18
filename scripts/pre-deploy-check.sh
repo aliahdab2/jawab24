@@ -205,7 +205,12 @@ AUDIT_FAILED=false
 # Patched versions exist (7.5.6+) but cannot be applied without breaking the typecheck via
 # pdfjs-dist semver-minor bump in the same lockfile regeneration. Track upstream
 # firebase-admin release that ships protobufjs >=7.5.6 transitively, then drop these.
-IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q"
+# GHSA-58qx-3vcg-4xpx — ws uninitialized memory disclosure (moderate, <=8.20.0). Backend
+# uses ws transitively via openai (server-side streaming completions to the OpenAI API
+# endpoint, not attacker-controlled) and vitest (test-time only, not production). No
+# user-facing WebSocket exposure in our backend. Patched in 8.20.1; drop this once
+# openai's transitive ws pin moves past 8.20.0.
+IGNORED_GHSA="GHSA-3ppc-4f35-3m26|GHSA-gpj5-g38j-94v9|GHSA-vpq2-c234-7xj6|GHSA-q4gf-8mx6-v5v3|GHSA-w5hq-g745-h8pq|GHSA-qx2v-qp2m-jg93|GHSA-v2v4-37r5-5v8g|GHSA-4c35-wcg5-mm9h|GHSA-r27j-894h-3w3p|GHSA-q6x5-8v7m-xcrf|GHSA-2pr8-phx7-x9h3|GHSA-66ff-xgx4-vchm|GHSA-fx83-v9x8-x52w|GHSA-75px-5xx7-5xc7|GHSA-jvwf-75h9-cwgg|GHSA-685m-2w69-288q|GHSA-58qx-3vcg-4xpx"
 
 # Helper: run audit for a workspace, distinguish network errors from real vulnerabilities
 run_audit() {
