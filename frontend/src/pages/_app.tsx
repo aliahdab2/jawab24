@@ -523,7 +523,7 @@ export default function App({ Component, pageProps }: AppPropsWithLayout) {
                 theme="system"
                 dir={isRTLLocale(effectiveLocale) ? 'rtl' : 'ltr'}
                 offset={{ top: '16px' }}
-                mobileOffset={{ top: 'calc(var(--sai-top, 24px) + 16px)' }}
+                mobileOffset={{ top: 'var(--toast-offset-top)' }}
               />
               {showPushDeniedBanner && (
                 <PushDeniedBanner onDismiss={handleDismissPushDeniedBanner} />

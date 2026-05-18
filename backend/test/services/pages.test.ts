@@ -578,5 +578,66 @@ describe('PagesService', () => {
                 300,
             );
         });
+
+        it('aggregates auto-reply breakdown across fb/ig/messages and excludes manual', async () => {
+            mockRedisGet.mockResolvedValue(null);
+
+            // Three stats sources (fb comments / ig comments / messages) each
+            // contribute to the same page. The merge logic should sum them and
+            // produce a breakdown with EXACTLY {ai, template, postReply} — no
+            // manual key — and a repliesCount that equals their sum.
+            const fbRow = { pageId: 'page-1', commentsCount: 100, aiCount: 50, templateCount: 10, postReplyCount: 5, lastActivity: null };
+            const igRow = { pageId: 'page-1', commentsCount: 30, aiCount: 15, templateCount: 3, postReplyCount: 2, lastActivity: null };
+            const msgRow = { pageId: 'page-1', commentsCount: 20, aiCount: 8, templateCount: 4, postReplyCount: 1, lastActivity: null };
+            const statsRowsByCall = [fbRow, igRow, msgRow];
+
+            let callCount = 0;
+            vi.mocked(db.select).mockImplementation((() => {
+                callCount++;
+                if (callCount === 1) {
+                    return {
+                        from: vi.fn().mockReturnValue({
+                            where: vi.fn().mockReturnValue({
+                                orderBy: vi.fn().mockReturnValue({
+                                    limit: vi.fn().mockResolvedValue(mockPages),
+                                }),
+                            }),
+                        }),
+                    } as any;
+                }
+                const row = statsRowsByCall[callCount - 2];
+                return {
+                    from: vi.fn().mockReturnValue({
+                        innerJoin: vi.fn().mockReturnValue({
+                            innerJoin: vi.fn().mockReturnValue({
+                                where: vi.fn().mockReturnValue({
+                                    groupBy: vi.fn().mockResolvedValue(row ? [row] : []),
+                                }),
+                            }),
+                            where: vi.fn().mockReturnValue({
+                                groupBy: vi.fn().mockResolvedValue(row ? [row] : []),
+                            }),
+                        }),
+                    }),
+                } as any;
+            }) as any);
+
+            const result = await pagesService.getPages(workspaceId);
+
+            const expectedAi = fbRow.aiCount + igRow.aiCount + msgRow.aiCount;          // 73
+            const expectedTemplate = fbRow.templateCount + igRow.templateCount + msgRow.templateCount; // 17
+            const expectedPostReply = fbRow.postReplyCount + igRow.postReplyCount + msgRow.postReplyCount; // 8
+            const expectedRepliesCount = expectedAi + expectedTemplate + expectedPostReply; // 98
+
+            expect(result[0].breakdown).toEqual({
+                ai: expectedAi,
+                template: expectedTemplate,
+                postReply: expectedPostReply,
+            });
+            // Contract: rows of the UI tooltip sum to the headline number.
+            expect(result[0].repliesCount).toBe(expectedRepliesCount);
+            // Guard against re-adding manual to the contract by accident.
+            expect(result[0].breakdown).not.toHaveProperty('manual');
+        });
     });
 });

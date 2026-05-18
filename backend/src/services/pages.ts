@@ -238,14 +238,14 @@ export class PagesService {
             .orderBy(desc(pages.createdAt))
             .limit(100);
 
-        type ReplyBreakdown = { ai: number; template: number; postReply: number; manual: number };
+        type ReplyBreakdown = { ai: number; template: number; postReply: number };
         type PageStats = {
             commentsCount: number;
             repliesCount: number;
             breakdown: ReplyBreakdown;
             lastActivity: number | null;
         };
-        const emptyBreakdown: ReplyBreakdown = { ai: 0, template: 0, postReply: 0, manual: 0 };
+        const emptyBreakdown: ReplyBreakdown = { ai: 0, template: 0, postReply: 0 };
         const emptyStats: PageStats & { replyRate: number } = {
             commentsCount: 0, repliesCount: 0, breakdown: emptyBreakdown, replyRate: 0, lastActivity: null,
         };
@@ -255,10 +255,9 @@ export class PagesService {
         // Three parallel queries (FB comments + IG comments + DMs) grouped by page_id
         // Cache stats in Redis to avoid repeated GROUP BY aggregations on every dashboard load
         //
-        // `repliesCount` headline counts auto-replies only (ai + template + post_reply).
-        // Manual replies are tracked separately in `breakdown.manual` for the tooltip
-        // but excluded from the headline — the metric measures platform automation,
-        // not merchant-driven handling.
+        // `repliesCount` and `breakdown` cover auto-replies only
+        // (ai + template + post_reply) — the metric measures platform
+        // automation, not merchant-driven manual handling.
         const cacheKey = `stats:workspace:${workspaceId}:v2`;
         const statsMap = new Map<string, PageStats>();
         const countByMethod = (table: typeof comments | typeof instagramComments | typeof messages, method: string) =>
@@ -278,7 +277,6 @@ export class PagesService {
                         aiCount: countByMethod(comments, 'ai'),
                         templateCount: countByMethod(comments, 'template'),
                         postReplyCount: countByMethod(comments, 'post_reply'),
-                        manualCount: countByMethod(comments, 'manual'),
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${comments.repliedAt}))`,
                     })
                         .from(comments)
@@ -293,7 +291,6 @@ export class PagesService {
                         aiCount: countByMethod(instagramComments, 'ai'),
                         templateCount: countByMethod(instagramComments, 'template'),
                         postReplyCount: countByMethod(instagramComments, 'post_reply'),
-                        manualCount: countByMethod(instagramComments, 'manual'),
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${instagramComments.repliedAt}))`,
                     })
                         .from(instagramComments)
@@ -309,7 +306,6 @@ export class PagesService {
                         aiCount: countByMethod(messages, 'ai'),
                         templateCount: countByMethod(messages, 'template'),
                         postReplyCount: countByMethod(messages, 'post_reply'),
-                        manualCount: countByMethod(messages, 'manual'),
                         lastActivity: sql<number | null>`EXTRACT(EPOCH FROM MAX(${messages.repliedAt}))`,
                     })
                         .from(messages)
@@ -326,7 +322,6 @@ export class PagesService {
                         const ai = Number(row.aiCount);
                         const template = Number(row.templateCount);
                         const postReply = Number(row.postReplyCount);
-                        const manual = Number(row.manualCount);
                         const rowActivity = row.lastActivity ? Math.round(Number(row.lastActivity) * 1000) : null;
                         statsMap.set(row.pageId, {
                             commentsCount: existing.commentsCount + Number(row.commentsCount),
@@ -335,7 +330,6 @@ export class PagesService {
                                 ai: existing.breakdown.ai + ai,
                                 template: existing.breakdown.template + template,
                                 postReply: existing.breakdown.postReply + postReply,
-                                manual: existing.breakdown.manual + manual,
                             },
                             lastActivity: rowActivity
                                 ? (existing.lastActivity ? Math.max(existing.lastActivity, rowActivity) : rowActivity)
