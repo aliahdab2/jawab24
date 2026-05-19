@@ -102,12 +102,12 @@ export function PageAccordionItem({
           >
             {page.name}
           </p>
-          <div className="flex items-center gap-3 mt-1.5">
-            <span className="text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
               {page.commentsCount || 0} {tDash('comments')}
             </span>
             {pendingCount > 0 && (
-              <span className="text-xs font-semibold status-warning px-1.5 py-0.5 rounded">
+              <span className="text-xs font-semibold status-warning px-1.5 py-0.5 rounded whitespace-nowrap">
                 {pendingCount} {tDash('pending')}
               </span>
             )}
@@ -176,7 +176,7 @@ export function PageAccordionItem({
                 </div>
                 <span
                   className={clsx(
-                    'text-[11px] font-semibold px-2.5 py-0.5 rounded-full',
+                    'text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap',
                     page.autoReplyEnabled
                       ? 'bg-emerald-500 text-white'
                       : 'bg-muted text-muted-foreground'
@@ -194,7 +194,7 @@ export function PageAccordionItem({
                 </div>
                 <span
                   className={clsx(
-                    'text-[11px] font-semibold px-2.5 py-0.5 rounded-full',
+                    'text-[11px] font-semibold px-2.5 py-0.5 rounded-full whitespace-nowrap',
                     page.instagramAutoReplyEnabled
                       ? 'bg-emerald-500 text-white'
                       : 'bg-muted text-muted-foreground'
@@ -206,18 +206,20 @@ export function PageAccordionItem({
             </div>
 
             {/* Status Row */}
-            <div className="mt-2 flex items-center justify-between py-2">
-              <div className="flex items-center gap-2">
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
+              <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 min-w-0">
                 <div className={clsx(
-                  'w-2 h-2 rounded-full',
+                  'w-2 h-2 rounded-full flex-shrink-0',
                   isActive ? 'bg-emerald-500 animate-pulse' : 'bg-surface-300'
                 )} />
-                <span className="text-xs font-bold text-muted-foreground">
-                  {tDash('pageAccordion.status')}:{' '}
+                <span className="text-xs font-bold text-muted-foreground whitespace-nowrap">
+                  {tDash('pageAccordion.status')}:
+                </span>
+                <span className="text-xs font-bold text-muted-foreground whitespace-nowrap">
                   {isActive ? tc('active') : tc('inactive')}
                 </span>
               </div>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
                 {formatConnectedDate(page.createdAt as string, tPages, tc('noData'))}
               </span>
             </div>
@@ -225,7 +227,7 @@ export function PageAccordionItem({
             {/* CTA Button */}
             <Link
               href={`/pages#page-${page.id}`}
-              className="mt-3 flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-700 transition-colors"
+              className="mt-3 flex items-center justify-center gap-2 w-full py-3 min-h-[44px] rounded-xl bg-brand-600 text-white text-[13px] font-semibold hover:bg-brand-700 transition-colors"
             >
               {tDash('pageAccordion.managePage')}
               <ArrowRight className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
