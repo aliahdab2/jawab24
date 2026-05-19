@@ -61,11 +61,11 @@ function UsageProgress({ label, used, limit, percent }: { label: string; used: n
   const roundedPercent = Math.round(percent);
   return (
     <div className="space-y-3">
-      <div className="flex justify-between items-end text-xs">
-        <span className="font-bold text-muted-foreground opacity-80 uppercase tracking-wider">
+      <div className="flex flex-wrap justify-between items-end gap-x-3 gap-y-1 text-xs">
+        <span className="font-bold text-muted-foreground opacity-80 uppercase tracking-wider min-w-0">
           {label}
         </span>
-        <div className="flex items-baseline gap-1.5">
+        <div className="flex items-baseline gap-1.5 whitespace-nowrap">
           <span className="font-bold text-foreground text-lg leading-none">
             {used.toLocaleString()}
           </span>
@@ -598,9 +598,7 @@ const DashboardPage: NextPageWithLayout = () => {
                   <SectionError onRetry={refetchAll} />
                 ) : commentItems.length > 0 ? (
                   commentItems.slice(0, maxRows).map((comment) => {
-                    const snippet = comment.message && comment.message.length > 60
-                      ? `${comment.message.slice(0, 60)}...`
-                      : (comment.message || '');
+                    const snippet = comment.message || '';
                     const timeLabel = getTimeLabel(comment.createdAt);
 
                     return (
@@ -608,7 +606,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         key={comment.id}
                         type="button"
                         onClick={() => setSelectedCommentData({ comment, mode: 'full' })}
-                        className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors w-full text-start"
+                        className="flex items-start gap-3 px-4 py-3.5 sm:px-5 sm:py-4 hover:bg-muted/50 transition-colors w-full text-start"
                       >
                         <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
                           <span className="text-xs font-bold text-muted-foreground">
@@ -627,7 +625,7 @@ const DashboardPage: NextPageWithLayout = () => {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate leading-relaxed">
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed break-words">
                             {snippet}
                           </p>
                         </div>
@@ -679,9 +677,7 @@ const DashboardPage: NextPageWithLayout = () => {
                   <SectionError onRetry={refetchAll} />
                 ) : messageItems.length > 0 ? (
                   messageItems.slice(0, maxRows).map((msg) => {
-                    const snippet = msg.message && msg.message.length > 60
-                      ? `${msg.message.slice(0, 60)}...`
-                      : (msg.message || '');
+                    const snippet = msg.message || '';
                     const timeLabel = getTimeLabel(msg.createdTime || msg.createdAt);
 
                     return (
@@ -689,7 +685,7 @@ const DashboardPage: NextPageWithLayout = () => {
                         key={msg.id}
                         type="button"
                         onClick={() => openConversationModal(msg.senderId, msg.pageId, msg.senderName)}
-                        className="flex items-start gap-3 px-4 py-3 sm:px-5 sm:py-3.5 hover:bg-muted/50 transition-colors w-full text-start"
+                        className="flex items-start gap-3 px-4 py-3.5 sm:px-5 sm:py-4 hover:bg-muted/50 transition-colors w-full text-start"
                       >
                         <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center flex-shrink-0 mt-0.5">
                           <span className="text-xs font-bold text-muted-foreground">
@@ -708,7 +704,7 @@ const DashboardPage: NextPageWithLayout = () => {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate leading-relaxed">
+                          <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed break-words">
                             {snippet}
                           </p>
                         </div>
