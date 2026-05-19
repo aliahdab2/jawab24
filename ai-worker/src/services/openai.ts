@@ -10,6 +10,7 @@ import {
     AI_TYPED_ERROR_NAMES,
 } from '../lib/errors';
 import { recordAiFailedBeforeLog, withAiMetrics } from '../lib/aiMetrics';
+import { detectLanguage, resolveInputLanguage } from './language';
 
 // Token budget constants (configurable via env vars for production tuning)
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
@@ -416,7 +417,7 @@ export class OpenAIService {
             }
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
-            const detectedLanguage = this.detectLanguage(request.comment);
+            const detectedLanguage = detectLanguage(request.comment);
 
             // Parse structured JSON response; fall back to plain text if parsing fails
             let parsed: { reply: string; intent?: string; confidence?: string; flags?: string[]; hedging?: boolean; language?: string };
@@ -577,7 +578,7 @@ export class OpenAIService {
         // conversation history → post content → KB language → merchant's configured default
         // before falling back to English.
         // detectLanguageOrNull returns null for punctuation-only input so the chain continues.
-        const language = this.resolveInputLanguage(request);
+        const language = this.resolveLanguage(request);
         const languageNames: Record<string, string> = { ar: 'Arabic', en: 'English', sv: 'Swedish', de: 'German', fr: 'French', es: 'Spanish', tr: 'Turkish' };
         const languageName = languageNames[language] || 'English';
         const retrievedChunks = request.context?.retrievedChunks;
@@ -738,55 +739,18 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
     }
 
     /**
-     * Language detection that returns null when no script is detectable.
-     * Used in the language fallback chain so punctuation/emoji-only input
-     * (e.g. "...") doesn't short-circuit to 'en' before KB inference runs.
+     * Build the ResolveLanguageInput payload from a GenerateRequest.
+     * Bridges the OpenAI-service-specific shape to the pure language module.
      */
-    private detectLanguageOrNull(text: string): string | null {
-        if (/[\u0600-\u06FF]/.test(text)) return 'ar';
-        if (/[åäöÅÄÖ]/.test(text)) return 'sv';
-        if (/[a-zA-Z]/.test(text)) return 'en';
-        return null; // punctuation-only, emoji-only, digits-only
-    }
-
-    /**
-     * Simple language detection based on character sets.
-     * Delegates to detectLanguageOrNull and falls back to 'en'.
-     */
-    private detectLanguage(text: string): string {
-        return this.detectLanguageOrNull(text) ?? 'en';
-    }
-
-    /**
-     * Resolve the effective input language.
-     *
-     * Walk order: explicit override → user history (preferred anchor) → assistant
-     * history (fallback when only the bot has spoken, e.g. dual-DM opener) →
-     * current message → post → KB → default → 'en'.
-     *
-     * User history takes priority over assistant history so that bot drift (e.g.
-     * an accidental English reply mid-Arabic conversation) does not lock the
-     * resolved language away from the customer's expressed preference.
-     *
-     * Prevents a single short Latin token (e.g. "ICDI", "ok") from flipping
-     * inputLang to 'en' and spuriously triggering language_mismatch.
-     */
-    private resolveInputLanguage(request: GenerateRequest): string {
-        const history = request.context?.conversationHistory ?? [];
-        const fromRole = (role: 'user' | 'assistant') =>
-            history
-                .filter(m => m.role === role && /[a-zA-Z؀-ۿ]/.test(m.content))
-                .reverse()
-                .map(m => this.detectLanguage(m.content))
-                .find(Boolean);
-        return request.language
-            || fromRole('user')
-            || fromRole('assistant')
-            || this.detectLanguageOrNull(request.comment)
-            || this.detectLanguageOrNull(request.context?.postMessage || '')
-            || this.detectLanguageOrNull(this.getKBText(request) || '')
-            || request.context?.defaultReplyLanguage
-            || 'en';
+    private resolveLanguage(request: GenerateRequest): string {
+        return resolveInputLanguage({
+            comment: request.comment,
+            language: request.language,
+            conversationHistory: request.context?.conversationHistory,
+            postMessage: request.context?.postMessage,
+            kbText: this.getKBText(request),
+            defaultReplyLanguage: request.context?.defaultReplyLanguage,
+        });
     }
 
     /**
@@ -892,8 +856,8 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
         // falls back to heuristic detection when absent (invalid_json fallback path).
         // Also logs `declared_lang_mismatch` (observability only) when GPT's JSON metadata diverges from what the reply looks like.
         if (reply) {
-            const inputLang = this.resolveInputLanguage(request);
-            const detectedLang = this.detectLanguage(reply);
+            const inputLang = this.resolveLanguage(request);
+            const detectedLang = detectLanguage(reply);
             const replyLang = parsed.language || detectedLang;
             if (inputLang !== replyLang && !flags.includes('language_mismatch')) {
                 flags.push('language_mismatch');
