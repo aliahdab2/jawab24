@@ -171,14 +171,18 @@ export default async function kbUploadRoutes(fastify: FastifyInstance) {
 
 // --- Vision access + daily quota helpers ---
 
-type VisionCheckResult =
+export type VisionCheckResult =
     | { allowed: true; userId: string }
     | { allowed: false; status: 403 | 429 | 503; response: Record<string, unknown> };
 
 /**
  * Check plan access (Business+) AND daily quota before calling GPT Vision.
+ *
+ * Exported for unit tests. On success the result carries the validated
+ * `userId`, so callers consume the value via type narrowing rather than
+ * re-extracting from the request with a non-null assertion.
  */
-async function checkVisionAccessAndQuota(request: FastifyRequest): Promise<VisionCheckResult> {
+export async function checkVisionAccessAndQuota(request: FastifyRequest): Promise<VisionCheckResult> {
     const userId = (request as AuthenticatedRequest).user?.userId;
     if (!userId) {
         return { allowed: false, status: 403, response: { success: false, error: 'plan_upgrade_required', message: 'Image extraction requires the Business plan', requiredPlan: 'business' } };
