@@ -35,8 +35,8 @@ android {
         applicationId "com.jawab24.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "1.3.0"
+        versionCode 9
+        versionName "1.3.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         // Inject Facebook secrets as string resources from local.properties
