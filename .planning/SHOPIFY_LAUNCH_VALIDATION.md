@@ -34,7 +34,7 @@ Confirm:
 - [ ] Backend running on `localhost:3000`
 - [ ] Frontend running on `localhost:3001`
 - [ ] ngrok URL captured; `SHOPIFY_HOST_NAME=<ngrok>` in `backend/.env`
-- [ ] Shopify Partners "Jawab24-Dev" app redirect includes `https://<ngrok>/shopify/callback`
+- [ ] Shopify Partners "Jawab24-Dev" app redirect includes `https://<ngrok>/shopify/auth/callback` (mounted at `backend/src/routes/shopify.ts:11` under the `/shopify` prefix)
 - [ ] Local DB reachable (`psql postgres://aliahdab@localhost:5432/postgres -c '\dt'`)
 - [ ] Redis reachable (`redis-cli ping` → `PONG`)
 - [ ] Workers logged at startup: `Reply processing worker started`, `Customer notification worker started`, **`Webhook retry worker started`** (this last one is new code that has never run live)
