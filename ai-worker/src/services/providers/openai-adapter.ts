@@ -4,6 +4,7 @@ import { config } from '../../config';
 import type { LLMProvider, LLMChatParams, LLMChatResult, LLMMessage } from './types';
 import { AI_REPLY_JSON_SCHEMA } from './types';
 import { withAiMetrics } from '../../lib/aiMetrics';
+import { AiTimeoutError } from '../../lib/errors';
 
 export class OpenAIAdapter implements LLMProvider {
     readonly name = 'openai';
@@ -31,8 +32,10 @@ export class OpenAIAdapter implements LLMProvider {
         const timeout = setTimeout(() => controller.abort(), params.timeoutMs);
 
         try {
-            const completion = await withAiMetrics(params.pipeline, this.modelId, () =>
-                Sentry.startSpan(
+            const completion = await withAiMetrics(
+                params.pipeline,
+                this.modelId,
+                () => Sentry.startSpan(
                     { name: 'ai.llm.call', op: 'ai', attributes: { 'ai.model': this.modelId } },
                     () => {
                         const isReasoningModel = /^(gpt-5|o1|o3|o4)/i.test(this.modelId);
@@ -70,6 +73,9 @@ export class OpenAIAdapter implements LLMProvider {
                         return client.chat.completions.create(body, { signal: controller.signal });
                     },
                 ),
+                (e) => (e instanceof Error && e.name === 'APIUserAbortError'
+                    ? 'AiTimeoutError'
+                    : 'OpenAIApiError'),
             );
 
             const content = completion.choices[0]?.message?.content?.trim() || '';
@@ -80,6 +86,11 @@ export class OpenAIAdapter implements LLMProvider {
                 tokensOut: completion.usage?.completion_tokens,
                 tokensTotal: completion.usage?.total_tokens,
             };
+        } catch (e) {
+            if (e instanceof Error && e.name === 'APIUserAbortError') {
+                throw new AiTimeoutError(params.timeoutMs);
+            }
+            throw e;
         } finally {
             clearTimeout(timeout);
         }
