@@ -1545,6 +1545,58 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('language_mismatch');
     });
 
+    it('should defer to Arabic post language for bare Latin acronym DM with no history', async () => {
+        // Regression from production screenshot 2026-05-19:
+        // Customer's first DM on an Arabic post about ICDL courses is just "ICDL".
+        // No conversation history exists yet. detectLanguageOrNull("ICDL") returns 'en'
+        // because it has Latin chars, short-circuiting the chain before postMessage.
+        // Fix: short single-token Latin input (acronyms, brand names) is treated as
+        // ambiguous so postMessage/KB language wins.
+        setupMock(JSON.stringify({
+            reply: 'دورة ICDL متاحة بكلفة 25 ألف ل.س بالعملة القديمة',
+            intent: 'QUESTION',
+            confidence: 'high',
+            language: 'ar',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ICDL',
+            context: {
+                postMessage: '#عروض 🔥💖 دورات بكلفة 25 الف #فقط (بالعملة القديمة) دورات ال ICDL 💻 دورات الإسعافات الأولية 🧑‍⚕️',
+            },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
+    it('should still treat a real English sentence as English even when post is Arabic', async () => {
+        // Counter-test for the ambiguous-Latin-token heuristic above: a multi-word
+        // English message must NOT be downgraded to "ambiguous" just because the
+        // post happens to be Arabic. Spaces or length > 10 chars disqualify the
+        // acronym shortcut.
+        setupMock(JSON.stringify({
+            reply: 'Our ICDL course is 25,000 SYP in the old currency. Want details?',
+            intent: 'QUESTION',
+            confidence: 'high',
+            language: 'en',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'how much is the ICDL course?',
+            context: {
+                postMessage: '#عروض 🔥💖 دورات بكلفة 25 الف #فقط (بالعملة القديمة)',
+            },
+        });
+
+        expect(result.flags).not.toContain('language_mismatch');
+    });
+
     // Other language mismatch cases (emoji/punctuation) are covered by eval tests
     // (Cat 41: Language Mismatch Guard, 4 tests) which test the full production pipeline.
 
