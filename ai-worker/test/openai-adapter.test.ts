@@ -93,4 +93,20 @@ describe('OpenAIAdapter', () => {
 
         expect(result.tokensInCached).toBe(0);
     });
+
+    it('converts OpenAI APIUserAbortError into a typed AiTimeoutError', async () => {
+        // Internal timeout aborts via AbortController → OpenAI SDK throws
+        // APIUserAbortError. Without normalization the raw "Request was aborted."
+        // leaks to Sentry as an unhandled OpenAIApiError; the backend can't tell
+        // it's a timeout. Adapter must re-throw as AiTimeoutError (matching the
+        // legacy openai.ts path).
+        const abortErr = Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' });
+        mockCreate.mockRejectedValue(abortErr);
+
+        const { OpenAIAdapter } = await import('../src/services/providers/openai-adapter');
+        const { AiTimeoutError } = await import('../src/lib/errors');
+        const adapter = new OpenAIAdapter('gpt-4.1-mini');
+
+        await expect(adapter.chat(baseParams)).rejects.toBeInstanceOf(AiTimeoutError);
+    });
 });
