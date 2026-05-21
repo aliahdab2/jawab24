@@ -1744,7 +1744,7 @@ describe('OpenAI Service - Few-Shot Examples & Prompt Version', () => {
             'GREETING', 'BUSINESS_INQUIRY', 'OFFENSIVE', 'SPAM_OR_IRRELEVANT',
         ]);
         expect(rf.json_schema.schema.properties.confidence.enum).toEqual(['high', 'medium', 'low']);
-        expect(rf.json_schema.schema.properties.language.enum).toEqual(['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr']);
+        expect(rf.json_schema.schema.properties.language.enum).toEqual(['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he']);
         expect(rf.json_schema.schema.additionalProperties).toBe(false);
     });
 });
