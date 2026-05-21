@@ -851,6 +851,10 @@ export const kbChunks = pgTable('kb_chunks', {
     metadata: jsonb('metadata').default({}),
     // Note: embedding vector(512) column added via raw SQL in migration (Drizzle doesn't support vector type)
     kbVersion: integer('kb_version').notNull(),
+    // Nullable expiry; retrieval filters out chunks where valid_until <= NOW().
+    // Use for time-bound narrative content (e.g. "Ramadan hours") so stale facts
+    // can't outscore current ones via semantic similarity alone.
+    validUntil: timestamp('valid_until'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {

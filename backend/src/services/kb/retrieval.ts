@@ -43,7 +43,7 @@ function detectQueryLanguage(text: string): string {
  *
  * Strategy:
  * 1. Normalize + embed the query
- * 2. Vector search: top-20 candidates via HNSW index (fast)
+ * 2. Vector search: top-20 candidates via HNSW index (fast); skip chunks past valid_until
  * 3. Trigram re-rank: score title + content trigram similarity on candidates only
  * 4. Fuse scores: 0.7 * vecScore + 0.3 * textScore + language boost
  * 5. Filter by threshold + return top-K
@@ -94,6 +94,7 @@ export class RetrievalService {
                 WHERE page_id = ${pageId}
                   AND kb_version = ${kbActiveVersion}
                   AND embedding IS NOT NULL
+                  AND (valid_until IS NULL OR valid_until > NOW())
                 ORDER BY embedding <=> ${vectorStr}::vector
                 LIMIT 20
             )
