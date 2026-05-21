@@ -89,6 +89,59 @@ describe('Retrieval — Integration (real Postgres)', () => {
         expect(gaps[0].resolved).toBe(false);
     });
 
+    it('should rank higher-authority tiers above raw narrative when content is similar', async () => {
+        const embedding = Array(512).fill(0.1);
+        const embeddingStr = `[${embedding.join(',')}]`;
+
+        await testDb.execute(sql`
+            INSERT INTO kb_chunks (page_id, type, language, title, title_normalized,
+                content_original, content_normalized, token_count, kb_version, embedding, source_tier)
+            VALUES
+                (${pageId}, 'info', 'en', 'RawA', 'raw a',
+                 'shipping policy raw', 'shipping policy raw',
+                 5, 1, ${embeddingStr}::vector, 4),
+                (${pageId}, 'info', 'en', 'Approved', 'approved',
+                 'shipping policy approved', 'shipping policy approved',
+                 5, 1, ${embeddingStr}::vector, 3),
+                (${pageId}, 'info', 'en', 'Catalog', 'catalog',
+                 'shipping policy catalog', 'shipping policy catalog',
+                 5, 1, ${embeddingStr}::vector, 2)
+        `);
+
+        const service = new RetrievalService(new FakeEmbeddingProvider());
+        const result = await service.retrieve(pageId, 'shipping policy', 1);
+
+        // Higher authority (lower tier number) should rank first
+        expect(result.chunks[0].title).toBe('Catalog');
+        expect(result.chunks[0].sourceTier).toBe(2);
+        // All three should be present (none excluded)
+        expect(result.chunks.map(c => c.title).sort()).toEqual(['Approved', 'Catalog', 'RawA']);
+    });
+
+    it('should exclude tier-5 (pending) chunks from retrieval entirely', async () => {
+        const embedding = Array(512).fill(0.1);
+        const embeddingStr = `[${embedding.join(',')}]`;
+
+        await testDb.execute(sql`
+            INSERT INTO kb_chunks (page_id, type, language, title, title_normalized,
+                content_original, content_normalized, token_count, kb_version, embedding, source_tier)
+            VALUES
+                (${pageId}, 'info', 'en', 'PendingExtract', 'pendingextract',
+                 'shipping policy pending', 'shipping policy pending',
+                 5, 1, ${embeddingStr}::vector, 5),
+                (${pageId}, 'info', 'en', 'Approved', 'approved',
+                 'shipping policy approved', 'shipping policy approved',
+                 5, 1, ${embeddingStr}::vector, 3)
+        `);
+
+        const service = new RetrievalService(new FakeEmbeddingProvider());
+        const result = await service.retrieve(pageId, 'shipping policy', 1);
+
+        const titles = result.chunks.map(c => c.title);
+        expect(titles).toContain('Approved');
+        expect(titles).not.toContain('PendingExtract');
+    });
+
     it('should filter chunks past valid_until and keep current/null ones', async () => {
         const embedding = Array(512).fill(0.1);
         const embeddingStr = `[${embedding.join(',')}]`;
