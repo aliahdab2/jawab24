@@ -29,8 +29,10 @@ import {
     isTransientAiError,
     needsImmediateAttention,
     AiRefusalError,
+    classifyDmError,
 } from '../../utils/fbGraphErrors';
 import { leadExtractorService } from '../leadExtractor';
+import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import { extractPostId } from '../../utils/instagram';
 
 /** Max age of the origin post to inherit into a follow-up DM's AI context.
@@ -564,6 +566,16 @@ export class MessageProcessor {
                 deliveryFailed = true;
                 pipelineMetrics.record(pipeline, 'send_failed');
                 this.logger.error(`[${platform}] Failed to send reply`, { error: String(error) });
+                // Defensive auto-pause: bump page-level failure counter (fire-and-forget).
+                // Only page-level buckets (`our_fault` / `unknown`) count toward the
+                // threshold; `customer_refused` / `window_expired` are per-customer.
+                // Transient errors already re-thrown above never reach here.
+                // classifyDmError is Facebook/Instagram-only; for other platforms we
+                // pass no bucket (treated as page-level `unknown` by the helper).
+                const dmBucket = (platform === 'facebook' || platform === 'instagram')
+                    ? classifyDmError(error, platform).bucket
+                    : undefined;
+                void recordSendFailure(page.id, dmBucket);
                 // SSE: notify merchant of failed reply
                 publishSSEEvent(userId, 'message:reply_failed', {
                     messageId: platformMessageId,
@@ -630,6 +642,9 @@ export class MessageProcessor {
             if (markedOlder > 0) {
                 this.logger.info(`[${platform}] Marked older debounced messages as replied`, { count: markedOlder, senderId });
             }
+
+            // Defensive auto-pause: any successful send resets the failure streak.
+            void recordSendSuccess(page.id);
 
             // 17. Notify if flagged — use enriched reason for high-stakes flags
             if (needsAttention && page.userId) {

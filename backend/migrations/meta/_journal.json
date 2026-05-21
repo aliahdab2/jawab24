@@ -729,6 +729,13 @@
       "when": 1779018690374,
       "tag": "0104_optimal_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "5",
+      "when": 1779376269685,
+      "tag": "0105_hard_black_widow",
+      "breakpoints": true
     }
   ]
 }
