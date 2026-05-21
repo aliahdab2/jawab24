@@ -23,6 +23,10 @@ Sentry.init({
         'ChunkLoadError',
         'Session expired',
         'Event `CustomEvent` (type=unhandledrejection)',
+        // React reconciler vs. browser auto-translation (Google Translate etc.) — not an app bug
+        /Failed to execute 'insertBefore' on 'Node'/,
+        /Failed to execute 'removeChild' on 'Node'/,
+        /The node (before|to be removed) (which the new node is to be inserted )?is not a child of this node/,
     ],
 
     beforeSend(event, hint) {
