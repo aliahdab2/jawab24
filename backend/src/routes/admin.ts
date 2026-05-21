@@ -95,7 +95,19 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         .from(users)
                         .leftJoin(subscriptions, eq(users.id, subscriptions.userId))
                         .leftJoin(plans, eq(subscriptions.planId, plans.id))
-                        .orderBy(desc(users.createdAt))
+                        // Active customers first, then trialing, then everything else by recency.
+                        // Lower CASE value = higher priority.
+                        .orderBy(
+                            sql`CASE ${subscriptions.status}
+                                WHEN 'active' THEN 0
+                                WHEN 'trialing' THEN 1
+                                WHEN 'past_due' THEN 2
+                                WHEN 'paused' THEN 3
+                                WHEN 'canceled' THEN 4
+                                ELSE 5
+                            END`,
+                            desc(users.createdAt),
+                        )
                         .limit(5000); // Safety cap — filters/pagination applied in-memory below
 
                     // Get all users first (we'll filter and paginate)
