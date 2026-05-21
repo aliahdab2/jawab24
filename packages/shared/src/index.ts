@@ -171,6 +171,12 @@ export interface Page {
   businessProfileUpdatedAt?: string | Date | null;
   // Connection status (true if Facebook access token is valid)
   isConnected?: boolean;
+  // Defensive auto-pause: set to 'send_rejected' when the bot was paused after
+  // hitting the consecutive-send-failure threshold (Page restricted/unpublished
+  // by Meta, permission lost mid-flight). Cleared when the customer re-enables
+  // auto-reply. See docs/page-auto-pause.md.
+  autoPauseReason?: 'send_rejected' | null;
+  autoPausedAt?: string | Date | null;
   // Computed/joined fields
   commentsCount?: number;
   repliesCount?: number;

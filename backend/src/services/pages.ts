@@ -481,7 +481,13 @@ export class PagesService {
     }
 
     /**
-     * Toggle auto-reply for a page
+     * Toggle auto-reply for a page.
+     *
+     * When the customer re-enables auto-reply, also clear any defensive auto-pause
+     * state (consecutive_send_failures, auto_pause_reason, auto_paused_at) so the
+     * page gets a fresh start. The customer is implicitly acknowledging "I checked
+     * the Facebook side, try again." If the underlying issue persists, the failure
+     * counter simply climbs back to the threshold.
      */
     async toggleAutoReply(workspaceId: string, pageId: string, enabled: boolean) {
         const [updatedPage] = await db
@@ -489,6 +495,15 @@ export class PagesService {
             .set({
                 autoReplyEnabled: enabled,
                 updatedAt: new Date(),
+                // Clear auto-pause state only on the off → on transition.
+                // Disabling shouldn't wipe a paused-reason audit trail.
+                ...(enabled
+                    ? {
+                        consecutiveSendFailures: 0,
+                        autoPauseReason: null,
+                        autoPausedAt: null,
+                    }
+                    : {}),
             })
             .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
             .returning();

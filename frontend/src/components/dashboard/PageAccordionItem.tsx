@@ -6,6 +6,7 @@ import {
   FileText,
   Instagram,
   ArrowRight,
+  AlertTriangle,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { formatConnectedDate } from '@/utils/dateUtils';
@@ -138,6 +139,22 @@ export function PageAccordionItem({
       >
         <div className="overflow-hidden">
           <div className="border-t border-theme-border bg-gradient-to-br from-emerald-50/60 to-surface-50/50 dark:from-emerald-950/30 dark:to-card px-4 sm:px-5 py-4">
+            {/* Auto-paused banner — shown when Facebook persistently rejected our reply sends */}
+            {page.autoPauseReason === 'send_rejected' && (
+              <div
+                className="mb-3 flex items-start gap-2 rounded-lg alert-warning px-3 py-2"
+                role="alert"
+              >
+                <AlertTriangle
+                  className="w-4 h-4 mt-0.5 flex-shrink-0"
+                  aria-hidden="true"
+                />
+                <p className="text-xs leading-snug">
+                  {tPages('autoPausedSendRejected')}
+                </p>
+              </div>
+            )}
+
             {/* Stats Grid */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-card rounded-xl p-3 text-center shadow-sm">

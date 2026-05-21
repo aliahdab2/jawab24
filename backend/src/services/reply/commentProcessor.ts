@@ -17,6 +17,7 @@ import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
 import { matchesKeyword, normalizeArabic, parseKeywords } from '@jawab24/shared';
 import { leadExtractorService } from '../leadExtractor';
+import { recordSendFailure, recordSendSuccess } from '../pageAutoPause';
 import {
     isTransientFbError,
     isTransientAiError,
@@ -699,6 +700,10 @@ export class CommentProcessor {
 
         if (!sendResult.success) {
             pipelineMetrics.record(pipeline, 'send_failed');
+            // Defensive auto-pause: bump page-level failure counter (fire-and-forget).
+            // Only `our_fault` / `unknown` / no-bucket count — `customer_refused` and
+            // `window_expired` are per-customer issues, not page-wide. See pageAutoPause.ts.
+            void recordSendFailure(pageId, sendResult.dmFailure?.bucket);
             // Flag the comment so it surfaces in "Needs Attention" — previously it stayed
             // replied=false/needsAttention=false/resolved=false, i.e. Pending forever.
             // Swallow a secondary DB error here: we already failed to send, the SSE event
@@ -766,6 +771,10 @@ export class CommentProcessor {
             replyText,
             senderName: fromName ?? null,
         });
+
+        // Defensive auto-pause: any successful send resets the failure streak.
+        // Cheap (UPDATE guarded by counter > 0 inside the helper).
+        void recordSendSuccess(pageId);
 
         // Arm the per-(page, post, sender) cooldown so back-to-back comments
         // from the same sender on the same post don't each fire a fresh reply.

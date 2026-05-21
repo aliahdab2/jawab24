@@ -157,6 +157,15 @@ export const pages = pgTable('pages', {
     // Business profile — structured data from Facebook sync
     businessProfile: jsonb('business_profile').default({}),
     businessProfileUpdatedAt: timestamp('business_profile_updated_at'),
+    // Defensive auto-pause: when Facebook persistently rejects our reply sends
+    // (Page restricted, unpublished, permission lost mid-flight), we bump the
+    // counter on every page-level failure (our_fault / unknown buckets), reset
+    // on any successful send, and flip auto_reply_enabled=false once the
+    // counter crosses the threshold. autoPauseReason carries the cause for the
+    // UI banner. Customer toggling auto-reply back on clears both fields.
+    consecutiveSendFailures: integer('consecutive_send_failures').default(0).notNull(),
+    autoPauseReason: varchar('auto_pause_reason', { length: 30 }),
+    autoPausedAt: timestamp('auto_paused_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
