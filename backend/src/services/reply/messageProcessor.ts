@@ -23,6 +23,7 @@ import { instagramService } from '../instagram';
 import type { SSEMessageSnapshot } from '@jawab24/shared';
 import { isUrgentFlag, buildNotificationReason } from './urgentFlags';
 import { truncateAtSentence } from '../../utils/text';
+import { isPunctuationOnly } from '../../utils/commentText';
 import {
     isTransientFbError,
     isTransientAiError,
@@ -410,6 +411,27 @@ export class MessageProcessor {
             const consolidatedText = unrepliedMessages.length > 1
                 ? unrepliedMessages.map(m => m.message).join('\n')
                 : messageText;
+
+            // 11a. Silently drop emoji-only / punctuation-only mid-conversation messages.
+            // Mirrors the sticker path in nonTextHandler.ts: a 🥰 / 👍 / "..." sent after
+            // the bot has already engaged carries no conversational intent, and regenerating
+            // through the AI causes a fresh "how can I help you today?" greeting that reads
+            // as if the conversation restarted (see screenshots 2026-05-20). The greeting
+            // branch at step 9b has already returned for first-contact cases, so reaching
+            // here means we are mid-conversation. `isPunctuationOnly` requires no letters
+            // and no digits in any script, so real replies like "ok", "نعم", or "٠٠٠"
+            // still flow through normally.
+            if (isPunctuationOnly(consolidatedText.trim())) {
+                for (const m of unrepliedMessages) {
+                    await messagesService.markAsResolved(m.id);
+                }
+                if (!unrepliedMessages.some(m => m.id === storedMessage.id)) {
+                    await messagesService.markAsResolved(storedMessage.id);
+                }
+                this.logger.info(`[${platform}] Skipped emoji/punctuation-only mid-conversation message`, { senderId, platformMessageId });
+                pipelineMetrics.record(pipeline, 'skipped_spam');
+                return { success: true, messageId: platformMessageId };
+            }
 
             // 11b. Show "typing..." before AI generation so the customer sees activity
             // during the 1-3s wait. See typingIndicator.ts for the full contract

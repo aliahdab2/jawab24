@@ -1267,6 +1267,76 @@ describe('MessageProcessor — Greeting & Away with pre-stored webhook message',
         expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
     });
 
+    // ── Emoji-only / punctuation-only mid-conversation skip ──────────────
+    // Mirrors the sticker handler: 🥰 / 👍 / "..." sent after the bot is
+    // already engaged must NOT regenerate through the AI (otherwise we get
+    // a fresh "how can I help you?" that reads as a conversation restart).
+
+    it('silently skips emoji-only mid-conversation message (no AI call, no reply)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageMulti: { sourceLang: 'en' },
+            greetingMessageEnabled: false,
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: '🥰', createdTime: new Date() } as any,
+        ]);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', '🥰', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(adapter.sendReply).not.toHaveBeenCalled();
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+        expect(messagesService.markAsResolved).toHaveBeenCalledWith('msg-uuid');
+    });
+
+    it('silently skips punctuation-only mid-conversation message ("...")', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageEnabled: false,
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: '...', createdTime: new Date() } as any,
+        ]);
+
+        const adapter = webhookPreStoredAdapter();
+
+        const result = await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', '...', 'msg-1',
+        );
+
+        expect(result.success).toBe(true);
+        expect(replyGenerator.generateForMessage).not.toHaveBeenCalled();
+    });
+
+    it('does NOT skip when emoji is mixed with real text ("ok 👍" reaches the AI)', async () => {
+        vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({
+            id: 'settings-uuid', userId: 'user-uuid', aiEnabled: true,
+            messagesAutoReply: true, replyDelay: 0,
+            greetingMessageEnabled: false,
+        } as any);
+        vi.mocked(messagesService.isFirstIncomingMessage).mockResolvedValue(false);
+        vi.mocked(messagesService.getUnrepliedFromSender).mockResolvedValue([
+            { id: 'msg-uuid', message: 'ok 👍', createdTime: new Date() } as any,
+        ]);
+
+        const adapter = webhookPreStoredAdapter();
+
+        await messageProcessor.processMessage(
+            adapter, 'page-1', 'sender-1', 'ok 👍', 'msg-1',
+        );
+
+        expect(replyGenerator.generateForMessage).toHaveBeenCalled();
+    });
+
     // ── greetingMessageEnabled toggle (Greeting on/off) ──────────────────
     // The toggle is the explicit gate: only when greetingMessageEnabled=true
     // AND a non-empty configured message exists does the greeting fire on
@@ -1682,7 +1752,9 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         const sendReply = vi.fn().mockResolvedValue(undefined);
         const adapter = createMockAdapter({ sendTypingIndicator, sendTypingOff, sendReply });
 
-        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', '🔥🔥🔥', 'msg-1');
+        // Must contain letters so it bypasses the emoji/punctuation-only short-circuit
+        // (step 11a) and actually reaches the AI, which is what this test exercises.
+        await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'follow @bestdeals21', 'msg-1');
 
         expect(sendReply).not.toHaveBeenCalled();
         expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
