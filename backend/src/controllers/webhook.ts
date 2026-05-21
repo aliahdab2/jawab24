@@ -43,6 +43,11 @@ function verifyWebhookSignature(rawBody: Buffer, signatureHeader: string | undef
 /** Messaging event from Facebook/Instagram webhook */
 interface MessagingEvent {
     sender?: { id: string };
+    /** Epoch millis when the platform (FB/IG) reports the customer sent the message.
+     *  We persist this as `created_time` and order the chat by it, so an image that
+     *  takes longer to process than a text follow-up still appears in send order
+     *  instead of DB-insert order. */
+    timestamp?: number;
     message?: {
         mid: string;
         text?: string;
@@ -297,6 +302,7 @@ export class WebhookController {
                                 attachmentUrl: att.payload?.url,
                                 attachmentId: att.payload?.id,
                                 attachmentTitle: att.payload?.title,
+                                platformTimestamp: messageEvent.timestamp,
                             }, 'facebook', this.log());
                         }
                     }
@@ -332,14 +338,21 @@ export class WebhookController {
         });
 
         try {
-            // Store message immediately so rapid follow-ups build conversation context
-            await messagesService.findOrCreateFromWebhook(
+            // Store message immediately so rapid follow-ups build conversation context.
+            const { message: stored, isNew } = await messagesService.findOrCreateFromWebhook(
                 page.id,
                 page.workspaceId,
                 messageId,
                 senderId,
-                messageText
+                messageText,
             );
+
+            // Stamp FB-reported send time. Chat sorts by created_time, so this
+            // guarantees in-order display even when our store path is slower
+            // than a sibling event (see services/messages.ts setCreatedTime).
+            if (isNew && typeof event.timestamp === 'number') {
+                await messagesService.setCreatedTime(stored.id, new Date(event.timestamp));
+            }
 
             // Enqueue reply job immediately — debounce is handled by hasNewerUnrepliedMessage
             const jobId = await enqueueMessage({
@@ -483,6 +496,7 @@ export class WebhookController {
                                 attachmentUrl: att.payload?.url,
                                 attachmentId: att.payload?.id,
                                 attachmentTitle: att.payload?.title,
+                                platformTimestamp: messageEvent.timestamp,
                             }, 'instagram', this.log());
                         }
                     }

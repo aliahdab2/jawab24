@@ -22,6 +22,12 @@ export interface NonTextMessageEvent {
     attachmentUrl?: string;
     attachmentId?: string;
     attachmentTitle?: string;
+    /** Epoch millis from the FB/IG webhook event. Persisted as `created_time`
+     *  so the chat sorts by platform send time, not DB insert time. Critical
+     *  for images: the handler's pre-store Graph API calls (fetch_sender_name)
+     *  can delay the image insert past the outgoing nudge insert, which would
+     *  otherwise render the nudge ABOVE the image it replies to. */
+    platformTimestamp?: number;
 }
 
 /**
@@ -36,7 +42,7 @@ export async function handleNonTextMessage(
     platform: 'facebook' | 'instagram',
     logger: Logger,
 ): Promise<void> {
-    const { senderId, messageId, attachmentType, attachmentUrl, attachmentId, attachmentTitle } = event;
+    const { senderId, messageId, attachmentType, attachmentUrl, attachmentId, attachmentTitle, platformTimestamp } = event;
 
     try {
         // 1. Look up the page
@@ -71,6 +77,9 @@ export async function handleNonTextMessage(
             const { message: stored, isNew } = await messagesService.findOrCreateFromWebhook(
                 page.id, workspaceId, messageId, senderId, '[Sticker]', senderName, 'sticker',
             );
+            if (isNew && typeof platformTimestamp === 'number') {
+                await messagesService.setCreatedTime(stored.id, new Date(platformTimestamp));
+            }
             if (isNew) {
                 await messagesService.markAsResolved(stored.id);
             }
@@ -98,9 +107,12 @@ export async function handleNonTextMessage(
                 });
 
                 // Store transcribed text in DB (not placeholder)
-                await messagesService.findOrCreateFromWebhook(
+                const { message: storedAudio, isNew: isNewAudio } = await messagesService.findOrCreateFromWebhook(
                     page.id, workspaceId, messageId, senderId, result.text, senderName, 'audio',
                 );
+                if (isNewAudio && typeof platformTimestamp === 'number') {
+                    await messagesService.setCreatedTime(storedAudio.id, new Date(platformTimestamp));
+                }
 
                 // Enqueue for the normal AI reply pipeline
                 // pageId must be the platform ID (not internal UUID) — same as webhook.ts processMessage
@@ -147,9 +159,12 @@ export async function handleNonTextMessage(
                 enrichedText = '[Customer shared a post]';
             }
 
-            await messagesService.findOrCreateFromWebhook(
+            const { message: storedShared, isNew: isNewShared } = await messagesService.findOrCreateFromWebhook(
                 page.id, workspaceId, messageId, senderId, enrichedText, senderName, attachmentType,
             );
+            if (isNewShared && typeof platformTimestamp === 'number') {
+                await messagesService.setCreatedTime(storedShared.id, new Date(platformTimestamp));
+            }
 
             const jobType = platform === 'facebook' ? 'facebook_message' : 'instagram_message';
             await enqueueMessage({
@@ -169,9 +184,12 @@ export async function handleNonTextMessage(
 
         // 6. Non-audio or failed transcription: store placeholder + send generic nudge
         const placeholder = getAttachmentPlaceholder(attachmentType, lang);
-        await messagesService.findOrCreateFromWebhook(
+        const { message: storedAtt, isNew: isNewAtt } = await messagesService.findOrCreateFromWebhook(
             page.id, workspaceId, messageId, senderId, placeholder, senderName, attachmentType,
         );
+        if (isNewAtt && typeof platformTimestamp === 'number') {
+            await messagesService.setCreatedTime(storedAtt.id, new Date(platformTimestamp));
+        }
         await sendNudge(page, workspaceId, senderId, getTextOnlyNudge(lang), platform, logger);
     } catch (error) {
         logger.error(`[${platform}] Failed to handle non-text message`, {
