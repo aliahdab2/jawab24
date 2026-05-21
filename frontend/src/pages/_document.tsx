@@ -7,8 +7,9 @@ interface DocProps {
 export default function MyDocument({ locale }: DocProps) {
   return (
     // Dynamic lang/dir based on Next.js i18n locale (SSR-correct for Google)
-    <Html lang={locale || 'ar'} dir={locale === 'en' ? 'ltr' : 'rtl'} suppressHydrationWarning>
+    <Html lang={locale || 'ar'} dir={locale === 'en' ? 'ltr' : 'rtl'} translate="no" className="notranslate" suppressHydrationWarning>
       <Head>
+        <meta name="google" content="notranslate" />
         {/* fb:app_id is in _app.tsx MetaHead (via next/head) — do NOT duplicate here,
            Facebook rejects pages with duplicate fb:app_id property tags */}
 

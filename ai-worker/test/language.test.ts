@@ -32,6 +32,37 @@ describe('detectLanguageOrNull', () => {
         // Arabic check runs first — any Arabic character wins.
         expect(detectLanguageOrNull('hello مرحبا')).toBe('ar');
     });
+
+    // Unicode-script-based detection (was regex-three-scripts before). These
+    // tests pin the screenshot-bug scenario: a Burmese-speaking customer's
+    // comment must not silently fall through to 'en'.
+    it('returns my for Burmese script', () => {
+        expect(detectLanguageOrNull('ဈေးဘယ်လောက်လဲ')).toBe('my');
+    });
+    it('returns th for Thai script', () => {
+        expect(detectLanguageOrNull('สวัสดี')).toBe('th');
+    });
+    it('returns ja for Japanese (Hiragana/Katakana, checked before Han)', () => {
+        expect(detectLanguageOrNull('こんにちは')).toBe('ja');
+        expect(detectLanguageOrNull('カタカナ')).toBe('ja');
+        // Mixed kanji + hiragana — must still resolve to ja, not zh
+        expect(detectLanguageOrNull('日本語です')).toBe('ja');
+    });
+    it('returns zh for pure Han script', () => {
+        expect(detectLanguageOrNull('你好')).toBe('zh');
+    });
+    it('returns ko for Hangul', () => {
+        expect(detectLanguageOrNull('안녕하세요')).toBe('ko');
+    });
+    it('returns ru for Cyrillic', () => {
+        expect(detectLanguageOrNull('привет')).toBe('ru');
+    });
+    it('returns hi for Devanagari', () => {
+        expect(detectLanguageOrNull('नमस्ते')).toBe('hi');
+    });
+    it('returns he for Hebrew', () => {
+        expect(detectLanguageOrNull('שלום')).toBe('he');
+    });
 });
 
 describe('detectLanguage', () => {
