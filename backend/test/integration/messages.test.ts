@@ -418,4 +418,124 @@ describe('Messages Service — Integration (real Postgres)', () => {
             expect(conv.senderName).toBe('Original Name');
         });
     });
+
+    // =========================================================
+    // getConversation chat ordering — regression guard for the
+    // image-appears-after-its-own-nudge bug (screenshots 2026-05-20).
+    //
+    // The non-text handler does network calls (fetch_sender_name) BEFORE
+    // inserting the image row, while the outgoing nudge it sends right
+    // after gets inserted on a faster path. Sorting purely by `created_at`
+    // (DB insert time) therefore puts the nudge above the image in the
+    // chat UI, even though the customer sent the image first. The fix
+    // sorts by `COALESCE(created_time, created_at)` — `created_time` is
+    // the platform-reported send time (FB/IG webhook `timestamp`), which
+    // can't be skewed by our processing latency.
+    //
+    // This test fails if anyone reverts the COALESCE in getConversation
+    // or stops calling messagesService.setCreatedTime in the webhook /
+    // non-text handler paths.
+    // =========================================================
+    describe('getConversation — ordering by platform send time', () => {
+        it('orders by created_time (platform send time), not created_at (DB insert time)', async () => {
+            // Real-world ordering of events from FB/IG's perspective:
+            //   T=0  customer sends image
+            //   T=1  bot sends auto-reply nudge
+            //
+            // What actually happens to our DB rows:
+            //   image row     created_time=T=0   created_at=T=2.0  (slow non-text handler path)
+            //   nudge row     created_time=T=1   created_at=T=1.5  (fast outgoing insert)
+            //
+            // created_at order would render nudge above image — that's the bug.
+            // created_time order renders image above nudge — that's correct.
+            const sendT0 = new Date('2026-05-20T10:00:00.000Z');
+            const sendT1 = new Date('2026-05-20T10:00:01.000Z');
+            const insertImage = new Date('2026-05-20T10:00:02.000Z');
+            const insertNudge = new Date('2026-05-20T10:00:01.500Z');
+
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-image',
+                message: '[Image]',
+                direction: 'incoming',
+                attachmentType: 'image',
+                createdTime: sendT0,
+                createdAt: insertImage,
+            });
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-nudge',
+                message: 'Please send text or voice',
+                direction: 'outgoing',
+                replied: true,
+                createdTime: sendT1,
+                createdAt: insertNudge,
+            });
+
+            const result = await messagesService.getConversation(pageId, senderId);
+
+            // `getConversation` returns DESC (most recent first). With correct
+            // ordering: nudge (sendT1) before image (sendT0).
+            expect(result).toHaveLength(2);
+            expect(result[0].platformMessageId).toBe('dm-nudge');
+            expect(result[1].platformMessageId).toBe('dm-image');
+        });
+
+        it('falls back to created_at when created_time is null (legacy rows)', async () => {
+            // Defends the COALESCE fallback: pre-fix rows that never got
+            // created_time populated must still sort correctly by created_at.
+            const t0 = new Date('2026-05-20T10:00:00.000Z');
+            const t1 = new Date('2026-05-20T10:00:01.000Z');
+
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-legacy-old',
+                message: 'older legacy',
+                direction: 'incoming',
+                createdTime: null,
+                createdAt: t0,
+            });
+            await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-legacy-new',
+                message: 'newer legacy',
+                direction: 'incoming',
+                createdTime: null,
+                createdAt: t1,
+            });
+
+            const result = await messagesService.getConversation(pageId, senderId);
+
+            expect(result).toHaveLength(2);
+            expect(result[0].platformMessageId).toBe('dm-legacy-new');
+            expect(result[1].platformMessageId).toBe('dm-legacy-old');
+        });
+    });
+
+    // =========================================================
+    // setCreatedTime — webhook layer stamps platform send time
+    // =========================================================
+    describe('setCreatedTime', () => {
+        it('updates created_time without touching other columns', async () => {
+            const insertAt = new Date('2026-05-20T10:00:02.000Z');
+            const platformSendAt = new Date('2026-05-20T10:00:00.000Z');
+
+            const inserted = await insertMessage(pageId, senderId, {
+                platformMessageId: 'dm-stamp',
+                message: 'hello',
+                direction: 'incoming',
+                createdTime: insertAt,
+                createdAt: insertAt,
+            });
+
+            await messagesService.setCreatedTime(inserted.id, platformSendAt);
+
+            const [row] = await testDb
+                .select()
+                .from(messages)
+                .where(eq(messages.id, inserted.id));
+
+            expect(row.createdTime?.getTime()).toBe(platformSendAt.getTime());
+            // Other columns must be untouched
+            expect(row.message).toBe('hello');
+            expect(row.platformMessageId).toBe('dm-stamp');
+            expect(row.direction).toBe('incoming');
+        });
+    });
 });

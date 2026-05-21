@@ -144,6 +144,15 @@ export class MessagesService {
      * Get conversation with a specific sender (with canonical sender_name)
      */
     async getConversation(pageId: string, senderId: string, limit: number = 50): Promise<Message[]> {
+        // Sort by platform-reported send time (created_time) with DB insert time
+        // (created_at) as a tiebreaker. Using created_at alone surfaced an
+        // ordering bug where an image's auto-reply nudge appeared ABOVE the
+        // image itself — the non-text handler's pre-store steps (Graph API
+        // fetch_sender_name, etc.) sometimes delayed the image insert past the
+        // outgoing nudge insert from a sibling event. created_time reflects the
+        // moment FB/IG reports the customer hit send, so it can't be skewed by
+        // our processing latency. Outgoing messages also set created_time
+        // (= our send time), so the ordering is consistent across directions.
         const rows = await db
             .select({
                 msg: messages,
@@ -155,7 +164,7 @@ export class MessagesService {
                 eq(messages.pageId, pageId),
                 eq(messages.senderId, senderId),
             ))
-            .orderBy(desc(messages.createdAt))
+            .orderBy(sql`COALESCE(${messages.createdTime}, ${messages.createdAt}) DESC, ${messages.createdAt} DESC`)
             .limit(limit);
 
         return rows.map(r => this.mapJoinedToMessage(r.msg, r.convSenderName));
@@ -664,6 +673,25 @@ export class MessagesService {
             ))
             .returning({ id: messages.id });
         return result.length;
+    }
+
+    /**
+     * Stamp a row's `created_time` with the platform-reported send time.
+     *
+     * The webhook controller calls this immediately after persisting a new
+     * incoming message so the chat sorts by FB/IG send time, not DB insert
+     * time. Without this, a slow non-text handler (e.g. blocked on a Graph
+     * API fetch_sender_name call) could insert the image row AFTER the
+     * outgoing nudge it triggered, rendering the nudge above the image.
+     *
+     * Kept as a small post-write update (instead of a parameter on
+     * findOrCreateFromWebhook) to avoid bloating that function's already-long
+     * positional signature and to keep the existing call-shape tests stable.
+     */
+    async setCreatedTime(messageId: string, createdTime: Date): Promise<void> {
+        await db.update(messages)
+            .set({ createdTime })
+            .where(eq(messages.id, messageId));
     }
 
     /**

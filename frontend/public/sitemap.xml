@@ -559,4 +559,25 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+
+  <!-- Blog: Turn Comments Into Sales - Arabic -->
+  <url>
+    <loc>https://jawab24.com/blog/turn-comments-into-sales</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/turn-comments-into-sales"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/turn-comments-into-sales"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/turn-comments-into-sales"/>
+    <lastmod>2026-05-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <!-- Blog: Turn Comments Into Sales - English -->
+  <url>
+    <loc>https://jawab24.com/en/blog/turn-comments-into-sales</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/blog/turn-comments-into-sales"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/blog/turn-comments-into-sales"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/blog/turn-comments-into-sales"/>
+    <lastmod>2026-05-20</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
 </urlset>
