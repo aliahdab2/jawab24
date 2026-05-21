@@ -1,7 +1,7 @@
 ---
-seoTitle: "Salla vs Shopify for Arabic Sellers — Which Platform Is Right for You in 2026?"
-seoDescription: "A detailed comparison of Salla and Shopify for Arabic-speaking sellers. Covers pricing, Arabic support, payment gateways, shipping, integrations, and which to choose."
-seoKeywords: "Salla vs Shopify, Salla platform, Shopify Arabic, best e-commerce platform Arabic, Salla review, Shopify Saudi Arabia"
+seoTitle: "Salla vs Shopify (2026): Which Platform Fits Arabic Sellers?"
+seoDescription: "Side-by-side comparison of Salla and Shopify for Arabic-speaking sellers — pricing, Arabic RTL support, local shipping & auto-reply integrations."
+seoKeywords: "Salla vs Shopify, salla vs shopify arabic, salla ecommerce platform arabic, salla pricing plans 2026, Shopify Arabic, best e-commerce platform Arabic, salla ecommerce platform pricing"
 title: "Salla vs Shopify for Arabic Sellers — Which Platform Is Right for You?"
 excerpt: "Salla dominates the Saudi market. Shopify dominates globally. If you're an Arabic-speaking seller, which one should you choose? We break down everything."
 ---
