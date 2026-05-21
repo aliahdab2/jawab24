@@ -87,6 +87,12 @@ export const BLOG_POSTS: BlogPost[] = [
     category: 'guides',
     readingTime: 8,
   },
+  {
+    slug: 'turn-comments-into-sales',
+    date: '2026-05-20',
+    category: 'guides',
+    readingTime: 9,
+  },
 ];
 
 export function getAllBlogSlugs(): string[] {
