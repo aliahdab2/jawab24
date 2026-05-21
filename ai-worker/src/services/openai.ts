@@ -340,8 +340,20 @@ export class OpenAIService {
                             max_tokens: config.openai.maxTokens,
                             temperature: config.openai.temperature,
                             top_p: config.openai.topP,
-                            frequency_penalty: config.openai.frequencyPenalty,
-                            presence_penalty: config.openai.presencePenalty,
+                            // Penalties intentionally zeroed for structured outputs. With
+                            // `response_format: json_schema` the model MUST reuse tokens like
+                            // `"`, `{`, `:`, and the schema's key names many times per response.
+                            // Non-zero frequency_penalty / presence_penalty bias the model
+                            // against exactly those required tokens, which produces unstable
+                            // output — most visibly, GPT occasionally emitted the entire JSON
+                            // object twice back-to-back, breaking JSON.parse and triggering
+                            // false `invalid_json` flags + medium-confidence downgrades
+                            // (see eval test #46, 2026-05-20). OpenAI's own guidance for
+                            // structured outputs is to leave both penalties at 0; the schema
+                            // is already constraining structure, so penalties have no upside
+                            // here and a real downside.
+                            frequency_penalty: 0,
+                            presence_penalty: 0,
                             response_format: {
                                 type: 'json_schema',
                                 json_schema: {
