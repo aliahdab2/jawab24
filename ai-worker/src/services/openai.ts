@@ -160,7 +160,7 @@ IMPORTANT: Output a JSON object with these fields:
 - "intent": MUST be exactly one of: QUESTION, COMPLIMENT, COMPLAINT, PURCHASE_INTENT, GREETING, BUSINESS_INQUIRY, OFFENSIVE, SPAM_OR_IRRELEVANT. No other values are accepted. Do NOT use "OTHER", "PRICE", "LOCATION", "HOURS", "PRODUCT", "INFO", or any custom intent.
 - "confidence": how confident you are in your reply ("high", "medium", or "low")
 - "hedging": true if your reply uses any hedge or deflection phrase — e.g. "I'll check", "let me confirm", "سأتحقق", "خليني أتحقق", "تواصل معنا", "contact us", or anything that signals you're redirecting rather than answering. false otherwise. This field MUST be present.
-- "language": the language code of your reply text. MUST be exactly one of: "ar" (Arabic), "en" (English), "sv" (Swedish), "de" (German), "fr" (French), "es" (Spanish), "tr" (Turkish). For any other language, use "en". This MUST match the actual language of the "reply" string. For empty replies (OFFENSIVE/SPAM_OR_IRRELEVANT), use the customer's message language.
+- "language": the ISO 639-1 code of your reply text (e.g. "ar", "en", "sv", "de", "fr", "es", "tr", "my" for Burmese, "th" for Thai, "zh" for Chinese, "ja" for Japanese, "ko" for Korean, "ru" for Russian, "hi" for Hindi, "he" for Hebrew). The code MUST match the actual language of the "reply" string. CRITICAL: ALWAYS reply in the SAME language the customer wrote in — if the customer wrote in Burmese, reply in Burmese; if Thai, reply in Thai; etc. Use the language of the customer's message and the business knowledge as your guide. Do NOT default to English unless the customer wrote in English. For empty replies (OFFENSIVE/SPAM_OR_IRRELEVANT), use the customer's message language.
 - "flags": an array of flag strings if applicable (empty array [] if none):
   - "info_not_in_kb" if the customer asked a specific question and the answer is NOT in <business_knowledge>, or if you responded with general info instead of answering their actual question
   - "price_not_in_kb" if your reply mentions any price, cost, or fee NOT found in <business_knowledge>
@@ -379,7 +379,16 @@ export class OpenAIService {
                                             hedging: { type: 'boolean' },
                                             language: {
                                                 type: 'string',
-                                                enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr'],
+                                                // ISO 639-1 codes. Includes scripts the detector now
+                                                // recognizes via Unicode properties: my (Burmese),
+                                                // th (Thai), zh (Chinese), ja (Japanese), ko (Korean),
+                                                // ru (Russian), hi (Hindi), he (Hebrew). With the
+                                                // prompt instructed to mirror the customer's language
+                                                // rather than fall back to English, strict-mode
+                                                // structured outputs need the enum to actually allow
+                                                // those values — otherwise GPT is forced to lie about
+                                                // what it wrote.
+                                                enum: ['ar', 'en', 'sv', 'de', 'fr', 'es', 'tr', 'my', 'th', 'zh', 'ja', 'ko', 'ru', 'hi', 'he'],
                                             },
                                         },
                                         required: ['reply', 'intent', 'confidence', 'flags', 'hedging', 'language'] as const,

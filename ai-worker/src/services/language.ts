@@ -42,14 +42,36 @@ export interface ResolveLanguageInput {
 const MAX_AMBIGUOUS_LATIN_TOKEN_LENGTH = 10;
 
 /**
- * Language detection that returns null when no script is detectable.
+ * Language detection via Unicode script properties. Returns null when no
+ * recognized script is found (punctuation/emoji-only input).
+ *
+ * For most non-Latin scripts the mapping is 1:1 with a language:
+ * Myanmar → Burmese, Thai → Thai, Hangul → Korean, etc. Han is mapped to
+ * Chinese; Japanese is detected separately via Hiragana/Katakana (which
+ * are checked BEFORE Han because Japanese text often mixes both with
+ * Han/kanji).
+ *
+ * Latin disambiguation (English vs Spanish vs French …) is deliberately
+ * NOT done here — the resolution chain (post + KB + history) handles that
+ * downstream. Swedish gets a special case for legacy reasons (one-off
+ * pilot); it precedes Latin so its specific characters are detected
+ * before falling through to the generic Latin → en branch.
+ *
  * Used in the language fallback chain so punctuation/emoji-only input
  * (e.g. "...") doesn't short-circuit to 'en' before KB inference runs.
  */
 export function detectLanguageOrNull(text: string): string | null {
-    if (/[؀-ۿ]/.test(text)) return 'ar';
+    if (/\p{Script=Arabic}/u.test(text)) return 'ar';
+    if (/\p{Script=Hiragana}|\p{Script=Katakana}/u.test(text)) return 'ja';
+    if (/\p{Script=Han}/u.test(text)) return 'zh';
+    if (/\p{Script=Hangul}/u.test(text)) return 'ko';
+    if (/\p{Script=Myanmar}/u.test(text)) return 'my';
+    if (/\p{Script=Thai}/u.test(text)) return 'th';
+    if (/\p{Script=Devanagari}/u.test(text)) return 'hi';
+    if (/\p{Script=Cyrillic}/u.test(text)) return 'ru';
+    if (/\p{Script=Hebrew}/u.test(text)) return 'he';
     if (/[åäöÅÄÖ]/.test(text)) return 'sv';
-    if (/[a-zA-Z]/.test(text)) return 'en';
+    if (/\p{Script=Latin}/u.test(text)) return 'en';
     return null;
 }
 
@@ -96,7 +118,9 @@ export function resolveInputLanguage(input: ResolveLanguageInput): string {
     const history = input.conversationHistory ?? [];
     const fromRole = (role: 'user' | 'assistant') =>
         history
-            .filter(m => m.role === role && /[a-zA-Z؀-ۿ]/.test(m.content))
+            // \p{L} matches any letter in any script — skips punctuation/emoji-only turns
+            // while staying script-agnostic (was hardcoded to Latin + Arabic before).
+            .filter(m => m.role === role && /\p{L}/u.test(m.content))
             .reverse()
             .map(m => detectLanguage(m.content))
             .find(Boolean);
