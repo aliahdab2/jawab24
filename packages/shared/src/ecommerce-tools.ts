@@ -126,3 +126,82 @@ export interface ShipmentInfoFull extends ShipmentInfo {
     customerFirstName: string; // for server-side name comparison
     customerPhone?: string;    // for server-side phone comparison
 }
+
+// ===========================================================================
+// Catalog Tools (Stage 2.3 of KB restructure)
+// ===========================================================================
+//
+// Entity-centric tools over the merchant-maintained `catalog_items` table.
+// Unlike the e-commerce tools above, these do NOT require a linked store —
+// they read structured data the merchant entered themselves (courses,
+// services, packages, branches, events, products without a Shopify/Salla
+// link).
+//
+// `list_active_entities` bakes in the freshness filter (endsAt > now)
+// automatically, so the LLM cannot accidentally recommend expired courses
+// (the catalyst incident that drove this whole restructure).
+// ===========================================================================
+
+export type CatalogToolName =
+    | 'search_entities'
+    | 'get_entity_details'
+    | 'list_active_entities';
+
+export const VALID_CATALOG_TOOL_NAMES: readonly CatalogToolName[] = [
+    'search_entities',
+    'get_entity_details',
+    'list_active_entities',
+];
+
+/** All valid tool names across both pipelines — for one-shot whitelist checks. */
+export const ALL_VALID_TOOL_NAMES: readonly (EcommerceToolName | CatalogToolName)[] = [
+    ...VALID_TOOL_NAMES,
+    ...VALID_CATALOG_TOOL_NAMES,
+];
+
+export type CatalogEntityType = 'course' | 'product' | 'service' | 'event' | 'branch' | 'package';
+
+export interface SearchEntitiesArgs {
+    query: string;
+    type?: CatalogEntityType;
+    price_min_minor?: number;
+    price_max_minor?: number;
+}
+
+export interface GetEntityDetailsArgs {
+    id: string;
+}
+
+export interface ListActiveEntitiesArgs {
+    type?: CatalogEntityType;
+    limit?: number;
+}
+
+export interface CatalogToolCall {
+    name: CatalogToolName;
+    arguments: Record<string, string | number | undefined>;
+}
+
+/** Status computed at read time from endsAt / archivedAt. */
+export type CatalogEntityStatus = 'active' | 'expiring_soon' | 'expired' | 'archived';
+
+/** Shape returned to the LLM for one catalog item. */
+export interface CatalogEntitySummary {
+    id: string;
+    type: CatalogEntityType;
+    name: string;
+    description?: string | null;
+    priceMinor?: number | null;
+    currency?: string | null;
+    startsAt?: string | null;          // ISO
+    endsAt?: string | null;            // ISO
+    enrollmentClosesAt?: string | null; // ISO
+    status: CatalogEntityStatus;
+}
+
+export interface CatalogEntityDetails extends CatalogEntitySummary {
+    metadata?: Record<string, unknown>;
+}
+
+/** Same result envelope as e-commerce tools — keeps the tool-loop uniform. */
+export type CatalogToolResult = EcommerceToolResult;
