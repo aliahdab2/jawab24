@@ -267,7 +267,7 @@ CRITICAL RULES:
  * both flags may be set; we default to "ecommerce only" when neither is
  * present to preserve legacy callers that don't yet set the flags.
  */
-function selectToolsForRequest(request: GenerateRequest): {
+export function selectToolsForRequest(request: GenerateRequest): {
     tools: OpenAI.ChatCompletionTool[];
     promptAddition: string;
 } {

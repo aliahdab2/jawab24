@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { testDb, createTestUser, createTestPage } from './setup';
 import { catalogItems } from '../../src/db/schema';
+import * as schema from '../../src/db/schema';
 
 import './setup';
 
@@ -92,6 +94,49 @@ describe('tool-loop catalog dispatch — Stage 2.3b', () => {
         expect(ids).toContain(courseId);
     });
 
+    it('degrades to catalog-only when store is inactive (regression for store-inactive bug)', async () => {
+        // Setup: a store row, but mark it inactive. The loop must clear
+        // storeId so the worker isn't told ecommerceToolsEnabled=true and the
+        // LLM isn't offered e-commerce tools it can't actually use.
+        const [store] = await testDb.insert(schema.ecommerceStores).values({
+            userId: (await testDb.select({ id: schema.pages.userId })
+                .from(schema.pages).where(eq(schema.pages.id, pageId)))[0].id!,
+            platform: 'shopify',
+            storeDomain: `inactive-${Date.now()}.myshopify.com`,
+            accessToken: 'enc',
+            accessTokenIv: 'iv',
+            isActive: false,
+        }).returning();
+
+        postMock.mockResolvedValueOnce({
+            data: {
+                reply: 'Sure!', language: 'en',
+                tokensUsed: 30, model: 'gpt-4.1-mini',
+            },
+        });
+
+        const { generateReplyWithTools } = await import('../../src/services/ecommerceToolLoop');
+        await generateReplyWithTools({
+            comment: 'what courses?',
+            language: 'en',
+            context: {
+                userId: 'fake-user',
+                pageId,
+                ecommerceStoreId: store.id,    // store EXISTS but is inactive
+                catalogToolsEnabled: true,      // catalog IS available — must not bail out
+            },
+        });
+
+        // The worker must be told ecommerceToolsEnabled=false because the
+        // store is dead. catalog flag stays true. pipeline tag flips to
+        // catalog_tools so cost is attributed correctly.
+        expect(postMock).toHaveBeenCalledTimes(1);
+        const ctxSent = (postMock.mock.calls[0][1] as { context: { ecommerceToolsEnabled: boolean; catalogToolsEnabled: boolean; pipeline: string } }).context;
+        expect(ctxSent.ecommerceToolsEnabled).toBe(false);
+        expect(ctxSent.catalogToolsEnabled).toBe(true);
+        expect(ctxSent.pipeline).toBe('catalog_tools');
+    });
+
     it('returns page_context_missing when a catalog tool is called without pageId', async () => {
         postMock
             .mockResolvedValueOnce({
@@ -121,4 +166,52 @@ describe('tool-loop catalog dispatch — Stage 2.3b', () => {
         expect(secondCallBody.toolResults[0]).toMatchObject({ success: false, error: 'page_context_missing' });
     });
 
+});
+
+/**
+ * dispatchAiReply probe-failure regression. The pre-flight DB probe
+ * (pageHasCatalogItems) is wrapped in try/catch so a transient DB failure
+ * never blocks reply generation — it just falls back to the no-tools path.
+ * Without this guard, a single failing query would 500 every reply on every
+ * page (catalog or not).
+ */
+describe('dispatchAiReply probe-failure fallback — Stage 2.3b safety net', () => {
+    beforeEach(() => {
+        vi.resetModules();
+        postMock.mockReset();
+    });
+
+    it('falls back to no-tools path when pageHasCatalogItems throws', async () => {
+        // Mock catalogTools to make the probe throw
+        vi.doMock('../../src/services/catalogTools', () => ({
+            pageHasCatalogItems: vi.fn().mockRejectedValue(new Error('DB unavailable')),
+        }));
+
+        // Capture aiService.generateReply to confirm fallback was hit
+        const generateReplyMock = vi.fn().mockResolvedValue({
+            reply: 'fallback reply', language: 'en', cached: false,
+        });
+        vi.doMock('../../src/services/ai', () => ({
+            aiService: { generateReply: generateReplyMock },
+        }));
+
+        const { dispatchAiReply } = await import('../../src/services/reply/generator');
+        const res = await dispatchAiReply({
+            comment: 'hi',
+            language: 'en',
+            context: {
+                userId: '00000000-0000-0000-0000-000000000001',
+                pageId: '00000000-0000-0000-0000-000000000002',
+                // No ecommerceStoreId — only the catalog probe runs
+            },
+        });
+
+        expect(res.reply).toBe('fallback reply');
+        expect(generateReplyMock).toHaveBeenCalledTimes(1);
+        // No worker call: tool-loop was never entered
+        expect(postMock).not.toHaveBeenCalled();
+
+        vi.doUnmock('../../src/services/catalogTools');
+        vi.doUnmock('../../src/services/ai');
+    });
 });

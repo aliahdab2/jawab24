@@ -30,7 +30,7 @@ import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDua
  * caused the AI to hallucinate product URLs in the test surfaces while real
  * DMs worked.
  */
-async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
+export async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
     const ctx = request.context;
     const pageId = ctx?.pageId;
     const hasStore = !!ctx?.ecommerceStoreId;
