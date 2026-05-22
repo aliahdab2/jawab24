@@ -3,9 +3,10 @@
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
 **Last updated:** 2026-05-23
-**Current stage:** Stage 1 — Foundations (complete, awaiting PR)
-**Current task:** Stage 1 done. Open PR with all 3 commits.
-**Branch:** `kb-restructure/stage-1-valid-until` — pushed to origin. 1.1 committed as `22cd666f`, 1.2 as `f0263935`, 1.3 pending commit. PR not yet opened.
+**Current stage:** Stage 1 — Foundations (complete, in review)
+**Current task:** PR #189 open. Hold merge until Stage 2 catalog UI is ready.
+**Branch:** `kb-restructure/stage-1-valid-until` — pushed. Commits: `22cd666f` (1.1), `f0263935` (1.2), `83edcf6b` (1.3).
+**PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, deploy stance documented in body ("hold merge until Stage 2").
 
 ---
 
@@ -74,6 +75,12 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 | 2026-05-22 | No feature flag system built up-front                                                 | Per-merchant manual enablement for first 3 dogfood merchants; revisit at Stage 2 boundary |
 
 ---
+
+## Future small follow-ups (out of scope for Stage 1)
+
+These are deliberately *not* in Stage 1 to keep the PR tight. Each is small enough to ship as its own PR when timing is right.
+
+- **Persona-hint UX nudge.** Persona-heavy merchants (e.g. the Libyan single-product seller) use the raw KB as a tone/voice field instead of `settings.brandVoiceNotesMulti`, which already exists but isn't discoverable. Fix is not detection — it's signposting: add a one-line link above the KB editor pointing at Brand Voice settings, and/or an empty-state hint inside Brand Voice settings pointing back at KB. ~20 min of work, no detection logic. Considered for Stage 1 and deliberately deferred to avoid scope sprawl + avoid a banner-promise we couldn't back up.
 
 ## Open questions
 
