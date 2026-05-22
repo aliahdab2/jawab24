@@ -257,6 +257,10 @@ export interface GenerateRequest {
         customerContext?: string;
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
+        /** When true, the worker includes e-commerce tool definitions in the OpenAI call. */
+        ecommerceToolsEnabled?: boolean;
+        /** When true, the worker includes catalog tool definitions (search/get/list entities). */
+        catalogToolsEnabled?: boolean;
     };
 }
 

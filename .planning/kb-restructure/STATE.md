@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-05-23
 **Current stage:** Stage 2 — Catalog editor (in progress)
-**Current task:** Stage 2.1 + 2.2 done (schema, migration, CRUD API + workspace-scoped tests). Next is 2.3 (AI tools: `search_entities`, `get_entity_details`, `list_active_entities` wired into the ai-worker tool whitelist).
+**Current task:** Stage 2.1, 2.2, 2.3a, **2.3b done** (schema, CRUD API, catalog tool executor + ai-worker integration + tool-loop dispatcher + context plumbing). Next is **2.4** — frontend route + list view at `/pages/[pageId]/catalog`.
 **Branch:** `kb-restructure/stage-2-catalog` (based on `kb-restructure/stage-1-valid-until`; will rebase onto main once Stage 1 PR #189 merges).
 **Stage 1 PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, hold-merge until Stage 2 catalog UI is ready.
 
@@ -39,7 +39,14 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 ### Stage 2 — Catalog entities (this month, ~3–4 weeks)
 - [x] **2.1 `catalog_items` table** — DONE 2026-05-23 (commit `96fc8cba`). Generic schema, type-driven, JSONB metadata. Migration `0108_*.sql`. 7 schema integration tests cover CRUD, defaults, cascade-delete, active-filter, and type-driven filtering.
 - [x] **2.2 Backend CRUD API** — DONE 2026-05-23. New `services/catalog.ts`, `controllers/catalog.ts`, `routes/catalog.ts` registered at root. Endpoints: `GET /catalog-items?pageId=…` (default `status=active`; supports `type`, `status=active|expired|archived|all`), `GET /catalog-items/:id`, `POST /catalog-items` (admin+), `PATCH /catalog-items/:id` (admin+), `DELETE /catalog-items/:id` (soft-archive, admin+). Workspace-scoped via parent page; every write bumps `pages.kbVersion` to invalidate semantic cache. Zod validates type enum, date ordering, `priceMinor` requires `currency`. 17 HTTP integration tests at `test/integration/catalog-api.test.ts` (24 catalog tests total pass; lint + tsc clean).
-- [ ] **2.3 AI tools** — `search_entities`, `get_entity_details`, `list_active_entities` added to ai-worker tool whitelist (extends `packages/shared/src/ecommerce-tools.ts`)
+- [x] **2.3a Catalog tool executor + shared types** — DONE 2026-05-23 (commit `25fa6265`). New `services/catalogTools.ts` with `executeCatalogToolCall(pageId, toolCall)` dispatcher and three tools (`search_entities`, `get_entity_details`, `list_active_entities`). `list_active_entities` filters `endsAt > NOW()` in SQL — catalyst-incident safeguard at the data layer. Shared types added to `@jawab24/shared`: `CatalogToolName`, `VALID_CATALOG_TOOL_NAMES`, `ALL_VALID_TOOL_NAMES`, `CatalogEntitySummary`, `CatalogEntityDetails`, `CatalogEntityStatus`. `pageHasCatalogItems()` helper for conditional surfacing. 18 integration tests added (cross-page isolation, archived exclusion, status computation, dispatcher unknown-name).
+- [x] **2.3b AI integration** — DONE 2026-05-23. Catalog tools wired end-to-end:
+  - **ai-worker** ([ecommerceToolHandler.ts](ai-worker/src/services/ecommerceToolHandler.ts)): added `CATALOG_TOOLS` (3 OpenAI function defs) + `CATALOG_PROMPT_ADDITION` system-prompt block; new `selectToolsForRequest()` helper picks tool sets and prompt additions based on `ecommerceToolsEnabled` / `catalogToolsEnabled` context flags. Both `generateWithTools` (Phase 1) and `generateWithToolResults` (Phase 2) use the helper. Default-on legacy behavior preserved when neither flag is set.
+  - **backend tool-loop** ([ecommerceToolLoop.ts](backend/src/services/ecommerceToolLoop.ts)): gating condition relaxed from `storeId` to `storeId || catalogToolsEnabled`. New `dispatchTool()` routes by tool name — `CATALOG_TOOL_SET` → `executeCatalogToolCall(pageId, ...)`, everything else → `executeToolCall(storeId, ...)`. Combined whitelist `ALL_VALID_TOOL_NAMES` used for filtering AI tool calls. Product cards skipped when no storeId (catalog-only flow).
+  - **reply pipeline** ([generator.ts](backend/src/services/reply/generator.ts)): `dispatchAiReply()` calls `pageHasCatalogItems(pageId)` when no store is linked; sets `catalogToolsEnabled: true` and routes through the tool loop. Probe failure is non-fatal — falls back to no-tools path. Caller can pre-set the flag (playground does).
+  - **context types**: `AiGenerateRequest.context.catalogToolsEnabled` (backend) + same flag added to ai-worker `GenerateRequest.context`.
+  - **tests**: 2 new tool-loop dispatch tests (mocked axios to ai-worker) confirm catalog tool names route to the catalog executor, results flow back to the worker, and `page_context_missing` surfaces when pageId is absent. 243/243 backend integration tests pass (including the existing e-commerce pipeline). 262/262 ai-worker tests pass.
+  - **eval re-baseline** still pending — gated to Stage 2.8 (as originally planned). Catalog-class eval cases will be added then.
 - [ ] **2.4 Frontend route + list view** — `/pages/[pageId]/catalog` with empty-state template picker
 - [ ] **2.5 Add/edit SidePanel form** — type-aware field surfacing, native date inputs
 - [ ] **2.6 Vertical templates + smart pre-selection** — Facebook category → template mapping
@@ -156,13 +163,22 @@ Stage 1.3 (pending commit):
 
 ---
 
-## Stage 2.2 files touched (uncommitted)
+## Recent commits on `kb-restructure/stage-2-catalog`
 
-- `backend/src/services/catalog.ts` — NEW. Workspace-scoped CRUD with auto-bump of `pages.kbVersion`.
-- `backend/src/controllers/catalog.ts` — NEW. Zod validation including type enum, date ordering, currency-required-with-price.
-- `backend/src/routes/catalog.ts` — NEW. Read = any workspace member, write = admin+ via existing `requireRole` hook.
-- `backend/src/index.ts` — register `catalogRoutes` (no prefix; endpoints live at `/catalog-items`).
-- `backend/test/integration/catalog-api.test.ts` — NEW. 17 HTTP tests covering all endpoints, cross-workspace 404s, soft-delete semantics, kbVersion bump.
+- (next) — Stage 2.3b: ai-worker + tool-loop integration (~7 files).
+- `25fa6265` — Stage 2.3a: catalog tool executor + shared types (3 files, 492+ insertions).
+- `ad7c485b` — Stage 2.2: catalog CRUD API with workspace scoping (6 files, 698+ insertions).
+- `96fc8cba` — Stage 2.1: catalog_items schema (originally on this branch).
+
+## Chrome DevTools MCP — where it pays off in the remaining stages
+
+The harness has the chrome-devtools MCP installed. Useful for:
+
+- **Stage 2.4** (frontend route): load `/pages/[pageId]/catalog`, screenshot empty state, verify "Catalog" button appears on `/pages.tsx`.
+- **Stage 2.5** (SidePanel form): drive the form via `fill_form`, submit, screenshot result, verify HTML5 date-input validation in-browser (where CLI can't see).
+- **Stage 2.6** (vertical templates): drive the FB-category → template confirmation flow end-to-end.
+- **Stage 2.7** (dogfood prep): admin-playground a catalog question against a seeded page; watch the network tab for the tool-loop request shape (the real-world sanity check before Stage 2.8 eval re-baseline).
+- **NOT** useful for Stages 2.3 / 2.8 — pure backend / pure CLI respectively.
 
 ---
 
@@ -170,10 +186,12 @@ Stage 1.3 (pending commit):
 
 **Concrete action a fresh session can execute immediately:**
 
-Stage 2.2 is implementation-complete (lint + tsc + 24 catalog integration tests pass). Suggested next steps:
-
-1. **Commit Stage 2.2** with a single atomic commit. Conventional message, e.g. `feat(kb): catalog CRUD API with workspace scoping (Stage 2.2)`. Body should call out: workspace-scoped via parent page, every write bumps `pages.kbVersion` for semantic-cache invalidation, soft-delete via `archivedAt`, Zod validation (type enum, date ordering, price-requires-currency), 17 HTTP integration tests added.
-2. **Move to Stage 2.3** (AI tools). Plan: extend `packages/shared/src/ecommerce-tools.ts` with `CATALOG_TOOLS` (`search_entities`, `get_entity_details`, `list_active_entities`), implement tool handlers in backend (reuse `catalogService` helpers), surface them in ai-worker prompt assembly only when the page has ≥1 active catalog item. `list_active_entities` bakes in the `endsAt > NOW()` filter. Hard ceiling on `MAX_TOOL_ROUNDS` (currently 2) stays.
+Stages 2.1 → 2.3b all committed on `kb-restructure/stage-2-catalog`. All backend + ai-worker tests pass (243 + 262). Suggested next step: **Stage 2.4** — frontend route + list view at `/pages/[pageId]/catalog`. Use chrome-devtools MCP to verify visually (see Chrome DevTools section above). Plan from STAGE-2-PLAN.md:
+- New route `frontend/src/pages/pages/[pageId]/catalog.tsx`
+- Components: `CatalogList`, `CatalogItemCard`, `CatalogStatusBadge`, `PlatformProductsTab` (read-only for Salla/Shopify)
+- Entry point: "Catalog" button on each page card in `/pages.tsx`
+- Empty state with template picker (Stage 2.6 will wire smart pre-selection)
+- New i18n namespace `catalog` (44 → 45 namespaces — register all 3 places per AI_INSTRUCTIONS.md)
 
 ---
 
