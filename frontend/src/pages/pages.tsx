@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
 import type { Page } from '@jawab24/shared';
+import type { KbWarnings } from '@/components/knowledge-base/types';
 import dynamic from 'next/dynamic';
 
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
@@ -656,12 +657,16 @@ const PagesPage: NextPageWithLayout = () => {
             setSaving(true);
             setSaved(false);
             try {
-              await api.put(`/pages/${editingPage.id}`, { knowledgeBase: text });
+              const response = await api.put<{ kbWarnings?: KbWarnings }>(
+                `/pages/${editingPage.id}`,
+                { knowledgeBase: text },
+              );
               setPages(pages.map(p =>
                 p.id === editingPage.id ? { ...p, knowledgeBase: text } : p
               ));
               setSaved(true);
               setTimeout(() => setSaved(false), 3000);
+              return response.data.kbWarnings;
             } catch (error) {
               const apiError = error as ApiError;
               if (apiError.response?.status === 403 && apiError.response?.data?.code === 'WORKSPACE_ACCESS_DENIED') {
@@ -670,6 +675,7 @@ const PagesPage: NextPageWithLayout = () => {
                 captureError(error, 'Failed to save knowledge base', { tags: { page: 'pages', action: 'save-kb' } });
                 toast.error(t('saveFailed'));
               }
+              return undefined;
             } finally {
               setSaving(false);
             }

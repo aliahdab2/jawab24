@@ -2,10 +2,10 @@
 
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
-**Last updated:** 2026-05-22
-**Current stage:** Stage 1 — Foundations (in progress)
-**Current task:** 1.1 + 1.2 complete, 1.3 next (ingestion-time warnings)
-**Branch:** `kb-restructure/stage-1-valid-until` — pushed to origin. 1.1 committed as `22cd666f`. 1.2 pending commit. No PR opened yet (bundling with 1.3).
+**Last updated:** 2026-05-23
+**Current stage:** Stage 1 — Foundations (complete, awaiting PR)
+**Current task:** Stage 1 done. Open PR with all 3 commits.
+**Branch:** `kb-restructure/stage-1-valid-until` — pushed to origin. 1.1 committed as `22cd666f`, 1.2 as `f0263935`, 1.3 pending commit. PR not yet opened.
 
 ---
 
@@ -30,7 +30,7 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 
 - [x] **1.1 `validUntil` on `kb_chunks`** — DONE 2026-05-22. Nullable `timestamp` column added; retrieval CTE filters `valid_until IS NULL OR valid_until > NOW()` before vector ranking. Migration `0106_zippy_tigra.sql` is single ADD COLUMN, no data touched. Integration test added (`should filter chunks past valid_until and keep current/null ones`). All 5 retrieval integration tests pass. Lint + tsc clean. Editor UI for setting `validUntil` deferred to Stage 2.
 - [x] **1.2 `source_tier` on `kb_chunks`** — DONE 2026-05-22. Integer column with `DEFAULT 4 NOT NULL` (migration `0107_huge_longshot.sql`). Both retrieval paths add `(4 - LEAST(source_tier, 4)) * 0.15` to final_score and exclude tier 5. `RetrievedChunk.sourceTier` exposed in interface. 2 new integration tests cover tier ordering + tier-5 exclusion (7/7 retrieval tests pass total). For current data (all rows backfilled to tier 4), the boost is mathematically 0 → no behavior change until tier-1/2/3/5 chunks are written by future stages.
-- [ ] **1.3 Ingestion-time warnings** — detect catalog-like patterns (price tokens + product nouns, date ranges + course nouns) in raw KB on save; show a non-blocking warning in the editor. Touches: ingestion service + `KnowledgeBaseRawEditor.tsx`.
+- [x] **1.3 Ingestion-time warnings** — DONE 2026-05-23. New `backend/src/services/kb/content-classifier.ts` with `detectCatalogLikePatterns()` (13 unit tests covering negative cases, real merchant fixtures, threshold boundaries). Wired into `PATCH /pages/:id` controller — response now carries optional `kbWarnings` field when raw KB contains 3+ price mentions or 2+ course keywords with any price. Frontend modal renders a dismissible warning banner (uses semantic `alert-warning` class, AR + EN i18n with ICU plurals). Pure no-op for retrieval/eval (classifier doesn't touch chunking or scoring).
 - [ ] **1.4 Re-baseline eval** — run `scripts/playground-eval.ts` before and after Stage 1. Document delta. Stop and diagnose if eval drops >1 point.
 
 **Stage 1 exit criteria:** eval baseline unchanged or improved, no merchant complaints, three merchants confirm they noticed nothing different (additive change worked).
@@ -92,6 +92,7 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 | Pre-Stage-1     | 2026-05-18 | 304 cases  | 95.7% | gpt-4.1-mini | v36            | Baseline. 279 PASS / 24 PARTIAL / 1 FAIL. Count confirmed by re-run on 2026-05-22 (earlier verification-agent claim of ~289 was wrong). |
 | Post-Stage-1.1  | 2026-05-22 | 304 cases  | 95.7% | gpt-4.1-mini | v36            | 279 PASS / 24 PARTIAL / 1 FAIL. Identical to baseline (no-op for existing rows with `valid_until = NULL`). Avg latency 536ms. Integration tests: 5/5 pass. Log at `/tmp/eval-stage-1-1.log`. |
 | Post-Stage-1.2  | 2026-05-22 | 304 cases  | 95.6% | gpt-4.1-mini | v36            | 279 PASS / 23 PARTIAL / 2 FAIL. -0.1pp vs baseline. Diagnosed as LLM variance, NOT regression: test #46 (Cat 4 safety, Arabic Riyadh question) was already PARTIAL in baseline (failed `contains:الرياض` check). In 1.2 the confidence calibration also flipped (high → medium), pushing it to FAIL. No PASS test regressed. For tier-4-only data (every existing row), boost formula `(4 - LEAST(4, 4)) * 0.15 = 0` is mathematically a no-op. Integration tests prove tier ordering works on real tier-1/2/3/5 data. Log at `/tmp/eval-stage-1-2.log`. |
+| Post-Stage-1.3  | 2026-05-23 | 304 cases  | 95.7% | gpt-4.1-mini | v36            | 279 PASS / 24 PARTIAL / 1 FAIL. Identical to baseline. **Confirms the 1.2 dip was pure LLM variance** — test #46 flipped back to PARTIAL this run with no code change to retrieval logic. Avg latency 577ms. Classifier doesn't touch retrieval, so no behavior change expected for eval. Log at `/tmp/eval-stage-1-3.log`. |
 | Post-Stage-1.2  | TBD  | TBD        | TBD       | TBD          | TBD            | After `source_tier`                  |
 | Post-Stage-1.3  | TBD  | TBD        | TBD       | TBD          | TBD            | After ingestion warnings             |
 | Post-Stage-2    | TBD  | TBD        | TBD       | TBD          | TBD            | After catalog entities live          |
@@ -118,7 +119,7 @@ Stage 1.1 (commit `22cd666f`, pushed):
 - `backend/src/services/kb/pgvector-store.ts` — added `valid_until` filter to symmetrical vector-only path
 - `backend/test/integration/retrieval.test.ts` — added `should filter chunks past valid_until` test
 
-Stage 1.2 (pending commit):
+Stage 1.2 (commit `f0263935`, pushed):
 - `backend/src/db/schema.ts` — added `sourceTier` column to `kbChunks` (integer, default 4, NOT NULL)
 - `backend/migrations/0107_huge_longshot.sql` — `ALTER TABLE kb_chunks ADD COLUMN source_tier integer DEFAULT 4 NOT NULL`
 - `backend/migrations/meta/0107_snapshot.json` — drizzle snapshot
@@ -127,30 +128,34 @@ Stage 1.2 (pending commit):
 - `backend/src/services/kb/pgvector-store.ts` — tier-5 excluded from vector-only path
 - `backend/test/integration/retrieval.test.ts` — 2 new tests (tier ordering, tier-5 exclusion)
 
+Stage 1.3 (pending commit):
+- `backend/src/services/kb/content-classifier.ts` — NEW. Heuristic detector for catalog-like patterns (3+ prices or 2+ course keywords + 1+ price). Patterns tuned against real dev-DB merchant KBs (electronics store, training institute).
+- `backend/test/services/kb/content-classifier.test.ts` — NEW. 13 unit tests: negative cases (policy w/ threshold price, FAQ, brand story), positive cases (real merchant fixtures, English variants, $ prefix), threshold boundary (exactly 2 vs exactly 3 prices).
+- `backend/src/controllers/pages.ts` — calls classifier in `update` controller when KB text supplied; returns `kbWarnings` in response when `hasCatalog: true`.
+- `frontend/src/components/knowledge-base/types.ts` — added `KbWarnings` / `KbCatalogReason` types mirroring backend shape.
+- `frontend/src/components/knowledge-base/KnowledgeBaseModal.tsx` — `onSave` signature returns warnings; modal stores in state; renders dismissible banner using existing `alert-warning` semantic class with ICU-plural body text.
+- `frontend/src/pages/pages.tsx` — `onSave` callback returns `response.data.kbWarnings`.
+- `frontend/src/i18n/en/kb.json` + `frontend/src/i18n/ar/kb.json` — added `catalogWarning.priceListTitle`, `catalogWarning.courseCatalogTitle`, `catalogWarning.body` (ICU plural with all 6 Arabic forms).
+
 ---
 
 ## Next session pickup
 
 **Concrete action a fresh session can execute immediately:**
 
-Start Stage 1.3 — ingestion-time warnings when merchants paste catalog-like content into the raw KB editor.
+Stage 1 is implementation-complete. Two things left before merging:
 
-Current branch is `kb-restructure/stage-1-valid-until`. Stage 1.1 is committed (`22cd666f`, pushed). Stage 1.2 is implemented locally but not yet committed — verify with `git status` and decide: commit 1.2 as its own atomic commit first (recommended), then continue to 1.3 on the same branch. Final PR will bundle all three commits.
+1. **Commit Stage 1.3** (currently uncommitted on `kb-restructure/stage-1-valid-until`). Verify with `git status` — should show the new classifier, its test, the controller change, the frontend modal + types + pages.tsx changes, and the two kb.json updates. Atomic commit, conventional message.
 
-Stage 1.3 scope:
-- Detect catalog-like patterns in raw KB on save: price tokens (SAR, $, ريال) adjacent to product nouns; date ranges with course/training nouns
-- Surface a **non-blocking warning** in the editor with a "this looks like a course/product — would you like to add it as a catalog item instead?" CTA (the CTA can be a no-op stub for now; the catalog editor lands in Stage 2)
-- Detection lives backend-side so it's reusable for the Stage 3 "Restructure my KB" extraction flow
+2. **Open the Stage 1 PR** to `main` with all three commits (`22cd666f`, `f0263935`, and the new 1.3 commit). Title suggestion: `feat(kb): source-aware retrieval foundations (valid_until, source_tier, catalog-detection warning)`. PR body should call out:
+   - The three sub-stages and what each delivers
+   - Eval: 95.7% → 95.7% (unchanged after final run, confirmed prior 1.2 dip was variance)
+   - Zero user-visible behavior change for current data — all columns default to no-op values
+   - Banner is the only user-visible UI; only fires when merchant pastes 3+ prices or course-catalog patterns
+   - Reviewer attention: the SQL changes in `retrieval.ts` and the source-tier scoring formula are hot-path code
 
-Suggested implementation path:
-1. New utility `backend/src/services/kb/content-classifier.ts` with `detectCatalogLikePatterns(text: string): { hasCatalog: boolean; reasons: string[] }`. Use regex patterns for the two heuristics; return reasons so the UI can be specific ("found 3 price+product mentions").
-2. Wire into the KB save endpoint (look at `backend/src/routes/` for the existing PATCH on pages/knowledgeBase). Return the warning payload in the response — do not block the save.
-3. Surface in [frontend/src/components/knowledge-base/KnowledgeBaseRawEditor.tsx](frontend/src/components/knowledge-base/KnowledgeBaseRawEditor.tsx) — a yellow banner above the editor after save, dismissible.
-4. Unit-test the classifier (no integration test needed — pure function). Add Arabic + English fixtures.
-5. Frontend: ensure no hardcoded strings (use `next-intl`, add to appropriate namespace).
-6. Re-run eval after 1.3 (expect no change — classifier doesn't touch retrieval).
-7. Update STATE.md and decide whether to open PR (Stage 1 complete) or continue holding for Stage 2.
+After PR opens, decision is whether to deploy Stage 1 alone or wait until Stage 2 builds something that *writes* to these columns. Per the strategy plan: probably wait for Stage 2 — there's no user-visible value to deploying empty infrastructure until the catalog UI lands.
 
-**Open question to resolve during 1.3:** what's the smallest set of regex patterns that catches catalog content without false-positiving on normal policy/FAQ text? Worth a side-by-side test with ~5 real merchant KB samples before committing.
+If you decide to deploy Stage 1 alone after merge: standard pipeline (PR merge → tag → Jenkins → gitops). Migrations 0106 + 0107 are both safe ADD COLUMN operations with `IF NOT EXISTS`-equivalent semantics (fail-fast if already applied). Local dev DB has them; production DB needs them.
 
 If anything in the strategy plan feels wrong in light of what you actually find in the code, **update the plan**, don't silently improvise.
