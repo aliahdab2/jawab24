@@ -3,10 +3,10 @@
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
 **Last updated:** 2026-05-23
-**Current stage:** Stage 1 — Foundations (complete, in review)
-**Current task:** PR #189 open. Hold merge until Stage 2 catalog UI is ready.
-**Branch:** `kb-restructure/stage-1-valid-until` — pushed. Commits: `22cd666f` (1.1), `f0263935` (1.2), `83edcf6b` (1.3).
-**PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, deploy stance documented in body ("hold merge until Stage 2").
+**Current stage:** Stage 2 — Catalog editor (in progress)
+**Current task:** Stage 2.1 (schema + migration + tests) done; next is 2.2 (backend API endpoints) per `.planning/kb-restructure/STAGE-2-PLAN.md`.
+**Branch:** `kb-restructure/stage-2-catalog` (based on `kb-restructure/stage-1-valid-until`; will rebase onto main once Stage 1 PR #189 merges).
+**Stage 1 PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, hold-merge until Stage 2 catalog UI is ready.
 
 ---
 
