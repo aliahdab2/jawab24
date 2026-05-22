@@ -4,9 +4,9 @@
 
 **Last updated:** 2026-05-23
 **Current stage:** Stage 2 — Catalog editor (in progress)
-**Current task:** Stage 2.1, 2.2, 2.3a, **2.3b done** (schema, CRUD API, catalog tool executor + ai-worker integration + tool-loop dispatcher + context plumbing). Next is **2.4** — frontend route + list view at `/pages/[pageId]/catalog`.
-**Branch:** `kb-restructure/stage-2-catalog` (based on `kb-restructure/stage-1-valid-until`; will rebase onto main once Stage 1 PR #189 merges).
-**Stage 1 PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, hold-merge until Stage 2 catalog UI is ready.
+**Current task:** Stage 2.1, 2.2, 2.3a, 2.3b + review-fix + coverage tests all done. Next is **2.4** — frontend route + list view at `/pages/[pageId]/catalog`.
+**Branch:** `kb-restructure/stage-2-catalog` — rebased onto main (post-Stage-1 merge), force-pushed 2026-05-22. 7 commits ahead.
+**Stage 1 PR:** [#189](https://github.com/aliahdab2/jawab24/pull/189) — **MERGED & DEPLOYED to production 2026-05-22T16:07:31Z (commit `1006c593`)**. valid_until column, source_tier authority ranking, and catalog-detection warning banner are live. Zero customer-facing behavior change today (existing data all backfilled to no-op defaults).
 
 ---
 
