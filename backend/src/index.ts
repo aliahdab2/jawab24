@@ -40,6 +40,7 @@ import sseRoutes from "./routes/sse";
 import customerNotificationRoutes from "./routes/customerNotifications";
 import ecommerceAnalyticsRoutes from "./routes/ecommerceAnalytics";
 import leadsRoutes from "./routes/leads";
+import catalogRoutes from "./routes/catalog";
 import { sseManager } from "./lib/sseManager";
 import { shutdownEventBus } from "./lib/eventBus";
 import { integrationRegistry } from "./integrations";
@@ -230,6 +231,7 @@ const start = async () => {
     await server.register(webhookRoutes);
     await server.register(aiRoutes);
     await server.register(pagesRoutes);
+    await server.register(catalogRoutes);
     await server.register(postsRoutes);
     await server.register(commentsRoutes);
     await server.register(settingsRoutes);

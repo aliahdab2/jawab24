@@ -4,7 +4,7 @@
 
 **Last updated:** 2026-05-23
 **Current stage:** Stage 2 — Catalog editor (in progress)
-**Current task:** Stage 2.1 (schema + migration + tests) done; next is 2.2 (backend API endpoints) per `.planning/kb-restructure/STAGE-2-PLAN.md`.
+**Current task:** Stage 2.1 + 2.2 done (schema, migration, CRUD API + workspace-scoped tests). Next is 2.3 (AI tools: `search_entities`, `get_entity_details`, `list_active_entities` wired into the ai-worker tool whitelist).
 **Branch:** `kb-restructure/stage-2-catalog` (based on `kb-restructure/stage-1-valid-until`; will rebase onto main once Stage 1 PR #189 merges).
 **Stage 1 PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, hold-merge until Stage 2 catalog UI is ready.
 
@@ -37,11 +37,14 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 **Stage 1 exit criteria:** eval baseline unchanged or improved, no merchant complaints, three merchants confirm they noticed nothing different (additive change worked).
 
 ### Stage 2 — Catalog entities (this month, ~3–4 weeks)
-- [ ] **2.1 `catalog_items` + `catalog_item_schedules` tables** — generic schema (see plan, "Data model" section)
-- [ ] **2.2 Entity tools** — `search_entities`, `get_entity_details`, `list_active_entities` added to ai-worker tool whitelist
-- [ ] **2.3 Catalog UI** — section in the existing `KnowledgeBaseSections` modal, surfaces empty-state by default
-- [ ] **2.4 Dogfood with 2–3 training-institute merchants** — manual per-merchant enablement (no feature flag system exists yet, see Open Questions)
-- [ ] **2.5 Re-baseline eval** — expect improvement on catalog-related tests, no regression elsewhere
+- [x] **2.1 `catalog_items` table** — DONE 2026-05-23 (commit `96fc8cba`). Generic schema, type-driven, JSONB metadata. Migration `0108_*.sql`. 7 schema integration tests cover CRUD, defaults, cascade-delete, active-filter, and type-driven filtering.
+- [x] **2.2 Backend CRUD API** — DONE 2026-05-23. New `services/catalog.ts`, `controllers/catalog.ts`, `routes/catalog.ts` registered at root. Endpoints: `GET /catalog-items?pageId=…` (default `status=active`; supports `type`, `status=active|expired|archived|all`), `GET /catalog-items/:id`, `POST /catalog-items` (admin+), `PATCH /catalog-items/:id` (admin+), `DELETE /catalog-items/:id` (soft-archive, admin+). Workspace-scoped via parent page; every write bumps `pages.kbVersion` to invalidate semantic cache. Zod validates type enum, date ordering, `priceMinor` requires `currency`. 17 HTTP integration tests at `test/integration/catalog-api.test.ts` (24 catalog tests total pass; lint + tsc clean).
+- [ ] **2.3 AI tools** — `search_entities`, `get_entity_details`, `list_active_entities` added to ai-worker tool whitelist (extends `packages/shared/src/ecommerce-tools.ts`)
+- [ ] **2.4 Frontend route + list view** — `/pages/[pageId]/catalog` with empty-state template picker
+- [ ] **2.5 Add/edit SidePanel form** — type-aware field surfacing, native date inputs
+- [ ] **2.6 Vertical templates + smart pre-selection** — Facebook category → template mapping
+- [ ] **2.7 Dogfood with 2–3 training-institute merchants** — manual per-merchant enablement
+- [ ] **2.8 Re-baseline eval** — expect improvement on catalog-related tests, no regression elsewhere
 
 **Stage 2 exit criteria:** 3 merchants using catalog with no complaints, eval improvement on catalog-class tests, p50 reply latency stays under 2.5s with one tool call.
 
@@ -153,11 +156,30 @@ Stage 1.3 (pending commit):
 
 ---
 
+## Stage 2.2 files touched (uncommitted)
+
+- `backend/src/services/catalog.ts` — NEW. Workspace-scoped CRUD with auto-bump of `pages.kbVersion`.
+- `backend/src/controllers/catalog.ts` — NEW. Zod validation including type enum, date ordering, currency-required-with-price.
+- `backend/src/routes/catalog.ts` — NEW. Read = any workspace member, write = admin+ via existing `requireRole` hook.
+- `backend/src/index.ts` — register `catalogRoutes` (no prefix; endpoints live at `/catalog-items`).
+- `backend/test/integration/catalog-api.test.ts` — NEW. 17 HTTP tests covering all endpoints, cross-workspace 404s, soft-delete semantics, kbVersion bump.
+
+---
+
 ## Next session pickup
 
 **Concrete action a fresh session can execute immediately:**
 
-Stage 1 is implementation-complete. Two things left before merging:
+Stage 2.2 is implementation-complete (lint + tsc + 24 catalog integration tests pass). Suggested next steps:
+
+1. **Commit Stage 2.2** with a single atomic commit. Conventional message, e.g. `feat(kb): catalog CRUD API with workspace scoping (Stage 2.2)`. Body should call out: workspace-scoped via parent page, every write bumps `pages.kbVersion` for semantic-cache invalidation, soft-delete via `archivedAt`, Zod validation (type enum, date ordering, price-requires-currency), 17 HTTP integration tests added.
+2. **Move to Stage 2.3** (AI tools). Plan: extend `packages/shared/src/ecommerce-tools.ts` with `CATALOG_TOOLS` (`search_entities`, `get_entity_details`, `list_active_entities`), implement tool handlers in backend (reuse `catalogService` helpers), surface them in ai-worker prompt assembly only when the page has ≥1 active catalog item. `list_active_entities` bakes in the `endsAt > NOW()` filter. Hard ceiling on `MAX_TOOL_ROUNDS` (currently 2) stays.
+
+---
+
+## Legacy Stage 1 next-session notes (kept for context)
+
+Stage 1 was implementation-complete. Two things were left before merging:
 
 1. **Commit Stage 1.3** (currently uncommitted on `kb-restructure/stage-1-valid-until`). Verify with `git status` — should show the new classifier, its test, the controller change, the frontend modal + types + pages.tsx changes, and the two kb.json updates. Atomic commit, conventional message.
 
