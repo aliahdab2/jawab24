@@ -73,6 +73,13 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 | 2026-05-22 | Entity-centric tools (`search_entities` etc.), not per-vertical tools                 | New verticals add types not tools; matches OpenAI Assistants pattern         |
 | 2026-05-22 | Source-aware retrieval (tier-weighted scoring) is the highest-leverage Stage-1 change | Prevents stale-chunk-beats-live-data class of bugs (catalyst incident)       |
 | 2026-05-22 | No feature flag system built up-front                                                 | Per-merchant manual enablement for first 3 dogfood merchants; revisit at Stage 2 boundary |
+| 2026-05-23 | Stage 2 catalog editor lives at standalone route `/pages/[pageId]/catalog`            | Modal doesn't scale to 20–50 catalog items; merchants benefit from a bookmarkable URL    |
+| 2026-05-23 | Vertical templates (6 starter types) — Notion-inspired but platform-controlled        | Templates are starting points, not lockboxes; merchants can add any type anytime         |
+| 2026-05-23 | Smart pre-selection from Facebook `category` (and `category_list` for locale-stability) | Data already captured at page connect; converts template question to a confirmation       |
+| 2026-05-23 | Stage 2.5 calendar view as separate sub-stage                                         | Keeps Stage 2 shippable; calendar is ~3 days follow-up after main catalog ships          |
+| 2026-05-23 | Don't allow merchant-defined schemas (Notion blank-canvas model)                      | Breaks AI semantic stability; tool calls need stable field semantics                     |
+| 2026-05-23 | Engagement-filter is required before drawing strategic conclusions from prod data     | Raw 72-page query was dominated by tire-kickers; 11 engaged customers = ~73% catalog-shaped, all 4 paying customers are catalog/service-shaped |
+| 2026-05-23 | Content creators / non-profits are a Stage 3 problem, not a Stage 2 problem           | They don't need catalog; persona/voice extraction is their value prop. Don't parallelize — Stage 2 ships first |
 
 ---
 
