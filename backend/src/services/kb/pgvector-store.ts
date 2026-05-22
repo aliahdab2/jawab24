@@ -103,6 +103,8 @@ export class PgVectorStore implements VectorStore {
             WHERE page_id = ${pageId}
               AND kb_version = ${kbActiveVersion}
               AND embedding IS NOT NULL
+              AND (valid_until IS NULL OR valid_until > NOW())
+              AND source_tier < 5
             ORDER BY embedding <=> ${vectorStr}::vector
             LIMIT ${topK}
         `);

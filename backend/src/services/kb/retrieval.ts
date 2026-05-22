@@ -11,6 +11,8 @@ export interface RetrievedChunk {
     language: string | null;
     title: string | null;
     content: string;
+    /** Authority tier (1 = most authoritative … 4 = raw narrative). Tier 5 is filtered out before reaching this object. */
+    sourceTier: number;
     vectorScore: number;
     textScore: number;
     finalScore: number;
@@ -31,6 +33,13 @@ const VECTOR_WEIGHT = 0.7;
 const TEXT_WEIGHT = 0.3;
 /** Language match bonus */
 const LANGUAGE_BOOST = 0.02;
+/**
+ * Per-tier-level boost added to final_score. Tier 1 chunks get +0.45 over tier 4 baseline,
+ * tier 2 get +0.30, tier 3 get +0.15. Calibrated as a starting point; tune via eval.
+ */
+const SOURCE_TIER_BOOST_PER_LEVEL = 0.15;
+/** source_tier values >= this are excluded from retrieval (auto-extracted suggestions awaiting review). */
+const SOURCE_TIER_EXCLUDED = 5;
 
 /** Detect language by Arabic character ratio */
 function detectQueryLanguage(text: string): string {
@@ -43,9 +52,11 @@ function detectQueryLanguage(text: string): string {
  *
  * Strategy:
  * 1. Normalize + embed the query
- * 2. Vector search: top-20 candidates via HNSW index (fast)
+ * 2. Vector search: top-20 candidates via HNSW index (fast); skip chunks past valid_until or tier 5+
  * 3. Trigram re-rank: score title + content trigram similarity on candidates only
- * 4. Fuse scores: 0.7 * vecScore + 0.3 * textScore + language boost
+ * 4. Fuse scores: 0.7 * vecScore + 0.3 * textScore + language boost + source-tier boost
+ *    where source-tier boost = (4 - LEAST(source_tier, 4)) * 0.15
+ *    (tier 1 → +0.45, tier 2 → +0.30, tier 3 → +0.15, tier 4 → 0)
  * 5. Filter by threshold + return top-K
  */
 export class RetrievalService {
@@ -89,11 +100,14 @@ export class RetrievalService {
                     title_normalized,
                     content_original,
                     content_normalized,
+                    source_tier,
                     1 - (embedding <=> ${vectorStr}::vector) as vec_score
                 FROM kb_chunks
                 WHERE page_id = ${pageId}
                   AND kb_version = ${kbActiveVersion}
                   AND embedding IS NOT NULL
+                  AND (valid_until IS NULL OR valid_until > NOW())
+                  AND source_tier < ${sql.raw(String(SOURCE_TIER_EXCLUDED))}
                 ORDER BY embedding <=> ${vectorStr}::vector
                 LIMIT 20
             )
@@ -103,6 +117,7 @@ export class RetrievalService {
                 language,
                 title,
                 content_original,
+                source_tier,
                 vec_score,
                 COALESCE(
                     0.6 * similarity(title_normalized, ${normalizedQuery})
@@ -116,6 +131,7 @@ export class RetrievalService {
                     0
                 )
                 + CASE WHEN language = ${queryLanguage} THEN ${sql.raw(String(LANGUAGE_BOOST))} ELSE 0 END
+                + (4 - LEAST(source_tier, 4)) * ${sql.raw(String(SOURCE_TIER_BOOST_PER_LEVEL))}
                 as final_score
             FROM vector_candidates
             WHERE vec_score >= ${sql.raw(String(MIN_SCORE_THRESHOLD))}
@@ -129,6 +145,7 @@ export class RetrievalService {
             language: (row.language as string) || null,
             title: (row.title as string) || null,
             content: (row.content_original as string) || '',
+            sourceTier: Number(row.source_tier),
             vectorScore: Number(row.vec_score),
             textScore: Number(row.text_score),
             finalScore: Number(row.final_score),

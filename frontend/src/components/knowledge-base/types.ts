@@ -24,6 +24,20 @@ export interface KbGap {
   sourceContext?: string | null;
 }
 
+/**
+ * Catalog-detection warnings returned by the KB save endpoint when the raw
+ * text contains price-list or course-catalog patterns. Mirrors the backend
+ * shape (`CatalogDetection` in backend/src/services/kb/content-classifier.ts).
+ */
+export type KbCatalogReason = 'price_list' | 'course_catalog';
+
+export interface KbWarnings {
+  hasCatalog: boolean;
+  reasons: KbCatalogReason[];
+  priceCount: number;
+  courseKeywordCount: number;
+}
+
 export interface KnowledgeSection {
   id: SectionId;
   content: string;

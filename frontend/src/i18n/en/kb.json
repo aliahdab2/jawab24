@@ -2,6 +2,11 @@
   "title": "Your Business Info",
   "description": "Tell Jawab about your business so it can reply accurately.",
   "thinKbTip": "The more details you add, the better Jawab answers your customers. Think about what your customers ask most often.",
+  "catalogWarning": {
+    "priceListTitle": "This looks like a price list",
+    "courseCatalogTitle": "This looks like a course catalog",
+    "body": "We found {priceCount, plural, one {# price} other {# prices}} in your text. Soon you'll be able to store these as structured items so answers stay accurate when prices change."
+  },
   "gaps": {
     "title": "Unanswered Questions",
     "hint": "Customers asked these but your KB couldn't answer. Tap to add an answer.",

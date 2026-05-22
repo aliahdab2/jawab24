@@ -9,7 +9,7 @@ import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useModalBackHandler } from '@/hooks/useModalBackHandler';
 import { pagesApi } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
-import type { KnowledgeSection, SectionId, CustomSectionId, KbGap } from './types';
+import type { KnowledgeSection, SectionId, CustomSectionId, KbGap, KbWarnings } from './types';
 import { isCustomSection, MAX_CUSTOM_SECTIONS } from './types';
 import { parseKnowledgeBase, serializeSections, getTotalCharCount } from './knowledgeBaseParser';
 import { KnowledgeBaseSections } from './KnowledgeBaseSections';
@@ -21,7 +21,7 @@ const MAX_LENGTH = 16000;
 interface KnowledgeBaseModalProps {
   page: Page;
   onClose: () => void;
-  onSave: (knowledgeBase: string) => Promise<void>;
+  onSave: (knowledgeBase: string) => Promise<KbWarnings | undefined | void>;
   saving: boolean;
   saved: boolean;
 }
@@ -38,6 +38,7 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
   const [showFacebookBanner, setShowFacebookBanner] = useState(false);
   const [gaps, setGaps] = useState<KbGap[]>([]);
   const [expandedGapId, setExpandedGapId] = useState<string | null>(null);
+  const [kbWarnings, setKbWarnings] = useState<KbWarnings | null>(null);
 
   // Initialize from page data
   useEffect(() => {
@@ -124,10 +125,15 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
     setRawMode((prev) => !prev);
   }, [rawMode, rawText, sections]);
 
-  // Save handler
-  const handleSave = useCallback(() => {
+  // Save handler — captures any catalog-detection warnings returned by the
+  // backend so the inline banner can prompt the merchant to restructure.
+  const handleSave = useCallback(async () => {
     const text = rawMode ? rawText : serializeSections(sections);
-    onSave(text);
+    setKbWarnings(null);
+    const result = await onSave(text);
+    if (result && typeof result === 'object' && 'hasCatalog' in result && result.hasCatalog) {
+      setKbWarnings(result);
+    }
   }, [rawMode, rawText, sections, onSave]);
 
   // Gap approved: append Q&A to "notes" section
@@ -252,6 +258,35 @@ export function KnowledgeBaseModal({ page, onClose, onSave, saving, saved }: Kno
               <p className="text-xs leading-relaxed">
                 {tKb('thinKbTip')}
               </p>
+            </div>
+          )}
+
+          {/* Catalog-detection warning — appears after save when raw KB looks
+              like a price list or course catalog. Non-blocking; merchant can
+              dismiss and keep the current text. */}
+          {kbWarnings && kbWarnings.hasCatalog && (
+            <div className="flex items-start gap-2.5 p-3 mb-3 rounded-xl alert-warning border" role="status" aria-live="polite">
+              <Lightbulb className="w-4 h-4 flex-shrink-0 mt-0.5" aria-hidden="true" />
+              <div className="flex-1 text-xs leading-relaxed">
+                <p className="font-medium mb-1">
+                  {kbWarnings.reasons.includes('course_catalog')
+                    ? tKb('catalogWarning.courseCatalogTitle')
+                    : tKb('catalogWarning.priceListTitle')}
+                </p>
+                <p>
+                  {tKb('catalogWarning.body', {
+                    priceCount: kbWarnings.priceCount,
+                  })}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setKbWarnings(null)}
+                className="flex-shrink-0 p-1 -m-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                aria-label={tc('dismiss')}
+              >
+                <X className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
             </div>
           )}
 

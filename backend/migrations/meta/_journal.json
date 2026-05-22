@@ -736,6 +736,20 @@
       "when": 1779376269685,
       "tag": "0105_hard_black_widow",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "5",
+      "when": 1779403461834,
+      "tag": "0106_zippy_tigra",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "5",
+      "when": 1779404452292,
+      "tag": "0107_huge_longshot",
+      "breakpoints": true
     }
   ]
 }

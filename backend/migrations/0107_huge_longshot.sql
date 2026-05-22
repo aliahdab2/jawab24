@@ -1,0 +1,1 @@
+ALTER TABLE "kb_chunks" ADD COLUMN "source_tier" integer DEFAULT 4 NOT NULL;

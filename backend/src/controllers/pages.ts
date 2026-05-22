@@ -3,6 +3,7 @@ import { pagesService, isPageDisconnected } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
 import { gapDetectorService } from '../services/kb/gap-detector';
+import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { CreatePageDTO, UpdatePageDTO, createRequestLogger } from '../types';
 import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { config } from '../config';
@@ -123,7 +124,20 @@ export class PagesController {
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
             }
-            return reply.send(serializePage(page));
+
+            // Non-blocking: flag catalog-like patterns in raw KB so the editor
+            // can prompt the merchant to restructure (Stage 2/3 will offer
+            // structured catalog entry). Only runs when KB text was supplied
+            // in this update.
+            const serialized = serializePage(page);
+            const kbText = request.body.knowledgeBase;
+            if (typeof kbText === 'string' && kbText.trim().length > 0) {
+                const detection = detectCatalogLikePatterns(kbText);
+                if (detection.hasCatalog) {
+                    return reply.send({ ...serialized, kbWarnings: detection });
+                }
+            }
+            return reply.send(serialized);
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to update page' });

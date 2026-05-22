@@ -851,6 +851,19 @@ export const kbChunks = pgTable('kb_chunks', {
     metadata: jsonb('metadata').default({}),
     // Note: embedding vector(512) column added via raw SQL in migration (Drizzle doesn't support vector type)
     kbVersion: integer('kb_version').notNull(),
+    // Nullable expiry; retrieval filters out chunks where valid_until <= NOW().
+    // Use for time-bound narrative content (e.g. "Ramadan hours") so stale facts
+    // can't outscore current ones via semantic similarity alone.
+    validUntil: timestamp('valid_until'),
+    // Authority tier for retrieval ranking (lower = more authoritative):
+    //   1 = live platform API (Salla/Shopify/Zid) — never written here, projected at query time
+    //   2 = manually entered structured catalog rows (future catalog_items table)
+    //   3 = approved narrative chunks (merchant explicitly marked canonical)
+    //   4 = raw narrative chunks ingested from free-text KB (DEFAULT for legacy rows)
+    //   5 = auto-extracted suggestions awaiting merchant review — excluded from retrieval
+    // Retrieval adds a boost of (4 - LEAST(source_tier, 4)) * 0.15 to final_score,
+    // and excludes tier 5 entirely. See retrieval.ts.
+    sourceTier: integer('source_tier').notNull().default(4),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => {
