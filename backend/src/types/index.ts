@@ -51,6 +51,13 @@ export interface AiGenerateRequest {
         customerContext?: string;
         ecommerceStoreId?: string;
         ecommerceToolsEnabled?: boolean;
+        /**
+         * Stage 2.3b: set by the reply pipeline when the page has ≥1 non-archived
+         * catalog item (`pageHasCatalogItems(pageId)`). Triggers the tool-loop
+         * even when no e-commerce store is linked, and tells the ai-worker to
+         * include the catalog tool definitions in the OpenAI call.
+         */
+        catalogToolsEnabled?: boolean;
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
     };

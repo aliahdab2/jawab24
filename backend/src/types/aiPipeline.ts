@@ -20,6 +20,7 @@ export type AiPipeline =
     | 'lead_extraction'      // Lead extraction from conversations
     | 'kb_file_extraction'   // PDF/image OCR for KB ingestion
     | 'ecommerce_tools'      // Per-iteration call inside the e-commerce tool loop
+    | 'catalog_tools'        // Per-iteration call inside the catalog tool loop (no e-commerce store linked)
     | 'failover'             // Fallback model after circuit breaker opened
     | 'unknown';             // Caller forgot to tag — surfaces in dashboard so we can fix it
 
