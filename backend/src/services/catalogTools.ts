@@ -14,13 +14,14 @@
  * safeguard — even if the LLM forgets to filter, the data layer guarantees
  * stale catalog entries are unreachable.
  */
-import { and, desc, eq, gt, ilike, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../db';
 import { catalogItems } from '../db/schema';
+import { catalogActiveCondition } from './catalog';
 import {
     VALID_CATALOG_TOOL_NAMES,
+    computeCatalogStatus,
     type CatalogEntityDetails,
-    type CatalogEntityStatus,
     type CatalogEntitySummary,
     type CatalogEntityType,
     type CatalogToolCall,
@@ -30,7 +31,6 @@ import {
 const SEARCH_DEFAULT_LIMIT = 5;
 const LIST_DEFAULT_LIMIT = 10;
 const HARD_MAX_LIMIT = 25;
-const EXPIRING_SOON_DAYS = 7;
 
 type CatalogRow = typeof catalogItems.$inferSelect;
 
@@ -38,15 +38,6 @@ function clampLimit(raw: unknown, fallback: number): number {
     const n = typeof raw === 'number' ? raw : Number(raw);
     if (!Number.isFinite(n) || n <= 0) return fallback;
     return Math.min(Math.floor(n), HARD_MAX_LIMIT);
-}
-
-function computeStatus(row: Pick<CatalogRow, 'archivedAt' | 'endsAt'>, now: Date): CatalogEntityStatus {
-    if (row.archivedAt) return 'archived';
-    if (!row.endsAt) return 'active';
-    if (row.endsAt <= now) return 'expired';
-    const msUntilEnd = row.endsAt.getTime() - now.getTime();
-    if (msUntilEnd <= EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000) return 'expiring_soon';
-    return 'active';
 }
 
 function toSummary(row: CatalogRow, now: Date): CatalogEntitySummary {
@@ -60,7 +51,7 @@ function toSummary(row: CatalogRow, now: Date): CatalogEntitySummary {
         startsAt: row.startsAt?.toISOString() ?? null,
         endsAt: row.endsAt?.toISOString() ?? null,
         enrollmentClosesAt: row.enrollmentClosesAt?.toISOString() ?? null,
-        status: computeStatus(row, now),
+        status: computeCatalogStatus(row, now),
     };
 }
 
@@ -136,12 +127,7 @@ async function listActiveEntities(pageId: string, args: CatalogToolCall['argumen
     const type = args.type as CatalogEntityType | undefined;
     const limit = clampLimit(args.limit, LIST_DEFAULT_LIMIT);
 
-    const freshness = or(isNull(catalogItems.endsAt), gt(catalogItems.endsAt, sql`NOW()`));
-    const conds = [
-        eq(catalogItems.pageId, pageId),
-        isNull(catalogItems.archivedAt),
-    ];
-    if (freshness) conds.push(freshness);
+    const conds = catalogActiveCondition(pageId);
     if (type) conds.push(eq(catalogItems.type, type));
 
     const rows = await db

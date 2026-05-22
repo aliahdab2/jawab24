@@ -1,6 +1,11 @@
-import { and, desc, eq, gt, isNotNull, isNull, lte, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNotNull, isNull, lte, or, sql, type SQL } from 'drizzle-orm';
 import { db } from '../db';
 import { catalogItems, pages } from '../db/schema';
+import { CATALOG_ITEM_TYPES, type CatalogItemType, type CatalogStatusFilter } from '@jawab24/shared';
+
+// Re-export the canonical types so existing controller/route imports keep working.
+export { CATALOG_ITEM_TYPES };
+export type { CatalogItemType, CatalogStatusFilter };
 
 /** Transaction or top-level db handle — both expose the same query builder surface. */
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -18,16 +23,26 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * the version when the free-text KB changes.
  */
 
-export type CatalogItemType = 'course' | 'product' | 'service' | 'event' | 'branch' | 'package';
-export const CATALOG_ITEM_TYPES: readonly CatalogItemType[] = [
-    'course', 'product', 'service', 'event', 'branch', 'package',
-] as const;
-
-export type CatalogStatus = 'active' | 'expired' | 'archived' | 'all';
+/**
+ * Drizzle predicate for "active" catalog items — not archived, plus either
+ * evergreen (no endsAt) or still within the future window. Used by both the
+ * catalog list endpoint (status=active) and the AI-side
+ * `listActiveEntities()` tool — sharing the predicate keeps the two
+ * surfaces from drifting about what "active" means in SQL.
+ */
+export function catalogActiveCondition(pageId: string): SQL[] {
+    const conds: SQL[] = [
+        eq(catalogItems.pageId, pageId),
+        isNull(catalogItems.archivedAt),
+    ];
+    const freshness = or(isNull(catalogItems.endsAt), gt(catalogItems.endsAt, sql`NOW()`));
+    if (freshness) conds.push(freshness);
+    return conds;
+}
 
 export interface ListFilters {
     type?: CatalogItemType;
-    status?: CatalogStatus;
+    status?: CatalogStatusFilter;
 }
 
 export interface CreateCatalogItemInput {
@@ -82,22 +97,22 @@ class CatalogService {
     async list(workspaceId: string, pageId: string, filters: ListFilters = {}) {
         if (!(await this.pageBelongsToWorkspace(workspaceId, pageId))) return null;
 
-        const conds = [eq(catalogItems.pageId, pageId)];
+        const status = filters.status ?? 'active';
+        const conds: SQL[] = status === 'active'
+            ? catalogActiveCondition(pageId)
+            : [eq(catalogItems.pageId, pageId)];
+
         if (filters.type) conds.push(eq(catalogItems.type, filters.type));
 
-        const status = filters.status ?? 'active';
-        if (status === 'active') {
-            conds.push(isNull(catalogItems.archivedAt));
-            const freshness = or(isNull(catalogItems.endsAt), gt(catalogItems.endsAt, sql`NOW()`));
-            if (freshness) conds.push(freshness);
-        } else if (status === 'expired') {
+        if (status === 'expired') {
             conds.push(isNull(catalogItems.archivedAt));
             conds.push(isNotNull(catalogItems.endsAt));
             conds.push(lte(catalogItems.endsAt, sql`NOW()`));
         } else if (status === 'archived') {
             conds.push(isNotNull(catalogItems.archivedAt));
         }
-        // 'all' applies no status filter.
+        // 'all' applies no extra status filter.
+        // 'active' is fully covered by catalogActiveCondition above.
 
         return db
             .select()

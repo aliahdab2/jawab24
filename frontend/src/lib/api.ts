@@ -157,8 +157,11 @@ export const pagesApi = {
 };
 
 // Catalog API (Stage 2 of KB restructure — structured catalog items)
-export type CatalogItemType = 'course' | 'product' | 'service' | 'event' | 'branch' | 'package';
-export type CatalogStatusFilter = 'active' | 'expired' | 'archived' | 'all';
+//
+// Types come from @jawab24/shared so backend + frontend can never disagree
+// about the catalog item shape, status filter, or status enum.
+import type { CatalogItemType, CatalogStatusFilter } from '@jawab24/shared';
+export type { CatalogItemType, CatalogStatusFilter } from '@jawab24/shared';
 
 export interface CatalogItem {
   id: string;

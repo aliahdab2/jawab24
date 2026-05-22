@@ -159,7 +159,33 @@ export const ALL_VALID_TOOL_NAMES: readonly (EcommerceToolName | CatalogToolName
     ...VALID_CATALOG_TOOL_NAMES,
 ];
 
-export type CatalogEntityType = 'course' | 'product' | 'service' | 'event' | 'branch' | 'package';
+/**
+ * Canonical type for a catalog item's category. Mirrors the `type` column on
+ * the `catalog_items` table. Adding a new type requires:
+ *   1. Extending this union here
+ *   2. Adding it to CATALOG_ITEM_TYPES below (for runtime iteration / Zod)
+ *   3. Whatever vertical UX the new type implies (Stage 2.6+)
+ */
+export type CatalogItemType = 'course' | 'product' | 'service' | 'event' | 'branch' | 'package';
+
+/** Runtime-iterable list of the canonical types — for Zod enums, type tab UIs, etc. */
+export const CATALOG_ITEM_TYPES: readonly CatalogItemType[] = [
+    'course', 'product', 'service', 'event', 'branch', 'package',
+] as const;
+
+/**
+ * Alias preserved because the AI tool surface names items as "entities"
+ * (search_entities, list_active_entities). Prefer `CatalogItemType` in
+ * non-tool code.
+ */
+export type CatalogEntityType = CatalogItemType;
+
+/**
+ * Status filter accepted by the catalog list endpoint
+ * (GET /catalog-items?status=...). NOT the same as CatalogEntityStatus, which
+ * is the per-item computed display state — distinct domains, distinct types.
+ */
+export type CatalogStatusFilter = 'active' | 'expired' | 'archived' | 'all';
 
 export interface SearchEntitiesArgs {
     query: string;
@@ -184,6 +210,33 @@ export interface CatalogToolCall {
 
 /** Status computed at read time from endsAt / archivedAt. */
 export type CatalogEntityStatus = 'active' | 'expiring_soon' | 'expired' | 'archived';
+
+/**
+ * Window in which a date-bound item is considered "expiring soon" rather than
+ * fully active. Shared between backend (tool result `status` field) and
+ * frontend (badge variant) — if these drift, the AI and the merchant UI
+ * disagree about whether something is expiring.
+ */
+export const EXPIRING_SOON_DAYS = 7;
+
+/**
+ * Single source of truth for catalog-item status derivation. Accepts both
+ * Date objects (backend Drizzle rows) and ISO strings (frontend JSON).
+ * Pure function, no IO. Tested via the parity test in
+ * `packages/shared/src/__tests__/catalog-status.test.ts`.
+ */
+export function computeCatalogStatus(
+    item: { archivedAt?: Date | string | null; endsAt?: Date | string | null },
+    now: Date = new Date(),
+): CatalogEntityStatus {
+    if (item.archivedAt) return 'archived';
+    if (!item.endsAt) return 'active';
+    const endsAt = item.endsAt instanceof Date ? item.endsAt : new Date(item.endsAt);
+    if (endsAt.getTime() <= now.getTime()) return 'expired';
+    const msUntilEnd = endsAt.getTime() - now.getTime();
+    if (msUntilEnd <= EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000) return 'expiring_soon';
+    return 'active';
+}
 
 /** Shape returned to the LLM for one catalog item. */
 export interface CatalogEntitySummary {

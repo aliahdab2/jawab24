@@ -1,24 +1,25 @@
 import { useTranslations } from 'next-intl';
 import { Badge } from '@/components/ui';
+import {
+    computeCatalogStatus as computeStatusShared,
+    type CatalogEntityStatus,
+} from '@jawab24/shared';
 import type { CatalogItem } from '@/lib/api';
 
-export type CatalogStatus = 'active' | 'expiring_soon' | 'expired' | 'archived';
-
-const EXPIRING_SOON_DAYS = 7;
-
-/** Client-side status derivation — mirrors backend computeStatus(). */
-export function computeStatus(item: Pick<CatalogItem, 'archivedAt' | 'endsAt'>, now: Date = new Date()): CatalogStatus {
-    if (item.archivedAt) return 'archived';
-    if (!item.endsAt) return 'active';
-    const endsAt = new Date(item.endsAt);
-    if (endsAt <= now) return 'expired';
-    const msUntilEnd = endsAt.getTime() - now.getTime();
-    if (msUntilEnd <= EXPIRING_SOON_DAYS * 24 * 60 * 60 * 1000) return 'expiring_soon';
-    return 'active';
+// Re-export the canonical computeCatalogStatus so existing callers
+// (CatalogItemCard) keep working. Local thin alias accepts the frontend's
+// CatalogItem shape directly.
+export function computeStatus(
+    item: Pick<CatalogItem, 'archivedAt' | 'endsAt'>,
+    now: Date = new Date(),
+): CatalogEntityStatus {
+    return computeStatusShared(item, now);
 }
 
+export type CatalogStatus = CatalogEntityStatus;
+
 interface Props {
-    status: CatalogStatus;
+    status: CatalogEntityStatus;
 }
 
 export function CatalogStatusBadge({ status }: Props) {
