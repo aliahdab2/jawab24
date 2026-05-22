@@ -32,6 +32,7 @@ import { buildProductCardsFromToolResults } from './reply/productCardBuilder';
 import { DEFAULT_AI_MODEL } from '@jawab24/shared';
 import { AiToolLoopExhaustedError } from '../utils/fbGraphErrors';
 import type { AiGenerateRequest, AiGenerateResponse } from '../types';
+import type { AiPipeline } from '../types/aiPipeline';
 import {
     ALL_VALID_TOOL_NAMES,
     VALID_CATALOG_TOOL_NAMES,
@@ -89,8 +90,14 @@ async function dispatchTool(
     return executeToolCall(storeId, tc as EcommerceToolCall);
 }
 
-/** Fire-and-forget ai_usage_log write for one ai-worker tool-loop round. */
-function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolResponse): void {
+/**
+ * Fire-and-forget ai_usage_log write for one ai-worker tool-loop round.
+ *
+ * `pipeline` reflects which tool family this round used so Phase 6.5 cost
+ * counters attribute correctly: `catalog_tools` for catalog-only flows,
+ * `ecommerce_tools` when a store is involved (with or without catalog).
+ */
+function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolResponse, pipeline: AiPipeline): void {
     const model = data.model || config.ai.model || DEFAULT_AI_MODEL;
     const userId = request.context?.userId;
     if (!userId) {
@@ -99,10 +106,10 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
         Sentry.addBreadcrumb({
             category: 'ai_usage_log',
             level: 'warning',
-            message: 'ecommerce_tools usage skipped: no userId in context',
+            message: `${pipeline} usage skipped: no userId in context`,
             data: { pageId: request.context?.pageId },
         });
-        recordAiFailedBeforeLog('ecommerce_tools', model, 'MissingUserId');
+        recordAiFailedBeforeLog(pipeline, model, 'MissingUserId');
         return;
     }
     const tokensIn = data.tokensIn ?? 0;
@@ -115,10 +122,10 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
         Sentry.addBreadcrumb({
             category: 'ai_usage_log',
             level: 'warning',
-            message: 'ecommerce_tools usage skipped: worker reported zero tokens',
+            message: `${pipeline} usage skipped: worker reported zero tokens`,
             data: { pageId: request.context?.pageId, model: data.model },
         });
-        recordAiFailedBeforeLog('ecommerce_tools', model, 'ZeroTokens');
+        recordAiFailedBeforeLog(pipeline, model, 'ZeroTokens');
         return;
     }
     logAiUsage({
@@ -130,7 +137,7 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
         cachedInputTokens: data.tokensInCached,
         tokensOut,
         cached: false,
-        pipeline: 'ecommerce_tools',
+        pipeline,
     }).catch(() => { /* logged via Sentry breadcrumb inside logAiUsage */ });
 }
 
@@ -146,7 +153,7 @@ function logToolRoundUsage(request: AiGenerateRequest, data: AiWorkerToolRespons
 export async function generateReplyWithTools(
     request: AiGenerateRequest,
 ): Promise<AiGenerateResponse> {
-    const storeId = request.context?.ecommerceStoreId;
+    let storeId = request.context?.ecommerceStoreId;
     const catalogEnabled = !!request.context?.catalogToolsEnabled;
     const pageId = request.context?.pageId;
 
@@ -157,20 +164,30 @@ export async function generateReplyWithTools(
     }
 
     // When a store IS linked, verify it's active before entering the loop.
-    // For catalog-only triggers, no store check is needed.
+    // If the store is gone or inactive:
+    //   - and catalog is available → degrade to catalog-only by clearing
+    //     storeId. Otherwise the LLM still sees e-commerce tools, picks
+    //     lookup_order, the dispatcher returns store_not_connected, and
+    //     we've wasted a tool round (and possibly confused the LLM).
+    //   - and catalog is NOT available → fall back to the no-tools path.
     if (storeId) {
+        let storeUsable = false;
         try {
             const store = await getStoreById(storeId);
-            if (!store || !store.isActive) {
-                // Store inactive but catalog may still be available — degrade
-                // gracefully to catalog-only if that flag is set; otherwise no tools.
-                if (!catalogEnabled) return aiService.generateReply(request);
-            }
+            storeUsable = !!store && !!store.isActive;
         } catch {
+            storeUsable = false;
+        }
+        if (!storeUsable) {
             if (!catalogEnabled) return aiService.generateReply(request);
+            storeId = undefined; // degrade to catalog-only
         }
     }
 
+    // Pipeline label used for cost attribution + Phase 6.5 diagnostic counters.
+    // Catalog-only after possible store downgrade above → `catalog_tools`;
+    // any flow with a usable store → `ecommerce_tools` (existing convention).
+    const pipeline: AiPipeline = catalogEnabled && !storeId ? 'catalog_tools' : 'ecommerce_tools';
     const toolLoopModel = config.ai.model || DEFAULT_AI_MODEL;
     try {
         // Step 1: Call AI worker with tools enabled.
@@ -189,7 +206,7 @@ export async function generateReplyWithTools(
                     // (catalog-only pages don't ship e-commerce tool defs).
                     ecommerceToolsEnabled: !!storeId,
                     catalogToolsEnabled: catalogEnabled,
-                    pipeline: catalogEnabled && !storeId ? 'catalog_tools' : 'ecommerce_tools',
+                    pipeline,
                 },
             },
             {
@@ -199,7 +216,7 @@ export async function generateReplyWithTools(
         );
 
         const data = toolResponse.data;
-        logToolRoundUsage(request, data);
+        logToolRoundUsage(request, data, pipeline);
         let totalTokens = data.tokensUsed || 0;
 
         // No tool calls → AI handled it directly
@@ -230,12 +247,13 @@ export async function generateReplyWithTools(
 
             if (validToolCalls.length === 0) break;
 
-            // Audit log
+            // Audit log — category reflects tool family so Sentry triage
+            // can filter catalog vs e-commerce tool events.
             for (const tc of validToolCalls) {
                 Sentry.addBreadcrumb({
-                    category: 'ecommerce-tool',
+                    category: CATALOG_TOOL_SET.has(tc.name) ? 'catalog-tool' : 'ecommerce-tool',
                     message: `Tool call: ${tc.name}`,
-                    data: { storeId, round, tool: tc.name, args: tc.arguments },
+                    data: { storeId, pageId, round, tool: tc.name, args: tc.arguments },
                     level: 'info',
                 });
             }
@@ -258,7 +276,7 @@ export async function generateReplyWithTools(
                             ...request.context,
                             ecommerceToolsEnabled: !!storeId,
                             catalogToolsEnabled: catalogEnabled,
-                            pipeline: catalogEnabled && !storeId ? 'catalog_tools' : 'ecommerce_tools',
+                            pipeline,
                         },
                     },
                     toolResults: lastToolResults,
@@ -271,7 +289,7 @@ export async function generateReplyWithTools(
             );
 
             const roundData = finalResponse.data;
-            logToolRoundUsage(request, roundData);
+            logToolRoundUsage(request, roundData, pipeline);
             totalTokens += roundData.tokensUsed || 0;
 
             // If AI returned more tool calls (Phase 2), loop again
@@ -326,7 +344,7 @@ export async function generateReplyWithTools(
         // Hop-level failure (axios error, tool execution failure). Tag with
         // the same error_class as other hop failures so the breakdown script
         // can attribute the silent fallback to the right source.
-        recordAiFailedBeforeLog('ecommerce_tools', toolLoopModel, 'AiWorkerUnreachable');
+        recordAiFailedBeforeLog(pipeline, toolLoopModel, 'AiWorkerUnreachable');
         captureError(error, 'E-commerce tool loop error', {
             tags: { service: 'ecommerce-tool-loop', storeId: storeId ?? 'none' },
         });
