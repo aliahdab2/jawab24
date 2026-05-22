@@ -9,6 +9,12 @@
     "body": "Add courses, services, products, or packages here. The AI will use them automatically when customers ask about prices or schedules.",
     "cta": "Add your first item"
   },
+  "emptyFiltered": {
+    "title": "No matches",
+    "body": "No items match the current filter. Try a different type or status."
+  },
+  "addItemTooltip": "Coming soon — adding items lands in the next update.",
+  "documentTitle": "Catalog",
   "loading": "Loading catalog…",
   "loadError": "Couldn't load the catalog. Please try again.",
   "types": {
@@ -21,10 +27,14 @@
     "package": "Packages"
   },
   "statusFilter": {
+    "groupLabel": "Filter by status",
     "active": "Active",
     "expired": "Expired",
     "archived": "Archived",
     "all": "All"
+  },
+  "typeFilter": {
+    "groupLabel": "Filter by type"
   },
   "status": {
     "active": "Active",

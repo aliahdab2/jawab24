@@ -48,7 +48,7 @@ export function CatalogItemCard({ item }: Props) {
         <Card className="p-4">
             <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-base text-surface-900 truncate">{item.name}</h3>
+                    <h3 className="font-semibold text-base text-foreground truncate">{item.name}</h3>
                     {item.description && (
                         <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{item.description}</p>
                     )}
@@ -57,7 +57,7 @@ export function CatalogItemCard({ item }: Props) {
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                <span className="font-semibold text-surface-900">
+                <span className="font-semibold text-foreground">
                     {price ?? <span className="text-muted-foreground italic">{t('card.freePrice')}</span>}
                 </span>
                 {startsAt && <span className="text-muted-foreground">{t('card.startsAt', { date: startsAt })}</span>}

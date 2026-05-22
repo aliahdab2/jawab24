@@ -3,9 +3,9 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
-import { ArrowLeft, ArrowRight, Plus } from 'lucide-react';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Button, PageHeader, PageSkeleton } from '@/components/ui';
+import { PageHeader, PageSkeleton } from '@/components/ui';
 import { CatalogList } from '@/components/catalog/CatalogList';
 import { useLanguage } from '@/i18n/hooks';
 import { isRTLLocale } from '@/utils/locale';
@@ -15,7 +15,6 @@ function CatalogPage() {
     const router = useRouter();
     const { language } = useLanguage();
     const t = useTranslations('catalog');
-    const tPages = useTranslations('pages');
     const isRTL = isRTLLocale(language);
     const pageId = typeof router.query.pageId === 'string' ? router.query.pageId : '';
     const [statusFilter, setStatusFilter] = useState<CatalogStatusFilter>('active');
@@ -34,7 +33,7 @@ function CatalogPage() {
     });
 
     if (!pageId || pageQuery.isLoading) return <PageSkeleton />;
-    if (pageQuery.isError) return <div className="p-6 text-error">{tPages('loadError')}</div>;
+    if (pageQuery.isError) return <div className="p-6 text-error">{t('loadError')}</div>;
 
     const pageName = pageQuery.data?.name ?? '';
     const BackIcon = isRTL ? ArrowRight : ArrowLeft;
@@ -52,12 +51,6 @@ function CatalogPage() {
             <PageHeader
                 title={`${t('title')} — ${pageName}`}
                 description={t('description')}
-                action={
-                    <Button disabled aria-label={t('addItem')}>
-                        <Plus className="w-4 h-4 me-1.5" aria-hidden="true" />
-                        {t('addItem')}
-                    </Button>
-                }
             />
 
             {catalogQuery.isLoading ? (
@@ -68,16 +61,23 @@ function CatalogPage() {
                 <CatalogList
                     items={catalogQuery.data ?? []}
                     statusFilter={statusFilter}
-                    onStatusChange={setStatusFilter}
+                    onStatusChange={(s) => setStatusFilter(s)}
                 />
             )}
         </div>
     );
 }
 
-CatalogPage.getLayout = (page: ReactElement) => (
-    <DashboardLayout title="Catalog">{page}</DashboardLayout>
-);
+CatalogPage.getLayout = (page: ReactElement) => {
+    // Wraps the page in DashboardLayout; the layout reads the document <title>
+    // from the catalog namespace so it localizes per language.
+    return <CatalogPageLayout>{page}</CatalogPageLayout>;
+};
+
+function CatalogPageLayout({ children }: { children: ReactElement }) {
+    const t = useTranslations('catalog');
+    return <DashboardLayout title={t('documentTitle')}>{children}</DashboardLayout>;
+}
 
 export default CatalogPage;
 
