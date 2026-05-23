@@ -5,8 +5,9 @@
 **Last updated:** 2026-05-23
 **Current stage:** Stage 2 — Catalog editor (in progress)
 **Current task:** Stage 2.1, 2.2, 2.3a, 2.3b + review-fix + coverage tests all done. Next is **2.4** — frontend route + list view at `/pages/[pageId]/catalog`.
-**Branch:** `kb-restructure/stage-2-catalog` — rebased onto main (post-Stage-1 merge), force-pushed 2026-05-22. 7 commits ahead.
+**Branch:** `kb-restructure/stage-2-catalog` — merged into main via #190 on 2026-05-22T22:07 CEST.
 **Stage 1 PR:** [#189](https://github.com/aliahdab2/jawab24/pull/189) — **MERGED & DEPLOYED to production 2026-05-22T16:07:31Z (commit `1006c593`)**. valid_until column, source_tier authority ranking, and catalog-detection warning banner are live. Zero customer-facing behavior change today (existing data all backfilled to no-op defaults).
+**Stage 2 PR:** [#190](https://github.com/aliahdab2/jawab24/pull/190) — **MERGED 2026-05-22T22:07 CEST (commit `896f05ff`); DEPLOYING 2026-05-23**. Backend infra (catalog_items schema + CRUD API, catalog tool executor + AI integration, ai-worker tool-loop gating) and read-only catalog UI ship in this deploy. Catalog tools are dormant by default — `catalogToolsEnabled` only flips true when a page has rows in `catalog_items`, and no merchant has populated it yet. Zero customer-facing behavior change expected until Stage 2.4+ ships the write path.
 
 ---
 
@@ -47,7 +48,8 @@ Smallest reversible changes that directly prevent the catalyst incident class of
   - **context types**: `AiGenerateRequest.context.catalogToolsEnabled` (backend) + same flag added to ai-worker `GenerateRequest.context`.
   - **tests**: 2 new tool-loop dispatch tests (mocked axios to ai-worker) confirm catalog tool names route to the catalog executor, results flow back to the worker, and `page_context_missing` surfaces when pageId is absent. 243/243 backend integration tests pass (including the existing e-commerce pipeline). 262/262 ai-worker tests pass.
   - **eval re-baseline** still pending — gated to Stage 2.8 (as originally planned). Catalog-class eval cases will be added then.
-- [ ] **2.4 Frontend route + list view** — `/pages/[pageId]/catalog` with empty-state template picker
+  - **prod verification 2026-05-23** — seeded 2 catalog rows on "Jawab24 Test" page via the API (POST returned 201, `pages.kb_version` bumped from 3 → 4 confirming cache-invalidation works), then drove three AI questions via `replyGenerator.generateForPlayground` direct-call: (1) "Do you have any coffee courses?" — AI mentioned the active "Coffee Roasting Workshop" + price 199.99 USD, `chunksRetrieved: 0` (proving the data came from the catalog tool, not RAG); (2) "How much is the Coffee Roasting Workshop?" — exact price quoted; (3) "Tell me about the Latte Art class" (expired item) — AI correctly stated it has ended and offered next steps. ai-worker logs show two-phase tool-loop fired (POST /generate-with-tools + POST /generate-with-tool-results) for each question. Rows soft-archived after test; test page back to clean state.
+- [x] **2.4 Frontend route + list view** — DONE 2026-05-22 (shipped in PR #190, deployed 2026-05-23). Route at `frontend/src/pages/pages/[pageId]/catalog.tsx`: React Query for parent page + catalog list, status filter ('active'/'expired'/'archived'/'all') driven from URL state, RTL-aware back arrow, loading/error states, Dashboard layout wrapper. Components: `CatalogList` (status + type filters, count-by-type, empty-state distinguishes "no items at all" vs "filter hid them", aria-pressed toggle semantics), `CatalogItemCard`, `CatalogStatusBadge`. Entry point: "Catalog" card on each page in `/pages.tsx` (lines 573-586). i18n namespace `catalog` (EN + AR), registered in `getMessages.ts` + `namespaces.ts` (`pagesCatalog` set: DASHBOARD_LAYOUT + catalog + kb + pages + time). Empty-state template picker deferred to Stage 2.6.
 - [ ] **2.5 Add/edit SidePanel form** — type-aware field surfacing, native date inputs
 - [ ] **2.6 Vertical templates + smart pre-selection** — Facebook category → template mapping
 - [ ] **2.7 Dogfood with 2–3 training-institute merchants** — manual per-merchant enablement

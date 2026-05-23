@@ -252,4 +252,121 @@ describe('Catalog API — Stage 2.2', () => {
             expect(res.statusCode).toBe(200);
         });
     });
+
+    // ---------------------------------------------------------------------------
+    // Stage 2.5 additions: restore via PATCH archivedAt:null + hard-delete gate.
+    // ---------------------------------------------------------------------------
+    describe('PATCH /catalog-items/:id — restore (Stage 2.5)', () => {
+        it('restores an archived item by setting archivedAt to null', async () => {
+            const [row] = await testDb.insert(schema.catalogItems)
+                .values({ pageId, type: 'course', name: 'Restoreable', archivedAt: new Date() })
+                .returning();
+
+            const res = await app.inject({
+                method: 'PATCH',
+                url: `/catalog-items/${row.id}`,
+                payload: { archivedAt: null },
+            });
+            expect(res.statusCode).toBe(200);
+            expect(res.json().data.archivedAt).toBeNull();
+
+            const [refetched] = await testDb.select().from(schema.catalogItems)
+                .where(eq(schema.catalogItems.id, row.id));
+            expect(refetched.archivedAt).toBeNull();
+        });
+
+        it('restored item reappears in active list', async () => {
+            const [row] = await testDb.insert(schema.catalogItems)
+                .values({ pageId, type: 'course', name: 'BackToActive', archivedAt: new Date() })
+                .returning();
+
+            // Before restore: not in active list
+            const listBefore = await app.inject({ method: 'GET', url: `/catalog-items?pageId=${pageId}&status=active` });
+            expect(listBefore.json().data.find((r: { id: string }) => r.id === row.id)).toBeUndefined();
+
+            await app.inject({
+                method: 'PATCH',
+                url: `/catalog-items/${row.id}`,
+                payload: { archivedAt: null },
+            });
+
+            // After restore: in active list
+            const listAfter = await app.inject({ method: 'GET', url: `/catalog-items?pageId=${pageId}&status=active` });
+            expect(listAfter.json().data.find((r: { id: string }) => r.id === row.id)).toBeDefined();
+        });
+    });
+
+    describe('DELETE /catalog-items/:id/permanent — hard-delete (Stage 2.5)', () => {
+        it('hard-deletes an archived item', async () => {
+            const [row] = await testDb.insert(schema.catalogItems)
+                .values({ pageId, type: 'service', name: 'GoForever', archivedAt: new Date() })
+                .returning();
+
+            const res = await app.inject({ method: 'DELETE', url: `/catalog-items/${row.id}/permanent` });
+            expect(res.statusCode).toBe(200);
+
+            // Row truly gone — no soft trace.
+            const after = await testDb.select().from(schema.catalogItems)
+                .where(eq(schema.catalogItems.id, row.id));
+            expect(after).toHaveLength(0);
+        });
+
+        it('returns 409 when item is not archived (gate enforces archive-first)', async () => {
+            const [row] = await testDb.insert(schema.catalogItems)
+                .values({ pageId, type: 'product', name: 'StillActive' })
+                .returning();
+
+            const res = await app.inject({ method: 'DELETE', url: `/catalog-items/${row.id}/permanent` });
+            expect(res.statusCode).toBe(409);
+            expect(res.json().code).toBe('not_archived');
+
+            // Row must still exist — gate prevented destruction.
+            const after = await testDb.select().from(schema.catalogItems)
+                .where(eq(schema.catalogItems.id, row.id));
+            expect(after).toHaveLength(1);
+            expect(after[0].archivedAt).toBeNull();
+        });
+
+        it('returns 404 for a non-existent id', async () => {
+            const res = await app.inject({
+                method: 'DELETE',
+                url: '/catalog-items/00000000-0000-0000-0000-000000000000/permanent',
+            });
+            expect(res.statusCode).toBe(404);
+        });
+
+        it('returns 404 for an item in a different workspace', async () => {
+            const otherUser = await createTestUser();
+            const otherWs = await createTestWorkspace(otherUser.id);
+            const otherPage = await createTestPage(otherUser.id, { workspaceId: otherWs.id });
+            const [row] = await testDb.insert(schema.catalogItems)
+                .values({ pageId: otherPage.id, type: 'service', name: 'Other workspace', archivedAt: new Date() })
+                .returning();
+
+            // Our test app is scoped to `workspaceId`, not the foreign one.
+            const res = await app.inject({ method: 'DELETE', url: `/catalog-items/${row.id}/permanent` });
+            expect(res.statusCode).toBe(404);
+
+            // Item must still exist — workspace isolation prevented destruction.
+            const after = await testDb.select().from(schema.catalogItems)
+                .where(eq(schema.catalogItems.id, row.id));
+            expect(after).toHaveLength(1);
+        });
+
+        it('bumps the page kbVersion on hard-delete (cache invalidation)', async () => {
+            const before = await testDb.select({ kbVersion: schema.pages.kbVersion })
+                .from(schema.pages).where(eq(schema.pages.id, pageId));
+            const beforeVer = before[0].kbVersion ?? 0;
+
+            const [row] = await testDb.insert(schema.catalogItems)
+                .values({ pageId, type: 'service', name: 'BumpCheck', archivedAt: new Date() })
+                .returning();
+
+            await app.inject({ method: 'DELETE', url: `/catalog-items/${row.id}/permanent` });
+
+            const after = await testDb.select({ kbVersion: schema.pages.kbVersion })
+                .from(schema.pages).where(eq(schema.pages.id, pageId));
+            expect(after[0].kbVersion ?? 0).toBeGreaterThan(beforeVer);
+        });
+    });
 });

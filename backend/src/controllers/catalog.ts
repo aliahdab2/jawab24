@@ -51,7 +51,15 @@ const CreateCatalogItemSchema = z.object({
     }
 });
 
-const UpdateCatalogItemSchema = CreateCatalogItemSchema.innerType().partial().superRefine(applyDateOrderingRules);
+// Update accepts the create fields PLUS `archivedAt`. Setting `archivedAt: null`
+// is how the merchant restores an archived item (see catalogApi.restore on the
+// frontend); setting it to a Date is technically possible but the canonical
+// archive path is DELETE /catalog-items/:id so leave that as the discoverable
+// action.
+const UpdateCatalogItemSchema = CreateCatalogItemSchema.innerType()
+    .extend({ archivedAt: isoDate.nullable().optional() })
+    .partial()
+    .superRefine(applyDateOrderingRules);
 
 const ListQuerySchema = z.object({
     pageId: z.string().uuid(),
@@ -157,6 +165,29 @@ export class CatalogController {
         } catch (error) {
             request.log.error(error);
             return reply.status(500).send({ error: 'Failed to archive catalog item' });
+        }
+    }
+
+    /**
+     * DELETE /catalog-items/:id/permanent — hard-delete.
+     * Two-step gate: only works on already-archived items. Caller archives first,
+     * then permanently deletes from the Archived view. Returns 409 if attempted
+     * on an active item to make the gate clear from the API surface.
+     */
+    async deletePermanent(request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) {
+        const req = request as ResolvedWorkspaceRequest;
+        if (!req.workspaceId) return reply.status(401).send({ error: 'Unauthorized' });
+
+        try {
+            const result = await catalogService.deletePermanent(req.workspaceId, request.params.id);
+            if (result === null) return reply.status(404).send({ error: 'Catalog item not found' });
+            if (result === 'not_archived') {
+                return reply.status(409).send({ error: 'Item must be archived before permanent deletion', code: 'not_archived' });
+            }
+            return reply.send({ data: result });
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ error: 'Failed to delete catalog item' });
         }
     }
 }

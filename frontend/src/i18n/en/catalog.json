@@ -6,14 +6,45 @@
   "viewRaw": "View raw KB",
   "emptyState": {
     "title": "No items yet",
-    "body": "Soon you'll be able to add courses, services, products, or packages here so the AI can answer questions about prices and schedules from current data.",
+    "body": "Add your courses, services, products, or packages here so the AI can answer questions about prices and schedules from current data.",
     "cta": "Add your first item"
   },
   "emptyFiltered": {
     "title": "No matches",
     "body": "No items match the current filter. Try a different type or status."
   },
-  "addItemTooltip": "Coming soon — adding items lands in the next update.",
+  "emptyStatus": {
+    "expiredTitle": "Nothing expired",
+    "expiredBody": "Items here are past their end date. Once a course or event finishes, it lands in this view.",
+    "archivedTitle": "Nothing archived",
+    "archivedBody": "Items you archive land here. Use this view to restore them or delete them permanently."
+  },
+  "form": {
+    "createTitle": "Add catalog item",
+    "editTitle": "Edit catalog item",
+    "type": "Type",
+    "typeLockedHint": "Type can't be changed after creation.",
+    "name": "Name",
+    "description": "Description",
+    "price": "Price",
+    "pricePlaceholder": "Leave empty if you'd rather discuss in chat",
+    "currency": "Currency",
+    "startsAt": "Starts on",
+    "endsAt": "Ends on",
+    "enrollmentClosesAt": "Enrollment closes on",
+    "create": "Create",
+    "save": "Save changes",
+    "createSuccess": "Item added",
+    "updateSuccess": "Changes saved",
+    "submitError": "Couldn't save. Please try again.",
+    "errNameRequired": "Name is required.",
+    "errNameTooLong": "Name is too long (max 200 characters).",
+    "errDescriptionTooLong": "Description is too long (max 4000 characters).",
+    "errPriceInvalid": "Enter a valid non-negative number.",
+    "errCurrencyRequired": "Pick a currency when setting a price.",
+    "errEndsBeforeStarts": "End date can't be before start date.",
+    "errEnrollmentAfterStarts": "Enrollment must close on or before the start date."
+  },
   "documentTitle": "Catalog",
   "loading": "Loading catalog…",
   "loadError": "Couldn't load the catalog. Please try again.",
@@ -48,7 +79,9 @@
     "endsAt": "Ends {date}",
     "enrollmentCloses": "Enrollment closes {date}",
     "edit": "Edit",
-    "archive": "Archive"
+    "archive": "Archive",
+    "restore": "Restore",
+    "deletePermanent": "Delete forever"
   },
   "counts": "{count, plural, one {# item} other {# items}}",
   "archive": {
@@ -57,6 +90,19 @@
     "confirm": "Archive",
     "cancel": "Cancel",
     "success": "Item archived",
+    "undo": "Undo",
     "error": "Couldn't archive. Please try again."
+  },
+  "restore": {
+    "success": "Item restored",
+    "error": "Couldn't restore. Please try again."
+  },
+  "deleteForever": {
+    "confirmTitle": "Delete this item forever?",
+    "confirmBody": "This permanently removes the item. There's no undo, and we won't be able to recover it.",
+    "confirm": "Delete forever",
+    "cancel": "Cancel",
+    "success": "Item deleted",
+    "error": "Couldn't delete. Please try again."
   }
 }

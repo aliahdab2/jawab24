@@ -198,6 +198,31 @@ class CatalogService {
             return row;
         });
     }
+
+    /**
+     * Hard-delete: removes the row entirely. Two-step gate — the item MUST be
+     * archived first. This prevents an accidental destructive click from the
+     * main list (where Archive is the visible action) and forces the merchant
+     * to deliberately move through archived state. Returns:
+     *   null  — not found in workspace
+     *   'not_archived' — exists but archivedAt is null (caller should 409 / 422)
+     *   the deleted row — success
+     */
+    async deletePermanent(workspaceId: string, id: string): Promise<typeof catalogItems.$inferSelect | 'not_archived' | null> {
+        const existing = await this.get(workspaceId, id);
+        if (!existing) return null;
+        if (!existing.archivedAt) return 'not_archived';
+
+        return db.transaction(async (tx) => {
+            const [row] = await tx
+                .delete(catalogItems)
+                .where(eq(catalogItems.id, id))
+                .returning();
+
+            await this.bumpKbVersion(tx, existing.pageId);
+            return row;
+        });
+    }
 }
 
 export const catalogService = new CatalogService();

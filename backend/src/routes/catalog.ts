@@ -56,5 +56,13 @@ export default async function catalogRoutes(fastify: FastifyInstance) {
                 security: auth,
             },
         }, catalogController.archive);
+
+        adminRoutes.delete('/catalog-items/:id/permanent', {
+            schema: {
+                tags: ['Catalog'],
+                summary: 'Permanently delete a catalog item (must be archived first)',
+                security: auth,
+            },
+        }, catalogController.deletePermanent);
     });
 }

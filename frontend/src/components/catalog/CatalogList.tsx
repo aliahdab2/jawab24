@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { BookOpen, SearchX } from 'lucide-react';
+import { BookOpen, Plus, SearchX } from 'lucide-react';
 import { Button, EmptyState } from '@/components/ui';
 import { CatalogItemCard } from './CatalogItemCard';
 import type { CatalogItem, CatalogItemType, CatalogStatusFilter } from '@/lib/api';
@@ -14,9 +14,19 @@ interface Props {
     statusFilter: CatalogStatusFilter;
     onStatusChange: (s: CatalogStatusFilter) => void;
     onAddClick?: () => void;
+    onEditItem?: (item: CatalogItem) => void;
+    onArchiveItem?: (item: CatalogItem) => void;
+    onRestoreItem?: (item: CatalogItem) => void;
+    onDeleteItemPermanent?: (item: CatalogItem) => void;
 }
 
-export function CatalogList({ items, statusFilter, onStatusChange, onAddClick }: Props) {
+// At very low item counts the type filter is pure visual noise — the merchant
+// can see every item at a glance and the filter pills crowd the layout for no
+// benefit. Show it only once the list is long enough that a filter saves real
+// scrolling. Threshold picked by eye, not measured; revisit with real data.
+const TYPE_FILTER_THRESHOLD = 6;
+
+export function CatalogList({ items, statusFilter, onStatusChange, onAddClick, onEditItem, onArchiveItem, onRestoreItem, onDeleteItemPermanent }: Props) {
     const t = useTranslations('catalog');
     const [typeFilter, setTypeFilter] = useState<'all' | CatalogItemType>('all');
 
@@ -45,6 +55,17 @@ export function CatalogList({ items, statusFilter, onStatusChange, onAddClick }:
 
     return (
         <div className="flex flex-col gap-4">
+            {/* "Add item" CTA — only when there are existing items. Empty state
+                renders its own CTA inside <EmptyState>, so no duplicate here. */}
+            {!isTrulyEmpty && onAddClick && (
+                <div className="flex justify-end">
+                    <Button onClick={onAddClick} size="sm">
+                        <Plus className="w-4 h-4 me-1" aria-hidden="true" />
+                        {t('addItem')}
+                    </Button>
+                </div>
+            )}
+
             {/* Status filter — these are filter buttons, not real ARIA tabs
                 (no associated tabpanels). Use aria-pressed for toggle semantics. */}
             <div className="flex flex-wrap gap-2" role="group" aria-label={t('statusFilter.groupLabel')}>
@@ -66,8 +87,16 @@ export function CatalogList({ items, statusFilter, onStatusChange, onAddClick }:
                 ))}
             </div>
 
-            {/* Type filter */}
-            <div className="flex flex-wrap gap-2 border-b border-theme-border pb-2" role="group" aria-label={t('typeFilter.groupLabel')}>
+            {/* Type filter — hidden when list is short enough that filtering
+                wouldn't save the merchant any scrolling (visual noise reduction). */}
+            <div
+                className={clsx(
+                    'flex flex-wrap gap-2 border-b border-theme-border pb-2',
+                    items.length < TYPE_FILTER_THRESHOLD && 'hidden',
+                )}
+                role="group"
+                aria-label={t('typeFilter.groupLabel')}
+            >
                 {TYPES.map(typ => {
                     const count = countsByType[typ] ?? 0;
                     if (typ !== 'all' && count === 0) return null;
@@ -91,13 +120,38 @@ export function CatalogList({ items, statusFilter, onStatusChange, onAddClick }:
                 })}
             </div>
 
-            {/* Items */}
-            {isTrulyEmpty ? (
+            {/* Items.
+
+                Empty-state copy is filter-aware so we never show the
+                "Add your first item" CTA to a merchant who already has items
+                — they might be on the Archived or Expired filter that just
+                happens to be empty right now. Showing them a generic
+                "no items" message in that case implies the catalog is empty
+                overall, which is wrong and misleading.
+
+                - status=active|all + truly empty → onboarding CTA
+                - status=expired + empty           → status-specific message
+                - status=archived + empty          → status-specific message
+                - any status + filtered by type    → "no matches" hint
+            */}
+            {isTrulyEmpty && (statusFilter === 'active' || statusFilter === 'all') ? (
                 <EmptyState
                     icon={BookOpen}
                     title={t('emptyState.title')}
                     description={t('emptyState.body')}
                     action={onAddClick ? <Button onClick={onAddClick}>{t('emptyState.cta')}</Button> : undefined}
+                />
+            ) : isTrulyEmpty && statusFilter === 'expired' ? (
+                <EmptyState
+                    icon={BookOpen}
+                    title={t('emptyStatus.expiredTitle')}
+                    description={t('emptyStatus.expiredBody')}
+                />
+            ) : isTrulyEmpty && statusFilter === 'archived' ? (
+                <EmptyState
+                    icon={BookOpen}
+                    title={t('emptyStatus.archivedTitle')}
+                    description={t('emptyStatus.archivedBody')}
                 />
             ) : isFilteredEmpty ? (
                 <EmptyState
@@ -110,7 +164,13 @@ export function CatalogList({ items, statusFilter, onStatusChange, onAddClick }:
                 <ul className="flex flex-col gap-3" aria-live="polite">
                     {visibleItems.map(item => (
                         <li key={item.id}>
-                            <CatalogItemCard item={item} />
+                            <CatalogItemCard
+                                item={item}
+                                onEdit={onEditItem ? () => onEditItem(item) : undefined}
+                                onArchive={onArchiveItem ? () => onArchiveItem(item) : undefined}
+                                onRestore={onRestoreItem ? () => onRestoreItem(item) : undefined}
+                                onDeletePermanent={onDeleteItemPermanent ? () => onDeleteItemPermanent(item) : undefined}
+                            />
                         </li>
                     ))}
                 </ul>

@@ -202,7 +202,10 @@ export interface CreateCatalogItemPayload {
   metadata?: Record<string, unknown>;
 }
 
-export type UpdateCatalogItemPayload = Partial<Omit<CreateCatalogItemPayload, 'pageId'>>;
+export type UpdateCatalogItemPayload = Partial<Omit<CreateCatalogItemPayload, 'pageId'>> & {
+  /** Set to null to restore an archived item. */
+  archivedAt?: string | null;
+};
 
 export const catalogApi = {
   list: (pageId: string, params?: { type?: CatalogItemType; status?: CatalogStatusFilter }) =>
@@ -213,6 +216,16 @@ export const catalogApi = {
   update: (id: string, payload: UpdateCatalogItemPayload) =>
     api.patch<CatalogItemResponse>(`/catalog-items/${id}`, payload),
   archive: (id: string) => api.delete<CatalogItemResponse>(`/catalog-items/${id}`),
+  /** Un-archives an item by setting archivedAt back to null via PATCH. */
+  restore: (id: string) =>
+    api.patch<CatalogItemResponse>(`/catalog-items/${id}`, { archivedAt: null }),
+  /**
+   * Hard-deletes a row. Backend gates: item must be archived first
+   * (409 otherwise). UI must enforce the gate too by only surfacing this on
+   * archived items.
+   */
+  deletePermanent: (id: string) =>
+    api.delete<CatalogItemResponse>(`/catalog-items/${id}/permanent`),
 };
 
 // Posts API
