@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useTranslations } from 'next-intl';
-import clsx from 'clsx';
-import { Button } from '@/components/ui';
+import { Button, InputFieldWrapper, CharCounter } from '@/components/ui';
+import { useAutoFocus } from '@/hooks/useAutoFocus';
+import { priceMinorToText, parseMoneyToPriceMinor } from '@/utils/money';
 import type { CatalogItem, CatalogItemType, CreateCatalogItemPayload } from '@/lib/api';
 
 const TYPES: CatalogItemType[] = ['course', 'product', 'service', 'event', 'branch', 'package'];
@@ -53,19 +54,6 @@ function dateInputToIso(value: string): string | null {
     return `${value}T00:00:00.000Z`;
 }
 
-function priceMinorToText(priceMinor: number | null | undefined): string {
-    if (priceMinor == null) return '';
-    return (priceMinor / 100).toString();
-}
-
-function textToPriceMinor(text: string): number | null {
-    const trimmed = text.trim();
-    if (!trimmed) return null;
-    const num = Number(trimmed);
-    if (!Number.isFinite(num) || num < 0) return null;
-    return Math.round(num * 100);
-}
-
 function initialFormState(item: CatalogItem | null | undefined): FormState {
     return {
         type: item?.type ?? 'course',
@@ -86,13 +74,9 @@ export function CatalogItemForm({ pageId, initialItem, onSubmit, onCancel, isSub
     const [state, setState] = useState<FormState>(() => initialFormState(initialItem));
     const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
-    // Auto-focus the first meaningful field when the form mounts so the
-    // merchant can start typing immediately. Skipped on edit to avoid
-    // accidentally selecting & overtyping an existing name.
-    const nameRef = useRef<HTMLInputElement | null>(null);
-    useEffect(() => {
-        if (!initialItem && nameRef.current) nameRef.current.focus();
-    }, [initialItem]);
+    // Auto-focus the Name field on create. Skipped on edit so the existing
+    // value isn't selected and accidentally overtyped.
+    const nameRef = useAutoFocus<HTMLInputElement>(!!initialItem);
 
     const DESCRIPTION_MAX = 4000;
 
@@ -115,7 +99,7 @@ export function CatalogItemForm({ pageId, initialItem, onSubmit, onCancel, isSub
         if (state.description.length > 4000) next.description = t('form.errDescriptionTooLong');
 
         if (showPrice && state.priceText.trim()) {
-            const minor = textToPriceMinor(state.priceText);
+            const minor = parseMoneyToPriceMinor(state.priceText);
             if (minor === null) next.priceText = t('form.errPriceInvalid');
             if (!state.currency) next.currency = t('form.errCurrencyRequired');
         }
@@ -135,7 +119,7 @@ export function CatalogItemForm({ pageId, initialItem, onSubmit, onCancel, isSub
         e.preventDefault();
         if (!validate()) return;
 
-        const priceMinor = showPrice && state.priceText.trim() ? textToPriceMinor(state.priceText) : null;
+        const priceMinor = showPrice && state.priceText.trim() ? parseMoneyToPriceMinor(state.priceText) : null;
         const payload: CreateCatalogItemPayload = {
             pageId,
             type: state.type,
@@ -196,41 +180,30 @@ export function CatalogItemForm({ pageId, initialItem, onSubmit, onCancel, isSub
                     {errors.name && <p className="text-xs text-error mt-1">{errors.name}</p>}
                 </div>
 
-                {/* Description */}
+                {/* Description — uses the shared InputFieldWrapper + CharCounter
+                    primitives (same pattern as every settings card), so users
+                    get the consistent focus-ring chrome and tri-tier counter
+                    coloring (muted → amber at 80% → red at cap). */}
                 <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                        <label htmlFor="catalog-description" className="text-sm font-medium text-foreground">
-                            {t('form.description')}
-                        </label>
-                        {/* Char counter — only render once they've started typing
-                            to avoid showing 0/4000 on the empty form (visual
-                            noise). At 80% of the limit the counter switches to
-                            warning color so the merchant sees the ceiling
-                            approaching. */}
-                        {state.description.length > 0 && (
-                            <span
-                                className={clsx(
-                                    'text-xs tabular-nums',
-                                    state.description.length > DESCRIPTION_MAX * 0.8
-                                        ? 'text-warning'
-                                        : 'text-muted-foreground',
-                                )}
-                            >
-                                {state.description.length} / {DESCRIPTION_MAX}
-                            </span>
-                        )}
-                    </div>
-                    <textarea
-                        id="catalog-description"
-                        dir="auto"
-                        value={state.description}
-                        onChange={e => update('description', e.target.value)}
+                    <label htmlFor="catalog-description" className="block text-sm font-medium text-foreground mb-1.5">
+                        {t('form.description')}
+                    </label>
+                    <InputFieldWrapper
                         disabled={isSubmitting}
-                        maxLength={DESCRIPTION_MAX}
-                        rows={3}
-                        className="w-full px-3 py-2 rounded-lg border border-theme-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60 resize-y"
-                        aria-invalid={!!errors.description}
-                    />
+                        trailing={<CharCounter value={state.description} max={DESCRIPTION_MAX} hideWhenZero />}
+                    >
+                        <textarea
+                            id="catalog-description"
+                            dir="auto"
+                            value={state.description}
+                            onChange={e => update('description', e.target.value)}
+                            disabled={isSubmitting}
+                            maxLength={DESCRIPTION_MAX}
+                            rows={3}
+                            className="w-full p-3 pe-14 bg-transparent border-none text-foreground text-sm focus:outline-none focus:ring-0 resize-y"
+                            aria-invalid={!!errors.description}
+                        />
+                    </InputFieldWrapper>
                     {errors.description && <p className="text-xs text-error mt-1">{errors.description}</p>}
                 </div>
 
@@ -243,11 +216,25 @@ export function CatalogItemForm({ pageId, initialItem, onSubmit, onCancel, isSub
                             </label>
                             <input
                                 id="catalog-price"
-                                type="number"
-                                min="0"
-                                step="0.01"
+                                // type=text + inputMode=decimal is the best-practice money
+                                // input (per GDS / Shopify / Stripe). type=number has well-
+                                // documented footguns: it formats with locale comma in many
+                                // languages ("0,07") which confused merchants here, the
+                                // spinner buttons make accidental cents-bumps trivial, and
+                                // step validation interferes with controlled state during
+                                // typing. With type=text we control display exactly and
+                                // accept both "." and "," via parseMoneyToPriceMinor.
+                                type="text"
+                                inputMode="decimal"
                                 value={state.priceText}
-                                onChange={e => update('priceText', e.target.value)}
+                                onChange={(e) => {
+                                    const raw = e.target.value;
+                                    // Restrict typing to a sensible money pattern so the
+                                    // field never lands in an obviously-broken state.
+                                    if (raw === '' || /^[0-9]*[.,]?[0-9]{0,2}$/.test(raw)) {
+                                        update('priceText', raw);
+                                    }
+                                }}
                                 disabled={isSubmitting}
                                 placeholder={t('form.pricePlaceholder')}
                                 className="w-full px-3 py-2 rounded-lg border border-theme-border bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:opacity-60"

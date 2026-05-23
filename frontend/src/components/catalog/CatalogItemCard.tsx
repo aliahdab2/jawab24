@@ -2,6 +2,7 @@ import { useTranslations } from 'next-intl';
 import { Pencil, Archive, RotateCcw, Trash2 } from 'lucide-react';
 import { Card } from '@/components/ui';
 import { useLanguage } from '@/i18n/hooks';
+import { formatPrice } from '@/utils/money';
 import { CatalogStatusBadge, computeStatus } from './CatalogStatusBadge';
 import type { CatalogItem } from '@/lib/api';
 
@@ -11,20 +12,6 @@ interface Props {
     onArchive?: () => void;
     onRestore?: () => void;
     onDeletePermanent?: () => void;
-}
-
-function formatPrice(priceMinor: number | null | undefined, currency: string | null | undefined, locale: string): string | null {
-    if (priceMinor == null || !currency) return null;
-    const amount = priceMinor / 100;
-    try {
-        return new Intl.NumberFormat(locale === 'ar' ? 'ar' : 'en', {
-            style: 'currency',
-            currency,
-            maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
-        }).format(amount);
-    } catch {
-        return `${amount} ${currency}`;
-    }
 }
 
 function formatDate(iso: string | null | undefined, locale: string): string | null {

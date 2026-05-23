@@ -205,14 +205,14 @@ describe('CatalogItemForm — UX polish', () => {
 
     it('hides the description char counter when empty', () => {
         render(<CatalogItemForm {...makeProps()} />);
-        // Counter format is "N / 4000". Should not appear when description is empty.
-        expect(screen.queryByText(/\/ 4000/)).not.toBeInTheDocument();
+        // CharCounter format is "N/4000" (no spaces). Should not appear when description is empty.
+        expect(screen.queryByText(/\/4000/)).not.toBeInTheDocument();
     });
 
     it('shows the description char counter once user types', () => {
         render(<CatalogItemForm {...makeProps()} />);
         fireEvent.change(screen.getByLabelText(/description/i), { target: { value: 'Hello' } });
-        expect(screen.getByText(/5 \/ 4000/)).toBeInTheDocument();
+        expect(screen.getByText(/5\/4000/)).toBeInTheDocument();
     });
 
     it('calls onCancel when Cancel is clicked', () => {
