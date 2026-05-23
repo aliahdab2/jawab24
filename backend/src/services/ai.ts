@@ -282,8 +282,20 @@ export class AiService {
         // without conversation context would ignore prior exchanges and cause hallucinations.
         const hasConversationHistory = (request.context?.conversationHistory?.length ?? 0) > 0;
 
+        // Eval-suite requests (pipeline === 'eval') bypass ALL caches in BOTH
+        // directions: no reads, no writes. The eval suite intentionally reuses
+        // the same demo workspace + same demo pages across hundreds of tests,
+        // which would otherwise create cache-key collisions between tests with
+        // different flag expectations — exactly the contamination that masked
+        // the real #190 regression and inflated noise by ~10 pts. Real
+        // customers don't collide that way, so bypassing here changes nothing
+        // for prod traffic. Note: source-tagging happens in playgroundContext.ts
+        // (source === 'eval' → pipeline === 'eval'); the admin playground UI
+        // surfaces a different pipeline tag and continues to exercise caching.
+        const bypassAllCaches = pipeline === 'eval';
+
         // Layer 1: Exact cache (scoped per page + KB version + post context + model)
-        if (!hasConversationHistory) {
+        if (!hasConversationHistory && !bypassAllCaches) {
             const cachedData = await this.checkCache(request.comment, cacheCtx);
             if (cachedData) {
                 // Fire-and-forget: log zero-cost cache hit under the workspace's resolved model.
@@ -314,7 +326,7 @@ export class AiService {
         let queryEmbedding: number[] | null = request.context?.queryEmbedding || null;
         let detectedPreGptIntent: string | null = null;
 
-        if (pageId && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+        if (pageId && kbActiveVersion !== null && kbActiveVersion !== undefined && !bypassAllCaches) {
             try {
                 // Use full fallback classifier (covers COMPLIMENT, SPAM, BUSINESS_INQUIRY etc.)
                 // instead of basic detectIntent() which only handles GREETING/PRICE/HOURS/etc.
@@ -431,8 +443,11 @@ export class AiService {
 
             // Save to exact cache (scoped by KB version + post context + model).
             // All models cache to their own bucket now — no more skip-when-non-default.
+            // Eval pipeline never writes to cache (see `bypassAllCaches` above).
             const saveCacheCtx: CacheContext = { ...cacheCtx, language: detectedLanguage };
-            await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
+            if (!bypassAllCaches) {
+                await this.saveToCache(request.comment, aiReply, saveCacheCtx, aiMetadata);
+            }
 
             // Fire-and-forget: log real token usage under the workspace's resolved model
             // so per-customer cost tracking reflects the actual model billed.
@@ -445,7 +460,8 @@ export class AiService {
 
             // Save to semantic cache (fire-and-forget, non-blocking) — skip OTHER intent.
             // Model is stored in metadata so check-time can filter to same-model entries.
-            if (pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
+            // Eval pipeline never writes (see `bypassAllCaches` above).
+            if (!bypassAllCaches && pageId && queryEmbedding && detectedPreGptIntent && detectedPreGptIntent !== 'OTHER' && kbActiveVersion !== null && kbActiveVersion !== undefined) {
                 semanticCacheService.save({
                     pageId,
                     queryText: request.comment,
