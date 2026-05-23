@@ -119,21 +119,55 @@ export interface Comment {
 }
 
 // --- Business Profile Types ---
+//
+// Stage 2.6 (2026-05-23) extended this with `phones[]`, `policies`, and
+// `_manualFields`. Older `phone: string` kept as deprecated for backwards
+// compatibility — `buildBusinessProfile()` coerces it into `phones[0]` on
+// the next FB sync. Once all rows are migrated (matter of weeks), `phone`
+// can be removed.
+//
+// `hours` keeps its `Record<string, string[]>` shape (one entry per day,
+// array of canonical strings like `["09:00-18:00"]` / `["closed"]` /
+// `["all day"]`). Multi-window was never used in prod (verified
+// 2026-05-23) but the array form is preserved so the existing renderers
+// in `utils/businessProfile.ts` and the chunker keep working. The Stage
+// 2.6 form emits length-1 arrays. Multi-window is Stage 2.6.1 if needed.
 export interface BusinessProfile {
   name?: string;
   category?: string;
   about?: string;
+  /** @deprecated since Stage 2.6 — use `phones[0]`. Coerced on next sync. */
   phone?: string;
+  /** Ordered, primary first. v1 enforces length ≤ 10 server-side. */
+  phones?: string[];
   website?: string;
   address?: string;
   city?: string;
   country?: string;
+  /** Canonical day → ["HH:MM-HH:MM" | "closed" | "all day"]. */
   hours?: Record<string, string[]>;
   channels?: {
     preferred?: 'dm' | 'whatsapp' | 'phone';
     whatsapp?: string;
   };
-  language_hint?: 'ar' | 'en';
+  language_hint?: 'ar' | 'en' | 'auto';
+  /**
+   * Free-text policy fields, ≤500 chars each, validated server-side.
+   * Each is optional; missing fields appear as `[NOT_PROVIDED]` in the
+   * prompt's BUSINESS_INFO block so the AI refuses rather than inventing.
+   */
+  policies?: {
+    shipping?: string;
+    returns?: string;
+    payment?: string;
+    booking?: string;
+  };
+  /**
+   * Keys the merchant has manually overridden in the UI. The FB sync
+   * (`buildBusinessProfile`) shallow-merges new FB data but skips any
+   * field listed here, so merchant edits aren't clobbered on re-auth.
+   */
+  _manualFields?: string[];
 }
 
 // --- Page Types ---

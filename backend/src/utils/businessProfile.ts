@@ -27,7 +27,13 @@ export function formatBusinessProfile(profile: BusinessProfile | Record<string, 
 
     if (p.category) lines.push(`Business type: ${p.category}`);
     if (p.about) lines.push(`About: ${p.about}`);
-    if (p.phone) lines.push(`Phone: ${p.phone}`);
+    // Prefer the new `phones[]` array; fall back to legacy `phone` during
+    // the Stage 2.6 rollout window (rows coerced on next FB sync).
+    const phoneList = (p.phones && p.phones.length > 0)
+        ? p.phones
+        : (p.phone ? [p.phone] : []);
+    if (phoneList.length === 1) lines.push(`Phone: ${phoneList[0]}`);
+    else if (phoneList.length > 1) lines.push(`Phones: ${phoneList.join(', ')}`);
     if (p.website) lines.push(`Website: ${p.website}`);
 
     // Address — combine fields if available
