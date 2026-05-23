@@ -43,9 +43,13 @@ export const BusinessProfileSchema = z.object({
     name: z.string().max(255).optional(),
     category: z.string().max(255).optional(),
     about: z.string().max(2000).optional(),
+    /** @deprecated Stage 2.6 — use `phones[]`. Coerced on next FB sync. */
     phone: z.string().max(50).optional(),
+    /** Stage 2.6 — ordered list of contact numbers. Primary first.
+     * Empty string entries stripped server-side; nulls and undefined dropped. */
+    phones: z.array(z.string().min(3).max(40)).max(10).optional(),
     website: z.string().max(500).optional(),
-    address: z.string().max(255).optional(),
+    address: z.string().max(500).optional(), // widened from 255 — Damascus-style multi-line addresses overflowed
     city: z.string().max(100).optional(),
     country: z.string().max(100).optional(),
     hours: z.record(
@@ -56,7 +60,18 @@ export const BusinessProfileSchema = z.object({
         preferred: z.enum(['dm', 'whatsapp', 'phone']).optional(),
         whatsapp: z.string().max(50).optional(),
     }).optional(),
-    language_hint: z.enum(['ar', 'en']).optional(),
+    language_hint: z.enum(['ar', 'en', 'auto']).optional(),
+    /** Stage 2.6 — free-text policy fields, ≤500 chars each. Empty strings
+     *  treated equivalently to "field not set" by the prompt-injection layer.
+     *  Optional (undefined) at every level; we don't use null for clarity. */
+    policies: z.object({
+        shipping: z.string().max(500).optional(),
+        returns: z.string().max(500).optional(),
+        payment: z.string().max(500).optional(),
+        booking: z.string().max(500).optional(),
+    }).optional(),
+    /** Stage 2.6 — FB sync skips keys listed here so merchant overrides survive re-auth. */
+    _manualFields: z.array(z.string()).optional(),
 }).passthrough(); // Allow extra fields from Facebook API without breaking
 
 export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;

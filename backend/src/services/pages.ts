@@ -160,23 +160,68 @@ export function detectLanguageHint(text: string): 'ar' | 'en' {
  * Build structured business profile from Facebook page data.
  * All fields are optional — partial profile is still valuable.
  */
-export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
+/**
+ * Build a BusinessProfile from a FacebookPage. When `existing` is provided,
+ * shallow-merges so merchant-edited fields survive re-auth:
+ *
+ *   - Any key listed in `existing._manualFields` is taken from `existing`,
+ *     ignoring what Facebook sent for that field.
+ *   - Sub-objects (`policies`, `channels`) are preserved as-is from `existing`
+ *     if they weren't sourced from Facebook (Facebook never populates them).
+ *   - Stage 2.6 migration: if the existing row has the legacy `phone: string`
+ *     but no `phones[]`, the FB sync coerces it into `phones[0]` and drops
+ *     the deprecated field. New writes never re-populate `phone`.
+ */
+export function buildBusinessProfile(
+    fbPage: FacebookPage,
+    existing?: BusinessProfile | null,
+): BusinessProfile {
+    const manualFields = new Set(existing?._manualFields ?? []);
     const profile: BusinessProfile = {};
 
-    if (fbPage.name) profile.name = fbPage.name;
-    if (fbPage.category) profile.category = fbPage.category;
-    if (fbPage.about) profile.about = fbPage.about;
-    if (fbPage.phone) profile.phone = fbPage.phone;
-    if (fbPage.website) profile.website = fbPage.website;
-    if (fbPage.single_line_address) profile.address = fbPage.single_line_address;
+    const setFromFb = <K extends keyof BusinessProfile>(key: K, value: BusinessProfile[K] | undefined) => {
+        if (manualFields.has(key as string)) return; // merchant override wins
+        if (value !== undefined && value !== null && value !== '') {
+            profile[key] = value;
+        }
+    };
 
-    const hours = parseBusinessHours(fbPage.hours);
-    if (hours) profile.hours = hours;
+    setFromFb('name', fbPage.name);
+    setFromFb('category', fbPage.category);
+    setFromFb('about', fbPage.about);
+    // Phone: FB only provides single string; map to phones[0] (the canonical form).
+    if (!manualFields.has('phones') && !manualFields.has('phone') && fbPage.phone) {
+        profile.phones = [fbPage.phone];
+    }
+    setFromFb('website', fbPage.website);
+    setFromFb('address', fbPage.single_line_address);
 
-    // Detect language hint from name + about text
-    const textForDetection = [fbPage.name, fbPage.about].filter(Boolean).join(' ');
-    if (textForDetection) {
-        profile.language_hint = detectLanguageHint(textForDetection);
+    if (!manualFields.has('hours')) {
+        const hours = parseBusinessHours(fbPage.hours);
+        if (hours) profile.hours = hours;
+    }
+
+    // Detect language hint from name + about text (only when not manually set)
+    if (!manualFields.has('language_hint')) {
+        const textForDetection = [fbPage.name, fbPage.about].filter(Boolean).join(' ');
+        if (textForDetection) {
+            profile.language_hint = detectLanguageHint(textForDetection);
+        }
+    }
+
+    // Preserve sub-objects FB never provides (policies, channels) and the
+    // override marker itself. These come from merchant edits only.
+    if (existing?.policies) profile.policies = existing.policies;
+    if (existing?.channels) profile.channels = existing.channels;
+    if (existing?._manualFields && existing._manualFields.length > 0) {
+        profile._manualFields = existing._manualFields;
+    }
+
+    // Legacy migration: existing.phone → phones[0] if not already done.
+    // Only kicks in when FB didn't provide a phone (otherwise FB data wins
+    // unless the merchant has it in _manualFields).
+    if (!profile.phones && !manualFields.has('phones') && existing?.phone) {
+        profile.phones = [existing.phone];
     }
 
     // Validate and strip unexpected fields from Facebook data
@@ -395,9 +440,63 @@ export class PagesService {
     }
 
     /**
+     * Invalidate every cache layer that reads merchant context the AI injects
+     * into prompts directly (i.e. NOT tool-fetched data — that always re-queries
+     * the live row and doesn't need invalidation).
+     *
+     * Call this from ANY writer that mutates a field which ends up in the AI's
+     * system prompt for a future reply. Concretely, today that is:
+     *
+     *   - business_profile (address / phones / hours / about / policies)   [Stage 2.6]
+     *   - settings.brandVoiceNotes / brandVoiceNotesMulti                  [future]
+     *   - settings.replyStyle                                              [future]
+     *   - settings.awayMessage / greetingMessage                           [future]
+     *   - pages.knowledge_base (raw KB text) — already handled by updatePage
+     *
+     * If you add a new field that gets prompt-injected (not tool-fetched), wire
+     * its writer through this function or your edits won't reach customers
+     * until the next semantic-cache eviction (~24h). The catalog write path is
+     * NOT a precedent here — catalog routes through tool calls, so it doesn't
+     * need this; it only bumps kbVersion for version-chain consistency.
+     *
+     * Mechanism: the exact-cache key (ai.ts:buildCacheKey) and the semantic
+     * cache (kb/semantic-cache.ts) both include kbActiveVersion as a scope
+     * input. Bumping kbActiveVersion makes the next cache lookup produce a
+     * different key / filter out every existing semantic row, so the AI
+     * regenerates with the updated context. Old entries become orphaned
+     * and expire on their existing TTLs — no SCAN/DEL needed.
+     *
+     * Returns the post-bump kbActiveVersion, or null if the page doesn't
+     * exist. Callers usually don't need the return value.
+     */
+    async invalidatePageCaches(pageId: string): Promise<{ kbActiveVersion: number } | null> {
+        const [updated] = await db
+            .update(pages)
+            .set({
+                kbVersion: sql`COALESCE(${pages.kbVersion}, 0) + 1`,
+                kbActiveVersion: sql`COALESCE(${pages.kbActiveVersion}, 0) + 1`,
+                kbUpdatedAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .where(eq(pages.id, pageId))
+            .returning({ kbActiveVersion: pages.kbActiveVersion });
+
+        if (!updated) return null;
+        return { kbActiveVersion: updated.kbActiveVersion ?? 0 };
+    }
+
+    /**
      * Update a page.
      * When knowledgeBase changes, bumps kbVersion and sets kbUpdatedAt.
-     * kbActiveVersion is NOT touched here — it's set after ingestion completes.
+     * kbActiveVersion is NOT touched for KB-text changes — it's set after
+     * ingestion completes.
+     *
+     * When businessProfile changes, bumps BOTH kbVersion AND kbActiveVersion
+     * inline (same effect as calling invalidatePageCaches separately). The
+     * second bump is required because business_profile is prompt-injected
+     * directly — there's no ingestion step to flip kbActiveVersion later.
+     * Without this bump, cached replies would quote the old address/phone/
+     * hours for up to 30 days (exact-cache TTL).
      */
     async updatePage(workspaceId: string, pageId: string, data: UpdatePageDTO) {
         const setData: Record<string, unknown> = {
@@ -411,9 +510,13 @@ export class PagesService {
             setData.kbUpdatedAt = new Date();
         }
 
-        // Update businessProfileUpdatedAt when businessProfile changes
+        // business_profile is prompt-injected, so cache invalidation must be
+        // active (bumping kbActiveVersion). See invalidatePageCaches docstring.
         if (data.businessProfile !== undefined) {
             setData.businessProfileUpdatedAt = new Date();
+            setData.kbVersion = sql`COALESCE(${pages.kbVersion}, 0) + 1`;
+            setData.kbActiveVersion = sql`COALESCE(${pages.kbActiveVersion}, 0) + 1`;
+            setData.kbUpdatedAt = new Date();
         }
 
         const [updatedPage] = await db
@@ -603,7 +706,9 @@ export class PagesService {
                 // stored token — if they did, the page would break when they lose access.
                 const isOriginalConnector = existingPage.userId === userId;
                 logger.debug(`[Pages] Updating existing page: ${fbPage.name} (tokenUpdate: ${isOriginalConnector})`);
-                const businessProfile = buildBusinessProfile(fbPage);
+                // Pass the existing profile so merchant-edited fields (per
+                // _manualFields) and policies/channels survive the FB refresh.
+                const businessProfile = buildBusinessProfile(fbPage, existingPage.businessProfile as BusinessProfile | null);
                 const [updated] = await db
                     .update(pages)
                     .set({
@@ -638,7 +743,9 @@ export class PagesService {
                 const globalExisting = globalResults[0];
 
                 const shouldAutoEnable = remainingSlots === null || remainingSlots > 0;
-                const businessProfile = buildBusinessProfile(fbPage);
+                // Pass globalExisting's profile so a reclaim/disconnect-recover
+                // preserves merchant edits if any (otherwise undefined → fresh).
+                const businessProfile = buildBusinessProfile(fbPage, globalExisting?.businessProfile as BusinessProfile | null);
 
                 if (globalExisting && isPageDisconnected(globalExisting)) {
                     // Page exists but previous owner disconnected — safe to claim
