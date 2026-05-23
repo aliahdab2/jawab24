@@ -156,65 +156,6 @@ export const pagesApi = {
     api.post(`/pages/${pageId}/test-reply`, data, { timeout: LONG_RUNNING_TIMEOUT }),
 };
 
-// Catalog API (Stage 2 of KB restructure — structured catalog items)
-//
-// Types come from @jawab24/shared so backend + frontend can never disagree
-// about the catalog item shape, status filter, or status enum.
-import type { CatalogItemType, CatalogStatusFilter } from '@jawab24/shared';
-export type { CatalogItemType, CatalogStatusFilter } from '@jawab24/shared';
-
-export interface CatalogItem {
-  id: string;
-  pageId: string;
-  type: CatalogItemType;
-  name: string;
-  description: string | null;
-  priceMinor: number | null;
-  currency: string | null;
-  startsAt: string | null;
-  endsAt: string | null;
-  enrollmentClosesAt: string | null;
-  metadata: Record<string, unknown>;
-  archivedAt: string | null;
-  sourceTier: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface CatalogListResponse {
-  data: CatalogItem[];
-}
-
-export interface CatalogItemResponse {
-  data: CatalogItem;
-}
-
-export interface CreateCatalogItemPayload {
-  pageId: string;
-  type: CatalogItemType;
-  name: string;
-  description?: string | null;
-  priceMinor?: number | null;
-  currency?: string | null;
-  startsAt?: string | null;
-  endsAt?: string | null;
-  enrollmentClosesAt?: string | null;
-  metadata?: Record<string, unknown>;
-}
-
-export type UpdateCatalogItemPayload = Partial<Omit<CreateCatalogItemPayload, 'pageId'>>;
-
-export const catalogApi = {
-  list: (pageId: string, params?: { type?: CatalogItemType; status?: CatalogStatusFilter }) =>
-    api.get<CatalogListResponse>('/catalog-items', { params: { pageId, ...params } }),
-  get: (id: string) => api.get<CatalogItemResponse>(`/catalog-items/${id}`),
-  create: (payload: CreateCatalogItemPayload) =>
-    api.post<CatalogItemResponse>('/catalog-items', payload),
-  update: (id: string, payload: UpdateCatalogItemPayload) =>
-    api.patch<CatalogItemResponse>(`/catalog-items/${id}`, payload),
-  archive: (id: string) => api.delete<CatalogItemResponse>(`/catalog-items/${id}`),
-};
-
 // Posts API
 export const postsApi = {
   getAll: () => api.get('/posts'),

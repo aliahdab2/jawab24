@@ -874,52 +874,6 @@ export const kbChunks = pgTable('kb_chunks', {
     };
 });
 
-// Catalog Items — structured catalog rows for merchants (Stage 2 of KB restructure)
-// Replaces free-text catalogs in kb_chunks; AI queries this via tool calls
-// (search_entities, get_entity_details, list_active_entities) rather than RAG
-// retrieval, so freshness (endsAt > now()) and authority (source_tier = 2)
-// always beat semantic similarity over stale narrative chunks.
-export const catalogItems = pgTable('catalog_items', {
-    id: uuid('id').defaultRandom().primaryKey(),
-    pageId: uuid('page_id').references(() => pages.id, { onDelete: 'cascade' }).notNull(),
-    // 'course' | 'product' | 'service' | 'event' | 'branch' | 'package'
-    // New verticals add types here; tool surface stays unchanged.
-    type: varchar('type', { length: 20 }).notNull(),
-    name: varchar('name', { length: 200 }).notNull(),
-    description: text('description'),
-    // Price stored as integer minor units (e.g. 250000 = 2500.00 SAR) to avoid
-    // floating-point precision drift. Nullable for "contact us" items.
-    priceMinor: integer('price_minor'),
-    currency: varchar('currency', { length: 8 }),
-    // Time-bound fields — drive "active" / "expiring soon" / "expired" status
-    // and the list_active_entities() freshness filter. Optional: services and
-    // branches typically leave them null.
-    startsAt: timestamp('starts_at'),
-    endsAt: timestamp('ends_at'),
-    enrollmentClosesAt: timestamp('enrollment_closes_at'),
-    // Vertical-specific extensions: bedrooms (real estate), duration (services),
-    // stock (products), category (restaurant menu). Promote a metadata key to
-    // a column only when 2+ merchants need to query by it.
-    metadata: jsonb('metadata').default({}),
-    // Soft-delete: archived items hidden from default list, kept for admin
-    // history and reporting. list_active_entities() filters these out.
-    archivedAt: timestamp('archived_at'),
-    // Authority tier for retrieval ranking (Stage 1.2). Default tier 2 =
-    // manually entered structured catalog. Live platform API data (Salla,
-    // Shopify) is tier 1 when surfaced as tool results.
-    sourceTier: integer('source_tier').notNull().default(2),
-    createdAt: timestamp('created_at').defaultNow(),
-    updatedAt: timestamp('updated_at').defaultNow(),
-}, (table) => {
-    return {
-        pageIdIdx: index('idx_catalog_items_page_id').on(table.pageId),
-        // Composite index for the common "list type X for page Y" query
-        typeIdx: index('idx_catalog_items_page_type').on(table.pageId, table.type),
-        // For "active items only" filtering — covers list_active_entities()
-        activeIdx: index('idx_catalog_items_active').on(table.pageId, table.archivedAt, table.endsAt),
-    };
-});
-
 // Semantic Cache Table — vector-based reply caching for semantically similar questions
 export const semanticCache = pgTable('semantic_cache', {
     id: uuid('id').defaultRandom().primaryKey(),

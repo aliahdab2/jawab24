@@ -159,76 +159,6 @@ const ECOMMERCE_TOOLS: OpenAI.ChatCompletionTool[] = [
     },
 ];
 
-// --- Catalog Tools (Stage 2.3b of KB restructure) ---
-// Used when the page has ≥1 non-archived catalog_items row. Surfaced
-// independently from the e-commerce tools so catalog-only merchants
-// (training institutes, salons, restaurants) get the structured-data
-// path without needing a Shopify/Salla store linked.
-
-const CATALOG_TOOLS: OpenAI.ChatCompletionTool[] = [
-    {
-        type: 'function',
-        function: {
-            name: 'search_entities',
-            description: 'Search the merchant\'s structured catalog (courses, services, products, events, branches, packages) by keyword. Use when the customer asks about a specific item by name or topic.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    query: { type: 'string', description: 'Keyword or phrase to match against item name/description (e.g. "IELTS", "haircut")' },
-                    type: { type: 'string', enum: ['course', 'product', 'service', 'event', 'branch', 'package'], description: 'Optional: restrict results to one item type.' },
-                    price_min_minor: { type: 'number', description: 'Optional: minimum price in minor units (e.g. 100000 = 1000.00 in the item\'s currency).' },
-                    price_max_minor: { type: 'number', description: 'Optional: maximum price in minor units.' },
-                },
-                required: ['query'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'get_entity_details',
-            description: 'Get the full record for one catalog item by id (returned by search_entities or list_active_entities). Use to retrieve description, schedule, metadata.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    id: { type: 'string', description: 'UUID of the catalog item.' },
-                },
-                required: ['id'],
-            },
-        },
-    },
-    {
-        type: 'function',
-        function: {
-            name: 'list_active_entities',
-            description: 'List all currently-available items in the catalog. Excludes expired courses/events (past endsAt) and archived items automatically. Use for open-ended questions like "what courses do you offer?", "what services do you have?", "ما هي الدورات المتاحة؟".',
-            parameters: {
-                type: 'object',
-                properties: {
-                    type: { type: 'string', enum: ['course', 'product', 'service', 'event', 'branch', 'package'], description: 'Optional: restrict to one item type.' },
-                    limit: { type: 'number', description: 'Optional: max results (default 10, max 25).' },
-                },
-            },
-        },
-    },
-];
-
-const CATALOG_PROMPT_ADDITION = `
-
-CATALOG TOOLS:
-The merchant has a structured catalog you can query for current, freshness-filtered data. ALWAYS prefer calling a catalog tool over guessing or quoting <business_knowledge>, because the tool returns live prices, schedules, and availability — the static KB may be stale.
-
-WHEN TO USE CATALOG TOOLS:
-- Customer asks what is offered: "what courses do you have?", "شو عندكم دورات؟", "ما هي خدماتكم؟" → list_active_entities
-- Customer mentions a specific item by name or keyword: "is the IELTS course available?", "كم سعر الحلاقة؟" → search_entities
-- Customer asks for details about a specific item already mentioned in the conversation → get_entity_details
-- Customer asks about price, schedule, enrollment, or availability of a known item → search_entities then get_entity_details
-
-CRITICAL: list_active_entities AUTOMATICALLY filters out expired items. If a tool returns an item, it is currently available — do NOT add caveats like "if it's still open". If the tool returns NO matching items, the merchant does not currently offer it; say so clearly instead of inventing one.
-
-When quoting prices: priceMinor is in minor units (cents). Divide by 100 and format with the item's currency code.
-`;
-
 // --- Tool-specific system prompt additions ---
 
 const TOOL_PROMPT_ADDITION = `
@@ -262,35 +192,6 @@ CRITICAL RULES:
 `;
 
 /**
- * Pick the active tool set + prompt addition for one request, based on which
- * tool families the backend has enabled in the request context. Either or
- * both flags may be set; we default to "ecommerce only" when neither is
- * present to preserve legacy callers that don't yet set the flags.
- */
-export function selectToolsForRequest(request: GenerateRequest): {
-    tools: OpenAI.ChatCompletionTool[];
-    promptAddition: string;
-} {
-    const ecommerceOn = request.context?.ecommerceToolsEnabled !== false; // default-on legacy
-    const catalogOn = !!request.context?.catalogToolsEnabled;
-
-    // When catalog is the ONLY signal, drop the e-commerce defs entirely.
-    const catalogOnly = catalogOn && !request.context?.ecommerceToolsEnabled;
-
-    const tools: OpenAI.ChatCompletionTool[] = [];
-    let promptAddition = '';
-    if (!catalogOnly && ecommerceOn) {
-        tools.push(...ECOMMERCE_TOOLS);
-        promptAddition += TOOL_PROMPT_ADDITION;
-    }
-    if (catalogOn) {
-        tools.push(...CATALOG_TOOLS);
-        promptAddition += CATALOG_PROMPT_ADDITION;
-    }
-    return { tools, promptAddition };
-}
-
-/**
  * Generate a reply with e-commerce tools available.
  *
  * If the AI decides to call a tool, returns { toolCalls: [...] }.
@@ -307,9 +208,8 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
     }
 
     try {
-        const { tools, promptAddition } = selectToolsForRequest(request);
         const baseSystemPrompt = openaiService.buildSystemPrompt(request);
-        const systemPrompt = baseSystemPrompt + promptAddition;
+        const systemPrompt = baseSystemPrompt + TOOL_PROMPT_ADDITION;
 
         const { messages } = openaiService.buildMessages(request, systemPrompt);
 
@@ -326,7 +226,7 @@ export async function generateWithTools(request: GenerateRequest): Promise<ToolE
                         messages,
                         max_tokens: config.openai.maxTokens,
                         temperature: config.openai.temperature,
-                        tools,
+                        tools: ECOMMERCE_TOOLS,
                     }, { signal: controller.signal }),
                 ),
             );
@@ -383,9 +283,8 @@ export async function generateWithToolResults(
     }
 
     try {
-        const { tools, promptAddition } = selectToolsForRequest(request);
         const baseSystemPrompt = openaiService.buildSystemPrompt(request);
-        const systemPrompt = baseSystemPrompt + promptAddition;
+        const systemPrompt = baseSystemPrompt + TOOL_PROMPT_ADDITION;
 
         const { messages } = openaiService.buildMessages(request, systemPrompt);
 
@@ -429,7 +328,7 @@ export async function generateWithToolResults(
                         temperature: config.openai.temperature,
                         // Include tools so AI can call verify_and_get_* in Phase 2
                         // NOTE: Cannot use response_format: json_schema with tools — parse JSON manually
-                        tools,
+                        tools: ECOMMERCE_TOOLS,
                     }, { signal: controller.signal }),
                 ),
             );

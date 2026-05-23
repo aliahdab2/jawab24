@@ -1,5 +1,4 @@
 import { aiService } from '../ai';
-import { pageHasCatalogItems } from '../catalogTools';
 import type { AiGenerateRequest } from '../../types';
 import type { AiPipeline } from '../../types/aiPipeline';
 import { messagesService } from '../messages';
@@ -17,42 +16,16 @@ import type { FacebookMessageTag } from '../../utils/commentText';
 import { preprocessCommentText, resolveCommentLanguage, rewritePunctuationForDualDm } from './commentPreprocess';
 
 /**
- * Single source of truth for AI dispatch.
- *
- * Routes through the tool loop when EITHER:
- *   - a Shopify/Salla/Zid store is linked (`ecommerceStoreId`), OR
- *   - the page has ≥1 non-archived catalog item (Stage 2.3b: structured
- *     catalog answered via `search_entities` / `get_entity_details` /
- *     `list_active_entities` instead of stale RAG chunks).
- *
- * When neither signal is present, falls through to the standard aiService.
- * Both real DM and playground/test-reply paths must use this — bypassing it
- * caused the AI to hallucinate product URLs in the test surfaces while real
- * DMs worked.
+ * Single source of truth for AI dispatch: when a store is linked, route
+ * through the e-commerce tool loop (search_products / check_inventory /
+ * lookup_order). Otherwise, use the standard aiService. Both real DM and
+ * playground/test-reply paths must use this — bypassing it caused the AI
+ * to hallucinate product URLs in the test surfaces while real DMs worked.
  */
-export async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
-    const ctx = request.context;
-    const pageId = ctx?.pageId;
-    const hasStore = !!ctx?.ecommerceStoreId;
-
-    // Cheap indexed lookup; only runs when we have a pageId AND the caller
-    // hasn't already resolved the flag (the playground hard-codes its own
-    // context for example).
-    let hasCatalog = !!ctx?.catalogToolsEnabled;
-    if (pageId && !hasStore && !hasCatalog) {
-        try {
-            hasCatalog = await pageHasCatalogItems(pageId);
-        } catch {
-            // Catalog probe failure is non-fatal — fall back to no-tools path.
-        }
-    }
-
-    if (hasStore || hasCatalog) {
-        const enriched: AiGenerateRequest = hasCatalog && ctx && !ctx.catalogToolsEnabled
-            ? { ...request, context: { ...ctx, catalogToolsEnabled: true } }
-            : request;
+async function dispatchAiReply(request: AiGenerateRequest): Promise<AiGenerateResponse> {
+    if (request.context?.ecommerceStoreId) {
         const { generateReplyWithTools } = await import('../ecommerceToolLoop');
-        return generateReplyWithTools(enriched);
+        return generateReplyWithTools(request);
     }
     return aiService.generateReply(request);
 }

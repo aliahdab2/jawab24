@@ -22,8 +22,7 @@ import {
   ExternalLink,
   AlertTriangle,
   LinkIcon,
-  FlaskConical,
-  LayoutGrid
+  FlaskConical
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
@@ -49,7 +48,6 @@ const PagesPage: NextPageWithLayout = () => {
   const tDash = useTranslations('dashboard');
   const tTime = useTranslations('time');
   const tTest = useTranslations('testSmartReply');
-  const tCatalog = useTranslations('catalog');
   const { language } = useLanguage();
   const router = useRouter();
   const { isAuthenticated, fbToken } = useAuthStore();
@@ -566,27 +564,6 @@ const PagesPage: NextPageWithLayout = () => {
                       </div>
                     </div>
                     <ChevronRight className={`w-5 h-5 transition-transform ${page.knowledgeBase ? 'text-brand-500' : 'text-icon-muted'} rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1`} />
-                  </div>
-                </button>
-              </div>
-
-              {/* Catalog */}
-              <div className="px-6 landscape:px-4 pb-3 landscape:pb-2">
-                <button
-                  onClick={() => router.push(`${getLocalePath(language)}/pages/${page.id}/catalog`)}
-                  className="group w-full p-3 landscape:p-2.5 rounded-xl border border-theme-border bg-card hover:bg-brand-50/10 dark:hover:bg-brand-900/10 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-muted text-muted-foreground group-hover:bg-brand-100 group-hover:text-brand-600 dark:group-hover:bg-brand-900/50 dark:group-hover:text-brand-400 transition-colors">
-                        <LayoutGrid className="w-5 h-5" />
-                      </div>
-                      <div className="text-start">
-                        <p className="text-sm font-bold text-foreground/70">{tCatalog('title')}</p>
-                        <p className="text-xs font-medium text-muted-foreground mt-0.5">{tCatalog('description')}</p>
-                      </div>
-                    </div>
-                    <ChevronRight className="w-5 h-5 text-icon-muted rtl:rotate-180 rtl:group-hover:-translate-x-1 ltr:group-hover:translate-x-1 transition-transform" />
                   </div>
                 </button>
               </div>
