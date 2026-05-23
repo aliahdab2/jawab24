@@ -70,8 +70,6 @@ export const BusinessProfileSchema = z.object({
         payment: z.string().max(500).optional(),
         booking: z.string().max(500).optional(),
     }).optional(),
-    /** Stage 2.6 — FB sync skips keys listed here so merchant overrides survive re-auth. */
-    _manualFields: z.array(z.string()).optional(),
 }).passthrough(); // Allow extra fields from Facebook API without breaking
 
 export type BusinessProfileInput = z.infer<typeof BusinessProfileSchema>;

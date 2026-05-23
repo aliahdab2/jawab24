@@ -2,7 +2,7 @@ import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
-import type { BusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
@@ -157,74 +157,35 @@ export function detectLanguageHint(text: string): 'ar' | 'en' {
 }
 
 /**
- * Build structured business profile from Facebook page data.
- * All fields are optional — partial profile is still valuable.
- */
-/**
- * Build a BusinessProfile from a FacebookPage. When `existing` is provided,
- * shallow-merges so merchant-edited fields survive re-auth:
+ * Build the FB-sourced half of a BusinessProfile from a FacebookPage.
  *
- *   - Any key listed in `existing._manualFields` is taken from `existing`,
- *     ignoring what Facebook sent for that field.
- *   - Sub-objects (`policies`, `channels`) are preserved as-is from `existing`
- *     if they weren't sourced from Facebook (Facebook never populates them).
- *   - Stage 2.6 migration: if the existing row has the legacy `phone: string`
- *     but no `phones[]`, the FB sync coerces it into `phones[0]` and drops
- *     the deprecated field. New writes never re-populate `phone`.
+ * Stage 2.6: this only ever produces the `suggestions` half of the
+ * container. The merchant-confirmed half (`merchant`) is editor-write-only
+ * and is never touched by FB sync. Use {@link buildBusinessProfileContainer}
+ * to produce the JSONB shape that gets written to `pages.business_profile`,
+ * preserving any existing merchant edits.
+ *
+ * All fields are optional — a partial suggestion is still useful in the
+ * editor's "Import from Facebook" affordance.
  */
-export function buildBusinessProfile(
-    fbPage: FacebookPage,
-    existing?: BusinessProfile | null,
-): BusinessProfile {
-    const manualFields = new Set(existing?._manualFields ?? []);
+export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
     const profile: BusinessProfile = {};
 
-    const setFromFb = <K extends keyof BusinessProfile>(key: K, value: BusinessProfile[K] | undefined) => {
-        if (manualFields.has(key as string)) return; // merchant override wins
-        if (value !== undefined && value !== null && value !== '') {
-            profile[key] = value;
-        }
-    };
+    if (fbPage.name) profile.name = fbPage.name;
+    if (fbPage.category) profile.category = fbPage.category;
+    if (fbPage.about) profile.about = fbPage.about;
+    if (fbPage.phone) profile.phones = [fbPage.phone];
+    if (fbPage.website) profile.website = fbPage.website;
+    if (fbPage.single_line_address) profile.address = fbPage.single_line_address;
 
-    setFromFb('name', fbPage.name);
-    setFromFb('category', fbPage.category);
-    setFromFb('about', fbPage.about);
-    // Phone: FB only provides single string; map to phones[0] (the canonical form).
-    if (!manualFields.has('phones') && !manualFields.has('phone') && fbPage.phone) {
-        profile.phones = [fbPage.phone];
-    }
-    setFromFb('website', fbPage.website);
-    setFromFb('address', fbPage.single_line_address);
+    const hours = parseBusinessHours(fbPage.hours);
+    if (hours) profile.hours = hours;
 
-    if (!manualFields.has('hours')) {
-        const hours = parseBusinessHours(fbPage.hours);
-        if (hours) profile.hours = hours;
+    const textForDetection = [fbPage.name, fbPage.about].filter(Boolean).join(' ');
+    if (textForDetection) {
+        profile.language_hint = detectLanguageHint(textForDetection);
     }
 
-    // Detect language hint from name + about text (only when not manually set)
-    if (!manualFields.has('language_hint')) {
-        const textForDetection = [fbPage.name, fbPage.about].filter(Boolean).join(' ');
-        if (textForDetection) {
-            profile.language_hint = detectLanguageHint(textForDetection);
-        }
-    }
-
-    // Preserve sub-objects FB never provides (policies, channels) and the
-    // override marker itself. These come from merchant edits only.
-    if (existing?.policies) profile.policies = existing.policies;
-    if (existing?.channels) profile.channels = existing.channels;
-    if (existing?._manualFields && existing._manualFields.length > 0) {
-        profile._manualFields = existing._manualFields;
-    }
-
-    // Legacy migration: existing.phone → phones[0] if not already done.
-    // Only kicks in when FB didn't provide a phone (otherwise FB data wins
-    // unless the merchant has it in _manualFields).
-    if (!profile.phones && !manualFields.has('phones') && existing?.phone) {
-        profile.phones = [existing.phone];
-    }
-
-    // Validate and strip unexpected fields from Facebook data
     const validated = BusinessProfileSchema.safeParse(profile);
     if (!validated.success) {
         captureError(
@@ -232,10 +193,30 @@ export function buildBusinessProfile(
             'BusinessProfile validation failed during Facebook sync',
             { extra: { fbPageId: fbPage.id, errors: validated.error.errors.map(e => `${e.path.join('.')}: ${e.message}`) } },
         );
-        return profile; // Return unvalidated rather than losing data
+        return profile;
     }
 
     return validated.data;
+}
+
+/**
+ * Produce the full Stage 2.6 container value for `pages.business_profile`,
+ * preserving any existing merchant edits and refreshing the `suggestions`
+ * half from Facebook. This is the value to persist on FB sync.
+ *
+ * Handles three shapes for `existing`:
+ *   - null/undefined        → fresh `{merchant: {}, suggestions: <fb>}`
+ *   - legacy flat shape     → treated as FB-default, demoted to suggestions
+ *                             (matches the migration's conservative default)
+ *   - already-container     → merchant preserved, suggestions overwritten
+ */
+export function buildBusinessProfileContainer(
+    fbPage: FacebookPage,
+    existing?: StoredBusinessProfile,
+): BusinessProfileContainer {
+    const suggestions = buildBusinessProfile(fbPage);
+    const { merchant = {} } = unwrapBusinessProfile(existing);
+    return { merchant, suggestions };
 }
 
 /**
@@ -512,7 +493,25 @@ export class PagesService {
 
         // business_profile is prompt-injected, so cache invalidation must be
         // active (bumping kbActiveVersion). See invalidatePageCaches docstring.
+        //
+        // Stage 2.6: the API contract is "PATCH body = merchant content"
+        // (flat BusinessProfile shape). Server-side we wrap it into the
+        // {merchant, suggestions} container, preserving the existing
+        // suggestions half from FB sync. This keeps the merchant API
+        // simple while enforcing the editor-write-only invariant.
         if (data.businessProfile !== undefined) {
+            const [existingRow] = await db
+                .select({ businessProfile: pages.businessProfile })
+                .from(pages)
+                .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+                .limit(1);
+            const { suggestions } = unwrapBusinessProfile(existingRow?.businessProfile as StoredBusinessProfile);
+            const merchant = data.businessProfile as BusinessProfile;
+            const container: BusinessProfileContainer = {
+                merchant,
+                ...(suggestions ? { suggestions } : {}),
+            };
+            setData.businessProfile = container;
             setData.businessProfileUpdatedAt = new Date();
             setData.kbVersion = sql`COALESCE(${pages.kbVersion}, 0) + 1`;
             setData.kbActiveVersion = sql`COALESCE(${pages.kbActiveVersion}, 0) + 1`;
@@ -706,9 +705,10 @@ export class PagesService {
                 // stored token — if they did, the page would break when they lose access.
                 const isOriginalConnector = existingPage.userId === userId;
                 logger.debug(`[Pages] Updating existing page: ${fbPage.name} (tokenUpdate: ${isOriginalConnector})`);
-                // Pass the existing profile so merchant-edited fields (per
-                // _manualFields) and policies/channels survive the FB refresh.
-                const businessProfile = buildBusinessProfile(fbPage, existingPage.businessProfile as BusinessProfile | null);
+                // Stage 2.6: FB sync writes to the `suggestions` half of the
+                // container. The `merchant` half is editor-write-only and is
+                // preserved verbatim from the existing row.
+                const businessProfile = buildBusinessProfileContainer(fbPage, existingPage.businessProfile as StoredBusinessProfile);
                 const [updated] = await db
                     .update(pages)
                     .set({
@@ -744,8 +744,8 @@ export class PagesService {
 
                 const shouldAutoEnable = remainingSlots === null || remainingSlots > 0;
                 // Pass globalExisting's profile so a reclaim/disconnect-recover
-                // preserves merchant edits if any (otherwise undefined → fresh).
-                const businessProfile = buildBusinessProfile(fbPage, globalExisting?.businessProfile as BusinessProfile | null);
+                // preserves the merchant half if any (otherwise undefined → fresh).
+                const businessProfile = buildBusinessProfileContainer(fbPage, globalExisting?.businessProfile as StoredBusinessProfile);
 
                 if (globalExisting && isPageDisconnected(globalExisting)) {
                     // Page exists but previous owner disconnected — safe to claim

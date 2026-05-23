@@ -1,4 +1,4 @@
-import type { BusinessProfile } from '@jawab24/shared';
+import { mergedBusinessProfile, type BusinessProfile, type StoredBusinessProfile } from '@jawab24/shared';
 
 const DAY_LABELS: Record<string, string> = {
     mon: 'Monday',
@@ -16,14 +16,22 @@ const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
  * Format a structured BusinessProfile into plain text suitable for appending
  * to the knowledge base before sending to GPT.
  *
+ * Accepts either the Stage 2.6 container shape ({merchant, suggestions}) or
+ * the legacy flat shape. Container input is merged via `mergedBusinessProfile`
+ * (merchant wins) before formatting, so brand-new merchants who never
+ * touched the editor still get FB suggestions in their chunked KB.
+ *
+ * This is the chunker path — distinct from the BUSINESS_INFO prompt block,
+ * which reads only `merchant` (see `packages/shared/src/businessInfoPrompt.ts`).
+ *
  * Returns null if the profile is empty or has no useful fields.
  */
-export function formatBusinessProfile(profile: BusinessProfile | Record<string, unknown> | null | undefined): string | null {
+export function formatBusinessProfile(profile: StoredBusinessProfile | Record<string, unknown>): string | null {
     if (!profile || typeof profile !== 'object') return null;
 
     const lines: string[] = [];
 
-    const p = profile as BusinessProfile;
+    const p: BusinessProfile = mergedBusinessProfile(profile as StoredBusinessProfile);
 
     if (p.category) lines.push(`Business type: ${p.category}`);
     if (p.about) lines.push(`About: ${p.about}`);

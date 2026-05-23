@@ -117,6 +117,18 @@ describe('PR2: KB Versioning + Business Profile', () => {
         });
 
         it('sets businessProfileUpdatedAt when businessProfile changes', async () => {
+            // Stage 2.6: updatePage fetches existing row to preserve the
+            // suggestions half of the container — mock the select call.
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([
+                            { businessProfile: { merchant: {}, suggestions: { name: 'FB Name' } } }
+                        ])
+                    })
+                })
+            } as any);
+
             let capturedSetData: any = null;
             vi.mocked(db.update).mockReturnValue({
                 set: vi.fn().mockImplementation((data) => {
@@ -135,6 +147,10 @@ describe('PR2: KB Versioning + Business Profile', () => {
 
             expect(capturedSetData).toBeDefined();
             expect(capturedSetData.businessProfileUpdatedAt).toBeInstanceOf(Date);
+            // Merchant content from PATCH body lands under .merchant; existing
+            // suggestions survive.
+            expect(capturedSetData.businessProfile.merchant).toEqual({ name: 'Test', category: 'Restaurant' });
+            expect(capturedSetData.businessProfile.suggestions).toEqual({ name: 'FB Name' });
         });
     });
 
@@ -163,7 +179,9 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(profile.name).toBe('Pizza House');
             expect(profile.category).toBe('Restaurant');
             expect(profile.about).toBe('Best pizza in Dubai');
-            expect(profile.phone).toBe('0591234567');
+            // Stage 2.6: FB-sourced phone is coerced into the canonical phones[] array.
+            expect(profile.phones).toEqual(['0591234567']);
+            expect(profile.phone).toBeUndefined();
             expect(profile.address).toBe('Dubai, UAE');
             expect(profile.website).toBe('https://pizza.com');
             expect(profile.hours).toEqual({
@@ -185,7 +203,7 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(profile).toBeDefined();
             expect(typeof profile).toBe('object');
             expect(profile.name).toBe('Minimal Page');
-            expect(profile.phone).toBeUndefined();
+            expect(profile.phones).toBeUndefined();
             expect(profile.address).toBeUndefined();
             expect(profile.hours).toBeUndefined();
             expect(profile.about).toBeUndefined();
@@ -346,10 +364,13 @@ describe('PR2: KB Versioning + Business Profile', () => {
 
             expect(insertedValues).toBeDefined();
             expect(insertedValues.businessProfile).toBeDefined();
-            expect(insertedValues.businessProfile.name).toBe('Test Business');
-            expect(insertedValues.businessProfile.category).toBe('Restaurant');
-            expect(insertedValues.businessProfile.phone).toBe('0501234567');
-            expect(insertedValues.businessProfile.address).toBe('Riyadh, Saudi Arabia');
+            // Stage 2.6: FB sync writes the {merchant, suggestions} container.
+            // FB-sourced data lands under suggestions; merchant is empty.
+            expect(insertedValues.businessProfile.merchant).toEqual({});
+            expect(insertedValues.businessProfile.suggestions.name).toBe('Test Business');
+            expect(insertedValues.businessProfile.suggestions.category).toBe('Restaurant');
+            expect(insertedValues.businessProfile.suggestions.phones).toEqual(['0501234567']);
+            expect(insertedValues.businessProfile.suggestions.address).toBe('Riyadh, Saudi Arabia');
             expect(insertedValues.businessProfileUpdatedAt).toBeInstanceOf(Date);
         });
 
@@ -392,8 +413,10 @@ describe('PR2: KB Versioning + Business Profile', () => {
 
             expect(capturedSetData).toBeDefined();
             expect(capturedSetData.businessProfile).toBeDefined();
-            expect(capturedSetData.businessProfile.name).toBe('Updated Business');
-            expect(capturedSetData.businessProfile.phone).toBe('0509999999');
+            // Stage 2.6: FB sync overwrites the suggestions half; merchant is preserved.
+            expect(capturedSetData.businessProfile.merchant).toEqual({});
+            expect(capturedSetData.businessProfile.suggestions.name).toBe('Updated Business');
+            expect(capturedSetData.businessProfile.suggestions.phones).toEqual(['0509999999']);
             expect(capturedSetData.businessProfileUpdatedAt).toBeInstanceOf(Date);
         });
 
@@ -431,10 +454,11 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(insertedValues).toBeDefined();
             expect(insertedValues.businessProfile).toBeDefined();
             expect(typeof insertedValues.businessProfile).toBe('object');
-            // Only name should be present
-            expect(insertedValues.businessProfile.name).toBe('Bare Page');
-            expect(insertedValues.businessProfile.phone).toBeUndefined();
-            expect(insertedValues.businessProfile.address).toBeUndefined();
+            // Stage 2.6 container: only suggestions.name populated; merchant empty.
+            expect(insertedValues.businessProfile.merchant).toEqual({});
+            expect(insertedValues.businessProfile.suggestions.name).toBe('Bare Page');
+            expect(insertedValues.businessProfile.suggestions.phones).toBeUndefined();
+            expect(insertedValues.businessProfile.suggestions.address).toBeUndefined();
         });
     });
 });

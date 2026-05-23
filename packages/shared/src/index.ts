@@ -120,18 +120,37 @@ export interface Comment {
 
 // --- Business Profile Types ---
 //
-// Stage 2.6 (2026-05-23) extended this with `phones[]`, `policies`, and
-// `_manualFields`. Older `phone: string` kept as deprecated for backwards
-// compatibility — `buildBusinessProfile()` coerces it into `phones[0]` on
-// the next FB sync. Once all rows are migrated (matter of weeks), `phone`
-// can be removed.
+// Stage 2.6 (2026-05-23) split this into two parallel sub-objects on the
+// same `pages.business_profile` JSONB column:
+//
+//   business_profile = {
+//     merchant:    BusinessProfile  // editor-write-only, AI prompt reads ONLY this
+//     suggestions: BusinessProfile  // FB-sync-only, surfaced as "Import from Facebook" buttons
+//   }
+//
+// The split is the regression-prevention gate: stale FB data physically
+// cannot reach the AI's BUSINESS_INFO prompt block, because the prompt
+// formatter reads only `merchant`. The chunker (used to feed raw KB to
+// the AI as text) reads BOTH sub-objects merged (merchant wins on
+// conflict), preserving today's behavior for pages whose merchant never
+// visited the editor.
+//
+// During the migration rollout window the column may still contain the
+// legacy flat shape (no `merchant`/`suggestions` keys). Readers should
+// treat that case as `{ merchant: {}, suggestions: <flat data> }` —
+// conservative default, matches the migration's heuristic for FB-default
+// rows. See `backend/migrations/0109_split_business_profile.sql`.
+//
+// Older `phone: string` kept on the inner shape as deprecated for backwards
+// compatibility — the migration coerces it into `phones[0]`. Once all rows
+// are migrated, `phone` can be removed.
 //
 // `hours` keeps its `Record<string, string[]>` shape (one entry per day,
 // array of canonical strings like `["09:00-18:00"]` / `["closed"]` /
 // `["all day"]`). Multi-window was never used in prod (verified
 // 2026-05-23) but the array form is preserved so the existing renderers
-// in `utils/businessProfile.ts` and the chunker keep working. The Stage
-// 2.6 form emits length-1 arrays. Multi-window is Stage 2.6.1 if needed.
+// keep working. The Stage 2.6 form emits length-1 arrays. Multi-window
+// is Stage 2.6.1 if needed.
 export interface BusinessProfile {
   name?: string;
   category?: string;
@@ -162,12 +181,55 @@ export interface BusinessProfile {
     payment?: string;
     booking?: string;
   };
-  /**
-   * Keys the merchant has manually overridden in the UI. The FB sync
-   * (`buildBusinessProfile`) shallow-merges new FB data but skips any
-   * field listed here, so merchant edits aren't clobbered on re-auth.
-   */
-  _manualFields?: string[];
+}
+
+/**
+ * Stage 2.6 container shape for `pages.business_profile`. Splits merchant-
+ * confirmed data from FB-suggested data so the AI prompt-injection layer
+ * can read only what the merchant has explicitly typed (regression-proof
+ * by construction: stale FB data physically can't reach the prompt).
+ *
+ * During the rollout window readers may also encounter the legacy flat
+ * `BusinessProfile` shape. Use `unwrapBusinessProfile()` to normalize.
+ */
+export interface BusinessProfileContainer {
+  /** Editor-write-only. The AI's BUSINESS_INFO prompt block reads ONLY this. */
+  merchant?: BusinessProfile;
+  /** FB-sync-only. Surfaced in the editor as "Import from Facebook" buttons. */
+  suggestions?: BusinessProfile;
+}
+
+/**
+ * Stored JSONB may be in the new container shape, the legacy flat shape,
+ * or null. Use {@link unwrapBusinessProfile} to normalize before reading.
+ */
+export type StoredBusinessProfile = BusinessProfileContainer | BusinessProfile | null | undefined;
+
+function isContainer(p: unknown): p is BusinessProfileContainer {
+  return !!p && typeof p === 'object' && ('merchant' in p || 'suggestions' in p);
+}
+
+/**
+ * Normalize stored business_profile JSONB to the container shape.
+ * Legacy flat rows are treated as FB-default (data goes under `suggestions`,
+ * `merchant` is empty) — matches the migration's conservative default for
+ * rows where we can't tell if the merchant ever edited them.
+ */
+export function unwrapBusinessProfile(stored: StoredBusinessProfile): BusinessProfileContainer {
+  if (!stored) return {};
+  if (isContainer(stored)) return stored;
+  return { merchant: {}, suggestions: stored };
+}
+
+/**
+ * Merged view of merchant + suggestions for callers that need "everything
+ * we know about this business" — used by the chunker to feed raw KB to
+ * the AI. Merchant values win on conflict. Does NOT reach the structured
+ * BUSINESS_INFO prompt block (that path reads only `merchant`).
+ */
+export function mergedBusinessProfile(stored: StoredBusinessProfile): BusinessProfile {
+  const { merchant = {}, suggestions = {} } = unwrapBusinessProfile(stored);
+  return { ...suggestions, ...merchant };
 }
 
 // --- Page Types ---
