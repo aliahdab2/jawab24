@@ -15,6 +15,7 @@ const PERM_GRANTED_KEY = 'push_permission_granted';
 const PERM_DENIED_KEY = 'push_permission_denied';
 const PERM_DENIED_BANNER_DISMISSED_KEY = 'push_denied_banner_dismissed_at';
 const PUSH_REFRESH_LAST_AT_KEY = 'push_refresh_last_at';
+const FCM_TOKEN_KEY = 'fcm_token';
 const DISMISS_COOLDOWN_DAYS = 7;
 const DENIED_BANNER_COOLDOWN_DAYS = 14;
 const PUSH_REFRESH_THROTTLE_MS = 60 * 60 * 1000; // 1 hour
@@ -286,16 +287,35 @@ async function registerPushListeners(authToken: string): Promise<void> {
 async function registerTokenWithBackend(authToken: string, fcmToken: string): Promise<void> {
     try {
         const platform = Capacitor.getPlatform() as 'android' | 'ios' | 'web';
-        
+
+        // If FCM rotated the token (same install, new value), revoke the old one
+        // first so the server doesn't keep fanning pushes out to both. App
+        // reinstall wipes this storage, so the server's stale-token cleanup
+        // handles that case instead.
+        const previousToken = (await prefGet(FCM_TOKEN_KEY)) ?? localStorage.getItem('fcm_token');
+        if (previousToken && previousToken !== fcmToken) {
+            try {
+                await axios.post(
+                    `${API_URL}/notifications/remove-token`,
+                    { token: previousToken },
+                    { headers: { Authorization: `Bearer ${authToken}` } }
+                );
+            } catch (error) {
+                addErrorBreadcrumb('push', 'Failed to remove previous FCM token before registering new one');
+                captureError(error, 'Failed to remove previous FCM token', { tags: { context: 'push' } });
+            }
+        }
+
         await axios.post(
             `${API_URL}/notifications/register-token`,
             { token: fcmToken, platform },
             { headers: { Authorization: `Bearer ${authToken}` } }
         );
-        
-        // Store token locally to detect changes
+
+        await prefSet(FCM_TOKEN_KEY, fcmToken);
+        // Drop the legacy localStorage entry so we don't read it again next time.
         if (typeof window !== 'undefined') {
-            localStorage.setItem('fcm_token', fcmToken);
+            localStorage.removeItem('fcm_token');
         }
     } catch (error) {
         captureError(error, 'Failed to register push token with backend', { tags: { context: 'push' } });
@@ -311,14 +331,17 @@ export async function removePushToken(authToken: string): Promise<void> {
     }
 
     try {
-        const fcmToken = localStorage.getItem('fcm_token');
+        const fcmToken = (await prefGet(FCM_TOKEN_KEY)) ?? localStorage.getItem('fcm_token');
         if (fcmToken) {
             await axios.post(
                 `${API_URL}/notifications/remove-token`,
                 { token: fcmToken },
                 { headers: { Authorization: `Bearer ${authToken}` } }
             );
-            localStorage.removeItem('fcm_token');
+            await prefRemove(FCM_TOKEN_KEY);
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('fcm_token');
+            }
         }
     } catch {
         addErrorBreadcrumb('push', 'Failed to remove push token');

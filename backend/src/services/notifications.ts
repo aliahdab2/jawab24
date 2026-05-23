@@ -1,6 +1,6 @@
 import { db } from '../db';
 import { deviceTokens, notifications, notificationSendLog, settings, workspaceMembers } from '../db/schema';
-import { eq, and, desc, count, inArray } from 'drizzle-orm';
+import { eq, and, desc, count, inArray, lt, ne } from 'drizzle-orm';
 import { captureError } from '../utils/sentryHelpers';
 import { flagReasonEn, flagReasonAr } from '@jawab24/shared';
 import { redis } from '../lib/redis';
@@ -16,6 +16,18 @@ import { createHash } from 'crypto';
  */
 const ANDROID_CHANNEL_ID = 'jawab24_default';
 const ANDROID_URGENT_CHANNEL_ID = 'jawab24_urgent';
+
+/**
+ * After this many days of not being re-registered, a device token is assumed
+ * abandoned (app uninstalled / device wiped) and is pruned opportunistically
+ * on the next register from the same user+platform. Without this, reinstalls
+ * leave stale rows that FCM still accepts for hours, causing the device to
+ * receive every push twice (once per token) until permanent_failure prunes them.
+ *
+ * Live devices touch `last_used_at` on every app open via `refreshPushRegistration`
+ * (throttled to 1h on the client), so 30 days is conservative.
+ */
+const STALE_TOKEN_DAYS = 30;
 
 /**
  * FCM error codes that mean the token is permanently dead.
@@ -313,6 +325,21 @@ class NotificationService {
                 throw err;
             }
         }
+
+        // Opportunistic cleanup: prune sibling tokens for the same user+platform
+        // that haven't been re-registered in STALE_TOKEN_DAYS. Catches reinstall
+        // leftovers that FCM hasn't yet flagged as NotRegistered (Android can
+        // keep accepting the old token for hours after uninstall, delivering
+        // every push twice in the meantime).
+        const staleCutoff = new Date(Date.now() - STALE_TOKEN_DAYS * 24 * 60 * 60 * 1000);
+        await db
+            .delete(deviceTokens)
+            .where(and(
+                eq(deviceTokens.userId, userId),
+                eq(deviceTokens.platform, platform),
+                ne(deviceTokens.token, token),
+                lt(deviceTokens.lastUsedAt, staleCutoff),
+            ));
     }
 
     /**

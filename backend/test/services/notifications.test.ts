@@ -118,9 +118,14 @@ describe('NotificationService', () => {
                 values: vi.fn().mockResolvedValue(undefined),
             });
 
+            const deleteWhere = vi.fn().mockResolvedValue(undefined);
+            (db.delete as any).mockReturnValue({ where: deleteWhere });
+
             await notificationService.registerDeviceToken('user-123', 'fcm-token-abc', 'android');
 
             expect(db.insert).toHaveBeenCalled();
+            expect(db.delete).toHaveBeenCalled();
+            expect(deleteWhere).toHaveBeenCalled();
         });
 
         it('should update lastUsedAt if token already exists', async () => {
@@ -138,9 +143,34 @@ describe('NotificationService', () => {
                 }),
             });
 
+            const deleteWhere = vi.fn().mockResolvedValue(undefined);
+            (db.delete as any).mockReturnValue({ where: deleteWhere });
+
             await notificationService.registerDeviceToken('user-123', 'fcm-token-abc', 'android');
 
             expect(db.update).toHaveBeenCalled();
+            // Stale-sibling cleanup runs on every register, even for re-registrations.
+            expect(db.delete).toHaveBeenCalled();
+        });
+
+        it('prunes stale sibling tokens for the same user+platform on register', async () => {
+            (db.select as any).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([]),
+                    }),
+                }),
+            });
+            (db.insert as any).mockReturnValue({
+                values: vi.fn().mockResolvedValue(undefined),
+            });
+            const deleteWhere = vi.fn().mockResolvedValue(undefined);
+            (db.delete as any).mockReturnValue({ where: deleteWhere });
+
+            await notificationService.registerDeviceToken('user-123', 'fcm-new', 'android');
+
+            expect(db.delete).toHaveBeenCalled();
+            expect(deleteWhere).toHaveBeenCalledTimes(1);
         });
     });
 
