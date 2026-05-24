@@ -49,6 +49,7 @@ import enZid           from './en/zid.json';
 import enOrderNotifications from './en/orderNotifications.json';
 import enEcommerceAnalytics from './en/ecommerceAnalytics.json';
 import enUnsubscribe   from './en/unsubscribe.json';
+import enTopup         from './en/topup.json';
 
 // ── Arabic namespace imports ──────────────────────────────────────────────────
 import arAbout         from './ar/about.json';
@@ -98,6 +99,7 @@ import arZid           from './ar/zid.json';
 import arOrderNotifications from './ar/orderNotifications.json';
 import arEcommerceAnalytics from './ar/ecommerceAnalytics.json';
 import arUnsubscribe   from './ar/unsubscribe.json';
+import arTopup         from './ar/topup.json';
 
 // Global namespaces loaded on every page
 const GLOBAL_NAMESPACES = ['common', 'nav', 'notifications', 'errors', 'errorBoundary', 'meta', 'sse'];
@@ -151,6 +153,7 @@ const NS: Record<string, Record<string, unknown>> = {
   'en/orderNotifications': enOrderNotifications, 'ar/orderNotifications': arOrderNotifications,
   'en/ecommerceAnalytics': enEcommerceAnalytics, 'ar/ecommerceAnalytics': arEcommerceAnalytics,
   'en/unsubscribe': enUnsubscribe,             'ar/unsubscribe': arUnsubscribe,
+  'en/topup': enTopup,                         'ar/topup': arTopup,
 };
 
 // All namespace names (derived from lookup table keys)

@@ -533,6 +533,8 @@ const DashboardPage: NextPageWithLayout = () => {
         <AiUsageWarningBanner
           aiReplies={usage.aiReplies}
           resetsAt={usage.currentPeriod?.end}
+          planSlug={usage.subscription?.plan?.slug}
+          userEmail={user?.email}
         />
       )}
 

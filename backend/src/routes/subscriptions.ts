@@ -122,6 +122,29 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
         });
 
         /**
+         * GET /subscription/topup/config - Return packs + WhatsApp contact for the
+         * top-up purchase UI. The frontend modal renders both:
+         *   - card payment options (PR 2b, not yet wired)
+         *   - WhatsApp deep link for manual / bank transfer payments
+         *
+         * Empty whatsappNumber means the manual path is disabled in the UI.
+         */
+        protectedRoutes.get(
+            '/topup/config',
+            { schema: { tags: ['Subscriptions'], summary: 'Get top-up packs and contact channels', security: auth } },
+            async (_request: FastifyRequest, reply: FastifyReply) => {
+                return reply.send({
+                    success: true,
+                    data: {
+                        packs: config.topup.packs,
+                        currency: config.topup.currency,
+                        whatsappNumber: config.topup.whatsappNumber,
+                    },
+                });
+            }
+        );
+
+        /**
          * GET /subscription/limits/pages - Check page limits
          */
         protectedRoutes.get('/limits/pages', { schema: { tags: ['Subscriptions'], summary: 'Check page limits', security: auth } }, async (request: FastifyRequest, reply: FastifyReply) => {

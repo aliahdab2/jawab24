@@ -5,9 +5,7 @@ import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
 import clsx from 'clsx';
 import { useLandscape } from '@/hooks/useLandscape';
-
-// Configure your WhatsApp number here (with country code, no + or spaces)
-const WHATSAPP_NUMBER = '46700224720'; // Sweden +46
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 
 export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const tc = useTranslations('common');
@@ -48,11 +46,8 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   }, []);
 
   const handleWhatsAppClick = () => {
-    const message = encodeURIComponent(
-      tc('whatsappDefaultMessage')
-    );
     window.open(
-      `https://wa.me/${WHATSAPP_NUMBER}?text=${message}`,
+      buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, tc('whatsappDefaultMessage')),
       '_blank'
     );
   };

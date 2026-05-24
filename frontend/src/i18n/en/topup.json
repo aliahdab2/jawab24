@@ -1,0 +1,35 @@
+{
+    "cta": {
+        "buyAddReplies": "Add replies",
+        "outOfReplies": "Out of replies?",
+        "running_low": "Running low?",
+        "addToKeepGoing": "Add more to keep going"
+    },
+    "modal": {
+        "title": "Add more AI replies",
+        "subtitle": "Choose how many extra replies you'd like to add to your account",
+        "neverExpires": "Replies never expire — use them anytime",
+        "contactToBuy": "Contact us to buy",
+        "whatsappMessage": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# AI reply} other {# AI replies}} ({pack} pack, ${priceUsd}) to my account.\n\nMy email: {email}",
+        "selectPack": "Select a pack",
+        "close": "Close"
+    },
+    "pack5k": {
+        "name": "5,000 replies",
+        "price": "$49"
+    },
+    "pack10k": {
+        "name": "10,000 replies",
+        "price": "$79",
+        "bestValue": "Best value"
+    },
+    "method": {
+        "card": "Pay with card (coming soon)",
+        "cardSubtitle": "Card payment will be available shortly",
+        "whatsapp": "Pay via bank transfer or other",
+        "whatsappSubtitle": "We'll respond on WhatsApp within hours and credit your account once payment is confirmed"
+    },
+    "errors": {
+        "noContactChannel": "Top-up requests are temporarily unavailable. Please try again later or contact support."
+    }
+}

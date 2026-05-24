@@ -5,6 +5,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import { BrandLogo } from '@/components/ui';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 
 export function LandingFooter() {
   const t = useTranslations('landing');
@@ -33,7 +34,7 @@ export function LandingFooter() {
             </p>
             <div className="flex items-center gap-3 sm:gap-4">
               <a
-                href={`https://wa.me/46700224720?text=${encodeURIComponent(t('footer.whatsappMessage'))}`}
+                href={buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, t('footer.whatsappMessage'))}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label={t('footer.whatsappAriaLabel')}

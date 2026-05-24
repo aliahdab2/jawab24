@@ -3,8 +3,8 @@ import Link from 'next/link';
 import { AlertTriangle, Sparkles, Info, MessageSquareOff } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { Card, Button, UpgradeCTA } from '@/components/ui';
+import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { useTimedDismiss } from '@/hooks/useTimedDismiss';
-import { isIOSNative } from '@/lib/capacitor';
 import { formatQuotaResetDate } from '@/lib/formatDate';
 import type { UsageSummary } from '@jawab24/shared';
 
@@ -12,6 +12,10 @@ interface AiUsageWarningBannerProps {
     aiReplies: UsageSummary['aiReplies'];
     /** ISO timestamp when the current period resets (usage.currentPeriod.end). */
     resetsAt?: string;
+    /** Plan slug — used to hide the top-up CTA for Free users (must subscribe first). */
+    planSlug?: string;
+    /** Current user's email — pre-fills the WhatsApp message in the top-up modal. */
+    userEmail?: string;
 }
 
 /**
@@ -22,7 +26,7 @@ interface AiUsageWarningBannerProps {
  * - Amber warning at 80–99% — dismissible for 24h.
  * - Red critical banner at >=100% — not dismissible (auto-reply is paused).
  */
-export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBannerProps) {
+export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
     const locale = useLocale();
 
@@ -106,29 +110,36 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt }: AiUsageWarningBann
                             </Button>
                         </Link>
                     )}
-                    {/* Upgrade CTA hidden on iOS native (App Store Guideline 3.1.1). */}
-                    {!isIOSNative() && (
-                        <>
-                            <UpgradeCTA className="block">
-                                <Button
-                                    variant="primary"
-                                    size="sm"
-                                    icon={<Sparkles className="w-4 h-4" />}
-                                >
-                                    {tSub('upgradePlan')}
-                                </Button>
-                            </UpgradeCTA>
-                            {isWarning && (
-                                <button
-                                    type="button"
-                                    onClick={dismiss}
-                                    className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
-                                    aria-label={tSub('limitBanner.dismissLabel')}
-                                >
-                                    {tSub('limitBanner.dismiss')}
-                                </button>
-                            )}
-                        </>
+                    {/* Top-up CTA appears first — smaller commitment, direct answer
+                        to "I hit my limit, how do I keep going?". Plan upgrade comes
+                        second for users who need a structural change. Both CTAs
+                        self-gate on iOS (App Store Guideline 3.1.1), so we don't
+                        wrap them in an outer isIOSNative() check here. The dismiss
+                        button stays visible on iOS — it's informational, not billing. */}
+                    <BuyTopUpCTA
+                        planSlug={planSlug}
+                        userEmail={userEmail}
+                        variant="primary"
+                        size="sm"
+                    />
+                    <UpgradeCTA className="block">
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            icon={<Sparkles className="w-4 h-4" />}
+                        >
+                            {tSub('upgradePlan')}
+                        </Button>
+                    </UpgradeCTA>
+                    {isWarning && (
+                        <button
+                            type="button"
+                            onClick={dismiss}
+                            className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
+                            aria-label={tSub('limitBanner.dismissLabel')}
+                        >
+                            {tSub('limitBanner.dismiss')}
+                        </button>
                     )}
                 </div>
             </div>

@@ -2,9 +2,7 @@ import { AlertCircle, MessageCircle } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/lib/store';
 import { isIOSNative } from '@/lib/capacitor';
-
-// WhatsApp support number
-const WHATSAPP_NUMBER = '46700224720';
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 
 /**
  * PaymentsUnavailableNotice Component
@@ -29,13 +27,10 @@ export function PaymentsUnavailableNotice() {
         return null;
     }
 
-    // Build WhatsApp URL with pre-filled message containing user's email
-    const buildWhatsAppUrl = () => {
-        const message = userEmail
-            ? `Hi! I'd like to upgrade my Jawab24 account.\nEmail: ${userEmail}`
-            : `Hi! I'd like to upgrade my Jawab24 account.`;
-        return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-    };
+    const whatsappMessage = userEmail
+        ? `Hi! I'd like to upgrade my Jawab24 account.\nEmail: ${userEmail}`
+        : `Hi! I'd like to upgrade my Jawab24 account.`;
+    const whatsappUrl = buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, whatsappMessage);
 
     return (
         <div className="max-w-md mx-auto p-6 bg-slate-800/50 border border-slate-700 rounded-2xl">
@@ -53,7 +48,7 @@ export function PaymentsUnavailableNotice() {
                     
                     {/* WhatsApp Contact Button - Pre-fills user's email */}
                     <a
-                        href={buildWhatsAppUrl()}
+                        href={whatsappUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors text-sm shadow-lg shadow-green-900/30"
