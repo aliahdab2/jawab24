@@ -22,6 +22,12 @@ export const users = pgTable('users', {
     // explicitly switches or accepts an invite. ON DELETE SET NULL so deleting a workspace
     // doesn't break login for its members; the resolver falls back to a heuristic.
     lastActiveWorkspaceId: uuid('last_active_workspace_id').references((): AnyPgColumn => workspaces.id, { onDelete: 'set null' }),
+    // Non-expiring AI-reply credit balance from one-time top-up purchases.
+    // Consumed only after the monthly plan quota is exhausted. Survives renewal,
+    // cancellation, and plan changes. May go negative after a refund of a
+    // partially-consumed pack (gate `> 0` blocks usage until next purchase clears
+    // the deficit) — intentional anti-abuse design, never clamp here.
+    topupBalance: integer('topup_balance').notNull().default(0),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
     // App-level invariant: at least one of facebookId or phone must be non-null
@@ -643,6 +649,67 @@ export const usage = pgTable('usage', {
         userIdIdx: index('idx_usage_user_id').on(table.userId),
         periodIdx: index('idx_usage_period').on(table.periodStart, table.periodEnd),
         userPeriodIdx: index('idx_usage_user_period').on(table.userId, table.periodStart),
+    };
+});
+
+// 12b. Top-up Purchases Table — one-time AI reply credit packs
+//
+// Supports two purchase paths (`source` column):
+//   - 'stripe': self-service card payment via Stripe PaymentIntent. The
+//     stripe_payment_intent_id is required and unique (enforces webhook
+//     idempotency — replays of payment_intent.succeeded find the row and no-op).
+//   - 'manual' / 'admin': admin-credited purchase for bank-transfer / USDT /
+//     WhatsApp / cash payments common in MENA. external_ref holds the bank
+//     transaction ID, wallet address, or any reference the admin enters.
+//
+// Each successful purchase increments users.topup_balance by replies_added.
+// Refunds decrement; balance may go negative on partial-consume + refund
+// (intentional anti-abuse).
+//
+// Status lifecycle: 'pending' (Stripe only — created with PaymentIntent)
+//   → 'succeeded' (Stripe webhook OR admin credit)
+//   → 'refunded' (Stripe charge.refunded webhook OR admin reverse).
+// Manual/admin purchases skip 'pending' — they're inserted as 'succeeded'.
+export const topupPurchases = pgTable('topup_purchases', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    // Pack identifier — '5k' or '10k' at launch. String (not enum) so new packs
+    // can be added via config without a schema migration.
+    pack: varchar('pack', { length: 16 }).notNull(),
+    repliesAdded: integer('replies_added').notNull(),
+    priceCents: integer('price_cents').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull().default('usd'),
+    // Payment source — see table comment above.
+    source: varchar('source', { length: 16 }).notNull().default('stripe'),
+    // Stripe PaymentIntent id — REQUIRED when source='stripe' (enforced by
+    // CHECK constraint), nullable when source='manual'/'admin'. UNIQUE when
+    // present so webhook replays are idempotent.
+    stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }).unique(),
+    // Free-form reference for non-Stripe purchases: bank transfer ID,
+    // USDT TXID, "WhatsApp chat 2026-05-24", etc. Audit trail for admin.
+    externalRef: varchar('external_ref', { length: 255 }),
+    status: varchar('status', { length: 16 }).notNull().default('pending'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    succeededAt: timestamp('succeeded_at'),
+    refundedAt: timestamp('refunded_at'),
+}, (table) => {
+    return {
+        userIdIdx: index('idx_topup_purchases_user_id').on(table.userId),
+        statusIdx: index('idx_topup_purchases_status').on(table.status),
+        sourceIdx: index('idx_topup_purchases_source').on(table.source),
+        statusCheck: check(
+            'topup_purchases_status_check',
+            sql`${table.status} IN ('pending', 'succeeded', 'failed', 'refunded')`
+        ),
+        sourceCheck: check(
+            'topup_purchases_source_check',
+            sql`${table.source} IN ('stripe', 'manual', 'admin')`
+        ),
+        // Stripe purchases must carry the PaymentIntent id; manual/admin may not.
+        stripeIdRequiredCheck: check(
+            'topup_purchases_stripe_id_required',
+            sql`${table.source} != 'stripe' OR ${table.stripePaymentIntentId} IS NOT NULL`
+        ),
     };
 });
 

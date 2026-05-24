@@ -1,6 +1,6 @@
 import { eq, and, or, gte, lte, desc, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { subscriptions, plans, usage, usageLogs, pages, workspaces } from '../db/schema';
+import { subscriptions, plans, usage, usageLogs, pages, workspaces, users, topupPurchases } from '../db/schema';
 import { plansService } from './plans';
 import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
@@ -28,6 +28,19 @@ export function computeCrossedAiThresholds(
         const boundary = (t / 100) * limit;
         return oldUsed < boundary && newUsed >= boundary;
     });
+}
+
+/**
+ * Thrown by incrementAiReplies when both the plan quota AND the topup balance
+ * are insufficient to absorb the requested count. Rare in practice — callers
+ * gate with canUseAiReplies first — but possible under concurrent increments
+ * that race the gate's read.
+ */
+export class QuotaExhaustedError extends Error {
+    constructor(message = 'AI reply quota exhausted and no top-up balance available') {
+        super(message);
+        this.name = 'QuotaExhaustedError';
+    }
 }
 
 /** Statuses that allow AI reply generation. */
@@ -335,6 +348,10 @@ export const subscriptionsService = {
         const aiUsed = currentUsage?.aiRepliesCount || 0;
         const aiLimit = plan.maxAiRepliesPerMonth;
 
+        // Top-up balance attaches to the subscription owner, not the requesting
+        // user (team members see the owner's combined plan + top-up).
+        const topup = await this.getTopupSummary(subscriptionOwnerId);
+
         return {
             currentPeriod: {
                 start: currentUsage?.periodStart?.toString() || new Date().toISOString(),
@@ -351,6 +368,7 @@ export const subscriptionsService = {
                 limit: plan.maxPages,
                 remaining: plan.maxPages ? Math.max(0, plan.maxPages - pagesUsed) : null,
             },
+            topup,
             subscription: {
                 plan,
                 status: subscription.status,
@@ -362,12 +380,22 @@ export const subscriptionsService = {
     },
 
     /**
-     * Increment AI reply usage
+     * Increment AI reply usage.
+     *
+     * Consumption order: plan quota first (resets monthly), then top-up balance
+     * (non-expiring). Splits `count` across both sources in a single transaction
+     * so a partial failure can't leave the user "charged twice" or "charged once
+     * but credited zero".
+     *
+     * Throws QuotaExhaustedError if the top-up decrement guard fails — rare,
+     * happens only when concurrent consumption races the gate. Caller should
+     * surface as a "balance depleted, please buy more" message.
      */
     async incrementAiReplies(userId: string, count: number = 1): Promise<void> {
+        if (count <= 0) return;
         const now = new Date();
 
-        // Ensure a usage period exists
+        // Ensure a usage period exists so the UPDATE below matches a row.
         const currentUsage = await this.getCurrentUsage(userId);
         if (!currentUsage) {
             const periodEnd = new Date(now);
@@ -375,31 +403,100 @@ export const subscriptionsService = {
             await this.initializeUsagePeriod(userId, now, periodEnd);
         }
 
-        // Atomic increment — avoids race condition when concurrent requests
-        // both read the same count and overwrite each other's writes.
-        // RETURNING gives us the new count so we can detect threshold crossings
-        // without an extra read (and without a race between read and update).
-        const [updated] = await db
-            .update(usage)
-            .set({
-                aiRepliesCount: sql`COALESCE(${usage.aiRepliesCount}, 0) + ${count}`,
-                updatedAt: new Date(),
-            })
-            .where(
-                and(
-                    eq(usage.userId, userId),
-                    lte(usage.periodStart, now),
-                    gte(usage.periodEnd, now)
-                )
-            )
-            .returning({ aiRepliesCount: usage.aiRepliesCount, periodStart: usage.periodStart });
+        // Determine how much of `count` lands on the plan vs the top-up.
+        //
+        // The plan counter only entitles usage when the subscription is in a
+        // status that the gate (canUseAiReplies → checkSubscriptionStatus) would
+        // allow. For canceled / paused / past-due-beyond-grace subscriptions,
+        // the `plan.maxAiRepliesPerMonth` still has a value (it's the plan they
+        // USED to be on), but they're no longer entitled to that quota — so we
+        // must NOT consume against it. All usage in that state goes to top-up.
+        //
+        // Without this gate, a canceled merchant with top-up balance would burn
+        // a ghost plan quota each new usage period (created by the
+        // initializeUsagePeriod call above) and the top-up balance would never
+        // decrement — effectively granting them free unlimited usage. The gate
+        // and the writer must agree on what counts as "active".
+        const subscription = await this.getUserSubscription(userId);
+        const statusAllowsPlan = subscription
+            ? this.checkSubscriptionStatus(subscription).allowed
+            : false;
 
-        await this.logUsageEvent(userId, 'ai_reply', { count });
+        let planRoom: number;
+        if (!statusAllowsPlan || !subscription) {
+            // No subscription, or status doesn't entitle plan usage (canceled,
+            // paused, past_due past grace). Top-up absorbs the entire count.
+            planRoom = 0;
+        } else if (subscription.plan.maxAiRepliesPerMonth === null) {
+            // Active subscription with unlimited plan.
+            planRoom = Number.POSITIVE_INFINITY;
+        } else {
+            const currentCount = (await this.getCurrentUsage(userId))?.aiRepliesCount ?? 0;
+            planRoom = Math.max(0, subscription.plan.maxAiRepliesPerMonth - currentCount);
+        }
 
-        // Dispatch threshold notifications (80%, 100%) — best-effort, never breaks the reply flow
-        if (updated) {
+        const planConsumed = Math.min(count, planRoom);
+        const topupConsumed = count - planConsumed;
+
+        // Atomic split: both writes succeed together or roll back together.
+        const updated = await db.transaction(async (tx) => {
+            let updatedUsage: { aiRepliesCount: number | null; periodStart: Date } | null = null;
+
+            if (planConsumed > 0) {
+                const [row] = await tx
+                    .update(usage)
+                    .set({
+                        aiRepliesCount: sql`COALESCE(${usage.aiRepliesCount}, 0) + ${planConsumed}`,
+                        updatedAt: new Date(),
+                    })
+                    .where(
+                        and(
+                            eq(usage.userId, userId),
+                            lte(usage.periodStart, now),
+                            gte(usage.periodEnd, now)
+                        )
+                    )
+                    .returning({ aiRepliesCount: usage.aiRepliesCount, periodStart: usage.periodStart });
+                updatedUsage = row ?? null;
+            }
+
+            if (topupConsumed > 0) {
+                // WHERE guard ensures we never drive the balance negative via a
+                // race. If the row count is zero, another concurrent consumer
+                // drained the balance after our gate read — throw to roll back.
+                const guarded = await tx
+                    .update(users)
+                    .set({
+                        topupBalance: sql`${users.topupBalance} - ${topupConsumed}`,
+                        updatedAt: new Date(),
+                    })
+                    .where(
+                        and(
+                            eq(users.id, userId),
+                            gte(users.topupBalance, topupConsumed)
+                        )
+                    )
+                    .returning({ id: users.id });
+
+                if (guarded.length === 0) {
+                    throw new QuotaExhaustedError();
+                }
+            }
+
+            return updatedUsage;
+        });
+
+        await this.logUsageEvent(userId, 'ai_reply', {
+            count,
+            planConsumed,
+            topupConsumed,
+        });
+
+        // Dispatch threshold notifications (80%, 100%) — best-effort, never breaks the reply flow.
+        // Only fires on the plan-counter side; top-up consumption doesn't have thresholds.
+        if (updated && planConsumed > 0) {
             const newUsed = updated.aiRepliesCount ?? 0;
-            await this.maybeNotifyAiUsageThreshold(userId, newUsed - count, newUsed, updated.periodStart);
+            await this.maybeNotifyAiUsageThreshold(userId, newUsed - planConsumed, newUsed, updated.periodStart);
         }
     },
 
@@ -452,54 +549,112 @@ export const subscriptionsService = {
     },
 
     /**
-     * Check if user can use AI replies
+     * Read the user's current top-up balance. Returns 0 if user row is missing.
+     */
+    async getTopupBalance(userId: string): Promise<number> {
+        const [row] = await db
+            .select({ topupBalance: users.topupBalance })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+        return row?.topupBalance ?? 0;
+    },
+
+    /**
+     * Aggregate top-up summary for a user: current balance + lifetime purchased.
+     * lifetimePurchased = sum of replies_added across all succeeded purchases.
+     */
+    async getTopupSummary(userId: string): Promise<{ balance: number; lifetimePurchased: number }> {
+        const [balanceRow] = await db
+            .select({ topupBalance: users.topupBalance })
+            .from(users)
+            .where(eq(users.id, userId))
+            .limit(1);
+
+        const [lifetimeRow] = await db
+            .select({ total: sql<number>`COALESCE(SUM(${topupPurchases.repliesAdded}), 0)` })
+            .from(topupPurchases)
+            .where(and(eq(topupPurchases.userId, userId), eq(topupPurchases.status, 'succeeded')));
+
+        return {
+            balance: balanceRow?.topupBalance ?? 0,
+            lifetimePurchased: Number(lifetimeRow?.total ?? 0),
+        };
+    },
+
+    /**
+     * Check if user can use AI replies.
+     *
+     * Allowance order:
+     *   1. Active/trialing subscription AND plan quota has room → allow (plan).
+     *   2. Else if top-up balance > 0 → allow with usingTopup: true. This branch
+     *      covers past_due, canceled, and quota-exhausted users — they paid for
+     *      these credits and the "never expires" promise must hold.
+     *   3. Else → deny, surfacing the more specific reason (status block over
+     *      quota exhaustion when both apply).
      */
     async canUseAiReplies(userId: string): Promise<LimitCheckResult> {
         const subscription = await this.getUserSubscription(userId);
 
+        // No subscription row: might still have top-up balance carried over from
+        // a previously canceled paid plan. Honor it; otherwise deny.
         if (!subscription) {
+            const topupBalance = await this.getTopupBalance(userId);
+            if (topupBalance > 0) {
+                return { allowed: true, usingTopup: true, topupBalance };
+            }
             return { allowed: false, reason: 'No active subscription' };
         }
 
-        // Check subscription status (canceled/paused/expired)
-        const statusCheck = this.checkSubscriptionStatus(subscription);
-        if (!statusCheck.allowed) return statusCheck;
-
         const plan = subscription.plan;
+        const statusCheck = this.checkSubscriptionStatus(subscription);
 
-        // Check if AI limit is unlimited (null)
-        if (plan.maxAiRepliesPerMonth === null) {
+        // Unlimited plan + active status: short-circuit, top-up irrelevant.
+        if (statusCheck.allowed && plan.maxAiRepliesPerMonth === null) {
             return { allowed: true };
         }
 
-        // Check current usage
-        const currentUsage = await this.getCurrentUsage(userId);
-        const used = currentUsage?.aiRepliesCount || 0;
-        const limit = plan.maxAiRepliesPerMonth;
+        // Active subscription with finite quota — try plan first.
+        if (statusCheck.allowed && plan.maxAiRepliesPerMonth !== null) {
+            const currentUsage = await this.getCurrentUsage(userId);
+            const used = currentUsage?.aiRepliesCount || 0;
+            const limit = plan.maxAiRepliesPerMonth;
 
-        if (used >= limit) {
-            // Reset is bound to the usage window (monthly), not the subscription
-            // period — yearly/manual subs have currentPeriodEnd up to a year out
-            // while quota actually resets every month.
-            const resetsAtSource = currentUsage?.periodEnd ?? subscription.currentPeriodEnd;
-            return {
-                allowed: false,
-                reason: 'Monthly AI reply limit reached',
-                code: 'ai_limit_reached',
-                limit,
-                used,
-                remaining: 0,
-                resetsAt: resetsAtSource
-                    ? new Date(resetsAtSource).toISOString()
-                    : undefined,
-            };
+            if (used < limit) {
+                return { allowed: true, limit, used, remaining: limit - used };
+            }
+
+            // Plan quota exhausted → fall through to top-up check below.
         }
 
+        // Either subscription is not in active state, or plan quota is exhausted.
+        // Top-up balance honors the purchase regardless of subscription state.
+        const topupBalance = await this.getTopupBalance(userId);
+        if (topupBalance > 0) {
+            return { allowed: true, usingTopup: true, topupBalance };
+        }
+
+        // Nothing left. Return the specific denial:
+        // status block (canceled/paused/past_due past grace) takes priority
+        // over quota exhaustion since status is the more fundamental block.
+        if (!statusCheck.allowed) return statusCheck;
+
+        // Otherwise the denial is quota exhaustion. Recompute the same fields
+        // the old code returned so existing callers keep working.
+        const currentUsage = await this.getCurrentUsage(userId);
+        const used = currentUsage?.aiRepliesCount || 0;
+        const limit = plan.maxAiRepliesPerMonth as number;
+        const resetsAtSource = currentUsage?.periodEnd ?? subscription.currentPeriodEnd;
         return {
-            allowed: true,
+            allowed: false,
+            reason: 'Monthly AI reply limit reached',
+            code: 'ai_limit_reached',
             limit,
             used,
-            remaining: limit - used,
+            remaining: 0,
+            resetsAt: resetsAtSource
+                ? new Date(resetsAtSource).toISOString()
+                : undefined,
         };
     },
 
