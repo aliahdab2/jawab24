@@ -80,7 +80,7 @@ describe('TopUpRequestModal', () => {
             // Should NOT have rendered the unavailable-state title
             // (note: "Pay with card (coming soon)" stub is fine — that's the card row)
             expect(screen.queryByText(/Top-ups coming soon/i)).not.toBeInTheDocument();
-            expect(screen.queryByRole('link', { name: /email support/i })).not.toBeInTheDocument();
+            expect(screen.queryByRole('link', { name: /contact us on whatsapp/i })).not.toBeInTheDocument();
         });
 
         it('prefilled message includes the user email when provided', async () => {
@@ -134,12 +134,13 @@ describe('TopUpRequestModal', () => {
             expect(screen.queryByText('$49')).not.toBeInTheDocument();
             expect(screen.queryByText('$79')).not.toBeInTheDocument();
 
-            // Mailto fallback is the actionable next step
-            const emailLink = screen.getByRole('link', { name: /email support/i });
-            expect(emailLink.getAttribute('href')).toMatch(/^mailto:support@jawab24\.com/);
+            // WhatsApp fallback is the actionable next step (falls back to the
+            // shared DEFAULT_SUPPORT_WHATSAPP_NUMBER, not the per-tenant one).
+            const whatsappLink = screen.getByRole('link', { name: /contact us on whatsapp/i });
+            expect(whatsappLink.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/\d+/);
         });
 
-        it('mailto includes user email in body when provided', async () => {
+        it('whatsapp message includes user email in body when provided', async () => {
             mockGetTopupConfig.mockReturnValue(configResponse({ whatsappNumber: '' }));
 
             render(<TopUpRequestModal isOpen onClose={vi.fn()} userEmail="user@example.com" />);
@@ -148,12 +149,12 @@ describe('TopUpRequestModal', () => {
                 expect(screen.getByText(/Top-ups coming soon/i)).toBeInTheDocument();
             });
 
-            const emailLink = screen.getByRole('link', { name: /email support/i });
-            const decoded = decodeURIComponent(emailLink.getAttribute('href')!);
+            const whatsappLink = screen.getByRole('link', { name: /contact us on whatsapp/i });
+            const decoded = decodeURIComponent(whatsappLink.getAttribute('href')!);
             expect(decoded).toContain('My email: user@example.com');
         });
 
-        it('mailto omits "My email:" line when userEmail is missing', async () => {
+        it('whatsapp message omits "My email:" line when userEmail is missing', async () => {
             mockGetTopupConfig.mockReturnValue(configResponse({ whatsappNumber: '' }));
 
             render(<TopUpRequestModal isOpen onClose={vi.fn()} />);
@@ -162,8 +163,8 @@ describe('TopUpRequestModal', () => {
                 expect(screen.getByText(/Top-ups coming soon/i)).toBeInTheDocument();
             });
 
-            const emailLink = screen.getByRole('link', { name: /email support/i });
-            const decoded = decodeURIComponent(emailLink.getAttribute('href')!);
+            const whatsappLink = screen.getByRole('link', { name: /contact us on whatsapp/i });
+            const decoded = decodeURIComponent(whatsappLink.getAttribute('href')!);
             expect(decoded).not.toContain('My email:');
         });
 
@@ -195,7 +196,7 @@ describe('TopUpRequestModal', () => {
 
             // No pack picker, mailto fallback still present
             expect(screen.queryByText('5,000 replies')).not.toBeInTheDocument();
-            expect(screen.getByRole('link', { name: /email support/i })).toBeInTheDocument();
+            expect(screen.getByRole('link', { name: /contact us on whatsapp/i })).toBeInTheDocument();
 
             // Telemetry: load_failed cause, not no_channel
             await waitFor(() => {
