@@ -97,6 +97,28 @@ export const config = {
         billingPortalConfigId: process.env.STRIPE_BILLING_PORTAL_CONFIG_ID || '',
     },
 
+    // Top-up packs — non-expiring AI reply credit purchases.
+    // Prices in cents; overridable via env so they can be tuned without redeploy.
+    // repliesAdded is the credit applied on successful purchase.
+    topup: {
+        packs: {
+            '5k': {
+                repliesAdded: 5000,
+                priceCents: Number(process.env.STRIPE_TOPUP_PACK_5K_CENTS) || 4900,
+            },
+            '10k': {
+                repliesAdded: 10000,
+                priceCents: Number(process.env.STRIPE_TOPUP_PACK_10K_CENTS) || 7900,
+            },
+        },
+        currency: 'usd',
+        // WhatsApp number for the manual purchase flow (MENA market — bank
+        // transfer / USDT / cash buyers contact support via WhatsApp). E.164
+        // format without leading + or spaces, e.g. "966500000000". Empty string
+        // hides the manual flow from the UI.
+        whatsappNumber: process.env.JAWAB24_SUPPORT_WHATSAPP || '',
+    },
+
     // Frontend URL
     frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3001',
 

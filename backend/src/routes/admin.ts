@@ -17,6 +17,7 @@ import { resolveRecipientLanguages } from '../utils/recipientLanguage';
 import { generateUnsubscribeToken } from './waitlist';
 import { runDailyLeadDigest } from '../services/leadDigest';
 import { subscriptionsService } from '../services/subscriptions';
+import { topupService, type TopupPack, type TopupSource, TopupUserNotFoundError, UnknownTopupPackError, DuplicateTopupError } from '../services/topup';
 import { analyticsService, type AdminUserAiCostPeriod } from '../services/analytics';
 
 const AI_COST_PERIODS: readonly AdminUserAiCostPeriod[] = ['7d', '30d', '90d', 'this_month', 'last_month'];
@@ -1430,6 +1431,97 @@ export default async function adminRoutes(fastify: FastifyInstance) {
 
                 if (!row) return reply.status(404).send({ error: 'Not found' });
                 return reply.send(row);
+            }
+        );
+
+        /**
+         * POST /admin/topup - Manually credit a top-up pack to a user.
+         * Used for non-Stripe purchases (bank transfer, USDT, WhatsApp, cash).
+         * Audit-logged in admin_audit_logs.action='manual_topup'.
+         *
+         * Body: { userId, pack: '5k'|'10k', source: 'manual'|'admin', externalRef?, note? }
+         * - externalRef: bank transaction ID, USDT TXID, WhatsApp ref, etc.
+         * - note: admin's reason for the credit (free-form).
+         */
+        adminProtected.post<{
+            Body: {
+                userId: string;
+                pack: TopupPack;
+                source?: Exclude<TopupSource, 'stripe'>;
+                externalRef?: string;
+                note?: string;
+            };
+        }>(
+            '/topup',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Manually credit a top-up pack to a user',
+                    security: auth,
+                    body: {
+                        type: 'object',
+                        required: ['userId', 'pack'],
+                        properties: {
+                            userId: { type: 'string', format: 'uuid' },
+                            pack: { type: 'string', enum: ['5k', '10k'] },
+                            source: { type: 'string', enum: ['manual', 'admin'], default: 'manual' },
+                            externalRef: { type: 'string', maxLength: 255 },
+                            note: { type: 'string', maxLength: 1000 },
+                        },
+                    },
+                },
+            },
+            async (request, reply) => {
+                const { userId, pack, source = 'manual', externalRef, note } = request.body;
+                const adminUserId = (request as AuthenticatedRequest).user?.userId;
+
+                try {
+                    const result = await topupService.creditTopup({
+                        userId,
+                        pack,
+                        source,
+                        externalRef,
+                    });
+
+                    await db.insert(adminAuditLogs).values({
+                        adminUserId,
+                        targetUserId: userId,
+                        action: 'manual_topup',
+                        previousValue: null,
+                        newValue: {
+                            pack,
+                            repliesAdded: result.repliesAdded,
+                            source,
+                            newBalance: result.newBalance,
+                            purchaseId: result.purchaseId,
+                        },
+                        paymentReference: externalRef ?? null,
+                        note: note ?? null,
+                    });
+
+                    return reply.send({
+                        success: true,
+                        purchase: {
+                            id: result.purchaseId,
+                            pack,
+                            repliesAdded: result.repliesAdded,
+                        },
+                        newBalance: result.newBalance,
+                    });
+                } catch (err) {
+                    if (err instanceof TopupUserNotFoundError) {
+                        return reply.status(404).send({ success: false, error: 'User not found' });
+                    }
+                    if (err instanceof UnknownTopupPackError) {
+                        return reply.status(400).send({ success: false, error: err.message });
+                    }
+                    if (err instanceof DuplicateTopupError) {
+                        // Shouldn't fire for manual/admin (no PaymentIntent id), but defensive.
+                        return reply.status(409).send({ success: false, error: 'Duplicate purchase' });
+                    }
+                    request.log.error(err, 'manual_topup failed');
+                    return reply.status(500).send({ success: false, error: 'Top-up credit failed' });
+                }
             }
         );
 

@@ -435,6 +435,14 @@ export const subscriptionApi = {
   billingPortal: () => api.post('/payment/billing-portal'),
   checkAiLimit: () => api.get('/subscription/limits/ai'),
   checkPageLimit: () => api.get('/subscription/limits/pages'),
+  getTopupConfig: () => api.get<{
+    success: boolean;
+    data: {
+      packs: Record<string, { repliesAdded: number; priceCents: number }>;
+      currency: string;
+      whatsappNumber: string;
+    };
+  }>('/subscription/topup/config'),
 };
 
 // Messages API
