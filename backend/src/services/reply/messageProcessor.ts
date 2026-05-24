@@ -89,6 +89,11 @@ export class MessageProcessor {
         platformMessageId: string,
         sharedPostUrl?: string,
         sharedPostId?: string,
+        // True iff this job was re-enqueued from a handoff pause (worker sets it
+        // when `handoffRetries > 0`). Used to scope the "stale backlog" check —
+        // we only want to suppress messages whose lateness was *caused* by our
+        // pause logic, not messages delayed by queue lag or restarts.
+        wasHandoffPaused: boolean = false,
     ): Promise<MessageResult> {
         const platform = adapter.platform;
         const pipeline = `${platform}_message` as Pipeline;
@@ -281,6 +286,23 @@ export class MessageProcessor {
                     senderId, pageId: page.id, delayMs,
                 });
                 return { success: false, messageId: platformMessageId, error: 'Handoff active', handoffDelayMs: delayMs };
+            }
+
+            // Stale-backlog suppression: scoped strictly to re-enqueued jobs.
+            // When a handoff pause expires and queued messages come back, anything
+            // older than one pause window is conversational backlog — replying to
+            // a 20-min-old "is this in stock?" looks broken, not helpful. Only
+            // gates re-enqueued jobs (wasHandoffPaused=true) so unrelated lateness
+            // (queue lag, restarts, retries) still gets processed normally.
+            if (wasHandoffPaused && storedMessage.createdAt) {
+                const ageMs = Date.now() - new Date(storedMessage.createdAt).getTime();
+                if (ageMs > pauseMinutes * 60 * 1000) {
+                    pipelineMetrics.record(pipeline, 'handoff_backlog_stale');
+                    this.logger.info(`[${platform}] Skipping — handoff backlog stale`, {
+                        senderId, pageId: page.id, ageMs, pauseMinutes,
+                    });
+                    return { success: false, messageId: platformMessageId, error: 'Handoff backlog stale' };
+                }
             }
 
             if (!rateCheck.allowed) {

@@ -79,9 +79,9 @@ async function processFacebookComment(job: Job<ReplyJobData>): Promise<ReplyJobR
 async function processMessageJob(
     job: Job<ReplyJobData>,
     label: string,
-    service: { processMessage: (pageId: string, senderId: string, text: string, messageId: string, sharedPostUrl?: string, sharedPostId?: string) => Promise<import('../interfaces').MessageResult> },
+    service: { processMessage: (pageId: string, senderId: string, text: string, messageId: string, sharedPostUrl?: string, sharedPostId?: string, wasHandoffPaused?: boolean) => Promise<import('../interfaces').MessageResult> },
 ): Promise<ReplyJobResult> {
-    const { pageId, messageId, senderId, text, sharedPostUrl, sharedPostId, requestId } = job.data;
+    const { pageId, messageId, senderId, text, sharedPostUrl, sharedPostId, requestId, handoffRetries } = job.data;
 
     logger.info(`[ReplyWorker] Processing ${label} message`, {
         jobId: job.id,
@@ -94,7 +94,10 @@ async function processMessageJob(
         throw new UnrecoverableError(`Missing messageId or senderId for ${label} message`);
     }
 
-    const result = await service.processMessage(pageId, senderId, text, messageId, sharedPostUrl, sharedPostId);
+    // A job that has been re-enqueued at least once was held by a handoff
+    // pause; messageProcessor uses this to gate stale-backlog suppression.
+    const wasHandoffPaused = (handoffRetries ?? 0) > 0;
+    const result = await service.processMessage(pageId, senderId, text, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused);
 
     return {
         success: result.success,

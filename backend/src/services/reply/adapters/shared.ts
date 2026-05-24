@@ -83,7 +83,12 @@ export async function storeIncomingMessage(
         pageId, workspaceId, platformMessageId, senderId, text, senderName, undefined, platform,
     );
     return {
-        message: { id: message.id, replied: message.replied, needsAttention: message.needsAttention ?? false },
+        message: {
+            id: message.id,
+            replied: message.replied,
+            needsAttention: message.needsAttention ?? false,
+            createdAt: message.createdAt ?? null,
+        },
         isNew,
     };
 }

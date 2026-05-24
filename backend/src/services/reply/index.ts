@@ -34,9 +34,10 @@ export class ReplyService {
         messageId: string,
         sharedPostUrl?: string,
         sharedPostId?: string,
+        wasHandoffPaused?: boolean,
     ): Promise<MessageResult> {
         return messageProcessor.processMessage(
-            facebookMessageAdapter, pageId, senderId, messageText, messageId, sharedPostUrl, sharedPostId,
+            facebookMessageAdapter, pageId, senderId, messageText, messageId, sharedPostUrl, sharedPostId, wasHandoffPaused,
         );
     }
 

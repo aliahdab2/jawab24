@@ -458,7 +458,11 @@ export class MessagesController {
                 return reply.status(403).send({ error: 'Unauthorized: page not owned by workspace' });
             }
 
-            await messagesService.resumeConversation(pageId, senderId);
+            // Pass the workspace's handoff window so the resume marker TTL
+            // matches it — otherwise a non-default window would let the
+            // implicit pause linger past the marker.
+            const wsSettings = await workspaceSettingsService.getSettings(req.workspaceId);
+            await messagesService.resumeConversation(pageId, senderId, wsSettings.handoffPauseDurationMinutes);
 
             // Promote any delayed handoff jobs so they process immediately
             let promoted = 0;
