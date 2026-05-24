@@ -27,6 +27,7 @@ export type Outcome =
     | 'debounce_skipped'
     | 'handoff_active'
     | 'handoff_requeued'
+    | 'handoff_backlog_stale'
     | 'rate_limited'
     | 'settings_disabled'
     | 'already_replied'

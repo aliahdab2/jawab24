@@ -20,7 +20,6 @@ vi.mock('../../src/utils/tracing', () => ({
     tracedExternalCall: (_service: string, _method: string, fn: () => unknown) => fn(),
 }));
 
-// Mock config
 vi.mock('../../src/config', () => ({
     config: {
         facebook: {
@@ -31,6 +30,16 @@ vi.mock('../../src/config', () => ({
             webhookVerifyToken: 'test_verify_token',
         },
     },
+}));
+
+// Stub the Redis client directly. Transitive imports (reply/adapters/shared →
+// messages → conversationPause) pull in lib/redis, which would otherwise try
+// to read config.redis and instantiate a real client. Mocking the module
+// keeps this test isolated from the config shape.
+vi.mock('../../src/lib/redis', () => ({
+    redis: { get: vi.fn(), setex: vi.fn(), set: vi.fn(), del: vi.fn() },
+    redisScanDelete: vi.fn(),
+    isRedisAuthFailed: () => false,
 }));
 
 describe('Facebook Service', () => {

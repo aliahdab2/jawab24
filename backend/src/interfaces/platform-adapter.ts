@@ -30,6 +30,8 @@ export interface StoredMessage {
     id: string;
     replied: boolean;
     needsAttention?: boolean;
+    /** Needed by stale-backlog suppression to measure message age. */
+    createdAt?: Date | string | null;
 }
 
 export type Platform = 'facebook' | 'instagram' | 'shopify' | 'whatsapp';

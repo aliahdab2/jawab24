@@ -13,6 +13,15 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
+// Stub Redis directly (rather than relying on config.redis) — the import chain
+// reply/adapters/shared → messages → conversationPause loads lib/redis which
+// would otherwise instantiate a real client at module load.
+vi.mock('../../src/lib/redis', () => ({
+    redis: { get: vi.fn(), setex: vi.fn(), set: vi.fn(), del: vi.fn() },
+    redisScanDelete: vi.fn(),
+    isRedisAuthFailed: () => false,
+}));
+
 // Import after mocks are set up
 import { ReplySender } from '../../src/services/reply/sender';
 

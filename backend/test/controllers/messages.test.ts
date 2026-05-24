@@ -367,12 +367,15 @@ describe('MessagesController', () => {
                 id: 'page-internal-uuid',
                 name: 'Test Page',
             } as any);
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ handoffPauseDurationMinutes: 15 } as any);
             vi.mocked(messagesService.resumeConversation).mockResolvedValue(undefined as any);
             mockPromoteDelayedJobs.mockResolvedValue(2);
 
             await messagesController.resumeConversation(mockRequest as any, mockReply as any);
 
-            expect(messagesService.resumeConversation).toHaveBeenCalledWith('page-ext-1', 'sender-1');
+            // pauseMinutes is forwarded so the Redis resume marker TTL matches
+            // the workspace's window — protects the override behavior.
+            expect(messagesService.resumeConversation).toHaveBeenCalledWith('page-ext-1', 'sender-1', 15);
             // Must use internal UUID (page.id), not the external pageId from body
             expect(mockPromoteDelayedJobs).toHaveBeenCalledWith('page-internal-uuid', 'sender-1');
             expect(mockReply.send).toHaveBeenCalledWith({ success: true, promotedJobs: 2 });
@@ -403,6 +406,7 @@ describe('MessagesController', () => {
                 id: 'page-internal-uuid',
                 name: 'Test Page',
             } as any);
+            vi.mocked(workspaceSettingsService.getSettings).mockResolvedValue({ handoffPauseDurationMinutes: 15 } as any);
             vi.mocked(messagesService.resumeConversation).mockResolvedValue(undefined as any);
             mockPromoteDelayedJobs.mockRejectedValue(new Error('Redis down'));
 
