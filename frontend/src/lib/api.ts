@@ -583,6 +583,23 @@ export const adminApi = {
     return response.data;
   },
 
+  // Manually credit a top-up pack to a user (audit-logged as manual_topup)
+  creditTopup: async (data: {
+    userId: string;
+    pack: '5k' | '10k';
+    source?: 'manual' | 'admin';
+    externalRef?: string;
+    note?: string;
+  }) => {
+    const response = await api.post('/admin/topup', data);
+    return response.data as {
+      success: boolean;
+      purchase?: { id: string; pack: '5k' | '10k'; repliesAdded: number };
+      newBalance?: number;
+      error?: string;
+    };
+  },
+
   // Get all plans (for admin dropdown)
   getPlans: async () => {
     const response = await api.get('/admin/plans');

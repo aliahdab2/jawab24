@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
-import { Check, MessageCircle, CreditCard, Mail, AlertCircle } from 'lucide-react';
+import { Check, MessageCircle, CreditCard, AlertCircle } from 'lucide-react';
 import { Modal, Button } from '@/components/ui';
 import { subscriptionApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
-import { buildWhatsAppUrl } from '@/lib/whatsapp';
+import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsapp';
 
 type Pack = '5k' | '10k';
 
@@ -23,7 +23,6 @@ interface TopUpRequestModalProps {
 }
 
 const PACKS_ORDER: Pack[] = ['5k', '10k'];
-const SUPPORT_EMAIL = 'support@jawab24.com';
 
 /**
  * Modal that lets a paying user request a top-up pack.
@@ -221,29 +220,32 @@ function UnavailableState({ onClose, userEmail, loadError }: UnavailableStatePro
         );
     }, [loadError]);
 
-    const bodyKey = userEmail ? 'unavailable.emailBodyWithEmail' : 'unavailable.emailBody';
-    const subject = encodeURIComponent(t('unavailable.emailSubject'));
-    const body = encodeURIComponent(t(bodyKey, { email: userEmail ?? '' }));
-    const mailto = `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`;
+    const messageKey = userEmail ? 'unavailable.whatsappMessageWithEmail' : 'unavailable.whatsappMessage';
+    const whatsappUrl = buildWhatsAppUrl(
+        DEFAULT_SUPPORT_WHATSAPP_NUMBER,
+        t(messageKey, { email: userEmail ?? '' }),
+    );
 
     return (
         <div className="space-y-4">
-            <div className="flex items-start gap-3 p-4 rounded-lg bg-surface-100 dark:bg-surface-800">
+            <div className="flex items-start gap-3 p-4 rounded-lg border status-info">
                 <AlertCircle
-                    className="w-5 h-5 text-icon-muted shrink-0 mt-0.5"
+                    className="w-5 h-5 shrink-0 mt-0.5"
                     aria-hidden="true"
                 />
-                <p className="text-sm text-foreground leading-relaxed">
+                <p className="text-sm leading-relaxed">
                     {loadError ? t('errors.loadFailed') : t('unavailable.message')}
                 </p>
             </div>
 
             <a
-                href={mailto}
-                className="flex items-center justify-center gap-2 w-full p-3 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-semibold transition-colors"
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 w-full p-3 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition-colors"
             >
-                <Mail className="w-4 h-4" aria-hidden="true" />
-                {t('unavailable.emailButton')}
+                <MessageCircle className="w-4 h-4" aria-hidden="true" />
+                {t('unavailable.whatsappButton')}
             </a>
 
             <div className="flex justify-end">

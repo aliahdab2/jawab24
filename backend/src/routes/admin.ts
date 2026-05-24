@@ -268,6 +268,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             phone: users.phone,
                             facebookId: users.facebookId,
                             createdAt: users.createdAt,
+                            topupBalance: users.topupBalance,
                         })
                         .from(users)
                         .where(eq(users.id, userId))

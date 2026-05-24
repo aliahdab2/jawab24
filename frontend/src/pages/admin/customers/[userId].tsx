@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook, Instagram, ExternalLink, Users } from 'lucide-react';
+import { ArrowLeft, Calendar, FileText, Zap, Globe, Mail, Facebook, Instagram, ExternalLink, Users, Plus } from 'lucide-react';
 import { AdminLayout } from '@/components/layout/AdminLayout';
 import { useTranslations } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
@@ -20,6 +20,7 @@ interface CustomerDetail {
     phone: string | null;
     facebookId: string | null;
     createdAt: string | null;
+    topupBalance: number | null;
     subscription: {
         id: string;
         status: string;
@@ -84,6 +85,8 @@ const STATUS_COLORS: Record<string, string> = {
     paused: 'bg-muted text-muted-foreground border-theme-border',
 };
 
+const FIELD_CLASS = 'w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 bg-background text-foreground';
+
 const STATUS_KEYS: Record<string, string> = {
     active: 'customers.statusActive',
     trialing: 'customers.statusTrialing',
@@ -115,6 +118,16 @@ export default function AdminCustomerDetailPage() {
     const [paymentMethod, setPaymentMethod] = useState<'manual' | 'bank_transfer' | 'syrian_bank'>('manual');
     const [paymentReference, setPaymentReference] = useState('');
     const [note, setNote] = useState('');
+
+    // Top-up form state
+    const [showTopupForm, setShowTopupForm] = useState(false);
+    const [topupLoading, setTopupLoading] = useState(false);
+    const [topupError, setTopupError] = useState<string | null>(null);
+    const [topupSuccess, setTopupSuccess] = useState<string | null>(null);
+    const [topupPack, setTopupPack] = useState<'5k' | '10k'>('5k');
+    const [topupSource, setTopupSource] = useState<'manual' | 'admin'>('manual');
+    const [topupExternalRef, setTopupExternalRef] = useState('');
+    const [topupNote, setTopupNote] = useState('');
 
     // AI Cost by Page state — driven by an in-card period selector. Fetched separately
     // from the user-detail call so changing the period doesn't refetch profile/pages/sub.
@@ -229,6 +242,46 @@ export default function AdminCustomerDetailPage() {
         }
     };
 
+    const handleTopup = async () => {
+        if (!userId || typeof userId !== 'string') return;
+
+        setTopupLoading(true);
+        setTopupError(null);
+        setTopupSuccess(null);
+
+        try {
+            const response = await adminApi.creditTopup({
+                userId,
+                pack: topupPack,
+                source: topupSource,
+                externalRef: topupExternalRef || undefined,
+                note: topupNote || undefined,
+            });
+
+            if (response.success && response.purchase) {
+                setTopupSuccess(t('customer.topupSuccess', {
+                    replies: response.purchase.repliesAdded,
+                    balance: response.newBalance ?? 0,
+                }));
+                setShowTopupForm(false);
+                setTopupExternalRef('');
+                setTopupNote('');
+                // Reload customer to refresh balance
+                const customerRes = await adminApi.getUser(userId);
+                if (customerRes.success) {
+                    setCustomer(customerRes.data);
+                }
+            } else {
+                setTopupError(response.error || t('customer.topupErrorGeneric'));
+            }
+        } catch (err) {
+            setTopupError(t('customer.topupErrorGeneric'));
+            captureError(err, 'Failed to credit top-up', { tags: { page: 'admin-customer-detail', action: 'topup' } });
+        } finally {
+            setTopupLoading(false);
+        }
+    };
+
     if (loading) {
         return (
             <AdminLayout title={t('customer.title')}>
@@ -275,10 +328,15 @@ export default function AdminCustomerDetailPage() {
                     </div>
                 </div>
 
-                {/* Success message */}
+                {/* Success messages — role=status + aria-live so screen readers announce them */}
                 {upgradeSuccess && (
-                    <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+                    <div role="status" aria-live="polite" className="alert-success border px-4 py-3 rounded-lg">
                         {upgradeSuccess}
+                    </div>
+                )}
+                {topupSuccess && (
+                    <div role="status" aria-live="polite" className="alert-success border px-4 py-3 rounded-lg">
+                        {topupSuccess}
                     </div>
                 )}
 
@@ -648,6 +706,116 @@ export default function AdminCustomerDetailPage() {
                             </div>
                         </Card>
 
+                        {/* Top-up Card */}
+                        <Card>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-semibold text-foreground">
+                                    {t('customer.topupTitle')}
+                                </h2>
+                                <Plus className="w-5 h-5 text-brand-500" />
+                            </div>
+                            <div>
+                                <div className="text-xs text-muted-foreground mb-1">
+                                    {t('customer.topupBalance')}
+                                </div>
+                                <div className="text-2xl font-bold text-foreground">
+                                    {(customer.topupBalance ?? 0).toLocaleString(intlLocale)}
+                                </div>
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-theme-border">
+                                <Button
+                                    onClick={() => {
+                                        setShowTopupForm(!showTopupForm);
+                                        setTopupError(null);
+                                    }}
+                                    className="w-full"
+                                    variant="secondary"
+                                >
+                                    {showTopupForm ? t('customer.cancelUpgrade') : t('customer.topupCreditButton')}
+                                </Button>
+                            </div>
+                        </Card>
+
+                        {/* Top-up Form */}
+                        {showTopupForm && (
+                            <Card>
+                                <h3 className="text-lg font-semibold text-foreground mb-4">
+                                    {t('customer.topupFormTitle')}
+                                </h3>
+
+                                {topupError && (
+                                    <div role="alert" className="mb-4 alert-error border px-4 py-3 rounded-lg text-sm">
+                                        {topupError}
+                                    </div>
+                                )}
+
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
+                                            {t('customer.topupPack')} *
+                                        </label>
+                                        <select
+                                            value={topupPack}
+                                            onChange={(e) => setTopupPack(e.target.value as '5k' | '10k')}
+                                            className={FIELD_CLASS}
+                                        >
+                                            <option value="5k">{t('customer.topupPack5k')}</option>
+                                            <option value="10k">{t('customer.topupPack10k')}</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
+                                            {t('customer.topupSource')} *
+                                        </label>
+                                        <select
+                                            value={topupSource}
+                                            onChange={(e) => setTopupSource(e.target.value as 'manual' | 'admin')}
+                                            className={FIELD_CLASS}
+                                        >
+                                            <option value="manual">{t('customer.topupSourceManual')}</option>
+                                            <option value="admin">{t('customer.topupSourceAdmin')}</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
+                                            {t('customer.topupExternalRef')}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={topupExternalRef}
+                                            onChange={(e) => setTopupExternalRef(e.target.value)}
+                                            placeholder={t('customer.topupExternalRefPlaceholder')}
+                                            className={FIELD_CLASS}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground/70 mb-1">
+                                            {t('customer.topupNote')}
+                                        </label>
+                                        <textarea
+                                            value={topupNote}
+                                            onChange={(e) => setTopupNote(e.target.value)}
+                                            placeholder={t('customer.topupNotePlaceholder')}
+                                            rows={3}
+                                            className={`${FIELD_CLASS} resize-none`}
+                                        />
+                                    </div>
+
+                                    <Button
+                                        onClick={handleTopup}
+                                        loading={topupLoading}
+                                        disabled={topupLoading}
+                                        className="w-full"
+                                    >
+                                        {t('customer.topupSubmit')}
+                                    </Button>
+                                </div>
+                            </Card>
+                        )}
+
                         {/* Upgrade Form */}
                         {showUpgradeForm && (
                             <Card>
@@ -656,7 +824,7 @@ export default function AdminCustomerDetailPage() {
                                 </h3>
 
                                 {upgradeError && (
-                                    <div className="mb-4 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm">
+                                    <div role="alert" className="mb-4 alert-error border px-4 py-3 rounded-lg text-sm">
                                         {upgradeError}
                                     </div>
                                 )}
@@ -670,7 +838,7 @@ export default function AdminCustomerDetailPage() {
                                         <select
                                             value={selectedPlan}
                                             onChange={(e) => setSelectedPlan(e.target.value)}
-                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className={FIELD_CLASS}
                                         >
                                             <option value="">{t('customer.upgradeFormSelectPlan')}</option>
                                             {plans.filter(p => p.isActive).map((plan) => (
@@ -689,7 +857,7 @@ export default function AdminCustomerDetailPage() {
                                         <select
                                             value={periodMonths}
                                             onChange={(e) => setPeriodMonths(Number(e.target.value) as 1 | 3 | 6 | 12)}
-                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className={FIELD_CLASS}
                                         >
                                             <option value={1}>1 {t('customer.upgradeFormMonth')}</option>
                                             <option value={3}>3 {t('customer.upgradeFormMonths')}</option>
@@ -706,7 +874,7 @@ export default function AdminCustomerDetailPage() {
                                         <select
                                             value={paymentMethod}
                                             onChange={(e) => setPaymentMethod(e.target.value as 'manual' | 'bank_transfer' | 'syrian_bank')}
-                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className={FIELD_CLASS}
                                         >
                                             <option value="manual">{t('customer.upgradeFormPaymentMethodsManual')}</option>
                                             <option value="bank_transfer">{t('customer.upgradeFormPaymentMethodsBankTransfer')}</option>
@@ -724,7 +892,7 @@ export default function AdminCustomerDetailPage() {
                                             value={paymentReference}
                                             onChange={(e) => setPaymentReference(e.target.value)}
                                             placeholder={t('customer.upgradeFormPaymentReferencePlaceholder')}
-                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500"
+                                            className={FIELD_CLASS}
                                         />
                                     </div>
 
@@ -738,7 +906,7 @@ export default function AdminCustomerDetailPage() {
                                             onChange={(e) => setNote(e.target.value)}
                                             placeholder={t('customer.upgradeFormNotePlaceholder')}
                                             rows={3}
-                                            className="w-full px-4 py-2 border border-theme-border rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"
+                                            className={`${FIELD_CLASS} resize-none`}
                                         />
                                     </div>
 

@@ -30,11 +30,10 @@
     },
     "unavailable": {
         "title": "Top-ups coming soon",
-        "message": "We're working on enabling additional reply purchases. In the meantime, our support team can help you add replies manually.",
-        "emailButton": "Email support",
-        "emailSubject": "Top-up request",
-        "emailBody": "Hi Jawab24 team,\n\nI'd like to add extra AI replies to my account.",
-        "emailBodyWithEmail": "Hi Jawab24 team,\n\nI'd like to add extra AI replies to my account.\n\nMy email: {email}"
+        "message": "We're working on enabling additional reply purchases. In the meantime, message us on WhatsApp and we'll add them to your account manually.",
+        "whatsappButton": "Contact us on WhatsApp",
+        "whatsappMessage": "Hi Jawab24 team,\nI'd like to add extra AI replies to my account.",
+        "whatsappMessageWithEmail": "Hi Jawab24 team,\nI'd like to add extra AI replies to my account.\n\nMy email: {email}"
     },
     "errors": {
         "loadFailed": "Couldn't load top-up options. Check your connection and try again."
