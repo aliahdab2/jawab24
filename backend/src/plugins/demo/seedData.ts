@@ -71,6 +71,33 @@ const DEMO_PAGES = [
 📖 تفاصيل الدورات: https://alnoor-institute.com/courses`,
         autoReplyEnabled: true,
         instagramUsername: 'alnoor_institute',
+        // Stage 2.6: merchant-confirmed structured fields. Drives the BUSINESS_INFO
+        // prompt-block eval cases (Cat 50). suggestions left empty so this page
+        // tests the "fully populated merchant" path; the GATE cases need a page
+        // with merchant={} + suggestions populated (see electronics page below).
+        businessProfile: {
+            merchant: {
+                phones: ['0112345678', '0501112233'],
+                address: 'الرياض، حي الملز، شارع الأمير سلطان',
+                city: 'الرياض',
+                country: 'السعودية',
+                hours: {
+                    sun: ['08:00-21:00'],
+                    mon: ['08:00-21:00'],
+                    tue: ['08:00-21:00'],
+                    wed: ['08:00-21:00'],
+                    thu: ['08:00-21:00'],
+                    fri: ['closed'],
+                    sat: ['09:00-17:00'],
+                },
+                policies: {
+                    payment: 'نقبل الدفع نقداً وبالتحويل البنكي وبطاقات مدى.',
+                    booking: 'التسجيل من خلال الموقع الإلكتروني أو زيارة المعهد مباشرة.',
+                },
+                language_hint: 'ar',
+            },
+            suggestions: {},
+        },
     },
     {
         facebookPageId: 'demo_page_school',
@@ -1131,6 +1158,9 @@ export async function seedDemoData(
                     knowledgeBase: pageData.suggestedKnowledgeBase,
                     autoReplyEnabled: pageData.autoReplyEnabled,
                     instagramUsername: pageData.instagramUsername,
+                    // Stage 2.6: refresh business_profile container so re-seeding picks up
+                    // any new structured fields. Falls through cleanly when undefined.
+                    ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
                 })
                 .where(eq(pages.facebookPageId, pageData.facebookPageId));
         }
@@ -1276,6 +1306,9 @@ export async function seedDemoData(
                 knowledgeBase: pageData.suggestedKnowledgeBase,
                 instagramUsername: pageData.instagramUsername,
                 instagramAutoReplyEnabled: false,
+                // Stage 2.6: seed the structured BUSINESS_INFO container when defined,
+                // letting eval cases drive the prompt-injection path with realistic data.
+                ...(pageData.businessProfile !== undefined && { businessProfile: pageData.businessProfile }),
             })
             .returning({ id: pages.id, facebookPageId: pages.facebookPageId });
         createdPages.push(created);
