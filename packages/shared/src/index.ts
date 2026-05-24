@@ -350,6 +350,19 @@ export interface UsageSummary {
     limit: number | null;
     remaining: number | null;
   };
+  /**
+   * Non-expiring AI reply credit balance from one-time top-up purchases.
+   * Consumed only after the monthly plan quota is exhausted. May be negative
+   * if a partially-consumed pack was refunded.
+   *
+   * Optional in the type for backward-compatibility during the rollout window
+   * (older clients/mocks won't have it). Backend always returns it as of PR 1.
+   */
+  topup?: {
+    balance: number;
+    /** Sum of replies_added across all succeeded top-up purchases (lifetime). */
+    lifetimePurchased: number;
+  };
   subscription: {
     plan: Plan;
     status: SubscriptionStatus;
@@ -370,6 +383,14 @@ export interface LimitCheckResult {
   remaining?: number;
   /** ISO timestamp when the current usage period resets. Set when `code` is 'ai_limit_reached'. */
   resetsAt?: string;
+  /**
+   * True when allowance comes from the user's top-up balance rather than their
+   * monthly plan quota. Set by canUseAiReplies when plan quota is exhausted (or
+   * subscription is past_due/canceled) but topup_balance > 0.
+   */
+  usingTopup?: boolean;
+  /** Current top-up balance when `usingTopup` is true. */
+  topupBalance?: number;
 }
 
 // --- AI Worker Types ---

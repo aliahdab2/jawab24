@@ -92,6 +92,8 @@ vi.mock('../../src/db/schema', () => ({
     usageLogs: {},
     pages: { userId: 'user_id', id: 'id' },
     workspaces: { id: 'id', ownerId: 'owner_id' },
+    users: { id: 'id', topupBalance: 'topup_balance' },
+    topupPurchases: { userId: 'user_id', status: 'status', repliesAdded: 'replies_added' },
 }));
 
 vi.mock('../../src/lib/redis', () => ({
@@ -720,6 +722,14 @@ describe('Subscriptions Service', () => {
 
 
     describe('canUseAiReplies - integration', () => {
+        beforeEach(() => {
+            // canUseAiReplies now consults the top-up balance on every denial path.
+            // These legacy tests don't care about top-up; stub it to zero so the
+            // existing assertions for "no subscription / canceled / limit reached"
+            // still surface those reasons (top-up > 0 would override them).
+            vi.spyOn(subscriptionsService, 'getTopupBalance').mockResolvedValue(0);
+        });
+
         it('should reject when no subscription', async () => {
             const result = await subscriptionsService.canUseAiReplies('user_no_sub');
             expect(result.allowed).toBe(false);
@@ -1217,6 +1227,16 @@ describe('isSubscriptionActive', () => {
             createdAt: new Date(),
             updatedAt: new Date(),
         };
+
+        beforeEach(() => {
+            // getUsageSummary now includes a top-up section. These legacy tests
+            // only assert plan + pages behavior; stub top-up to zeros so they
+            // don't need to mock the additional users + topup_purchases queries.
+            vi.spyOn(subscriptionsService, 'getTopupSummary').mockResolvedValue({
+                balance: 0,
+                lifetimePurchased: 0,
+            });
+        });
 
         it('returns usage summary for workspace owner', async () => {
             vi.spyOn(subscriptionsService, 'getUserSubscription').mockResolvedValue(mockSubscription);
