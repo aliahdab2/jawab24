@@ -848,3 +848,9 @@ export interface WorkspaceSettings {
   brandVoiceNotesMulti: Record<string, string>;
   holdLowConfidence: boolean;
 }
+
+// --- Business Info structured prompt block (Stage 2.6) ---
+export { formatBusinessInfoPrompt } from './businessInfoPrompt';
+// --- Business hours canonicalizer (Stage 2.6) ---
+export { canonicalizeHoursEntry, canonicalizeHoursWeek } from './businessHours';
+export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } from './businessHours';

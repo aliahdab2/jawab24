@@ -42,6 +42,8 @@ export interface CommentReplyContext {
     productCatalog?: string;
     replyStyle?: 'professional' | 'casual' | 'enthusiastic';
     brandVoiceNotes?: string;
+    /** Stage 2.6 structured BUSINESS_INFO block (merchant-confirmed only). */
+    businessInfoBlock?: string | null;
     senderName?: string;
     defaultReplyLanguage?: string;
     /** Facebook `message_tags` array — present for Facebook comments only. Feeds the

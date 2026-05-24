@@ -1079,6 +1079,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         knowledgeBase: pages.knowledgeBase,
                         kbActiveVersion: pages.kbActiveVersion,
                         ecommerceStoreId: pages.ecommerceStoreId,
+                        businessProfile: pages.businessProfile,
                     })
                     .from(pages)
                     .where(eq(pages.id, pageId))

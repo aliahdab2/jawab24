@@ -2,6 +2,11 @@ import { integrationRegistry } from '../../integrations';
 import { getStoreContextForAI } from '../ecommerce';
 import { formatBusinessProfile } from '../../utils/businessProfile';
 import { detectLanguageCode } from '../../utils/language';
+import {
+    formatBusinessInfoPrompt,
+    unwrapBusinessProfile,
+    type StoredBusinessProfile,
+} from '@jawab24/shared';
 
 export interface EnrichedContext {
     knowledgeBase: string | undefined;
@@ -9,6 +14,14 @@ export interface EnrichedContext {
     productCatalog: string | undefined;
     brandVoiceNotes: string | undefined;
     ecommerceStoreId: string | undefined;
+    /**
+     * Stage 2.6 structured BUSINESS_INFO block. Built from `business_profile.merchant`
+     * only — never from FB suggestions. The AI prompt injects this verbatim so
+     * stale FB phone/address data cannot reach the [NOT_PROVIDED] / authoritative
+     * surface. Null when the merchant has no confirmed fields yet (then the
+     * AI falls back to merged narrative KB via `formatBusinessProfile`).
+     */
+    businessInfoBlock: string | null;
 }
 
 /**
@@ -53,13 +66,21 @@ export async function enrichPageContext(
         } catch { /* non-critical */ }
     }
 
-    // 3. Append business profile (hours, location, phone) to KB
+    // 3a. Narrative business profile appended to KB (merged merchant ∪ suggestions —
+    //     supports brand-new pages whose merchant never visited the editor).
     const profileText = formatBusinessProfile(page.businessProfile as Record<string, unknown> | null | undefined);
     if (profileText) {
         knowledgeBase = knowledgeBase
             ? `${knowledgeBase}\n\n--- Business Info ---\n${profileText}`
             : profileText;
     }
+
+    // 3b. Stage 2.6 structured BUSINESS_INFO block — built from `merchant` only,
+    //     never FB suggestions. Beats stale narrative chunks via the "structured
+    //     > narrative" precedence (Eval Case #19) and refuses to invent missing
+    //     fields via [NOT_PROVIDED] markers (Damascus phone regression case #11).
+    const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
+    const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null);
 
     // 4. Language-appropriate brand voice notes
     const bvMulti = (userSettings.brandVoiceNotesMulti || {}) as Record<string, string>;
@@ -74,5 +95,5 @@ export async function enrichPageContext(
         || legacyFallback
         || undefined;
 
-    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId };
+    return { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock };
 }

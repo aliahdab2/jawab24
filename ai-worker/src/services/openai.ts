@@ -254,6 +254,14 @@ export interface GenerateRequest {
         conversationHistory?: ConversationMessage[];
         replyStyle?: string;
         brandVoiceNotes?: string;
+        /**
+         * Stage 2.6 structured BUSINESS_INFO prompt block (pre-formatted by
+         * backend's contextEnricher via `formatBusinessInfoPrompt`). Built from
+         * `business_profile.merchant` ONLY — never FB suggestions. The AI
+         * treats this as authoritative and refuses to invent values for
+         * fields marked `[NOT_PROVIDED]`. Null/absent → no block injected.
+         */
+        businessInfoBlock?: string | null;
         customerContext?: string;
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
@@ -642,6 +650,15 @@ ${isDM
                 ? 'guidelines from the business owner — incorporate naturally. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below'
                 : 'follow these additional guidelines from the business owner';
             prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}`;
+        }
+
+        // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only.
+        // Injected verbatim above the narrative <business_knowledge> tag below,
+        // so the model treats structured fields as authoritative and refuses to
+        // invent values for [NOT_PROVIDED] fields. Eval cases #11 (Damascus
+        // phone hallucination) and #19 (structured-beats-stale-KB) gate this.
+        if (request.context?.businessInfoBlock) {
+            prompt += `\n\n${request.context.businessInfoBlock.replace(/[<>]/g, '').slice(0, 1500)}`;
         }
 
         // Customer context goes into the user prompt (next to the message) when conversation

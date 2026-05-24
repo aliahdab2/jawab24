@@ -416,6 +416,7 @@ export class CommentProcessor {
             generatorContext.storePolicies = enriched.storePolicies;
             generatorContext.productCatalog = enriched.productCatalog;
             generatorContext.brandVoiceNotes = enriched.brandVoiceNotes;
+            generatorContext.businessInfoBlock = enriched.businessInfoBlock;
             generatorContext.replyStyle = userSettings.replyStyle;
             generatorContext.defaultReplyLanguage = userSettings.defaultReplyLanguage;
             // Pass commenter name so the AI addresses the actual commenter, not a tagged person

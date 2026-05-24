@@ -6,6 +6,11 @@ import { detectLanguageCode } from '../../utils/language';
 import type { PlaygroundInput } from './generator';
 import type { FacebookMessageTag } from '../../utils/commentText';
 import type { PlaygroundSource } from '../../types/aiPipeline';
+import {
+    formatBusinessInfoPrompt,
+    unwrapBusinessProfile,
+    type StoredBusinessProfile,
+} from '@jawab24/shared';
 
 /** Minimal page shape needed to build playground context */
 export interface PlaygroundPageData {
@@ -16,6 +21,8 @@ export interface PlaygroundPageData {
     knowledgeBase?: string | null;
     kbActiveVersion?: number | null;
     ecommerceStoreId?: string | null;
+    /** Stage 2.6: needed to build the structured BUSINESS_INFO prompt block. */
+    businessProfile?: unknown;
 }
 
 interface PlaygroundContextOptions {
@@ -96,6 +103,10 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         }
     }
 
+    // 2b. Stage 2.6 structured BUSINESS_INFO block — built from merchant half only.
+    const { merchant } = unwrapBusinessProfile(page.businessProfile as StoredBusinessProfile);
+    const businessInfoBlock = formatBusinessInfoPrompt(merchant ?? null);
+
     // 3. When comment mode is dual or private, use DM channel for detailed reply
     const effectiveChannel: 'comment' | 'dm' = (channel === 'comment' && (commentReplyMode === 'dual' || commentReplyMode === 'private'))
         ? 'dm'
@@ -117,6 +128,7 @@ export async function buildPlaygroundContext(opts: PlaygroundContextOptions): Pr
         conversationHistory: channel === 'dm' ? conversationHistory : undefined,
         replyStyle,
         brandVoiceNotes,
+        businessInfoBlock,
         customerContext,
         model,
         defaultReplyLanguage,
