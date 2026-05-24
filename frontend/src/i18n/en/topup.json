@@ -10,17 +10,16 @@
         "subtitle": "Choose how many extra replies you'd like to add to your account",
         "neverExpires": "Replies never expire — use them anytime",
         "contactToBuy": "Contact us to buy",
-        "whatsappMessage": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# AI reply} other {# AI replies}} ({pack} pack, ${priceUsd}) to my account.\n\nMy email: {email}",
+        "whatsappMessage": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# AI reply} other {# AI replies}} ({pack} pack, ${priceUsd}) to my account.",
+        "whatsappMessageWithEmail": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# AI reply} other {# AI replies}} ({pack} pack, ${priceUsd}) to my account.\n\nMy email: {email}",
         "selectPack": "Select a pack",
         "close": "Close"
     },
     "pack5k": {
-        "name": "5,000 replies",
-        "price": "$49"
+        "name": "5,000 replies"
     },
     "pack10k": {
         "name": "10,000 replies",
-        "price": "$79",
         "bestValue": "Best value"
     },
     "method": {
@@ -29,7 +28,15 @@
         "whatsapp": "Pay via bank transfer or other",
         "whatsappSubtitle": "We'll respond on WhatsApp within hours and credit your account once payment is confirmed"
     },
+    "unavailable": {
+        "title": "Top-ups coming soon",
+        "message": "We're working on enabling additional reply purchases. In the meantime, our support team can help you add replies manually.",
+        "emailButton": "Email support",
+        "emailSubject": "Top-up request",
+        "emailBody": "Hi Jawab24 team,\n\nI'd like to add extra AI replies to my account.",
+        "emailBodyWithEmail": "Hi Jawab24 team,\n\nI'd like to add extra AI replies to my account.\n\nMy email: {email}"
+    },
     "errors": {
-        "noContactChannel": "Top-up requests are temporarily unavailable. Please try again later or contact support."
+        "loadFailed": "Couldn't load top-up options. Check your connection and try again."
     }
 }
