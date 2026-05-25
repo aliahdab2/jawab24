@@ -583,6 +583,13 @@ export const adminApi = {
     return response.data;
   },
 
+  // Set or clear per-workspace AI model override. null clears the override
+  // so the workspace tracks DEFAULT_AI_MODEL again.
+  setUserAiModel: async (userId: string, model: string | null) => {
+    const response = await api.patch(`/admin/users/${userId}/ai-model`, { model });
+    return response.data as { success: boolean; data?: { aiModel: string | null }; error?: string };
+  },
+
   // Manually credit a top-up pack to a user (audit-logged as manual_topup)
   creditTopup: async (data: {
     userId: string;

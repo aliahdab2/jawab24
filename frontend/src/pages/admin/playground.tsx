@@ -7,6 +7,8 @@ import { useLanguage } from '@/i18n/hooks';
 import clsx from 'clsx';
 import { adminApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { AiModelOptions } from '@/components/admin/AiModelOptions';
 
 // ────────────────────────────────────────────
 // Types
@@ -147,7 +149,7 @@ export default function AdminPlaygroundPage() {
     const [kbStatus, setKbStatus] = useState<KbStatus | null>(null);
     const [question, setQuestion] = useState('');
     const [channel, setChannel] = useState<'comment' | 'dm'>('comment');
-    const [selectedModel, setSelectedModel] = useState('gpt-4.1-mini');
+    const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_AI_MODEL);
     const [postMessage, setPostMessage] = useState('');
     const [conversationHistory, setConversationHistory] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
     const [loading, setLoading] = useState(false);
@@ -270,7 +272,7 @@ export default function AdminPlaygroundPage() {
                 channel,
                 ...(channel === 'comment' && postMessage.trim() ? { postMessage: postMessage.trim() } : {}),
                 ...(channel === 'dm' && fullHistory.length > 0 ? { conversationHistory: fullHistory } : {}),
-                ...(selectedModel !== 'gpt-4.1-mini' ? { model: selectedModel } : {}),
+                ...(selectedModel !== DEFAULT_AI_MODEL ? { model: selectedModel } : {}),
             });
 
             const assistantMsg: PlaygroundMessage = {
@@ -469,9 +471,7 @@ export default function AdminPlaygroundPage() {
                             aria-label={t('playground.modelLabel')}
                             className="px-2.5 py-1.5 border border-surface-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 bg-card text-foreground"
                         >
-                            <option value="gpt-4.1-mini">GPT-4.1 Mini</option>
-                            <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option>
-                            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                            <AiModelOptions />
                         </select>
 
                         <div className="flex-1" />

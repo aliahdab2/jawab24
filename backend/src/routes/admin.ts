@@ -1,8 +1,10 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
+import { isAllowedAiModel } from '@jawab24/shared';
+import { clearAiModelCache } from '../services/aiModelResolver';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, emailUnsubscribes, leadDigestSends, emailSends, posts, instagramMedia, leads, workspaceMembers } from '../db/schema';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, emailUnsubscribes, leadDigestSends, emailSends, posts, instagramMedia, leads, workspaceMembers, settings } from '../db/schema';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
@@ -281,6 +283,14 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         });
                     }
 
+                    // Per-workspace AI model override (null = follows DEFAULT_AI_MODEL).
+                    const [settingsRow] = await db
+                        .select({ aiModel: settings.aiModel })
+                        .from(settings)
+                        .where(eq(settings.userId, userId))
+                        .limit(1);
+                    const aiModel: string | null = settingsRow?.aiModel ?? null;
+
                     // Get subscription with plan limits
                     const [subscription] = await db
                         .select({
@@ -407,6 +417,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         success: true,
                         data: {
                             ...user,
+                            aiModel,
                             subscription: subscription || null,
                             pages: userPages,
                             usage: currentUsage ? {
@@ -431,6 +442,85 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         success: false,
                         error: 'Failed to get user',
                     });
+                }
+            }
+        );
+
+        /**
+         * PATCH /admin/users/:userId/ai-model
+         * Per-workspace AI model override. Body: { model: string | null }.
+         * null clears the override so the workspace tracks DEFAULT_AI_MODEL again.
+         * Invalidates the in-memory resolver cache so the change takes effect immediately.
+         */
+        adminProtected.patch<{ Params: { userId: string }; Body: { model: string | null } }>(
+            '/users/:userId/ai-model',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Set or clear the per-workspace AI model override',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: {
+                        type: 'object',
+                        properties: { model: { type: ['string', 'null'] } },
+                        required: ['model'],
+                    },
+                },
+            },
+            async (
+                request: FastifyRequest<{ Params: { userId: string }; Body: { model: string | null } }>,
+                reply: FastifyReply,
+            ) => {
+                const { userId } = request.params;
+                const { model } = request.body;
+                const adminUserId = (request as AuthenticatedRequest).user?.userId;
+
+                if (model !== null && !isAllowedAiModel(model)) {
+                    return reply.status(400).send({ success: false, error: 'Invalid model' });
+                }
+
+                try {
+                    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId)).limit(1);
+                    if (!target) {
+                        return reply.status(404).send({ success: false, error: 'User not found' });
+                    }
+
+                    // Read previous value, upsert, and audit-log atomically — so a
+                    // concurrent admin click can't observe a stale `from` value in the
+                    // audit log, and a failed audit-log insert rolls back the change.
+                    let previousModel: string | null = null;
+                    await db.transaction(async (tx) => {
+                        const [existing] = await tx
+                            .select({ aiModel: settings.aiModel })
+                            .from(settings)
+                            .where(eq(settings.userId, userId))
+                            .limit(1);
+                        previousModel = existing?.aiModel ?? null;
+
+                        await tx
+                            .insert(settings)
+                            .values({ userId, aiModel: model })
+                            .onConflictDoUpdate({ target: settings.userId, set: { aiModel: model } });
+
+                        await tx.insert(adminAuditLogs).values({
+                            adminUserId,
+                            targetUserId: userId,
+                            action: 'ai_model_changed',
+                            previousValue: { aiModel: previousModel },
+                            newValue: { aiModel: model },
+                        });
+                    });
+
+                    // Cache invalidation lives outside the transaction: if the DB
+                    // write rolled back we never get here, so we won't wrongly evict.
+                    clearAiModelCache(userId);
+
+                    request.log.info({ adminUserId, targetUserId: userId, from: previousModel, to: model }, 'Admin changed AI model');
+
+                    return reply.send({ success: true, data: { aiModel: model } });
+                } catch (error) {
+                    request.log.error(error, 'Admin set AI model failed');
+                    return reply.status(500).send({ success: false, error: 'Failed to set AI model' });
                 }
             }
         );
