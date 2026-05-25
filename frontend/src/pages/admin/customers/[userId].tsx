@@ -10,6 +10,9 @@ import { Card, Button } from '@/components/ui';
 import clsx from 'clsx';
 import { adminApi, type AdminUserAiCostReport, type AdminUserAiCostPeriod } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
+import { DEFAULT_AI_MODEL } from '@jawab24/shared';
+import { AiModelOptions } from '@/components/admin/AiModelOptions';
+import { toast } from 'sonner';
 
 const AI_COST_PERIODS: readonly AdminUserAiCostPeriod[] = ['7d', '30d', '90d', 'this_month', 'last_month'];
 
@@ -21,6 +24,8 @@ interface CustomerDetail {
     facebookId: string | null;
     createdAt: string | null;
     topupBalance: number | null;
+    /** Per-workspace AI model override. null = follows DEFAULT_AI_MODEL. */
+    aiModel: string | null;
     subscription: {
         id: string;
         status: string;
@@ -129,6 +134,10 @@ export default function AdminCustomerDetailPage() {
     const [topupExternalRef, setTopupExternalRef] = useState('');
     const [topupNote, setTopupNote] = useState('');
 
+    // AI Model override — '' represents "use default" (settings.ai_model = NULL).
+    const [selectedAiModel, setSelectedAiModel] = useState<string>('');
+    const [aiModelSaving, setAiModelSaving] = useState(false);
+
     // AI Cost by Page state — driven by an in-card period selector. Fetched separately
     // from the user-detail call so changing the period doesn't refetch profile/pages/sub.
     const [aiCostPeriod, setAiCostPeriod] = useState<AdminUserAiCostPeriod>('30d');
@@ -154,6 +163,7 @@ export default function AdminCustomerDetailPage() {
                     if (customerRes.data.subscription?.planId) {
                         setSelectedPlan(customerRes.data.subscription.planId);
                     }
+                    setSelectedAiModel(customerRes.data.aiModel ?? '');
                 } else {
                     setError('Failed to load customer');
                 }
@@ -239,6 +249,36 @@ export default function AdminCustomerDetailPage() {
             captureError(err, 'Failed to upgrade customer', { tags: { page: 'admin-customer-detail', action: 'upgrade' } });
         } finally {
             setUpgradeLoading(false);
+        }
+    };
+
+    const handleSaveAiModel = async () => {
+        if (!userId || typeof userId !== 'string') return;
+        const currentValue = customer?.aiModel ?? '';
+        if (selectedAiModel === currentValue) return;
+
+        // Confirm only when switching TO a non-default model — that's the
+        // direction with potential quality impact. Clearing the override back
+        // to default is always safe.
+        if (selectedAiModel && selectedAiModel !== DEFAULT_AI_MODEL) {
+            if (!confirm(t('customer.aiModelConfirm', { model: selectedAiModel }))) return;
+        }
+
+        setAiModelSaving(true);
+        try {
+            const response = await adminApi.setUserAiModel(userId, selectedAiModel || null);
+            if (response.success) {
+                toast.success(t('customer.aiModelSaved'));
+                const customerRes = await adminApi.getUser(userId);
+                if (customerRes.success) setCustomer(customerRes.data);
+            } else {
+                toast.error(response.error || t('customer.aiModelSaveError'));
+            }
+        } catch (err) {
+            toast.error(t('customer.aiModelSaveError'));
+            captureError(err, 'Failed to set AI model', { tags: { page: 'admin-customer-detail', action: 'setAiModel' } });
+        } finally {
+            setAiModelSaving(false);
         }
     };
 
@@ -702,6 +742,35 @@ export default function AdminCustomerDetailPage() {
                                         ? t('customer.cancelUpgrade')
                                         : t('customer.manualUpgrade')
                                     }
+                                </Button>
+                            </div>
+                        </Card>
+
+                        {/* AI Model Override Card */}
+                        <Card>
+                            <h2 className="text-lg font-semibold text-foreground mb-4">
+                                {t('customer.aiModel')}
+                            </h2>
+                            <p className="text-xs text-muted-foreground mb-3">
+                                {t('customer.aiModelHint')}
+                            </p>
+                            <select
+                                value={selectedAiModel}
+                                onChange={(e) => setSelectedAiModel(e.target.value)}
+                                disabled={aiModelSaving}
+                                aria-label={t('customer.aiModel')}
+                                className={FIELD_CLASS}
+                            >
+                                <option value="">{t('customer.aiModelUseDefault', { model: DEFAULT_AI_MODEL })}</option>
+                                <AiModelOptions defaultLabelSuffix={`(${t('customer.aiModelDefaultSuffix')})`} />
+                            </select>
+                            <div className="mt-4">
+                                <Button
+                                    onClick={handleSaveAiModel}
+                                    disabled={aiModelSaving || selectedAiModel === (customer.aiModel ?? '')}
+                                    className="w-full"
+                                >
+                                    {aiModelSaving ? tc('saving') : t('customer.aiModelSave')}
                                 </Button>
                             </div>
                         </Card>

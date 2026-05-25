@@ -47,23 +47,24 @@ vi.mock('../../src/db', () => {
         orderBy: vi.fn().mockReturnThis(),
         limit: vi.fn().mockResolvedValue([]),
     });
-    return {
-        db: {
-            select: vi.fn().mockReturnValue(chain()),
-            insert: vi.fn().mockReturnValue({
-                values: vi.fn().mockReturnValue({
+    const dbMock: any = {
+        select: vi.fn().mockReturnValue(chain()),
+        insert: vi.fn().mockReturnValue({
+            values: vi.fn().mockReturnValue({
+                returning: vi.fn().mockResolvedValue([]),
+            }),
+        }),
+        update: vi.fn().mockReturnValue({
+            set: vi.fn().mockReturnValue({
+                where: vi.fn().mockReturnValue({
                     returning: vi.fn().mockResolvedValue([]),
                 }),
             }),
-            update: vi.fn().mockReturnValue({
-                set: vi.fn().mockReturnValue({
-                    where: vi.fn().mockReturnValue({
-                        returning: vi.fn().mockResolvedValue([]),
-                    }),
-                }),
-            }),
-        },
+        }),
+        // Transactions pass `db` itself as `tx` so existing select/insert mocks apply.
+        transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(dbMock)),
     };
+    return { db: dbMock };
 });
 
 vi.mock('drizzle-orm', () => ({
@@ -95,6 +96,11 @@ vi.mock('../../src/db/schema', () => ({
     kbGaps: { id: 'id', pageId: 'pageId', queryText: 'qt', detectedIntent: 'di', occurrenceCount: 'oc', firstSeenAt: 'fsa', lastSeenAt: 'lsa', resolved: 'resolved' },
     workspaceMembers: { workspaceId: 'workspaceId', userId: 'userId', role: 'role' },
     leads: { id: 'id', pageId: 'pageId', status: 'status', createdAt: 'createdAt' },
+    settings: { id: 'id', userId: 'userId', aiModel: 'aiModel' },
+}));
+
+vi.mock('../../src/services/aiModelResolver', () => ({
+    clearAiModelCache: vi.fn(),
 }));
 
 vi.mock('../../src/config', () => ({
@@ -208,6 +214,7 @@ describe('Admin Routes', () => {
                 }),
             }),
         } as any);
+        (db as any).transaction = vi.fn(async (fn: (tx: unknown) => unknown) => fn(db));
 
         app = fastify();
         app.register(adminRoutes, { prefix: '/admin' });
@@ -837,7 +844,16 @@ describe('Admin Routes', () => {
                 ]),
             };
 
-            // Second select: subscription with plan
+            // Second select: settings.aiModel lookup
+            const settingsChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ aiModel: null }]),
+            };
+
+            // Third select: subscription with plan
             const subChain = {
                 from: vi.fn().mockReturnThis(),
                 where: vi.fn().mockReturnThis(),
@@ -895,6 +911,7 @@ describe('Admin Routes', () => {
 
             vi.mocked(db.select)
                 .mockReturnValueOnce(userChain as any)
+                .mockReturnValueOnce(settingsChain as any)
                 .mockReturnValueOnce(subChain as any)
                 .mockReturnValueOnce(pagesChain as any)
                 .mockReturnValueOnce(usageChain as any)
@@ -1150,6 +1167,188 @@ describe('Admin Routes', () => {
                     kbActiveVersion: 7,
                 }),
             );
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // PATCH /admin/users/:userId/ai-model
+    // ---------------------------------------------------------------
+    describe('PATCH /admin/users/:userId/ai-model', () => {
+        const authHeaders = { authorization: 'Bearer valid-token', 'content-type': 'application/json' };
+
+        it('returns 401 without authorization header', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: `/admin/users/${TEST_USER_ID}/ai-model`,
+                headers: { 'content-type': 'application/json' },
+                payload: { model: 'gpt-4o-mini' },
+            });
+            expect(response.statusCode).toBe(401);
+        });
+
+        it('returns 403 for non-admin user', async () => {
+            const { authenticate } = await import('../../src/middleware/auth');
+            vi.mocked(authenticate).mockImplementation(async (req: any) => {
+                req.user = { userId: 'regular-user-id', role: 'user' };
+            });
+            const response = await app.inject({
+                method: 'PATCH',
+                url: `/admin/users/${TEST_USER_ID}/ai-model`,
+                headers: authHeaders,
+                payload: { model: 'gpt-4o-mini' },
+            });
+            expect(response.statusCode).toBe(403);
+        });
+
+        it('returns 400 when model is not in allow-list', async () => {
+            const response = await app.inject({
+                method: 'PATCH',
+                url: `/admin/users/${TEST_USER_ID}/ai-model`,
+                headers: authHeaders,
+                payload: { model: 'gpt-pwned' },
+            });
+            expect(response.statusCode).toBe(400);
+            expect(JSON.parse(response.payload).error).toBe('Invalid model');
+        });
+
+        it('returns 404 when target user does not exist', async () => {
+            const { db } = await import('../../src/db');
+            const userChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+            };
+            vi.mocked(db.select).mockReturnValueOnce(userChain as any);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: `/admin/users/${NONEXISTENT_UUID}/ai-model`,
+                headers: authHeaders,
+                payload: { model: 'gpt-4o-mini' },
+            });
+            expect(response.statusCode).toBe(404);
+        });
+
+        it('upserts settings, invalidates cache, and audit-logs when no existing override', async () => {
+            const { db } = await import('../../src/db');
+            const { clearAiModelCache } = await import('../../src/services/aiModelResolver');
+
+            const userChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_USER_ID }]),
+            };
+            const existingChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+            };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(userChain as any)
+                .mockReturnValueOnce(existingChain as any);
+
+            const onConflictDoUpdate = vi.fn().mockResolvedValue([]);
+            const insertValues = vi.fn().mockReturnValue({ onConflictDoUpdate });
+            const auditInsertValues = vi.fn().mockResolvedValue([]);
+            // First insert call is the settings upsert (returns chainable for onConflictDoUpdate);
+            // second is the audit log (terminal — returns a resolved promise).
+            vi.mocked(db.insert)
+                .mockReturnValueOnce({ values: insertValues } as any)
+                .mockReturnValueOnce({ values: auditInsertValues } as any);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: `/admin/users/${TEST_USER_ID}/ai-model`,
+                headers: authHeaders,
+                payload: { model: 'gpt-4o-mini' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.payload)).toEqual({ success: true, data: { aiModel: 'gpt-4o-mini' } });
+            expect(clearAiModelCache).toHaveBeenCalledWith(TEST_USER_ID);
+            expect(insertValues).toHaveBeenCalledWith({ userId: TEST_USER_ID, aiModel: 'gpt-4o-mini' });
+            expect(onConflictDoUpdate).toHaveBeenCalledWith(expect.objectContaining({ set: { aiModel: 'gpt-4o-mini' } }));
+            expect(auditInsertValues).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'ai_model_changed',
+                previousValue: { aiModel: null },
+                newValue: { aiModel: 'gpt-4o-mini' },
+            }));
+        });
+
+        it('records previous value in audit log when override is changed', async () => {
+            const { db } = await import('../../src/db');
+
+            const userChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_USER_ID }]),
+            };
+            const existingChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ aiModel: 'gpt-4o-mini' }]),
+            };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(userChain as any)
+                .mockReturnValueOnce(existingChain as any);
+
+            const onConflictDoUpdate = vi.fn().mockResolvedValue([]);
+            const insertValues = vi.fn().mockReturnValue({ onConflictDoUpdate });
+            const auditInsertValues = vi.fn().mockResolvedValue([]);
+            vi.mocked(db.insert)
+                .mockReturnValueOnce({ values: insertValues } as any)
+                .mockReturnValueOnce({ values: auditInsertValues } as any);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: `/admin/users/${TEST_USER_ID}/ai-model`,
+                headers: authHeaders,
+                payload: { model: 'gpt-4.1-mini' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(auditInsertValues).toHaveBeenCalledWith(expect.objectContaining({
+                action: 'ai_model_changed',
+                previousValue: { aiModel: 'gpt-4o-mini' },
+                newValue: { aiModel: 'gpt-4.1-mini' },
+            }));
+        });
+
+        it('accepts null to clear override', async () => {
+            const { db } = await import('../../src/db');
+
+            const userChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ id: TEST_USER_ID }]),
+            };
+            const existingChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([{ aiModel: 'gpt-4o-mini' }]),
+            };
+            vi.mocked(db.select)
+                .mockReturnValueOnce(userChain as any)
+                .mockReturnValueOnce(existingChain as any);
+
+            const onConflictDoUpdate = vi.fn().mockResolvedValue([]);
+            const insertValues = vi.fn().mockReturnValue({ onConflictDoUpdate });
+            const auditInsertValues = vi.fn().mockResolvedValue([]);
+            vi.mocked(db.insert)
+                .mockReturnValueOnce({ values: insertValues } as any)
+                .mockReturnValueOnce({ values: auditInsertValues } as any);
+
+            const response = await app.inject({
+                method: 'PATCH',
+                url: `/admin/users/${TEST_USER_ID}/ai-model`,
+                headers: authHeaders,
+                payload: { model: null },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(JSON.parse(response.payload)).toEqual({ success: true, data: { aiModel: null } });
+            expect(insertValues).toHaveBeenCalledWith({ userId: TEST_USER_ID, aiModel: null });
+            expect(onConflictDoUpdate).toHaveBeenCalledWith(expect.objectContaining({ set: { aiModel: null } }));
         });
     });
 });
