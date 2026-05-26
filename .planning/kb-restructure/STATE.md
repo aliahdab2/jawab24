@@ -2,11 +2,17 @@
 
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
-**Last updated:** 2026-05-23
-**Current stage:** Stage 1 — Foundations (complete, in review)
-**Current task:** PR #189 open. Hold merge until Stage 2 catalog UI is ready.
-**Branch:** `kb-restructure/stage-1-valid-until` — pushed. Commits: `22cd666f` (1.1), `f0263935` (1.2), `83edcf6b` (1.3).
-**PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, deploy stance documented in body ("hold merge until Stage 2").
+**Last updated:** 2026-05-26
+**Current stage:** Stage 2.6 — Business Profile Foundation (implementation complete, in audit)
+**Current task:** Resume tomorrow with checks #2 and #3 below. Open PR for `feat/kb-business-info-foundation` if both pass.
+
+**Active branches:**
+- `feat/kb-business-info-foundation` — Stage 2.6, **6 commits, no PR yet** (see Stage 2.6 section)
+- `kb-restructure/stage-1-valid-until` — Stage 1, PR #189 merged-and-shipped state is unclear; gating language below is stale (see ⚠️ open item)
+
+**Status of older PRs:**
+- PR #189 (Stage 1 foundations): https://github.com/aliahdab2/jawab24/pull/189 — gating language ("hold merge until Stage 2") is now obsolete since Stage 2 was merged then reverted.
+- PR #190 (Stage 2 catalog): merged 2026-05-24, **reverted same day** at `1dfa8c65`. **Reason for revert: eval dropped from 95.7% to ~90% after merge.** Root cause investigation attempted, not found. Archive branch `archive/stage-2-catalog-main` **deleted** (local + origin) on 2026-05-26 to remove mental overhead. Stage 2 will be **redesigned as v2** — post-mortem at [POST-MORTEMS/stage-2-v1-failed.md](POST-MORTEMS/stage-2-v1-failed.md) captures suspects + lessons. Original code remains reachable from main's revert history if needed.
 
 ---
 
@@ -36,14 +42,44 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 
 **Stage 1 exit criteria:** eval baseline unchanged or improved, no merchant complaints, three merchants confirm they noticed nothing different (additive change worked).
 
-### Stage 2 — Catalog entities (this month, ~3–4 weeks)
-- [ ] **2.1 `catalog_items` + `catalog_item_schedules` tables** — generic schema (see plan, "Data model" section)
-- [ ] **2.2 Entity tools** — `search_entities`, `get_entity_details`, `list_active_entities` added to ai-worker tool whitelist
-- [ ] **2.3 Catalog UI** — section in the existing `KnowledgeBaseSections` modal, surfaces empty-state by default
-- [ ] **2.4 Dogfood with 2–3 training-institute merchants** — manual per-merchant enablement (no feature flag system exists yet, see Open Questions)
-- [ ] **2.5 Re-baseline eval** — expect improvement on catalog-related tests, no regression elsewhere
+### Stage 2 — Catalog entities — **TO BE REDESIGNED (v2)**
 
-**Stage 2 exit criteria:** 3 merchants using catalog with no complaints, eval improvement on catalog-class tests, p50 reply latency stays under 2.5s with one tool call.
+v1 (PR #190) merged and was reverted on 2026-05-24 after eval dropped 95.7% → ~90%. Root cause not isolated. Archive branch deleted 2026-05-26. **Do not resume v1 task list below — it's preserved only as a reference for what v2 must reconsider.** See [POST-MORTEMS/stage-2-v1-failed.md](POST-MORTEMS/stage-2-v1-failed.md) for what went wrong and the v2 design constraints (smaller PRs, pre-merge eval gate, tool-list-bloat caution).
+
+v2 design is a **fresh-brain task** — do not start it until Stage 2.6 lands (priorities listed in header block).
+
+<details>
+<summary>v1 task list (archived for v2 reference, not active)</summary>
+
+- [ ] ~~2.1 `catalog_items` + `catalog_item_schedules` tables~~
+- [ ] ~~2.2 Entity tools (`search_entities`, `get_entity_details`, `list_active_entities`)~~
+- [ ] ~~2.3 Catalog UI in `KnowledgeBaseSections` modal~~
+- [ ] ~~2.4 Dogfood with 2–3 training-institute merchants~~
+- [ ] ~~2.5 Re-baseline eval~~
+
+v1 exit criteria were: 3 merchants using catalog with no complaints, eval improvement on catalog-class tests, p50 reply latency under 2.5s with one tool call. v2 will likely keep the same exit criteria but must add a pre-merge eval gate on the existing 304 cases.
+
+</details>
+
+### Stage 2.6 — Business Profile Foundation (parallel track to Stage 2 catalog)
+
+Branch: `feat/kb-business-info-foundation`. **6 commits, no PR opened yet.** Adds structured business profile (address / phones / hours / policies) to the AI prompt, with a regression-prevention split between merchant-confirmed data and FB-suggested data. Motivated by the Damascus institute "1234567" phone hallucination incident.
+
+- [x] **2.6 foundation** — `BusinessProfile` type extended (phones[], policies, language_hint:'auto'); new `BusinessProfileContainer {merchant, suggestions}` shape + `unwrapBusinessProfile()` / `mergedBusinessProfile()` helpers; hours canonicalizer (`businessHours.ts`) with Arabic-Indic digits, AM/PM (ص/م), Closed/مغلق, 24/7, en/em-dash separators. Commit `b7f3b8f7`.
+- [x] **2.6 backend** — cache invalidation (`invalidatePageCaches()`), PATCH wraps `{merchant: body, suggestions: existing.suggestions}` server-side, FB sync writes only the `suggestions` half via `buildBusinessProfileContainer()`. Commit `4ecf9228`.
+- [x] **2.6c-prep** — split business_profile JSONB into container shape with migration. Commit `1214c553`. ⚠️ migration filename referenced as `0027_split_business_profile.sql` in code comments — almost certainly stale-comment drift (current latest is `0107`); needs verification.
+- [x] **2.6c structured prompt block** — new `businessInfoPrompt.ts` (`formatBusinessInfoPrompt()`) injects structured BUSINESS_INFO block above raw KB chunks; `[NOT_PROVIDED]` markers force refusal instead of confabulation. Commit `f754cf8d`.
+- [x] **2.6c phone guard** — post-generation `phone_not_in_kb` guard. Commit `7b0e7f9a`.
+- [x] **2.6c eval cases** — Cat 50 Business Info added; training-page seed. Commit `da4d1fcb`.
+
+**Audit status (2026-05-26):**
+- ✓ **Check #1 PASSED** — `formatBusinessInfoPrompt()` reads only `container.merchant`, never `suggestions`. Both call sites ([contextEnricher.ts:82-83](../../backend/src/services/reply/contextEnricher.ts#L82-L83), [playgroundContext.ts:107-108](../../backend/src/services/reply/playgroundContext.ts#L107-L108)) correctly destructure `const { merchant } = unwrapBusinessProfile(page.businessProfile)` before passing. Regression-prevention contract intact.
+- ⏳ **Check #2 deferred to tomorrow** — verify `BusinessProfileSchema` in `backend/src/utils/validation.ts` accepts `phones[]` (≤10), `policies.*` (≤500 chars each), `language_hint:'auto'`. PATCH will silently strip these otherwise.
+- ⏳ **Check #3 deferred to tomorrow** — locate the actual migration file. Code comment says `0027_split_business_profile.sql` but current latest is `0107_huge_longshot.sql` — comment is almost certainly stale from an early draft. Confirm migration exists and is correctly numbered.
+- ⏳ **Eval baseline update needed** — commit `da4d1fcb` adds Cat 50 cases but the eval tracking table below has no post-2.6 row. Re-run the suite on `feat/kb-business-info-foundation` to confirm no regression on the existing 304 cases plus the new Cat 50 baseline.
+- ⏳ **Stage 2 gating language refresh** — header block above now reflects that PR #190 was reverted; but no plan exists yet for re-attempting Stage 2 catalog. Decide whether 2.6 ships independently or waits for Stage 2 re-land.
+
+**Resume tomorrow:** Run checks #2 and #3. If both pass, open PR for `feat/kb-business-info-foundation` against main.
 
 ### Stage 3 — "Paste, we organize" classifier (next quarter, ~6–10 weeks)
 - [ ] **3.1 LLM extraction pipeline** — composes on top of existing `file-extractor.ts`
