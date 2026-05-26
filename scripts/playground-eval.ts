@@ -169,7 +169,7 @@ const TEST_CASES: TestCase[] = [
     { id: 10, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل التوصيل مجاني لجدة؟', page: 'electronics', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
     // 1.4 — Vague/generic response detection
     { id: 11, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'شو سياسة الاسترجاع؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
-    { id: 12, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل تقبلون تحويل بنكي؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
+    { id: 12, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل تقبلون تحويل بنكي؟', page: 'school', expected: { confidence: ['low'], flags: ['info_not_in_kb'] }, notes: 'Moved off training page 2026-05-26: Stage 2.6 seed gave training a payment policy ("نقبل الدفع... وبالتحويل البنكي") so the bank-transfer question is now legitimately answerable there. School page has no payment info → preserves the original info-not-in-KB / low-confidence assertion.' },
     { id: 13, category: 1, categoryName: 'Confidence & Flags', channel: 'dm', message: 'Can I get a certificate?', page: 'training', expected: { confidence: ['low', 'medium'] }, notes: 'KB mentions اعتماد but not certificates' },
 
     // ===== Category 2: (removed — Preset Reply feature removed) =====
