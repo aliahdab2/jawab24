@@ -5,6 +5,39 @@
 **PR:** #190 (https://github.com/aliahdab2/jawab24/pull/190) — merged 2026-05-24, reverted same day at commit `1dfa8c65`
 **Original feature commit:** `896f05ff` (still reachable from main's revert history; this is not code loss)
 
+---
+
+## ⚠️ Correction (added 2026-05-26, during Stage 2.6 rebase)
+
+Investigating the Stage 2.6 eval surfaced facts that materially correct the original write-up below. **Read this section first; the original text is preserved as the contemporaneous record but is partly superseded.**
+
+### 1. The "~90%" was the *clean* number — the dirty number was worse and nearly caused a wrong call
+
+Commit `b10aa65e` (`fix(ai): bypass all caches when pipeline === 'eval'`, authored 2026-05-23 22:05, the night before the revert) records the real measurement:
+
+> *"This contamination inflated the apparent damage of #190 by ~10 points: dirty-cache eval showed 79.9%, fresh-flush showed 90.3%. We almost reverted #190 based on the inflated number."*
+
+So the eval the team reacted to was **cache-contaminated**: the 304-case suite reuses one demo workspace/page, so earlier tests wrote cache entries that later tests with different flag-expectations then hit, producing fast sub-300ms false-fails. Dirty = 79.9%, clean = 90.3%. The revert was still correct — **90.3% vs the 95.7% baseline is a real ~5pp regression** — but the magnitude was half what the dirty number screamed.
+
+### 2. The eval-cache-bypass fix was collateral damage of the revert
+
+`b10aa65e` was a genuinely useful, isolated test-harness fix (gates all 4 cache touchpoints in `generateReply` on `pipeline !== 'eval'`). It lived on the catalog branch, so the wholesale revert of #190 took it down with the catalog code, and it **never reached main**. It was lost for ~3 days until the Stage 2.6 rebase rediscovered the same cache-contamination symptom and recovered the fix. It has been cherry-picked into `feat/kb-business-info-foundation` as commit `e1351d6a` and will land with PR #194 — so this class of false-fail can't recur.
+
+### 3. Refined suspect ranking — the regression is post-2.3b and backend-only
+
+The original post-mortem assumed a single big-bang PR with an undiagnosable wholesale diff. The branch's own history is more precise:
+
+- v1 shipped 6 sub-stages: 2.1 schema (`42d97a10`), 2.2 CRUD (`e2e29fa3`), 2.3a tool executor (`db5f66ff`), 2.3b AI integration (`d006f2c6`), 2.4 list view (`4f285222`), 2.5 editor (`94cd2854`).
+- **Commit `90909588` logged a Stage 2.3b eval result of 95.6% — green, within variance of baseline.** So the suite was healthy *through 2.3b*. The ~5pp regression entered **after 2.3b**, in commits between `d006f2c6` and the PR merge `896f05ff`.
+- **UI commits (2.4 `4f285222`, 2.5 `94cd2854`) are eliminated as suspects** — the eval exercises the backend reply pipeline only; it never renders or calls the catalog UI. So although v1 *did* ship UI (correcting the original "read-only UI" framing — there was a full editor), none of it can move an eval score.
+- **Highest remaining suspect: `7584283c`** (`fix(kb): catalog tool-loop attribution + store-inactive degradation`) — backend, touches the tool loop, lands *after* the 2.3b green eval. v2's bisect should start here.
+
+### 4. Added lesson: the eval harness must bypass cache, or the gate lies
+
+The #190 near-miss (almost reverting on 79.9% when the truth was 90.3%) and the Stage 2.6 rebase (a "95.8%" dirty pass that hadn't actually tested regression case #411 — it served a 6ms stale cache hit) are the same failure: **a cache-polluted eval produces a number that doesn't reflect the code under test.** Any eval used as a merge gate MUST run with caches bypassed (`pipeline === 'eval'`). This is now enforced in code (`e1351d6a`); v2's pre-merge gate depends on it.
+
+---
+
 ## What happened
 
 PR #190 shipped Stage 2 of the KB restructure: catalog entities backend (catalog_items + catalog_item_schedules tables, services, controllers, routes), AI tools (catalog tool registration in ai-worker + tool loop in backend), and read-only UI. It merged to main, passed CI, and was deployed. On the first post-deploy eval run, the suite dropped from **95.7% → ~90%** on the existing 304 cases — approximately 17 tests regressed.
