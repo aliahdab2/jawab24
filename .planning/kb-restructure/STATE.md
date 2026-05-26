@@ -94,6 +94,19 @@ Branch: `feat/kb-business-info-foundation`. **6 commits, no PR opened yet.** Add
 
 **Resume tomorrow:** Run checks #2 and #3. If both pass, open PR for `feat/kb-business-info-foundation` against main.
 
+**Stage 2.6d open questions (decide during 2.6d frontend planning):**
+
+- **Hours field overlap** (surfaced 2026-05-26 during 2.6 rebase). Two parallel "hours" surfaces exist:
+  - `workspace.settings.businessHoursStart/End/businessHoursOnly` — single window per week, used by the auto-reply *scheduler* to decide "is the bot allowed to reply right now?"
+  - `business_profile.hours` (new in 2.6) — per-day arrays with `closed`/`all day` support, injected into the AI prompt so the bot can answer "when are you open?" accurately
+  
+  These are conceptually different (when does the *platform* run vs. what does the *business* tell customers) but visually overlap and can produce contradictory states (e.g. bot replies at 11pm saying "we're open 9-6"). Three options:
+  - (a) Keep them separate, explain the distinction in the 2.6d UI
+  - (b) Make `business_profile.hours` the source of truth and derive the scheduler window from it (requires another migration + scheduler refactor — own stage)
+  - (c) Keep them separate technically but link them in the 2.6d UI ("use these as your auto-reply window?" confirmation)
+  
+  **Defer decision until:** real merchant usage data exists after 2.6d ships. Current PR #194 is backend-only — merchants can't fill `business_profile.hours` yet, so the overlap is theoretical, not active.
+
 ### Stage 3 — "Paste, we organize" classifier (next quarter, ~6–10 weeks)
 - [ ] **3.1 LLM extraction pipeline** — composes on top of existing `file-extractor.ts`
 - [ ] **3.2 Diff-view approval UI** — merchant accepts/edits/rejects per item
