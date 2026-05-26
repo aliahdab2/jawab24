@@ -107,7 +107,7 @@ export function canonicalizeHoursEntry(input: unknown): ParseResult {
     // If both endpoints fit in 1..12 and the parsed end ≤ start, we assume the
     // merchant meant "AM to PM" (e.g. "9-6" ⇒ 9:00 to 18:00). Anything else
     // (mixed AM/PM, end > start, or hour > 12) is taken at face value.
-    let startHour = startParsed.hour;
+    const startHour = startParsed.hour;
     let endHour = endParsed.hour;
     if (!startParsed.hadMeridiem && !endParsed.hadMeridiem &&
         startHour >= 1 && startHour <= 12 &&
