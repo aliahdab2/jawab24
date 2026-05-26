@@ -86,8 +86,22 @@ export function formatBusinessInfoPrompt(profile: BusinessProfile | null | undef
     // If everything is missing, no signal to add.
     if (!address && !phones && !hours && !policies) return null;
 
+    // The defensive refusal instruction is placed FIRST, immediately under the
+    // header, NOT last. The consumer (ai-worker/openai.ts) hard-caps the injected
+    // block at BUSINESS_INFO_MAX_CHARS; a fully-populated profile (4 policies ×
+    // 500 chars + address + phones + hours) can exceed that cap, and if the
+    // directive lived at the bottom it would be the first thing truncated away —
+    // dropping the anti-hallucination guard exactly for the merchants with the
+    // richest data. Putting it up top guarantees it survives truncation.
+    // The persona/brand voice lives earlier in the prompt (BRAND VOICE NOTES in
+    // openai.ts) so the model picks a tone-matched refusal automatically.
     const sections: string[] = [
         'BUSINESS_INFO (structured, authoritative — prefer over <business_knowledge> text):',
+        `When a field is ${NOT_PROVIDED}, you MUST NOT invent a value. ` +
+        'Politely decline in the merchant\'s brand voice and offer an alternative ' +
+        'channel if available (e.g. "we don\'t have a public phone — please visit ' +
+        'us at <address>" or "I\'m here in chat — what can I help with?").',
+        '',
         `- Address: ${address ?? NOT_PROVIDED}`,
         `- Phones: ${phones ?? NOT_PROVIDED}`,
     ];
@@ -105,17 +119,6 @@ export function formatBusinessInfoPrompt(profile: BusinessProfile | null | undef
     } else {
         sections.push(`- Policies: ${NOT_PROVIDED}`);
     }
-
-    // Defensive refusal instruction. The persona/brand voice already lives
-    // earlier in the prompt (BRAND VOICE NOTES section in openai.ts) so the
-    // model will pick a tone-matched refusal automatically.
-    sections.push('');
-    sections.push(
-        `When a field is ${NOT_PROVIDED}, you MUST NOT invent a value. ` +
-        'Politely decline in the merchant\'s brand voice and offer an alternative ' +
-        'channel if available (e.g. "we don\'t have a public phone — please visit ' +
-        'us at <address>" or "I\'m here in chat — what can I help with?").',
-    );
 
     return sections.join('\n');
 }

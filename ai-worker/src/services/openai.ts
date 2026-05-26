@@ -15,6 +15,10 @@ import { detectLanguage, resolveInputLanguage } from './language';
 // Token budget constants (configurable via env vars for production tuning)
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
 const MAX_INPUT_TOKENS = parseInt(process.env.MAX_INPUT_TOKENS || '24000', 10);  // Hard cap on total input tokens (system + history + user message)
+// Stage 2.6 structured BUSINESS_INFO block cap. A maxed-out profile (4 policies ×
+// 500 + address + phones + hours) can exceed this; the refusal directive is hoisted
+// to the top of the block (see businessInfoPrompt.ts) so it always survives the cut.
+const BUSINESS_INFO_MAX_CHARS = parseInt(process.env.BUSINESS_INFO_MAX_CHARS || '1500', 10);
 
 /** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
 function estimateTokens(text: string): number {
@@ -658,7 +662,7 @@ ${isDM
         // invent values for [NOT_PROVIDED] fields. Eval cases #11 (Damascus
         // phone hallucination) and #19 (structured-beats-stale-KB) gate this.
         if (request.context?.businessInfoBlock) {
-            prompt += `\n\n${request.context.businessInfoBlock.replace(/[<>]/g, '').slice(0, 1500)}`;
+            prompt += `\n\n${request.context.businessInfoBlock.replace(/[<>]/g, '').slice(0, BUSINESS_INFO_MAX_CHARS)}`;
         }
 
         // Customer context goes into the user prompt (next to the message) when conversation
