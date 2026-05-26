@@ -3,11 +3,11 @@
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
 **Last updated:** 2026-05-26
-**Current stage:** Stage 2.6 — Business Profile Foundation (implementation complete, in audit)
-**Current task:** Resume tomorrow with checks #2 and #3 below. Open PR for `feat/kb-business-info-foundation` if both pass.
+**Current stage:** Stage 2.6 — Business Profile Foundation (audit + eval gate PASSED — ready for PR review)
+**Current task:** Branch rebased onto main, all gates green. Next: push branch, update PR #194 description with eval results, merge after review.
 
 **Active branches:**
-- `feat/kb-business-info-foundation` — Stage 2.6, **6 commits, [PR #194 OPEN](https://github.com/aliahdab2/jawab24/pull/194)** (see Stage 2.6 section)
+- `feat/kb-business-info-foundation` — Stage 2.6, **10 commits** (rebased onto main 2026-05-26), **[PR #194 OPEN](https://github.com/aliahdab2/jawab24/pull/194)** (see Stage 2.6 section)
 - `kb-restructure/stage-1-valid-until` — Stage 1, **merged & deployed** (see PR #189 entry below)
 
 **Stage 2.6 plan:** detailed approach at `~/.claude/plans/what-about-address-and-playful-fog.md`. Approved 2026-05-23 with refinements covering phones[] array, canonical hours format, persona-aware refusal language, cache invalidation (kbVersion + kbActiveVersion + Redis SCAN/DEL), and 19 eval cases (2 of which are regression-specific, no LLM variance budget).
@@ -76,23 +76,24 @@ v1 exit criteria were: 3 merchants using catalog with no complaints, eval improv
 
 ### Stage 2.6 — Business Profile Foundation (parallel track to Stage 2 catalog)
 
-Branch: `feat/kb-business-info-foundation`. **6 commits, no PR opened yet.** Adds structured business profile (address / phones / hours / policies) to the AI prompt, with a regression-prevention split between merchant-confirmed data and FB-suggested data. Motivated by the Damascus institute "1234567" phone hallucination incident.
+Branch: `feat/kb-business-info-foundation`. **10 commits, [PR #194 OPEN](https://github.com/aliahdab2/jawab24/pull/194)**, rebased onto current main 2026-05-26. Adds structured business profile (address / phones / hours / policies) to the AI prompt, with a regression-prevention split between merchant-confirmed data and FB-suggested data. Motivated by the Damascus institute "1234567" phone hallucination incident.
 
 - [x] **2.6 foundation** — `BusinessProfile` type extended (phones[], policies, language_hint:'auto'); new `BusinessProfileContainer {merchant, suggestions}` shape + `unwrapBusinessProfile()` / `mergedBusinessProfile()` helpers; hours canonicalizer (`businessHours.ts`) with Arabic-Indic digits, AM/PM (ص/م), Closed/مغلق, 24/7, en/em-dash separators. Commit `b7f3b8f7`.
 - [x] **2.6 backend** — cache invalidation (`invalidatePageCaches()`), PATCH wraps `{merchant: body, suggestions: existing.suggestions}` server-side, FB sync writes only the `suggestions` half via `buildBusinessProfileContainer()`. Commit `4ecf9228`.
-- [x] **2.6c-prep** — split business_profile JSONB into container shape with migration. Commit `1214c553`. ⚠️ migration filename referenced as `0027_split_business_profile.sql` in code comments — almost certainly stale-comment drift (current latest is `0107`); needs verification.
+- [x] **2.6c-prep** — split business_profile JSONB into container shape, migration `0109_split_business_profile.sql` (renumbered from 0108 during the 2026-05-26 rebase to resolve a slot collision with main's top-up billing migration `0108_superb_aaron_stack`). Missing drizzle snapshot regenerated (`0109_snapshot.json`, commit `2db0a924`). Stale `0027` comment in index.ts corrected to `0109`. Commit `1214c553` (rebased `7b0909e5`).
 - [x] **2.6c structured prompt block** — new `businessInfoPrompt.ts` (`formatBusinessInfoPrompt()`) injects structured BUSINESS_INFO block above raw KB chunks; `[NOT_PROVIDED]` markers force refusal instead of confabulation. Commit `f754cf8d`.
 - [x] **2.6c phone guard** — post-generation `phone_not_in_kb` guard. Commit `7b0e7f9a`.
 - [x] **2.6c eval cases** — Cat 50 Business Info added; training-page seed. Commit `da4d1fcb`.
 
-**Audit status (2026-05-26):**
-- ✓ **Check #1 PASSED** — `formatBusinessInfoPrompt()` reads only `container.merchant`, never `suggestions`. Both call sites ([contextEnricher.ts:82-83](../../backend/src/services/reply/contextEnricher.ts#L82-L83), [playgroundContext.ts:107-108](../../backend/src/services/reply/playgroundContext.ts#L107-L108)) correctly destructure `const { merchant } = unwrapBusinessProfile(page.businessProfile)` before passing. Regression-prevention contract intact.
-- ⏳ **Check #2 deferred to tomorrow** — verify `BusinessProfileSchema` in `backend/src/utils/validation.ts` accepts `phones[]` (≤10), `policies.*` (≤500 chars each), `language_hint:'auto'`. PATCH will silently strip these otherwise.
-- ⏳ **Check #3 deferred to tomorrow** — locate the actual migration file. Code comment says `0027_split_business_profile.sql` but current latest is `0107_huge_longshot.sql` — comment is almost certainly stale from an early draft. Confirm migration exists and is correctly numbered.
-- ⏳ **Eval baseline update needed** — commit `da4d1fcb` adds Cat 50 cases but the eval tracking table below has no post-2.6 row. Re-run the suite on `feat/kb-business-info-foundation` to confirm no regression on the existing 304 cases plus the new Cat 50 baseline.
-- ⏳ **Stage 2 gating language refresh** — header block above now reflects that PR #190 was reverted; but no plan exists yet for re-attempting Stage 2 catalog. Decide whether 2.6 ships independently or waits for Stage 2 re-land.
+**Audit + gate status (2026-05-26 — ALL PASSED):**
+- ✓ **Check #1** — `formatBusinessInfoPrompt()` reads only `container.merchant`, never `suggestions`. Both call sites destructure correctly. Regression-prevention contract intact.
+- ✓ **Check #2** — `BusinessProfileSchema` (backend/src/utils/validation.ts) accepts `phones[]` (≤10), `policies.{shipping,returns,payment,booking}` (≤500ch each), `language_hint:'auto'`. Confirmed.
+- ✓ **Check #3** — migration is `0109_split_business_profile.sql`; `drizzle-kit check:pg` clean; 109-migration fresh-DB apply + idempotency verified on a throwaway DB.
+- ✓ **Integration tests** — backend 3729 pass / 5 skip / 0 fail; ai-worker 268 pass / 0 fail. tsc + lint clean across all 4 packages.
+- ✓ **Eval gate (clean, cache-bypassed)** — **96.0% overall** (291 PASS / 19 PARTIAL / 3 FAIL / 313). Regression cases #410/#411 PASS *live*. Existing-304 subset **95.9% (+0.2pp** vs 95.7% baseline). Cat 50 9/9. The 3 FAILs: **#12** (seed collision — fixed, moved to school page, commit `260222fb`), **#46** (known LLM variance), **#87** (pre-existing on main, NOT a 2.6 regression — to be filed separately).
+- ⚠️ **Eval-gate trustworthiness depends on `e1351d6a`** — the `pipeline === 'eval'` cache bypass (cherry-picked from the reverted catalog branch's `b10aa65e`). Without it, ~14% of cases serve stale cache and the gate lies (the first "95.8%" run hadn't actually tested regression case #411 — 6ms stale hit). See post-mortem Correction §2/§4.
 
-**Resume tomorrow:** Run checks #2 and #3. If both pass, open PR for `feat/kb-business-info-foundation` against main.
+**Ready for PR review** — branch rebased clean onto main; lint + tsc + unit tests + migration verify + eval gate all green.
 
 **Stage 2.6d open questions (decide during 2.6d frontend planning):**
 
@@ -171,7 +172,8 @@ These are deliberately *not* in Stage 1 to keep the PR tight. Each is small enou
 | Post-Stage-1.3  | 2026-05-23 | 304 cases  | 95.7% | gpt-4.1-mini | v36            | 279 PASS / 24 PARTIAL / 1 FAIL. Identical to baseline. **Confirms the 1.2 dip was pure LLM variance** — test #46 flipped back to PARTIAL this run with no code change to retrieval logic. Avg latency 577ms. Classifier doesn't touch retrieval, so no behavior change expected for eval. Log at `/tmp/eval-stage-1-3.log`. |
 | Post-Stage-2.3b | 2026-05-23 | 304 cases  | 95.6% | gpt-4.1-mini | v36            | 278 PASS / 25 PARTIAL / 1 FAIL. -0.1pp vs baseline = within LLM variance (matches Stage 1.2 pattern). Single FAIL is same as baseline (#87 FREE SHIPPING contamination). **Cat 48 E-commerce Tool Loop: 4/4 PASS** — confirms the gating change in `ecommerceToolLoop.ts` (storeId → storeId\|catalogToolsEnabled) did NOT regress the store-connected path, which was the highest-risk concern of 2.3b. Avg latency 629ms (vs 577ms baseline; +52ms within variance — the `pageHasCatalogItems` probe is sub-ms on indexed lookup). Log at `/tmp/eval-stage-2-3b.log`. |
 | Post-refactor   | 2026-05-23 | 304 cases  | 94.7% raw / ~95.4% adjusted | gpt-4.1-mini | v36 | 277 PASS / 22 PARTIAL / 5 FAIL. Headline -0.9pp **misleading**: 2 of the 5 FAILs are HTTP 429 rate-limit infra failures (#103, #196) hitting ai-worker's `@fastify/rate-limit` cap of 100/window — NOT code regressions. The 3 real logic FAILs (#95, #296 COMPLAINT↔COMPLIMENT sarcasm misclassification; #324 replyMethod ai vs skipped) are all known-LLM-variance categories. Excluding the 2 infra failures → ~95.4%, within variance of baseline. Avg latency 1607ms (vs 629ms post-2.3b) explained by cold OpenAI prompt cache + circuit-breaker retries on 429s — not the refactor. Refactor is byte-for-byte behavior-equivalent (14 new shared unit tests + 46 backend integration tests verify parity). Log at `/tmp/eval-refactor.log`. |
-| Post-Stage-2    | TBD  | TBD        | TBD       | TBD          | TBD            | After catalog entities live          |
+| Post-Stage-2.6  | 2026-05-26 | 313 cases  | 96.0% | server default | v36 | **Rebased branch, cache-bypassed (clean).** 291 PASS / 19 PARTIAL / 3 FAIL. Existing-304 subset = 95.9% (+0.2pp vs baseline); Cat 50 = 9/9; regression cases #410/#411 PASS live. The 3 FAILs: #12 (seed collision — fixed in `260222fb`), #46 (known variance), #87 (**pre-existing — already the lone FAIL at Stage 2.3b above with v36**, confirmed not a 2.6 regression by running it on main). Trustworthy only because of the `e1351d6a` cache bypass; the first run without it falsely passed via a 6ms stale-cache hit on #411. Log at `/tmp/eval-stage-2.6-rebase-clean.log` (dirty run preserved at `-DIRTY.log`). |
+| Post-Stage-2 (catalog v2) | TBD | TBD | TBD | TBD | TBD | After catalog v2 (redesign) |
 
 **Eval gotcha for future runs:** the ai-worker has `rateLimit.max = 100/window` ([ai-worker/src/server.ts:18-19](ai-worker/src/server.ts#L18)). The eval blasts ~304 requests in a few minutes, so on cold-cache runs (>5min gap since last eval) some hit 429. To get a clean signal: either bump the dev rate limit, add inter-request sleeps to the eval script, or re-run after the rate-limit window clears.
 
