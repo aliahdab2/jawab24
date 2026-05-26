@@ -476,7 +476,7 @@ export class MessageProcessor {
                 messageText,
                 page.knowledgeBase || undefined,
             );
-            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId } = enriched;
+            const { knowledgeBase, storePolicies, productCatalog, brandVoiceNotes, ecommerceStoreId, businessInfoBlock } = enriched;
 
             let { replyText, replyMethod, needsAttention, flagReason, aiIntent, confidence, productCards } =
                 await replyGenerator.generateForMessage(
@@ -496,6 +496,7 @@ export class MessageProcessor {
                         senderName,
                         replyStyle: userSettings.replyStyle,
                         brandVoiceNotes,
+                        businessInfoBlock,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
                     },

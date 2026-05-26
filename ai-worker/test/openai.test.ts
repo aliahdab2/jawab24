@@ -1422,6 +1422,123 @@ describe('OpenAI Service - Post-Reply Validation', () => {
         expect(result.flags).not.toContain('price_not_in_kb');
     });
 
+    // ─── Phone hallucination guard (Stage 2.6) ─────────────────────────────
+
+    it('should flag phone_not_in_kb when reply invents a phone not in KB or business info', async () => {
+        // Damascus institute regression: AI invented "1234567" because peer
+        // merchants had phones in similar patterns and this page had none.
+        setupMock(JSON.stringify({
+            reply: 'يمكنك الاتصال على 1234567',
+            intent: 'QUESTION',
+            confidence: 'low',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ممكن رقم تليفون؟',
+            context: { knowledgeBase: 'مرحباً بكم في المعهد' },
+        });
+
+        expect(result.flags).toContain('phone_not_in_kb');
+    });
+
+    it('should NOT flag phone_not_in_kb when reply quotes a phone present in KB', async () => {
+        setupMock(JSON.stringify({
+            reply: 'يمكنك الاتصال على 0501234567',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ممكن رقم تليفون؟',
+            context: { knowledgeBase: 'اتصل بنا على 0501234567' },
+        });
+
+        expect(result.flags).not.toContain('phone_not_in_kb');
+    });
+
+    it('should NOT flag phone_not_in_kb when reply phone is in business_info_block', async () => {
+        setupMock(JSON.stringify({
+            reply: 'رقمنا هو 0501234567',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ما رقم الهاتف؟',
+            context: {
+                knowledgeBase: '',
+                businessInfoBlock: 'BUSINESS_INFO:\n- Phones: 0501234567',
+            },
+        });
+
+        expect(result.flags).not.toContain('phone_not_in_kb');
+    });
+
+    it('should match Arabic-Indic digits in reply against Latin digits in KB', async () => {
+        // Merchant typed "0501234567" in KB; AI replied with the same number
+        // in Arabic-Indic digits. Should NOT flag — same logical number.
+        setupMock(JSON.stringify({
+            reply: 'الرقم هو ٠٥٠١٢٣٤٥٦٧',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'ما رقم الهاتف؟',
+            context: { knowledgeBase: 'اتصل على 0501234567' },
+        });
+
+        expect(result.flags).not.toContain('phone_not_in_kb');
+    });
+
+    it('should NOT flag times as phone numbers (whitelist)', async () => {
+        setupMock(JSON.stringify({
+            reply: 'We open at 9:00 and close at 18:30',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'What are your hours?',
+            context: { knowledgeBase: 'Hours: 9-18' },
+        });
+
+        expect(result.flags).not.toContain('phone_not_in_kb');
+    });
+
+    it('should NOT flag order/SKU IDs as phone numbers (whitelist)', async () => {
+        setupMock(JSON.stringify({
+            reply: 'Your order #1234567 is being prepared',
+            intent: 'QUESTION',
+            confidence: 'high',
+            flags: [],
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        const result = await service.generateReply({
+            comment: 'Where is my order?',
+            context: { knowledgeBase: 'Order tracking available' },
+        });
+
+        expect(result.flags).not.toContain('phone_not_in_kb');
+    });
+
     it('should NOT flag long replies for DM channel', async () => {
         const longReply = 'word '.repeat(55).trim();
         setupMock(JSON.stringify({

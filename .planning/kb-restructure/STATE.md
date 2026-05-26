@@ -2,11 +2,19 @@
 
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
-**Last updated:** 2026-05-23
-**Current stage:** Stage 1 — Foundations (complete, in review)
-**Current task:** PR #189 open. Hold merge until Stage 2 catalog UI is ready.
-**Branch:** `kb-restructure/stage-1-valid-until` — pushed. Commits: `22cd666f` (1.1), `f0263935` (1.2), `83edcf6b` (1.3).
-**PR:** https://github.com/aliahdab2/jawab24/pull/189 — open for review, deploy stance documented in body ("hold merge until Stage 2").
+**Last updated:** 2026-05-26
+**Current stage:** Stage 2.6 — Business Profile Foundation (audit + eval gate PASSED — ready for PR review)
+**Current task:** Branch rebased onto main, all gates green. Next: push branch, update PR #194 description with eval results, merge after review.
+
+**Active branches:**
+- `feat/kb-business-info-foundation` — Stage 2.6, **10 commits** (rebased onto main 2026-05-26), **[PR #194 OPEN](https://github.com/aliahdab2/jawab24/pull/194)** (see Stage 2.6 section)
+- `kb-restructure/stage-1-valid-until` — Stage 1, **merged & deployed** (see PR #189 entry below)
+
+**Stage 2.6 plan:** detailed approach at `~/.claude/plans/what-about-address-and-playful-fog.md`. Approved 2026-05-23 with refinements covering phones[] array, canonical hours format, persona-aware refusal language, cache invalidation (kbVersion + kbActiveVersion + Redis SCAN/DEL), and 19 eval cases (2 of which are regression-specific, no LLM variance budget).
+
+**Status of older PRs:**
+- PR #189 (Stage 1 foundations): https://github.com/aliahdab2/jawab24/pull/189 — **MERGED & DEPLOYED to production 2026-05-22T16:07:31Z (commit `1006c593`).** valid_until column, source_tier authority ranking, and catalog-detection warning banner are live. Zero customer-facing behavior change today (existing data all backfilled to no-op defaults).
+- PR #190 (Stage 2 catalog): merged 2026-05-24, **reverted same day** at `1dfa8c65`. **Reason for revert: eval dropped from 95.7% to ~90% after merge.** Root cause investigation attempted, not found. Archive branch `archive/stage-2-catalog-main` **deleted** (local + origin) on 2026-05-26 to remove mental overhead. Stage 2 will be **redesigned as v2** — post-mortem at [POST-MORTEMS/stage-2-v1-failed.md](POST-MORTEMS/stage-2-v1-failed.md) captures suspects + lessons. Original code remains reachable from main's revert history if needed.
 
 ---
 
@@ -36,14 +44,69 @@ Smallest reversible changes that directly prevent the catalyst incident class of
 
 **Stage 1 exit criteria:** eval baseline unchanged or improved, no merchant complaints, three merchants confirm they noticed nothing different (additive change worked).
 
-### Stage 2 — Catalog entities (this month, ~3–4 weeks)
-- [ ] **2.1 `catalog_items` + `catalog_item_schedules` tables** — generic schema (see plan, "Data model" section)
-- [ ] **2.2 Entity tools** — `search_entities`, `get_entity_details`, `list_active_entities` added to ai-worker tool whitelist
-- [ ] **2.3 Catalog UI** — section in the existing `KnowledgeBaseSections` modal, surfaces empty-state by default
-- [ ] **2.4 Dogfood with 2–3 training-institute merchants** — manual per-merchant enablement (no feature flag system exists yet, see Open Questions)
-- [ ] **2.5 Re-baseline eval** — expect improvement on catalog-related tests, no regression elsewhere
+### Stage 2 — Catalog entities — **TO BE REDESIGNED (v2)**
 
-**Stage 2 exit criteria:** 3 merchants using catalog with no complaints, eval improvement on catalog-class tests, p50 reply latency stays under 2.5s with one tool call.
+v1 (PR #190) merged and was reverted on 2026-05-24 after eval dropped 95.7% → ~90%. Root cause not isolated. Archive branch deleted 2026-05-26. **Do not resume v1 task list below — it's preserved only as a reference for what v2 must reconsider.** See [POST-MORTEMS/stage-2-v1-failed.md](POST-MORTEMS/stage-2-v1-failed.md) for what went wrong and the v2 design constraints (smaller PRs, pre-merge eval gate, tool-list-bloat caution).
+
+v2 design is a **fresh-brain task** — do not start it until Stage 2.6 lands (priorities listed in header block).
+
+<details>
+<summary>v1 sub-stages — what was actually merged in PR #190 (archived for v2 reference)</summary>
+
+v1 was structured into 8 sub-stages, not the vague 5-bullet placeholder the original post-mortem implied. **All 6 sub-stages below were merged in PR #190**; the remaining 2 (dogfood + final eval gate) were the planned but un-executed validation steps. Commit SHAs below are the canonical (main-reachable) ones; an earlier rebase left orphaned twins (e.g. `96fc8cba`, `25fa6265`) which resolve but should not be cited.
+
+**Merged sub-stages:**
+- ~~2.1 `catalog_items` schema~~ (`42d97a10`) — generic schema, type-driven, JSONB metadata; migration `0108_*.sql`; 7 schema integration tests.
+- ~~2.2 Backend CRUD API~~ (`e2e29fa3`) — `services/catalog.ts` + controllers + routes; workspace-scoped via parent page; `pages.kbVersion` bumped on every write.
+- ~~2.3a Catalog tool executor + shared types~~ (`db5f66ff`) — `services/catalogTools.ts`, `executeCatalogToolCall()`, three tools (`search_entities`, `get_entity_details`, `list_active_entities`). `list_active_entities` filters `endsAt > NOW()` in SQL as data-layer safeguard.
+- ~~2.3b AI integration~~ (`d006f2c6`) — catalog tools wired into ai-worker (`CATALOG_TOOLS`, `selectToolsForRequest()`) + backend tool-loop (`dispatchTool()`, `ALL_VALID_TOOL_NAMES` whitelist) + reply pipeline (`pageHasCatalogItems()` probe in `dispatchAiReply()`).
+- ~~2.4 Catalog list view + entry from /pages~~ (`4f285222`) — frontend route `/pages/[pageId]/catalog`, empty-state template picker.
+- ~~2.5 Catalog editor (add/edit/archive/restore/delete) + polish~~ (`94cd2854`) — SidePanel form, type-aware field surfacing.
+
+**Planned but NOT executed (the missing eval gate):**
+- ~~2.6 Vertical templates + smart pre-selection~~ — Facebook category → template mapping. *Note: v1 used "Stage 2.6" for this; unrelated to current Stage 2.6 = business profile foundation.*
+- ~~2.7 Dogfood with 2–3 training-institute merchants~~
+- ~~2.8 Re-baseline eval BEFORE release~~ — **this was the gate that should have caught the 5pp drop. It was never run.**
+
+**v2 designer:** see [POST-MORTEMS/stage-2-v1-failed.md](POST-MORTEMS/stage-2-v1-failed.md) for the refined suspect ranking and timeline analysis (the 2.3b eval-green discovery narrows the search window significantly).
+
+v1 exit criteria were: 3 merchants using catalog with no complaints, eval improvement on catalog-class tests, p50 reply latency under 2.5s with one tool call. v2 will likely keep the same exit criteria but must add a pre-merge eval gate on the existing 304 cases.
+
+</details>
+
+### Stage 2.6 — Business Profile Foundation (parallel track to Stage 2 catalog)
+
+Branch: `feat/kb-business-info-foundation`. **10 commits, [PR #194 OPEN](https://github.com/aliahdab2/jawab24/pull/194)**, rebased onto current main 2026-05-26. Adds structured business profile (address / phones / hours / policies) to the AI prompt, with a regression-prevention split between merchant-confirmed data and FB-suggested data. Motivated by the Damascus institute "1234567" phone hallucination incident.
+
+- [x] **2.6 foundation** — `BusinessProfile` type extended (phones[], policies, language_hint:'auto'); new `BusinessProfileContainer {merchant, suggestions}` shape + `unwrapBusinessProfile()` / `mergedBusinessProfile()` helpers; hours canonicalizer (`businessHours.ts`) with Arabic-Indic digits, AM/PM (ص/م), Closed/مغلق, 24/7, en/em-dash separators. Commit `b7f3b8f7`.
+- [x] **2.6 backend** — cache invalidation (`invalidatePageCaches()`), PATCH wraps `{merchant: body, suggestions: existing.suggestions}` server-side, FB sync writes only the `suggestions` half via `buildBusinessProfileContainer()`. Commit `4ecf9228`.
+- [x] **2.6c-prep** — split business_profile JSONB into container shape, migration `0109_split_business_profile.sql` (renumbered from 0108 during the 2026-05-26 rebase to resolve a slot collision with main's top-up billing migration `0108_superb_aaron_stack`). Missing drizzle snapshot regenerated (`0109_snapshot.json`, commit `2db0a924`). Stale `0027` comment in index.ts corrected to `0109`. Commit `1214c553` (rebased `7b0909e5`).
+- [x] **2.6c structured prompt block** — new `businessInfoPrompt.ts` (`formatBusinessInfoPrompt()`) injects structured BUSINESS_INFO block above raw KB chunks; `[NOT_PROVIDED]` markers force refusal instead of confabulation. Commit `f754cf8d`.
+- [x] **2.6c phone guard** — post-generation `phone_not_in_kb` guard. Commit `7b0e7f9a`.
+- [x] **2.6c eval cases** — Cat 50 Business Info added; training-page seed. Commit `da4d1fcb`.
+
+**Audit + gate status (2026-05-26 — ALL PASSED):**
+- ✓ **Check #1** — `formatBusinessInfoPrompt()` reads only `container.merchant`, never `suggestions`. Both call sites destructure correctly. Regression-prevention contract intact.
+- ✓ **Check #2** — `BusinessProfileSchema` (backend/src/utils/validation.ts) accepts `phones[]` (≤10), `policies.{shipping,returns,payment,booking}` (≤500ch each), `language_hint:'auto'`. Confirmed.
+- ✓ **Check #3** — migration is `0109_split_business_profile.sql`; `drizzle-kit check:pg` clean; 109-migration fresh-DB apply + idempotency verified on a throwaway DB.
+- ✓ **Integration tests** — backend 3729 pass / 5 skip / 0 fail; ai-worker 268 pass / 0 fail. tsc + lint clean across all 4 packages.
+- ✓ **Eval gate (clean, cache-bypassed)** — **96.0% overall** (291 PASS / 19 PARTIAL / 3 FAIL / 313). Regression cases #410/#411 PASS *live*. Existing-304 subset **95.9% (+0.2pp** vs 95.7% baseline). Cat 50 9/9. The 3 FAILs: **#12** (seed collision — fixed, moved to school page, commit `260222fb`), **#46** (known LLM variance), **#87** (pre-existing on main, NOT a 2.6 regression — to be filed separately).
+- ⚠️ **Eval-gate trustworthiness depends on `e1351d6a`** — the `pipeline === 'eval'` cache bypass (cherry-picked from the reverted catalog branch's `b10aa65e`). Without it, ~14% of cases serve stale cache and the gate lies (the first "95.8%" run hadn't actually tested regression case #411 — 6ms stale hit). See post-mortem Correction §2/§4.
+
+**Ready for PR review** — branch rebased clean onto main; lint + tsc + unit tests + migration verify + eval gate all green.
+
+**Stage 2.6d open questions (decide during 2.6d frontend planning):**
+
+- **Hours field overlap** (surfaced 2026-05-26 during 2.6 rebase). Two parallel "hours" surfaces exist:
+  - `workspace.settings.businessHoursStart/End/businessHoursOnly` — single window per week, used by the auto-reply *scheduler* to decide "is the bot allowed to reply right now?"
+  - `business_profile.hours` (new in 2.6) — per-day arrays with `closed`/`all day` support, injected into the AI prompt so the bot can answer "when are you open?" accurately
+  
+  These are conceptually different (when does the *platform* run vs. what does the *business* tell customers) but visually overlap and can produce contradictory states (e.g. bot replies at 11pm saying "we're open 9-6"). Three options:
+  - (a) Keep them separate, explain the distinction in the 2.6d UI
+  - (b) Make `business_profile.hours` the source of truth and derive the scheduler window from it (requires another migration + scheduler refactor — own stage)
+  - (c) Keep them separate technically but link them in the 2.6d UI ("use these as your auto-reply window?" confirmation)
+  
+  **Defer decision until:** real merchant usage data exists after 2.6d ships. Current PR #194 is backend-only — merchants can't fill `business_profile.hours` yet, so the overlap is theoretical, not active.
 
 ### Stage 3 — "Paste, we organize" classifier (next quarter, ~6–10 weeks)
 - [ ] **3.1 LLM extraction pipeline** — composes on top of existing `file-extractor.ts`
@@ -107,9 +170,12 @@ These are deliberately *not* in Stage 1 to keep the PR tight. Each is small enou
 | Post-Stage-1.1  | 2026-05-22 | 304 cases  | 95.7% | gpt-4.1-mini | v36            | 279 PASS / 24 PARTIAL / 1 FAIL. Identical to baseline (no-op for existing rows with `valid_until = NULL`). Avg latency 536ms. Integration tests: 5/5 pass. Log at `/tmp/eval-stage-1-1.log`. |
 | Post-Stage-1.2  | 2026-05-22 | 304 cases  | 95.6% | gpt-4.1-mini | v36            | 279 PASS / 23 PARTIAL / 2 FAIL. -0.1pp vs baseline. Diagnosed as LLM variance, NOT regression: test #46 (Cat 4 safety, Arabic Riyadh question) was already PARTIAL in baseline (failed `contains:الرياض` check). In 1.2 the confidence calibration also flipped (high → medium), pushing it to FAIL. No PASS test regressed. For tier-4-only data (every existing row), boost formula `(4 - LEAST(4, 4)) * 0.15 = 0` is mathematically a no-op. Integration tests prove tier ordering works on real tier-1/2/3/5 data. Log at `/tmp/eval-stage-1-2.log`. |
 | Post-Stage-1.3  | 2026-05-23 | 304 cases  | 95.7% | gpt-4.1-mini | v36            | 279 PASS / 24 PARTIAL / 1 FAIL. Identical to baseline. **Confirms the 1.2 dip was pure LLM variance** — test #46 flipped back to PARTIAL this run with no code change to retrieval logic. Avg latency 577ms. Classifier doesn't touch retrieval, so no behavior change expected for eval. Log at `/tmp/eval-stage-1-3.log`. |
-| Post-Stage-1.2  | TBD  | TBD        | TBD       | TBD          | TBD            | After `source_tier`                  |
-| Post-Stage-1.3  | TBD  | TBD        | TBD       | TBD          | TBD            | After ingestion warnings             |
-| Post-Stage-2    | TBD  | TBD        | TBD       | TBD          | TBD            | After catalog entities live          |
+| Post-Stage-2.3b | 2026-05-23 | 304 cases  | 95.6% | gpt-4.1-mini | v36            | 278 PASS / 25 PARTIAL / 1 FAIL. -0.1pp vs baseline = within LLM variance (matches Stage 1.2 pattern). Single FAIL is same as baseline (#87 FREE SHIPPING contamination). **Cat 48 E-commerce Tool Loop: 4/4 PASS** — confirms the gating change in `ecommerceToolLoop.ts` (storeId → storeId\|catalogToolsEnabled) did NOT regress the store-connected path, which was the highest-risk concern of 2.3b. Avg latency 629ms (vs 577ms baseline; +52ms within variance — the `pageHasCatalogItems` probe is sub-ms on indexed lookup). Log at `/tmp/eval-stage-2-3b.log`. |
+| Post-refactor   | 2026-05-23 | 304 cases  | 94.7% raw / ~95.4% adjusted | gpt-4.1-mini | v36 | 277 PASS / 22 PARTIAL / 5 FAIL. Headline -0.9pp **misleading**: 2 of the 5 FAILs are HTTP 429 rate-limit infra failures (#103, #196) hitting ai-worker's `@fastify/rate-limit` cap of 100/window — NOT code regressions. The 3 real logic FAILs (#95, #296 COMPLAINT↔COMPLIMENT sarcasm misclassification; #324 replyMethod ai vs skipped) are all known-LLM-variance categories. Excluding the 2 infra failures → ~95.4%, within variance of baseline. Avg latency 1607ms (vs 629ms post-2.3b) explained by cold OpenAI prompt cache + circuit-breaker retries on 429s — not the refactor. Refactor is byte-for-byte behavior-equivalent (14 new shared unit tests + 46 backend integration tests verify parity). Log at `/tmp/eval-refactor.log`. |
+| Post-Stage-2.6  | 2026-05-26 | 313 cases  | 96.0% | server default | v36 | **Rebased branch, cache-bypassed (clean).** 291 PASS / 19 PARTIAL / 3 FAIL. Existing-304 subset = 95.9% (+0.2pp vs baseline); Cat 50 = 9/9; regression cases #410/#411 PASS live. The 3 FAILs: #12 (seed collision — fixed in `260222fb`), #46 (known variance), #87 (**pre-existing — already the lone FAIL at Stage 2.3b above with v36**, confirmed not a 2.6 regression by running it on main). Trustworthy only because of the `e1351d6a` cache bypass; the first run without it falsely passed via a 6ms stale-cache hit on #411. Log at `/tmp/eval-stage-2.6-rebase-clean.log` (dirty run preserved at `-DIRTY.log`). |
+| Post-Stage-2 (catalog v2) | TBD | TBD | TBD | TBD | TBD | After catalog v2 (redesign) |
+
+**Eval gotcha for future runs:** the ai-worker has `rateLimit.max = 100/window` ([ai-worker/src/server.ts:18-19](ai-worker/src/server.ts#L18)). The eval blasts ~304 requests in a few minutes, so on cold-cache runs (>5min gap since last eval) some hit 429. To get a clean signal: either bump the dev rate limit, add inter-request sleeps to the eval script, or re-run after the rate-limit window clears.
 
 Run command (from memory):
 ```bash
@@ -153,11 +219,41 @@ Stage 1.3 (pending commit):
 
 ---
 
+## Recent commits on `kb-restructure/stage-2-catalog`
+
+- (next) — Stage 2.3b: ai-worker + tool-loop integration (~7 files).
+- `25fa6265` — Stage 2.3a: catalog tool executor + shared types (3 files, 492+ insertions).
+- `ad7c485b` — Stage 2.2: catalog CRUD API with workspace scoping (6 files, 698+ insertions).
+- `96fc8cba` — Stage 2.1: catalog_items schema (originally on this branch).
+
+## Chrome DevTools MCP — where it pays off in the remaining stages
+
+The harness has the chrome-devtools MCP installed. Useful for:
+
+- **Stage 2.4** (frontend route): load `/pages/[pageId]/catalog`, screenshot empty state, verify "Catalog" button appears on `/pages.tsx`.
+- **Stage 2.5** (SidePanel form): drive the form via `fill_form`, submit, screenshot result, verify HTML5 date-input validation in-browser (where CLI can't see).
+- **Stage 2.6** (vertical templates): drive the FB-category → template confirmation flow end-to-end.
+- **Stage 2.7** (dogfood prep): admin-playground a catalog question against a seeded page; watch the network tab for the tool-loop request shape (the real-world sanity check before Stage 2.8 eval re-baseline).
+- **NOT** useful for Stages 2.3 / 2.8 — pure backend / pure CLI respectively.
+
+---
+
 ## Next session pickup
 
 **Concrete action a fresh session can execute immediately:**
 
-Stage 1 is implementation-complete. Two things left before merging:
+Stages 2.1 → 2.3b all committed on `kb-restructure/stage-2-catalog`. All backend + ai-worker tests pass (243 + 262). Suggested next step: **Stage 2.4** — frontend route + list view at `/pages/[pageId]/catalog`. Use chrome-devtools MCP to verify visually (see Chrome DevTools section above). Plan from STAGE-2-PLAN.md:
+- New route `frontend/src/pages/pages/[pageId]/catalog.tsx`
+- Components: `CatalogList`, `CatalogItemCard`, `CatalogStatusBadge`, `PlatformProductsTab` (read-only for Salla/Shopify)
+- Entry point: "Catalog" button on each page card in `/pages.tsx`
+- Empty state with template picker (Stage 2.6 will wire smart pre-selection)
+- New i18n namespace `catalog` (44 → 45 namespaces — register all 3 places per AI_INSTRUCTIONS.md)
+
+---
+
+## Legacy Stage 1 next-session notes (kept for context)
+
+Stage 1 was implementation-complete. Two things were left before merging:
 
 1. **Commit Stage 1.3** (currently uncommitted on `kb-restructure/stage-1-valid-until`). Verify with `git status` — should show the new classifier, its test, the controller change, the frontend modal + types + pages.tsx changes, and the two kb.json updates. Atomic commit, conventional message.
 

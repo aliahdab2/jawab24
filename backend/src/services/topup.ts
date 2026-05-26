@@ -64,7 +64,7 @@ export const topupService = {
 
         const now = new Date();
 
-        return await db.transaction(async (tx) => {
+        return db.transaction(async (tx) => {
             // Confirm user exists before crediting — FK would catch it, but we
             // want a clean domain error rather than a Postgres constraint dump.
             const [user] = await tx

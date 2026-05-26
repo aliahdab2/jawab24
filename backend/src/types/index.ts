@@ -45,6 +45,13 @@ export interface AiGenerateRequest {
         queryEmbedding?: number[];
         replyStyle?: string;
         brandVoiceNotes?: string;
+        /**
+         * Stage 2.6 structured BUSINESS_INFO prompt block, pre-formatted from
+         * `business_profile.merchant`. Injected verbatim by ai-worker. Null/
+         * absent → no structured block in the prompt; the AI falls back to
+         * narrative KB only.
+         */
+        businessInfoBlock?: string | null;
         /** Customer's display name — used for personalization only, never affects cache keys. */
         senderName?: string;
         /** Substantive customer context (history, returning-customer summary, etc.) that changes the answer. */

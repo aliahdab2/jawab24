@@ -15,6 +15,10 @@ import { detectLanguage, resolveInputLanguage } from './language';
 // Token budget constants (configurable via env vars for production tuning)
 const KB_MAX_CHARS = parseInt(process.env.KB_MAX_CHARS || '16000', 10);       // ~4600 tokens — static KB fallback limit (RAG bypasses this)
 const MAX_INPUT_TOKENS = parseInt(process.env.MAX_INPUT_TOKENS || '24000', 10);  // Hard cap on total input tokens (system + history + user message)
+// Stage 2.6 structured BUSINESS_INFO block cap. A maxed-out profile (4 policies ×
+// 500 + address + phones + hours) can exceed this; the refusal directive is hoisted
+// to the top of the block (see businessInfoPrompt.ts) so it always survives the cut.
+const BUSINESS_INFO_MAX_CHARS = parseInt(process.env.BUSINESS_INFO_MAX_CHARS || '1500', 10);
 
 /** Conservative token estimate: ~3.5 chars per token (safe across Latin + Arabic) */
 function estimateTokens(text: string): number {
@@ -254,6 +258,14 @@ export interface GenerateRequest {
         conversationHistory?: ConversationMessage[];
         replyStyle?: string;
         brandVoiceNotes?: string;
+        /**
+         * Stage 2.6 structured BUSINESS_INFO prompt block (pre-formatted by
+         * backend's contextEnricher via `formatBusinessInfoPrompt`). Built from
+         * `business_profile.merchant` ONLY — never FB suggestions. The AI
+         * treats this as authoritative and refuses to invent values for
+         * fields marked `[NOT_PROVIDED]`. Null/absent → no block injected.
+         */
+        businessInfoBlock?: string | null;
         customerContext?: string;
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
@@ -644,6 +656,15 @@ ${isDM
             prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}`;
         }
 
+        // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only.
+        // Injected verbatim above the narrative <business_knowledge> tag below,
+        // so the model treats structured fields as authoritative and refuses to
+        // invent values for [NOT_PROVIDED] fields. Eval cases #11 (Damascus
+        // phone hallucination) and #19 (structured-beats-stale-KB) gate this.
+        if (request.context?.businessInfoBlock) {
+            prompt += `\n\n${request.context.businessInfoBlock.replace(/[<>]/g, '').slice(0, BUSINESS_INFO_MAX_CHARS)}`;
+        }
+
         // Customer context goes into the user prompt (next to the message) when conversation
         // history is present — that's where the model's attention is strongest and the data
         // matters most (preventing re-asks). For single-message scenarios (comments, first DM),
@@ -858,6 +879,51 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
                             }
                         }
                     }
+                }
+            }
+        }
+
+        // Check 1b: Hallucinated phone numbers (Stage 2.6).
+        //   The Damascus institute "1234567" incident: AI invented a phone because peer
+        //   merchants had phones in similar patterns and the page itself had none in KB
+        //   and no merchant-confirmed phone in business_profile.merchant.
+        //
+        //   Detection: any 7-14-digit run in the reply (Latin OR Arabic-Indic digits)
+        //   that doesn't appear in the merged KB+business-info text is flagged.
+        //
+        //   Whitelisting: same patterns the price check strips first — times, dates,
+        //   percentages, order IDs — plus order/SKU prefixes. We deliberately do NOT
+        //   gate this on intent: a phone hallucination is wrong regardless of whether
+        //   the AI classified the message as QUESTION, COMPLIMENT, or GREETING.
+        if (reply) {
+            const kbText = this.getKBText(request);
+            const businessInfoText = request.context?.businessInfoBlock || '';
+            const haystack = `${kbText}\n${businessInfoText}`;
+
+            // Normalize Arabic-Indic digits in haystack so reply matching works either way.
+            const ARABIC_TO_LATIN_DIGITS: Record<string, string> = {
+                '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+                '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+            };
+            const normalize = (s: string) => s.replace(/[٠-٩]/g, (ch) => ARABIC_TO_LATIN_DIGITS[ch] ?? ch);
+
+            const sanitizedReply = normalize(reply)
+                .replace(/\d{1,2}[:/]\d{2}/g, '')                       // times (9:00)
+                .replace(/\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?/g, '')     // dates
+                .replace(/#\d+|ORD-?\d+|SKU-?\d+/gi, '')                 // order/SKU IDs
+                .replace(/\d+%/g, '');                                   // percentages
+
+            // 7-15 digit runs (with optional + prefix, internal separators stripped before length check).
+            // Pattern: digit, then 5-15 of {digit|space|.|-|()}, then digit → 7-17 chars, 7-15 digits.
+            const phoneCandidates = sanitizedReply.match(/\+?\d[\d\s.\-()]{5,15}\d/g) || [];
+            const haystackDigits = normalize(haystack).replace(/\D/g, '');
+
+            for (const candidate of phoneCandidates) {
+                const digits = candidate.replace(/\D/g, '');
+                if (digits.length < 7 || digits.length > 15) continue;
+                if (!haystackDigits.includes(digits)) {
+                    if (!flags.includes('phone_not_in_kb')) flags.push('phone_not_in_kb');
+                    break;
                 }
             }
         }

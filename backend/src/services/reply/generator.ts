@@ -182,6 +182,13 @@ export interface GenerateReplyContext {
     // Reply customization
     replyStyle?: string;
     brandVoiceNotes?: string;
+    /**
+     * Stage 2.6 structured BUSINESS_INFO prompt block (merchant-confirmed only).
+     * Built by `contextEnricher.enrichPageContext`; null when the merchant has
+     * not yet filled in any field in the editor. The AI prompt injects this
+     * verbatim — see ai-worker's openai.ts.
+     */
+    businessInfoBlock?: string | null;
     // E-commerce tools (DMs only)
     ecommerceStoreId?: string;
     // Language fallback
@@ -228,6 +235,8 @@ export interface PlaygroundInput {
     conversationHistory?: { role: 'user' | 'assistant'; content: string }[];
     replyStyle?: string;
     brandVoiceNotes?: string;
+    /** Stage 2.6 structured BUSINESS_INFO prompt block (merchant-confirmed only). */
+    businessInfoBlock?: string | null;
     customerContext?: string;
     model?: string;
     defaultReplyLanguage?: string;
@@ -381,7 +390,7 @@ export class ReplyGenerator {
             const aiResponse = await aiService.generateReply({
                 comment: commentForAI,
                 language: resolvedLang !== 'unknown' ? resolvedLang : undefined,
-                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'comment_reply' }
+                context: { userId, pageId, pageName, postMessage, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: effectiveChannel, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'comment_reply' }
             });
 
             return this.processAiResponse(aiResponse, userId, pageId, retrievedChunks?.length ?? 0, ragAttempted, !!effectiveKB, text, gapSource);
@@ -479,7 +488,7 @@ export class ReplyGenerator {
                 const aiRequest: AiGenerateRequest = {
                     comment: text,
                     language: deferToHistory ? undefined : (msgLang !== 'unknown' ? msgLang : undefined),
-                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'dm_reply' },
+                    context: { userId, pageId, pageName, knowledgeBase: effectiveKB, retrievedChunks, storePolicies: context.storePolicies, productCatalog: context.productCatalog, channel: 'dm', conversationHistory: historyForAI, kbActiveVersion: context.kbActiveVersion, queryEmbedding, replyStyle: context.replyStyle, brandVoiceNotes: context.brandVoiceNotes, businessInfoBlock: context.businessInfoBlock, senderName: context.senderName, customerContext, ecommerceStoreId: context.ecommerceStoreId, defaultReplyLanguage: context.defaultReplyLanguage, pipeline: 'dm_reply' },
                 };
 
                 const aiResponse = await dispatchAiReply(aiRequest);
@@ -608,7 +617,7 @@ export class ReplyGenerator {
         const {
             pageId, userId, question, channel, knowledgeBase, kbActiveVersion,
             pageName, productCatalog, storePolicies, postMessage, conversationHistory,
-            replyStyle, brandVoiceNotes, customerContext, model, defaultReplyLanguage,
+            replyStyle, brandVoiceNotes, businessInfoBlock, customerContext, model, defaultReplyLanguage,
             messageTags, ourFacebookPageId, ecommerceStoreId, pipeline,
         } = input;
 
@@ -674,6 +683,7 @@ export class ReplyGenerator {
                 ...(channel === 'dm' && conversationHistory?.length ? { conversationHistory } : {}),
                 ...(replyStyle ? { replyStyle } : {}),
                 ...(brandVoiceNotes ? { brandVoiceNotes } : {}),
+                ...(businessInfoBlock ? { businessInfoBlock } : {}),
                 ...(mergedCustomerCtx ? { customerContext: mergedCustomerCtx } : {}),
                 ...(defaultReplyLanguage ? { defaultReplyLanguage } : {}),
                 ...(ecommerceStoreId ? { ecommerceStoreId } : {}),

@@ -2,7 +2,7 @@ import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
-import type { BusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
@@ -157,8 +157,16 @@ export function detectLanguageHint(text: string): 'ar' | 'en' {
 }
 
 /**
- * Build structured business profile from Facebook page data.
- * All fields are optional — partial profile is still valuable.
+ * Build the FB-sourced half of a BusinessProfile from a FacebookPage.
+ *
+ * Stage 2.6: this only ever produces the `suggestions` half of the
+ * container. The merchant-confirmed half (`merchant`) is editor-write-only
+ * and is never touched by FB sync. Use {@link buildBusinessProfileContainer}
+ * to produce the JSONB shape that gets written to `pages.business_profile`,
+ * preserving any existing merchant edits.
+ *
+ * All fields are optional — a partial suggestion is still useful in the
+ * editor's "Import from Facebook" affordance.
  */
 export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
     const profile: BusinessProfile = {};
@@ -166,20 +174,18 @@ export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
     if (fbPage.name) profile.name = fbPage.name;
     if (fbPage.category) profile.category = fbPage.category;
     if (fbPage.about) profile.about = fbPage.about;
-    if (fbPage.phone) profile.phone = fbPage.phone;
+    if (fbPage.phone) profile.phones = [fbPage.phone];
     if (fbPage.website) profile.website = fbPage.website;
     if (fbPage.single_line_address) profile.address = fbPage.single_line_address;
 
     const hours = parseBusinessHours(fbPage.hours);
     if (hours) profile.hours = hours;
 
-    // Detect language hint from name + about text
     const textForDetection = [fbPage.name, fbPage.about].filter(Boolean).join(' ');
     if (textForDetection) {
         profile.language_hint = detectLanguageHint(textForDetection);
     }
 
-    // Validate and strip unexpected fields from Facebook data
     const validated = BusinessProfileSchema.safeParse(profile);
     if (!validated.success) {
         captureError(
@@ -187,10 +193,30 @@ export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
             'BusinessProfile validation failed during Facebook sync',
             { extra: { fbPageId: fbPage.id, errors: validated.error.errors.map(e => `${e.path.join('.')}: ${e.message}`) } },
         );
-        return profile; // Return unvalidated rather than losing data
+        return profile;
     }
 
     return validated.data;
+}
+
+/**
+ * Produce the full Stage 2.6 container value for `pages.business_profile`,
+ * preserving any existing merchant edits and refreshing the `suggestions`
+ * half from Facebook. This is the value to persist on FB sync.
+ *
+ * Handles three shapes for `existing`:
+ *   - null/undefined        → fresh `{merchant: {}, suggestions: <fb>}`
+ *   - legacy flat shape     → treated as FB-default, demoted to suggestions
+ *                             (matches the migration's conservative default)
+ *   - already-container     → merchant preserved, suggestions overwritten
+ */
+export function buildBusinessProfileContainer(
+    fbPage: FacebookPage,
+    existing?: StoredBusinessProfile,
+): BusinessProfileContainer {
+    const suggestions = buildBusinessProfile(fbPage);
+    const { merchant = {} } = unwrapBusinessProfile(existing);
+    return { merchant, suggestions };
 }
 
 /**
@@ -395,9 +421,63 @@ export class PagesService {
     }
 
     /**
+     * Invalidate every cache layer that reads merchant context the AI injects
+     * into prompts directly (i.e. NOT tool-fetched data — that always re-queries
+     * the live row and doesn't need invalidation).
+     *
+     * Call this from ANY writer that mutates a field which ends up in the AI's
+     * system prompt for a future reply. Concretely, today that is:
+     *
+     *   - business_profile (address / phones / hours / about / policies)   [Stage 2.6]
+     *   - settings.brandVoiceNotes / brandVoiceNotesMulti                  [future]
+     *   - settings.replyStyle                                              [future]
+     *   - settings.awayMessage / greetingMessage                           [future]
+     *   - pages.knowledge_base (raw KB text) — already handled by updatePage
+     *
+     * If you add a new field that gets prompt-injected (not tool-fetched), wire
+     * its writer through this function or your edits won't reach customers
+     * until the next semantic-cache eviction (~24h). The catalog write path is
+     * NOT a precedent here — catalog routes through tool calls, so it doesn't
+     * need this; it only bumps kbVersion for version-chain consistency.
+     *
+     * Mechanism: the exact-cache key (ai.ts:buildCacheKey) and the semantic
+     * cache (kb/semantic-cache.ts) both include kbActiveVersion as a scope
+     * input. Bumping kbActiveVersion makes the next cache lookup produce a
+     * different key / filter out every existing semantic row, so the AI
+     * regenerates with the updated context. Old entries become orphaned
+     * and expire on their existing TTLs — no SCAN/DEL needed.
+     *
+     * Returns the post-bump kbActiveVersion, or null if the page doesn't
+     * exist. Callers usually don't need the return value.
+     */
+    async invalidatePageCaches(pageId: string): Promise<{ kbActiveVersion: number } | null> {
+        const [updated] = await db
+            .update(pages)
+            .set({
+                kbVersion: sql`COALESCE(${pages.kbVersion}, 0) + 1`,
+                kbActiveVersion: sql`COALESCE(${pages.kbActiveVersion}, 0) + 1`,
+                kbUpdatedAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .where(eq(pages.id, pageId))
+            .returning({ kbActiveVersion: pages.kbActiveVersion });
+
+        if (!updated) return null;
+        return { kbActiveVersion: updated.kbActiveVersion ?? 0 };
+    }
+
+    /**
      * Update a page.
      * When knowledgeBase changes, bumps kbVersion and sets kbUpdatedAt.
-     * kbActiveVersion is NOT touched here — it's set after ingestion completes.
+     * kbActiveVersion is NOT touched for KB-text changes — it's set after
+     * ingestion completes.
+     *
+     * When businessProfile changes, bumps BOTH kbVersion AND kbActiveVersion
+     * inline (same effect as calling invalidatePageCaches separately). The
+     * second bump is required because business_profile is prompt-injected
+     * directly — there's no ingestion step to flip kbActiveVersion later.
+     * Without this bump, cached replies would quote the old address/phone/
+     * hours for up to 30 days (exact-cache TTL).
      */
     async updatePage(workspaceId: string, pageId: string, data: UpdatePageDTO) {
         const setData: Record<string, unknown> = {
@@ -411,9 +491,31 @@ export class PagesService {
             setData.kbUpdatedAt = new Date();
         }
 
-        // Update businessProfileUpdatedAt when businessProfile changes
+        // business_profile is prompt-injected, so cache invalidation must be
+        // active (bumping kbActiveVersion). See invalidatePageCaches docstring.
+        //
+        // Stage 2.6: the API contract is "PATCH body = merchant content"
+        // (flat BusinessProfile shape). Server-side we wrap it into the
+        // {merchant, suggestions} container, preserving the existing
+        // suggestions half from FB sync. This keeps the merchant API
+        // simple while enforcing the editor-write-only invariant.
         if (data.businessProfile !== undefined) {
+            const [existingRow] = await db
+                .select({ businessProfile: pages.businessProfile })
+                .from(pages)
+                .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
+                .limit(1);
+            const { suggestions } = unwrapBusinessProfile(existingRow?.businessProfile as StoredBusinessProfile);
+            const merchant = data.businessProfile as BusinessProfile;
+            const container: BusinessProfileContainer = {
+                merchant,
+                ...(suggestions ? { suggestions } : {}),
+            };
+            setData.businessProfile = container;
             setData.businessProfileUpdatedAt = new Date();
+            setData.kbVersion = sql`COALESCE(${pages.kbVersion}, 0) + 1`;
+            setData.kbActiveVersion = sql`COALESCE(${pages.kbActiveVersion}, 0) + 1`;
+            setData.kbUpdatedAt = new Date();
         }
 
         const [updatedPage] = await db
@@ -603,7 +705,10 @@ export class PagesService {
                 // stored token — if they did, the page would break when they lose access.
                 const isOriginalConnector = existingPage.userId === userId;
                 logger.debug(`[Pages] Updating existing page: ${fbPage.name} (tokenUpdate: ${isOriginalConnector})`);
-                const businessProfile = buildBusinessProfile(fbPage);
+                // Stage 2.6: FB sync writes to the `suggestions` half of the
+                // container. The `merchant` half is editor-write-only and is
+                // preserved verbatim from the existing row.
+                const businessProfile = buildBusinessProfileContainer(fbPage, existingPage.businessProfile as StoredBusinessProfile);
                 const [updated] = await db
                     .update(pages)
                     .set({
@@ -638,7 +743,9 @@ export class PagesService {
                 const globalExisting = globalResults[0];
 
                 const shouldAutoEnable = remainingSlots === null || remainingSlots > 0;
-                const businessProfile = buildBusinessProfile(fbPage);
+                // Pass globalExisting's profile so a reclaim/disconnect-recover
+                // preserves the merchant half if any (otherwise undefined → fresh).
+                const businessProfile = buildBusinessProfileContainer(fbPage, globalExisting?.businessProfile as StoredBusinessProfile);
 
                 if (globalExisting && isPageDisconnected(globalExisting)) {
                     // Page exists but previous owner disconnected — safe to claim

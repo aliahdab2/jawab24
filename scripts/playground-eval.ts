@@ -169,7 +169,7 @@ const TEST_CASES: TestCase[] = [
     { id: 10, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل التوصيل مجاني لجدة؟', page: 'electronics', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
     // 1.4 — Vague/generic response detection
     { id: 11, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'شو سياسة الاسترجاع؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
-    { id: 12, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل تقبلون تحويل بنكي؟', page: 'training', expected: { confidence: ['low'], flags: ['info_not_in_kb'] } },
+    { id: 12, category: 1, categoryName: 'Confidence & Flags', channel: 'comment', message: 'هل تقبلون تحويل بنكي؟', page: 'school', expected: { confidence: ['low'], flags: ['info_not_in_kb'] }, notes: 'Moved off training page 2026-05-26: Stage 2.6 seed gave training a payment policy ("نقبل الدفع... وبالتحويل البنكي") so the bank-transfer question is now legitimately answerable there. School page has no payment info → preserves the original info-not-in-KB / low-confidence assertion.' },
     { id: 13, category: 1, categoryName: 'Confidence & Flags', channel: 'dm', message: 'Can I get a certificate?', page: 'training', expected: { confidence: ['low', 'medium'] }, notes: 'KB mentions اعتماد but not certificates' },
 
     // ===== Category 2: (removed — Preset Reply feature removed) =====
@@ -3220,6 +3220,92 @@ const TEST_CASES: TestCase[] = [
             flagsAbsent: ['info_not_in_kb'],
         },
         notes: 'Polite single-word query with closing — must not get classified as ambiguous.',
+    },
+
+    // ===== Category 50: Stage 2.6 Business Info structured surface =====
+    // Tests the BUSINESS_INFO prompt block built from `business_profile.merchant`.
+    // Demo seed (training page) has merchant.phones, .address, .hours, .policies populated.
+    // School page has NO merchant data → tests the [NOT_PROVIDED] refusal path.
+    // Cases #11 (Damascus regression) and #19 (structured-beats-stale-KB) are the
+    // tier-1 cases: must pass 100% — no LLM variance budget. Block merge if they fail.
+    {
+        id: 400, category: 50, categoryName: 'Business Info', channel: 'comment',
+        message: 'وين موقعكم؟',
+        page: 'training',
+        expected: { confidence: ['high'], replyContains: ['الرياض'] },
+        notes: 'LOCATION: merchant.address populated — must quote it.',
+    },
+    {
+        id: 401, category: 50, categoryName: 'Business Info', channel: 'dm',
+        message: 'ما رقم الهاتف؟',
+        page: 'training',
+        expected: { confidence: ['high'], replyContainsAny: ['0112345678', '0501112233'] },
+        notes: 'CONTACT phone-present: must quote phones[0] or phones[1].',
+    },
+    {
+        id: 402, category: 50, categoryName: 'Business Info', channel: 'dm',
+        message: 'عندكم أكثر من رقم؟',
+        page: 'training',
+        expected: { replyContains: ['0112345678'], replyContainsAny: ['0501112233'] },
+        notes: 'CONTACT multi-phone: should list both numbers from merchant.phones.',
+    },
+    {
+        id: 403, category: 50, categoryName: 'Business Info', channel: 'dm',
+        message: 'بشتغلوا الجمعة؟',
+        page: 'training',
+        expected: { replyContainsAny: ['مغلق', 'الجمعة', 'closed', 'إجازة'] },
+        notes: 'HOURS Friday-closed: merchant.hours.fri = ["closed"] — must say closed.',
+    },
+    {
+        id: 404, category: 50, categoryName: 'Business Info', channel: 'dm',
+        message: 'بتفتحوا السبت؟',
+        page: 'training',
+        expected: { replyContainsAny: ['09:00', '9', 'السبت', 'صباحا'] },
+        notes: 'HOURS Saturday-differs: merchant.hours.sat = ["09:00-17:00"] — must say open.',
+    },
+    {
+        id: 405, category: 50, categoryName: 'Business Info', channel: 'dm',
+        message: 'هل تقبلون الدفع نقداً؟',
+        page: 'training',
+        expected: { confidence: ['high'], replyContainsAny: ['نقد', 'تحويل', 'مدى'] },
+        notes: 'POLICY payment-set: merchant.policies.payment populated.',
+    },
+    {
+        id: 406, category: 50, categoryName: 'Business Info', channel: 'dm',
+        message: 'وين انتم وامتى مفتوحين؟',
+        page: 'training',
+        expected: { replyContains: ['الرياض'], replyContainsAny: ['ساعات', '08:00', '8', 'صباح'] },
+        notes: 'MULTI-INTENT location+hours: both fields must appear.',
+    },
+    // ─── Tier 1 regression cases — 100% pass required ───
+    {
+        id: 410, category: 50, categoryName: 'Business Info — REGRESSION (Damascus phone)', channel: 'dm',
+        message: 'ممكن رقم تليفون؟',
+        page: 'school',
+        expected: {
+            // School page: merchant.phones is empty (no merchant data seeded); raw KB
+            // has the real numbers (0126543210, 0505556677). AI should either quote
+            // from KB or politely refuse — but must NEVER invent the prod-incident
+            // "1234567" number. The phone guard catches inventions; this test
+            // verifies the guard is wired and prompt instructions hold.
+            flagsAbsent: ['phone_not_in_kb'],
+            replyNotContains: ['1234567'],
+        },
+        notes: 'TIER-1 REGRESSION (#11): the Damascus institute prod incident. Guard MUST keep "1234567" out of the reply.',
+    },
+    {
+        id: 411, category: 50, categoryName: 'Business Info — REGRESSION (structured beats stale KB)', channel: 'dm',
+        message: 'وين موقعكم بالضبط؟',
+        page: 'training',
+        // training page: merchant.address = 'الملز، شارع الأمير سلطان'; KB also mentions الملز.
+        // Test that the structured field is honored (matches both since they agree today).
+        // This case is documentation/regression-marker — to test "stale KB" we'd need a page
+        // where merchant.address and KB disagree, which we don't seed yet.
+        expected: {
+            confidence: ['high'],
+            replyContains: ['الملز'],
+        },
+        notes: 'TIER-1 REGRESSION (#19): structured > narrative precedence. Today merchant + KB agree; the test exists to fail loudly if injection ever stops happening.',
     },
 ];
 
