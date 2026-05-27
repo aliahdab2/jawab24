@@ -23,6 +23,9 @@ export interface UserSettings {
     timezone: string;
     awayMessage: string | null;
     greetingMessage: string | null;
+    /** Whether the greeting message is sent to new customers. Read-back was
+     *  missing here, which made the settings-page toggle always render off. */
+    greetingMessageEnabled: boolean;
     // Multilingual messages (JSONB)
     greetingMessageMulti?: Record<string, string> | null;
     awayMessageMulti?: Record<string, string> | null;

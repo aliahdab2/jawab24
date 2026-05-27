@@ -286,6 +286,7 @@ export class SettingsService {
             timezone: record.timezone || 'Asia/Damascus',
             awayMessage: record.awayMessage ?? null,
             greetingMessage: record.greetingMessage ?? null,
+            greetingMessageEnabled: record.greetingMessageEnabled ?? false,
             // Multilingual messages (JSONB)
             awayMessageMulti: record.awayMessageMulti || {},
             greetingMessageMulti: record.greetingMessageMulti || {},
