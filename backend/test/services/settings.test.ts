@@ -150,6 +150,36 @@ describe('Settings Service', () => {
             expect(result.commentReplyMode).toBe('dual');
             expect(result.dualReplyNudge).toEqual(dualNudge);
         });
+
+        // Regression: mapToUserSettings used to omit greetingMessageEnabled entirely,
+        // so the API never returned it and the settings-page toggle always rendered
+        // off (and any unrelated save then wrote it back to false). The DB column was
+        // written correctly — only the read-back mapping was missing the field.
+        it('should map greetingMessageEnabled back from the DB record', async () => {
+            const { db } = await import('../../src/db');
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({
+                ...baseSettings,
+                userId: 'user_greet',
+                greetingMessageEnabled: true,
+            } as any);
+
+            const result = await settingsService.getSettings('user_greet');
+            expect(result.greetingMessageEnabled).toBe(true);
+        });
+
+        it('should default greetingMessageEnabled to false when the column is null', async () => {
+            const { db } = await import('../../src/db');
+
+            vi.mocked(db.query.settings.findFirst).mockResolvedValue({
+                ...baseSettings,
+                userId: 'user_greet_null',
+                greetingMessageEnabled: null,
+            } as any);
+
+            const result = await settingsService.getSettings('user_greet_null');
+            expect(result.greetingMessageEnabled).toBe(false);
+        });
     });
 
     describe('updateSettings', () => {
