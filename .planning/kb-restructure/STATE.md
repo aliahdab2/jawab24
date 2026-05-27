@@ -2,12 +2,12 @@
 
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
-**Last updated:** 2026-05-26
-**Current stage:** Stage 2.6 — Business Profile Foundation (audit + eval gate PASSED — ready for PR review)
-**Current task:** Branch rebased onto main, all gates green. Next: push branch, update PR #194 description with eval results, merge after review.
+**Last updated:** 2026-05-27
+**Current stage:** Stage 2.6 — Business Profile Foundation (**MERGED + DEPLOYED to production**)
+**Current task:** Stage 2.6 shipped. Next focus: **Stage 2 v1 root-cause analysis** — use [POST-MORTEMS/stage-2-v1-failed.md](POST-MORTEMS/stage-2-v1-failed.md) as the starting point; bisect the suspects (start at `7584283c`) against the `896f05ff` archive code reachable from main's revert history. (Not started yet.)
 
 **Active branches:**
-- `feat/kb-business-info-foundation` — Stage 2.6, **10 commits** (rebased onto main 2026-05-26), **[PR #194 OPEN](https://github.com/aliahdab2/jawab24/pull/194)** (see Stage 2.6 section)
+- _(none active)_ — `feat/kb-business-info-foundation` was squash-merged as PR #194 (`024df791`) and retired. Lingering Stage 2 branches `kb-restructure/stage-2-catalog` (local) + `revert/stage-2-catalog` (remote) deleted 2026-05-27.
 - `kb-restructure/stage-1-valid-until` — Stage 1, **merged & deployed** (see PR #189 entry below)
 
 **Stage 2.6 plan:** detailed approach at `~/.claude/plans/what-about-address-and-playful-fog.md`. Approved 2026-05-23 with refinements covering phones[] array, canonical hours format, persona-aware refusal language, cache invalidation (kbVersion + kbActiveVersion + Redis SCAN/DEL), and 19 eval cases (2 of which are regression-specific, no LLM variance budget).
@@ -76,7 +76,7 @@ v1 exit criteria were: 3 merchants using catalog with no complaints, eval improv
 
 ### Stage 2.6 — Business Profile Foundation (parallel track to Stage 2 catalog)
 
-Branch: `feat/kb-business-info-foundation`. **10 commits, [PR #194 OPEN](https://github.com/aliahdab2/jawab24/pull/194)**, rebased onto current main 2026-05-26. Adds structured business profile (address / phones / hours / policies) to the AI prompt, with a regression-prevention split between merchant-confirmed data and FB-suggested data. Motivated by the Damascus institute "1234567" phone hallucination incident.
+**MERGED + DEPLOYED.** PR #194 squash-merged to main as **`024df791`** and deployed to production **2026-05-26** (blue-green `green` env; verified healthy 2026-05-27: 0 ai-worker errors, 0 new Sentry issues, only benign pre-existing FB-400 reply errors in backend logs). Adds structured business profile (address / phones / hours / policies) to the AI prompt, with a regression-prevention split between merchant-confirmed data and FB-suggested data. Motivated by the Damascus institute "1234567" phone hallucination incident.
 
 - [x] **2.6 foundation** — `BusinessProfile` type extended (phones[], policies, language_hint:'auto'); new `BusinessProfileContainer {merchant, suggestions}` shape + `unwrapBusinessProfile()` / `mergedBusinessProfile()` helpers; hours canonicalizer (`businessHours.ts`) with Arabic-Indic digits, AM/PM (ص/م), Closed/مغلق, 24/7, en/em-dash separators. Commit `b7f3b8f7`.
 - [x] **2.6 backend** — cache invalidation (`invalidatePageCaches()`), PATCH wraps `{merchant: body, suggestions: existing.suggestions}` server-side, FB sync writes only the `suggestions` half via `buildBusinessProfileContainer()`. Commit `4ecf9228`.
@@ -93,7 +93,7 @@ Branch: `feat/kb-business-info-foundation`. **10 commits, [PR #194 OPEN](https:/
 - ✓ **Eval gate (clean, cache-bypassed)** — **96.0% overall** (291 PASS / 19 PARTIAL / 3 FAIL / 313). Regression cases #410/#411 PASS *live*. Existing-304 subset **95.9% (+0.2pp** vs 95.7% baseline). Cat 50 9/9. The 3 FAILs: **#12** (seed collision — fixed, moved to school page, commit `260222fb`), **#46** (known LLM variance), **#87** (pre-existing on main, NOT a 2.6 regression — to be filed separately).
 - ⚠️ **Eval-gate trustworthiness depends on `e1351d6a`** — the `pipeline === 'eval'` cache bypass (cherry-picked from the reverted catalog branch's `b10aa65e`). Without it, ~14% of cases serve stale cache and the gate lies (the first "95.8%" run hadn't actually tested regression case #411 — 6ms stale hit). See post-mortem Correction §2/§4.
 
-**Ready for PR review** — branch rebased clean onto main; lint + tsc + unit tests + migration verify + eval gate all green.
+**SHIPPED** — merged (`024df791`) + deployed to production 2026-05-26. Day-1 sanity check (2026-05-27): containers healthy 8h, ai-worker 0 errors, Sentry 0 new issues, migration applied cleanly (healthy startup). Post-deploy eval re-confirmed on gpt-4o-mini: 93.8% (vs 96.0% default gpt-4.1-mini) — Cat 50 + both regression cases #410/#411 PASS on 4o-mini too; default stays gpt-4.1-mini.
 
 **Stage 2.6d open questions (decide during 2.6d frontend planning):**
 
