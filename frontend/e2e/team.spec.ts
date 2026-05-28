@@ -144,7 +144,9 @@ test.describe('Team Section', () => {
     await ownerText.waitFor({ state: 'attached', timeout: 15000 });
     await ownerText.evaluate(el => el.scrollIntoView({ block: 'center' }));
     await expect(ownerText).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(t('team.roleOwner'), { exact: true })).toBeVisible();
+    // .first(): the role name now appears in both the member badge and the
+    // "What each role can do" legend; the badge is DOM-first (member list).
+    await expect(page.getByText(t('team.roleOwner'), { exact: true }).first()).toBeVisible();
     await expect(page.getByText(`(${t('team.you')})`)).toBeVisible();
   });
 
@@ -216,8 +218,10 @@ test.describe('Team Section', () => {
     await page.goto('/en/settings');
 
     await expect(page.getByText('Sara', { exact: true })).toBeVisible({ timeout: 15000 });
-    // One remove button (for Sara, not for owner)
-    const removeButtons = page.getByText(t('team.removeMember'));
+    // One remove button (for Sara, not for owner). Scope to the button role +
+    // exact: the role legend's admin description contains the word "remove",
+    // which would otherwise substring-match getByText('Remove').
+    const removeButtons = page.getByRole('button', { name: t('team.removeMember'), exact: true });
     await expect(removeButtons).toHaveCount(1);
   });
 
@@ -226,11 +230,13 @@ test.describe('Team Section', () => {
     await setupRoutes(page, { members: [MOCK_OWNER, MOCK_MEMBER] });
     await page.goto('/en/settings');
 
-    const ownerBadge = page.getByText(t('team.roleOwner'), { exact: true });
+    // .first(): role names also render in the "What each role can do" legend;
+    // the member badges are DOM-first.
+    const ownerBadge = page.getByText(t('team.roleOwner'), { exact: true }).first();
     await ownerBadge.waitFor({ state: 'attached', timeout: 15000 });
     await ownerBadge.evaluate(el => el.scrollIntoView({ block: 'center' }));
     await expect(ownerBadge).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText(t('team.roleMember')).first()).toBeVisible();
+    await expect(page.getByText(t('team.roleMember'), { exact: true }).first()).toBeVisible();
   });
 
   test('works in Arabic (RTL)', async ({ page }) => {
@@ -257,7 +263,7 @@ test.describe('Team Section', () => {
     await page.goto('/ar/settings');
 
     await expect(page.getByText(tAr('team.sectionTitle')).first()).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText(tAr('team.roleOwner'))).toBeVisible();
+    await expect(page.getByText(tAr('team.roleOwner'), { exact: true }).first()).toBeVisible();
     await expect(page.getByPlaceholder(tAr('team.invitePlaceholder'))).toBeVisible();
   });
 });
