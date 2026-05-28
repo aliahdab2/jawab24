@@ -8,6 +8,7 @@
   "general": "General",
   "sectionAutoReply": "Auto-Reply",
   "sectionAiPersonality": "Reply Personality",
+  "personalityDisabledHint": "Turn on Smart Replies above to customize your reply tone and brand voice.",
   "account": "Account",
   "notifications": "Notifications",
   "language": "Language",

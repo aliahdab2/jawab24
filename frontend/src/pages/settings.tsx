@@ -297,7 +297,7 @@ const SettingsPage: NextPageWithLayout = () => {
   }
 
   return (
-    <div className="pb-24 landscape:pb-20">
+    <div className="max-w-3xl mx-auto pb-24 landscape:pb-20">
       <PageHeader
         title={t('title')}
         description={t('pageContext')}
@@ -347,24 +347,27 @@ const SettingsPage: NextPageWithLayout = () => {
       </div>
 
       {/* Section: AI Personality */}
-      {settings.aiEnabled && (
-        <>
-          <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAiPersonality')}</p>
-          <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
-            <ReplyStyleCard
-              settings={settings}
-              setSettings={setSettings}
-              hasChanges={hasChanges}
-              onScrollToAdvanced={() => {
-                setShowAdvanced(true);
-                requestAnimationFrame(() => {
-                  document.getElementById('advanced-settings-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                });
-              }}
-            />
+      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionAiPersonality')}</p>
+      <div className="space-y-4 sm:space-y-6 landscape:space-y-4 mb-8 sm:mb-10 landscape:mb-6">
+        {settings.aiEnabled ? (
+          <ReplyStyleCard
+            settings={settings}
+            setSettings={setSettings}
+            hasChanges={hasChanges}
+            onScrollToAdvanced={() => {
+              setShowAdvanced(true);
+              requestAnimationFrame(() => {
+                document.getElementById('advanced-settings-body')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              });
+            }}
+          />
+        ) : (
+          <div className="flex items-center gap-3 rounded-2xl border border-dashed border-theme-border bg-muted/40 p-4 text-sm text-muted-foreground">
+            <Sparkles className="w-5 h-5 shrink-0 text-icon-muted" aria-hidden="true" />
+            <span>{t('personalityDisabledHint')}</span>
           </div>
-        </>
-      )}
+        )}
+      </div>
 
       {/* Advanced Settings Toggle */}
       <CollapsibleSectionHeader
@@ -428,7 +431,7 @@ const SettingsPage: NextPageWithLayout = () => {
         'px-safe-landscape',
         hasChanges || saving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
       )}>
-        <div className="max-w-[1600px] mx-auto">
+        <div className="max-w-3xl mx-auto">
           <Button
             onClick={handleSave}
             disabled={!hasChanges || saving}
@@ -455,22 +458,8 @@ const SettingsPage: NextPageWithLayout = () => {
         <TeamSection />
       </div>
 
-      {/* Section: Help & Support */}
-      <div className="mt-8 sm:mt-10 landscape:mt-6">
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{tc('needHelp')}</p>
-        <div className="bg-card border border-theme-border rounded-2xl p-4 sm:p-5">
-          <p className="text-sm text-muted-foreground mb-4">{tc('helpDescription')}</p>
-          <a
-            href={`https://wa.me/46700224720?text=${encodeURIComponent(tc('whatsappDefaultMessage'))}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 px-5 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95 text-sm"
-          >
-            <MessageCircle className="w-4 h-4" />
-            {tc('contactWhatsApp')}
-          </a>
-        </div>
-      </div>
+      {/* Help & Support lives in the persistent WhatsAppHelpButton (floating,
+          present on every dashboard page) — no duplicate section here. */}
 
       {/* Visual separator before danger zone */}
       <div className="mt-12 mb-6 border-t-2 border-destructive/20" />

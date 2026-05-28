@@ -531,6 +531,36 @@ export function TeamSection() {
             );
           })}
         </div>
+
+        {/* Role explainer — what each kind of member can do. Reuses the same
+            icons + colors as the member badges above so the legend reads as
+            a key to them. Helps owners pick the right role when inviting. */}
+        <div className="mt-5 pt-4 border-t border-theme-border">
+          <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
+            {t('rolesExplainerTitle')}
+          </p>
+          <ul className="space-y-3">
+            {(['owner', 'admin', 'member'] as WorkspaceRole[]).map((r) => {
+              const RoleIcon = ROLE_ICONS[r];
+              const cap = r.charAt(0).toUpperCase() + r.slice(1);
+              return (
+                <li key={r} className="flex items-start gap-3">
+                  <span className={clsx('inline-flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0', getRoleColor(r))}>
+                    <RoleIcon className="w-3.5 h-3.5" aria-hidden="true" />
+                  </span>
+                  <div className="min-w-0 text-start">
+                    <p className="text-sm font-bold text-foreground">
+                      {t(`role${cap}` as 'roleOwner' | 'roleAdmin' | 'roleMember')}
+                    </p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {t(`roleDesc${cap}` as 'roleDescOwner' | 'roleDescAdmin' | 'roleDescMember')}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </Card>
       )}
 

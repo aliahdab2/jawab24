@@ -127,7 +127,10 @@ describe('TeamSection', () => {
   it('renders member list with owner badge', async () => {
     renderTeamSection();
     expect(await screen.findByText('Ahmad')).toBeInTheDocument();
-    expect(await screen.findByText('Owner')).toBeInTheDocument();
+    // "Owner" appears both as the member's role badge (a <span>) and in the
+    // "What each role can do" legend (a <p>). Scope to the badge span so this
+    // assertion still verifies the member row specifically.
+    expect(await screen.findByText('Owner', { selector: 'span' })).toBeInTheDocument();
     expect(await screen.findByText('(You)')).toBeInTheDocument();
   });
 

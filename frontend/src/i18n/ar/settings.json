@@ -8,6 +8,7 @@
   "general": "عام",
   "sectionAutoReply": "الرد التلقائي",
   "sectionAiPersonality": "شخصية الردود",
+  "personalityDisabledHint": "فعّل الردود الذكية بالأعلى لتخصيص نبرة ردودك وصوت علامتك التجارية.",
   "account": "الحساب",
   "notifications": "التنبيهات",
   "language": "لغة لوحة التحكم",
