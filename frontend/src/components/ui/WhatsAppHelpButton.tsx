@@ -16,9 +16,8 @@ export function WhatsAppHelpButton({ hidden = false }: { hidden?: boolean }) {
   const [shouldPulse, setShouldPulse] = useState(false);
 
   // Hide on internal action screens where FAB overlaps with primary actions or content.
-  // /settings used to be in this list because the page had its own in-page Help card;
-  // that card was removed, so settings now needs the floating FAB for support access.
-  const HIDDEN_ROUTES = ['/messages', '/comments', '/notifications', '/leads'];
+  // /settings is in this list because that page renders its own in-page Help & Support card.
+  const HIDDEN_ROUTES = ['/messages', '/comments', '/notifications', '/settings', '/leads'];
   const isHiddenRoute = HIDDEN_ROUTES.some(r => pathname.startsWith(r));
 
   const isLandscape = useLandscape();

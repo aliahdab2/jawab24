@@ -458,8 +458,22 @@ const SettingsPage: NextPageWithLayout = () => {
         <TeamSection />
       </div>
 
-      {/* Help & Support lives in the persistent WhatsAppHelpButton (floating,
-          present on every dashboard page) — no duplicate section here. */}
+      {/* Section: Help & Support */}
+      <div className="mt-8 sm:mt-10 landscape:mt-6">
+        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{tc('needHelp')}</p>
+        <div className="bg-card border border-theme-border rounded-2xl p-4 sm:p-5">
+          <p className="text-sm text-muted-foreground mb-4">{tc('helpDescription')}</p>
+          <a
+            href={`https://wa.me/46700224720?text=${encodeURIComponent(tc('whatsappDefaultMessage'))}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 px-5 rounded-xl transition-all shadow-sm hover:shadow-md active:scale-95 text-sm"
+          >
+            <MessageCircle className="w-4 h-4" />
+            {tc('contactWhatsApp')}
+          </a>
+        </div>
+      </div>
 
       {/* Visual separator before danger zone */}
       <div className="mt-12 mb-6 border-t-2 border-destructive/20" />
