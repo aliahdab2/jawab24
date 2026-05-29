@@ -1,5 +1,7 @@
 // Shared Types for Jawab24
 
+import type { MerchantProvenanceMap } from './businessProfileMerge';
+
 // --- Validation schemas (single source of truth across backend + frontend) ---
 export { UpdateSettingsSchema, type UpdateSettingsInput } from './schemas/settings';
 
@@ -193,10 +195,18 @@ export interface BusinessProfile {
  * `BusinessProfile` shape. Use `unwrapBusinessProfile()` to normalize.
  */
 export interface BusinessProfileContainer {
-  /** Editor-write-only. The AI's BUSINESS_INFO prompt block reads ONLY this. */
+  /** Editor-write + auto-promoted FB data. The AI's BUSINESS_INFO prompt block reads ONLY this. */
   merchant?: BusinessProfile;
-  /** FB-sync-only. Surfaced in the editor as "Import from Facebook" buttons. */
+  /** FB-sync-only. Raw snapshot of the last FB sync; surfaced in the editor as "Review & Confirm" cues. */
   suggestions?: BusinessProfile;
+  /**
+   * Stage 2.6.1 sidecar map of per-field provenance for the `merchant`
+   * half. Tracks whether each field came from FB sync (auto-promoted) or
+   * the merchant editor (manually typed/cleared). See
+   * {@link MerchantProvenanceMap} for state semantics, including the
+   * "cleared ≠ never-seen" invariant.
+   */
+  merchantProvenance?: MerchantProvenanceMap;
 }
 
 /**
@@ -209,6 +219,16 @@ function isContainer(p: unknown): p is BusinessProfileContainer {
   return !!p && typeof p === 'object' && ('merchant' in p || 'suggestions' in p);
 }
 
+// Hardening guard for the Drizzle + postgres.js jsonb double-encoding (parked
+// for a separate hygiene PR). Drizzle's reader auto-parses string values, so
+// this branch is dead for any read going through the ORM — but it protects
+// any future direct-postgres.js read path from silently demoting the entire
+// container into `suggestions`.
+function parseIfStringified(p: unknown): unknown {
+  if (typeof p !== 'string') return p;
+  try { return JSON.parse(p); } catch { return null; }
+}
+
 /**
  * Normalize stored business_profile JSONB to the container shape.
  * Legacy flat rows are treated as FB-default (data goes under `suggestions`,
@@ -217,8 +237,10 @@ function isContainer(p: unknown): p is BusinessProfileContainer {
  */
 export function unwrapBusinessProfile(stored: StoredBusinessProfile): BusinessProfileContainer {
   if (!stored) return {};
-  if (isContainer(stored)) return stored;
-  return { merchant: {}, suggestions: stored };
+  const parsed = parseIfStringified(stored);
+  if (!parsed) return {};
+  if (isContainer(parsed)) return parsed;
+  return { merchant: {}, suggestions: parsed as BusinessProfile };
 }
 
 /**
@@ -851,6 +873,8 @@ export interface WorkspaceSettings {
 
 // --- Business Info structured prompt block (Stage 2.6) ---
 export { formatBusinessInfoPrompt } from './businessInfoPrompt';
+export { applyFbSyncToMerchant, applyMerchantEdit, classifyForMigration, hasTrackedField, TRACKED_FIELDS } from './businessProfileMerge';
+export type { MerchantProvenanceMap, FieldProvenance, ProvenanceSource, MigrationPlan } from './businessProfileMerge';
 // --- Business hours canonicalizer (Stage 2.6) ---
 export { canonicalizeHoursEntry, canonicalizeHoursWeek } from './businessHours';
 export type { CanonicalHoursEntry, ParseResult, ParseSuccess, ParseFailure } from './businessHours';

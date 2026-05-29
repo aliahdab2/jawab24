@@ -1,0 +1,455 @@
+import { describe, it, expect } from 'vitest';
+import { applyFbSyncToMerchant, applyMerchantEdit, classifyForMigration, hasTrackedField, formatBusinessInfoPrompt } from '../index';
+import type { BusinessProfile, BusinessProfileContainer, MerchantProvenanceMap, StoredBusinessProfile } from '../index';
+
+// The "Damascus institute" fixture — the real prod failure case that
+// motivated Option B (page 39aeab89, الفريق الدمشقي للتدريب والتأهيل).
+const damascusFbSuggestions: BusinessProfile = {
+    name: 'الفريق الدمشقي للتدريب والتأهيل',
+    category: 'Local service',
+    about: 'فريقنا يهدف الى تطوير وتدريب وتأهيل الشباب السوري',
+    phones: ['+963937549674'],
+    website: 'https://www.the.damascene.team.com/',
+    address: 'البرامكة سانا فوق مكتبة الحافظ الطابق الاول, Damascus, Syria',
+    hours: {
+        mon: ['08:00-20:00'], tue: ['08:00-20:00'], wed: ['08:00-20:00'],
+        thu: ['08:00-20:00'], fri: ['00:00-23:45'], sat: ['08:00-20:00'],
+        sun: ['08:00-20:00'],
+    },
+    language_hint: 'ar',
+};
+
+describe('applyFbSyncToMerchant', () => {
+    describe('case 1: fresh page (no existing merchant or provenance)', () => {
+        it('populates merchant from FB and marks every field as fb_sync, confirmedAt: null', () => {
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                undefined,
+                undefined,
+                damascusFbSuggestions,
+            );
+
+            expect(merchant.address).toBe(damascusFbSuggestions.address);
+            expect(merchant.phones).toEqual(['+963937549674']);
+            expect(merchant.hours?.mon).toEqual(['08:00-20:00']);
+
+            expect(merchantProvenance.address).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(merchantProvenance.hours).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+    });
+
+    describe('case 2: merchant edited address (other fields still fb_sync-owned)', () => {
+        it('preserves the edited field, refreshes the others from FB', () => {
+            const existingMerchant: BusinessProfile = { address: 'manually-typed-address' };
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+            };
+
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                existingMerchant,
+                existingProvenance,
+                damascusFbSuggestions,
+            );
+
+            // Edited field preserved
+            expect(merchant.address).toBe('manually-typed-address');
+            expect(merchantProvenance.address).toEqual({
+                source: 'editor',
+                confirmedAt: '2026-05-01T10:00:00.000Z',
+            });
+
+            // Other fields refreshed from FB
+            expect(merchant.phones).toEqual(['+963937549674']);
+            expect(merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+    });
+
+    describe('case 3: merchant has unconfirmed fb_sync values (the post-migration steady state)', () => {
+        it('refreshes them from the new FB sync, keeps source fb_sync and confirmedAt null', () => {
+            const existingMerchant: BusinessProfile = {
+                address: 'OLD-fb-addr',
+                phones: ['+OLD-phone'],
+            };
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'fb_sync', confirmedAt: null },
+                phones: { source: 'fb_sync', confirmedAt: null },
+            };
+
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                existingMerchant,
+                existingProvenance,
+                damascusFbSuggestions,
+            );
+
+            expect(merchant.address).toBe(damascusFbSuggestions.address);
+            expect(merchant.phones).toEqual(['+963937549674']);
+            expect(merchantProvenance.address).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+    });
+
+    describe('case 4: merchant explicitly CLEARED phones (cleared ≠ never-seen)', () => {
+        it('does NOT repopulate phones from FB, even though FB still has them', () => {
+            // Cleared state: merchant.phones is absent AND provenance says editor.
+            const existingMerchant: BusinessProfile = {
+                address: 'editor-set-address',
+                // phones intentionally absent — merchant cleared it
+            };
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+                phones: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+            };
+
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                existingMerchant,
+                existingProvenance,
+                damascusFbSuggestions,
+            );
+
+            // phones stays cleared — FB suggestion is IGNORED
+            expect(merchant.phones).toBeUndefined();
+            // provenance is unchanged for the cleared field
+            expect(merchantProvenance.phones).toEqual({
+                source: 'editor',
+                confirmedAt: '2026-05-01T10:00:00.000Z',
+            });
+            // address (editor-set) also preserved
+            expect(merchant.address).toBe('editor-set-address');
+        });
+    });
+
+    describe('case 5: FB sync result is empty (transient FB outage / private page)', () => {
+        it('leaves merchant and provenance untouched', () => {
+            const existingMerchant: BusinessProfile = { address: 'X' };
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+            };
+
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                existingMerchant,
+                existingProvenance,
+                {}, // FB returned nothing
+            );
+
+            expect(merchant).toEqual(existingMerchant);
+            expect(merchantProvenance).toEqual(existingProvenance);
+        });
+    });
+
+    describe('case 6: end-to-end with formatBusinessInfoPrompt (the bug closes)', () => {
+        it('produces a non-null BUSINESS_INFO block for an empty-merchant prod page after FB-sync promotion', () => {
+            // Simulates page 39aeab89 BEFORE Option B: merchant={}, suggestions has the data.
+            const { merchant } = applyFbSyncToMerchant(undefined, undefined, damascusFbSuggestions);
+
+            const block = formatBusinessInfoPrompt(merchant);
+
+            expect(block).not.toBeNull();
+            expect(block).toContain('البرامكة سانا');           // the address
+            expect(block).toContain('+963937549674');           // the phone
+            expect(block).toContain('Monday: 08:00-20:00');     // formatted hours
+        });
+    });
+
+    describe('case 7: defensive normalization for pre-Option-B rows', () => {
+        // Rollout window: a row written via the editor BEFORE the migration runs
+        // has merchant populated but no provenance map. The merge MUST treat
+        // those values as editor-owned (preserve them), not free for FB clobber.
+        it('treats existing merchant values without provenance as editor-owned', () => {
+            const existingMerchant: BusinessProfile = { address: 'pre-migration-editor-value' };
+            // No existingProvenance — pre-Option-B state.
+
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                existingMerchant,
+                undefined,
+                damascusFbSuggestions,
+            );
+
+            // Existing editor value preserved
+            expect(merchant.address).toBe('pre-migration-editor-value');
+            expect(merchantProvenance.address).toEqual({ source: 'editor', confirmedAt: null });
+
+            // Fields not in existing merchant are still populated from FB
+            expect(merchant.phones).toEqual(['+963937549674']);
+            expect(merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+    });
+
+    describe('case 8: mixed-provenance overlap (the realistic post-migration state)', () => {
+        it('handles editor-owned, fb_sync-owned, and never-seen fields in the same call', () => {
+            const existingMerchant: BusinessProfile = {
+                address: 'editor-typed',           // editor-owned
+                phones: ['+OLD'],                  // fb_sync (will refresh)
+                // hours absent — never seen
+                // website absent — merchant cleared
+            };
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+                phones: { source: 'fb_sync', confirmedAt: null },
+                website: { source: 'editor', confirmedAt: '2026-05-15T10:00:00.000Z' }, // cleared
+            };
+
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                existingMerchant,
+                existingProvenance,
+                damascusFbSuggestions,
+            );
+
+            // address: editor-owned, preserved
+            expect(merchant.address).toBe('editor-typed');
+            expect(merchantProvenance.address?.source).toBe('editor');
+
+            // phones: fb_sync, refreshed
+            expect(merchant.phones).toEqual(['+963937549674']);
+            expect(merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+
+            // hours: never seen, populated from FB
+            expect(merchant.hours?.mon).toEqual(['08:00-20:00']);
+            expect(merchantProvenance.hours).toEqual({ source: 'fb_sync', confirmedAt: null });
+
+            // website: cleared, stays cleared
+            expect(merchant.website).toBeUndefined();
+            expect(merchantProvenance.website?.source).toBe('editor');
+        });
+    });
+
+    describe('purity (does not mutate inputs)', () => {
+        it('returns new objects; does not mutate existingMerchant or existingProvenance', () => {
+            const existingMerchant: BusinessProfile = { address: 'X' };
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+            };
+            const existingMerchantSnapshot = JSON.parse(JSON.stringify(existingMerchant));
+            const existingProvenanceSnapshot = JSON.parse(JSON.stringify(existingProvenance));
+
+            applyFbSyncToMerchant(existingMerchant, existingProvenance, damascusFbSuggestions);
+
+            expect(existingMerchant).toEqual(existingMerchantSnapshot);
+            expect(existingProvenance).toEqual(existingProvenanceSnapshot);
+        });
+    });
+});
+
+describe('applyMerchantEdit', () => {
+    const NOW = new Date('2026-05-29T15:00:00.000Z');
+    const NOW_ISO = NOW.toISOString();
+
+    describe('case M1: fresh save (no prior provenance)', () => {
+        it('marks every present field as editor + now', () => {
+            const patch: BusinessProfile = {
+                address: 'merchant-typed-address',
+                phones: ['+999'],
+            };
+            const { merchant, merchantProvenance } = applyMerchantEdit(patch, undefined, NOW);
+
+            expect(merchant).toEqual(patch);
+            expect(merchantProvenance.address).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+            // Fields not in patch and never seen → no provenance entry
+            expect(merchantProvenance.hours).toBeUndefined();
+        });
+    });
+
+    describe('case M2: save that clears a previously-set field', () => {
+        it('marks the cleared field as editor + now (the cleared tombstone)', () => {
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+                phones: { source: 'fb_sync', confirmedAt: null },
+            };
+            // PATCH omits phones — merchant cleared it.
+            const patch: BusinessProfile = { address: 'still-here' };
+
+            const { merchant, merchantProvenance } = applyMerchantEdit(patch, existingProvenance, NOW);
+
+            expect(merchant.address).toBe('still-here');
+            expect(merchant.phones).toBeUndefined();
+
+            // address present in patch → editor + now (bumped)
+            expect(merchantProvenance.address).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+            // phones absent from patch but had prior provenance → cleared tombstone
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+        });
+    });
+
+    describe('case M3: save bumps confirmedAt even on unchanged fields (saving = confirming)', () => {
+        it('refreshes confirmedAt on fields kept in the patch', () => {
+            const existingProvenance: MerchantProvenanceMap = {
+                address: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+                phones: { source: 'fb_sync', confirmedAt: null },
+            };
+            // PATCH keeps both fields with the same values.
+            const patch: BusinessProfile = { address: 'unchanged', phones: ['+555'] };
+
+            const { merchantProvenance } = applyMerchantEdit(patch, existingProvenance, NOW);
+
+            // Both fields now editor + fresh confirmation timestamp
+            expect(merchantProvenance.address?.confirmedAt).toBe(NOW_ISO);
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+        });
+    });
+
+    describe('case M4: never-seen + still-not-set stays absent', () => {
+        it('does not create provenance entries for fields no one has ever touched', () => {
+            const patch: BusinessProfile = { address: 'X' };
+
+            const { merchantProvenance } = applyMerchantEdit(patch, undefined, NOW);
+
+            expect(merchantProvenance.hours).toBeUndefined();
+            expect(merchantProvenance.policies).toBeUndefined();
+            expect(merchantProvenance.website).toBeUndefined();
+        });
+    });
+
+    describe('case M5: cleared field stays cleared if PATCH still omits it', () => {
+        it('refreshes the tombstone timestamp but keeps source=editor and value absent', () => {
+            const existingProvenance: MerchantProvenanceMap = {
+                phones: { source: 'editor', confirmedAt: '2026-05-01T10:00:00.000Z' },
+            };
+            const patch: BusinessProfile = {}; // PATCH still omits phones
+
+            const { merchant, merchantProvenance } = applyMerchantEdit(patch, existingProvenance, NOW);
+
+            expect(merchant.phones).toBeUndefined();
+            expect(merchantProvenance.phones).toEqual({ source: 'editor', confirmedAt: NOW_ISO });
+        });
+    });
+
+    describe('round-trip: editor save then FB sync respects the merchant edit', () => {
+        it('keeps editor-owned fields untouched on subsequent FB sync', () => {
+            // Merchant saves a custom address
+            const editorPatch: BusinessProfile = { address: 'merchant-custom-address' };
+            const afterEdit = applyMerchantEdit(editorPatch, undefined, NOW);
+
+            // FB sync runs later with different data
+            const fbSuggestions: BusinessProfile = {
+                address: 'FB-different-address',
+                phones: ['+963937549674'],
+            };
+            const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+                afterEdit.merchant,
+                afterEdit.merchantProvenance,
+                fbSuggestions,
+            );
+
+            // Address stays editor-owned
+            expect(merchant.address).toBe('merchant-custom-address');
+            expect(merchantProvenance.address?.source).toBe('editor');
+            // Phones gets populated as fb_sync (never seen before)
+            expect(merchant.phones).toEqual(['+963937549674']);
+            expect(merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+        });
+    });
+});
+
+describe('hasTrackedField', () => {
+    it('returns false for undefined / empty profile', () => {
+        expect(hasTrackedField(undefined)).toBe(false);
+        expect(hasTrackedField({})).toBe(false);
+    });
+
+    it('returns true when at least one tracked field is set', () => {
+        expect(hasTrackedField({ address: 'X' })).toBe(true);
+        expect(hasTrackedField({ phones: ['+1'] })).toBe(true);
+    });
+
+    it('returns false when only the deprecated `phone` (singular) is set — phone is intentionally untracked', () => {
+        expect(hasTrackedField({ phone: '+1' } as BusinessProfile)).toBe(false);
+    });
+});
+
+describe('classifyForMigration', () => {
+    describe('idempotency', () => {
+        it('skips rows that already have merchantProvenance set', () => {
+            const stored: BusinessProfileContainer = {
+                merchant: { address: 'X' },
+                suggestions: { phones: ['+1'] },
+                merchantProvenance: { address: { source: 'editor', confirmedAt: '2026-05-29T00:00:00.000Z' } },
+            };
+            const plan = classifyForMigration(stored);
+            expect(plan.kind).toBe('skip');
+            if (plan.kind === 'skip') expect(plan.reason).toBe('already_migrated');
+        });
+    });
+
+    describe('promote_fb_sync (container with merchant={} + suggestions populated)', () => {
+        it('promotes suggestions into merchant with fb_sync provenance', () => {
+            const stored: BusinessProfileContainer = {
+                merchant: {},
+                suggestions: { address: 'البرامكة سانا', phones: ['+963'], name: 'Damascus' },
+            };
+            const plan = classifyForMigration(stored);
+            expect(plan.kind).toBe('promote_fb_sync');
+            if (plan.kind !== 'promote_fb_sync') return;
+            expect(plan.newContainer.merchant?.address).toBe('البرامكة سانا');
+            expect(plan.newContainer.merchant?.phones).toEqual(['+963']);
+            expect(plan.newContainer.suggestions).toEqual(stored.suggestions);
+            expect(plan.newContainer.merchantProvenance?.address).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(plan.promotedFields).toEqual(expect.arrayContaining(['address', 'phones', 'name']));
+        });
+    });
+
+    describe('wrap_legacy (legacy flat shape with at least one tracked field)', () => {
+        it('wraps the flat blob into a container and promotes into merchant', () => {
+            const stored = { address: 'Riyadh', phones: ['+966'], name: 'Test' } as unknown as StoredBusinessProfile;
+            const plan = classifyForMigration(stored);
+            expect(plan.kind).toBe('wrap_legacy');
+            if (plan.kind !== 'wrap_legacy') return;
+            expect(plan.newContainer.merchant?.address).toBe('Riyadh');
+            expect(plan.newContainer.suggestions?.address).toBe('Riyadh');
+            expect(plan.newContainer.merchantProvenance?.address?.source).toBe('fb_sync');
+        });
+    });
+
+    describe('backfill_editor (container with merchant already populated)', () => {
+        it('preserves merchant values and marks them editor-owned', () => {
+            const stored: BusinessProfileContainer = {
+                merchant: { name: 'Editor-typed', address: 'Manual Address' },
+                suggestions: { name: 'FB Biz', phones: ['+1'] },
+            };
+            const plan = classifyForMigration(stored);
+            expect(plan.kind).toBe('backfill_editor');
+            if (plan.kind !== 'backfill_editor') return;
+            // Merchant values UNCHANGED
+            expect(plan.newContainer.merchant?.name).toBe('Editor-typed');
+            expect(plan.newContainer.merchant?.address).toBe('Manual Address');
+            // Merchant did NOT acquire suggestion-only fields (phones)
+            expect(plan.newContainer.merchant?.phones).toBeUndefined();
+            // Provenance recorded for the two existing merchant fields
+            expect(plan.newContainer.merchantProvenance?.name?.source).toBe('editor');
+            expect(plan.newContainer.merchantProvenance?.address?.source).toBe('editor');
+            expect(plan.newContainer.merchantProvenance?.phones).toBeUndefined();
+            expect(plan.backfilledFields).toEqual(expect.arrayContaining(['name', 'address']));
+        });
+    });
+
+    describe('skip — no signal data', () => {
+        it('skips an empty container', () => {
+            const plan = classifyForMigration({ merchant: {}, suggestions: {} });
+            expect(plan.kind).toBe('skip');
+            if (plan.kind === 'skip') expect(plan.reason).toBe('no_data');
+        });
+
+        it('skips null', () => {
+            const plan = classifyForMigration(null);
+            expect(plan.kind).toBe('skip');
+        });
+    });
+
+    describe('double-encoded jsonb-string (prod state)', () => {
+        it('handles the migrated-from-prod string form for the promote case', () => {
+            const stored = JSON.stringify({
+                merchant: {},
+                suggestions: { address: 'البرامكة سانا', phones: ['+963'] },
+            }) as unknown as StoredBusinessProfile;
+            const plan = classifyForMigration(stored);
+            expect(plan.kind).toBe('promote_fb_sync');
+            if (plan.kind !== 'promote_fb_sync') return;
+            expect(plan.newContainer.merchant?.address).toBe('البرامكة سانا');
+        });
+
+        it('handles the migrated-from-prod string form for legacy flat', () => {
+            const stored = JSON.stringify({ address: 'Riyadh', phones: ['+966'] }) as unknown as StoredBusinessProfile;
+            const plan = classifyForMigration(stored);
+            expect(plan.kind).toBe('wrap_legacy');
+        });
+    });
+});
