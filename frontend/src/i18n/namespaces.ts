@@ -52,8 +52,10 @@ export const PAGE_NAMESPACES = {
   dashboard:          [...DASHBOARD_LAYOUT, 'comments', 'flagReason', 'feedback', 'kb', 'messages', 'onboarding', 'pages', 'plans', 'settings', 'subscription', 'time', 'topup'],
   // 'settings' is needed by PauseBanner (rendered in Comment/MessageDetailModal)
   // for the duration labels (duration15min, duration30min, …).
-  comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback', 'messages', 'settings'],
-  messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'messages', 'settings'],
+  // 'kb' + 'pages' are needed by the in-conversation Business Info editor
+  // (InlineKbEditorModal → KnowledgeBaseModal) opened from the needs-attention banner.
+  comments:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'feedback', 'kb', 'messages', 'pages', 'settings'],
+  messages:           [...DASHBOARD_LAYOUT, 'comments', 'export', 'flagReason', 'kb', 'messages', 'pages', 'settings'],
   leads:              [...DASHBOARD_LAYOUT, 'leads', 'export'],
 
   pages:              [...DASHBOARD_LAYOUT, 'kb', 'pages', 'testSmartReply', 'time', 'onboarding'],

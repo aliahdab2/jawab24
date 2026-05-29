@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { toast } from 'sonner';
 import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
+import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { ReplyFeedback } from './ReplyFeedback';
 import { checkNeedsAttention } from './CommentCard';
 import { useTranslations } from 'next-intl';
@@ -58,8 +59,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
   const tc = useTranslations('common');
   const tMessages = useTranslations('messages');
   const { dateLocale } = useLanguage();
+  const [kbOpen, setKbOpen] = useState(false);
 
-  useEscapeKey(onClose);
+  // Disable the comment's ESC-to-close while the KB editor is layered on top,
+  // so ESC closes only the topmost (KB) modal — not both at once.
+  useEscapeKey(onClose, !kbOpen);
   useBodyScrollLock(true);
 
   const needsAttention = checkNeedsAttention(comment);
@@ -276,7 +280,11 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         <div className="px-4 pt-4 md:px-6 md:pt-4 pb-safe-modal border-t border-theme-border bg-card flex-shrink-0">
           {/* Needs attention banner */}
           {needsAttention && (
-            <NeedsAttentionBanner flagReason={comment.flagReason} flagMeta={comment.flagMeta} />
+            <NeedsAttentionBanner
+              flagReason={comment.flagReason}
+              flagMeta={comment.flagMeta}
+              onAddToKb={comment.pageId ? () => setKbOpen(true) : undefined}
+            />
           )}
 
           {/* Held reply banner */}
@@ -360,6 +368,14 @@ export const CommentDetailModal: React.FC<CommentDetailModalProps> = ({
         </div>
 
       </div>
+
+      {comment.pageId && (
+        <InlineKbEditorModal
+          pageId={comment.pageId}
+          open={kbOpen}
+          onClose={() => setKbOpen(false)}
+        />
+      )}
     </div>,
     document.body
   );

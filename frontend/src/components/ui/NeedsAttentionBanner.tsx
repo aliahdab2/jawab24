@@ -1,21 +1,26 @@
 import React from 'react';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { AlertTriangle, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Plus } from 'lucide-react';
 import { FlagTag } from './FlagTag';
 import { isKbRelatedFlag, type FlagMetaShape } from '@/utils/flagReason';
 
 interface NeedsAttentionBannerProps {
   flagReason: string | null | undefined;
   flagMeta?: FlagMetaShape | null;
+  /**
+   * Opens the Business Info / KB editor in place for this conversation's page.
+   * When omitted, the KB CTA is hidden (e.g. when the host has no page context).
+   */
+  onAddToKb?: () => void;
 }
 
 /**
  * Shared "Needs attention" footer banner for comment and message detail modals.
  * Renders the flag reason (angry_customer, price_not_in_kb, low_confidence, etc.)
- * and a deep-link CTA when the flag is KB-related.
+ * and, when the flag is KB-related, a CTA that opens the Business Info editor
+ * in place over the conversation (the host owns the editor; see InlineKbEditorModal).
  */
-export function NeedsAttentionBanner({ flagReason, flagMeta }: NeedsAttentionBannerProps) {
+export function NeedsAttentionBanner({ flagReason, flagMeta, onAddToKb }: NeedsAttentionBannerProps) {
   const t = useTranslations('comments');
   const isKbFlag = isKbRelatedFlag(flagReason);
 
@@ -24,23 +29,15 @@ export function NeedsAttentionBanner({ flagReason, flagMeta }: NeedsAttentionBan
       <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
       <span>{t('needsAttention')}</span>
       <FlagTag flagReason={flagReason} flagMeta={flagMeta} />
-      {isKbFlag && (
-        <Link
-          // Plain href — Next.js i18n routing auto-prefixes the active locale.
-          // Manually prefixing produced /ar/ar/pages, which 404s and silently
-          // failed the "open KB modal" CTA from the message/comment detail modal.
-          // No onClick to close the parent modal: the host page's close
-          // handler (closeConversation in /messages, onClose in /comments)
-          // fires router.back()/replace(), which races with Link's
-          // router.push and silently swallows the navigation. The route
-          // change to /pages unmounts the host page (and its modal) on
-          // its own — no manual close needed.
-          href="/pages?openKb=true"
+      {isKbFlag && onAddToKb && (
+        <button
+          type="button"
+          onClick={onAddToKb}
           className="inline-flex items-center gap-1 ms-auto px-2 py-0.5 rounded-full border text-[10px] font-semibold status-warning hover:opacity-80 transition-opacity"
         >
-          <ExternalLink className="w-2.5 h-2.5" aria-hidden="true" />
+          <Plus className="w-2.5 h-2.5" aria-hidden="true" />
           <span>{t('addToBusinessInfo')}</span>
-        </Link>
+        </button>
       )}
     </div>
   );

@@ -28,14 +28,12 @@ import { toast } from 'sonner';
 import { pagesApi, api } from '@/lib/api';
 import { iosOr } from '@/lib/iosCopy';
 import type { Page } from '@jawab24/shared';
-import type { KbWarnings } from '@/components/knowledge-base/types';
 import dynamic from 'next/dynamic';
 
 const KnowledgeBaseModal = dynamic(() => import('@/components/knowledge-base/KnowledgeBaseModal').then(m => ({ default: m.KnowledgeBaseModal })), { ssr: false });
 const TestSmartReplyModal = dynamic(() => import('@/components/test-smart-reply/TestSmartReplyModal').then(m => ({ default: m.TestSmartReplyModal })), { ssr: false });
 import { captureError } from '@/lib/sentryHelpers';
-import type { ApiError } from '@/lib/api-utils';
-import { useWorkspaceRole } from '@/hooks';
+import { useWorkspaceRole, useSaveKnowledgeBase } from '@/hooks';
 import { getLocalePath } from '@/utils/locale';
 import { formatConnectedDate } from '@/utils/dateUtils';
 import { formatRelativeTime } from '@/utils/dateUtils';
@@ -56,8 +54,9 @@ const PagesPage: NextPageWithLayout = () => {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
   const [editingPage, setEditingPage] = useState<Page | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { saveKnowledgeBase, saving, saved, resetSaved } = useSaveKnowledgeBase(
+    (pageId, text) => setPages((prev) => prev.map(p => (p.id === pageId ? { ...p, knowledgeBase: text } : p))),
+  );
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [showReconnectDialog, setShowReconnectDialog] = useState(false);
   const [imgError, setImgError] = useState<Record<string, boolean>>({});
@@ -213,11 +212,11 @@ const PagesPage: NextPageWithLayout = () => {
     const thinKbPage = pages.find(p => (p.knowledgeBase || '').length < 200);
     const target = thinKbPage ?? pages[0];
     setEditingPage(target);
-    setSaved(false);
+    resetSaved();
 
     // Clean up the URL without triggering a re-render
     router.replace('/pages', undefined, { shallow: true });
-  }, [router.isReady, router.query.openKb, loading, pages, router]);
+  }, [router.isReady, router.query.openKb, loading, pages, router, resetSaved]);
 
   const handleToggle = async (pageId: string, enabled: boolean) => {
     setPages(prev => prev.map(page =>
@@ -274,12 +273,12 @@ const PagesPage: NextPageWithLayout = () => {
 
   const openKnowledgeBase = (page: Page) => {
     setEditingPage(page);
-    setSaved(false);
+    resetSaved();
   };
 
   const closeKnowledgeBase = () => {
     setEditingPage(null);
-    setSaved(false);
+    resetSaved();
   };
 
   if (loading && pages.length === 0) {
@@ -653,33 +652,7 @@ const PagesPage: NextPageWithLayout = () => {
         <KnowledgeBaseModal
           page={editingPage}
           onClose={closeKnowledgeBase}
-          onSave={async (text) => {
-            setSaving(true);
-            setSaved(false);
-            try {
-              const response = await api.put<{ kbWarnings?: KbWarnings }>(
-                `/pages/${editingPage.id}`,
-                { knowledgeBase: text },
-              );
-              setPages(pages.map(p =>
-                p.id === editingPage.id ? { ...p, knowledgeBase: text } : p
-              ));
-              setSaved(true);
-              setTimeout(() => setSaved(false), 3000);
-              return response.data.kbWarnings;
-            } catch (error) {
-              const apiError = error as ApiError;
-              if (apiError.response?.status === 403 && apiError.response?.data?.code === 'WORKSPACE_ACCESS_DENIED') {
-                toast.error(t('saveFailedAccessRevoked'));
-              } else {
-                captureError(error, 'Failed to save knowledge base', { tags: { page: 'pages', action: 'save-kb' } });
-                toast.error(t('saveFailed'));
-              }
-              return undefined;
-            } finally {
-              setSaving(false);
-            }
-          }}
+          onSave={(text) => saveKnowledgeBase(editingPage.id, text)}
           saving={saving}
           saved={saved}
         />

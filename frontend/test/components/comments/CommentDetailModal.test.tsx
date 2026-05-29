@@ -108,10 +108,13 @@ describe('CommentDetailModal — KB nudge', () => {
     expect(screen.queryByText('Add to Business Info')).not.toBeInTheDocument();
   });
 
-  it('"Add to Business Info" link points to pages?openKb=true', () => {
+  it('"Add to Business Info" is an in-place button, not a navigation link', () => {
+    // The CTA now opens the Business Info editor over the comment
+    // (InlineKbEditorModal) instead of navigating to /pages.
     const comment = makeComment({ needsAttention: true, flagReason: 'info_not_in_kb' });
     render(<CommentDetailModal {...defaultProps} comment={comment} />);
-    const link = screen.getByText('Add to Business Info').closest('a');
-    expect(link?.getAttribute('href')).toContain('openKb=true');
+    const cta = screen.getByText('Add to Business Info');
+    expect(cta.closest('a')).toBeNull();
+    expect(cta.closest('button')).toBeInTheDocument();
   });
 });
