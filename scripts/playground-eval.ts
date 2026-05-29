@@ -3221,6 +3221,23 @@ const TEST_CASES: TestCase[] = [
         },
         notes: 'Polite single-word query with closing — must not get classified as ambiguous.',
     },
+    {
+        // 2026-05-29 Damascus institute prod failure: page 39aeab89 had
+        // merchant={} + suggestions.address set; BUSINESS_INFO was empty so
+        // the bot replied with phones only. Option B auto-promotes
+        // suggestions→merchant so this prompt path is now populated. The
+        // bare "عنوان" (no leading ال) on the comment channel is the exact
+        // surface of the prod incident — distinct from #330 ("العنوان", DM).
+        id: 412, category: 49, categoryName: 'Short Retrieval-Sensitive Queries', channel: 'comment',
+        message: 'عنوان',
+        page: 'training',
+        expected: {
+            confidence: ['high'],
+            replyContains: ['الرياض'],
+            flagsAbsent: ['info_not_in_kb'],
+        },
+        notes: 'Damascus institute prod regression — bare "عنوان" comment; bot must surface address, not phones-only.',
+    },
 
     // ===== Category 50: Stage 2.6 Business Info structured surface =====
     // Tests the BUSINESS_INFO prompt block built from `business_profile.merchant`.
