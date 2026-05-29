@@ -804,6 +804,9 @@ export const pendingEcommerceInstalls = pgTable('pending_ecommerce_installs', {
     storeDomain: varchar('store_domain', { length: 255 }).notNull(),
     accessToken: text('access_token').notNull(),       // AES-256-GCM encrypted
     accessTokenIv: varchar('access_token_iv', { length: 64 }).notNull(),
+    refreshToken: text('refresh_token'),                // AES-256-GCM encrypted; null for Shopify (offline tokens never expire)
+    refreshTokenIv: varchar('refresh_token_iv', { length: 64 }),
+    tokenExpiresAt: timestamp('token_expires_at'),      // Salla 14d / Zid ~1y; null for Shopify
     scopes: text('scopes'),
     nonce: varchar('nonce', { length: 64 }).notNull(),  // CSRF nonce for OAuth
     status: varchar('status', { length: 20 }).default('pending'), // pending|claimed|expired

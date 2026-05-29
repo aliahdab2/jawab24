@@ -29,6 +29,15 @@ interface ModalProps {
    * Delete) so users don't have to scroll a long form to act.
    */
   footer?: React.ReactNode;
+  /**
+   * Tailwind z-index class for the overlay wrapper. Defaults to the z-50
+   * page-modal tier. Pass a higher tier (e.g. 'z-[60]') for a dialog that must
+   * stack above a z-50 modal — e.g. a confirmation opened from inside another
+   * modal that portals to document.body. Because document.body portals append
+   * last, a same-z dialog rendered into #modal-root would otherwise be painted
+   * over by the body-portaled modal.
+   */
+  overlayZClassName?: string;
 }
 
 export function Modal({
@@ -39,6 +48,7 @@ export function Modal({
   size = 'md',
   mobilePresentation = 'sheet',
   footer,
+  overlayZClassName = 'z-50',
 }: ModalProps) {
   const [mounted, setMounted] = useState(false);
   const tc = useTranslations('common');
@@ -100,7 +110,7 @@ export function Modal({
   const overlayBottom = "bottom-[var(--keyboard-height,0px)]";
 
   const modalContent = (
-    <div className={clsx("fixed top-0 start-0 end-0 z-50 overflow-hidden", overlayBottom)}>
+    <div className={clsx("fixed top-0 start-0 end-0 overflow-hidden", overlayZClassName, overlayBottom)}>
       {/* Backdrop */}
       <div
         aria-hidden="true"

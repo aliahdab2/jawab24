@@ -96,6 +96,8 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/ecommerceCrypto', () => ({
     encrypt: vi.fn().mockReturnValue({ ciphertext: 'enc_token', iv: 'test_iv' }),
     decrypt: vi.fn().mockReturnValue('plaintext_token'),
+    encryptOptional: vi.fn((token?: string | null) => (token ? { ciphertext: 'enc_token', iv: 'test_iv' } : {})),
+    decryptOptional: vi.fn((c?: string | null, iv?: string | null) => (c && iv ? 'plaintext_token' : undefined)),
 }));
 
 vi.mock('../../src/config', () => ({

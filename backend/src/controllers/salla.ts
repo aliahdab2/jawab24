@@ -113,6 +113,8 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
             const pendingId = await createPendingInstall('salla', {
                 storeDomain: storeInfo.storeDomain,
                 accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
                 scopes: config.salla.scopes,
                 nonce: state,
             });

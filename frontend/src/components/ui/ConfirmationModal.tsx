@@ -58,6 +58,10 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
       onClose={onClose}
       title={title}
       size="sm"
+      // Confirmations sit on the tier above z-50 page-modals so they're never
+      // painted over by a body-portaled modal that opened them (e.g. the KB
+      // editor's custom-section delete). Matches the logout-confirm tier.
+      overlayZClassName="z-[60]"
     >
       <div>
         <div className="flex items-start gap-4">

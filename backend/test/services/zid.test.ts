@@ -77,6 +77,8 @@ vi.mock('../../src/services/ecommerce', () => ({
 
 vi.mock('../../src/services/ecommerceCrypto', () => ({
     decrypt: (...args: unknown[]) => mockDecrypt(...args),
+    encryptOptional: vi.fn(() => ({})),
+    decryptOptional: (...args: unknown[]) => (args[0] && args[1] ? mockDecrypt(...args) : undefined),
 }));
 
 vi.mock('../../src/utils/sentryHelpers', () => ({

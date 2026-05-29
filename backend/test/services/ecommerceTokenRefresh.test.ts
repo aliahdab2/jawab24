@@ -36,6 +36,8 @@ vi.mock('../../src/db/schema', () => ({
 // Mock ecommerceCrypto
 vi.mock('../../src/services/ecommerceCrypto', () => ({
     decrypt: vi.fn((_cipher: string, _iv: string) => 'decrypted-refresh-token'),
+    encryptOptional: vi.fn((token?: string | null) => (token ? { ciphertext: 'enc-refresh', iv: 'iv-mock' } : {})),
+    decryptOptional: vi.fn((cipher?: string | null, iv?: string | null) => (cipher && iv ? 'decrypted-refresh-token' : undefined)),
 }));
 
 // Mock sentryHelpers

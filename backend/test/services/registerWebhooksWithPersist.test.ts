@@ -51,6 +51,8 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 vi.mock('../../src/services/ecommerceCrypto', () => ({
     encrypt: vi.fn(),
     decrypt: vi.fn(),
+    encryptOptional: vi.fn(() => ({})),
+    decryptOptional: vi.fn(),
 }));
 
 vi.mock('../../src/services/customerNotifications', () => ({

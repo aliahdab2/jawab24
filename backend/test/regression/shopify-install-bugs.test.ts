@@ -71,6 +71,8 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/ecommerceCrypto', () => ({
     encrypt: vi.fn((token: string) => ({ ciphertext: `enc(${token})`, iv: 'iv-mock' })),
     decrypt: vi.fn((encrypted: string) => `dec(${encrypted})`),
+    encryptOptional: vi.fn((token?: string | null) => (token ? { ciphertext: `enc(${token})`, iv: 'iv-mock' } : {})),
+    decryptOptional: vi.fn((encrypted?: string | null, iv?: string | null) => (encrypted && iv ? `dec(${encrypted})` : undefined)),
 }));
 
 const captureErrorMock = vi.fn();
