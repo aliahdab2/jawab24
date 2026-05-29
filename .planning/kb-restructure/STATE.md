@@ -8,7 +8,7 @@
 
 ## 2026-05-29 — Stage 2.6.1 (Option B) — "عنوان" bug closed
 
-**Status:** Migration applied to prod (72 rows), PR open for code merge.
+**Status:** Migration applied to prod (72 rows). PR #208 **merged to main** (commit `6a744b50`). **Manual deploy still required** — GHA `Deploy` workflow is broken (Verify Secrets job missing `SERVER_SSH_KEY`, pre-existing since at least 2026-05-27, unrelated to this work). Run `bash scripts/deploy-production.sh -y` to ship.
 
 **Bug:** Customer comments asking "عنوان" (address) on page `39aeab89` (الفريق الدمشقي للتدريب والتأهيل) got phone numbers instead of the address. Root cause: Stage 2.6 one-sided gate — `business_profile.merchant = {}` kept BUSINESS_INFO prompt block empty, even though `suggestions.address` had the FB-synced address. 12 prod pages were in this state; 30 more legacy-flat rows were equivalent (per `unwrapBusinessProfile` demoting flat → suggestions).
 
@@ -26,10 +26,24 @@
 - Drizzle + postgres.js jsonb double-encoding storage hygiene (`project_drizzle_jsonb_double_encoding.md`). Runtime is fine (Drizzle reader auto-parses); storage shape will regress on post-merge writes until the parked 5-line driver fix ships.
 
 **Next pickup actions:**
-1. Get PR #208 reviewed + merged + deployed.
-2. Post-deploy: verify Damascus page (`39aeab89-...`) still answers "عنوان" correctly via the playground or eval `id: 412`.
-3. Post-deploy: monitor for any new FB page connections — confirm their `merchantProvenance` populates on first sync.
-4. After Option B stabilizes in prod, schedule the Drizzle double-encoding driver fix as a separate hygiene PR.
+1. Run manual deploy: `bash scripts/deploy-production.sh -y` (GHA pipeline broken, see status note).
+2. Post-deploy verification checklist (below) — exercises the NEW code paths against migrated data for the first time.
+3. After Option B stabilizes in prod, schedule the Drizzle double-encoding driver fix as a separate hygiene PR.
+
+**Post-deploy verification checklist:**
+
+Automated spot-checks (SSH + psql via `~/.ssh/id_jawab24_deploy`):
+- Container `git.sha` label matches `6a744b5…` (or later commit).
+- `SELECT COUNT(*) FROM pages WHERE business_profile ? 'merchantProvenance'` → expect ≥ 70.
+- Damascus page row: `merchant.address` populated, `merchantProvenance.address.source = 'fb_sync'`.
+- `SELECT COUNT(*) FROM pages WHERE jsonb_typeof(business_profile) = 'string'` → expect 0 (no fresh double-encoding regressions).
+
+Manual UI exercises (the NEW code paths — these have never run end-to-end):
+1. **Editor-save path (`applyMerchantEdit`)** — edit ONE field at `/settings → Business Profile` on a non-customer page. After save, psql confirms: only that field's `merchantProvenance` entry flips to `source='editor'`, others unchanged. Revert the edit when done.
+2. **FB-sync path (`buildBusinessProfileContainer → applyFbSyncToMerchant`)** — disconnect+reconnect a test page's FB integration. After re-sync, confirm: new fields get `source='fb_sync'`; any pre-existing `source='editor'` fields are preserved (not overwritten).
+3. **Reply regression** — playground against Damascus (`39aeab89-...`) with message "عنوان". Expect address-first reply. Also try "ما عنوانكم؟" and "where are you located?".
+
+Rollback path if any check fails: `scripts/promote-business-profile-fb-sync.rollback.sql` + revert commit `6a744b50`.
 
 ---
 **Current stage:** Stage 2.6 — Business Profile Foundation (**MERGED + DEPLOYED to production**)
