@@ -9,6 +9,8 @@ import { notificationService } from '../services/notifications';
 import { emailService } from '../services/email';
 import { subscriptionWelcomeEmailTemplate } from '../utils/emailTemplates';
 import { captureError } from '../utils/sentryHelpers';
+import { isSanctionedGeo } from '../utils/sanctions';
+import { shouldBlockUnknownGeo } from '../middleware/geo';
 import type { CreateCheckoutSessionRequest, SubscriptionStatus } from '../types/payment';
 import type Stripe from 'stripe';
 
@@ -48,8 +50,6 @@ export class PaymentController {
             }
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
-            const { isSanctionedGeo } = await import('../utils/sanctions');
-            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
 
             // Check if geo is sanctioned
             if (request.geo && isSanctionedGeo(request.geo)) {
@@ -191,8 +191,6 @@ export class PaymentController {
             }
 
             // SANCTIONS CHECK
-            const { isSanctionedGeo } = await import('../utils/sanctions');
-            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
 
             if (request.geo && isSanctionedGeo(request.geo)) {
                 request.log.warn({ userId, geo: request.geo }, 'Payment blocked: sanctioned jurisdiction');
@@ -393,8 +391,6 @@ export class PaymentController {
             }
 
             // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
-            const { isSanctionedGeo } = await import('../utils/sanctions');
-            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
 
             // Check if geo is sanctioned
             if (request.geo && isSanctionedGeo(request.geo)) {
@@ -561,8 +557,6 @@ export class PaymentController {
             }
 
             // SANCTIONS CHECK: Block billing portal access for sanctioned jurisdictions
-            const { isSanctionedGeo } = await import('../utils/sanctions');
-            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
 
             if (request.geo && isSanctionedGeo(request.geo)) {
                 request.log.warn({
