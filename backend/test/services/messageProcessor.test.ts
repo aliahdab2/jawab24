@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { messageProcessor } from '../../src/services/reply/messageProcessor';
 import { workspaceSettingsService } from '../../src/services/workspaceSettings';
 import { messagesService } from '../../src/services/messages';
+import { invalidateWorkspaceStatsCache } from '../../src/services/pages';
 import { conversationsService } from '../../src/services/conversations';
 import { replyGenerator } from '../../src/services/reply/generator';
 import { rateLimiter } from '../../src/services/protection';
@@ -1759,6 +1760,30 @@ describe('MessageProcessor — typing indicator must not leak on skip paths', ()
         expect(sendReply).not.toHaveBeenCalled();
         expect(sendTypingIndicator).toHaveBeenCalledTimes(1);
         expect(sendTypingOff).toHaveBeenCalledTimes(1);
+    });
+
+    it('resolves the message when silently skipped as spam (no false "will reply soon" badge)', async () => {
+        // Regression: SPAM_OR_IRRELEVANT / conversation-closers ("no thank you") were
+        // returned as success but left replied=false/resolved=false, so the inbox
+        // showed "سيتم الرد قريباً" forever. The silent-skip path must mark the message
+        // resolved (mirroring the emoji/punctuation drop) and refresh the cached stats.
+        vi.mocked(replyGenerator.generateForMessage).mockResolvedValue({
+            replyText: '',
+            replyMethod: 'ai',
+            needsAttention: false,
+            aiIntent: 'SPAM_OR_IRRELEVANT',
+        } as any);
+
+        const sendReply = vi.fn().mockResolvedValue(undefined);
+        const adapter = createMockAdapter({ sendReply });
+
+        // Letters bypass the emoji/punctuation short-circuit so it reaches the AI skip path.
+        const result = await messageProcessor.processMessage(adapter, 'page-1', 'sender-1', 'no thank you', 'msg-1');
+
+        expect(result.success).toBe(true);
+        expect(sendReply).not.toHaveBeenCalled();
+        expect(messagesService.markAsResolved).toHaveBeenCalledWith('msg-uuid');
+        expect(invalidateWorkspaceStatsCache).toHaveBeenCalled();
     });
 
     it('clears typing_on with typing_off when reply is flagged offensive', async () => {
