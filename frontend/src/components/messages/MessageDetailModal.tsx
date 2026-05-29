@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import clsx from 'clsx';
 import { useQuery } from '@tanstack/react-query';
 import { PlatformIcon, PauseToggle, PauseBanner, NeedsAttentionBanner, ReplySourceBadge } from '@/components/ui';
+import { InlineKbEditorModal } from '@/components/knowledge-base/InlineKbEditorModal';
 import { useTranslations } from 'next-intl';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
@@ -98,6 +99,7 @@ export function MessageDetailModal({
   );
   const [replyText, setReplyText] = useState(heldMessage?.aiOriginalReply || '');
   const [sendError, setSendError] = useState<string | null>(null);
+  const [kbOpen, setKbOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [hasNewMessage, setHasNewMessage] = useState(false);
@@ -112,7 +114,9 @@ export function MessageDetailModal({
     initialCountRef.current = fullMessages.length;
   }
 
-  useEscapeKey(() => onClose(), true);
+  // Disable the conversation's ESC-to-close while the KB editor is layered on
+  // top, so ESC closes only the topmost (KB) modal — not both at once.
+  useEscapeKey(() => onClose(), !kbOpen);
   useBodyScrollLock(true);
 
   // Check if user is scrolled near the bottom (within 100px)
@@ -385,6 +389,7 @@ export function MessageDetailModal({
             <NeedsAttentionBanner
               flagReason={conversation.lastMessage.flagReason}
               flagMeta={conversation.lastMessage.flagMeta}
+              onAddToKb={pageId ? () => setKbOpen(true) : undefined}
             />
           )}
 
@@ -475,6 +480,14 @@ export function MessageDetailModal({
         </div>
 
       </div>
+
+      {pageId && (
+        <InlineKbEditorModal
+          pageId={pageId}
+          open={kbOpen}
+          onClose={() => setKbOpen(false)}
+        />
+      )}
     </div>,
     document.body
   );

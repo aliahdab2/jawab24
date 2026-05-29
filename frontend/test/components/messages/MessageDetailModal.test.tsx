@@ -131,11 +131,14 @@ describe('MessageDetailModal — KB nudge', () => {
     expect(screen.queryByText('Add to Business Info')).not.toBeInTheDocument();
   });
 
-  it('"Add to Business Info" link points to pages?openKb=true', () => {
+  it('"Add to Business Info" is an in-place button, not a navigation link', () => {
+    // The CTA now opens the Business Info editor over the conversation
+    // (InlineKbEditorModal) instead of navigating to /pages.
     const msg = makeMessage({ flagReason: 'price_not_in_kb' });
     const conv = makeConversation(msg);
     render(<MessageDetailModal {...defaultProps} conversation={conv} />);
-    const link = screen.getByText('Add to Business Info').closest('a');
-    expect(link?.getAttribute('href')).toContain('openKb=true');
+    const cta = screen.getByText('Add to Business Info');
+    expect(cta.closest('a')).toBeNull();
+    expect(cta.closest('button')).toBeInTheDocument();
   });
 });

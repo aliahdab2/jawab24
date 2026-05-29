@@ -34,3 +34,4 @@ export { useDeepLinkParam } from './useDeepLinkParam';
 export { useDeepLinkResource } from './useDeepLinkResource';
 export { useConnectedStore } from './useConnectedStore';
 export { usePersistedBoolean } from './usePersistedBoolean';
+export { useSaveKnowledgeBase } from './useSaveKnowledgeBase';
