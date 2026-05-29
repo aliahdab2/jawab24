@@ -2,7 +2,36 @@
 
 > **Read this first** if you're a fresh Claude session. This file is the single source of truth for where the KB restructure work stands. The full strategy is at `~/.claude/plans/brief-for-the-expert-encapsulated-hearth.md` — read that for the *why*, read this for the *what's next*.
 
-**Last updated:** 2026-05-27
+**Last updated:** 2026-05-29
+
+---
+
+## 2026-05-29 — Stage 2.6.1 (Option B) — "عنوان" bug closed
+
+**Status:** Migration applied to prod (72 rows), PR open for code merge.
+
+**Bug:** Customer comments asking "عنوان" (address) on page `39aeab89` (الفريق الدمشقي للتدريب والتأهيل) got phone numbers instead of the address. Root cause: Stage 2.6 one-sided gate — `business_profile.merchant = {}` kept BUSINESS_INFO prompt block empty, even though `suggestions.address` had the FB-synced address. 12 prod pages were in this state; 30 more legacy-flat rows were equivalent (per `unwrapBusinessProfile` demoting flat → suggestions).
+
+**Fix shape (decided):** Option B (sidecar provenance map). Stage 2.6 split stays; FB sync now auto-promotes into `merchant` with `merchantProvenance.X = { source: 'fb_sync', confirmedAt: null }`. Editor saves stamp `source: 'editor', confirmedAt: now` and tombstone cleared fields. Old gate semantics preserved (editor-owned fields are immune to FB overwrites).
+
+**What landed:**
+- One-shot migration applied to prod via `scripts/promote-business-profile-fb-sync.ts` (12 promote + 59 wrap_legacy + 1 backfill_editor + 2 skip). Side effect: fixed double-encoded jsonb-string for all 72 migrated rows.
+- PR #208 — `feat/business-profile-option-b` branch — 4 commits (shared helpers + classifier, backend wiring, migration tooling, eval case). Waiting on review.
+- Prod smoke test verified the data fix alone closes the bug (smoke ran old code + new data, both queries return the address verbatim, no phones-first).
+- New eval case `id: 412` in Cat 49 — bare "عنوان" comment — passes in 3 consecutive runs (95.7% / 96.2% / 96.2%, variance confirmed).
+
+**Gap window risk:** between now and PR merge+deploy, NEW pages connecting to FB hit the original bug (old `buildBusinessProfileContainer` still produces `{merchant: {}, suggestions}`). Existing 72 migrated pages stay fixed.
+
+**Parked separately:**
+- Drizzle + postgres.js jsonb double-encoding storage hygiene (`project_drizzle_jsonb_double_encoding.md`). Runtime is fine (Drizzle reader auto-parses); storage shape will regress on post-merge writes until the parked 5-line driver fix ships.
+
+**Next pickup actions:**
+1. Get PR #208 reviewed + merged + deployed.
+2. Post-deploy: verify Damascus page (`39aeab89-...`) still answers "عنوان" correctly via the playground or eval `id: 412`.
+3. Post-deploy: monitor for any new FB page connections — confirm their `merchantProvenance` populates on first sync.
+4. After Option B stabilizes in prod, schedule the Drizzle double-encoding driver fix as a separate hygiene PR.
+
+---
 **Current stage:** Stage 2.6 — Business Profile Foundation (**MERGED + DEPLOYED to production**)
 **Current task:** Stage 2.6 shipped. Next focus: **Stage 2 v1 root-cause analysis** — use [POST-MORTEMS/stage-2-v1-failed.md](POST-MORTEMS/stage-2-v1-failed.md) as the starting point; bisect the suspects (start at `7584283c`) against the `896f05ff` archive code reachable from main's revert history. (Not started yet.)
 
