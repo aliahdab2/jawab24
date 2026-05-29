@@ -2,7 +2,7 @@ import { db } from '../db';
 import { pages, posts, comments, instagramComments, instagramMedia, messages, workspaceMembers, workspaces as workspacesTable } from '../db/schema';
 import { eq, and, desc, sql, count } from 'drizzle-orm';
 import { CreatePageDTO, UpdatePageDTO, Logger, noopLogger, FacebookPage, FacebookPageHours } from '../types';
-import { unwrapBusinessProfile, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
+import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, type BusinessProfile, type BusinessProfileContainer, type StoredBusinessProfile } from '@jawab24/shared';
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
@@ -200,23 +200,44 @@ export function buildBusinessProfile(fbPage: FacebookPage): BusinessProfile {
 }
 
 /**
- * Produce the full Stage 2.6 container value for `pages.business_profile`,
- * preserving any existing merchant edits and refreshing the `suggestions`
- * half from Facebook. This is the value to persist on FB sync.
+ * Produce the full Stage 2.6.1 container value for `pages.business_profile`.
+ *
+ * Refreshes the `suggestions` half (raw FB snapshot) on every sync, and
+ * auto-promotes FB-suggested fields into the `merchant` half — the half
+ * the AI prompt actually reads — with per-field provenance tracking.
+ * This is Option B: the gate stays one-sided in spirit (editor edits are
+ * still authoritative), but the prompt is populated from day one instead
+ * of waiting for the merchant to manually click "Import from Facebook".
+ *
+ * Behavior:
+ *   - Editor-owned fields (provenance.source === 'editor', set OR cleared)
+ *     are preserved untouched. Future syncs cannot regress merchant edits
+ *     or resurrect a field the merchant explicitly cleared.
+ *   - Never-seen and fb_sync-owned fields get populated/refreshed from FB
+ *     with provenance.source = 'fb_sync', confirmedAt: null.
+ *   - Defensive: a pre-migration row with `merchant` populated but no
+ *     provenance map is treated as editor-owned (only the editor could
+ *     have written those values before Option B, since the gate blocked
+ *     FB suggestions from reaching merchant).
  *
  * Handles three shapes for `existing`:
- *   - null/undefined        → fresh `{merchant: {}, suggestions: <fb>}`
- *   - legacy flat shape     → treated as FB-default, demoted to suggestions
- *                             (matches the migration's conservative default)
- *   - already-container     → merchant preserved, suggestions overwritten
+ *   - null/undefined        → fresh promotion, every field fb_sync/null
+ *   - legacy flat shape     → unwrap demotes to suggestions; merchant is
+ *                             treated as never-seen, FB promotes into it
+ *   - already-container     → per-field merge per the rules above
  */
 export function buildBusinessProfileContainer(
     fbPage: FacebookPage,
     existing?: StoredBusinessProfile,
 ): BusinessProfileContainer {
     const suggestions = buildBusinessProfile(fbPage);
-    const { merchant = {} } = unwrapBusinessProfile(existing);
-    return { merchant, suggestions };
+    const existingContainer = unwrapBusinessProfile(existing);
+    const { merchant, merchantProvenance } = applyFbSyncToMerchant(
+        existingContainer.merchant,
+        existingContainer.merchantProvenance,
+        suggestions,
+    );
+    return { merchant, suggestions, merchantProvenance };
 }
 
 /**
@@ -494,22 +515,29 @@ export class PagesService {
         // business_profile is prompt-injected, so cache invalidation must be
         // active (bumping kbActiveVersion). See invalidatePageCaches docstring.
         //
-        // Stage 2.6: the API contract is "PATCH body = merchant content"
-        // (flat BusinessProfile shape). Server-side we wrap it into the
-        // {merchant, suggestions} container, preserving the existing
-        // suggestions half from FB sync. This keeps the merchant API
-        // simple while enforcing the editor-write-only invariant.
+        // Stage 2.6.1: the API contract is "PATCH body = merchant content"
+        // (flat BusinessProfile shape, full-replace semantics). Server-side
+        // we wrap it into the {merchant, suggestions, merchantProvenance}
+        // container, preserving the existing suggestions half from FB sync
+        // and updating the per-field provenance to reflect this editor save
+        // (every present field → editor + now; every previously-known field
+        // absent from the patch → "cleared" tombstone with editor + now).
         if (data.businessProfile !== undefined) {
             const [existingRow] = await db
                 .select({ businessProfile: pages.businessProfile })
                 .from(pages)
                 .where(and(eq(pages.id, pageId), eq(pages.workspaceId, workspaceId)))
                 .limit(1);
-            const { suggestions } = unwrapBusinessProfile(existingRow?.businessProfile as StoredBusinessProfile);
-            const merchant = data.businessProfile as BusinessProfile;
+            const existingContainer = unwrapBusinessProfile(existingRow?.businessProfile as StoredBusinessProfile);
+            const patch = data.businessProfile as BusinessProfile;
+            const { merchant, merchantProvenance } = applyMerchantEdit(
+                patch,
+                existingContainer.merchantProvenance,
+            );
             const container: BusinessProfileContainer = {
                 merchant,
-                ...(suggestions ? { suggestions } : {}),
+                ...(existingContainer.suggestions ? { suggestions: existingContainer.suggestions } : {}),
+                merchantProvenance,
             };
             setData.businessProfile = container;
             setData.businessProfileUpdatedAt = new Date();

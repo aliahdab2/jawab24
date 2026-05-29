@@ -152,6 +152,71 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(capturedSetData.businessProfile.merchant).toEqual({ name: 'Test', category: 'Restaurant' });
             expect(capturedSetData.businessProfile.suggestions).toEqual({ name: 'FB Name' });
         });
+
+        // Stage 2.6.1 (Option B) — editor-provenance integration test.
+        // Locks in the wiring at pages.ts:updatePage that the shared-package
+        // unit tests can't reach: every field in the PATCH gets
+        // {source: 'editor', confirmedAt: <ISO>}, and a field previously
+        // present in merchantProvenance but absent from the PATCH is
+        // recorded as cleared (still editor + fresh timestamp).
+        it('records editor provenance for every field in the PATCH and tombstones cleared fields', async () => {
+            // Existing container: phones is fb_sync-owned and present; address is
+            // editor-owned from a prior save. Merchant currently has both fields.
+            const priorEditorTime = '2026-05-01T10:00:00.000Z';
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        limit: vi.fn().mockResolvedValue([
+                            {
+                                businessProfile: {
+                                    merchant: { phones: ['+1'], address: 'old-address' },
+                                    suggestions: { phones: ['+1'] },
+                                    merchantProvenance: {
+                                        phones: { source: 'fb_sync', confirmedAt: null },
+                                        address: { source: 'editor', confirmedAt: priorEditorTime },
+                                    },
+                                },
+                            },
+                        ]),
+                    }),
+                }),
+            } as any);
+
+            let capturedSetData: any = null;
+            vi.mocked(db.update).mockReturnValue({
+                set: vi.fn().mockImplementation((data) => {
+                    capturedSetData = data;
+                    return {
+                        where: vi.fn().mockReturnValue({
+                            returning: vi.fn().mockResolvedValue([{ id: 'page-1', ...data }]),
+                        }),
+                    };
+                }),
+            } as any);
+
+            // Merchant edits: keeps phones (unchanged), CLEARS address (omitted from PATCH).
+            await pagesService.updatePage('user-1', 'page-1', {
+                businessProfile: { phones: ['+1'] },
+            });
+
+            const prov = capturedSetData.businessProfile.merchantProvenance;
+            expect(prov).toBeDefined();
+
+            // phones: present in PATCH → editor + fresh timestamp (saving = confirming)
+            expect(prov.phones.source).toBe('editor');
+            expect(prov.phones.confirmedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+            expect(prov.phones.confirmedAt).not.toBe(null);
+
+            // address: absent from PATCH but present in prior provenance → cleared
+            // tombstone (still editor, fresh timestamp, value gone from merchant)
+            expect(prov.address.source).toBe('editor');
+            expect(prov.address.confirmedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+            expect(prov.address.confirmedAt).not.toBe(priorEditorTime); // bumped
+            expect(capturedSetData.businessProfile.merchant.address).toBeUndefined();
+
+            // Existing suggestions survive untouched (FB-sync half is editor-write-immune)
+            expect(capturedSetData.businessProfile.suggestions).toEqual({ phones: ['+1'] });
+        });
     });
 
     // =========================================
@@ -364,13 +429,19 @@ describe('PR2: KB Versioning + Business Profile', () => {
 
             expect(insertedValues).toBeDefined();
             expect(insertedValues.businessProfile).toBeDefined();
-            // Stage 2.6: FB sync writes the {merchant, suggestions} container.
-            // FB-sourced data lands under suggestions; merchant is empty.
-            expect(insertedValues.businessProfile.merchant).toEqual({});
+            // Stage 2.6.1 (Option B): FB sync auto-promotes suggestions into
+            // merchant with per-field provenance. Suggestions still holds the
+            // raw FB snapshot for the editor "Review & Confirm" UI.
+            expect(insertedValues.businessProfile.merchant.name).toBe('Test Business');
+            expect(insertedValues.businessProfile.merchant.phones).toEqual(['0501234567']);
+            expect(insertedValues.businessProfile.merchant.address).toBe('Riyadh, Saudi Arabia');
             expect(insertedValues.businessProfile.suggestions.name).toBe('Test Business');
-            expect(insertedValues.businessProfile.suggestions.category).toBe('Restaurant');
             expect(insertedValues.businessProfile.suggestions.phones).toEqual(['0501234567']);
-            expect(insertedValues.businessProfile.suggestions.address).toBe('Riyadh, Saudi Arabia');
+            // Provenance: every promoted field is fb_sync + confirmedAt null
+            // (merchant hasn't reviewed yet).
+            expect(insertedValues.businessProfile.merchantProvenance.name).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(insertedValues.businessProfile.merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(insertedValues.businessProfile.merchantProvenance.address).toEqual({ source: 'fb_sync', confirmedAt: null });
             expect(insertedValues.businessProfileUpdatedAt).toBeInstanceOf(Date);
         });
 
@@ -413,10 +484,15 @@ describe('PR2: KB Versioning + Business Profile', () => {
 
             expect(capturedSetData).toBeDefined();
             expect(capturedSetData.businessProfile).toBeDefined();
-            // Stage 2.6: FB sync overwrites the suggestions half; merchant is preserved.
-            expect(capturedSetData.businessProfile.merchant).toEqual({});
+            // Stage 2.6.1 (Option B): FB sync refreshes both halves.
+            // Existing page had no merchantProvenance → fields are never-seen
+            // and get auto-promoted into merchant on this sync.
+            expect(capturedSetData.businessProfile.merchant.name).toBe('Updated Business');
+            expect(capturedSetData.businessProfile.merchant.phones).toEqual(['0509999999']);
             expect(capturedSetData.businessProfile.suggestions.name).toBe('Updated Business');
             expect(capturedSetData.businessProfile.suggestions.phones).toEqual(['0509999999']);
+            expect(capturedSetData.businessProfile.merchantProvenance.name).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(capturedSetData.businessProfile.merchantProvenance.phones).toEqual({ source: 'fb_sync', confirmedAt: null });
             expect(capturedSetData.businessProfileUpdatedAt).toBeInstanceOf(Date);
         });
 
@@ -454,11 +530,17 @@ describe('PR2: KB Versioning + Business Profile', () => {
             expect(insertedValues).toBeDefined();
             expect(insertedValues.businessProfile).toBeDefined();
             expect(typeof insertedValues.businessProfile).toBe('object');
-            // Stage 2.6 container: only suggestions.name populated; merchant empty.
-            expect(insertedValues.businessProfile.merchant).toEqual({});
+            // Stage 2.6.1: only `name` was returned by FB; it gets promoted
+            // into merchant and recorded in provenance. Other fields stay
+            // absent in both halves and have no provenance entry.
+            expect(insertedValues.businessProfile.merchant.name).toBe('Bare Page');
+            expect(insertedValues.businessProfile.merchant.phones).toBeUndefined();
+            expect(insertedValues.businessProfile.merchant.address).toBeUndefined();
             expect(insertedValues.businessProfile.suggestions.name).toBe('Bare Page');
             expect(insertedValues.businessProfile.suggestions.phones).toBeUndefined();
-            expect(insertedValues.businessProfile.suggestions.address).toBeUndefined();
+            expect(insertedValues.businessProfile.merchantProvenance.name).toEqual({ source: 'fb_sync', confirmedAt: null });
+            expect(insertedValues.businessProfile.merchantProvenance.phones).toBeUndefined();
+            expect(insertedValues.businessProfile.merchantProvenance.address).toBeUndefined();
         });
     });
 });
