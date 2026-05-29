@@ -6,7 +6,7 @@
  */
 
 /** Flags that indicate the reply failed due to missing Business Info */
-const KB_FLAGS = new Set(['info_not_in_kb', 'price_not_in_kb']);
+const KB_FLAGS = new Set(['info_not_in_kb', 'price_not_in_kb', 'phone_not_in_kb']);
 
 /**
  * Returns true when the primary flag on a comment/message is KB-related,

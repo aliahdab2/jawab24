@@ -446,12 +446,7 @@ export class MessageProcessor {
             // and no digits in any script, so real replies like "ok", "نعم", or "٠٠٠"
             // still flow through normally.
             if (isPunctuationOnly(consolidatedText.trim())) {
-                for (const m of unrepliedMessages) {
-                    await messagesService.markAsResolved(m.id);
-                }
-                if (!unrepliedMessages.some(m => m.id === storedMessage.id)) {
-                    await messagesService.markAsResolved(storedMessage.id);
-                }
+                await this.markSkippedAsResolved(unrepliedMessages, storedMessage.id, workspaceId);
                 this.logger.info(`[${platform}] Skipped emoji/punctuation-only mid-conversation message`, { senderId, platformMessageId });
                 pipelineMetrics.record(pipeline, 'skipped_spam');
                 return { success: true, messageId: platformMessageId };
@@ -520,7 +515,10 @@ export class MessageProcessor {
             // 12c. Skip reply — silent for spam/tags, flagged for offensive content
             if (shouldSkipReply(flagReason, aiIntent)) {
                 if (shouldSilentlySkip(aiIntent)) {
-                    // Spam/irrelevant — no flag, no notification
+                    // Spam/irrelevant (incl. conversation-closers like "no thank you") —
+                    // no flag, no notification. Resolve so the inbox shows "handled"
+                    // instead of a false "will reply soon" badge that never clears.
+                    await this.markSkippedAsResolved(unrepliedMessages, storedMessage.id, workspaceId);
                     pipelineMetrics.record(pipeline, 'skipped_spam');
                     return { success: true, messageId: platformMessageId };
                 }
@@ -841,6 +839,32 @@ export class MessageProcessor {
 
     private delay(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Mark a deliberately-skipped message (and any consolidated siblings) as resolved.
+     *
+     * Shared by the emoji/punctuation drop (11a) and the spam/irrelevant silent skip
+     * (12c). Both decide no reply is warranted, so both MUST leave a terminal state —
+     * otherwise the message stays replied=false/resolved=false and the inbox renders a
+     * false "will reply soon" badge that never resolves (isPending in MessageCard).
+     *
+     * Mirrors the comment pipeline's silentlyResolveAndSkip: resolving changes the
+     * needs-attention/handled counts, so the cached workspace stats must be invalidated
+     * too or the inbox header tallies stay stale until the next unrelated event.
+     */
+    private async markSkippedAsResolved(
+        unrepliedMessages: { id: string }[],
+        storedMessageId: string,
+        workspaceId: string,
+    ): Promise<void> {
+        for (const m of unrepliedMessages) {
+            await messagesService.markAsResolved(m.id);
+        }
+        if (!unrepliedMessages.some(m => m.id === storedMessageId)) {
+            await messagesService.markAsResolved(storedMessageId);
+        }
+        invalidateWorkspaceStatsCache(workspaceId);
     }
 
     /**
