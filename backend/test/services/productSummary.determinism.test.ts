@@ -35,6 +35,8 @@ vi.mock('drizzle-orm', () => ({
 vi.mock('../../src/services/ecommerceCrypto', () => ({
     encrypt: vi.fn(),
     decrypt: vi.fn(),
+    encryptOptional: vi.fn(() => ({})),
+    decryptOptional: vi.fn(),
 }));
 vi.mock('../../src/lib/redis', () => ({
     redis: { get: vi.fn(), set: vi.fn(), del: vi.fn() },

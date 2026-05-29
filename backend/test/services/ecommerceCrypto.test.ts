@@ -98,4 +98,40 @@ describe('EcommerceCrypto', () => {
 
         expect(() => encrypt('test')).toThrow('must be at least 32 characters');
     });
+
+    describe('encryptOptional / decryptOptional', () => {
+        it('encryptOptional returns an empty object for absent values (Shopify has no refresh token)', async () => {
+            const { encryptOptional } = await import('../../src/services/ecommerceCrypto');
+
+            expect(encryptOptional(undefined)).toEqual({});
+            expect(encryptOptional(null)).toEqual({});
+            expect(encryptOptional('')).toEqual({});
+        });
+
+        it('encryptOptional round-trips through decrypt when a value is present', async () => {
+            const { encryptOptional, decrypt } = await import('../../src/services/ecommerceCrypto');
+
+            const { ciphertext, iv } = encryptOptional('salla_refresh_token');
+            expect(ciphertext).toBeDefined();
+            expect(iv).toBeDefined();
+            expect(decrypt(ciphertext!, iv!)).toBe('salla_refresh_token');
+        });
+
+        it('decryptOptional returns undefined when either part is missing', async () => {
+            const { decryptOptional, encrypt } = await import('../../src/services/ecommerceCrypto');
+            const { ciphertext, iv } = encrypt('something');
+
+            expect(decryptOptional(undefined, undefined)).toBeUndefined();
+            expect(decryptOptional(null, null)).toBeUndefined();
+            expect(decryptOptional(ciphertext, undefined)).toBeUndefined();
+            expect(decryptOptional(undefined, iv)).toBeUndefined();
+        });
+
+        it('decryptOptional decrypts a full ciphertext + iv pair', async () => {
+            const { encryptOptional, decryptOptional } = await import('../../src/services/ecommerceCrypto');
+
+            const { ciphertext, iv } = encryptOptional('zid_refresh_token');
+            expect(decryptOptional(ciphertext, iv)).toBe('zid_refresh_token');
+        });
+    });
 });

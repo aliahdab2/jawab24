@@ -18,6 +18,8 @@ vi.mock('../../src/config', () => ({
 vi.mock('../../src/services/ecommerceCrypto', () => ({
     encrypt: vi.fn().mockReturnValue({ ciphertext: 'encrypted_token', iv: 'test_iv' }),
     decrypt: vi.fn().mockReturnValue('decrypted_access_token'),
+    encryptOptional: vi.fn((token?: string | null) => (token ? { ciphertext: 'encrypted_token', iv: 'test_iv' } : {})),
+    decryptOptional: vi.fn((c?: string | null, iv?: string | null) => (c && iv ? 'decrypted_access_token' : undefined)),
 }));
 
 vi.mock('../../src/lib/redis', () => ({

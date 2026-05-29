@@ -285,8 +285,14 @@ describe('Zid Controller', () => {
                 storeDomain: 'my-zid-store.zid.store',
                 accessToken: 'zid_access_token',
                 refreshToken: 'zid_refresh_token',
+                tokenExpiresAt: expect.any(Date),
                 workspaceId: 'test_workspace_id',
             }));
+            // expiresIn(31536000s)→ms must be ~365 days out (guards a dropped *1000).
+            const storeArg = mockCreateStore.mock.calls[0][0];
+            const msUntilExpiry = storeArg.tokenExpiresAt.getTime() - Date.now();
+            expect(msUntilExpiry).toBeGreaterThan(360 * 24 * 60 * 60 * 1000);
+            expect(msUntilExpiry).toBeLessThan(370 * 24 * 60 * 60 * 1000);
             expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/zid/onboarding');
         });
 
@@ -335,8 +341,17 @@ describe('Zid Controller', () => {
             expect(mockCreatePendingInstall).toHaveBeenCalledWith('zid', expect.objectContaining({
                 storeDomain: 'my-zid-store.zid.store',
                 accessToken: 'zid_access_token',
+                refreshToken: 'zid_refresh_token',
+                tokenExpiresAt: expect.any(Date),
                 nonce: 'nonce123',
             }));
+            // Guard the expiresIn(seconds)→ms conversion: 31536000s must land ~365 days
+            // out. Catches a dropped *1000 or unit/sign regression that would re-break
+            // refresh on app-store (logged-out) installs — the bug this PR fixes.
+            const pendingArg = mockCreatePendingInstall.mock.calls[0][1];
+            const msUntilExpiry = pendingArg.tokenExpiresAt.getTime() - Date.now();
+            expect(msUntilExpiry).toBeGreaterThan(360 * 24 * 60 * 60 * 1000);
+            expect(msUntilExpiry).toBeLessThan(370 * 24 * 60 * 60 * 1000);
             expect(rep.setCookie).toHaveBeenCalledWith(
                 'pendingZidId',
                 'pending-zid-123',

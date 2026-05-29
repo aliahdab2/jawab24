@@ -764,6 +764,13 @@
       "when": 1779700000000,
       "tag": "0109_split_business_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "5",
+      "when": 1780074897061,
+      "tag": "0110_secret_wendigo",
+      "breakpoints": true
     }
   ]
 }

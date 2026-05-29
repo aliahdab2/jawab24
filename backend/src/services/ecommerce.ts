@@ -8,7 +8,7 @@
 import { eq, and, lt, sql, desc, notInArray } from 'drizzle-orm';
 import { db } from '../db';
 import { ecommerceStores, ecommerceProducts, pages, pendingEcommerceInstalls, workspaceMembers } from '../db/schema';
-import { encrypt, decrypt } from './ecommerceCrypto';
+import { encrypt, decrypt, encryptOptional, decryptOptional } from './ecommerceCrypto';
 import type { EcommerceStore, EcommerceProduct } from '@jawab24/shared';
 import { captureError } from '../utils/sentryHelpers';
 import { redisScanDelete } from '../lib/redis';
@@ -229,15 +229,8 @@ export interface CreateStoreOptions {
 
 export async function createStore(opts: CreateStoreOptions) {
     const { ciphertext: accessCiphertext, iv: accessIv } = encrypt(opts.accessToken);
-
-    // Encrypt refresh token if provided (Salla, Zid — Shopify doesn't need one)
-    let refreshCiphertext: string | undefined;
-    let refreshIv: string | undefined;
-    if (opts.refreshToken) {
-        const enc = encrypt(opts.refreshToken);
-        refreshCiphertext = enc.ciphertext;
-        refreshIv = enc.iv;
-    }
+    // Refresh token is optional — Salla/Zid have one, Shopify offline tokens don't.
+    const { ciphertext: refreshCiphertext, iv: refreshIv } = encryptOptional(opts.refreshToken);
 
     const result = await db.insert(ecommerceStores).values({
         userId: opts.userId,
@@ -285,6 +278,7 @@ export async function updateStoreTokens(storeId: string, tokens: {
     tokenExpiresAt?: Date;
 }) {
     const { ciphertext: accessCiphertext, iv: accessIv } = encrypt(tokens.accessToken);
+    const { ciphertext: refreshCiphertext, iv: refreshIv } = encryptOptional(tokens.refreshToken);
 
     const updateSet: Record<string, unknown> = {
         accessToken: accessCiphertext,
@@ -296,10 +290,11 @@ export async function updateStoreTokens(storeId: string, tokens: {
         updateSet.tokenExpiresAt = tokens.tokenExpiresAt;
     }
 
-    if (tokens.refreshToken) {
-        const enc = encrypt(tokens.refreshToken);
-        updateSet.refreshToken = enc.ciphertext;
-        updateSet.refreshTokenIv = enc.iv;
+    // Only overwrite the stored refresh token when a new one was supplied —
+    // some refresh responses omit it, and we must not clobber the existing pair.
+    if (refreshCiphertext) {
+        updateSet.refreshToken = refreshCiphertext;
+        updateSet.refreshTokenIv = refreshIv;
     }
 
     await db.update(ecommerceStores).set(updateSet)
@@ -622,6 +617,8 @@ export async function getProducts(storeId: string): Promise<EcommerceProduct[]> 
 export async function createPendingInstall(platform: EcommercePlatform, data: {
     storeDomain: string;
     accessToken: string;
+    refreshToken?: string;
+    tokenExpiresAt?: Date;
     scopes?: string;
     nonce: string;
 }): Promise<string> {
@@ -635,12 +632,19 @@ export async function createPendingInstall(platform: EcommercePlatform, data: {
     );
 
     const { ciphertext, iv } = encrypt(data.accessToken);
+    // Carry the refresh token + expiry through to the claim so the resulting
+    // store is refreshable. Without this, app-store (logged-out) installs of
+    // Salla/Zid produce stores that silently die when the access token expires.
+    const { ciphertext: refreshCiphertext, iv: refreshIv } = encryptOptional(data.refreshToken);
 
     const result = await db.insert(pendingEcommerceInstalls).values({
         platform,
         storeDomain: data.storeDomain,
         accessToken: ciphertext,
         accessTokenIv: iv,
+        refreshToken: refreshCiphertext,
+        refreshTokenIv: refreshIv,
+        tokenExpiresAt: data.tokenExpiresAt,
         scopes: data.scopes || null,
         nonce: data.nonce,
         status: 'pending',
@@ -679,8 +683,11 @@ export async function claimPendingInstall(
         throw new Error(`This ${platform} store is already connected to another account`);
     }
 
-    // Decrypt access token
+    // Decrypt tokens. Refresh token is optional — absent for Shopify and for
+    // pending rows created before refresh-token support — so the store stays
+    // refreshable (Salla/Zid) without breaking the no-refresh-token case.
     const accessToken = decrypt(pending.accessToken, pending.accessTokenIv);
+    const refreshToken = decryptOptional(pending.refreshToken, pending.refreshTokenIv);
 
     // Resolve user's workspace for store scoping
     const [membership] = await db.select({ workspaceId: workspaceMembers.workspaceId })
@@ -693,6 +700,8 @@ export async function claimPendingInstall(
         platform,
         storeDomain: pending.storeDomain,
         accessToken,
+        refreshToken,
+        tokenExpiresAt: pending.tokenExpiresAt ?? undefined,
         workspaceId,
     });
 

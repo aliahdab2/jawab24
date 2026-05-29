@@ -23,3 +23,23 @@ export function encrypt(plaintext: string): { ciphertext: string; iv: string } {
 export function decrypt(ciphertext: string, iv: string): string {
     return aesGcmDecrypt(ciphertext, iv, getKey());
 }
+
+/**
+ * Encrypt an optional secret (e.g. an OAuth refresh token). Returns an empty
+ * object when the value is absent — Shopify offline tokens have no refresh
+ * token — so callers can persist the result without branching on presence.
+ */
+export function encryptOptional(plaintext?: string | null): { ciphertext?: string; iv?: string } {
+    if (!plaintext) return {};
+    return aesGcmEncrypt(plaintext, getKey());
+}
+
+/**
+ * Decrypt an optional secret. Returns undefined when either part is missing —
+ * Shopify rows and pending installs created before refresh-token support have
+ * no refresh token — so callers never attempt a decrypt on a null pair.
+ */
+export function decryptOptional(ciphertext?: string | null, iv?: string | null): string | undefined {
+    if (!ciphertext || !iv) return undefined;
+    return aesGcmDecrypt(ciphertext, iv, getKey());
+}

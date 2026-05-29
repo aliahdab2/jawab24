@@ -315,6 +315,11 @@ describe('Salla Controller', () => {
             expect(mockCreateStore).toHaveBeenCalledWith(expect.objectContaining({
                 tokenExpiresAt: expect.any(Date),
             }));
+            // expiresIn(1209600s)→ms must be ~14 days out, not ~20 min (dropped *1000).
+            const storeArg = mockCreateStore.mock.calls[0][0];
+            const msUntilExpiry = storeArg.tokenExpiresAt.getTime() - Date.now();
+            expect(msUntilExpiry).toBeGreaterThan(13 * 24 * 60 * 60 * 1000);
+            expect(msUntilExpiry).toBeLessThan(15 * 24 * 60 * 60 * 1000);
         });
 
         it('should create pending install when user is NOT logged in', async () => {
@@ -338,8 +343,17 @@ describe('Salla Controller', () => {
             expect(mockCreatePendingInstall).toHaveBeenCalledWith('salla', expect.objectContaining({
                 storeDomain: 'my-salla-store.salla.sa',
                 accessToken: 'salla_access_token',
+                refreshToken: 'salla_refresh_token',
+                tokenExpiresAt: expect.any(Date),
                 nonce: 'nonce123',
             }));
+            // Guard the expiresIn(seconds)→ms conversion: 1209600s must land ~14 days
+            // out. Catches a dropped *1000 (≈20 min) or unit/sign regression that would
+            // re-break refresh on app-store (logged-out) installs — the bug this PR fixes.
+            const pendingArg = mockCreatePendingInstall.mock.calls[0][1];
+            const msUntilExpiry = pendingArg.tokenExpiresAt.getTime() - Date.now();
+            expect(msUntilExpiry).toBeGreaterThan(13 * 24 * 60 * 60 * 1000);
+            expect(msUntilExpiry).toBeLessThan(15 * 24 * 60 * 60 * 1000);
             expect(rep.setCookie).toHaveBeenCalledWith(
                 'pendingSallaId',
                 'pending-salla-123',
