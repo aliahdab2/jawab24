@@ -27,6 +27,13 @@ vi.mock('../../src/services/stripe', () => ({
         })),
         cancelSubscription: vi.fn().mockResolvedValue({}),
         cancelSubscriptionImmediately: vi.fn().mockResolvedValue({}),
+        updateSubscriptionPrice: vi.fn().mockResolvedValue({
+            id: 'sub_test_123',
+            status: 'active',
+            current_period_start: Math.floor(Date.now() / 1000),
+            current_period_end: Math.floor(Date.now() / 1000) + 30 * 24 * 3600,
+            cancel_at_period_end: false,
+        }),
         createBillingPortalSession: vi.fn().mockResolvedValue({
             url: 'https://billing.stripe.com/test',
         }),
@@ -330,6 +337,96 @@ describe('Payment — cancelSubscription', () => {
 
         expect(updated.cancelAtPeriodEnd).toBe(true);
         expect(stripeService.cancelSubscription).toHaveBeenCalledWith('sub_to_cancel');
+    });
+});
+
+// ---------------------------------------------------------------------------
+
+describe('Payment — changePlan sanctions guard', () => {
+    let userId: string;
+
+    beforeEach(async () => {
+        const user = await createTestUser({ email: 'changeplan@test.com' });
+        userId = user.id;
+    });
+
+    /** Build an app whose preHandler sets a specific geo. Mirrors the shape geoMiddleware produces. */
+    async function buildAppWithGeo(
+        geo: { country?: string; region?: string | null; source?: string },
+    ): Promise<FastifyInstance> {
+        const app = fastify({ logger: false });
+        app.addHook('preHandler', async (request: any) => {
+            request.user = { userId, facebookId: 'fb_test' };
+            request.geo = geo;
+        });
+        const paymentRoutes = (await import('../../src/routes/payment')).default;
+        app.register(paymentRoutes, { prefix: '/' });
+        await app.ready();
+        return app;
+    }
+
+    it('returns 403 SANCTIONED_GEO_BLOCK for a sanctioned country before any Stripe call', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.updateSubscriptionPrice).mockClear();
+
+        const app = await buildAppWithGeo({ country: 'IR', region: null }); // Iran — sanctioned
+        const plan = await createTestPlan();
+        await createTestSubscription(userId, plan.id, { externalSubscriptionId: 'sub_block_me' });
+
+        // Target a different plan so the request would otherwise reach the billable Stripe call
+        const otherPlan = await createTestPlan({ slug: `other-${Date.now()}` });
+        const res = await app.inject({
+            method: 'POST',
+            url: '/change-plan',
+            payload: { planId: otherPlan.id },
+        });
+
+        await app.close();
+        expect(res.statusCode).toBe(403);
+        expect(res.json().code).toBe('SANCTIONED_GEO_BLOCK');
+        // The guard must fire before the billable Stripe operation
+        expect(stripeService.updateSubscriptionPrice).not.toHaveBeenCalled();
+    });
+
+    it('returns 403 GEO_VERIFICATION_REQUIRED when geo is unresolved (fail-closed)', async () => {
+        // The exact shape geoMiddleware sets when neither trusted header nor IP lookup resolves.
+        const app = await buildAppWithGeo({ country: undefined, region: undefined, source: 'unknown' });
+        const plan = await createTestPlan({ slug: `unknown-geo-${Date.now()}` });
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/change-plan',
+            payload: { planId: plan.id },
+        });
+
+        await app.close();
+        expect(res.statusCode).toBe(403);
+        expect(res.json().code).toBe('GEO_VERIFICATION_REQUIRED');
+    });
+
+    it('allows a plan change from a non-sanctioned country (guard does not over-block)', async () => {
+        const { stripeService } = await import('../../src/services/stripe');
+        vi.mocked(stripeService.updateSubscriptionPrice).mockClear();
+
+        const app = await buildAppWithGeo({ country: 'US', region: null, source: 'geoip-lite' });
+        const currentPlan = await createTestPlan({ slug: `current-${Date.now()}` });
+        await createTestSubscription(userId, currentPlan.id, {
+            status: 'active',
+            externalSubscriptionId: 'sub_allow_me',
+        });
+        const targetPlan = await createTestPlan({ slug: `target-${Date.now()}`, stripePriceId: 'price_target_999' });
+
+        const res = await app.inject({
+            method: 'POST',
+            url: '/change-plan',
+            payload: { planId: targetPlan.id },
+        });
+
+        await app.close();
+        expect(res.statusCode).toBe(200);
+        expect(res.json().success).toBe(true);
+        // The billable Stripe operation runs for a legitimate request
+        expect(stripeService.updateSubscriptionPrice).toHaveBeenCalledWith('sub_allow_me', 'price_target_999');
     });
 });
 

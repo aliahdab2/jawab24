@@ -392,6 +392,38 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
+            // SANCTIONS CHECK: Block payment processing for sanctioned jurisdictions
+            const { isSanctionedGeo } = await import('../utils/sanctions');
+            const { shouldBlockUnknownGeo } = await import('../middleware/geo');
+
+            // Check if geo is sanctioned
+            if (request.geo && isSanctionedGeo(request.geo)) {
+                request.log.warn({
+                    userId,
+                    geo: request.geo,
+                    route: '/payment/change-plan',
+                }, 'Payment blocked: sanctioned jurisdiction');
+
+                return reply.status(403).send({
+                    error: 'Payments are not available in your region',
+                    code: 'SANCTIONED_GEO_BLOCK',
+                });
+            }
+
+            // Safe-by-default: Block if geo is unknown/unreliable
+            if (shouldBlockUnknownGeo(request.geo)) {
+                request.log.warn({
+                    userId,
+                    geo: request.geo,
+                    route: '/payment/change-plan',
+                }, 'Payment blocked: unknown geo (safe-by-default)');
+
+                return reply.status(403).send({
+                    error: 'Unable to process payment at this time',
+                    code: 'GEO_VERIFICATION_REQUIRED',
+                });
+            }
+
             const { planId } = request.body;
             const billingInterval = request.body.billingInterval === 'year' ? 'year' : 'month';
             if (!planId) {
