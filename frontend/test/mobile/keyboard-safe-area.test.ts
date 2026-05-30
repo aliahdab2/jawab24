@@ -176,15 +176,29 @@ describe('capacitor config', () => {
     expect(configTs).not.toContain('KeyboardResize.Native');
   });
 
-  it('Android navigation bar is transparent (edge-to-edge)', async () => {
+  it('Android edge-to-edge: no deprecated bar-color overrides (handled at runtime)', async () => {
     const fs = await import('node:fs');
     const path = await import('node:path');
-    const stylesXml = fs.readFileSync(
-      path.resolve(__dirname, '../../android/app/src/main/res/values-v29/styles.xml'),
+    const resDir = path.resolve(__dirname, '../../android/app/src/main/res');
+
+    // The legacy values-v29/styles.xml existed only to set statusBarColor/
+    // navigationBarColor to transparent — the deprecated way to force edge-to-edge,
+    // ignored on API 35+ (the app targets SDK 36) and the source of Play Console's
+    // "deprecated edge-to-edge APIs" warning. It was removed in #213. The per-API
+    // override must NOT come back, or the warning re-appears.
+    expect(fs.existsSync(path.join(resDir, 'values-v29/styles.xml'))).toBe(false);
+
+    // The base theme must not carry the deprecated bar-color attributes either.
+    const baseStyles = fs.readFileSync(path.join(resDir, 'values/styles.xml'), 'utf-8');
+    expect(baseStyles).not.toContain('android:navigationBarColor');
+    expect(baseStyles).not.toContain('android:statusBarColor');
+
+    // Edge-to-edge is now applied at runtime by Capacitor's StatusBar overlay,
+    // which is what makes env(safe-area-inset-*) report correctly.
+    const appTsx = fs.readFileSync(
+      path.resolve(__dirname, '../../src/pages/_app.tsx'),
       'utf-8'
     );
-
-    // Navigation bar is transparent for edge-to-edge display
-    expect(stylesXml).toContain('android:navigationBarColor">@android:color/transparent');
+    expect(appTsx).toContain('StatusBar.setOverlaysWebView({ overlay: true })');
   });
 });
