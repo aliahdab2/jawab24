@@ -35,6 +35,9 @@ export function useTheme() {
       } else {
         root.classList.remove('dark');
       }
+      // Keep the UA color-scheme in sync (also set pre-hydration in _document.tsx) so
+      // runtime theme toggles never reintroduce the white-canvas flash.
+      root.style.colorScheme = isDark ? 'dark' : 'light';
 
       // Sync Capacitor StatusBar on native
       syncNativeStatusBar(isDark);

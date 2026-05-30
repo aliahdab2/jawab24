@@ -50,6 +50,10 @@ export default function MyDocument({ locale }: DocProps) {
                   if (!theme) theme = 'system';
                   var isDark = theme === 'dark' ||
                     (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                  // Set color-scheme so the WebView's UA canvas matches the theme on the
+                  // very first paint — without this it defaults to white, causing a white
+                  // flash in dark mode before the styled body paints (native + web).
+                  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
                   if (isDark) {
                     document.documentElement.classList.add('dark');
                   }
