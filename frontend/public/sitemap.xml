@@ -266,6 +266,94 @@
     <priority>0.8</priority>
   </url>
 
+  <!-- Compare: Jawab24 vs Speedly - Arabic -->
+  <url>
+    <loc>https://jawab24.com/compare/speedly</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/compare/speedly"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/speedly"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/speedly"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Compare: Jawab24 vs Speedly - English -->
+  <url>
+    <loc>https://jawab24.com/en/compare/speedly</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/compare/speedly"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/compare/speedly"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/compare/speedly"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Integration: Shopify - Arabic -->
+  <url>
+    <loc>https://jawab24.com/integrations/shopify</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/integrations/shopify"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/shopify"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/shopify"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Integration: Shopify - English -->
+  <url>
+    <loc>https://jawab24.com/en/integrations/shopify</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/integrations/shopify"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/shopify"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/shopify"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Integration: Salla - Arabic -->
+  <url>
+    <loc>https://jawab24.com/integrations/salla</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/integrations/salla"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/salla"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/salla"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Integration: Salla - English -->
+  <url>
+    <loc>https://jawab24.com/en/integrations/salla</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/integrations/salla"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/salla"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/salla"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Integration: Zid - Arabic -->
+  <url>
+    <loc>https://jawab24.com/integrations/zid</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/integrations/zid"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/zid"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/zid"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Integration: Zid - English -->
+  <url>
+    <loc>https://jawab24.com/en/integrations/zid</loc>
+    <xhtml:link rel="alternate" hreflang="ar" href="https://jawab24.com/integrations/zid"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://jawab24.com/en/integrations/zid"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://jawab24.com/integrations/zid"/>
+    <lastmod>2026-05-30</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
   <!-- Blog Index - Arabic -->
   <url>
     <loc>https://jawab24.com/blog</loc>
