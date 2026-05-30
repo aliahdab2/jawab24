@@ -3,6 +3,13 @@
 **Analysis Date:** 2026-03-30
 **Scope:** backend/src/services/, backend/src/controllers/, frontend/src/components/, frontend/src/hooks/, frontend/src/pages/
 
+> **Status update 2026-05-30 (backend e-commerce items):**
+> - ✅ **M7 RESOLVED** — `authCallback` (and `authRedirect`) extracted into `createEcommerceControllers`; Salla + Zid now share one implementation (Shopify deliberately untouched — domain-input flow). salla.ts 269→149, zid.ts 244→137; 3744 backend tests green.
+> - ✅ **M3 RESOLVED** — `utils/hmacVerify.ts` (`verifyHexHmac`/`verifyBase64Hmac`); Salla/Zid/Shopify delegate.
+> - ✅ **M2 RESOLVED** — `utils/httpRetry.ts` exists.
+> - 🟡 **H2 MOSTLY RESOLVED** — shared `services/ecommerceTokenRefresh.ts` core; thin per-platform `refreshAccessToken` wrappers remain.
+> - Still open (backend): **M1** resolveStoreCredentials, **M4** webhook-HMAC controller boilerplate, **M6** isProductEvent, **L4** Shopify protected-handler dup. Frontend items (H1/H3/H4/H5, M5/M8) untracked here.
+
 ---
 
 ## Summary
