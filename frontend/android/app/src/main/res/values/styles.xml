@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 
-        Base application theme
-        Edge-to-edge is handled in values-v29/styles.xml for Android 10+
+    <!--
+        Base application theme.
+        Edge-to-edge is applied at runtime via Capacitor StatusBar.setOverlaysWebView
+        (see frontend/src/pages/_app.tsx). The deprecated values-v29 bar-color
+        override was removed in #213 (ignored on API 35+, app targets SDK 36).
     -->
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.DarkActionBar">
         <item name="colorPrimary">@color/colorPrimary</item>
