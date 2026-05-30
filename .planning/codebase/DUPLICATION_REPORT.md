@@ -3,6 +3,15 @@
 **Analysis Date:** 2026-03-30
 **Scope:** backend/src/services/, backend/src/controllers/, frontend/src/components/, frontend/src/hooks/, frontend/src/pages/
 
+> **Status update 2026-05-30 (backend e-commerce items):**
+> - ✅ **M7 RESOLVED** — `authCallback` (and `authRedirect`) extracted into `createEcommerceControllers`; Salla + Zid now share one implementation (Shopify deliberately untouched — domain-input flow). salla.ts 269→149, zid.ts 244→137; 3744 backend tests green.
+> - ✅ **M3 RESOLVED** — `utils/hmacVerify.ts` (`verifyHexHmac`/`verifyBase64Hmac`); Salla/Zid/Shopify delegate.
+> - ✅ **M2 RESOLVED** — `utils/httpRetry.ts` exists.
+> - 🟡 **H2 MOSTLY RESOLVED** — shared `services/ecommerceTokenRefresh.ts` core; thin per-platform `refreshAccessToken` wrappers remain.
+> - ✅ **M1 RESOLVED (Salla↔Zid)** — `resolveStoreAccessToken(storeId, cfg)` added to `ecommerceTokenRefresh.ts`; Salla + Zid `resolveStoreCredentials` now delegate. Shopify NOT folded in — it has no token refresh + a different return shape (kept separate, same rationale as M7/Shopify).
+> - ✅ **H3 RESOLVED** — dead `ShopifySection.tsx` already deleted.
+> - Still open (backend): **M4** webhook-HMAC controller boilerplate, **M6** isProductEvent, **L4** Shopify protected-handler dup. Frontend: **H1** onboarding wizard now triplicated (shopify/salla/zid — got worse), H4/H5, M5/M8.
+
 ---
 
 ## Summary

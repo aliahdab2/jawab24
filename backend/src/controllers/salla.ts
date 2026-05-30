@@ -1,149 +1,21 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import crypto from 'crypto';
 import * as sallaService from '../services/salla';
 import {
     getStoreByDomain,
-    createStore,
     deactivateStore,
-    createPendingInstall,
-    registerWebhooksWithPersist,
 } from '../services/ecommerce';
 import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
-import { workspaceService } from '../services/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
 import {
     PENDING_SALLA_COOKIE_OPTIONS,
     SALLA_NONCE_COOKIE_OPTIONS,
 } from '../services/cookies';
-import { tryGetUserId } from '../utils/authHelpers';
 import { createEcommerceControllers } from './ecommerceControllers';
 
-// --- OAuth Flow (PUBLIC — no JWT required) ---
-
-export async function authRedirect(_request: FastifyRequest, reply: FastifyReply) {
-    // Salla doesn't need a shop domain — merchant authenticates directly
-    const nonce = crypto.randomBytes(16).toString('hex');
-
-    reply.setCookie('sallaNonce', nonce, SALLA_NONCE_COOKIE_OPTIONS);
-
-    const authUrl = sallaService.buildAuthUrl(nonce);
-    return reply.redirect(authUrl);
-}
-
-export async function authCallback(request: FastifyRequest, reply: FastifyReply) {
-    const { code, state } = request.query as {
-        code?: string; state?: string;
-    };
-
-    if (!code) {
-        return reply.status(400).send({ error: 'Invalid OAuth callback: missing code' });
-    }
-
-    // CSRF state validation applies ONLY to merchant-initiated installs — flows we
-    // started via GET /salla/auth, which sets the signed `sallaNonce` cookie. Salla
-    // App Store / Partners "Install App" installs are platform-initiated: Salla
-    // redirects straight here with its own `state` and no prior nonce from us, so
-    // there is nothing to match against. For those, the trust anchor is the
-    // server-to-server code exchange (uses our client_secret) — an attacker cannot
-    // forge a `code` that Salla issued to our app.
-    const nonceCookie = request.cookies.sallaNonce;
-    if (nonceCookie) {
-        // We initiated this flow: the nonce MUST be present, valid, and match.
-        // A tampered/invalid cookie is rejected — do NOT fall through to the
-        // platform-initiated path (that would bypass CSRF protection).
-        const unsigned = request.unsignCookie(nonceCookie);
-        const storedNonce = unsigned.valid ? unsigned.value : null;
-        if (!storedNonce || state !== storedNonce) {
-            return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
-        }
-        reply.clearCookie('sallaNonce', { path: '/' });
-    }
-
-    const frontendUrl = config.frontendUrl;
-
-    try {
-        // Exchange code for tokens
-        const tokens = await sallaService.exchangeCodeForToken(code);
-
-        // Fetch store info to get domain (used as unique identifier)
-        const storeInfo = await sallaService.fetchStoreInfo(tokens.accessToken);
-
-        // Check if user is already logged in
-        const userId = tryGetUserId(request);
-
-        if (userId) {
-            // --- LOGGED IN: Create store directly ---
-            const workspaces = await workspaceService.getUserWorkspaces(userId);
-            const workspaceId = workspaces[0]?.id || null;
-
-            const store = await createStore({
-                userId,
-                platform: 'salla',
-                storeDomain: storeInfo.storeDomain,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-                shopInfo: {
-                    shopName: storeInfo.storeName,
-                    shopEmail: storeInfo.storeEmail,
-                    shopCurrency: storeInfo.storeCurrency,
-                },
-                platformData: { merchantId: storeInfo.merchantId },
-                workspaceId,
-            });
-
-            // Register webhooks with persist-on-throw + retry queue. Mirrors the
-            // Shopify install path. Install must NOT fail because of webhook
-            // hiccups — the helper persists a "failed: all" marker and enqueues
-            // a retry so the integrations card surfaces a Re-register CTA.
-            await registerWebhooksWithPersist(
-                store.id,
-                'salla',
-                () => sallaService.registerWebhooks(tokens.accessToken),
-            );
-
-            // Enqueue full sync (non-blocking)
-            enqueueSyncJob(store.id, 'salla').catch(err => {
-                request.log.error({ err }, 'Failed to enqueue Salla sync');
-            });
-
-            return reply.redirect(`${frontendUrl}/salla/onboarding`);
-        } else {
-            // --- NOT LOGGED IN: Create pending install ---
-            const existingStore = await getStoreByDomain('salla', storeInfo.storeDomain);
-            if (existingStore && existingStore.isActive) {
-                return reply.redirect(`${frontendUrl}/login?salla_error=already_connected`);
-            }
-
-            const pendingId = await createPendingInstall('salla', {
-                storeDomain: storeInfo.storeDomain,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-                scopes: config.salla.scopes,
-                // Platform-initiated installs may omit state; the claim flow keys off
-                // the signed pendingSallaId cookie, not this value.
-                nonce: state ?? '',
-            });
-
-            reply.setCookie('pendingSallaId', pendingId, PENDING_SALLA_COOKIE_OPTIONS);
-
-            return reply.redirect(`${frontendUrl}/login?salla_pending=true`);
-        }
-    } catch (error) {
-        const err = error as Error & { response?: { status?: number; data?: unknown } };
-        request.log.error({
-            err,
-            message: err?.message,
-            stack: err?.stack,
-            responseStatus: err?.response?.status,
-            responseData: err?.response?.data,
-        }, 'Salla auth callback failed');
-        return reply.redirect(`${frontendUrl}/login?salla_error=auth_failed`);
-    }
-}
+// OAuth flow (authRedirect + authCallback) is shared via createEcommerceControllers
+// — see the adapter wiring at the bottom of this file.
 
 // --- Webhook (single endpoint — dispatches by event type in body) ---
 
@@ -254,6 +126,8 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
 // --- Protected API (Jawab24 JWT required) ---
 
 export const {
+    authRedirect,
+    authCallback,
     getStore,
     connectStore,
     disconnectStoreHandler,
@@ -266,4 +140,10 @@ export const {
     buildAuthUrl: sallaService.buildAuthUrl,
     nonceCookieName: 'sallaNonce',
     nonceCookieOptions: SALLA_NONCE_COOKIE_OPTIONS,
+    exchangeCodeForToken: sallaService.exchangeCodeForToken,
+    fetchStoreInfo: sallaService.fetchStoreInfo,
+    registerWebhooks: (accessToken: string) => sallaService.registerWebhooks(accessToken),
+    scopes: config.salla.scopes,
+    pendingCookieName: 'pendingSallaId',
+    pendingCookieOptions: PENDING_SALLA_COOKIE_OPTIONS,
 });

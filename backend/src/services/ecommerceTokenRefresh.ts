@@ -118,6 +118,20 @@ export async function ensureValidToken(storeId: string, cfg: TokenRefreshConfig)
 }
 
 /**
+ * Resolve a refreshable store's decrypted access token (the Salla/Zid pattern):
+ * ensure the token is fresh, then decrypt it. Returns null if the store is
+ * missing/inactive or has no stored token. Shopify does NOT use this — its tokens
+ * are non-expiring and resolved via its own (different) path.
+ */
+export async function resolveStoreAccessToken(storeId: string, cfg: TokenRefreshConfig): Promise<string | null> {
+    await ensureValidToken(storeId, cfg);
+    const store = await getStoreById(storeId);
+    if (!store || !store.isActive) return null;
+    if (!store.accessToken || !store.accessTokenIv) return null;
+    return decrypt(store.accessToken, store.accessTokenIv);
+}
+
+/**
  * Return store IDs whose tokens expire within 2 days (for periodic proactive refresh).
  */
 export async function getStoresNeedingTokenRefresh(platform: 'salla' | 'zid') {

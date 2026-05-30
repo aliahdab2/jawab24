@@ -1,137 +1,22 @@
-import crypto from 'crypto';
 import { FastifyRequest, FastifyReply } from 'fastify';
 import * as zidService from '../services/zid';
 import {
     getStoreByDomain,
     getStoreByMerchantId,
-    createStore,
     deactivateStore,
-    createPendingInstall,
-    registerWebhooksWithPersist,
 } from '../services/ecommerce';
 import { dispatchOrderNotification } from '../services/orderNotificationScheduler';
 import type { OrderEvent } from '../services/orderNotificationScheduler';
-import { workspaceService } from '../services/workspace';
 import { enqueueSyncJob } from '../lib/ecommerceSyncQueue';
 import { config } from '../config';
 import {
     PENDING_ZID_COOKIE_OPTIONS,
     ZID_NONCE_COOKIE_OPTIONS,
 } from '../services/cookies';
-import { tryGetUserId } from '../utils/authHelpers';
 import { createEcommerceControllers } from './ecommerceControllers';
 
-// --- OAuth Flow (PUBLIC — no JWT required) ---
-
-export async function authRedirect(_request: FastifyRequest, reply: FastifyReply) {
-    const nonce = crypto.randomBytes(16).toString('hex');
-
-    reply.setCookie('zidNonce', nonce, ZID_NONCE_COOKIE_OPTIONS);
-
-    const authUrl = zidService.buildAuthUrl(nonce);
-    return reply.redirect(authUrl);
-}
-
-export async function authCallback(request: FastifyRequest, reply: FastifyReply) {
-    const { code, state } = request.query as {
-        code?: string; state?: string;
-    };
-
-    if (!code) {
-        return reply.status(400).send({ error: 'Invalid OAuth callback: missing code' });
-    }
-
-    // CSRF state validation applies ONLY to merchant-initiated installs — flows we
-    // started via GET /zid/auth, which sets the signed `zidNonce` cookie. Zid App
-    // Market / platform-initiated installs redirect straight here with their own
-    // `state` and no prior nonce from us, so there is nothing to match against. For
-    // those, the trust anchor is the server-to-server code exchange (uses our
-    // client_secret) — an attacker cannot forge a `code` that Zid issued to our app.
-    const nonceCookie = request.cookies.zidNonce;
-    if (nonceCookie) {
-        // We initiated this flow: the nonce MUST be present, valid, and match.
-        // A tampered/invalid cookie is rejected — do NOT fall through to the
-        // platform-initiated path (that would bypass CSRF protection).
-        const unsigned = request.unsignCookie(nonceCookie);
-        const storedNonce = unsigned.valid ? unsigned.value : null;
-        if (!storedNonce || state !== storedNonce) {
-            return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
-        }
-        reply.clearCookie('zidNonce', { path: '/' });
-    }
-
-    const frontendUrl = config.frontendUrl;
-
-    try {
-        const tokens = await zidService.exchangeCodeForToken(code);
-        const storeInfo = await zidService.fetchStoreInfo(tokens.accessToken);
-
-        const userId = tryGetUserId(request);
-
-        if (userId) {
-            // --- LOGGED IN: Create store directly ---
-            const workspaces = await workspaceService.getUserWorkspaces(userId);
-            const workspaceId = workspaces[0]?.id || null;
-
-            const store = await createStore({
-                userId,
-                platform: 'zid',
-                storeDomain: storeInfo.storeDomain,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-                shopInfo: {
-                    shopName: storeInfo.storeName,
-                    shopEmail: storeInfo.storeEmail,
-                    shopCurrency: storeInfo.storeCurrency,
-                },
-                platformData: { merchantId: storeInfo.merchantId },
-                workspaceId,
-            });
-
-            // Register webhooks with persist-on-throw + retry queue. Mirrors
-            // the Shopify install path. Install must NOT fail because of webhook
-            // hiccups — the helper persists a "failed: all" marker and enqueues
-            // a retry so the integrations card surfaces a Re-register CTA.
-            await registerWebhooksWithPersist(
-                store.id,
-                'zid',
-                () => zidService.registerWebhooks(tokens.accessToken),
-            );
-
-            // Enqueue full sync (non-blocking)
-            enqueueSyncJob(store.id, 'zid').catch(err => {
-                request.log.error({ err }, 'Failed to enqueue Zid sync');
-            });
-
-            return reply.redirect(`${frontendUrl}/zid/onboarding`);
-        } else {
-            // --- NOT LOGGED IN: Create pending install ---
-            const existingStore = await getStoreByDomain('zid', storeInfo.storeDomain);
-            if (existingStore && existingStore.isActive) {
-                return reply.redirect(`${frontendUrl}/login?zid_error=already_connected`);
-            }
-
-            const pendingId = await createPendingInstall('zid', {
-                storeDomain: storeInfo.storeDomain,
-                accessToken: tokens.accessToken,
-                refreshToken: tokens.refreshToken,
-                tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-                scopes: config.zid.scopes,
-                // Platform-initiated installs may omit state; the claim flow keys off
-                // the signed pendingZidId cookie, not this value.
-                nonce: state ?? '',
-            });
-
-            reply.setCookie('pendingZidId', pendingId, PENDING_ZID_COOKIE_OPTIONS);
-
-            return reply.redirect(`${frontendUrl}/login?zid_pending=true`);
-        }
-    } catch (error) {
-        request.log.error({ error }, 'Zid auth callback failed');
-        return reply.redirect(`${frontendUrl}/login?zid_error=auth_failed`);
-    }
-}
+// OAuth flow (authRedirect + authCallback) is shared via createEcommerceControllers
+// — see the adapter wiring at the bottom of this file.
 
 // --- Webhook (single endpoint — dispatches by event type in body) ---
 
@@ -229,6 +114,8 @@ function buildZidOrderEvent(storeId: string, event: string, body: unknown): Orde
 // --- Protected API (Jawab24 JWT required) ---
 
 export const {
+    authRedirect,
+    authCallback,
     getStore,
     connectStore,
     disconnectStoreHandler,
@@ -241,4 +128,10 @@ export const {
     buildAuthUrl: zidService.buildAuthUrl,
     nonceCookieName: 'zidNonce',
     nonceCookieOptions: ZID_NONCE_COOKIE_OPTIONS,
+    exchangeCodeForToken: zidService.exchangeCodeForToken,
+    fetchStoreInfo: zidService.fetchStoreInfo,
+    registerWebhooks: (accessToken: string) => zidService.registerWebhooks(accessToken),
+    scopes: config.zid.scopes,
+    pendingCookieName: 'pendingZidId',
+    pendingCookieOptions: PENDING_ZID_COOKIE_OPTIONS,
 });
