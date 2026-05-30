@@ -257,7 +257,6 @@ export default function BlogPostPage({
       <Head>
         <title>{frontmatter.seoTitle}</title>
         <meta name="description" content={frontmatter.seoDescription} />
-        <meta name="keywords" content={frontmatter.seoKeywords} />
 
         <meta key="og:title" property="og:title" content={frontmatter.seoTitle} />
         <meta key="og:description" property="og:description" content={frontmatter.seoDescription} />

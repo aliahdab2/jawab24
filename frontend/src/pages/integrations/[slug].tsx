@@ -55,7 +55,6 @@ export default function IntegrationPage({ integration }: IntegrationPageProps) {
       <Head>
         <title>{t(k(`${slug}.seoTitle`))}</title>
         <meta name="description" content={t(k(`${slug}.seoDescription`))} />
-        <meta name="keywords" content={t(k(`${slug}.seoKeywords`))} />
 
         <meta key="og:title" property="og:title" content={t(k(`${slug}.seoTitle`))} />
         <meta key="og:description" property="og:description" content={t(k(`${slug}.seoDescription`))} />

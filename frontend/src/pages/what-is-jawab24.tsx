@@ -83,7 +83,6 @@ export default function WhatIsJawab24() {
       <Head>
         <title>{t('seoTitle')}</title>
         <meta name="description" content={t('seoDescription')} />
-        <meta name="keywords" content={t('seoKeywords')} />
 
         <meta key="og:title" property="og:title" content={t('seoTitle')} />
         <meta key="og:description" property="og:description" content={t('seoDescription')} />

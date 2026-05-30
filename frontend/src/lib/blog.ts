@@ -5,7 +5,6 @@ import matter from 'gray-matter';
 export interface BlogFrontmatter {
   seoTitle: string;
   seoDescription: string;
-  seoKeywords: string;
   title: string;
   excerpt: string;
 }

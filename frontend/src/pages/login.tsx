@@ -249,7 +249,6 @@ export default function LoginPage() {
       <Head>
         <title>{`${BRAND_ASSETS.meta.appTitle} - ${t('login')}`}</title>
         <meta name="description" content={t('seoDescription')} />
-        <meta name="keywords" content={t('seoKeywords')} />
         <meta key="og:title" property="og:title" content={t('ogTitle')} />
         <meta key="og:description" property="og:description" content={t('ogDescription')} />
       </Head>

@@ -97,7 +97,6 @@ export default function LandingPageContent({ latestPosts = [] }: LandingPageCont
       <Head>
         <title>{t('seoTitle')}</title>
         <meta name="description" content={t('seoDescription')} />
-        <meta name="keywords" content={t('seoKeywords')} />
 
         {/* Open Graph — title/desc override MetaHead defaults; image/type/locale/site_name inherited */}
         <meta key="og:title" property="og:title" content={t('seoTitle')} />
