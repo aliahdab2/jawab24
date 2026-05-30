@@ -1,4 +1,5 @@
 apply plugin: 'com.android.application'
+apply plugin: 'com.github.triplet.play'
 
 // Read local.properties for build secrets (Facebook, Sentry)
 // Required keys: FACEBOOK_APP_ID, FACEBOOK_CLIENT_TOKEN
@@ -20,6 +21,11 @@ def releaseStorePassword = localProperties.getProperty('RELEASE_STORE_PASSWORD',
 def releaseKeyAlias = localProperties.getProperty('RELEASE_KEY_ALIAS', '')
 def releaseKeyPassword = localProperties.getProperty('RELEASE_KEY_PASSWORD', '')
 
+// Version is overridable from CI via -PappVersionName / -PappVersionCode.
+// Local/dev builds fall back to the literals below (kept at the last released values).
+def appVersionName = project.findProperty('appVersionName') ?: "1.3.2"
+def appVersionCode = (project.findProperty('appVersionCode') ?: "10302") as Integer
+
 if (facebookAppId.isEmpty()) {
     logger.warn("WARNING: FACEBOOK_APP_ID not set in local.properties. Facebook login will not work.")
 }
@@ -35,8 +41,8 @@ android {
         applicationId "com.jawab24.android"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 9
-        versionName "1.3.1"
+        versionCode appVersionCode
+        versionName appVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         // Inject Facebook secrets as string resources from local.properties
@@ -87,6 +93,16 @@ android {
             outputFileName = "Jawab24-${variant.name}-${date}.apk"
         }
     }
+}
+
+// Gradle Play Publisher — uploads the signed AAB to Google Play.
+// Credentials come from the ANDROID_PUBLISHER_CREDENTIALS env var (raw JSON) in CI;
+// no key file is committed. Track defaults to 'internal' and is overridden per-run
+// with the --track CLI flag. For a staged production rollout, add
+// `--release-status inProgress --user-fraction 0.1` to the gradle command.
+play {
+    track = 'internal'
+    defaultToAppBundles = true
 }
 
 repositories {
