@@ -27,7 +27,8 @@ vi.mock('../../src/services/salla', () => ({
     fetchStoreInfo: (...args: any[]) => mockFetchStoreInfo(...args),
     fullSync: (...args: any[]) => mockFullSync(...args),
     isProductEvent: (...args: any[]) => mockIsProductEvent(...args),
-    isOrderEvent: vi.fn(() => false),
+    // Faithful to the real impl so the order-notification dispatch branch is reachable in tests.
+    isOrderEvent: (event: string) => event.startsWith('order.') || event === 'abandoned.cart',
 }));
 
 vi.mock('../../src/services/customerNotifications', () => ({
@@ -75,6 +76,11 @@ vi.mock('../../src/services/workspace', () => ({
     workspaceService: {
         getUserWorkspaces: (...args: any[]) => mockGetUserWorkspaces(...args),
     },
+}));
+
+const mockDispatchOrderNotification = vi.fn();
+vi.mock('../../src/services/orderNotificationScheduler', () => ({
+    dispatchOrderNotification: (...args: any[]) => mockDispatchOrderNotification(...args),
 }));
 
 vi.mock('../../src/config', () => ({
@@ -222,16 +228,24 @@ describe('Salla Controller', () => {
             expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: state mismatch' });
         });
 
-        it('should reject when nonce cookie is missing', async () => {
+        it('should treat a missing nonce cookie as a platform-initiated (Salla-first) install and proceed', async () => {
+            // Salla App Store / Partners "Install App" redirects straight to the callback
+            // with its own state and NO prior nonce from us. The CSRF state check must not
+            // reject this — the server-to-server code exchange is the trust anchor.
             const req = mockRequest({
-                query: { code: 'code123', state: 'nonce123' },
+                query: { code: 'code123', state: 'salla_state_abc' },
                 cookies: {},
             });
             const rep = mockReply();
 
             await authCallback(req, rep);
 
-            expect(rep.status).toHaveBeenCalledWith(400);
+            // Proceeds past the state check into the OAuth code exchange...
+            expect(mockExchangeCodeForToken).toHaveBeenCalledWith('code123');
+            // ...and (not logged in) lands in the pending-install / claim path — not a 400.
+            expect(mockCreatePendingInstall).toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?salla_pending=true');
+            expect(rep.status).not.toHaveBeenCalledWith(400);
         });
 
         it('should reject when signed cookie is invalid', async () => {
@@ -641,6 +655,49 @@ describe('Salla Controller', () => {
 
             expect(mockEnqueueSyncJob).not.toHaveBeenCalled();
             expect(mockDeactivateStore).not.toHaveBeenCalled();
+            expect(rep.status).toHaveBeenCalledWith(200);
+        });
+
+        // --- A3 regression: real Salla event names + slug-based status (verified
+        // against a live order.created payload — data.status.slug, flat under data) ---
+        it('should dispatch order_delivered on order.status.updated with slug "delivered" (A3)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'order.status.updated', merchant: 12345,
+                data: { id: 1686116368, customer: { mobile: '+966555123456', first_name: 'Test' }, status: { slug: 'delivered', name: 'تم التوصيل' } },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification).toHaveBeenCalledTimes(1);
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({
+                platform: 'salla', storeId: 'store-1', type: 'order_delivered', customerPhone: '+966555123456',
+            });
+        });
+
+        it('should dispatch order_shipped on order.shipment.created with the tracking number (A3)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = {
+                event: 'order.shipment.created', merchant: 12345,
+                data: { id: 1686116368, customer: { mobile: '+966555123456' }, shipments: [{ tracking_number: 'TRK-123' }] },
+            };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            await webhookHandler(req, mockReply());
+
+            expect(mockDispatchOrderNotification.mock.calls[0][0]).toMatchObject({ type: 'order_shipped', trackingNumber: 'TRK-123' });
+        });
+
+        it('should NOT dispatch for the phantom "order.completed" event (A3 regression)', async () => {
+            mockVerifyWebhookHmac.mockReturnValue(true);
+            mockGetStoreByDomain.mockResolvedValue({ id: 'store-1' });
+            const body = { event: 'order.completed', merchant: 12345, data: { id: 1, customer: { mobile: '+966555' } } };
+            const req = mockRequest({ headers: { 'x-salla-signature': 'valid_hmac' }, body, rawBody: Buffer.from(JSON.stringify(body)) });
+            const rep = mockReply();
+            await webhookHandler(req, rep);
+
+            expect(mockDispatchOrderNotification).not.toHaveBeenCalled();
             expect(rep.status).toHaveBeenCalledWith(200);
         });
     });
