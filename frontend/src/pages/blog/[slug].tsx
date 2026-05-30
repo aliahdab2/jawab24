@@ -17,6 +17,7 @@ import remarkGfm from 'remark-gfm';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
 import { slugify } from '@/utils/headingSlug';
+import { BreadcrumbJsonLd } from '@/components/seo/BreadcrumbJsonLd';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import {
   BLOG_POSTS,
@@ -297,6 +298,14 @@ export default function BlogPostPage({
               'image': BRAND_ASSETS.urls.ogImage(),
             }),
           }}
+        />
+
+        <BreadcrumbJsonLd
+          items={[
+            { name: 'Jawab24', url: `https://jawab24.com${locale === 'en' ? '/en' : '/'}` },
+            { name: t('indexTitle'), url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/blog` },
+            { name: frontmatter.title, url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/blog/${slug}` },
+          ]}
         />
       </Head>
 
