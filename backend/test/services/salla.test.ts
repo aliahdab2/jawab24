@@ -855,8 +855,8 @@ describe('Salla Service', () => {
                 'app.uninstalled',
                 'order.created',
                 'order.updated',
-                'order.shipping.update',
-                'order.completed',
+                'order.status.updated',
+                'order.shipment.created',
                 'abandoned.cart',
             ]);
         });

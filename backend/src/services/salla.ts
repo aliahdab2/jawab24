@@ -111,11 +111,15 @@ export const SALLA_WEBHOOK_EVENTS = [
     'product.status.updated',
     'product.quantity.low',
     'app.uninstalled',
-    // Order lifecycle — for customer notifications
+    // Order lifecycle — for customer notifications.
+    // Salla has NO `order.completed` event and NO `order.shipping.update` event
+    // (verified against docs.salla.dev + SDKs). Order completion/delivery is a
+    // STATUS VALUE inside `order.status.updated` (data.status.slug in
+    // {completed,delivered,shipped}); shipment/tracking is `order.shipment.created`.
     'order.created',
     'order.updated',
-    'order.shipping.update',
-    'order.completed',
+    'order.status.updated',
+    'order.shipment.created',
     'abandoned.cart',
 ] as const;
 

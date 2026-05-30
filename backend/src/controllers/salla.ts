@@ -207,7 +207,9 @@ interface SallaOrderData {
     reference?: string;
     customer?: { first_name?: string; mobile?: string };
     total?: { amount?: number; currency?: string };
-    status?: { name?: string };
+    // Branch on `slug` (stable English id) — `name` is localized Arabic.
+    // Verified against a live order.created payload (data.status.slug, flat under data).
+    status?: { slug?: string; name?: string };
     shipments?: Array<{ tracking_number?: string }>;
 }
 
@@ -237,9 +239,9 @@ function buildSallaOrderEvent(storeId: string, event: string, body: unknown): Or
 
     if (event === 'order.created') {
         return { platform: 'salla', storeId, type: 'order_confirmed', customerPhone: phone, customerName, orderId, orderNumber };
-    } else if (event === 'order.shipping.update' || (event === 'order.updated' && data.status?.name === 'in_transit')) {
+    } else if (event === 'order.shipment.created' || (event === 'order.status.updated' && data.status?.slug === 'shipped')) {
         return { platform: 'salla', storeId, type: 'order_shipped', customerPhone: phone, customerName, orderId, orderNumber, trackingNumber };
-    } else if (event === 'order.completed') {
+    } else if (event === 'order.status.updated' && (data.status?.slug === 'completed' || data.status?.slug === 'delivered')) {
         return {
             platform: 'salla', storeId, type: 'order_delivered',
             customerPhone: phone, customerName, orderId, orderNumber,
