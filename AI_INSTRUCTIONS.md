@@ -224,7 +224,21 @@ cd frontend && npm run test:e2e          # E2E tests (Playwright)
 npm run translation:validate             # Check i18n files (from frontend/)
 ```
 
-For Shopify integration tests, AI eval, and mobile builds — see the `/shopify-dev`, `/eval`, and `/build-mobile` skills.
+For Shopify integration tests, AI eval, mobile builds, and Android releases — see the `/shopify-dev`, `/eval`, `/build-mobile`, and `/release-android` skills.
+
+### Releasing a new Android version
+
+Local-first — no CI required:
+
+```bash
+./scripts/release-android.sh internal --bump patch   # build + sign + upload to internal track
+./scripts/release-android.sh internal --dry-run      # build the signed AAB only, no upload
+```
+
+- Builds the signed AAB and uploads to Google Play via the Gradle Play Publisher plugin. Tracks: `internal` (default) / `alpha` / `beta` / `production`. Version: `--bump patch|minor|major` (default `patch`) or `--version X.Y.Z`; `versionCode` is derived as `major*10000 + minor*100 + patch`.
+- **Prereqs**: signing config in `frontend/android/local.properties` and the Play service-account key at `frontend/android/play-service-account.json` (both untracked).
+- The service account is scoped to **testing tracks only** — push to **production by promoting the tested build in the Play Console** (it has no production API permission by design).
+- Full flow, preconditions, and the optional dispatch-only CI workflow (`.github/workflows/android-release.yml`) are documented in the `/release-android` skill.
 
 ---
 

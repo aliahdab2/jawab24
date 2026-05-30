@@ -822,3 +822,16 @@ All webhooks use HMAC-SHA256 signature verification:
   - Mutual dependencies (if using Shopify, must have SHOPIFY_API_KEY + SECRET)
   - Fails hard if validation fails (process.exit(1))
 
+---
+
+## Google Play Publishing (Android Release)
+
+- **Purpose**: Automated upload of signed Android App Bundles (AAB) to Google Play.
+- **Tooling**: Gradle Play Publisher (`com.github.triplet.gradle:play-publisher:3.13.0`, pinned for AGP 8.13 — 4.x requires AGP 9). Classpath in `frontend/android/build.gradle`; `play{}` block in `frontend/android/app/build.gradle`.
+- **Entry point**: `scripts/release-android.sh` (local-first) / `/release-android` skill. Optional dispatch-only CI: `.github/workflows/android-release.yml`.
+- **Play package**: `com.jawab24.android` (differs from the iOS/Capacitor appId `com.jawab24.app`).
+- **Auth**: service account `play-publisher@jawab24-play-publisher.iam.gserviceaccount.com` (in a personal `aliahdab@gmail.com` Cloud project — deliberately NOT the telavox.se org). Credential via `ANDROID_PUBLISHER_CREDENTIALS` env (raw JSON) or local key file `frontend/android/play-service-account.json` (untracked). Scoped to **testing tracks only** — production is promoted manually in the Play Console.
+- **Signing**: upload keystore `frontend/android/jawab24-upload.jks` (alias `jawab24`) + passwords in `frontend/android/local.properties` (both untracked). Play App Signing holds the real signing key.
+- **Versioning**: `versionName` from `--version`/`--bump`; `versionCode = major*10000 + minor*100 + patch` (deterministic, injected via `-PappVersionName/-PappVersionCode`). The `build.gradle` literals are the "last released" fallback.
+- **Note**: Play Console's old "API access" page was removed by Google — service accounts are created in Google Cloud Console and invited via Play Console → Users and permissions.
+
