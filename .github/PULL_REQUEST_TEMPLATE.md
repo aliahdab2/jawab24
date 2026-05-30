@@ -14,6 +14,7 @@
 - [ ] I have tested my changes manually
 - [ ] I have added tests that prove my fix/feature works
 - [ ] I have updated documentation if needed
+- [ ] **Living-doc sync (Rule 15):** if this PR changes an **integration** (`backend/src/services/{shopify,salla,zid,whatsapp,facebook,instagram,stripe}.ts`), an **outbox event**, or **how the system is built**, I updated the living docs **in this same PR** — `.planning/codebase/INTEGRATIONS.md`, `SYSTEM_ANALYSIS.md`, and/or `ARCHITECTURE.md`. _(Tick if updated, or if this PR touches none of those — never defer to a follow-up.)_
 - [ ] My code follows the project's coding style
 
 ## Screenshots (if applicable)

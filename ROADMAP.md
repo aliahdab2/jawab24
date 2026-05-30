@@ -1,7 +1,9 @@
 # Jawab24 — Product Roadmap
 
-> **Last updated**: 2026-04-15
+> **Last updated**: 2026-05-30 (status reconciliation; phase plan below not re-sequenced)
 > **Purpose**: Strategic feature roadmap based on competitive analysis and product study.
+>
+> **Active near-term focus (2026-05-30):** Ship the **Salla App Store** listing first (Arabic-first / "AI sales rep" wedge); file Meta WhatsApp Embedded Signup in parallel. Shopify + Zid submissions and WhatsApp frontend/templates follow. See `.planning/SALLA_LISTING_BRIEF.md`, `.planning/SALLA_LAUNCH_VALIDATION.md`, and the consolidated launch plan.
 
 ---
 
@@ -24,13 +26,22 @@
 - Conversation pause/resume (handoff)
 - Multi-tenant workspace infrastructure (invisible to users, ready for team features)
 
-### Competitive Gaps (updated 2026-04-15)
-- ~~No WhatsApp channel~~ — Backend complete (2026-04-04), UI pending
+### Competitive Gaps (updated 2026-05-30)
+- ~~No WhatsApp channel~~ — Inbound DMs live through the shared AI pipeline; **frontend connection UI + proactive template messages still pending** (gated on Meta Embedded Signup approval)
 - No chatbot flow builder
-- Limited analytics (basic overview only)
+- ~~Limited analytics (basic overview only)~~ — **E-commerce analytics dashboard shipped** (`ecommerce-analytics.tsx`); inbox-level smart analytics (Phase 4) still pending
 - No customer profiles/CRM
 - No AI suggested replies in inbox
 - Team features: backend ready, UI not yet exposed (see Phase 6)
+- **Proactive DM/WhatsApp cart-recovery & order notifications NOT built** — only the SMS channel is live (see below)
+
+### Completed Since Last Update (2026-04-15 → 2026-05-30)
+- E-commerce **SMS customer notifications** live: order confirmed/shipped/delivered, abandoned-cart recovery, review requests, digital delivery — bilingual, dedup'd, merchant-configurable (`services/customerNotifications.ts`)
+- **E-commerce analytics dashboard** shipped (`services/ecommerceAnalytics.ts` + `pages/ecommerce-analytics.tsx`)
+- **Platform-agnostic webhook hardening** lifted across Shopify/Salla/Zid (retry queue, persist-on-throw, reregister endpoint + recovery UI) — PR #27/#28
+- **Salla App Store launch prep**: privacy policy now covers Shopify/Salla/Zid (#176), pending-install refresh-token persistence fixed (#211), listing brief + validation docs drafted
+- **Android local-first Play release pipeline** (`scripts/release-android.sh` + Gradle Play Publisher) — PR #212
+- Prompt iterated toward v37 ("feel human" pass — on branch, not yet deployed)
 
 ### Completed Since Last Update (2026-02-22 → 2026-04-15)
 - WhatsApp Cloud API backend integration

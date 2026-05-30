@@ -1,5 +1,25 @@
 # E-Commerce Customer Notifications — Implementation Plan
 
+> ## ✅ STATUS: SHIPPED (SMS channel) — reconciled 2026-05-30
+>
+> **The SMS delivery system described below is live in production.** This doc was
+> drafted as a forward plan and never updated when the work shipped — the
+> "Planned" labels in §10 are historical, not current. Verified in code on
+> 2026-05-30:
+> - **Phase 1 (Foundation):** `customer_notification_templates` + `customer_notifications_log` tables (`backend/src/db/schema.ts:1123,1144`); `services/customerNotifications.ts`; `lib/customerNotificationQueue.ts` + `workers/customerNotificationWorker.ts`; `controllers/` + `routes/customerNotifications.ts`; default-template seeding on store connect.
+> - **Phase 2 (Order notifications):** order events wired into Salla/Zid/Shopify webhooks; `orderNotificationScheduler.ts` normalizes across platforms; dedup via `platformEventId`; Arabic/English template selection by phone country prefix.
+> - **Phase 3 (Abandoned cart):** `abandoned_cart` type + cancellation-on-order (`customerNotifications.ts:142,168`).
+> - **Phase 4 (Review + digital):** `review_request` + `digital_delivery` types (`customerNotifications.ts:192,198`).
+> - **Phase 5 (Dashboard UI):** `frontend/src/i18n/{en,ar}/orderNotifications.json` + `frontend/src/components/notifications/`; analytics shipped via `services/ecommerceAnalytics.ts` + `pages/ecommerce-analytics.tsx`.
+>
+> **NOT shipped (tracked separately, do not assume from this doc):** the
+> **Facebook/Instagram DM and WhatsApp delivery channels**. Only the SMS channel
+> exists. The DM channel requires customer-identity mapping + proactive messaging,
+> which are **not built** (no `ecommerceCustomerMap` table, no `proactiveMessaging.ts`)
+> — see `ECOMMERCE_POWER_FEATURES_PLAN.md` "Step 3". The single source of truth
+> for what's live is `.planning/codebase/INTEGRATIONS.md` § "E-commerce Order
+> Notifications", not this plan.
+
 > Compete with LetsBot: abandoned cart recovery, order status notifications,
 > review requests, digital product delivery, and merchant-configurable templates.
 >
@@ -586,6 +606,8 @@ ALTER TABLE customer_notification_templates
 ---
 
 ## 10. Implementation Order
+
+> ⚠️ **Historical.** Phases 1–5 (SMS channel) shipped — see the STATUS banner at the top of this file. The "Week N" labels were the original estimate, not current status.
 
 ### Phase 1: Foundation (Week 1)
 
