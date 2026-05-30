@@ -16,6 +16,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
+import { slugify } from '@/utils/headingSlug';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import {
   BLOG_POSTS,
@@ -52,22 +53,9 @@ function extractToc(markdown: string): TocItem[] {
   let match: RegExpExecArray | null;
   while ((match = headingRegex.exec(markdown)) !== null) {
     const text = match[2].replace(/\*\*/g, '').trim();
-    const id = text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-');
-    items.push({ id, text, level: match[1].length });
+    items.push({ id: slugify(text), text, level: match[1].length });
   }
   return items;
-}
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/\*\*/g, '')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .trim();
 }
 
 /* ─── Reading progress bar ────────────────────────────────────────── */
