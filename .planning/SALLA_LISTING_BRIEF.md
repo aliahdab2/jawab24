@@ -28,10 +28,15 @@
 - Limited team — no dedicated CX agent
 - Reads Arabic first; product UI in Arabic is **table stakes**
 
-### Value proposition (one-liner, Arabic-first)
-**ذكاء اصطناعي عربي يرد على عملائك في فيسبوك وإنستغرام بأسعار ومنتجات متجرك في سلة — تلقائياً 24/7.**
+### Positioning direction (DECIDED 2026-05-30)
+**Frame Jawab24 as an AI _sales rep_ (مندوب مبيعات), not a customer-service auto-reply tool.** It doesn't just answer — it recommends products, quotes live prices, follows up, and closes the sale. This shifts the lead verb from "يردّ" (replies) to "يبيع" (sells), pushes the category toward Marketing/Sales over Customer Service, and should propagate beyond this listing (landing page, other app-store listings) for brand consistency — tracked as a follow-up, not in this PR.
 
-(English fallback for international merchants: *Arabic-first AI replies on Facebook + Instagram using your live Salla catalog — 24/7.*)
+> Term choice: `مندوب مبيعات` (sales rep — stronger commerce resonance) vs `موظف مبيعات` (sales employee — literal). Leaning `مندوب مبيعات`; confirm with marketing.
+
+### Value proposition (one-liner, Arabic-first) — DRAFT, sales-rep reframe
+**مندوب مبيعات بالذكاء الاصطناعي يبيع منتجات متجرك في سلة عبر فيسبوك وإنستغرام، ويردّ على عملائك طوال اليوم بلا توقّف.**
+
+(English fallback for international merchants: *An AI sales rep that sells your Salla products on Facebook + Instagram and replies to customers 24/7.*)
 
 ### What sets Jawab24 apart from other Salla apps
 1. **Arabic-first AI** — not English translated to Arabic. Trained on Gulf + Levantine + Egyptian dialects.
@@ -49,43 +54,67 @@
 ### App name (شاشة العرض)
 **Jawab24 — جواب24**
 
-### Short tagline (~50 chars Arabic)
-**ردود ذكية على فيسبوك وإنستغرام بمنتجاتك من سلة**
+### Short tagline (~50 chars Arabic) — DRAFT, sales-rep reframe
+**مندوب مبيعاتك الذكي على فيسبوك وإنستغرام**
 
-### Long description (Arabic, ~300 words)
+### Long description (Arabic, ~250 words) — DRAFT, sales-rep frame (awaiting marketing sign-off)
 
-```
-[TBD — marketing draft]
-
-Suggested structure:
-1. هل تقضي ساعات في الرد على رسائل عملائك؟ (hook)
-2. Jawab24 يربط متجرك في سلة بصفحات فيسبوك وإنستغرام (what it does)
-3. الذكاء الاصطناعي يفهم العربية ويرد بأسعار ومنتجات متجرك الفعلية (why it's different)
-4. خواص: مزامنة تلقائية للمنتجات، رد على التعليقات والرسائل، رسائل التذكير بالعربة المتروكة، تتبع الطلبات
-5. آمن وموثوق: لا يخزن بيانات عملائك، توكنات مشفرة، متوافق مع GDPR
-6. CTA: ابدأ الآن مجاناً — لا تحتاج بطاقة ائتمان
-```
-
-### Long description (English fallback, ~250 words)
+> Wedge: lead on Arabic-first AI depth + live Salla catalog (verified shipped). Proactive order/cart features held as "قريباً" until Phase 4.2 validates their Salla wiring (see A2/A3 in the launch plan). Arabic is canonical; English below is the translation.
 
 ```
-[TBD — marketing draft]
+هل تقضي ساعاتك في الرد على نفس الأسئلة؟ "كم السعر؟"، "هل المنتج متوفر؟"، "وين وصل طلبي؟". كل رسالة يتأخر الرد عليها قد تعني عميلاً يذهب إلى متجر آخر.
 
-Same structure. Translate AFTER Arabic is finalized — the Arabic is canonical.
+Jawab24 هو مندوب مبيعاتك الذكي الذي لا ينام. يربط متجرك في سلة بصفحاتك على فيسبوك وإنستغرام، ويرد على رسائل عملائك وتعليقاتهم تلقائياً — بأسعار ومنتجات متجرك الحقيقية، طوال اليوم.
+
+ما الذي يميّز Jawab24؟ إنه يفهم العربية كما يتحدثها عملاؤك — الفصحى واللهجات الخليجية والمصرية والشامية — لا ترجمة آلية. يقرأ منتجاتك وأسعارك مباشرة من سلة، فيجيب بمعلومات دقيقة بدل الردود العامة، ويقترح المنتج المناسب ليُتمّ عملية البيع. وإذا لم يجد الإجابة في معلومات متجرك، ينبّهك بدل أن يخمّن.
+
+أهم المزايا:
+• ردود فورية على رسائل وتعليقات فيسبوك وإنستغرام
+• يقرأ منتجاتك وأسعارك من سلة، ويزامنها تلقائياً عند أي تحديث
+• يبيع بالعربية الفصحى أو بلهجة عميلك
+• يقترح المنتجات المناسبة من متجرك
+• ثلاث طرق للرد: تعليق عام، رسالة خاصة، أو الاثنان معاً
+• تأكيد الطلبات وتذكير العملاء بالعربات المتروكة (قريباً)
+
+آمن وموثوق: نشفّر بيانات الدخول إلى متجرك، ولا نشارك بيانات عملائك. متوافق مع نظام حماية البيانات الشخصية (PDPL).
+
+ابدأ مجاناً اليوم — بدون بطاقة ائتمان. دع Jawab24 يرد ويبيع، وتفرّغ أنت لتنمية متجرك.
 ```
 
-### Feature bullets (Arabic, 5–7 items, ≤8 words each)
-- ✅ ردود فورية على رسائل وتعليقات فيسبوك وإنستغرام
-- ✅ يقرأ منتجاتك وأسعارك من سلة مباشرة
-- ✅ يرد بالعربية الفصحى أو اللهجة المحلية
-- ✅ مزامنة تلقائية عند تحديث المنتجات
-- ✅ رسائل العربة المتروكة وتأكيد الطلبات (قريباً — Phase 3)
-- ✅ يدعم اللغتين العربية والإنجليزية
-- ✅ مدعوم بفريق سعودي
+### Long description (English fallback, ~230 words) — DRAFT (translation of the canonical Arabic)
+
+```
+Tired of answering the same questions all day? "How much is this?", "Is it in stock?", "Where's my order?" Every slow reply is a customer who might buy somewhere else.
+
+Jawab24 is your AI sales rep that never sleeps. It connects your Salla store to your Facebook and Instagram pages and replies to customer messages and comments automatically — with your store's real products and prices, around the clock.
+
+What makes Jawab24 different? It understands Arabic the way your customers actually speak it — Modern Standard plus Gulf, Egyptian, and Levantine dialects — not clumsy machine translation. It reads your products and prices straight from Salla, so it answers with accurate details instead of generic chatbot replies, and recommends the right product to close the sale. When it can't find an answer in your store info, it flags you instead of guessing.
+
+Key features:
+• Instant replies to Facebook & Instagram messages and comments
+• Reads your Salla products and prices, auto-syncing on every update
+• Sells in Modern Standard Arabic or your customer's dialect
+• Recommends the right products from your catalog
+• Three reply modes: public comment, private DM, or both
+• Order confirmations & abandoned-cart reminders (coming soon)
+
+Safe and trusted: your store credentials are encrypted and we never share your customers' data. PDPL-compliant.
+
+Start free today — no credit card required. Let Jawab24 reply and sell, so you can focus on growing your store.
+```
+
+### Feature bullets (Arabic, 5–7 items, ≤8 words each) — DRAFT, sales-rep reframe (selling verbs first)
+- ✅ يقترح المنتجات المناسبة من متجرك ويُتمّ البيع
+- ✅ يجيب فوراً عن الأسعار والتوفّر من منتجات متجرك في سلة
+- ✅ يبيع ويردّ بالعربية الفصحى أو بلهجة عملائك
+- ✅ يتابع العربات المتروكة ويذكّر العميل بإكمال طلبه (قريباً — Phase 3)
+- ✅ يزامن منتجاتك وأسعارك من سلة تلقائياً
+- ✅ يعمل طوال اليوم دون توقّف على فيسبوك وإنستغرام
+- ✅ يدعم العربية والإنجليزية، ومدعوم بفريق سعودي
 
 ### Categories / tags (Salla taxonomy)
-- Primary category: **[TBD — confirm Salla's category list]** (likely "تطبيقات التسويق" / Marketing or "خدمة العملاء" / Customer Service)
-- Tags: `chatbot`, `auto-reply`, `facebook`, `instagram`, `AI`, `arabic`, `customer-service`, `social-commerce`
+- Primary category: lean **Marketing / Sales (التسويق / المبيعات)** over Customer Service, to match the sales-rep positioning — pending confirmation of Salla's actual taxonomy (open question §9.1).
+- Tags: `sales`, `chatbot`, `facebook`, `instagram`, `AI`, `arabic`, `social-commerce`, `cart-recovery` — leading with sales/commerce intent over `customer-service`
 
 ---
 
@@ -195,12 +224,11 @@ Salla supports two billing models:
 - **(A) Salla-managed billing** — Jawab24 charges through Salla's billing API, Salla takes a cut, merchant pays in SAR through their existing Salla payment relationship. Lower friction, lower margin.
 - **(B) External billing** — Jawab24 has its own subscription page; merchant signs up there. Higher friction (two payment relationships), full margin.
 
-[TBD — decide.] *Recommendation, not decided:* (A) for launch — first-100-merchant adoption friction matters more than per-merchant margin. Validate by checking what comparable Salla apps in the same category do.
+✅ **DECIDED 2026-05-30: (A) Salla-managed billing for launch.** Rationale: first-100-merchant adoption friction matters more than per-merchant margin; merchant pays in SAR through their existing Salla payment relationship. Revisit margin trade-off after launch traction.
 
 ### Free tier strategy
-- *Recommendation, not decided:* free tier with caps matching the Jawab24.com plan (e.g. 100 AI replies/month), then paid plans through Salla billing.
+✅ **DECIDED 2026-05-30: free tier capped to the jawab24.com free plan (~100 AI replies/month), then paid tiers through Salla billing.** Lowers the trial barrier on a price-sensitive Salla audience.
 - Free tier prevalence on the Salla App Store [TBD — verify by browsing the live listings; the original draft cited "~30%" without a source].
-- Decision: [TBD]
 
 ### Pricing tiers (if Salla-managed billing)
 - [TBD — sync with Jawab24.com plan structure]
