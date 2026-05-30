@@ -27,6 +27,7 @@ import { ecommerceApiGet } from '../utils/httpRetry';
 import {
     refreshAccessToken as sharedRefreshAccessToken,
     ensureValidToken as sharedEnsureValidToken,
+    resolveStoreAccessToken,
     getStoresNeedingTokenRefresh as sharedGetStoresNeedingTokenRefresh,
     refreshExpiringTokens as sharedRefreshExpiringTokens,
     type TokenRefreshConfig,
@@ -366,11 +367,7 @@ export async function getStoresNeedingTokenRefresh() {
 import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/shared';
 
 async function resolveStoreCredentials(storeId: string): Promise<string | null> {
-    await sharedEnsureValidToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
-    const store = await getStoreById(storeId);
-    if (!store || !store.isActive) return null;
-    if (!store.accessToken || !store.accessTokenIv) return null;
-    return decrypt(store.accessToken, store.accessTokenIv);
+    return resolveStoreAccessToken(storeId, ZID_TOKEN_REFRESH_CONFIG);
 }
 
 // --- Zid Order Response Types ---

@@ -28,6 +28,7 @@ import { ecommerceApiGet } from '../utils/httpRetry';
 import {
     refreshAccessToken as sharedRefreshAccessToken,
     ensureValidToken as sharedEnsureValidToken,
+    resolveStoreAccessToken,
     getStoresNeedingTokenRefresh as sharedGetStoresNeedingTokenRefresh,
     refreshExpiringTokens as sharedRefreshExpiringTokens,
     type TokenRefreshConfig,
@@ -384,11 +385,7 @@ import type { OrderInfoFull, ShipmentInfoFull, InventoryInfo } from '@jawab24/sh
  * Ensures token is valid (refreshes if needed) and returns decrypted accessToken.
  */
 async function resolveStoreCredentials(storeId: string): Promise<string | null> {
-    await sharedEnsureValidToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
-    const store = await getStoreById(storeId);
-    if (!store || !store.isActive) return null;
-    if (!store.accessToken || !store.accessTokenIv) return null;
-    return decrypt(store.accessToken, store.accessTokenIv);
+    return resolveStoreAccessToken(storeId, SALLA_TOKEN_REFRESH_CONFIG);
 }
 
 // --- Salla Order Response Types ---
