@@ -8,6 +8,11 @@ export default function TermsOfService() {
     { title: t('acceptTitle'), text: t('acceptText') },
     { title: t('descTitle'), text: t('descText') },
     {
+      title: t('ecommerceTitle'),
+      text: t('ecommerceText'),
+      items: [t('ecommerceItem1'), t('ecommerceItem2'), t('ecommerceItem3')]
+    },
+    {
       title: t('requireTitle'),
       text: t('requireText'),
       items: [t('requireItem1'), t('requireItem2'), t('requireItem3'), t('requireItem4')]

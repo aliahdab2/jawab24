@@ -20,7 +20,7 @@ export default function PrivacyPolicy() {
     {
       title: t('shareTitle'),
       text: t('shareText'),
-      items: [t('shareItem1'), t('shareItem2'), t('shareItem3'), t('shareItem4'), t('shareItem5'), t('shareItem6'), t('shareItem7')]
+      items: [t('shareItem1'), t('shareItem2'), t('shareItem3'), t('shareItem4'), t('shareItem5'), t('shareItem6'), t('shareItem7'), t('shareItem8'), t('shareItem9')]
     },
     {
       title: t('ecommerceTitle'),
@@ -28,11 +28,13 @@ export default function PrivacyPolicy() {
       items: [t('ecommerceItem1'), t('ecommerceItem2'), t('ecommerceItem3'), t('ecommerceItem4'), t('ecommerceItem5'), t('ecommerceItem6')]
     },
     { title: t('securityTitle'), text: t('securityText') },
+    { title: t('residencyTitle'), text: t('residencyText') },
     { title: t('retentionTitle'), text: t('retentionText') },
+    { title: t('childrenTitle'), text: t('childrenText') },
     {
       title: t('rightsTitle'),
       text: t('rightsText'),
-      items: [t('rightsItem1'), t('rightsItem2'), t('rightsItem3'), t('rightsItem4'), t('rightsItem5')]
+      items: [t('rightsItem1'), t('rightsItem2'), t('rightsItem3'), t('rightsItem4'), t('rightsItem5'), t('rightsItem6')]
     },
     {
       title: t('deletionTitle'),
