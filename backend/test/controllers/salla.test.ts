@@ -222,16 +222,24 @@ describe('Salla Controller', () => {
             expect(rep.send).toHaveBeenCalledWith({ error: 'Invalid OAuth callback: state mismatch' });
         });
 
-        it('should reject when nonce cookie is missing', async () => {
+        it('should treat a missing nonce cookie as a platform-initiated (Salla-first) install and proceed', async () => {
+            // Salla App Store / Partners "Install App" redirects straight to the callback
+            // with its own state and NO prior nonce from us. The CSRF state check must not
+            // reject this — the server-to-server code exchange is the trust anchor.
             const req = mockRequest({
-                query: { code: 'code123', state: 'nonce123' },
+                query: { code: 'code123', state: 'salla_state_abc' },
                 cookies: {},
             });
             const rep = mockReply();
 
             await authCallback(req, rep);
 
-            expect(rep.status).toHaveBeenCalledWith(400);
+            // Proceeds past the state check into the OAuth code exchange...
+            expect(mockExchangeCodeForToken).toHaveBeenCalledWith('code123');
+            // ...and (not logged in) lands in the pending-install / claim path — not a 400.
+            expect(mockCreatePendingInstall).toHaveBeenCalled();
+            expect(rep.redirect).toHaveBeenCalledWith('https://jawab24.com/login?salla_pending=true');
+            expect(rep.status).not.toHaveBeenCalledWith(400);
         });
 
         it('should reject when signed cookie is invalid', async () => {

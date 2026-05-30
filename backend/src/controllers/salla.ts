@@ -37,22 +37,29 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
         code?: string; state?: string;
     };
 
-    // Validate nonce from signed cookie matches state param
+    if (!code) {
+        return reply.status(400).send({ error: 'Invalid OAuth callback: missing code' });
+    }
+
+    // CSRF state validation applies ONLY to merchant-initiated installs — flows we
+    // started via GET /salla/auth, which sets the signed `sallaNonce` cookie. Salla
+    // App Store / Partners "Install App" installs are platform-initiated: Salla
+    // redirects straight here with its own `state` and no prior nonce from us, so
+    // there is nothing to match against. For those, the trust anchor is the
+    // server-to-server code exchange (uses our client_secret) — an attacker cannot
+    // forge a `code` that Salla issued to our app.
     const nonceCookie = request.cookies.sallaNonce;
-    let storedNonce: string | null = null;
     if (nonceCookie) {
+        // We initiated this flow: the nonce MUST be present, valid, and match.
+        // A tampered/invalid cookie is rejected — do NOT fall through to the
+        // platform-initiated path (that would bypass CSRF protection).
         const unsigned = request.unsignCookie(nonceCookie);
-        if (unsigned.valid && unsigned.value) {
-            storedNonce = unsigned.value;
+        const storedNonce = unsigned.valid ? unsigned.value : null;
+        if (!storedNonce || state !== storedNonce) {
+            return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
         }
+        reply.clearCookie('sallaNonce', { path: '/' });
     }
-
-    if (!code || !state || state !== storedNonce) {
-        return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
-    }
-
-    // Clear the nonce cookie
-    reply.clearCookie('sallaNonce', { path: '/' });
 
     const frontendUrl = config.frontendUrl;
 
@@ -116,7 +123,9 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
                 refreshToken: tokens.refreshToken,
                 tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
                 scopes: config.salla.scopes,
-                nonce: state,
+                // Platform-initiated installs may omit state; the claim flow keys off
+                // the signed pendingSallaId cookie, not this value.
+                nonce: state ?? '',
             });
 
             reply.setCookie('pendingSallaId', pendingId, PENDING_SALLA_COOKIE_OPTIONS);

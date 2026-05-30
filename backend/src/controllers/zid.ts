@@ -37,20 +37,28 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
         code?: string; state?: string;
     };
 
+    if (!code) {
+        return reply.status(400).send({ error: 'Invalid OAuth callback: missing code' });
+    }
+
+    // CSRF state validation applies ONLY to merchant-initiated installs — flows we
+    // started via GET /zid/auth, which sets the signed `zidNonce` cookie. Zid App
+    // Market / platform-initiated installs redirect straight here with their own
+    // `state` and no prior nonce from us, so there is nothing to match against. For
+    // those, the trust anchor is the server-to-server code exchange (uses our
+    // client_secret) — an attacker cannot forge a `code` that Zid issued to our app.
     const nonceCookie = request.cookies.zidNonce;
-    let storedNonce: string | null = null;
     if (nonceCookie) {
+        // We initiated this flow: the nonce MUST be present, valid, and match.
+        // A tampered/invalid cookie is rejected — do NOT fall through to the
+        // platform-initiated path (that would bypass CSRF protection).
         const unsigned = request.unsignCookie(nonceCookie);
-        if (unsigned.valid && unsigned.value) {
-            storedNonce = unsigned.value;
+        const storedNonce = unsigned.valid ? unsigned.value : null;
+        if (!storedNonce || state !== storedNonce) {
+            return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
         }
+        reply.clearCookie('zidNonce', { path: '/' });
     }
-
-    if (!code || !state || state !== storedNonce) {
-        return reply.status(400).send({ error: 'Invalid OAuth callback: state mismatch' });
-    }
-
-    reply.clearCookie('zidNonce', { path: '/' });
 
     const frontendUrl = config.frontendUrl;
 
@@ -110,7 +118,9 @@ export async function authCallback(request: FastifyRequest, reply: FastifyReply)
                 refreshToken: tokens.refreshToken,
                 tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
                 scopes: config.zid.scopes,
-                nonce: state,
+                // Platform-initiated installs may omit state; the claim flow keys off
+                // the signed pendingZidId cookie, not this value.
+                nonce: state ?? '',
             });
 
             reply.setCookie('pendingZidId', pendingId, PENDING_ZID_COOKIE_OPTIONS);
