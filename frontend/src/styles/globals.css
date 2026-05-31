@@ -71,7 +71,7 @@
     --secondary: 240 245 244;          /* surface-100: mint-tinted */
     --secondary-foreground: 33 44 43;  /* surface-800 */
     --muted: 240 245 244;             /* surface-100: subtle sections */
-    --muted-foreground: 100 118 116;  /* surface-500: teal-tinted muted */
+    --muted-foreground: 75 90 88;     /* darkened from surface-500 (100 118 116) for WCAG AA — ~7:1 on the white card */
     --accent: 249 115 22;             /* accent-500 (orange — unchanged) */
     --accent-foreground: 255 255 255;
     --destructive: 239 68 68;         /* red-500 */

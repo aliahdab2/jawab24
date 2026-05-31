@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import clsx from 'clsx';
 import { Card, Button, Input, ConfirmationModal } from '@/components/ui';
 import { Users, Mail, Phone, Crown, Shield, User, X, ChevronDown, Copy, Check, Link, UserPlus, RefreshCw } from 'lucide-react';
@@ -124,6 +124,10 @@ export function TeamPanel() {
   const [roleDropdown, setRoleDropdown] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<{ url: string; contact: string } | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
+  // Transient "saved" status: flashes for ~2s after any successful mutation,
+  // then fades back to the idle autosave hint. (Team changes persist per click.)
+  const [justSaved, setJustSaved] = useState(false);
+  const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const myMember = members.find((m) => m.userId === user?.id);
   const myRole = myMember?.role ?? 'member';
@@ -157,6 +161,16 @@ export function TeamPanel() {
     fetchData();
   }, [fetchData]);
 
+  // Flash the "saved" confirmation, resetting any in-flight timer so rapid
+  // successive saves keep the confirmation visible for a full window each time.
+  const flashSaved = useCallback(() => {
+    setJustSaved(true);
+    if (savedTimer.current) clearTimeout(savedTimer.current);
+    savedTimer.current = setTimeout(() => setJustSaved(false), 2000);
+  }, []);
+
+  useEffect(() => () => { if (savedTimer.current) clearTimeout(savedTimer.current); }, []);
+
   const showInviteLink = (token: string, contactValue: string) => {
     const url = `${BRAND_ASSETS.urls.base}/invites/accept?token=${token}`;
     setInviteLink({ url, contact: contactValue });
@@ -185,6 +199,7 @@ export function TeamPanel() {
       ? (smsSent ? 'inviteResentSms' : emailSent ? 'inviteResentEmail' : 'inviteResent')
       : (smsSent ? 'inviteSentSms' : emailSent ? 'inviteSentEmail' : 'inviteSent');
     toast.success(t(key as Parameters<typeof t>[0], { contact: contactValue }));
+    flashSaved();
   };
 
   const handleInvite = async () => {
@@ -235,6 +250,7 @@ export function TeamPanel() {
       await workspaceApi.revokeInvite(inviteId);
       setInviteLink(null);
       toast.success(t('inviteRevoked'));
+      flashSaved();
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to revoke invite', { tags: { page: 'team', action: 'revokeInvite' } });
@@ -247,6 +263,7 @@ export function TeamPanel() {
       await workspaceApi.removeMember(removeTarget.userId);
       toast.success(t('memberRemoved', { name: removeTarget.userName || removeTarget.userEmail || '' }));
       setRemoveTarget(null);
+      flashSaved();
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to remove member', { tags: { page: 'team', action: 'removeMember' } });
@@ -259,6 +276,7 @@ export function TeamPanel() {
     try {
       await workspaceApi.updateMemberRole(userId, newRole);
       toast.success(t('roleUpdated'));
+      flashSaved();
       await fetchData();
     } catch (error) {
       captureError(error, 'Failed to update role', { tags: { page: 'team', action: 'updateRole' } });
@@ -285,9 +303,18 @@ export function TeamPanel() {
             {totalCount} / {MAX_MEMBERS}
           </span>
         </div>
-        {/* Behavioral hint — Team mutations persist on each click (no Save). */}
-        <p className="text-xs text-muted-foreground mb-4 italic">
-          {t('savedAutomatically')}
+        {/* Autosave status — flashes a transient "saved" confirmation after a
+            mutation, then fades back to the idle hint. aria-live announces it. */}
+        <p
+          aria-live="polite"
+          className={clsx(
+            'text-xs mb-4 transition-colors duration-500',
+            justSaved
+              ? 'text-emerald-600 dark:text-emerald-400 font-medium not-italic'
+              : 'text-muted-foreground italic',
+          )}
+        >
+          {justSaved ? t('savedConfirmation') : t('savedAutomatically')}
         </p>
 
         {/* Invite form — admins and owners only */}
