@@ -299,7 +299,7 @@ const SettingsPage: NextPageWithLayout = () => {
   }
 
   return (
-    <div className="max-w-3xl mx-auto pb-24 landscape:pb-20">
+    <div className="max-w-4xl mx-auto pb-24 landscape:pb-20">
       <PageHeader
         title={t('title')}
         description={t('pageContext')}
@@ -433,7 +433,7 @@ const SettingsPage: NextPageWithLayout = () => {
         'px-safe-landscape',
         hasChanges || saving ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'
       )}>
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-4xl mx-auto">
           <Button
             onClick={handleSave}
             disabled={!hasChanges || saving}
