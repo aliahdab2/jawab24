@@ -35,5 +35,11 @@
     "subscriptionWelcomeCta": "Open dashboard",
     "subscriptionWelcomeNextSteps": "Next: connect your Facebook or Instagram page, then add a few replies to your knowledge base. We'll handle the rest.",
     "subscriptionWelcomeBilling": "A separate invoice email with billing details will arrive from Stripe shortly.",
-    "subscriptionWelcomeSignoff": "— The Jawab24 team"
+    "subscriptionWelcomeSignoff": "— The Jawab24 team",
+    "inviteEmailSubject": "You've been invited to join {workspace} on Jawab24",
+    "inviteEmailHeading": "You've been invited 🎉",
+    "inviteEmailIntro": "You've been invited to join the {workspace} workspace on Jawab24 — the assistant that auto-replies to your Facebook & Instagram comments and messages. Accept the invitation to get started.",
+    "inviteEmailCta": "Accept invitation",
+    "inviteEmailExpiry": "This invitation link expires in 48 hours.",
+    "inviteEmailIgnore": "If you weren't expecting this invitation, you can safely ignore this email."
 }

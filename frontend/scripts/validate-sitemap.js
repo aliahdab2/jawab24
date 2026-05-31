@@ -60,6 +60,7 @@ const EXCLUDED_ROUTES = new Map([
   ['salla/onboarding', 'merchant onboarding (auth-gated)'],
   ['settings', 'app workspace (auth-gated)'],
   ['shopify/onboarding', 'merchant onboarding (auth-gated)'],
+  ['team', 'app workspace (auth-gated)'],
   ['unsubscribe', 'email utility (noindex)'],
   ['zid/onboarding', 'merchant onboarding (auth-gated)'],
 ]);

@@ -45,6 +45,9 @@ function setupAuth(
   page: import('@playwright/test').Page,
   options: {
     user?: Partial<typeof BASE_USER>;
+    // Current user's role in the active workspace. Gates the Team tile
+    // (owner/admin see it; member does not). Defaults to owner.
+    workspaceRole?: 'owner' | 'admin' | 'member';
     unreadComments?: number;
     unreadMessages?: number;
     newLeads?: number;
@@ -52,6 +55,7 @@ function setupAuth(
 ) {
   const {
     user = {},
+    workspaceRole = 'owner',
     unreadComments = 0,
     unreadMessages = 0,
     newLeads = 0,
@@ -60,7 +64,7 @@ function setupAuth(
   const mergedUser = { ...BASE_USER, ...user };
 
   return page.addInitScript(
-    ({ mergedUser, unreadComments, unreadMessages, newLeads }) => {
+    ({ mergedUser, workspaceRole, unreadComments, unreadMessages, newLeads }) => {
       // Stub EventSource so useSSE never connects.
       // Without this, SSE status transitions (connecting→error→reconnecting)
       // re-render DashboardLayout on every retry, detaching nav buttons
@@ -76,7 +80,7 @@ function setupAuth(
         state: {
           user: mergedUser, token: 'mock-token', fbToken: 'mock-fb',
           isAuthenticated: true,
-          workspaces: [{ id: 'ws1', name: 'My Workspace' }],
+          workspaces: [{ id: 'ws1', name: 'My Workspace', role: workspaceRole }],
           activeWorkspaceId: 'ws1',
         },
         version: 0,
@@ -90,7 +94,7 @@ function setupAuth(
       }));
       localStorage.setItem('jawab24_onboarding_complete', 'true');
     },
-    { mergedUser, unreadComments, unreadMessages, newLeads },
+    { mergedUser, workspaceRole, unreadComments, unreadMessages, newLeads },
   );
 }
 
@@ -205,7 +209,20 @@ test.describe('Mobile Navigation', () => {
     await expect(dialog.getByRole('button', { name: t('nav.comments'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.messages'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.leads'), exact: true })).toBeVisible();
+    // Team is workspace owner/admin-only; the default mock user is an owner.
+    await expect(dialog.getByRole('button', { name: t('nav.team'), exact: true })).toBeVisible();
     await expect(dialog.getByRole('button', { name: t('nav.settings'), exact: true })).toBeVisible();
+  });
+
+  // Team management is workspace owner/admin-only. A plain member should NOT
+  // see the Team tile in the More overlay; an owner should.
+  test('Team item is hidden from members in the More overlay', async ({ page }) => {
+    await setupAuth(page, { workspaceRole: 'member' });
+    await mockAPIs(page);
+    await gotoWithMobileNav(page);
+
+    await mobileNav(page).getByRole('button', { name: t('nav.more'), exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('button', { name: t('nav.team'), exact: true })).not.toBeVisible();
   });
 
   // Stores is admin-only while we finish the public roll-out. A regular

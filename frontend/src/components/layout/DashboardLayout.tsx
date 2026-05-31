@@ -5,6 +5,7 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { Sidebar, getNavigationGroups, resolveNavKey } from './Sidebar';
 import { useAuthStore, useUIStore } from '@/lib/store';
+import { useWorkspaceRole } from '@/hooks';
 import { useTranslations, useLocale } from 'next-intl';
 import { useLanguage } from '@/i18n/hooks';
 import { VersionBadge, WhatsAppHelpButton, BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui';
@@ -50,6 +51,9 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   const isRTL = isRTLLocale(locale);
   const { isAuthenticated, _hasHydrated, logout, user } = useAuthStore();
   const isAdmin = !!user?.isAdmin;
+  // Workspace role (owner/admin) gates the Team tile in the More overlay —
+  // distinct from the platform `isAdmin` super-admin flag.
+  const { isAdmin: canManageTeam } = useWorkspaceRole();
   const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const isOnboardingVisible = useUIStore((s) => s.isOnboardingVisible);
   const unreadComments = useUIStore((s) => s.unreadComments);
@@ -64,10 +68,10 @@ export function DashboardLayout({ children, title, isPublic = false, skipTitle =
   // those paths — derived from the same nav config the overlay uses, so
   // adding a nav entry can never silently miss this active-state check.
   const moreOverlayPaths = useMemo(
-    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin })
+    () => getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam })
       .flatMap((g) => g.items.map((i) => i.href))
       .filter((href) => !['/dashboard', '/comments', '/messages'].includes(href)),
-    [isAdmin],
+    [isAdmin, canManageTeam],
   );
 
   // ESC key to close modals (logout confirmation takes priority)
@@ -429,6 +433,8 @@ function MobileMenuOverlay({
   const tNav = useTranslations('nav');
   const tPricing = useTranslations('pricing');
   const isLandscape = useLandscape();
+  // Workspace role gates the Team tile here (mirrors the desktop sidebar).
+  const { isAdmin: canManageTeam } = useWorkspaceRole();
   useBodyScrollLock(isOpen);
 
   // Workspace switcher: only mobile path that lets multi-workspace users move
@@ -443,7 +449,7 @@ function MobileMenuOverlay({
     router.replace(router.asPath);
   };
 
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
   const menuItems = navigationGroups.flatMap((group) =>
     group.items.map((item) => ({
       path: item.href,

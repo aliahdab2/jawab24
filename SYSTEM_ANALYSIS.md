@@ -2144,8 +2144,9 @@ Jawab24 supports **multi-tenant workspaces** with role-based access control (RBA
 │                                                                 │
 │  WORKSPACE INVITES                                              │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ email, token_hash, role, expires_at, status              │   │
-│  │ Token: 48-hour expiry, shareable invite link             │   │
+│  │ email/phone, token_hash, role, expires_at, status        │   │
+│  │ Token: 48-hour expiry; delivered by email (bilingual)    │   │
+│  │   or SMS, with a copy-and-share link as fallback         │   │
 │  │ Status: pending → accepted | expired | revoked           │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │

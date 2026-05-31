@@ -8,7 +8,7 @@ vi.mock('../../src/config', () => ({
     },
 }));
 
-import { waitlistEmailTemplate } from '../../src/utils/emailTemplates';
+import { waitlistEmailTemplate, inviteEmailTemplate } from '../../src/utils/emailTemplates';
 
 describe('waitlistEmailTemplate', () => {
     const baseParams = {
@@ -188,5 +188,71 @@ describe('waitlistEmailTemplate', () => {
 
             expect(html).toContain('dir="auto"');
         });
+    });
+});
+
+describe('inviteEmailTemplate', () => {
+    const params = {
+        workspaceName: 'Acme Co',
+        inviteUrl: 'https://jawab24.com/invites/accept?token=tok123',
+    };
+
+    it('should return a subject and a valid HTML document', () => {
+        const { subject, html } = inviteEmailTemplate(params);
+
+        expect(subject).toBeTruthy();
+        expect(html).toContain('<!DOCTYPE html>');
+        expect(html).toContain('</html>');
+    });
+
+    it('should include the workspace name in both subject and body', () => {
+        const { subject, html } = inviteEmailTemplate(params);
+
+        expect(subject).toContain('Acme Co');
+        expect(html).toContain('Acme Co');
+    });
+
+    it('should be bilingual — render both Arabic and English content', () => {
+        const { subject, html } = inviteEmailTemplate(params);
+
+        // English heading + Arabic heading both present
+        expect(html).toContain("You've been invited");
+        expect(html).toContain('لديك دعوة');
+        // Both direction blocks are rendered
+        expect(html).toContain('dir="rtl"');
+        expect(html).toContain('dir="ltr"');
+        // Bilingual subject pieces (AR | EN) both carry the product name
+        expect(subject).toContain('Jawab24');
+    });
+
+    it('should link the CTA to the accept URL', () => {
+        const { html } = inviteEmailTemplate(params);
+
+        expect(html).toContain('href="https://jawab24.com/invites/accept?token=tok123"');
+    });
+
+    it('should HTML-escape the workspace name', () => {
+        const { html } = inviteEmailTemplate({ ...params, workspaceName: 'Tom & <Jerry>' });
+
+        expect(html).toContain('Tom &amp; &lt;Jerry&gt;');
+        expect(html).not.toContain('<Jerry>');
+    });
+
+    it('should include the brand name and brand-colored header', () => {
+        const { html } = inviteEmailTemplate(params);
+
+        expect(html).toContain('Jawab24 Test'); // from mocked config.resend.fromName
+        expect(html).toContain('background-color:#0d9488');
+    });
+
+    it('should render a workspace name containing $-replacement patterns literally', () => {
+        // Regression: String.replace/replaceAll interpret `$&`, `$\``, `$'`, `$$`
+        // in a replacement STRING. A workspace name like "Acme $& Co" must not
+        // corrupt the email or leak the literal {workspace} placeholder.
+        const { subject, html } = inviteEmailTemplate({ workspaceName: 'Acme $& Co', inviteUrl: 'https://jawab24.com/invites/accept?token=t' });
+
+        expect(html).not.toContain('{workspace}');       // placeholder fully substituted
+        expect(html).toContain('Acme $&amp; Co');        // body intro: & escaped, $& kept literal
+        expect(subject).toContain('Acme $& Co');         // subject: raw name, $& kept literal
     });
 });

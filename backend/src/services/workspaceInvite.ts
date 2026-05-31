@@ -4,6 +4,8 @@ import { db } from '../db';
 import { workspaceInvites, users } from '../db/schema';
 import { workspaceService } from './workspace';
 import { smsService } from './sms';
+import { emailService } from './email';
+import { inviteEmailTemplate } from '../utils/emailTemplates';
 import { detectContactType, isArabicPhone } from '@jawab24/shared';
 import type { WorkspaceRole } from '@jawab24/shared';
 import { config } from '../config';
@@ -76,11 +78,12 @@ export class WorkspaceInviteService {
                 .returning();
         }
 
+        const inviteUrl = new URL('/invites/accept', config.frontendUrl);
+        inviteUrl.searchParams.set('token', rawToken);
+
         // Send SMS for phone invites — awaited so we can report delivery status
         let smsSent = false;
         if (phone) {
-            const inviteUrl = new URL('/invites/accept', config.frontendUrl);
-            inviteUrl.searchParams.set('token', rawToken);
             const lang = isArabicPhone(phone) ? 'ar' : 'en';
             const message = t('inviteSms', lang, { link: inviteUrl.toString() });
             try {
@@ -93,7 +96,29 @@ export class WorkspaceInviteService {
             }
         }
 
-        return { invite, rawToken, smsSent };
+        // Send email for email invites — awaited so we can report delivery
+        // status. When this fails (provider down, bounce at send time), the
+        // controller still returns the raw token so the UI can fall back to the
+        // copy-and-share link. The email_sends audit row is written by the
+        // email service for both success and failure.
+        let emailSent = false;
+        if (email) {
+            const workspace = await workspaceService.getWorkspace(workspaceId);
+            const { subject, html } = inviteEmailTemplate({
+                workspaceName: workspace?.name ?? 'Jawab24',
+                inviteUrl: inviteUrl.toString(),
+            });
+            try {
+                const result = await emailService.send({ to: email, subject, html, type: 'invite' });
+                emailSent = result.success;
+            } catch (err) {
+                captureError(err, 'Failed to send invite email', {
+                    tags: { context: 'workspace' },
+                });
+            }
+        }
+
+        return { invite, rawToken, smsSent, emailSent };
     }
 
     /**

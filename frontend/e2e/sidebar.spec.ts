@@ -45,7 +45,8 @@ function setupAuth(
   options: {
     user?: Partial<typeof BASE_USER>;
     sidebarOpen?: boolean;
-    workspaces?: { id: string; name: string }[];
+    // `role` gates the Team nav item (owner/admin see it; member does not).
+    workspaces?: { id: string; name: string; role?: 'owner' | 'admin' | 'member' }[];
     unreadComments?: number;
     unreadMessages?: number;
     newLeads?: number;
@@ -139,7 +140,20 @@ test.describe('Sidebar', () => {
     await expect(page.getByRole('link', { name: t('nav.pages') }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: t('nav.comments') }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: t('nav.messages') }).first()).toBeVisible();
+    // Team is workspace owner/admin-only; the default mock user is an owner.
+    await expect(page.getByRole('link', { name: t('nav.team') }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: t('nav.settings') }).first()).toBeVisible();
+  });
+
+  test('hides the Team link for plain members', async ({ page }) => {
+    await setupAuth(page, { workspaces: [{ id: 'ws1', name: 'My Workspace', role: 'member' }] });
+    await mockAPIs(page);
+    await gotoWithSidebar(page);
+
+    // Settings is always present — wait for it so the sidebar has rendered
+    // before asserting the Team link is absent.
+    await expect(page.getByRole('link', { name: t('nav.settings') }).first()).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('link', { name: t('nav.team') })).toHaveCount(0);
   });
 
   /* ------------------------------------------------------------------ */
