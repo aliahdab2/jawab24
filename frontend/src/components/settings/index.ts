@@ -14,5 +14,4 @@ export { LimitFallbackMessageCard } from './LimitFallbackMessageCard';
 export { ReplyStyleCard } from './ReplyStyleCard';
 export { LowConfidenceHoldCard } from './LowConfidenceHoldCard';
 export { DangerZone } from './DangerZone';
-export { TeamSection } from './TeamSection';
 export type { SettingsState, SettingsCardProps } from './types';

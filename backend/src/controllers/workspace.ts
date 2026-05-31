@@ -158,14 +158,14 @@ async function createInvite(request: WorkspaceRequest, reply: FastifyReply) {
             return reply.status(400).send({ error: true, message: 'Email or phone number is required' });
         }
 
-        const { invite, rawToken, smsSent } = await workspaceInviteService.createInvite(
+        const { invite, rawToken, smsSent, emailSent } = await workspaceInviteService.createInvite(
             (request as ResolvedWorkspaceRequest).workspaceId,
             contact.toLowerCase(),
             body.role || 'member',
             request.user.userId,
         );
 
-        return reply.status(201).send({ invite, token: rawToken, smsSent });
+        return reply.status(201).send({ invite, token: rawToken, smsSent, emailSent });
     } catch (error) {
         captureError(error, 'Failed to create invite', { tags: { context: 'workspace' } });
         return reply.status(500).send({ error: true, message: 'Failed to create invite' });

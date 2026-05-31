@@ -13,11 +13,13 @@ import {
   CreditCard,
   Shield,
   Users,
+  UsersRound,
   Store,
   ChevronDown as ChevronDownIcon,
   Check
 } from 'lucide-react';
 import { useAuthStore, useUIStore } from '@/lib/store';
+import { useWorkspaceRole } from '@/hooks';
 import { useTranslations } from 'next-intl';
 import clsx from 'clsx';
 import { BRAND_ASSETS } from '@/constants/brand';
@@ -126,8 +128,16 @@ export function resolveNavKey(
     return key;
 }
 
-export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean } = {}) {
+export function getNavigationGroups(options: { isNative?: boolean; isAdmin?: boolean; canManageTeam?: boolean } = {}) {
   const accountItems = [
+    // Team is workspace owner/admin-only (canManageTeam = workspace role, NOT
+    // the platform `isAdmin` super-admin flag). Placed first so it sits between
+    // Leads (last inbox item) and Pricing in the flattened mobile More grid,
+    // and directly above Pricing in the desktop ACCOUNT group. Members never
+    // see the tile; the /team page itself stays read-only for them as a guard.
+    ...(options.canManageTeam
+      ? [{ key: 'nav.team', href: '/team', icon: UsersRound }]
+      : []),
     // Pricing is intentionally hidden on native (iOS/Android) — mature B2B SaaS
     // apps (Slack, Notion, HubSpot) do not expose plan purchase from the mobile
     // app. Users manage subscriptions on the web.
@@ -310,6 +320,9 @@ export const Sidebar = memo(function Sidebar() {
   const router = useRouter();
   const { logout, user, fbToken, workspaces, activeWorkspaceId } = useAuthStore();
   const isAdmin = !!user?.isAdmin;
+  // Workspace role (owner/admin) gates the Team tile — distinct from the
+  // platform `isAdmin` super-admin flag above, which gates Stores/Admin.
+  const { isAdmin: canManageTeam } = useWorkspaceRole();
   const setActiveWorkspace = useAuthStore((s) => s.setActiveWorkspace);
   const { sidebarOpen, toggleSidebar } = useUIStore();
   const unreadComments = useUIStore((s) => s.unreadComments);
@@ -322,7 +335,7 @@ export const Sidebar = memo(function Sidebar() {
   const tAdmin = useTranslations('admin');
   const tAuth = useTranslations('auth');
   const isDemoUser = useIsDemoUser();
-  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin });
+  const navigationGroups = getNavigationGroups({ isNative: isNativePlatform(), isAdmin, canManageTeam });
 
   const resolveItemKey = (key: string) => resolveNavKey(key, tNav, tPricing);
 

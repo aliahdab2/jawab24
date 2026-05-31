@@ -9,8 +9,6 @@ import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import { isValidContact } from '@jawab24/shared';
 import { BRAND_ASSETS } from '@/constants/brand';
-import { usePersistedBoolean } from '@/hooks';
-import { CollapsibleSectionHeader } from './CollapsibleSectionHeader';
 import type { WorkspaceRole } from '@jawab24/shared';
 
 interface MemberRow {
@@ -99,15 +97,22 @@ function hoursUntil(dateStr: string): number {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60)));
 }
 
-export function TeamSection() {
+/**
+ * Team management view — member list, role management, and invites.
+ *
+ * Rendered as the body of the dedicated `/team` page. The page supplies the
+ * title/description via PageHeader; this panel owns all data fetching and
+ * mutations. Mutations persist on each click (no page-level Save).
+ *
+ * Read-only for Members: the invite form, resend/revoke, role dropdown and
+ * remove controls are all gated by `isAdmin` (owner||admin) derived from the
+ * fetched member list — so a Member who reaches `/team` by URL sees a safe,
+ * informational view even though the nav tile is hidden for them.
+ */
+export function TeamPanel() {
   const t = useTranslations('team');
   const tc = useTranslations('common');
   const user = useAuthStore((s) => s.user);
-
-  // Default collapsed — the Team section is conditionally relevant for solo
-  // users and noisy on every visit otherwise. Persist user's choice so
-  // workspace owners with frequent invites get their preferred default back.
-  const [expanded, setExpanded] = usePersistedBoolean('settings:team:expanded', false);
 
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [invites, setInvites] = useState<InviteRow[]>([]);
@@ -142,7 +147,7 @@ export function TeamSection() {
         setInvites(invitesRes.data ?? []);
       }
     } catch (error) {
-      captureError(error, 'Failed to fetch team data', { tags: { page: 'settings', section: 'team' } });
+      captureError(error, 'Failed to fetch team data', { tags: { page: 'team' } });
     } finally {
       setLoading(false);
     }
@@ -158,13 +163,27 @@ export function TeamSection() {
     setLinkCopied(false);
   };
 
-  const processInviteResponse = (res: { data?: { token?: string; smsSent?: boolean } }, contactValue: string, isResend: boolean) => {
+  const processInviteResponse = (
+    res: { data?: { token?: string; smsSent?: boolean; emailSent?: boolean } },
+    contactValue: string,
+    isResend: boolean,
+  ) => {
     const token = res.data?.token;
     const smsSent = res.data?.smsSent;
-    if (token && !smsSent) showInviteLink(token, contactValue);
+    const emailSent = res.data?.emailSent;
+    const delivered = smsSent || emailSent;
+    // The invite is delivered automatically by email (or SMS). The copy-link
+    // is the manual fallback — show it only when no channel actually
+    // delivered (e.g. email provider down), and clear any stale link when a
+    // resend does go out via a channel.
+    if (token && !delivered) {
+      showInviteLink(token, contactValue);
+    } else if (delivered) {
+      setInviteLink(null);
+    }
     const key = isResend
-      ? (smsSent ? 'inviteResentSms' : 'inviteResent')
-      : (smsSent ? 'inviteSentSms' : 'inviteSent');
+      ? (smsSent ? 'inviteResentSms' : emailSent ? 'inviteResentEmail' : 'inviteResent')
+      : (smsSent ? 'inviteSentSms' : emailSent ? 'inviteSentEmail' : 'inviteSent');
     toast.success(t(key as Parameters<typeof t>[0], { contact: contactValue }));
   };
 
@@ -189,7 +208,7 @@ export function TeamSection() {
       processInviteResponse(res, trimmed, false);
       await fetchData();
     } catch (error) {
-      captureError(error, 'Failed to send invite', { tags: { page: 'settings', action: 'invite' } });
+      captureError(error, 'Failed to send invite', { tags: { page: 'team', action: 'invite' } });
       toast.error(t('inviteError'));
     } finally {
       setSending(false);
@@ -204,7 +223,7 @@ export function TeamSection() {
       processInviteResponse(res, contactValue, true);
       await fetchData();
     } catch (error) {
-      captureError(error, 'Failed to resend invite', { tags: { page: 'settings', action: 'resendInvite' } });
+      captureError(error, 'Failed to resend invite', { tags: { page: 'team', action: 'resendInvite' } });
       toast.error(t('inviteError'));
     } finally {
       setResendingId(null);
@@ -218,7 +237,7 @@ export function TeamSection() {
       toast.success(t('inviteRevoked'));
       await fetchData();
     } catch (error) {
-      captureError(error, 'Failed to revoke invite', { tags: { page: 'settings', action: 'revokeInvite' } });
+      captureError(error, 'Failed to revoke invite', { tags: { page: 'team', action: 'revokeInvite' } });
     }
   };
 
@@ -230,7 +249,7 @@ export function TeamSection() {
       setRemoveTarget(null);
       await fetchData();
     } catch (error) {
-      captureError(error, 'Failed to remove member', { tags: { page: 'settings', action: 'removeMember' } });
+      captureError(error, 'Failed to remove member', { tags: { page: 'team', action: 'removeMember' } });
       toast.error(t('removeError'));
     }
   };
@@ -242,69 +261,31 @@ export function TeamSection() {
       toast.success(t('roleUpdated'));
       await fetchData();
     } catch (error) {
-      captureError(error, 'Failed to update role', { tags: { page: 'settings', action: 'updateRole' } });
+      captureError(error, 'Failed to update role', { tags: { page: 'team', action: 'updateRole' } });
     }
   };
 
   if (loading) {
     return (
-      <div>
-        <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionTitle')}</p>
-        <Card className="border-none p-6 animate-pulse">
-          <div className="h-12 bg-muted rounded-xl" />
-        </Card>
-      </div>
+      <Card className="border-none p-6 animate-pulse">
+        <div className="h-12 bg-muted rounded-xl" />
+      </Card>
     );
   }
 
   const isAlone = members.length <= 1 && invites.length === 0;
-  const pendingInvitesCount = invites.length;
 
   return (
-    <div>
-      <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-3">{t('sectionTitle')}</p>
-
-      <CollapsibleSectionHeader
-        expanded={expanded}
-        onToggle={() => setExpanded(!expanded)}
-        controlsId="team-section-body"
-        className={expanded ? 'mb-4 landscape:mb-3' : ''}
-        icon={
-          <div className="w-12 h-12 rounded-xl flex items-center justify-center icon-bg-brand landscape:w-10 landscape:h-10 flex-shrink-0">
-            <Users className="w-5 h-5" aria-hidden="true" />
-          </div>
-        }
-      >
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className={clsx('font-bold landscape:text-sm', expanded ? 'text-foreground' : 'text-foreground/70')}>
-            {t('sectionTitle')}
-          </span>
-          <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">
-            {t('memberCountBadge', { count: members.length })}
-          </span>
-          {pendingInvitesCount > 0 && (
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full status-brand whitespace-nowrap">
-              {t('pendingInvitesBadge', { count: pendingInvitesCount })}
-            </span>
-          )}
-        </div>
-      </CollapsibleSectionHeader>
-
-      {expanded && (
-      <Card id="team-section-body" className="border-none p-4 landscape:p-3 animate-slide-up">
-        {/* Description sits above the invite form; the icon + title + count
-            already live in the collapsible button above. The {totalCount} /
-            {MAX_MEMBERS} quota readout stays here so the user sees how close
-            they are to the cap when actually managing the team. */}
-        <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground landscape:text-xs">{t('sectionDesc')}</p>
+    <>
+      <Card className="border-none p-4 landscape:p-3 animate-slide-up">
+        {/* The {totalCount} / {MAX_MEMBERS} quota readout shows how close the
+            workspace is to the cap while managing the team. */}
+        <div className="mb-2 flex items-center justify-end gap-3">
           <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">
             {totalCount} / {MAX_MEMBERS}
           </span>
         </div>
-        {/* Behavioral hint — Team mutations skip the page-level Save button
-            and persist on each click. Place it inside the body so it sits
-            right above the invite form, where it's useful in context. */}
+        {/* Behavioral hint — Team mutations persist on each click (no Save). */}
         <p className="text-xs text-muted-foreground mb-4 italic">
           {t('savedAutomatically')}
         </p>
@@ -334,7 +315,7 @@ export function TeamSection() {
           </div>
         )}
 
-        {/* Invite link — shown after sending / resending */}
+        {/* Invite link — manual fallback, shown when no channel delivered */}
         {inviteLink && (
           <div className="mb-4 p-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
             <div className="flex items-center gap-2 mb-2">
@@ -562,7 +543,6 @@ export function TeamSection() {
           </ul>
         </div>
       </Card>
-      )}
 
       {/* Remove confirmation */}
       {removeTarget && (
@@ -577,6 +557,6 @@ export function TeamSection() {
           variant="danger"
         />
       )}
-    </div>
+    </>
   );
 }

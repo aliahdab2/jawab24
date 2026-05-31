@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { TeamSection } from '../../../src/components/settings/TeamSection';
+import { TeamPanel } from '../../../src/components/team/TeamPanel';
 
 // -- Mocks --
 
@@ -45,16 +45,16 @@ vi.mock('@/lib/store', () => ({
 }));
 
 vi.mock('next/router', () => ({
-  useRouter: () => ({ push: vi.fn(), pathname: '/settings', query: {}, asPath: '/settings' }),
+  useRouter: () => ({ push: vi.fn(), pathname: '/team', query: {}, asPath: '/team' }),
 }));
 
 // -- Helpers --
 
-function renderTeamSection() {
+function renderTeamPanel() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <TeamSection />
+      <TeamPanel />
     </QueryClientProvider>
   );
 }
@@ -87,45 +87,24 @@ const pendingPhoneInvite = {
   createdAt: new Date().toISOString(),
 };
 
-describe('TeamSection', () => {
+describe('TeamPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockMembers.mockResolvedValue({ data: [ownerMember] });
     mockInvites.mockResolvedValue({ data: [] });
-    // Most existing tests assert content inside the Team panel. The section
-    // is collapsed by default now, so seed the persisted-expanded flag for
-    // those tests. Tests that care about the default-collapsed behavior
-    // explicitly remove this key in their own setup.
-    window.localStorage.setItem('settings:team:expanded', '1');
   });
 
-  it('is collapsed by default and expands on click', async () => {
-    window.localStorage.removeItem('settings:team:expanded');
-    renderTeamSection();
-    // Header is always visible; description (inside the Card) appears only when expanded.
-    expect(screen.queryByText('Invite people to help manage your replies')).not.toBeInTheDocument();
-    const toggle = await screen.findByRole('button', { name: /Team/i });
-    expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    fireEvent.click(toggle);
-    expect(await screen.findByText('Invite people to help manage your replies')).toBeInTheDocument();
-    expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('renders team section with header', async () => {
-    renderTeamSection();
-    const teamHeaders = await screen.findAllByText('Team');
-    expect(teamHeaders.length).toBeGreaterThanOrEqual(1);
-    expect(await screen.findByText('Invite people to help manage your replies')).toBeInTheDocument();
-  });
-
-  it('shows invite form for owner', async () => {
-    renderTeamSection();
+  // The panel is always expanded (no collapsible header) — the page title and
+  // description live in the page's PageHeader, not in this component.
+  it('renders the invite form and role explainer for an owner', async () => {
+    renderTeamPanel();
     expect(await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)')).toBeInTheDocument();
     expect(await screen.findByText('Invite')).toBeInTheDocument();
+    expect(await screen.findByText('What each role can do')).toBeInTheDocument();
   });
 
   it('renders member list with owner badge', async () => {
-    renderTeamSection();
+    renderTeamPanel();
     expect(await screen.findByText('Ahmad')).toBeInTheDocument();
     // "Owner" appears both as the member's role badge (a <span>) and in the
     // "What each role can do" legend (a <p>). Scope to the badge span so this
@@ -136,7 +115,7 @@ describe('TeamSection', () => {
 
   it('renders multiple members', async () => {
     mockMembers.mockResolvedValue({ data: [ownerMember, adminMember, regularMember] });
-    renderTeamSection();
+    renderTeamPanel();
 
     expect(await screen.findByText('Ahmad')).toBeInTheDocument();
     expect(await screen.findByText('Sara')).toBeInTheDocument();
@@ -145,7 +124,7 @@ describe('TeamSection', () => {
 
   it('shows pending email invite', async () => {
     mockInvites.mockResolvedValue({ data: [pendingEmailInvite] });
-    renderTeamSection();
+    renderTeamPanel();
 
     expect(await screen.findByText('ali@test.com')).toBeInTheDocument();
     expect(await screen.findByText('Pending')).toBeInTheDocument();
@@ -153,7 +132,7 @@ describe('TeamSection', () => {
 
   it('shows pending phone invite', async () => {
     mockInvites.mockResolvedValue({ data: [pendingPhoneInvite] });
-    renderTeamSection();
+    renderTeamPanel();
 
     expect(await screen.findByText('+966501234567')).toBeInTheDocument();
     expect(await screen.findByText('Pending')).toBeInTheDocument();
@@ -161,7 +140,7 @@ describe('TeamSection', () => {
 
   it('sends invite with email on button click', async () => {
     mockCreateInvite.mockResolvedValue({ data: { id: 'inv-new' } });
-    renderTeamSection();
+    renderTeamPanel();
 
     const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
     fireEvent.change(input, { target: { value: 'new@test.com' } });
@@ -176,7 +155,7 @@ describe('TeamSection', () => {
 
   it('sends invite with phone number on button click', async () => {
     mockCreateInvite.mockResolvedValue({ data: { id: 'inv-new', token: 'tok123' } });
-    renderTeamSection();
+    renderTeamPanel();
 
     const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
     fireEvent.change(input, { target: { value: '+966501234567' } });
@@ -190,7 +169,7 @@ describe('TeamSection', () => {
   });
 
   it('rejects invalid contact (no + prefix phone)', async () => {
-    renderTeamSection();
+    renderTeamPanel();
 
     const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
     fireEvent.change(input, { target: { value: '0501234567' } });
@@ -204,7 +183,7 @@ describe('TeamSection', () => {
   });
 
   it('rejects invalid contact (malformed string)', async () => {
-    renderTeamSection();
+    renderTeamPanel();
 
     const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
     fireEvent.change(input, { target: { value: 'not-valid' } });
@@ -219,7 +198,7 @@ describe('TeamSection', () => {
 
   it('shows resend button on pending invites', async () => {
     mockInvites.mockResolvedValue({ data: [pendingEmailInvite] });
-    renderTeamSection();
+    renderTeamPanel();
 
     expect(await screen.findByText('Resend')).toBeInTheDocument();
   });
@@ -227,7 +206,7 @@ describe('TeamSection', () => {
   it('resend calls createInvite with invite contact', async () => {
     mockCreateInvite.mockResolvedValue({ data: { token: 'newtoken' } });
     mockInvites.mockResolvedValue({ data: [pendingEmailInvite] });
-    renderTeamSection();
+    renderTeamPanel();
 
     const resendButton = await screen.findByText('Resend');
     fireEvent.click(resendButton);
@@ -239,7 +218,7 @@ describe('TeamSection', () => {
 
   it('shows remove button for non-owner members', async () => {
     mockMembers.mockResolvedValue({ data: [ownerMember, regularMember] });
-    renderTeamSection();
+    renderTeamPanel();
 
     const removeButtons = await screen.findAllByText('Remove');
     expect(removeButtons).toHaveLength(1);
@@ -247,7 +226,7 @@ describe('TeamSection', () => {
 
   it('does not show remove for owner row', async () => {
     mockMembers.mockResolvedValue({ data: [ownerMember, adminMember] });
-    renderTeamSection();
+    renderTeamPanel();
 
     await screen.findByText('Ahmad');
     const removeButtons = screen.getAllByText('Remove');
@@ -261,7 +240,7 @@ describe('TeamSection', () => {
       userName: 'Fatima', userEmail: 'fatima@test.com',
     }];
     mockMembers.mockResolvedValue({ data: members });
-    renderTeamSection();
+    renderTeamPanel();
 
     expect(await screen.findByText('You can invite 1 more person')).toBeInTheDocument();
   });
@@ -275,23 +254,23 @@ describe('TeamSection', () => {
       })),
     ];
     mockMembers.mockResolvedValue({ data: members });
-    renderTeamSection();
+    renderTeamPanel();
 
     expect(await screen.findByText('Member limit reached (5)')).toBeInTheDocument();
   });
 
-  it('shows member count in header', async () => {
+  it('shows member count quota readout', async () => {
     mockMembers.mockResolvedValue({ data: [ownerMember, adminMember] });
-    renderTeamSection();
+    renderTeamPanel();
 
-    // Header shows "2 / 5"
+    // Quota readout shows "2 / 5"
     expect(await screen.findByText('2 / 5')).toBeInTheDocument();
   });
 
   it('invite link uses canonical domain not window.location.origin', async () => {
     const token = 'abc123token';
     mockCreateInvite.mockResolvedValue({ data: { token } });
-    renderTeamSection();
+    renderTeamPanel();
 
     const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
     fireEvent.change(input, { target: { value: 'new@test.com' } });
@@ -305,8 +284,25 @@ describe('TeamSection', () => {
     });
   });
 
+  it('hides the copy-link when the invite was delivered by email', async () => {
+    // When the backend reports emailSent, the invite went out automatically —
+    // the manual copy-link fallback must NOT be shown.
+    mockCreateInvite.mockResolvedValue({ data: { token: 'tok-email', emailSent: true } });
+    renderTeamPanel();
+
+    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    fireEvent.change(input, { target: { value: 'new@test.com' } });
+    fireEvent.click(screen.getByText('Invite'));
+
+    await waitFor(() => {
+      expect(mockCreateInvite).toHaveBeenCalledWith('new@test.com');
+    });
+    // No readonly link input should be rendered.
+    expect(document.querySelector('input[readonly]')).toBeNull();
+  });
+
   it('shows email below name when both exist', async () => {
-    renderTeamSection();
+    renderTeamPanel();
 
     expect(await screen.findByText('Ahmad')).toBeInTheDocument();
     expect(await screen.findByText('ahmad@test.com')).toBeInTheDocument();
@@ -318,7 +314,7 @@ describe('TeamSection', () => {
     mockMembers.mockResolvedValue({
       data: [{ ...ownerMember, userPicture: 'https://platform-lookaside.fbsbx.com/picture.jpg' }],
     });
-    renderTeamSection();
+    renderTeamPanel();
 
     const img = await screen.findByRole('img', { name: 'Ahmad' });
     expect(img).toHaveAttribute('src', 'https://platform-lookaside.fbsbx.com/picture.jpg');
@@ -327,7 +323,7 @@ describe('TeamSection', () => {
 
   it('shows initial avatar when userPicture is null', async () => {
     mockMembers.mockResolvedValue({ data: [{ ...ownerMember, userPicture: null }] });
-    renderTeamSection();
+    renderTeamPanel();
 
     await screen.findByText('Ahmad');
     // No img element for this member — initial div shown instead
@@ -338,7 +334,7 @@ describe('TeamSection', () => {
     mockMembers.mockResolvedValue({
       data: [{ ...ownerMember, userPicture: 'https://platform-lookaside.fbsbx.com/picture.jpg' }],
     });
-    renderTeamSection();
+    renderTeamPanel();
 
     const img = await screen.findByRole('img', { name: 'Ahmad' });
 

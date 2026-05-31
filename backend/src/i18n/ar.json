@@ -35,5 +35,11 @@
     "subscriptionWelcomeCta": "افتح لوحة التحكم",
     "subscriptionWelcomeNextSteps": "الخطوة التالية: اربط صفحة فيسبوك أو إنستغرام، ثم أضف بعض الردود إلى قاعدة المعرفة. وسنتكفل بالباقي.",
     "subscriptionWelcomeBilling": "ستصلك فاتورة منفصلة بتفاصيل الدفع من Stripe خلال دقائق.",
-    "subscriptionWelcomeSignoff": "— فريق Jawab24"
+    "subscriptionWelcomeSignoff": "— فريق Jawab24",
+    "inviteEmailSubject": "لديك دعوة للانضمام إلى {workspace} على Jawab24",
+    "inviteEmailHeading": "لديك دعوة 🎉",
+    "inviteEmailIntro": "تمت دعوتك للانضمام إلى مساحة العمل {workspace} على Jawab24 — المساعد الذي يرد تلقائياً على تعليقات ورسائل فيسبوك وإنستغرام. اقبل الدعوة لتبدأ.",
+    "inviteEmailCta": "قبول الدعوة",
+    "inviteEmailExpiry": "ينتهي رابط الدعوة خلال 48 ساعة.",
+    "inviteEmailIgnore": "إذا لم تكن تتوقع هذه الدعوة، يمكنك تجاهل هذه الرسالة بأمان."
 }

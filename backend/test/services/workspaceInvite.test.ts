@@ -16,6 +16,9 @@ vi.mock('../../src/services/workspace', () => ({
         getUserWorkspaces: vi.fn().mockResolvedValue([
             { id: 'ws-1', name: 'My Workspace', role: 'member' },
         ]),
+        // getWorkspace is called inside createInvite for email invites to put the
+        // workspace name in the invite email. Mocked to return a named workspace.
+        getWorkspace: vi.fn().mockResolvedValue({ id: 'ws-1', name: 'My Workspace' }),
         // setLastActiveWorkspace is called inside acceptInvite so the freshly-joined
         // workspace becomes the user's default on next login. Mocked to no-op for unit tests.
         setLastActiveWorkspace: vi.fn().mockResolvedValue(undefined),
@@ -28,9 +31,17 @@ vi.mock('../../src/services/sms', () => ({
     },
 }));
 
+vi.mock('../../src/services/email', () => ({
+    emailService: {
+        send: vi.fn().mockResolvedValue({ success: true, id: 'email-1' }),
+    },
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         frontendUrl: 'https://jawab24.com',
+        // inviteEmailTemplate reads config.resend.fromName for the email header.
+        resend: { apiKey: '', fromEmail: 'info@jawab24.com', fromName: 'Jawab24' },
     },
 }));
 
@@ -40,6 +51,7 @@ vi.mock('../../src/utils/sentryHelpers', () => ({
 
 const { workspaceService } = await import('../../src/services/workspace');
 const { smsService } = await import('../../src/services/sms');
+const { emailService } = await import('../../src/services/email');
 
 function mockSelectLimitChain(returnValue: any) {
     return {
@@ -117,7 +129,39 @@ describe('WorkspaceInviteService', () => {
             expect(result.rawToken.length).toBe(64); // 32 bytes hex
             expect(result.smsSent).toBe(false);
             expect(smsService.send).not.toHaveBeenCalled();
+            // Email invites are now sent automatically (no SMS for an email contact).
+            expect(result.emailSent).toBe(true);
+            expect(emailService.send).toHaveBeenCalledTimes(1);
             expect(db.insert).toHaveBeenCalledTimes(1);
+        });
+
+        it('should send an email with the workspace name when inviting an email address', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([]) as any);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(sampleInvite) as any);
+
+            const result = await workspaceInviteService.createInvite('ws-1', 'test@example.com', 'member', 'user-1');
+
+            expect(result.emailSent).toBe(true);
+            expect(emailService.send).toHaveBeenCalledTimes(1);
+            const sent = vi.mocked(emailService.send).mock.calls[0][0];
+            expect(sent.to).toBe('test@example.com');
+            expect(sent.type).toBe('invite');
+            // Bilingual subject carries the workspace name in both AR and EN.
+            expect(sent.subject).toContain('My Workspace');
+            expect(sent.html).toContain('My Workspace');
+        });
+
+        it('should still create invite if the email send fails', async () => {
+            vi.mocked(db.select).mockReturnValue(mockSelectLimitChain([]) as any);
+            vi.mocked(db.insert).mockReturnValue(mockInsertChain(sampleInvite) as any);
+            vi.mocked(emailService.send).mockResolvedValueOnce({ success: false, error: 'provider down' });
+
+            const result = await workspaceInviteService.createInvite('ws-1', 'test@example.com', 'member', 'user-1');
+
+            expect(result.invite).toEqual(sampleInvite);
+            expect(result.rawToken).toBeDefined();
+            // emailSent reflects the failed send so the controller can fall back to the link.
+            expect(result.emailSent).toBe(false);
         });
 
         it('should send SMS when inviting a phone number', async () => {

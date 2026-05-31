@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { t, tAr } from './i18n';
 
 /**
- * Team Section E2E Tests
- * Tests the team management section within the Settings page.
+ * Team Page E2E Tests
+ * Tests the team management view on its dedicated /team page.
  */
 
 const MOCK_SETTINGS = {
@@ -76,11 +76,6 @@ function setupAuth(page: import('@playwright/test').Page) {
       JSON.stringify({ state: { sidebarOpen: true, language: 'en', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
     );
     localStorage.setItem('jawab24_onboarding_complete', 'true');
-    // Team section is collapsed by default in production. These specs assert
-    // content inside the expanded panel (invite form, member rows, badges).
-    // Pre-expand it so the existing assertions keep working without each test
-    // having to click the toggle first.
-    localStorage.setItem('settings:team:expanded', '1');
   });
 }
 
@@ -121,15 +116,15 @@ function setupRoutes(
   });
 }
 
-test.describe('Team Section', () => {
+test.describe('Team Page', () => {
   test.beforeEach(async ({ page }) => {
     page.on('pageerror', (err) => console.log(`PAGE ERROR: ${err}`));
   });
 
-  test('shows team section on settings page', async ({ page }) => {
+  test('shows team management on the team page', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page);
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     await expect(page.getByText(t('team.sectionTitle')).first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(t('team.sectionDesc'))).toBeVisible();
@@ -138,7 +133,7 @@ test.describe('Team Section', () => {
   test('shows owner with badge and (You) label', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page);
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     const ownerText = page.getByText('Test Owner').first();
     await ownerText.waitFor({ state: 'attached', timeout: 15000 });
@@ -153,7 +148,7 @@ test.describe('Team Section', () => {
   test('shows invite form for owner', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page);
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     await expect(page.getByPlaceholder(t('team.invitePlaceholder'))).toBeVisible({ timeout: 15000 });
     await expect(page.getByRole('button', { name: t('team.sendInvite'), exact: true })).toBeVisible();
@@ -165,7 +160,7 @@ test.describe('Team Section', () => {
       members: [MOCK_OWNER, MOCK_MEMBER],
       invites: [MOCK_INVITE],
     });
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     const ownerText = page.getByText('Test Owner').first();
     await ownerText.waitFor({ state: 'attached', timeout: 15000 });
@@ -179,10 +174,13 @@ test.describe('Team Section', () => {
     await expect(page.getByText(t('team.pending'), { exact: true })).toBeVisible();
   });
 
-  test('sends invite and shows copyable link', async ({ page }) => {
+  test('falls back to a copyable link when no channel delivered the invite', async ({ page }) => {
+    // setupRoutes' POST response omits emailSent — simulating a send that
+    // did not go out (provider down / no reachable channel). The UI then
+    // surfaces the manual copy-and-share link as the fallback.
     await setupAuth(page);
     await setupRoutes(page);
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     const emailInput = page.getByPlaceholder(t('team.invitePlaceholder'));
     await emailInput.waitFor({ timeout: 15000 });
@@ -197,10 +195,44 @@ test.describe('Team Section', () => {
     await expect(page.locator('input[readonly]')).toHaveValue(/mock-invite-token-123/);
   });
 
+  test('emails the invite and hides the manual link when delivery succeeds', async ({ page }) => {
+    await setupAuth(page);
+    await setupRoutes(page);
+    // Override the POST handler to report a successful email send. Playwright
+    // runs the most recently registered matching route first.
+    await page.route('**/workspaces/current/invites', async (route) => {
+      if (route.request().method() === 'POST') {
+        return route.fulfill({
+          status: 201,
+          contentType: 'application/json',
+          body: JSON.stringify({ invite: { ...MOCK_INVITE, email: 'new@test.com' }, token: 'mock-invite-token-123', emailSent: true }),
+        });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    });
+    await page.goto('/en/team');
+
+    const emailInput = page.getByPlaceholder(t('team.invitePlaceholder'));
+    await emailInput.waitFor({ timeout: 15000 });
+    await emailInput.fill('new@test.com');
+
+    // Wait for the invite request to resolve before asserting absence, so this
+    // can't false-pass by checking before the response is processed.
+    const invitePosted = page.waitForResponse(
+      (r) => r.url().includes('/workspaces/current/invites') && r.request().method() === 'POST',
+    );
+    await page.getByRole('button', { name: t('team.sendInvite'), exact: true }).click();
+    await invitePosted;
+
+    // The invite was emailed — no manual copy-link fallback should be shown.
+    await expect(page.getByText(t('team.linkExpires'))).not.toBeVisible();
+    await expect(page.locator('input[readonly]')).toHaveCount(0);
+  });
+
   test('validates invalid contact', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page);
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     const emailInput = page.getByPlaceholder(t('team.invitePlaceholder'));
     await emailInput.waitFor({ timeout: 15000 });
@@ -215,7 +247,7 @@ test.describe('Team Section', () => {
   test('shows remove button for non-owner members', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page, { members: [MOCK_OWNER, MOCK_MEMBER] });
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     await expect(page.getByText('Sara', { exact: true })).toBeVisible({ timeout: 15000 });
     // One remove button (for Sara, not for owner). Scope to the button role +
@@ -228,7 +260,7 @@ test.describe('Team Section', () => {
   test('shows role badges for all members', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page, { members: [MOCK_OWNER, MOCK_MEMBER] });
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     // .first(): role names also render in the "What each role can do" legend;
     // the member badges are DOM-first.
@@ -253,14 +285,9 @@ test.describe('Team Section', () => {
         JSON.stringify({ state: { sidebarOpen: true, language: 'ar', _hasHydrated: false, isOnboardingVisible: false }, version: 0 })
       );
       localStorage.setItem('jawab24_onboarding_complete', 'true');
-      localStorage.setItem('settings:team:expanded', '1');
     });
     await setupRoutes(page);
-    // Override settings mock to return Arabic dashboard language
-    await page.route('**/api/settings', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...MOCK_SETTINGS, dashboardLanguage: 'ar' }) });
-    });
-    await page.goto('/ar/settings');
+    await page.goto('/ar/team');
 
     await expect(page.getByText(tAr('team.sectionTitle')).first()).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(tAr('team.roleOwner'), { exact: true }).first()).toBeVisible();
@@ -471,7 +498,7 @@ test.describe('Team — Invite Form Guards', () => {
     await setupAuth(page);
     // Pending invite already exists for ali@test.com
     await setupRoutes(page, { invites: [MOCK_INVITE] });
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     const emailInput = page.getByPlaceholder(t('team.invitePlaceholder'));
     await emailInput.waitFor({ timeout: 15000 });
@@ -487,7 +514,7 @@ test.describe('Team — Invite Form Guards', () => {
   test('blocks sending invite to someone already a member', async ({ page }) => {
     await setupAuth(page);
     await setupRoutes(page, { members: [MOCK_OWNER, MOCK_MEMBER] });
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     const emailInput = page.getByPlaceholder(t('team.invitePlaceholder'));
     await emailInput.waitFor({ timeout: 15000 });
@@ -528,7 +555,7 @@ test.describe('Team — Invite Form Guards', () => {
       }
       await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
-    await page.goto('/en/settings');
+    await page.goto('/en/team');
 
     // Pending invite row should be visible
     await expect(page.getByText('ali@test.com')).toBeVisible({ timeout: 15000 });

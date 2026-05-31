@@ -37,7 +37,11 @@ export function t(key: MessageKey, lang: string, vars?: Record<string, string>):
     let text: string = messages[locale][key] ?? messages.en[key];
     if (vars) {
         for (const [k, v] of Object.entries(vars)) {
-            text = text.replaceAll(`{${k}}`, v);
+            // Use a replacer FUNCTION, not a replacement string: String.replaceAll
+            // interprets `$&`, `$\``, `$'`, `$$` etc. in a replacement string, which
+            // would corrupt any value containing `$` (e.g. a workspace/business name
+            // like "Acme $& Co"). A function inserts the value literally.
+            text = text.replaceAll(`{${k}}`, () => v);
         }
     }
     return text;
