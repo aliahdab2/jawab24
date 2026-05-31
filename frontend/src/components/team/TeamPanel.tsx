@@ -295,119 +295,117 @@ export function TeamPanel() {
 
   return (
     <>
-      <Card className="border-none p-4 landscape:p-3 animate-slide-up">
-        {/* The {totalCount} / {MAX_MEMBERS} quota readout shows how close the
-            workspace is to the cap while managing the team. */}
-        <div className="mb-2 flex items-center justify-end gap-3">
-          <span className="text-xs text-muted-foreground font-normal whitespace-nowrap">
-            {totalCount} / {MAX_MEMBERS}
-          </span>
-        </div>
-        {/* Autosave status — flashes a transient "saved" confirmation after a
-            mutation, then fades back to the idle hint. aria-live announces it. */}
-        <p
-          aria-live="polite"
-          className={clsx(
-            'text-xs mb-4 transition-colors duration-500',
-            justSaved
-              ? 'text-emerald-600 dark:text-emerald-400 font-medium not-italic'
-              : 'text-muted-foreground italic',
-          )}
-        >
-          {justSaved ? t('savedConfirmation') : t('savedAutomatically')}
-        </p>
+      <Card className="border-none p-5 sm:p-6 landscape:p-4 animate-slide-up space-y-6">
+        {/* ── Invite a teammate (owners + admins only) ── */}
+        {isAdmin && (
+          <section>
+            <h2 className="text-base font-bold text-foreground">{t('inviteTitle')}</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 mb-3">{t('inviteHint')}</p>
 
-        {/* Invite form — admins and owners only */}
-        {isAdmin && remaining > 0 && (
-          <div className="flex gap-2 mb-4">
-            <Input
-              type="text"
-              dir="auto"
-              placeholder={t('invitePlaceholder')}
-              value={contact}
-              onChange={(e) => setContact(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleInvite(); }}
-              className="flex-1"
-              aria-label={t('invitePlaceholder')}
-            />
-            <Button
-              onClick={handleInvite}
-              disabled={sending || !contact.trim()}
-              size="sm"
-              className="px-4 whitespace-nowrap"
-            >
-              <UserPlus className="w-4 h-4 me-1.5" aria-hidden="true" />
-              {t('sendInvite')}
-            </Button>
-          </div>
-        )}
-
-        {/* Invite link — manual fallback, shown when no channel delivered */}
-        {inviteLink && (
-          <div className="mb-4 p-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
-            <div className="flex items-center gap-2 mb-2">
-              <Link className="w-4 h-4 text-brand-600 dark:text-brand-400 flex-shrink-0" aria-hidden="true" />
-              <p className="text-sm font-bold text-brand-700 dark:text-brand-300 min-w-0 truncate">
-                {t('shareLinkDesc', { contact: inviteLink.contact })}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                readOnly
-                dir="ltr"
-                value={inviteLink.url}
-                className="flex-1 min-w-0 text-xs bg-background border border-brand-200 dark:border-brand-700 rounded-lg px-3 py-2 text-foreground font-mono truncate"
-                onClick={(e) => (e.target as HTMLInputElement).select()}
-                aria-label={t('copyLink')}
-              />
-              <Button
-                size="sm"
-                variant={linkCopied ? 'secondary' : 'primary'}
-                className="flex-shrink-0 px-3 sm:px-4"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(inviteLink.url);
-                  setLinkCopied(true);
-                  toast.success(t('linkCopied'));
-                  setTimeout(() => setLinkCopied(false), 3000);
-                }}
-              >
-                {linkCopied ? (
-                  <>
-                    <Check className="w-4 h-4 sm:me-1.5" aria-hidden="true" />
-                    <span className="hidden sm:inline">{t('linkCopied')}</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 sm:me-1.5" aria-hidden="true" />
-                    <span className="hidden sm:inline">{t('copyLink')}</span>
-                  </>
+            {remaining > 0 ? (
+              <>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Input
+                    type="text"
+                    dir="auto"
+                    placeholder={t('invitePlaceholder')}
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleInvite(); }}
+                    className="flex-1"
+                    aria-label={t('invitePlaceholder')}
+                  />
+                  <Button
+                    onClick={handleInvite}
+                    disabled={sending || !contact.trim()}
+                    size="sm"
+                    className="px-4 whitespace-nowrap justify-center"
+                  >
+                    <UserPlus className="w-4 h-4 me-1.5" aria-hidden="true" />
+                    {t('sendInvite')}
+                  </Button>
+                </div>
+                {remaining <= 2 && (
+                  <p className="text-xs text-muted-foreground mt-2">{t('limitHint', { remaining })}</p>
                 )}
-              </Button>
+              </>
+            ) : (
+              <p className="text-xs text-amber-600 dark:text-amber-400">{t('limitReached')}</p>
+            )}
+
+            {/* Invite link — manual fallback, shown when no channel delivered */}
+            {inviteLink && (
+              <div className="mt-4 p-3 rounded-xl bg-brand-50 dark:bg-brand-900/20 border border-brand-200 dark:border-brand-800">
+                <div className="flex items-center gap-2 mb-2">
+                  <Link className="w-4 h-4 text-brand-600 dark:text-brand-400 flex-shrink-0" aria-hidden="true" />
+                  <p className="text-sm font-bold text-brand-700 dark:text-brand-300 min-w-0 truncate">
+                    {t('shareLinkDesc', { contact: inviteLink.contact })}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    dir="ltr"
+                    value={inviteLink.url}
+                    className="flex-1 min-w-0 text-xs bg-background border border-brand-200 dark:border-brand-700 rounded-lg px-3 py-2 text-foreground font-mono truncate"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                    aria-label={t('copyLink')}
+                  />
+                  <Button
+                    size="sm"
+                    variant={linkCopied ? 'secondary' : 'primary'}
+                    className="flex-shrink-0 px-3 sm:px-4"
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(inviteLink.url);
+                      setLinkCopied(true);
+                      toast.success(t('linkCopied'));
+                      setTimeout(() => setLinkCopied(false), 3000);
+                    }}
+                  >
+                    {linkCopied ? (
+                      <>
+                        <Check className="w-4 h-4 sm:me-1.5" aria-hidden="true" />
+                        <span className="hidden sm:inline">{t('linkCopied')}</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 sm:me-1.5" aria-hidden="true" />
+                        <span className="hidden sm:inline">{t('copyLink')}</span>
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-brand-600 dark:text-brand-400 mt-2">{t('linkExpires')}</p>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ── Members ── */}
+        <section>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <h2 className="text-base font-bold text-foreground">{t('membersTitle')}</h2>
+            <span
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-surface-100 dark:bg-surface-800 rounded-full px-2.5 py-1 flex-shrink-0"
+              aria-label={`${totalCount} / ${MAX_MEMBERS}`}
+            >
+              <Users className="w-3.5 h-3.5" aria-hidden="true" />
+              {totalCount} / {MAX_MEMBERS}
+            </span>
+          </div>
+
+          {/* Empty state — shown to non-admins who are alone */}
+          {isAlone && !isAdmin && (
+            <div className="text-center py-8 px-4 rounded-xl border border-dashed border-theme-border bg-surface-50 dark:bg-surface-800/40 mb-2">
+              <Users className="w-10 h-10 mx-auto text-icon-muted mb-3" aria-hidden="true" />
+              <p className="font-bold text-foreground">{t('emptyTitle')}</p>
+              <p className="text-sm text-muted-foreground mt-1">{t('emptyDesc')}</p>
             </div>
-            <p className="text-xs text-brand-600 dark:text-brand-400 mt-2">{t('linkExpires')}</p>
-          </div>
-        )}
+          )}
 
-        {/* Limit hint */}
-        {isAdmin && remaining > 0 && remaining <= 2 && (
-          <p className="text-xs text-muted-foreground mb-3">{t('limitHint', { remaining })}</p>
-        )}
-        {isAdmin && remaining <= 0 && (
-          <p className="text-xs text-amber-600 dark:text-amber-400 mb-3">{t('limitReached')}</p>
-        )}
-
-        {/* Empty state — shown to non-admins who are alone */}
-        {isAlone && !isAdmin && (
-          <div className="text-center py-8">
-            <Users className="w-10 h-10 mx-auto text-icon-muted mb-3" aria-hidden="true" />
-            <p className="font-bold text-foreground">{t('emptyTitle')}</p>
-            <p className="text-sm text-muted-foreground mt-1">{t('emptyDesc')}</p>
-          </div>
-        )}
-
-        {/* Member + invite list */}
-        <div className="divide-y divide-theme-border">
+          {/* Member + invite list */}
+          <div className="divide-y divide-theme-border">
           {members.map((member) => {
             const isMe = member.userId === user?.id;
             const isMemberOwner = member.role === 'owner';
@@ -538,16 +536,17 @@ export function TeamPanel() {
               </div>
             );
           })}
-        </div>
+          </div>
+        </section>
 
-        {/* Role explainer — what each kind of member can do. Reuses the same
-            icons + colors as the member badges above so the legend reads as
-            a key to them. Helps owners pick the right role when inviting. */}
-        <div className="mt-5 pt-4 border-t border-theme-border">
+        {/* Role explainer — what each role can do, as a responsive grid so it
+            uses the card width instead of sprawling vertically. Reuses the same
+            icons + colors as the member badges so the legend reads as a key. */}
+        <section className="pt-5 border-t border-theme-border">
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
             {t('rolesExplainerTitle')}
           </p>
-          <ul className="space-y-3">
+          <ul className="grid gap-4 sm:grid-cols-3">
             {(['owner', 'admin', 'member'] as WorkspaceRole[]).map((r) => {
               const RoleIcon = ROLE_ICONS[r];
               const cap = r.charAt(0).toUpperCase() + r.slice(1);
@@ -568,7 +567,21 @@ export function TeamPanel() {
               );
             })}
           </ul>
-        </div>
+        </section>
+
+        {/* Autosave status — subtle footer. aria-live announces the transient
+            "saved" flash after a mutation, then fades back to the idle hint. */}
+        <p
+          aria-live="polite"
+          className={clsx(
+            'text-xs text-center pt-1 transition-colors duration-500',
+            justSaved
+              ? 'text-emerald-600 dark:text-emerald-400 font-medium'
+              : 'text-muted-foreground',
+          )}
+        >
+          {justSaved ? t('savedConfirmation') : t('savedAutomatically')}
+        </p>
       </Card>
 
       {/* Remove confirmation */}
