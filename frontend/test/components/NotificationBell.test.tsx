@@ -643,9 +643,12 @@ describe('NotificationBell', () => {
                 expect(screen.getByRole('tablist')).toBeInTheDocument();
             });
 
-            // Should have 4 filter tabs
+            // Filter tabs: All, Comments, Leads, Billing, System
             const tabs = screen.getAllByRole('tab');
-            expect(tabs).toHaveLength(4);
+            expect(tabs).toHaveLength(5);
+            expect(tabs.map((t) => t.textContent)).toEqual(
+                expect.arrayContaining([expect.stringMatching(/Leads/)]),
+            );
         });
 
         it('should filter notifications when clicking a category', async () => {

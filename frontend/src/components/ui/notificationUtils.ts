@@ -163,9 +163,10 @@ export function isGroup(item: Notification | GroupedNotifications): item is Grou
 }
 
 export function computeFilterCounts(notifications: Notification[]): Record<NotificationFilter, number> {
-    const counts: Record<NotificationFilter, number> = { all: notifications.length, comments: 0, billing: 0, system: 0 };
+    const counts: Record<NotificationFilter, number> = { all: notifications.length, comments: 0, leads: 0, billing: 0, system: 0 };
     for (const n of notifications) {
         if (FILTER_TYPE_MAP.comments?.includes(n.type)) counts.comments++;
+        else if (FILTER_TYPE_MAP.leads?.includes(n.type)) counts.leads++;
         else if (FILTER_TYPE_MAP.billing?.includes(n.type)) counts.billing++;
         else if (FILTER_TYPE_MAP.system?.includes(n.type)) counts.system++;
     }
