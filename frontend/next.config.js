@@ -62,6 +62,18 @@ const nextConfig = {
     ];
   },
 
+  async rewrites() {
+    // Serve the IndexNow key-verification file at /<key>.txt (Bing / Copilot /
+    // ChatGPT search / Yandex discovery). The key is public by design but sourced
+    // from env so it is not committed. No-op for the mobile static export and when
+    // the key is unset, so this never affects existing routing.
+    const indexNowKey = process.env.INDEXNOW_KEY;
+    if (isMobile || !indexNowKey) return [];
+    return [
+      { source: `/${indexNowKey}.txt`, destination: '/api/indexnow-key', locale: false },
+    ];
+  },
+
   async headers() {
     return [
       // Static brand assets — immutable, cached for 1 year
