@@ -7,6 +7,7 @@ import { config } from '../config';
 import { redis } from '../lib/redis';
 import { publishSSEEvent } from '../lib/eventBus';
 import { messagesService } from './messages';
+import { notificationService } from './notifications';
 import { logAiUsage } from './aiUsageLog';
 import { getModelForUser } from './aiModelResolver';
 import { recordAiAttempt, recordAiReturn, recordAiFailedBeforeLog } from '../lib/aiMetrics';
@@ -183,6 +184,20 @@ class LeadExtractorService {
                 senderName: senderName ?? null,
                 phone: upserted.phone,
             });
+
+            // Persistent push + in-app bell entry — only for genuinely new leads,
+            // so repeat messages from the same sender never re-notify. The push is
+            // gated per-user by the `newLeadAlertsEnabled` setting (bell row still
+            // stored when muted). Fire-and-forget, matching maybeCaptureLead's contract.
+            if (isNew) {
+                notificationService.sendTemplateNotificationToWorkspace(
+                    workspaceId,
+                    'new_lead',
+                    { senderName: senderName || 'Unknown', phone: upserted.phone ?? '' },
+                    { leadId: upserted.id, pageId, deepLink: '/leads' },
+                    { gatePushBySetting: 'newLeadAlertsEnabled' },
+                ).catch(err => this.logger.error('New lead notification failed', { err }));
+            }
         } catch (error) {
             captureError(error, 'Lead capture failed', {
                 tags: { service: 'leadExtractor', pageId },

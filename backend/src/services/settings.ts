@@ -302,6 +302,7 @@ export class SettingsService {
             brandVoiceNotesMulti: record.brandVoiceNotesMulti || {},
             holdLowConfidence: record.holdLowConfidence ?? false,
             notificationsEnabled: record.notificationsEnabled ?? true,
+            newLeadAlertsEnabled: record.newLeadAlertsEnabled ?? true,
             onboardingCompletedAt: record.onboardingCompletedAt?.toISOString() ?? null,
         };
     }

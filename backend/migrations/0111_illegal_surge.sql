@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ADD COLUMN "new_lead_alerts_enabled" boolean DEFAULT true NOT NULL;

@@ -52,6 +52,17 @@ describe('NotificationService', () => {
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('new_comment');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('stale_comment');
             expect(NOTIFICATION_TEMPLATES).toHaveProperty('stale_message');
+            expect(NOTIFICATION_TEMPLATES).toHaveProperty('new_lead');
+        });
+
+        it('should have new_lead template with senderName/phone placeholders', () => {
+            const template = NOTIFICATION_TEMPLATES.new_lead;
+            expect(template.titles.en).toBe('New Lead');
+            expect(template.titles.ar).toBe('عميل محتمل جديد');
+            expect(template.bodies.en).toContain('{senderName}');
+            expect(template.bodies.en).toContain('{phone}');
+            expect(template.bodies.ar).toContain('{senderName}');
+            expect(template.bodies.ar).toContain('{phone}');
         });
 
         it('should have skipped_reply template with correct placeholders', () => {
@@ -768,6 +779,88 @@ describe('NotificationService', () => {
                 expect.any(Number),
                 'NX',
             );
+        });
+
+        it('suppresses the push but still stores the bell row when pushEnabled is false', async () => {
+            setupWithDeviceTokens();
+
+            await notificationService.sendNotification(
+                'user-1',
+                {
+                    type: 'new_lead',
+                    titles: { en: 'New Lead', ar: 'عميل محتمل جديد' },
+                    bodies: { en: 'Body', ar: 'نص' },
+                },
+                { pushEnabled: false },
+            );
+
+            // Bell row is always persisted...
+            expect(db.insert).toHaveBeenCalled();
+            // ...but the entire push block (cooldown check + FCM send) is skipped.
+            expect(mockRedisSet).not.toHaveBeenCalled();
+        });
+    });
+
+    // Per-user push gating inside the workspace fan-out. Used by new-lead
+    // alerts: every member gets the in-app bell row, but the push is suppressed
+    // for members who turned `newLeadAlertsEnabled` off.
+    describe('sendNotificationToWorkspace push gating', () => {
+        it('resolves pushEnabled per member from the setting (absent → true)', async () => {
+            // 1. workspace members query
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { userId: 'u-on' },
+                        { userId: 'u-off' },
+                        { userId: 'u-absent' },
+                    ]),
+                }),
+            });
+            // 2. batched settings preference query (u-absent has no row)
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([
+                        { userId: 'u-on', enabled: true },
+                        { userId: 'u-off', enabled: false },
+                    ]),
+                }),
+            });
+
+            const spy = vi.spyOn(notificationService, 'sendNotification').mockResolvedValue('notif-x');
+
+            await notificationService.sendTemplateNotificationToWorkspace(
+                'ws-1',
+                'new_lead',
+                { senderName: 'Ali', phone: '+9647701234567' },
+                { leadId: 'l-1', pageId: 'p-1', deepLink: '/leads' },
+                { gatePushBySetting: 'newLeadAlertsEnabled' },
+            );
+
+            expect(spy).toHaveBeenCalledWith('u-on', expect.objectContaining({ type: 'new_lead' }), { pushEnabled: true });
+            expect(spy).toHaveBeenCalledWith('u-off', expect.objectContaining({ type: 'new_lead' }), { pushEnabled: false });
+            // No settings row → defaults to enabled.
+            expect(spy).toHaveBeenCalledWith('u-absent', expect.objectContaining({ type: 'new_lead' }), { pushEnabled: true });
+        });
+
+        it('does not gate push (and runs no preference query) when no options are passed', async () => {
+            // Only the workspace members query runs — no settings preference query.
+            (db.select as any).mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockResolvedValue([{ userId: 'u-1' }]),
+                }),
+            });
+
+            const spy = vi.spyOn(notificationService, 'sendNotification').mockResolvedValue('notif-y');
+
+            await notificationService.sendTemplateNotificationToWorkspace(
+                'ws-1',
+                'new_comment',
+                { senderName: 'Ali' },
+            );
+
+            expect(spy).toHaveBeenCalledWith('u-1', expect.objectContaining({ type: 'new_comment' }), { pushEnabled: undefined });
+            // Members query only — the preference select was never issued.
+            expect(db.select).toHaveBeenCalledTimes(1);
         });
     });
 

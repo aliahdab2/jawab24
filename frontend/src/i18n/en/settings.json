@@ -152,6 +152,10 @@
     "messageLabel": "For messages, remind me after",
     "helpText": "Set how long to wait before sending a reminder"
   },
+  "newLeadAlerts": {
+    "title": "New lead alerts",
+    "desc": "Get a push notification the moment a new lead with a phone number is captured"
+  },
   "handoffPause": {
     "title": "Pause Auto-Reply When I Reply Manually",
     "desc": "Pauses auto-reply while you handle the conversation yourself.",

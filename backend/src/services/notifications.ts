@@ -72,13 +72,23 @@ export type NotificationType =
     | 'ai_usage_warning_80'
     | 'ai_usage_limit_reached'
     | 'auto_reply_paused_billing'
-    | 'refund_processed';
+    | 'refund_processed'
+    | 'new_lead';
 
 export interface NotificationPayload {
     type: NotificationType;
     titles: Record<string, string>;  // { en: '...', ar: '...', fr: '...' }
     bodies: Record<string, string>;  // { en: '...', ar: '...', fr: '...' }
     data?: Record<string, unknown>;
+}
+
+/**
+ * Options for the workspace fan-out. `gatePushBySetting` names a per-user
+ * boolean column in `settings`; members with it false still get the in-app
+ * bell row but no push. Omitted → everyone is pushed (no extra query).
+ */
+export interface WorkspaceNotifyOptions {
+    gatePushBySetting?: 'newLeadAlertsEnabled';
 }
 
 /** Default fallback language when the requested locale has no translation */
@@ -99,6 +109,7 @@ const PUSH_COOLDOWN_SECONDS: Partial<Record<NotificationType, number>> = {
     stale_message:   300,  // 5 min
     kb_gap:         3600,  // 1 hour
     provider_failover: 600, // 10 min
+    new_lead:        120,  // 2 min — coalesce a burst of distinct leads; bell row still stored
 };
 
 // Notification templates — keyed by locale for easy multi-language expansion
@@ -207,6 +218,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'A refund of {amount} {currency} has been issued to your card. It may take 5–10 business days to appear on your statement.',
             ar: 'تم إرجاع مبلغ {amount} {currency} إلى بطاقتك. قد يستغرق ظهوره في كشف الحساب من 5 إلى 10 أيام عمل.',
+        },
+    },
+    new_lead: {
+        titles: { en: 'New Lead', ar: 'عميل محتمل جديد' },
+        bodies: {
+            en: '{senderName} shared their phone: {phone}. Tap to view the lead.',
+            ar: 'شارك {senderName} رقم هاتفه: {phone}. اضغط لعرض العميل المحتمل.',
         },
     },
 };
@@ -367,10 +385,17 @@ class NotificationService {
     /**
      * Create and send a notification to a user.
      * Stores all locale variants in JSONB; push uses user's preferred language.
+     *
+     * `options.pushEnabled` (default true): when explicitly false, the in-app
+     * bell row is still stored, but the FCM push is suppressed. Used by
+     * per-user notification preferences (e.g. new-lead alerts) resolved in the
+     * workspace fan-out, so an owner can mute the push without losing the
+     * persistent bell entry.
      */
     async sendNotification(
         userId: string,
-        payload: NotificationPayload
+        payload: NotificationPayload,
+        options?: { pushEnabled?: boolean }
     ): Promise<string> {
         // 1. Store notification in database (for in-app display)
         const [notification] = await db
@@ -391,8 +416,9 @@ class NotificationService {
         ]);
 
         // 3. Send push notification via FCM (if tokens exist and FCM is configured)
-        // Rate-limit noisy notification types to prevent phone spam on bulk processing
-        if (tokens.length > 0) {
+        // Rate-limit noisy notification types to prevent phone spam on bulk processing.
+        // `pushEnabled === false` suppresses only the push (bell row already stored above).
+        if (tokens.length > 0 && options?.pushEnabled !== false) {
             const cooldown = PUSH_COOLDOWN_SECONDS[payload.type];
             let pushAllowed = true;
 
@@ -674,25 +700,46 @@ class NotificationService {
      * Send a notification to every member of a workspace.
      * Used for workspace-level events (flagged reply, stale comment, etc.)
      * so team admins see the same notifications as the owner.
+     *
+     * `options.gatePushBySetting`: when set, the named per-user boolean in the
+     * `settings` table is read once (batched) for all members; members with it
+     * set to false still get the in-app bell row but no push. Absent/omitted →
+     * everyone is pushed (current behavior, no extra query).
      */
     async sendNotificationToWorkspace(
         workspaceId: string,
         payload: NotificationPayload,
+        options?: WorkspaceNotifyOptions,
     ): Promise<void> {
         const members = await db
             .select({ userId: workspaceMembers.userId })
             .from(workspaceMembers)
             .where(eq(workspaceMembers.workspaceId, workspaceId));
 
+        // Resolve per-user push preference once for the whole workspace (one query
+        // for N members) when a gating setting is requested.
+        let pushPrefByUser: Map<string, boolean> | null = null;
+        if (options?.gatePushBySetting === 'newLeadAlertsEnabled' && members.length > 0) {
+            const prefRows = await db
+                .select({ userId: settings.userId, enabled: settings.newLeadAlertsEnabled })
+                .from(settings)
+                .where(inArray(settings.userId, members.map(m => m.userId)));
+            pushPrefByUser = new Map<string, boolean>();
+            for (const r of prefRows) {
+                if (r.userId) pushPrefByUser.set(r.userId, r.enabled ?? true);
+            }
+        }
+
         await Promise.all(
-            members.map(m =>
-                this.sendNotification(m.userId, payload).catch(err =>
+            members.map(m => {
+                const pushEnabled = pushPrefByUser ? (pushPrefByUser.get(m.userId) ?? true) : undefined;
+                return this.sendNotification(m.userId, payload, { pushEnabled }).catch(err =>
                     captureError(err, 'Failed to send workspace notification to member', {
                         tags: { service: 'notifications' },
                         extra: { workspaceId, userId: m.userId },
                     }),
-                ),
-            ),
+                );
+            }),
         );
     }
 
@@ -704,8 +751,9 @@ class NotificationService {
         type: NotificationType,
         variables: Record<string, string> = {},
         data?: Record<string, unknown>,
+        options?: WorkspaceNotifyOptions,
     ): Promise<void> {
-        return this.sendNotificationToWorkspace(workspaceId, buildTemplatePayload(type, variables, data));
+        return this.sendNotificationToWorkspace(workspaceId, buildTemplatePayload(type, variables, data), options);
     }
 }
 

@@ -44,6 +44,7 @@ export interface UserSettings {
     brandVoiceNotes: string;
     holdLowConfidence: boolean;
     notificationsEnabled: boolean;
+    newLeadAlertsEnabled: boolean;
     onboardingCompletedAt: string | null;
 }
 
@@ -80,5 +81,6 @@ export interface UpdateSettingsDTO {
     brandVoiceNotes?: string;
     holdLowConfidence?: boolean;
     notificationsEnabled?: boolean;
+    newLeadAlertsEnabled?: boolean;
     onboardingCompletedAt?: string | null;
 }
