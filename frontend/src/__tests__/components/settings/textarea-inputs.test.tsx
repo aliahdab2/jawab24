@@ -40,6 +40,7 @@ function makeSettings(overrides: Partial<SettingsState> = {}): SettingsState {
     aiEnabled: true,
     aiModel: 'gpt-4o-mini',
     notificationsEnabled: false,
+    newLeadAlertsEnabled: false,
     pushNotifications: false,
     commentReplyMode: 'dual',
     commentsAutoReply: true,

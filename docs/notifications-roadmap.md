@@ -128,6 +128,7 @@ CREATE TABLE notification_preferences (
 | Payment Failed | Stripe webhook `invoice.payment_failed` | Push + In-App |
 | Subscription Expiring | 3 days before expiry (cron) | Push + In-App |
 | Page Disconnected | Facebook API error (token expired) | Push + In-App |
+| New Lead | Lead captured (customer shared a phone) — first time per sender only | Push (gated by per-user `newLeadAlertsEnabled`) + In-App |
 
 **Deliverables:**
 - [x] Database schema (device_tokens, notifications)

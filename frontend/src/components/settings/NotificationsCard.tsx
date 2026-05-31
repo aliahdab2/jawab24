@@ -4,6 +4,7 @@ import {
   Bell,
   Clock,
   Check,
+  UserPlus,
 } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import type { SettingsCardProps } from './types';
@@ -88,6 +89,19 @@ export function NotificationsCard({ settings, setSettings }: SettingsCardProps) 
           </div>
         </div>
       </div>
+      </div>
+      {/* New lead alerts — independent channel, controllable even when reply reminders are off */}
+      <div className="flex items-center justify-between gap-4 mt-4 pt-4 border-t border-theme-border/60">
+        <div className="flex items-center gap-4">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center landscape:w-8 landscape:h-8 ${settings.newLeadAlertsEnabled ? 'icon-bg-brand' : 'bg-muted text-muted-foreground'}`}>
+            <UserPlus className="w-4 h-4" />
+          </div>
+          <div className="text-start">
+            <h4 className="font-bold text-foreground text-base">{t('newLeadAlerts.title')}</h4>
+            <p className="text-xs text-muted-foreground font-medium">{t('newLeadAlerts.desc')}</p>
+          </div>
+        </div>
+        <Toggle enabled={settings.newLeadAlertsEnabled} onChange={(enabled) => setSettings({ ...settings, newLeadAlertsEnabled: enabled })} aria-label={t('newLeadAlerts.title')} />
       </div>
     </Card>
   );

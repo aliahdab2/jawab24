@@ -5,6 +5,7 @@ export interface SettingsState {
   aiEnabled: boolean;
   aiModel: string;
   notificationsEnabled: boolean;
+  newLeadAlertsEnabled: boolean;
   pushNotifications: boolean;
   commentReplyMode: string;
   commentsAutoReply: boolean;

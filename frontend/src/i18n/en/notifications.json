@@ -45,7 +45,8 @@
     "subscription_renewed": "renewal confirmations",
     "page_disconnected": "disconnected pages",
     "kb_gap": "knowledge gaps",
-    "skipped_reply": "skipped replies"
+    "skipped_reply": "skipped replies",
+    "new_lead": "new leads"
   },
   "expand": "Expand group",
   "collapse": "Collapse group"

@@ -73,6 +73,7 @@ export const UpdateSettingsSchema = z.object({
     commentEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     messageEscalationMinutes: z.number().int().min(5, 'Minimum 5 minutes').max(1440, 'Maximum 24 hours').optional(),
     notificationsEnabled: z.boolean().optional(),
+    newLeadAlertsEnabled: z.boolean().optional(),
     replyStyle: z.enum(['professional', 'casual', 'enthusiastic']).optional(),
     brandVoiceNotes: z
         .string()
