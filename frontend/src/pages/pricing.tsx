@@ -560,7 +560,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
       <Head>
         <title>{t('pricing.seoTitle')}</title>
         <meta name="description" content={t('pricing.seoDescription')} />
-        <meta name="keywords" content={t('pricing.seoKeywords')} />
         <meta key="og:title" property="og:title" content={t('pricing.ogTitle')} />
         <meta key="og:description" property="og:description" content={t('pricing.ogDescription')} />
         <script

@@ -16,6 +16,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isRTLLocale } from '@/utils/locale';
+import { slugify } from '@/utils/headingSlug';
+import { BreadcrumbJsonLd } from '@/components/seo/BreadcrumbJsonLd';
 import { PublicLayout } from '@/components/layout/PublicLayout';
 import {
   BLOG_POSTS,
@@ -52,22 +54,9 @@ function extractToc(markdown: string): TocItem[] {
   let match: RegExpExecArray | null;
   while ((match = headingRegex.exec(markdown)) !== null) {
     const text = match[2].replace(/\*\*/g, '').trim();
-    const id = text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/\s+/g, '-');
-    items.push({ id, text, level: match[1].length });
+    items.push({ id: slugify(text), text, level: match[1].length });
   }
   return items;
-}
-
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/\*\*/g, '')
-    .replace(/[^\w\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .trim();
 }
 
 /* ─── Reading progress bar ────────────────────────────────────────── */
@@ -257,7 +246,6 @@ export default function BlogPostPage({
       <Head>
         <title>{frontmatter.seoTitle}</title>
         <meta name="description" content={frontmatter.seoDescription} />
-        <meta name="keywords" content={frontmatter.seoKeywords} />
 
         <meta key="og:title" property="og:title" content={frontmatter.seoTitle} />
         <meta key="og:description" property="og:description" content={frontmatter.seoDescription} />
@@ -310,6 +298,14 @@ export default function BlogPostPage({
               'image': BRAND_ASSETS.urls.ogImage(),
             }),
           }}
+        />
+
+        <BreadcrumbJsonLd
+          items={[
+            { name: 'Jawab24', url: `https://jawab24.com${locale === 'en' ? '/en' : '/'}` },
+            { name: t('indexTitle'), url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/blog` },
+            { name: frontmatter.title, url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/blog/${slug}` },
+          ]}
         />
       </Head>
 

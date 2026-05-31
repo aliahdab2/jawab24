@@ -47,3 +47,7 @@ android-release-keys/
 *.keystore
 *.jks
 seo-indexing-report-*.md
+
+# Local growth/SEO working drafts (kept on disk, not tracked)
+/Jawab24_Growth_Playbook.md
+/SEO_Audit_Jawab24.md
