@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/router';
 import clsx from 'clsx';
-import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, Clock, MessageCircle } from 'lucide-react';
+import { Bell, X, Check, CheckCheck, ChevronRight, ChevronLeft, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore, useUIStore } from '@/lib/store';
 import { useTranslations, useLocale } from 'next-intl';
@@ -10,9 +10,10 @@ import { isRTLLocale } from '@/utils/locale';
 import { useBodyScrollLock, useNotificationPoller } from '@/hooks';
 import { getNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '@/lib/notifications';
 import { SwipeableNotificationItem } from './SwipeableNotificationItem';
-import { NotificationFilterPills, FILTER_TYPE_MAP, type NotificationFilter } from '../notifications/NotificationFilterPills';
+import { NotificationFilterPills } from '../notifications/NotificationFilterPills';
 import { NotificationGroupHeader } from '../notifications/NotificationGroup';
 import { NotificationEmptyState } from '../notifications/NotificationEmptyState';
+import { NotificationAvatar, NotificationTimestamp, UnreadAccentBar } from '../notifications/NotificationVisuals';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import {
     type Notification,
@@ -23,6 +24,9 @@ import {
     groupNotifications,
     isGroup,
     computeFilterCounts,
+    formatBadgeCount,
+    FILTER_TYPE_MAP,
+    type NotificationFilter,
 } from './notificationUtils';
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -220,7 +224,6 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
 
     const renderNotificationItem = (notification: Notification, indented = false) => {
         const style = getNotificationStyle(notification.type);
-        const IconComponent = style.icon;
         const isUnread = !notification.read;
         const isActionable = ACTIONABLE_TYPES.has(notification.type);
 
@@ -240,20 +243,10 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                     )}
                     onClick={() => handleNotificationClick(notification)}
                 >
-                    {/* Unread accent bar */}
-                    {isUnread && (
-                        <div className="absolute inset-y-0 start-0 w-[3px] bg-brand-500 rounded-e-full" />
-                    )}
+                    {isUnread && <UnreadAccentBar />}
 
                     <div className="flex items-start gap-3.5">
-                        {/* Icon */}
-                        <div className={clsx(
-                            'w-10 h-10 rounded-xl ring-1 flex items-center justify-center flex-shrink-0',
-                            style.bgColor, style.ringColor,
-                            !isUnread && 'opacity-50',
-                        )}>
-                            <IconComponent className={clsx('w-5 h-5', style.iconColor)} aria-hidden="true" />
-                        </div>
+                        <NotificationAvatar style={style} muted={!isUnread} />
 
                         <div className="flex-1 min-w-0">
                             {/* Title */}
@@ -271,21 +264,24 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                                 )}
                             </div>
 
-                            {/* Body */}
-                            <p className={clsx(
-                                'text-xs leading-relaxed mt-0.5 line-clamp-2',
-                                isUnread ? 'text-muted-foreground' : 'text-muted-foreground/70',
-                            )}>
+                            {/* Body — dir="auto" so embedded customer names / phone numbers
+                                don't break bidi ordering (e.g. a lead body that leads with a
+                                Latin name or a phone number inside RTL Arabic copy). */}
+                            <p
+                                dir="auto"
+                                className={clsx(
+                                    'text-xs leading-relaxed mt-0.5 line-clamp-2',
+                                    isUnread ? 'text-muted-foreground' : 'text-muted-foreground/70',
+                                )}
+                            >
                                 {notification.body}
                             </p>
 
-                            {/* Timestamp */}
-                            <div className="flex items-center gap-1 mt-1.5">
-                                <Clock className="w-3 h-3 text-icon-muted" aria-hidden="true" />
-                                <p className="text-[11px] text-muted-foreground">
-                                    {getRelativeTime(notification.createdAt)}
-                                </p>
-                            </div>
+                            <NotificationTimestamp
+                                time={notification.createdAt}
+                                getRelativeTime={getRelativeTime}
+                                className="mt-1.5"
+                            />
 
                             {/* Reply Now CTA */}
                             {isActionable && (
@@ -341,10 +337,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                     enabled={group.unreadCount > 0}
                 >
                     <NotificationGroupHeader
-                        icon={style.icon}
-                        iconColor={style.iconColor}
-                        bgColor={style.bgColor}
-                        ringColor={style.ringColor}
+                        style={style}
                         count={group.notifications.length}
                         unreadCount={group.unreadCount}
                         typeLabel={t(typeLabelKey)}
@@ -391,7 +384,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         'absolute -top-1 -end-1 min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[11px] font-bold text-white bg-red-500 rounded-full shadow-sm shadow-red-200 ring-2',
                         isDark ? 'ring-black/30' : 'ring-white',
                     )}>
-                        {unreadCount > 99 ? '99+' : unreadCount}
+                        {formatBadgeCount(unreadCount)}
                     </span>
                 )}
             </button>
@@ -420,7 +413,7 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                             </h3>
                             {unreadCount > 0 && (
                                 <span className="min-w-[22px] h-[22px] px-1.5 flex items-center justify-center text-[11px] font-bold text-brand-700 dark:text-brand-300 bg-brand-100 dark:bg-brand-900/50 rounded-full">
-                                    {unreadCount > 99 ? '99+' : unreadCount}
+                                    {formatBadgeCount(unreadCount)}
                                 </span>
                             )}
                         </div>
