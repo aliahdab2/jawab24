@@ -27,6 +27,7 @@
   "filter": {
     "all": "All",
     "comments": "Comments",
+    "leads": "Leads",
     "billing": "Billing",
     "system": "System"
   },
