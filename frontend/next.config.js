@@ -62,6 +62,24 @@ const nextConfig = {
     ];
   },
 
+  async rewrites() {
+    // Serve the IndexNow key-verification file at /<key>.txt (Bing / Copilot /
+    // ChatGPT Search / Yandex discovery). The pattern matches any long token and
+    // routes to the API route, which validates the requested key against the
+    // RUNTIME env (INDEXNOW_KEY) and 404s otherwise — so this does NOT depend on
+    // INDEXNOW_KEY being present at build time. Static public .txt files (robots,
+    // llms, llms-full) are served before afterFiles rewrites, so they are
+    // unaffected. No-op for the mobile static export.
+    if (isMobile) return [];
+    return [
+      {
+        source: '/:indexnowKey([A-Za-z0-9-]{8,}).txt',
+        destination: '/api/indexnow-key?key=:indexnowKey',
+        locale: false,
+      },
+    ];
+  },
+
   async headers() {
     return [
       // Static brand assets — immutable, cached for 1 year

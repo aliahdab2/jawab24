@@ -800,6 +800,22 @@ All webhooks use HMAC-SHA256 signature verification:
 
 ---
 
+## Search / AI Engine Discovery
+
+### IndexNow (Bing / Copilot / ChatGPT Search / Yandex)
+- **Purpose**: Instantly notify IndexNow-participating engines (Bing, Microsoft Copilot, ChatGPT Search, Yandex) of the public URL set after a deploy, so new/updated pages are crawled without waiting for organic discovery. Google does not consume IndexNow (it reads the sitemap), so this complements — not replaces — sitemap submission.
+- **API**: `POST https://api.indexnow.org/indexnow` with `{ host, key, keyLocation, urlList }` (native `fetch`, no SDK).
+- **Key verification**: The key is served as plain text at `https://jawab24.com/<key>.txt` via a rewrite in `frontend/next.config.js` that routes `/<token>.txt` → API route `/api/indexnow-key`, which validates the token against the **runtime** `INDEXNOW_KEY` env and 404s otherwise. Validating at runtime (not build time) means rotating the key needs no rebuild. The key is public by design but sourced from env (not committed).
+- **Trigger**: Non-blocking step at the end of `scripts/deploy-production.sh` (after a successful deploy) submits every `<loc>` URL from the live sitemap. Skipped when `INDEXNOW_KEY` is unset; never fails the deploy.
+- **Configuration**:
+  - `INDEXNOW_KEY` — required in the frontend **runtime** env (for the key file) and in the deploy env (for the ping). Public value; not a secret.
+- **Implementation Location**:
+  - Key file route: `/frontend/src/pages/api/indexnow-key.ts` + rewrite in `/frontend/next.config.js`
+  - Ping script: `/scripts/indexnow-ping.ts`
+  - Tests: `/frontend/test/pages/api/indexnow-key.test.ts`
+
+---
+
 ## Integration Testing
 
 - **E2E Test Commands**:

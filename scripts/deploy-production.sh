@@ -216,3 +216,12 @@ echo -e "📊 Dashboard: https://jawab24.com/dashboard"
 echo -e "🔧 API:       https://jawab24.com/api/health"
 echo ""
 
+# Notify IndexNow (Bing / Copilot / ChatGPT Search / Yandex) of the live URL set.
+# Non-blocking: skipped when INDEXNOW_KEY is unset, and can never fail the deploy
+# (the deploy already succeeded by this point).
+if [ -n "${INDEXNOW_KEY:-}" ]; then
+  echo -e "🔔 Pinging IndexNow…"
+  npx tsx scripts/indexnow-ping.ts || echo "⚠️  IndexNow ping failed (non-fatal)"
+  echo ""
+fi
+

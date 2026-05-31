@@ -388,6 +388,31 @@ export default function WhatIsJawab24() {
                 ))}
               </div>
             </section>
+
+            {/* Related reading — internal links to money pages */}
+            <section>
+              <h2 className="text-2xl font-semibold text-brand-400 mb-3">
+                {t('related.title')}
+              </h2>
+              <ul className="space-y-2">
+                <li>
+                  <Link
+                    href="/compare"
+                    className="text-brand-400 hover:text-brand-300 transition-colors"
+                  >
+                    {t('related.compare')}
+                  </Link>
+                </li>
+                <li>
+                  <Link
+                    href="/blog/best-auto-reply-tools-2026"
+                    className="text-brand-400 hover:text-brand-300 transition-colors"
+                  >
+                    {t('related.bestTools')}
+                  </Link>
+                </li>
+              </ul>
+            </section>
           </div>
 
           {/* Footer */}

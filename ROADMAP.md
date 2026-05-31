@@ -1,9 +1,66 @@
 # Jawab24 — Product Roadmap
 
-> **Last updated**: 2026-05-30 (status reconciliation; phase plan below not re-sequenced)
+> **Last updated**: 2026-05-31 (execution spine added — see below; the phases are the *menu*, the spine is the *order*)
 > **Purpose**: Strategic feature roadmap based on competitive analysis and product study.
 >
 > **Active near-term focus (2026-05-30):** Ship the **Salla App Store** listing first (Arabic-first / "AI sales rep" wedge); file Meta WhatsApp Embedded Signup in parallel. Shopify + Zid submissions and WhatsApp frontend/templates follow. See `.planning/SALLA_LISTING_BRIEF.md`, `.planning/SALLA_LAUNCH_VALIDATION.md`, and the consolidated launch plan.
+
+---
+
+## 🧭 Execution Spine — next 6–8 weeks (from 2026-05-31)
+
+The phases below are a *menu*; this spine is the *order*. Several tracks run in parallel; the **critical path is the keystone** — it unlocks the largest competitive gap (proactive WhatsApp/DM commerce). Week bands are **relative sequencing, not date commitments** — assign real dates to team capacity.
+
+### Critical path (the one thread)
+```
+Salla code-ready ✅ ──► Salla submit ──► Shopify / Zid submit
+
+WhatsApp backend ✅ ──► Meta Embedded Signup req ──► WA Phase 3 connect UI ──► WA Phase 4 templates ─┐
+                        (file NOW, 3–5d TTL)        (build in parallel, no approval needed)          │
+                                                                                                     ▼
+KEYSTONE: 1d customer-identity map ─► 1e proactive sender ─► DM cart-recovery + DM order notif ─► WhatsApp cart-recovery + notif
+          (no external dep — just build)                     (notif infra already shipped, SMS-only)   = LetsBot parity on outbound
+```
+
+### Sequenced work
+
+**Now / W1–2 — unblock distribution + start the clock**
+- **Salla submission:** resolve the live-validation OAuth blocker (Cloudflare on dev-store login — see `.planning/SALLA_LAUNCH_VALIDATION.md` dogfood), run S1b/S2/S3, produce listing assets, upload. *Code is done; this is validation + assets + portal.*
+- **WhatsApp Phase 2:** file the Meta Embedded Signup request **immediately** — it gates Phase 4 and has a 3–5 business-day TTL. Pure paperwork.
+- **WhatsApp Phase 3 (connect UI):** start the build in parallel — it does **not** need Meta approval to write, only to test. Reuses the **shared KB** (one business KB across FB/IG/WhatsApp — no per-channel KB).
+
+**W2–3 — land the channel UI, start the keystone**
+- WhatsApp Phase 3 ships (connect card + `whatsappAutoReplyEnabled` toggle, shared KB).
+- **Keystone 1d — customer-identity mapping** begins: an `ecommerce_customer_map` (social/WhatsApp sender ↔ e-commerce customer), populated from `ecommerceActions`. *(Spec: `.planning/ECOMMERCE_POWER_FEATURES_PLAN.md` Phase 1d.)*
+
+**W3–5 — the unlock**
+- **Keystone 1e — proactive sender** (`proactiveMessaging.ts`, rate-limited): the missing "system-initiated outbound" primitive. *(Spec: Power Features Phase 1e.)*
+- Once 1d+1e land → **DM cart-recovery** (Power Features Ph2) + **DM order notifications** (Power Features Ph3) ship in parallel — the notification engine (templates, queue, scheduler, worker) already exists for SMS; this adds the DM channel branch.
+
+**W5–6 — parity moment + more distribution**
+- WhatsApp Phase 4 (templates) once Meta-approved → route cart-recovery + notifications over **WhatsApp**. *This is the point Jawab24 reaches LetsBot parity on proactive commerce.*
+- Shopify + Zid app-store submissions (after Salla proves the listing pattern).
+
+**W6–8 / deferred**
+- URL click-tracking (Power Features Ph6) for conversion telemetry — after recovery/notifications ship.
+- Inbox-polish phases (2 AI suggestions · 3 customer profiles · 4 analytics · 6 team UI · 7 posts) — **interleave as capacity allows; none block the outbound story.**
+
+### Calendar blockers (these gate the path — track them)
+- **Meta Embedded Signup approval** — 3–5 business days after request; gates WA Phase 4.
+- **Salla App Store review** — historically 5–10 days after submit.
+- **Salla live-validation OAuth blocker** — Cloudflare blocks automated dev-store login; needs a manual / real-merchant workaround before S1b can complete.
+
+### Deferred / not planned (explicit, so it isn't silently missing)
+- **Bulk broadcast / promotional campaigns** — the one real LetsBot capability with *no plan today*. Deferred; revisit Q3 if competitive demand is proven (needs segment builder, scheduler, rate-limit, opt-out/compliance).
+- **Web-chat widget, chatbot flow builder** — intentionally not planned (flow builder conflicts with the "Rules + AI" principle).
+
+### Non-engineering, owner = marketing (parallel, off the eng critical path)
+- **GTM / positioning:** the "AI sales rep / مندوب مبيعات" repositioning is decided but not operationalized (messaging, pricing tiers, launch sequence, target persona). Needs a GTM narrative doc — today only an SEO checklist (`Jawab24_Growth_Playbook.md`) exists. **Flagged, not solved here.**
+
+### Success signals per milestone
+- **Salla live** → first non-seed merchant install + one real AI reply referencing their catalog.
+- **Keystone live** → a cart-recovery DM delivered to a mapped customer (not SMS).
+- **WhatsApp parity** → an order-confirmation template delivered over WhatsApp end-to-end.
 
 ---
 
@@ -33,7 +90,7 @@
 - No customer profiles/CRM
 - No AI suggested replies in inbox
 - Team features: backend ready, UI not yet exposed (see Phase 6)
-- **Proactive DM/WhatsApp cart-recovery & order notifications NOT built** — only the SMS channel is live (see below)
+- **Proactive DM/WhatsApp cart-recovery & order notifications NOT built** — only the SMS channel is live. Unblocked by the **keystone** (customer-identity mapping + proactive sender) in the Execution Spine above; the notification engine itself is shipped, it just lacks a DM/WhatsApp channel branch.
 
 ### Completed Since Last Update (2026-04-15 → 2026-05-30)
 - E-commerce **SMS customer notifications** live: order confirmed/shipped/delivered, abandoned-cart recovery, review requests, digital delivery — bilingual, dedup'd, merchant-configurable (`services/customerNotifications.ts`)
@@ -367,6 +424,7 @@ Backend infrastructure is fully built and running in production (see Completed W
 | No AI suggested replies in inbox | Smart Reply button exists (comments), but competitors show 2-3 AI suggestion chips for agents to pick from | Phase 2: AI Suggestions | **High** |
 | ~~No email channel~~ | ~~Standard for support platforms~~ | Resend transactional email implemented | ~~Low~~ ✅ Resolved |
 | Team UI not exposed | Backend ready but no team management page, invite UI, or role indicators | Phase 6: Team UI (~5-7 days) | Low (on demand) |
+| No bulk broadcast / campaigns | LetsBot (WhatsApp-first competitor) sends promotional broadcasts to customer lists; Jawab24 has no broadcast feature at all | Deferred — needs segment builder + scheduler + opt-out/compliance | Low (revisit Q3) |
 
 ### Jawab24's Unique Differentiator
 **Arabic-first AI + RAG + bilingual auto-translation** — no competitor serves the MENA market with this depth. ManyChat has scale, Intercom has enterprise features, but neither does Arabic well. The 4 unique features (gap detection, price guard, semantic caching, auto-translation) have no equivalent in any competitor.

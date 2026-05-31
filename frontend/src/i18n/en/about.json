@@ -148,5 +148,10 @@
   "whyDifferent": {
     "title": "Why Jawab24 Is Different",
     "text": "Jawab24 is not a chatbot — it is an intelligent auto-reply system. Traditional chatbots force you to build conversation flows manually and follow rigid decision trees. Jawab24 understands what customers are asking, checks your product catalog for accurate information, and generates natural responses — all without any flow setup. It combines post replies, AI-generated smart replies, product catalog data, and business knowledge into a single system that works in Arabic and English. Designed from the ground up for Arabic-speaking markets, with native Salla integration, dialect-aware AI, and right-to-left interface support."
+  },
+  "related": {
+    "title": "Learn more",
+    "compare": "Compare Jawab24 with other auto-reply tools",
+    "bestTools": "Best Facebook auto-reply tools in 2026"
   }
 }
