@@ -4,6 +4,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
+import { buildWebUrl } from '@/lib/webUrl';
 import { BreadcrumbJsonLd } from '@/components/seo/BreadcrumbJsonLd';
 import type { MessageKeys, NestedKeyOf } from 'use-intl';
 import {
@@ -82,7 +83,7 @@ export default function ComparePage({ competitor }: ComparePageProps) {
               '@type': 'WebPage',
               'name': t(k(`${slug}.seoTitle`)),
               'description': t(k(`${slug}.seoDescription`)),
-              'url': `https://jawab24.com/compare/${slug}`,
+              'url': buildWebUrl(`/compare/${slug}`, locale),
               'isPartOf': {
                 '@type': 'WebSite',
                 'name': 'Jawab24',
@@ -113,9 +114,9 @@ export default function ComparePage({ competitor }: ComparePageProps) {
 
         <BreadcrumbJsonLd
           items={[
-            { name: 'Jawab24', url: `https://jawab24.com${locale === 'en' ? '/en' : '/'}` },
-            { name: t('hubBreadcrumb'), url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/compare` },
-            { name: t('vsTitle', { name: competitor.name }), url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/compare/${slug}` },
+            { name: 'Jawab24', url: buildWebUrl('/', locale) },
+            { name: t('hubBreadcrumb'), url: buildWebUrl('/compare', locale) },
+            { name: t('vsTitle', { name: competitor.name }), url: buildWebUrl(`/compare/${slug}`, locale) },
           ]}
         />
       </Head>

@@ -30,6 +30,9 @@ function mockRes(): { res: NextApiResponse; captured: CapturedRes } {
   return { res, captured };
 }
 
+const reqWithKey = (key?: string) => ({ query: key === undefined ? {} : { key } }) as unknown as NextApiRequest;
+const KEY = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+
 describe('GET /api/indexnow-key', () => {
   const original = process.env.INDEXNOW_KEY;
   beforeEach(() => {
@@ -42,17 +45,32 @@ describe('GET /api/indexnow-key', () => {
 
   it('returns 404 when INDEXNOW_KEY is not configured', () => {
     const { res, captured } = mockRes();
-    handler({} as NextApiRequest, res);
+    handler(reqWithKey(KEY), res);
     expect(captured.statusCode).toBe(404);
     expect(captured.body).toBeUndefined();
   });
 
-  it('serves the key as plain text when configured', () => {
-    process.env.INDEXNOW_KEY = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+  it('serves the key as plain text when the requested token matches', () => {
+    process.env.INDEXNOW_KEY = KEY;
     const { res, captured } = mockRes();
-    handler({} as NextApiRequest, res);
+    handler(reqWithKey(KEY), res);
     expect(captured.statusCode).toBe(200);
-    expect(captured.body).toBe('a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6');
+    expect(captured.body).toBe(KEY);
     expect(captured.headers['content-type']).toContain('text/plain');
+  });
+
+  it('returns 404 when the requested token does not match the configured key', () => {
+    process.env.INDEXNOW_KEY = KEY;
+    const { res, captured } = mockRes();
+    handler(reqWithKey('not-the-key'), res);
+    expect(captured.statusCode).toBe(404);
+    expect(captured.body).toBeUndefined();
+  });
+
+  it('returns 404 when hit directly without a key token', () => {
+    process.env.INDEXNOW_KEY = KEY;
+    const { res, captured } = mockRes();
+    handler(reqWithKey(undefined), res);
+    expect(captured.statusCode).toBe(404);
   });
 });

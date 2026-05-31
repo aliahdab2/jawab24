@@ -64,13 +64,19 @@ const nextConfig = {
 
   async rewrites() {
     // Serve the IndexNow key-verification file at /<key>.txt (Bing / Copilot /
-    // ChatGPT search / Yandex discovery). The key is public by design but sourced
-    // from env so it is not committed. No-op for the mobile static export and when
-    // the key is unset, so this never affects existing routing.
-    const indexNowKey = process.env.INDEXNOW_KEY;
-    if (isMobile || !indexNowKey) return [];
+    // ChatGPT Search / Yandex discovery). The pattern matches any long token and
+    // routes to the API route, which validates the requested key against the
+    // RUNTIME env (INDEXNOW_KEY) and 404s otherwise — so this does NOT depend on
+    // INDEXNOW_KEY being present at build time. Static public .txt files (robots,
+    // llms, llms-full) are served before afterFiles rewrites, so they are
+    // unaffected. No-op for the mobile static export.
+    if (isMobile) return [];
     return [
-      { source: `/${indexNowKey}.txt`, destination: '/api/indexnow-key', locale: false },
+      {
+        source: '/:indexnowKey([A-Za-z0-9-]{8,}).txt',
+        destination: '/api/indexnow-key?key=:indexnowKey',
+        locale: false,
+      },
     ];
   },
 

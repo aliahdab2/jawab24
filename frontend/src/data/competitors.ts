@@ -140,3 +140,8 @@ export function getAllCompetitorSlugs(): string[] {
 export function getCompetitor(slug: string): Competitor | undefined {
   return COMPETITORS[slug];
 }
+
+/** Slug + display name for every competitor — used by the /compare hub (and its test). */
+export function getCompetitorSummaries(): { slug: string; name: string }[] {
+  return Object.values(COMPETITORS).map(({ slug, name }) => ({ slug, name }));
+}

@@ -30,7 +30,12 @@ async function main() {
   }
 
   const sitemapUrl = process.argv[2] || `${ORIGIN}/sitemap.xml`;
-  const res = await fetch(sitemapUrl);
+  // Only ever fetch our own origin. The deploy passes no argument; this guards a
+  // mistyped/hostile override and rejects any redirect off jawab24.com (SSRF).
+  if (new URL(sitemapUrl).origin !== ORIGIN) {
+    throw new Error(`Refusing to fetch sitemap off-origin: ${sitemapUrl}`);
+  }
+  const res = await fetch(sitemapUrl, { redirect: 'error' });
   if (!res.ok) throw new Error(`Could not fetch sitemap ${sitemapUrl}: HTTP ${res.status}`);
 
   const urlList = extractSitemapUrls(await res.text());

@@ -4,14 +4,13 @@ import type { GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
+import { buildWebUrl } from '@/lib/webUrl';
 import { BreadcrumbJsonLd } from '@/components/seo/BreadcrumbJsonLd';
-import { getAllCompetitorSlugs, getCompetitor } from '@/data/competitors';
+import { getCompetitorSummaries } from '@/data/competitors';
 
 interface CompareHubProps {
   competitors: { slug: string; name: string }[];
 }
-
-const CANONICAL = 'https://jawab24.com';
 
 export default function CompareHubPage({ competitors }: CompareHubProps) {
   const t = useTranslations('compare');
@@ -19,7 +18,6 @@ export default function CompareHubPage({ competitors }: CompareHubProps) {
   const isRTL = isRTLLocale(locale);
   const BackArrow = isRTL ? ArrowRight : ArrowLeft;
   const ForwardArrow = isRTL ? ArrowLeft : ArrowRight;
-  const localePrefix = locale === 'en' ? '/en' : '';
 
   return (
     <>
@@ -41,15 +39,15 @@ export default function CompareHubPage({ competitors }: CompareHubProps) {
               '@type': 'CollectionPage',
               'name': t('hubSeoTitle'),
               'description': t('hubSeoDescription'),
-              'url': `${CANONICAL}${localePrefix}/compare`,
-              'isPartOf': { '@type': 'WebSite', 'name': 'Jawab24', 'url': CANONICAL },
+              'url': buildWebUrl('/compare', locale),
+              'isPartOf': { '@type': 'WebSite', 'name': 'Jawab24', 'url': 'https://jawab24.com' },
               'mainEntity': {
                 '@type': 'ItemList',
                 'itemListElement': competitors.map((c, i) => ({
                   '@type': 'ListItem',
                   'position': i + 1,
                   'name': t('vsTitle', { name: c.name }),
-                  'url': `${CANONICAL}${localePrefix}/compare/${c.slug}`,
+                  'url': buildWebUrl(`/compare/${c.slug}`, locale),
                 })),
               },
             }),
@@ -58,8 +56,8 @@ export default function CompareHubPage({ competitors }: CompareHubProps) {
 
         <BreadcrumbJsonLd
           items={[
-            { name: 'Jawab24', url: `${CANONICAL}${locale === 'en' ? '/en' : '/'}` },
-            { name: t('hubBreadcrumb'), url: `${CANONICAL}${localePrefix}/compare` },
+            { name: 'Jawab24', url: buildWebUrl('/', locale) },
+            { name: t('hubBreadcrumb'), url: buildWebUrl('/compare', locale) },
           ]}
         />
       </Head>
@@ -83,7 +81,8 @@ export default function CompareHubPage({ competitors }: CompareHubProps) {
           <p className="text-lg text-foreground/70 leading-relaxed mb-10">{t('hubSubtitle')}</p>
 
           {/* Comparison cards */}
-          <section className="mb-12">
+          <section className="mb-12" aria-labelledby="compare-cards-heading">
+            <h2 id="compare-cards-heading" className="sr-only">{t('hubCardsHeading')}</h2>
             <ul className="grid gap-4 sm:grid-cols-2">
               {competitors.map((c) => (
                 <li key={c.slug}>
@@ -145,12 +144,7 @@ export const getStaticProps: GetStaticProps<CompareHubProps> = async (ctx) => {
   const { getI18nProps } = await import('@/i18n/getMessages');
   const { PAGE_NAMESPACES } = await import('@/i18n/namespaces');
   const i18nProps = await getI18nProps(ctx, [...PAGE_NAMESPACES.compare]);
-  const competitors = getAllCompetitorSlugs()
-    .map((slug) => {
-      const c = getCompetitor(slug);
-      return c ? { slug: c.slug, name: c.name } : null;
-    })
-    .filter((c): c is { slug: string; name: string } => c !== null);
+  const competitors = getCompetitorSummaries();
 
   return { props: { competitors, ...i18nProps } };
 };
