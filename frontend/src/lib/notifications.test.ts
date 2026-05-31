@@ -43,9 +43,6 @@ vi.mock('@/lib/sentryHelpers', () => ({
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('./api', () => ({ api: {} }));
 vi.mock('axios', () => ({ default: { post: vi.fn() } }));
-vi.mock('@/components/notifications/NotificationFilterPills', () => ({
-    ACTIONABLE_NOTIFICATION_TYPES: [],
-}));
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

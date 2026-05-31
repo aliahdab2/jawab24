@@ -2,7 +2,6 @@ import {
     Bell, MessageCircle, AlertTriangle, CreditCard, CheckCircle, Unplug, BookOpen, Mail, Clock, UserPlus,
     type LucideIcon,
 } from 'lucide-react';
-import { FILTER_TYPE_MAP, ACTIONABLE_NOTIFICATION_TYPES, type NotificationFilter } from '../notifications/NotificationFilterPills';
 import { isIOSNative } from '@/lib/capacitor';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -32,6 +31,24 @@ export interface NotificationStyle {
     ringColor: string;
 }
 
+// ─── Filter taxonomy ───────────────────────────────────────────────────────────
+// Lives in the domain layer (not the pill component) so utilities like
+// computeFilterCounts can map types to filters without the UI depending on it
+// the wrong way around.
+
+export type NotificationFilter = 'all' | 'comments' | 'leads' | 'billing' | 'system';
+
+/** Notification types that represent actionable comment/message items (used for routing, CTAs, and filtering). */
+export const ACTIONABLE_NOTIFICATION_TYPES = ['stale_comment', 'stale_message', 'new_comment', 'flagged_reply', 'skipped_reply'] as const;
+
+export const FILTER_TYPE_MAP: Record<NotificationFilter, string[] | null> = {
+    all: null,
+    comments: [...ACTIONABLE_NOTIFICATION_TYPES],
+    leads: ['new_lead'],
+    billing: ['payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed', 'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'auto_reply_paused_billing'],
+    system: ['page_disconnected', 'kb_gap', 'provider_failover'],
+};
+
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
@@ -55,12 +72,24 @@ export const DEFAULT_STYLE: NotificationStyle = {
 };
 
 export const ACTIONABLE_TYPES = new Set<string>(ACTIONABLE_NOTIFICATION_TYPES);
-export const GROUP_TIME_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+
+/**
+ * Types that must NEVER collapse into a group. For these, the per-item body is
+ * the whole point: a lead carries the customer's name + phone, so "3 new leads"
+ * would hide exactly the information the merchant needs to act. Each renders as
+ * its own card even when several arrive consecutively.
+ */
+export const NON_GROUPABLE_TYPES = new Set<string>(['new_lead']);
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 export function getNotificationStyle(type: string): NotificationStyle {
     return NOTIFICATION_STYLES[type] ?? DEFAULT_STYLE;
+}
+
+/** Clamp a count for display in a badge ("99+" above 99). */
+export function formatBadgeCount(count: number): string {
+    return count > 99 ? '99+' : String(count);
 }
 
 /**
@@ -126,11 +155,13 @@ export function groupNotifications(
     for (let i = 1; i < notifications.length; i++) {
         const prev = notifications[i - 1];
         const curr = notifications[i];
-        const timeDiff = Math.abs(
-            new Date(prev.createdAt).getTime() - new Date(curr.createdAt).getTime(),
-        );
 
-        if (curr.type === prev.type && timeDiff <= GROUP_TIME_WINDOW_MS) {
+        // Group consecutive notifications of the same type. We intentionally do
+        // NOT split on a time gap: two same-type bursts a few hours apart would
+        // otherwise render as two identical, indistinguishable group headers
+        // (e.g. two "2 reported replies" rows), which reads as a duplicate bug.
+        // NON_GROUPABLE_TYPES (e.g. leads) always stay as individual cards.
+        if (curr.type === prev.type && !NON_GROUPABLE_TYPES.has(curr.type)) {
             currentGroup.push(curr);
         } else {
             flushGroup(currentGroup, result);

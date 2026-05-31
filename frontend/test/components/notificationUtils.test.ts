@@ -1,5 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { resolveNotificationRoute } from '@/components/ui/notificationUtils';
+import {
+  resolveNotificationRoute,
+  groupNotifications,
+  isGroup,
+  formatBadgeCount,
+  type Notification,
+  type GroupedNotifications,
+} from '@/components/ui/notificationUtils';
+
+/** Build a notification with sensible defaults; input is assumed sorted newest-first. */
+function notif(o: { id: string; type: string; createdAt: string; read?: boolean }): Notification {
+  return {
+    id: o.id,
+    type: o.type,
+    title: `title-${o.id}`,
+    body: `body-${o.id}`,
+    data: null,
+    read: o.read ?? false,
+    createdAt: o.createdAt,
+  };
+}
+
+/** Fixed-clock helper (no Date.now) — returns an ISO timestamp `h` hours before a fixed noon. */
+const hoursAgo = (h: number) => new Date(Date.UTC(2026, 0, 1, 12 - h, 0, 0)).toISOString();
 
 describe('resolveNotificationRoute', () => {
   describe('comment/message deep links', () => {
@@ -91,5 +114,78 @@ describe('resolveNotificationRoute', () => {
   it('prefers specific deep link over filter fallback', () => {
     expect(resolveNotificationRoute('flagged_reply', { type: 'message', messageId: 'm-9' }))
       .toBe('/messages?messageId=m-9');
+  });
+});
+
+describe('groupNotifications', () => {
+  it('returns an empty array when there are no notifications', () => {
+    expect(groupNotifications([])).toEqual([]);
+  });
+
+  it('merges consecutive same-type notifications regardless of time gap (3h apart still group)', () => {
+    // This is the headline behavior change: the old 1-hour window would have
+    // split these into two identical-looking group headers.
+    const items = [
+      notif({ id: 'a', type: 'flagged_reply', createdAt: hoursAgo(0) }),
+      notif({ id: 'b', type: 'flagged_reply', createdAt: hoursAgo(3) }),
+    ];
+    const result = groupNotifications(items);
+    expect(result).toHaveLength(1);
+    expect(isGroup(result[0])).toBe(true);
+    expect((result[0] as GroupedNotifications).notifications).toHaveLength(2);
+  });
+
+  it('uses the newest (first) item\'s createdAt as latestTimestamp', () => {
+    const items = [
+      notif({ id: 'a', type: 'flagged_reply', createdAt: hoursAgo(0) }),
+      notif({ id: 'b', type: 'flagged_reply', createdAt: hoursAgo(3) }),
+    ];
+    const [group] = groupNotifications(items) as GroupedNotifications[];
+    expect(group.latestTimestamp).toBe(hoursAgo(0));
+  });
+
+  it('counts only unread items within a group', () => {
+    const items = [
+      notif({ id: 'a', type: 'flagged_reply', createdAt: hoursAgo(0), read: false }),
+      notif({ id: 'b', type: 'flagged_reply', createdAt: hoursAgo(1), read: true }),
+      notif({ id: 'c', type: 'flagged_reply', createdAt: hoursAgo(2), read: false }),
+    ];
+    const [group] = groupNotifications(items) as GroupedNotifications[];
+    expect(group.notifications).toHaveLength(3);
+    expect(group.unreadCount).toBe(2);
+  });
+
+  it('does not group across a different type in between (consecutive-only)', () => {
+    const items = [
+      notif({ id: 'a', type: 'flagged_reply', createdAt: hoursAgo(0) }),
+      notif({ id: 'b', type: 'new_comment', createdAt: hoursAgo(1) }),
+      notif({ id: 'c', type: 'flagged_reply', createdAt: hoursAgo(2) }),
+    ];
+    const result = groupNotifications(items);
+    expect(result).toHaveLength(3);
+    expect(result.every(item => !isGroup(item))).toBe(true);
+  });
+
+  it('never groups leads — each new_lead stays an individual card (preserves name + phone)', () => {
+    const items = [
+      notif({ id: 'a', type: 'new_lead', createdAt: hoursAgo(0) }),
+      notif({ id: 'b', type: 'new_lead', createdAt: hoursAgo(0) }),
+    ];
+    const result = groupNotifications(items);
+    expect(result).toHaveLength(2);
+    expect(result.every(item => !isGroup(item))).toBe(true);
+  });
+});
+
+describe('formatBadgeCount', () => {
+  it('renders the number as-is at or below 99', () => {
+    expect(formatBadgeCount(0)).toBe('0');
+    expect(formatBadgeCount(5)).toBe('5');
+    expect(formatBadgeCount(99)).toBe('99');
+  });
+
+  it('clamps to "99+" above 99', () => {
+    expect(formatBadgeCount(100)).toBe('99+');
+    expect(formatBadgeCount(5000)).toBe('99+');
   });
 });

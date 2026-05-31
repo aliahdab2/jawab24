@@ -1,13 +1,12 @@
 import React from 'react';
 import clsx from 'clsx';
-import { ChevronDown, Clock, type LucideIcon } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
+import { formatBadgeCount, type NotificationStyle } from '@/components/ui/notificationUtils';
+import { NotificationAvatar, NotificationTimestamp, UnreadAccentBar } from './NotificationVisuals';
 
 interface NotificationGroupHeaderProps {
-    icon: LucideIcon;
-    iconColor: string;
-    bgColor: string;
-    ringColor: string;
+    style: NotificationStyle;
     count: number;
     unreadCount: number;
     typeLabel: string;
@@ -18,10 +17,7 @@ interface NotificationGroupHeaderProps {
 }
 
 export function NotificationGroupHeader({
-    icon: Icon,
-    iconColor,
-    bgColor,
-    ringColor,
+    style,
     count,
     unreadCount,
     typeLabel,
@@ -37,23 +33,19 @@ export function NotificationGroupHeader({
         <button
             onClick={onToggle}
             className={clsx(
-                'w-full px-5 py-3.5 transition-colors duration-200 cursor-pointer text-start',
+                'relative w-full px-5 py-3.5 transition-colors duration-200 cursor-pointer text-start',
                 hasUnread
-                    ? 'bg-brand-50/40 hover:bg-brand-50/70'
-                    : 'hover:bg-background',
+                    ? 'bg-brand-50/40 dark:bg-brand-900/20 hover:bg-brand-50/70 dark:hover:bg-brand-900/30'
+                    : 'hover:bg-muted',
             )}
             aria-expanded={isExpanded}
             aria-label={isExpanded ? t('collapse') : t('expand')}
         >
+            {/* Unread accent bar — matches single notification items */}
+            {hasUnread && <UnreadAccentBar />}
+
             <div className="flex items-center gap-3.5">
-                {/* Icon */}
-                <div className={clsx(
-                    'w-10 h-10 rounded-xl ring-1 flex items-center justify-center flex-shrink-0',
-                    bgColor, ringColor,
-                    !hasUnread && 'opacity-50',
-                )}>
-                    <Icon className={clsx('w-5 h-5', iconColor)} aria-hidden="true" />
-                </div>
+                <NotificationAvatar style={style} muted={!hasUnread} />
 
                 <div className="flex-1 min-w-0">
                     {/* Summary */}
@@ -68,18 +60,16 @@ export function NotificationGroupHeader({
                         </p>
                         {hasUnread && (
                             <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[10px] font-bold text-white bg-brand-500 rounded-full flex-shrink-0">
-                                {unreadCount}
+                                {formatBadgeCount(unreadCount)}
                             </span>
                         )}
                     </div>
 
-                    {/* Timestamp */}
-                    <div className="flex items-center gap-1 mt-1">
-                        <Clock className="w-3 h-3 text-muted-foreground" aria-hidden="true" />
-                        <p className="text-[11px] text-muted-foreground">
-                            {getRelativeTime(latestTimestamp)}
-                        </p>
-                    </div>
+                    <NotificationTimestamp
+                        time={latestTimestamp}
+                        getRelativeTime={getRelativeTime}
+                        className="mt-1"
+                    />
                 </div>
 
                 {/* Expand/Collapse chevron */}
