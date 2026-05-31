@@ -50,10 +50,30 @@ Jawab24 publishes guides, comparisons, and data-driven articles about auto-reply
 - 40+ Social Commerce & AI Customer Service Statistics 2026: https://jawab24.com/blog/social-commerce-ai-customer-service-statistics-2026
 - Instagram & Facebook DM Selling Statistics 2026: https://jawab24.com/blog/instagram-facebook-dm-selling-statistics-2026
 
+## Comparisons
+
+How Jawab24 compares to other auto-reply and chatbot tools — Arabic-first, native Salla/Shopify integration, dialect detection, and price verification:
+
+- All comparisons: https://jawab24.com/compare
+- Jawab24 vs ManyChat: https://jawab24.com/compare/manychat
+- Jawab24 vs Tidio: https://jawab24.com/compare/tidio
+- Jawab24 vs Chatfuel: https://jawab24.com/compare/chatfuel
+- Jawab24 vs Botpress: https://jawab24.com/compare/botpress
+- Jawab24 vs Speedly: https://jawab24.com/compare/speedly
+
+## Integrations
+
+Native e-commerce integrations that sync product catalogs and verify prices so AI replies stay accurate:
+
+- Shopify integration: https://jawab24.com/integrations/shopify
+- Salla integration: https://jawab24.com/integrations/salla
+- Zid integration: https://jawab24.com/integrations/zid
+
 ## Links
 
 - Landing page: https://jawab24.com/
 - What is Jawab24: https://jawab24.com/what-is-jawab24
 - Pricing: https://jawab24.com/pricing
 - Blog: https://jawab24.com/blog
+- Compare tools: https://jawab24.com/compare
 - Full details for LLMs: https://jawab24.com/llms-full.txt
