@@ -4,6 +4,7 @@ import type { GetStaticPaths, GetStaticProps } from 'next';
 import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
 import { useTranslations, useLocale } from 'next-intl';
 import { isRTLLocale } from '@/utils/locale';
+import { BreadcrumbJsonLd } from '@/components/seo/BreadcrumbJsonLd';
 import type { MessageKeys, NestedKeyOf } from 'use-intl';
 import {
   getAllCompetitorSlugs,
@@ -108,6 +109,14 @@ export default function ComparePage({ competitor }: ComparePageProps) {
               })),
             }),
           }}
+        />
+
+        <BreadcrumbJsonLd
+          items={[
+            { name: 'Jawab24', url: `https://jawab24.com${locale === 'en' ? '/en' : '/'}` },
+            { name: t('hubBreadcrumb'), url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/compare` },
+            { name: t('vsTitle', { name: competitor.name }), url: `https://jawab24.com${locale === 'en' ? '/en' : ''}/compare/${slug}` },
+          ]}
         />
       </Head>
 
