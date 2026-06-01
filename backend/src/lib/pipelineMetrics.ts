@@ -40,6 +40,8 @@ export type Outcome =
     | 'held_low_confidence'
     | 'greeting_sent'
     | 'greeting_suppressed'
+    | 'greeting_prefixed'
+    | 'greeting_skipped_already_engaged'
     | 'subscription_inactive'
     | 'lock_contention'
     | 'trigger_no_match'

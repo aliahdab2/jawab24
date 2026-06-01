@@ -35,6 +35,17 @@ interface CacheContext {
      * by the default model (gpt-4.1-mini). Omitted/undefined means "default".
      */
     model?: string;
+    /**
+     * First-contact greeting suppression (see messageProcessor). When true the AI
+     * is told NOT to greet because the backend prepends the merchant welcome. This
+     * changes the generated reply, so it MUST scope the cache: without it a
+     * suppressed (greeting-less) reply and an ordinary reply share a bucket — and a
+     * first contact (empty history, undefined customerContext) would otherwise read
+     * an ordinary cached reply that greeted, then get the merchant welcome prepended
+     * on top → double greeting. Only `true` alters the key (see buildCacheKey), so
+     * existing cache entries stay valid.
+     */
+    suppressGreeting?: boolean;
 }
 
 /** Shape returned by a successful exact-cache hit. */
@@ -114,9 +125,16 @@ export class AiService {
             // workspace overridden to gpt-4o never reads a gpt-4.1-mini-generated reply.
             `m:${ctx.model || DEFAULT_AI_MODEL}`,
             `pv:${PROMPT_VERSION}`,
-        ].join(':');
+        ];
 
-        return crypto.createHash('sha256').update(key).digest('hex');
+        // Only a true value alters the key — appended conditionally so the vast
+        // majority of traffic (suppressGreeting falsy) keeps byte-identical keys and
+        // existing cache entries stay valid. A suppressed reply (greeting-less, the
+        // merchant welcome is prepended by the backend) gets its own bucket so it can
+        // never collide with an ordinary reply that greeted on its own.
+        if (ctx.suppressGreeting) key.push('sg:1');
+
+        return crypto.createHash('sha256').update(key.join(':')).digest('hex');
     }
 
     /**
@@ -275,6 +293,7 @@ export class AiService {
             replyStyle: request.context?.replyStyle,
             customerContext: request.context?.customerContext,
             model: resolvedModel,
+            suppressGreeting: request.context?.suppressGreeting,
         };
 
         // DM conversations with history → skip all caches.
