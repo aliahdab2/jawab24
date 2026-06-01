@@ -120,7 +120,18 @@ export function resolveInputLanguage(input: ResolveLanguageInput): string {
         history
             // \p{L} matches any letter in any script — skips punctuation/emoji-only turns
             // while staying script-agnostic (was hardcoded to Latin + Arabic before).
-            .filter(m => m.role === role && /\p{L}/u.test(m.content))
+            //
+            // Also skip bare ambiguous Latin tokens (acronyms / product names like
+            // "ICDL", "iPhone"). The current message gets this deferral below via
+            // `ambiguous`; the history anchor needs it too. Without it, a customer who
+            // types a course name mid-thread re-anchors the whole conversation to
+            // English: detectLanguage('Icdl') → 'en', and since detectLanguage never
+            // returns falsy, `.find(Boolean)` would lock onto that most-recent token.
+            // Prod 2026-06-01: an Arabic thread replied 'ar' to "Icdl" but 'en' to a
+            // repeated "IcDL" because the prior "Icdl" user turn had become the anchor.
+            // Filtering these tokens lets the walk continue to a real-language user
+            // turn, then assistant history, then post/KB.
+            .filter(m => m.role === role && /\p{L}/u.test(m.content) && !isAmbiguousLatinToken(m.content))
             .reverse()
             .map(m => detectLanguage(m.content))
             .find(Boolean);
