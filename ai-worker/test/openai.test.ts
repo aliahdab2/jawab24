@@ -807,6 +807,37 @@ describe('OpenAI Service - RAG Chunks & Channel', () => {
         expect(systemPrompt).toContain('General business info here');
     });
 
+    it('adds the no-greeting directive when suppressGreeting is set', async () => {
+        const capture: { messages: any[] } = { messages: [] };
+        setupMockService(capture);
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({
+            comment: 'دورة محاسبة',
+            context: { channel: 'dm', suppressGreeting: true },
+        });
+
+        const systemPrompt = capture.messages[0].content;
+        // Backend prepended the merchant welcome; the model must not greet again.
+        expect(systemPrompt).toContain('welcome greeting has ALREADY been added');
+    });
+
+    it('omits the no-greeting directive when suppressGreeting is absent', async () => {
+        const capture: { messages: any[] } = { messages: [] };
+        setupMockService(capture);
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({
+            comment: 'دورة محاسبة',
+            context: { channel: 'dm' },
+        });
+
+        const systemPrompt = capture.messages[0].content;
+        expect(systemPrompt).not.toContain('welcome greeting has ALREADY been added');
+    });
+
     it('should use channel=comment for short reply instructions', async () => {
         const capture: { messages: any[] } = { messages: [] };
         setupMockService(capture);

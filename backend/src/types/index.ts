@@ -60,6 +60,13 @@ export interface AiGenerateRequest {
         ecommerceToolsEnabled?: boolean;
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
+        /**
+         * When true, the backend has prepended the merchant's configured welcome
+         * greeting to this reply (customer's first message). Tells ai-worker the
+         * model must NOT greet again — go straight to the answer — so the customer
+         * doesn't see a double "welcome". See messageProcessor first-message path.
+         */
+        suppressGreeting?: boolean;
     };
 }
 

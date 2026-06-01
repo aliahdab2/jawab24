@@ -274,6 +274,13 @@ export interface GenerateRequest {
         customerContext?: string;
         /** Merchant's configured fallback language — used when all detection signals fail. */
         defaultReplyLanguage?: string;
+        /**
+         * When true, the backend has already prepended the merchant's configured
+         * welcome greeting to this reply (customer's first message). The model must
+         * NOT add its own greeting — answer directly — or the customer sees a double
+         * "welcome". See backend messageProcessor first-message handling.
+         */
+        suppressGreeting?: boolean;
     };
 }
 
@@ -653,6 +660,13 @@ ${isDM
     ? '- DM: give full answers with prices and specifics from <business_knowledge>. For catalog questions, mention categories and ask what interests them — don\'t dump everything.\n- You ARE the contact point — don\'t tell customers to "contact us" when they\'re already talking to you.\n- Don\'t repeat "I\'ll check" if you already said it earlier in the conversation.'
     : '- Comment: 1-3 sentences max. Include key facts (prices, hours) directly. Only suggest DM for private info or when the answer is not in KB.'}
 - CRITICAL: You MUST reply in ${languageName} (language code: ${language}). The customer wrote in ${languageName}. Do NOT switch to another language even if <business_knowledge> content is in a different language — translate the information into ${languageName} when replying. For unrecognized languages, default to English (NOT Arabic).`;
+
+        if (request.context?.suppressGreeting) {
+            // A configured welcome message has already been prepended to this reply by
+            // the backend (the customer's first message). Greeting again here produces a
+            // visible double "welcome", so go straight to the answer.
+            prompt += `\n- A welcome greeting has ALREADY been added to the start of this reply for you. Do NOT greet, welcome, or say hello — begin directly with the answer to the customer's question.`;
+        }
 
         if (request.context?.brandVoiceNotes) {
             const voiceHeader = isDM && request.context?.conversationHistory?.length

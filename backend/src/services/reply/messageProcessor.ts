@@ -374,33 +374,81 @@ export class MessageProcessor {
             const isOpener = isOpenerMessage(messageText);
             const isFirstIncoming = await messagesService.isFirstIncomingMessage(page.id, senderId);
 
+            // When the merchant's welcome greeting fires on a real first question, it is
+            // prepended to the AI answer (below) instead of replacing it. Null = no prefix.
+            let greetingPrefix: string | null = null;
+
+            // SHARED-INFRASTRUCTURE SAFETY NOTE — processMessage is the path EVERY incoming
+            // DM/message flows through, so a regression here affects all greeting-enabled
+            // merchants. This block is scoped to be safe:
+            //   • It only executes inside `isOpener || isFirstIncoming` and only does work
+            //     when a greeting is `configured` — non-greeting and mid-conversation
+            //     traffic (the overwhelming majority) is untouched.
+            //   • For suppressGreeting=false (all non-first-contact traffic) the ai-worker
+            //     prompt is byte-identical to before, and the exact-cache key is scoped by
+            //     suppressGreeting (see ai.ts buildCacheKey) so the two modes never share a
+            //     cached reply.
+            //   • The per-(pageId,senderId) reply lock + the hasOutgoingMessage check make
+            //     the greeting idempotent across BullMQ retries.
             if (isOpener || isFirstIncoming) {
                 const settings = await workspaceSettingsService.getSettings(workspaceId);
+                const configured = settings.greetingMessageEnabled
+                    ? await workspaceSettingsService.getGreetingMessage(workspaceId, detectLanguageCode(messageText))
+                    : null;
 
-                // (1) Toggle on + configured text → send greeting.
-                if (settings.greetingMessageEnabled) {
-                    const detectedLang = detectLanguageCode(messageText);
-                    const configured = await workspaceSettingsService.getGreetingMessage(workspaceId, detectedLang);
-                    if (configured) {
-                        try {
-                            await adapter.sendReply(page, senderId, configured);
-                            await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, configured, 'template');
-                            await messagesService.markAsReplied(storedMessage.id, configured, 'template');
-                            this.logger.info(`[${platform}] Sent greeting message`, { senderId, source: isOpener ? 'opener' : 'first_message' });
-                            pipelineMetrics.record(pipeline, 'greeting_sent');
-                            return { success: true, messageId: platformMessageId, replyText: configured, replyMethod: 'template' as const };
-                        } catch (error) {
-                            // Greeting send failed. For real messages, fall through to
-                            // AI so the customer's first message still gets answered.
-                            // For openers, the silent-suppress branch below catches it
-                            // so the system phrase never reaches AI.
-                            this.logger.error(`[${platform}] Failed to send greeting message`, { error: String(error), willFallbackToAI: !isOpener });
-                        }
+                // Greet only a genuinely fresh contact. In dual/private comment-reply mode
+                // the bot may have ALREADY sent this customer a detailed DM (the private
+                // reply to their comment, stored as an outgoing row — see commentProcessor)
+                // before they typed anything. `isFirstIncoming` is still true then because
+                // it counts only INCOMING rows, so greeting here would be wrong twice: it
+                // drops their question AND welcomes someone the bot is mid-conversation with
+                // (prod screenshots 2026-06-01: dual-mode reply listed courses, then the
+                // first DM "دورة محاسبة" got the welcome template and the question vanished).
+                // The outgoing-row check also makes the greeting idempotent across retries.
+                // Only query for prior engagement when a greeting is actually configured.
+                const botAlreadyEngaged = configured
+                    ? await messagesService.hasOutgoingMessage(page.id, senderId)
+                    : false;
+
+                if (configured && !botAlreadyEngaged && isOpener) {
+                    // (1a) Pure opener tap ("Get Started" / "بدء الاستخدام") — there is no
+                    // question to answer, so the greeting IS the whole reply.
+                    try {
+                        await adapter.sendReply(page, senderId, configured);
+                        await messagesService.storeOutgoingMessage(page.id, workspaceId, senderId, configured, 'template');
+                        await messagesService.markAsReplied(storedMessage.id, configured, 'template');
+                        this.logger.info(`[${platform}] Sent greeting message`, { senderId, source: 'opener' });
+                        pipelineMetrics.record(pipeline, 'greeting_sent');
+                        return { success: true, messageId: platformMessageId, replyText: configured, replyMethod: 'template' as const };
+                    } catch (error) {
+                        // Send failed — fall through to the opener-suppress branch so the
+                        // "Get Started" system phrase never reaches the AI.
+                        // KNOWN LIMITATION: if sendReply succeeds but a later storeOutgoingMessage
+                        // throws, a BullMQ retry can re-greet (no outgoing row was committed).
+                        // hasOutgoingMessage only mitigates once a row lands; the send→store-fail
+                        // window pre-dates this change and is not closed here.
+                        this.logger.error(`[${platform}] Failed to send greeting message`, { error: String(error), willFallbackToAI: false });
                     }
+                } else if (configured && !botAlreadyEngaged) {
+                    // (1b) Real first message carrying an actual question. Do NOT let the
+                    // greeting replace the answer (the old behavior returned here, forcing
+                    // the customer to ask twice). Carry the greeting as a prefix; the AI
+                    // answers below and we prepend the welcome into one message.
+                    // `suppressGreeting` stops the AI from greeting again.
+                    greetingPrefix = configured;
+                    pipelineMetrics.record(pipeline, 'greeting_prefixed');
+                } else if (configured && botAlreadyEngaged && !isOpener) {
+                    // (1c) Real first INCOMING message, but the bot already DMed this customer
+                    // (dual-mode private reply, away message, or a retry). Greeting is
+                    // deliberately skipped — the customer is mid-conversation. Make it
+                    // observable so a hasOutgoingMessage false-negative (incongruous
+                    // mid-thread greeting) is detectable instead of silent.
+                    this.logger.info(`[${platform}] Skipped greeting — bot already engaged`, { senderId, reason: 'bot_already_engaged' });
+                    pipelineMetrics.record(pipeline, 'greeting_skipped_already_engaged');
                 }
 
-                // (2) Opener reaching here = toggle off, empty text, or send failed.
-                // Never let the opener system phrase reach AI — silent + return.
+                // (2) Opener reaching here = greeting disabled/empty, bot already engaged,
+                // or send failed. Never let the opener system phrase reach AI — silent + return.
                 if (isOpener) {
                     await messagesService.markAsReplied(storedMessage.id, '', 'template');
                     this.logger.info(`[${platform}] Suppressed opener tap silently`, { senderId });
@@ -408,7 +456,8 @@ export class MessageProcessor {
                     return { success: true, messageId: platformMessageId, replyText: '', replyMethod: 'template' as const };
                 }
 
-                // (3) Real first message + greeting disabled/empty → fall through to AI.
+                // (3) Real first message + no greeting (disabled/empty/already-engaged) →
+                // greetingPrefix stays null and we fall through to the AI exactly as before.
             }
 
             // 10. Reply delay (doubles as consolidation window when > 0)
@@ -494,6 +543,7 @@ export class MessageProcessor {
                         businessInfoBlock,
                         ecommerceStoreId: typeof ecommerceStoreId === 'string' ? ecommerceStoreId : undefined,
                         defaultReplyLanguage: userSettings.defaultReplyLanguage,
+                        suppressGreeting: !!greetingPrefix,
                     },
                     userSettings.aiEnabled ?? false,
                 );
@@ -558,8 +608,32 @@ export class MessageProcessor {
                 return { success: false, messageId: platformMessageId, error: 'No reply generated' };
             }
 
-            // 12e. Enforce platform max message length (Facebook=2000, Instagram=1000)
+            // 12e. Platform max message length (Facebook=2000, Instagram=1000). Computed
+            // before the greeting prepend so the welcome can be kept within budget.
             const maxReplyChars = adapter.maxReplyLength ?? 2000;
+
+            // 12d-bis. First-contact welcome: prepend the merchant's configured greeting to
+            // the answer so the customer is welcomed AND answered in a single message —
+            // instead of the greeting replacing the answer and forcing them to ask twice.
+            // The AI was told (suppressGreeting) not to greet again, so there is no double
+            // "welcome". Placed after the skip/held returns above so spam, offensive, and
+            // held-for-review first messages never receive a greeting.
+            //
+            // The greeting is the merchant's configured text and is kept intact: the AI
+            // answer is truncated first to the remaining budget, so a long answer on a tight
+            // cap (Instagram = 1000) can't silently push the welcome out. `aiOriginalReply`
+            // (captured above, pre-prepend) deliberately remains the bare AI text — the
+            // greeting is merchant text, not AI output — so for first-contact replies the
+            // stored `replyText` = greeting + "\n\n" + (possibly-truncated) aiOriginalReply.
+            if (greetingPrefix) {
+                const separator = '\n\n';
+                const answerBudget = maxReplyChars - greetingPrefix.length - separator.length;
+                const answer = answerBudget <= 0
+                    ? ''
+                    : (replyText.length > answerBudget ? truncateAtSentence(replyText, answerBudget) : replyText);
+                replyText = answer ? `${greetingPrefix}${separator}${answer}` : greetingPrefix;
+            }
+
             if (replyText.length > maxReplyChars) {
                 const originalLength = replyText.length;
                 replyText = truncateAtSentence(replyText, maxReplyChars);
@@ -727,6 +801,7 @@ export class MessageProcessor {
                 flagReason: flagReason || null,
                 needsAttention,
                 replyLength: replyText.length,
+                greetingPrepended: !!greetingPrefix,
                 consolidatedCount: unrepliedMessages.length,
                 durationMs: Date.now() - t0,
             });
