@@ -54,3 +54,36 @@ export function NotificationTimestamp({
         </div>
     );
 }
+
+/**
+ * Title/headline row shared by the single row and the group header. The unread
+ * typography is identical across both; the trailing indicator differs
+ * legitimately (single item = unread dot, group = count badge) so it's passed in
+ * via `trailing` rather than baked in.
+ */
+export function NotificationTitle({
+    unread,
+    truncate = false,
+    children,
+    trailing,
+}: {
+    unread: boolean;
+    truncate?: boolean;
+    children: React.ReactNode;
+    trailing?: React.ReactNode;
+}) {
+    return (
+        <div className="flex items-center gap-2">
+            <p
+                className={clsx(
+                    'text-[13px] leading-snug',
+                    truncate && 'truncate',
+                    unread ? 'font-semibold text-foreground' : 'font-normal text-muted-foreground',
+                )}
+            >
+                {children}
+            </p>
+            {trailing}
+        </div>
+    );
+}

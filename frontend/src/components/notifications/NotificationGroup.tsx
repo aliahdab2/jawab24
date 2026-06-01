@@ -3,7 +3,7 @@ import clsx from 'clsx';
 import { ChevronDown } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { formatBadgeCount, type NotificationStyle } from '@/components/ui/notificationUtils';
-import { NotificationAvatar, NotificationTimestamp, UnreadAccentBar } from './NotificationVisuals';
+import { NotificationAvatar, NotificationTimestamp, NotificationTitle, UnreadAccentBar } from './NotificationVisuals';
 
 interface NotificationGroupHeaderProps {
     style: NotificationStyle;
@@ -48,22 +48,16 @@ export function NotificationGroupHeader({
                 <NotificationAvatar style={style} muted={!hasUnread} />
 
                 <div className="flex-1 min-w-0">
-                    {/* Summary */}
-                    <div className="flex items-center gap-2">
-                        <p className={clsx(
-                            'text-[13px] leading-snug',
-                            hasUnread
-                                ? 'font-semibold text-foreground'
-                                : 'font-normal text-muted-foreground',
-                        )}>
-                            {t('groupSummary', { count })} — {typeLabel}
-                        </p>
-                        {hasUnread && (
+                    <NotificationTitle
+                        unread={hasUnread}
+                        trailing={hasUnread ? (
                             <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center text-[10px] font-bold text-white bg-brand-500 rounded-full flex-shrink-0">
                                 {formatBadgeCount(unreadCount)}
                             </span>
-                        )}
-                    </div>
+                        ) : undefined}
+                    >
+                        {t('groupSummary', { count })} — {typeLabel}
+                    </NotificationTitle>
 
                     <NotificationTimestamp
                         time={latestTimestamp}

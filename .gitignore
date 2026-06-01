@@ -51,3 +51,6 @@ seo-indexing-report-*.md
 # Local growth/SEO working drafts (kept on disk, not tracked)
 /Jawab24_Growth_Playbook.md
 /SEO_Audit_Jawab24.md
+
+# GSD local planning/workflow state (per-developer, not shared)
+/.planning/
