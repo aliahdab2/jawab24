@@ -13,7 +13,7 @@ import { SwipeableNotificationItem } from './SwipeableNotificationItem';
 import { NotificationFilterPills } from '../notifications/NotificationFilterPills';
 import { NotificationGroupHeader } from '../notifications/NotificationGroup';
 import { NotificationEmptyState } from '../notifications/NotificationEmptyState';
-import { NotificationAvatar, NotificationTimestamp, UnreadAccentBar } from '../notifications/NotificationVisuals';
+import { NotificationAvatar, NotificationTimestamp, NotificationTitle, UnreadAccentBar } from '../notifications/NotificationVisuals';
 import { formatRelativeTime } from '@/utils/dateUtils';
 import {
     type Notification,
@@ -249,20 +249,15 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
                         <NotificationAvatar style={style} muted={!isUnread} />
 
                         <div className="flex-1 min-w-0">
-                            {/* Title */}
-                            <div className="flex items-center gap-2">
-                                <p className={clsx(
-                                    'text-[13px] leading-snug truncate',
-                                    isUnread
-                                        ? 'font-semibold text-foreground'
-                                        : 'font-normal text-muted-foreground',
-                                )}>
-                                    {notification.title}
-                                </p>
-                                {isUnread && (
-                                    <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
-                                )}
-                            </div>
+                            <NotificationTitle
+                                unread={isUnread}
+                                truncate
+                                trailing={isUnread
+                                    ? <span className="w-2 h-2 rounded-full bg-brand-500 flex-shrink-0" />
+                                    : undefined}
+                            >
+                                {notification.title}
+                            </NotificationTitle>
 
                             {/* Body — dir="auto" so embedded customer names / phone numbers
                                 don't break bidi ordering (e.g. a lead body that leads with a

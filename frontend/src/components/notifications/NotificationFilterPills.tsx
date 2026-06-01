@@ -53,7 +53,7 @@ export function NotificationFilterPills({
                                 'min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full',
                                 isActive
                                     ? 'bg-white/20 text-white'
-                                    : 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300',
+                                    : 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-400',
                             )}>
                                 {formatBadgeCount(count)}
                             </span>
