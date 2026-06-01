@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launch/splash background, theme-aware. This is the LIGHT value (the app's
+         light page background #f6f9fa from globals.css); values-night/colors.xml
+         overrides it with the dark page background. The splash thus follows the
+         phone's system theme, matching the app, which defaults to the system theme.
+         The colorful app icon (mipmap/ic_launcher) is shown on top in both modes. -->
+    <color name="splash_background">#F6F9FA</color>
+</resources>
