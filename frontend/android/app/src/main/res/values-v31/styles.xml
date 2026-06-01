@@ -11,10 +11,10 @@
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <!-- Fixed dark-brand background, identical in light and dark. -->
         <item name="android:windowSplashScreenBackground">@color/splash_background</item>
-        <!-- White chat-bubble logo (transparent vector) centered on the dark bg.
-             The system masks it to a circle (~2/3 of a 240dp area visible); the
-             108dp foreground sits inside that safe zone. -->
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <!-- The actual app icon (teal/orange gradient + white bubble), so the
+             splash shows the recognizable brand mark, not a monochrome shape.
+             The system sizes and circular-masks it at the standard splash size. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
         <!-- After the splash dismisses, switch to the dark window background so
              there is no white flash before the WebView paints. -->
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
