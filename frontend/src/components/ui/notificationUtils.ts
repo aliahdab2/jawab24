@@ -152,6 +152,14 @@ export function resolveNotificationRoute(
             : '/comments?filter=needs_action';
     }
 
+    // Build the leads route from the structured leadId rather than the stored
+    // deepLink string, so notifications created before per-lead deep-linking
+    // shipped (their deepLink is the bare '/leads') still open the exact lead.
+    // Both old and new new_lead payloads carry leadId.
+    if (type === 'new_lead' && data?.leadId) {
+        return `/leads?leadId=${encodeURIComponent(data.leadId)}`;
+    }
+
     if (data?.deepLink) return data.deepLink;
 
     switch (type) {
