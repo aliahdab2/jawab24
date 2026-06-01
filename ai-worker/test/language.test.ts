@@ -150,6 +150,88 @@ describe('resolveInputLanguage', () => {
         ).toBe('ar');
     });
 
+    it('does not let a prior ambiguous Latin token re-anchor an Arabic thread to English', () => {
+        // Prod 2026-06-01: the most-recent user turn is a bare course-name token
+        // ("Icdl"); an older user turn is Arabic. Before the fromRole ambiguous-token
+        // filter, fromRole('user') resolved to 'en' from "Icdl" and replied English.
+        // It must skip the token and resolve 'ar' from the older Arabic turn.
+        expect(
+            resolveInputLanguage({
+                comment: 'IcDL',
+                conversationHistory: [
+                    { role: 'user', content: 'مرحبا بدي أعرف عن الدورات' },
+                    { role: 'assistant', content: 'دورة ICDL كلفتها 25 الف ل.س' },
+                    { role: 'user', content: 'Icdl' },
+                    { role: 'assistant', content: 'دورة ICDL كلفتها 25 الف ل.س' },
+                ],
+            }),
+        ).toBe('ar');
+    });
+
+    it('falls through to assistant history when every user turn is an ambiguous Latin token', () => {
+        // No real-language user signal exists, so the bot's own Arabic turn anchors.
+        expect(
+            resolveInputLanguage({
+                comment: 'ok',
+                conversationHistory: [
+                    { role: 'user', content: 'yes' },
+                    { role: 'user', content: 'ok' },
+                    { role: 'assistant', content: 'مرحبا، كيف فيني ساعدك؟' },
+                ],
+            }),
+        ).toBe('ar');
+    });
+
+    it('does not treat a mixed-script history turn as an ambiguous token', () => {
+        // "بدي ICDL" contains Arabic script → detectLanguageOrNull → 'ar', so it is
+        // not ambiguous and stays a valid Arabic anchor.
+        expect(
+            resolveInputLanguage({
+                comment: 'hi',
+                conversationHistory: [
+                    { role: 'user', content: 'بدي ICDL' },
+                ],
+            }),
+        ).toBe('ar');
+    });
+
+    it('the auto-reply assistant anchor recovers a genuine English customer', () => {
+        // A short English opener ("hello") is structurally ambiguous and gets skipped
+        // in history, but because Jawab24 auto-replies to every message the bot's
+        // prior English turn is always present and anchors the language back to 'en'.
+        // This is why the structural (length-based) ambiguous-token filter is
+        // sufficient in practice — the assistant anchor covers short English words.
+        expect(
+            resolveInputLanguage({
+                comment: 'ICDL',
+                conversationHistory: [
+                    { role: 'user', content: 'hello' },
+                    { role: 'assistant', content: 'Hi! How can I help?' },
+                ],
+                postMessage: 'دورات ال ICDL',
+            }),
+        ).toBe('en');
+    });
+
+    it('documents the residual: a short English word alone in history does not anchor', () => {
+        // KNOWN, ACCEPTED TRADEOFF of the structural ambiguous-token filter: when the
+        // ONLY signal is a short English word in history (no assistant turn yet) and
+        // the post is Arabic, the word is skipped and we fall to the Arabic post.
+        // This window does not occur in the live auto-reply pipeline (an assistant
+        // turn always exists by the 2nd user message — see the test above). Pinned to
+        // 'ar' to document behavior; if a future change makes the skip
+        // ENGLISH_COMMON-aware, flip this to 'en' deliberately.
+        expect(
+            resolveInputLanguage({
+                comment: 'ICDL',
+                conversationHistory: [
+                    { role: 'user', content: 'hello' },
+                ],
+                postMessage: 'دورات ال ICDL',
+            }),
+        ).toBe('ar');
+    });
+
     it('defers ambiguous Latin token to Arabic post language', () => {
         // Regression from production screenshot 2026-05-19:
         // First-message DM "ICDL" on an Arabic post must reply in Arabic.
