@@ -935,6 +935,9 @@ export const leadsApi = {
   getByPage: (pageId: string, params?: { status?: LeadStatus; limit?: number; offset?: number }) =>
     api.get<LeadsPaginatedResponse>('/leads', { params: { pageId, ...params } }),
 
+  /** Fetch a single lead by id — used by the notification deep-link to open the exact lead. */
+  getById: (leadId: string) => api.get<Lead>(`/leads/${leadId}`),
+
   /** Fetch all leads for export. Bypasses the paginated list's per-request cap so
    *  CSV downloads aren't silently truncated when the merchant has >200 leads. */
   getAllForExport: (pageId: string, status?: LeadStatus) =>

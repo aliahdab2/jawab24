@@ -9,12 +9,13 @@ interface NotificationFilterPillsProps {
     counts: Record<NotificationFilter, number>;
 }
 
+// Mirrors the "Inbox" sidebar group (Comments / Messages / Leads). Account-health
+// events (billing/system) intentionally have no tab — they pin to the top of "All".
 const FILTERS: { value: NotificationFilter; labelKey: string }[] = [
     { value: 'all', labelKey: 'filter.all' },
     { value: 'comments', labelKey: 'filter.comments' },
+    { value: 'messages', labelKey: 'filter.messages' },
     { value: 'leads', labelKey: 'filter.leads' },
-    { value: 'billing', labelKey: 'filter.billing' },
-    { value: 'system', labelKey: 'filter.system' },
 ];
 
 export function NotificationFilterPills({

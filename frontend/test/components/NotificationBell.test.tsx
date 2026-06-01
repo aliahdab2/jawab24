@@ -643,12 +643,19 @@ describe('NotificationBell', () => {
                 expect(screen.getByRole('tablist')).toBeInTheDocument();
             });
 
-            // Filter tabs: All, Comments, Leads, Billing, System
+            // Filter tabs mirror the Inbox sidebar group: All, Comments, Messages, Leads.
+            // Billing/System have no tab — they pin to the top of "All" instead.
             const tabs = screen.getAllByRole('tab');
-            expect(tabs).toHaveLength(5);
-            expect(tabs.map((t) => t.textContent)).toEqual(
-                expect.arrayContaining([expect.stringMatching(/Leads/)]),
+            expect(tabs).toHaveLength(4);
+            const labels = tabs.map((t) => t.textContent ?? '');
+            expect(labels).toEqual(
+                expect.arrayContaining([
+                    expect.stringMatching(/Comments/),
+                    expect.stringMatching(/Messages/),
+                    expect.stringMatching(/Leads/),
+                ]),
             );
+            expect(labels.some((l) => /Billing|System/.test(l))).toBe(false);
         });
 
         it('should filter notifications when clicking a category', async () => {
@@ -691,10 +698,10 @@ describe('NotificationBell', () => {
                 expect(screen.getByText('New Comment')).toBeInTheDocument();
             });
 
-            // Click "System" filter (no system notifications)
-            const systemTab = screen.getByText('System');
+            // Click "Messages" filter — the only notification is a comment, so this is empty.
+            const messagesTab = screen.getByText('Messages');
             await act(async () => {
-                fireEvent.click(systemTab);
+                fireEvent.click(messagesTab);
             });
 
             expect(screen.getByText(/No .+ notifications/)).toBeInTheDocument();

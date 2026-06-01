@@ -32,6 +32,7 @@ export { useHandoffPauseDuration } from './useHandoffPauseDuration';
 export { useLoadConversation } from './useLoadConversation';
 export { useDeepLinkParam } from './useDeepLinkParam';
 export { useDeepLinkResource } from './useDeepLinkResource';
+export { useUrlSelectedResource } from './useUrlSelectedResource';
 export { useConnectedStore } from './useConnectedStore';
 export { usePersistedBoolean } from './usePersistedBoolean';
 export { useSaveKnowledgeBase } from './useSaveKnowledgeBase';

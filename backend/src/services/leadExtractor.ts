@@ -194,7 +194,10 @@ class LeadExtractorService {
                     workspaceId,
                     'new_lead',
                     { senderName: senderName || 'Unknown', phone: upserted.phone ?? '' },
-                    { leadId: upserted.id, pageId, deepLink: '/leads' },
+                    // Deep-link to the exact lead so the bell opens that customer's
+                    // card directly (the leads page reads ?leadId via useUrlSelectedResource),
+                    // rather than dropping the merchant on the unfiltered list.
+                    { leadId: upserted.id, pageId, deepLink: `/leads?leadId=${upserted.id}` },
                     { gatePushBySetting: 'newLeadAlertsEnabled' },
                 ).catch(err => this.logger.error('New lead notification failed', { err }));
             }
@@ -389,6 +392,16 @@ class LeadExtractorService {
             offset += CHUNK;
         }
         return all;
+    }
+
+    /** Fetch a single lead by id. The controller verifies the lead's page belongs to the caller's workspace. */
+    async getLeadById(leadId: string): Promise<LeadRecord | null> {
+        const [row] = await db
+            .select()
+            .from(leads)
+            .where(eq(leads.id, leadId))
+            .limit(1);
+        return (row as LeadRecord) ?? null;
     }
 
     async getNewLeadsCount(pageId: string): Promise<number> {

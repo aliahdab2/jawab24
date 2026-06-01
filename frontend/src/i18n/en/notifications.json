@@ -27,9 +27,8 @@
   "filter": {
     "all": "All",
     "comments": "Comments",
-    "leads": "Leads",
-    "billing": "Billing",
-    "system": "System"
+    "messages": "Messages",
+    "leads": "Leads"
   },
   "replyNow": "Reply now",
   "emptyDescription": "When something needs your attention, it will show up here.",

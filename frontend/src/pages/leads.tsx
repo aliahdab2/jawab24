@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, type ReactElement } from 'react';
+import React, { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
-import { usePageFilter } from '@/hooks';
+import { usePageFilter, useUrlSelectedResource } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -35,6 +35,9 @@ type StatusFilter = LeadStatus | 'all';
 // Page size for the infinite-scroll list. Matches MESSAGES_PER_PAGE / COMMENTS_PER_PAGE
 // so all three list pages have consistent paging behaviour.
 const LEADS_PER_PAGE = 50;
+
+// Sentry tags for unexpected failures when opening a deep-linked lead.
+const deepLinkErrorTag = { page: 'leads', action: 'deep-link' } as const;
 
 // ── Lead card (mobile, swipeable) ─────────────────────────────────────────────
 
@@ -380,7 +383,6 @@ const LeadsPage: NextPageWithLayout = () => {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [exporting, setExporting] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
-  const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
 
   const { data: pagesData } = useQuery<Page[]>({
     queryKey: ['pages'],
@@ -460,6 +462,32 @@ const LeadsPage: NextPageWithLayout = () => {
   // Backend returns `total` on every paginated response, so the first page is
   // authoritative even as more pages stream in.
   const total = leadsData?.pages[0]?.total ?? 0;
+
+  // URL-driven detail drawer (?lead=<id>) + notification deep-link (?leadId=<id>),
+  // shared with the Comments page via useUrlSelectedResource. The deep-link fetches
+  // the lead directly so the bell opens that exact customer's card even when it's
+  // outside the current status filter or not yet loaded by the infinite list.
+  const getLeadKey = useCallback((l: Lead) => l.id, []);
+  const fetchLeadById = useCallback(async (leadId: string): Promise<Lead | null> => {
+    const { data } = await leadsApi.getById(leadId);
+    return data ?? null;
+  }, []);
+  const {
+    selected: selectedLead,
+    setSelected: setSelectedLead,
+    open: openLead,
+    close: closeLead,
+  } = useUrlSelectedResource<Lead>({
+    urlParam: 'lead',
+    getKey: getLeadKey,
+    list: leads,
+    deepLink: {
+      paramName: 'leadId',
+      fetch: fetchLeadById,
+      notFoundMessage: t('deepLinkNotFound'),
+      errorTag: deepLinkErrorTag,
+    },
+  });
 
   // Auto-fetch next page when the sentinel scrolls into view. Same pattern as
   // messages.tsx / comments.tsx — kept inline rather than extracted to a shared
@@ -671,7 +699,7 @@ const LeadsPage: NextPageWithLayout = () => {
                 language={language}
                 onStatusChange={(l, s) => statusMutation.mutate({ lead: l, status: s })}
                 onDelete={(l) => setLeadToDelete(l)}
-                onSelect={setSelectedLead}
+                onSelect={openLead}
                 isPending={isPending}
                 t={t}
               />
@@ -699,7 +727,7 @@ const LeadsPage: NextPageWithLayout = () => {
                     language={language}
                     onStatusChange={(l, s) => statusMutation.mutate({ lead: l, status: s })}
                     onDelete={(l) => setLeadToDelete(l)}
-                    onSelect={setSelectedLead}
+                    onSelect={openLead}
                     isPending={isPending}
                     t={t}
                   />
@@ -725,7 +753,7 @@ const LeadsPage: NextPageWithLayout = () => {
         <LeadDetailModal
           lead={selectedLead}
           pages={pages}
-          onClose={() => setSelectedLead(null)}
+          onClose={closeLead}
           onStatusChange={(status) => {
             statusMutation.mutate({ lead: selectedLead, status });
             setSelectedLead((prev) => prev ? { ...prev, status } : null);

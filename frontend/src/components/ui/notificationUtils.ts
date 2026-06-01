@@ -33,21 +33,53 @@ export interface NotificationStyle {
 
 // ─── Filter taxonomy ───────────────────────────────────────────────────────────
 // Lives in the domain layer (not the pill component) so utilities like
-// computeFilterCounts can map types to filters without the UI depending on it
-// the wrong way around.
+// computeFilterCounts and pinAccountHealthFirst can map types to buckets without
+// the UI depending on it the wrong way around.
+//
+// The tabs mirror the app's own "Inbox" sidebar group (Comments / Messages /
+// Leads) so the panel matches where a merchant already works. Comments and
+// Messages are deliberately split — a stale DM is not a "comment". Account-health
+// events (billing + system) get NO tab: they are rare but critical, so
+// pinAccountHealthFirst floats the unread ones to the top of "All" rather than
+// hiding them behind a tab a merchant only taps out of curiosity.
 
-export type NotificationFilter = 'all' | 'comments' | 'leads' | 'billing' | 'system';
+export type NotificationFilter = 'all' | 'comments' | 'messages' | 'leads';
 
 /** Notification types that represent actionable comment/message items (used for routing, CTAs, and filtering). */
 export const ACTIONABLE_NOTIFICATION_TYPES = ['stale_comment', 'stale_message', 'new_comment', 'flagged_reply', 'skipped_reply'] as const;
 
-export const FILTER_TYPE_MAP: Record<NotificationFilter, string[] | null> = {
-    all: null,
-    comments: [...ACTIONABLE_NOTIFICATION_TYPES],
-    leads: ['new_lead'],
-    billing: ['payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed', 'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'auto_reply_paused_billing'],
-    system: ['page_disconnected', 'kb_gap', 'provider_failover'],
-};
+/** Inherently comment-channel types. */
+const COMMENT_ONLY_TYPES = new Set<string>(['new_comment', 'stale_comment']);
+/** Inherently DM-channel types. */
+const MESSAGE_ONLY_TYPES = new Set<string>(['stale_message']);
+/** Reply-handling alerts fire on EITHER channel; the source is carried in data.type ('comment' | 'message'), stamped by the comment/message processors. */
+const CHANNEL_AWARE_TYPES = new Set<string>(['flagged_reply', 'skipped_reply']);
+
+/**
+ * Account-health notification types — rare but critical (payment failures,
+ * disconnected pages, AI quota, provider failover). They belong to no tab;
+ * pinAccountHealthFirst surfaces the unread ones at the top of "All".
+ */
+export const ACCOUNT_HEALTH_TYPES = new Set<string>([
+    'payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed',
+    'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'auto_reply_paused_billing',
+    'page_disconnected', 'kb_gap', 'provider_failover',
+]);
+
+/**
+ * Map a notification to its filter bucket, or null when it belongs to no tab
+ * (account-health types, which appear only under "All"). flagged/skipped replies
+ * route by the source channel the backend stamps into data.type.
+ */
+export function getNotificationBucket(n: Notification): Exclude<NotificationFilter, 'all'> | null {
+    if (n.type === 'new_lead') return 'leads';
+    if (COMMENT_ONLY_TYPES.has(n.type)) return 'comments';
+    if (MESSAGE_ONLY_TYPES.has(n.type)) return 'messages';
+    if (CHANNEL_AWARE_TYPES.has(n.type)) {
+        return (n.data as { type?: string } | null)?.type === 'message' ? 'messages' : 'comments';
+    }
+    return null;
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -194,12 +226,27 @@ export function isGroup(item: Notification | GroupedNotifications): item is Grou
 }
 
 export function computeFilterCounts(notifications: Notification[]): Record<NotificationFilter, number> {
-    const counts: Record<NotificationFilter, number> = { all: notifications.length, comments: 0, leads: 0, billing: 0, system: 0 };
+    const counts: Record<NotificationFilter, number> = { all: notifications.length, comments: 0, messages: 0, leads: 0 };
     for (const n of notifications) {
-        if (FILTER_TYPE_MAP.comments?.includes(n.type)) counts.comments++;
-        else if (FILTER_TYPE_MAP.leads?.includes(n.type)) counts.leads++;
-        else if (FILTER_TYPE_MAP.billing?.includes(n.type)) counts.billing++;
-        else if (FILTER_TYPE_MAP.system?.includes(n.type)) counts.system++;
+        const bucket = getNotificationBucket(n);
+        if (bucket) counts[bucket]++;
     }
     return counts;
+}
+
+/**
+ * Stable-partition unread account-health notifications to the front, for the
+ * "All" view only. A payment failure or disconnected page must not sink below a
+ * pile of routine comment alerts. Read items keep their chronological spot —
+ * once seen, they stop dominating. Order within each partition is preserved
+ * (callers pass newest-first), so the result still reads chronologically below
+ * the pinned block. Returns the input untouched when nothing is pinned.
+ */
+export function pinAccountHealthFirst(notifications: Notification[]): Notification[] {
+    const pinned: Notification[] = [];
+    const rest: Notification[] = [];
+    for (const n of notifications) {
+        (ACCOUNT_HEALTH_TYPES.has(n.type) && !n.read ? pinned : rest).push(n);
+    }
+    return pinned.length === 0 ? notifications : [...pinned, ...rest];
 }
