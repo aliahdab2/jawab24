@@ -39,6 +39,13 @@ const config: CapacitorConfig = {
     SplashScreen: {
       launchAutoHide: false, // We'll hide it manually after hydration
       showSpinner: false,    // Explicitly disable spinner
+      // Fixed dark-brand color for the legacy/fallback splash path (pre-12
+      // fallback and any manual SplashScreen.show()). Matches splash_background
+      // in android res and the in-app dark page bg (#060d18). The Android 12+
+      // system splash is controlled by android res/values-v31/styles.xml.
+      backgroundColor: '#060D18',
+      androidScaleType: 'CENTER_INSIDE',
+      androidSplashResourceName: 'splash_screen',
     }
   }
 };

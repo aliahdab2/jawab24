@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pre-API-31 launch background (and the Capacitor fallback splash image):
+     fixed dark fill + centered logo. On API 31+ the system splash defined in
+     values-v31/styles.xml is used instead, and this only serves as the
+     post-splash window background via AppTheme.NoActionBar. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item
+        android:width="160dp"
+        android:height="160dp"
+        android:gravity="center"
+        android:drawable="@drawable/ic_launcher_foreground" />
+</layer-list>

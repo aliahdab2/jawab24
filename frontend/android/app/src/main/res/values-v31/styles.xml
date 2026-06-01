@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Android 12+ (API 31+) system splash screen.
+        The system reads these attributes directly from the launch theme; without
+        this file it shows the launcher icon on a default near-white background.
+        Parent MUST stay Theme.SplashScreen — Capacitor's installSplashScreen()
+        requires it. Same style name as values/styles.xml; the resource system
+        picks this -v31 variant automatically on API 31+.
+    -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <!-- Fixed dark-brand background, identical in light and dark. -->
+        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
+        <!-- White chat-bubble logo (transparent vector) centered on the dark bg.
+             The system masks it to a circle (~2/3 of a 240dp area visible); the
+             108dp foreground sits inside that safe zone. -->
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <!-- After the splash dismisses, switch to the dark window background so
+             there is no white flash before the WebView paints. -->
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+</resources>
