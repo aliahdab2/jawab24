@@ -79,6 +79,28 @@ describe('resolveNotificationRoute', () => {
     });
   });
 
+  describe('new_lead', () => {
+    it('builds the route from leadId so a fresh notification opens the exact lead', () => {
+      expect(resolveNotificationRoute('new_lead', { leadId: 'lead-1', deepLink: '/leads?leadId=lead-1' }))
+        .toBe('/leads?leadId=lead-1');
+    });
+
+    it('ignores a stale bare "/leads" deepLink and still builds from leadId (pre-#230 notifications)', () => {
+      expect(resolveNotificationRoute('new_lead', { leadId: 'lead-1', deepLink: '/leads' }))
+        .toBe('/leads?leadId=lead-1');
+    });
+
+    it('url-encodes the leadId', () => {
+      expect(resolveNotificationRoute('new_lead', { leadId: 'a/b' }))
+        .toBe('/leads?leadId=a%2Fb');
+    });
+
+    it('falls back to the deepLink when leadId is somehow absent', () => {
+      expect(resolveNotificationRoute('new_lead', { deepLink: '/leads' }))
+        .toBe('/leads');
+    });
+  });
+
   describe('non-comment types', () => {
     it('uses data.deepLink when present', () => {
       expect(resolveNotificationRoute('custom', { deepLink: '/settings/billing' }))
