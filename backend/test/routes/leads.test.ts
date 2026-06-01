@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import fastify from 'fastify';
 import leadsRoutes from '../../src/routes/leads';
 import { leadExtractorService } from '../../src/services/leadExtractor';
+import { pagesService } from '../../src/services/pages';
 
 vi.mock('../../src/services/leadExtractor', () => ({
     leadExtractorService: {
         getLeadsByPage: vi.fn(),
+        getLeadById: vi.fn(),
         getAllLeadsForExport: vi.fn(),
         updateLeadStatus: vi.fn(),
         deleteLead: vi.fn(),
@@ -102,6 +104,36 @@ describe('Leads Routes', () => {
                 'page_1',
                 expect.objectContaining({ status: undefined }),
             );
+        });
+    });
+
+    describe('GET /leads/:id', () => {
+        it('returns the lead when it belongs to the caller workspace', async () => {
+            vi.mocked(leadExtractorService.getLeadById).mockResolvedValue(MOCK_LEAD as any);
+
+            const res = await app.inject({ method: 'GET', url: '/leads/lead_1' });
+
+            expect(res.statusCode).toBe(200);
+            expect(JSON.parse(res.body).id).toBe('lead_1');
+            expect(leadExtractorService.getLeadById).toHaveBeenCalledWith('lead_1');
+        });
+
+        it('returns 404 when the lead does not exist', async () => {
+            vi.mocked(leadExtractorService.getLeadById).mockResolvedValue(null);
+
+            const res = await app.inject({ method: 'GET', url: '/leads/nonexistent' });
+
+            expect(res.statusCode).toBe(404);
+        });
+
+        it("returns 404 (not 403) when the lead's page is outside the caller workspace", async () => {
+            vi.mocked(leadExtractorService.getLeadById).mockResolvedValue(MOCK_LEAD as any);
+            // Lead exists, but its page resolves to nothing for this workspace.
+            vi.mocked(pagesService.getPage).mockResolvedValueOnce(null as any);
+
+            const res = await app.inject({ method: 'GET', url: '/leads/lead_1' });
+
+            expect(res.statusCode).toBe(404);
         });
     });
 

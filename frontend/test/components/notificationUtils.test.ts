@@ -4,18 +4,21 @@ import {
   groupNotifications,
   isGroup,
   formatBadgeCount,
+  getNotificationBucket,
+  pinAccountHealthFirst,
+  computeFilterCounts,
   type Notification,
   type GroupedNotifications,
 } from '@/components/ui/notificationUtils';
 
 /** Build a notification with sensible defaults; input is assumed sorted newest-first. */
-function notif(o: { id: string; type: string; createdAt: string; read?: boolean }): Notification {
+function notif(o: { id: string; type: string; createdAt: string; read?: boolean; data?: unknown }): Notification {
   return {
     id: o.id,
     type: o.type,
     title: `title-${o.id}`,
     body: `body-${o.id}`,
-    data: null,
+    data: o.data ?? null,
     read: o.read ?? false,
     createdAt: o.createdAt,
   };
@@ -187,5 +190,76 @@ describe('formatBadgeCount', () => {
   it('clamps to "99+" above 99', () => {
     expect(formatBadgeCount(100)).toBe('99+');
     expect(formatBadgeCount(5000)).toBe('99+');
+  });
+});
+
+describe('getNotificationBucket', () => {
+  it('buckets inherent comment types under comments', () => {
+    expect(getNotificationBucket(notif({ id: 'a', type: 'new_comment', createdAt: hoursAgo(0) }))).toBe('comments');
+    expect(getNotificationBucket(notif({ id: 'b', type: 'stale_comment', createdAt: hoursAgo(0) }))).toBe('comments');
+  });
+
+  it('buckets a stale DM under messages, not comments (the naming fix)', () => {
+    expect(getNotificationBucket(notif({ id: 'a', type: 'stale_message', createdAt: hoursAgo(0) }))).toBe('messages');
+  });
+
+  it('buckets new_lead under leads', () => {
+    expect(getNotificationBucket(notif({ id: 'a', type: 'new_lead', createdAt: hoursAgo(0) }))).toBe('leads');
+  });
+
+  it('routes flagged/skipped replies by the channel stamped in data.type', () => {
+    expect(getNotificationBucket(notif({ id: 'a', type: 'flagged_reply', createdAt: hoursAgo(0), data: { type: 'message' } }))).toBe('messages');
+    expect(getNotificationBucket(notif({ id: 'b', type: 'flagged_reply', createdAt: hoursAgo(0), data: { type: 'comment' } }))).toBe('comments');
+    expect(getNotificationBucket(notif({ id: 'c', type: 'skipped_reply', createdAt: hoursAgo(0), data: { type: 'message' } }))).toBe('messages');
+  });
+
+  it('defaults channel-aware replies to comments when data.type is absent', () => {
+    expect(getNotificationBucket(notif({ id: 'a', type: 'flagged_reply', createdAt: hoursAgo(0) }))).toBe('comments');
+  });
+
+  it('returns null for account-health types (no tab — they live in "All" only)', () => {
+    expect(getNotificationBucket(notif({ id: 'a', type: 'payment_failed', createdAt: hoursAgo(0) }))).toBeNull();
+    expect(getNotificationBucket(notif({ id: 'b', type: 'page_disconnected', createdAt: hoursAgo(0) }))).toBeNull();
+    expect(getNotificationBucket(notif({ id: 'c', type: 'provider_failover', createdAt: hoursAgo(0) }))).toBeNull();
+  });
+});
+
+describe('pinAccountHealthFirst', () => {
+  it('floats an unread account-health alert above older comment alerts', () => {
+    const items = [
+      notif({ id: 'comment', type: 'new_comment', createdAt: hoursAgo(0) }),
+      notif({ id: 'payment', type: 'payment_failed', createdAt: hoursAgo(2), read: false }),
+      notif({ id: 'lead', type: 'new_lead', createdAt: hoursAgo(3) }),
+    ];
+    expect(pinAccountHealthFirst(items).map(n => n.id)).toEqual(['payment', 'comment', 'lead']);
+  });
+
+  it('does not pin a READ account-health alert — it keeps its chronological spot', () => {
+    const items = [
+      notif({ id: 'comment', type: 'new_comment', createdAt: hoursAgo(0) }),
+      notif({ id: 'payment', type: 'payment_failed', createdAt: hoursAgo(2), read: true }),
+    ];
+    expect(pinAccountHealthFirst(items).map(n => n.id)).toEqual(['comment', 'payment']);
+  });
+
+  it('preserves order within each partition and returns the input unchanged when nothing is pinned', () => {
+    const items = [
+      notif({ id: 'a', type: 'new_comment', createdAt: hoursAgo(0) }),
+      notif({ id: 'b', type: 'stale_message', createdAt: hoursAgo(1) }),
+    ];
+    expect(pinAccountHealthFirst(items)).toBe(items);
+  });
+});
+
+describe('computeFilterCounts', () => {
+  it('counts each notification into its channel bucket; account-health items count only in "all"', () => {
+    const items = [
+      notif({ id: 'a', type: 'new_comment', createdAt: hoursAgo(0) }),
+      notif({ id: 'b', type: 'stale_message', createdAt: hoursAgo(1) }),
+      notif({ id: 'c', type: 'flagged_reply', createdAt: hoursAgo(2), data: { type: 'message' } }),
+      notif({ id: 'd', type: 'new_lead', createdAt: hoursAgo(3) }),
+      notif({ id: 'e', type: 'payment_failed', createdAt: hoursAgo(4) }),
+    ];
+    expect(computeFilterCounts(items)).toEqual({ all: 5, comments: 1, messages: 2, leads: 1 });
   });
 });

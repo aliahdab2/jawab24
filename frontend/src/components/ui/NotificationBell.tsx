@@ -25,7 +25,8 @@ import {
     isGroup,
     computeFilterCounts,
     formatBadgeCount,
-    FILTER_TYPE_MAP,
+    getNotificationBucket,
+    pinAccountHealthFirst,
     type NotificationFilter,
 } from './notificationUtils';
 
@@ -107,8 +108,12 @@ export function NotificationBell({ variant = 'light' }: NotificationBellProps) {
     const filterCounts = useMemo(() => computeFilterCounts(notifications), [notifications]);
 
     const filteredAndGrouped = useMemo(() => {
-        const types = FILTER_TYPE_MAP[activeFilter];
-        const filtered = types ? notifications.filter(n => types.includes(n.type)) : notifications;
+        // "All" pins unread account-health alerts (billing/system) to the top so
+        // they can't be missed; the per-tab views filter by channel bucket.
+        if (activeFilter === 'all') {
+            return groupNotifications(pinAccountHealthFirst(notifications));
+        }
+        const filtered = notifications.filter(n => getNotificationBucket(n) === activeFilter);
         return groupNotifications(filtered);
     }, [notifications, activeFilter]);
 

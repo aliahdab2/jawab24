@@ -60,6 +60,23 @@ export class LeadsController {
         return reply.send({ data });
     }
 
+    /** GET /leads/:id — fetch a single lead (used by the notification deep-link). */
+    async getLeadById(
+        request: FastifyRequest<{ Params: { id: string } }>,
+        reply: FastifyReply,
+    ) {
+        const req = request as ResolvedWorkspaceRequest;
+        const lead = await leadExtractorService.getLeadById(request.params.id);
+        if (!lead) return reply.status(404).send({ error: 'Lead not found' });
+
+        // Authorize: the lead's page must belong to the caller's workspace. Return
+        // 404 (not 403) on a cross-workspace id so we don't leak lead existence.
+        const page = await pagesService.getPage(req.workspaceId, lead.pageId);
+        if (!page) return reply.status(404).send({ error: 'Lead not found' });
+
+        return reply.send(lead);
+    }
+
     /** PATCH /leads/:id/status */
     async updateStatus(
         request: FastifyRequest<{

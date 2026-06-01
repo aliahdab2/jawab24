@@ -30,6 +30,7 @@
   "exportCsv": "Export CSV",
   "exportFailed": "Failed to export. Please try again.",
   "loadFailed": "Failed to load leads",
+  "deepLinkNotFound": "This lead may have already been removed.",
   "deleteLead": "Delete",
   "deleteConfirm": "Are you sure you want to delete this lead?",
   "deleteSuccess": "Lead deleted",

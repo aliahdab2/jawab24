@@ -13,7 +13,7 @@ import { SwipeableCommentCard } from '@/components/comments';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, usePageFilter, useDeepLinkResource } from '@/hooks';
+import { useDebounce, usePageFilter, useUrlSelectedResource } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import {
@@ -66,7 +66,6 @@ const CommentsPage: NextPageWithLayout = () => {
   const [filter, setFilter] = useState<FilterType>('needs_action');
   const [searchQuery, setSearchQuery] = useState('');
   const debouncedSearch = useDebounce(searchQuery, 300);
-  const [selectedComment, setSelectedComment] = useState<Comment | null>(null);
 
   // Per-post trigger state
   const [triggerModalComment, setTriggerModalComment] = useState<Comment | null>(null);
@@ -262,16 +261,6 @@ const CommentsPage: NextPageWithLayout = () => {
     syncFromUrl(router.query.page as string | undefined);
   }, [router.isReady, router.query.filter, router.query.page, syncFromUrl]);
 
-  // URL-driven modal open: ?comment=<id> — back button / swipe-back pops the
-  // entry naturally, which clears selectedComment via the sync effect below.
-  //
-  // Deep-linked comments aren't in the paginated allComments list, so we stash
-  // the fetched resource in pendingOpenRef and let the sync effect pick it up
-  // once router.push lands. This keeps the URL as the single source of truth
-  // and avoids a race where a premature setSelectedComment would be cleared
-  // by the sync effect before the URL caught up.
-  const pushedModalRef = useRef(false);
-  const pendingOpenRef = useRef<Map<string, Comment>>(new Map());
   // Stable so useModalBackHandler doesn't cleanup+re-push onClose on every parent
   // re-render — without this, hardware back can fall through to page navigation
   // during the microsecond gap between cleanup and re-push.
@@ -279,58 +268,31 @@ const CommentsPage: NextPageWithLayout = () => {
   const onTriggerSaved = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['posts'] });
   }, [queryClient]);
-  const openComment = useCallback((comment: Comment) => {
-    setTriggerModalComment(null);
-    pendingOpenRef.current.set(comment.id, comment);
-    pushedModalRef.current = true;
-    router.push(
-      { pathname: router.pathname, query: { ...router.query, comment: comment.id } },
-      undefined,
-      { shallow: true },
-    );
-  }, [router]);
-  const closeComment = useCallback(() => {
-    if (pushedModalRef.current) {
-      pushedModalRef.current = false;
-      router.back();
-    } else {
-      const { comment: _c, ...rest } = router.query;
-      void _c;
-      router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true });
-    }
-  }, [router]);
 
-  // Deep-link: fetch the comment directly by id (bypasses list pagination/filters).
-  const fetchCommentById = useCallback(async (commentId: string) => {
+  // URL-driven detail drawer (?comment=<id>) + notification deep-link
+  // (?commentId=<id>), shared with the Messages and Leads pages via
+  // useUrlSelectedResource. Opening a comment first closes any open trigger modal.
+  const getCommentKey = useCallback((c: Comment) => c.id, []);
+  const fetchCommentById = useCallback(async (commentId: string): Promise<Comment | null> => {
     const { data } = await commentsApi.getById(commentId);
     return (data as unknown as Comment) ?? null;
   }, []);
-  useDeepLinkResource<Comment>('commentId', {
-    fetch: fetchCommentById,
-    onOpen: openComment,
-    notFoundMessage: t('deepLinkNotFound'),
-    errorTag: deepLinkErrorTag,
+  const {
+    selected: selectedComment,
+    open: openComment,
+    close: closeComment,
+  } = useUrlSelectedResource<Comment>({
+    urlParam: 'comment',
+    getKey: getCommentKey,
+    list: allComments,
+    deepLink: {
+      paramName: 'commentId',
+      fetch: fetchCommentById,
+      notFoundMessage: t('deepLinkNotFound'),
+      errorTag: deepLinkErrorTag,
+    },
+    onBeforeOpen: closeTriggerModal,
   });
-
-  // Sync modal state from URL (?comment=<id>). Drives open via click/deep-link
-  // AND close via browser back / swipe-back / hardware back.
-  useEffect(() => {
-    if (!router.isReady) return;
-    const commentIdParam = router.query.comment as string | undefined;
-    if (!commentIdParam) {
-      if (selectedComment) setSelectedComment(null);
-      return;
-    }
-    if (selectedComment?.id === commentIdParam) return;
-    const pending = pendingOpenRef.current.get(commentIdParam);
-    if (pending) {
-      pendingOpenRef.current.delete(commentIdParam);
-      setSelectedComment(pending);
-      return;
-    }
-    const found = allComments.find(c => c.id === commentIdParam);
-    if (found) setSelectedComment(found);
-  }, [router.isReady, router.query.comment, allComments, selectedComment]);
 
   // Update Page Title — use server stats counts to match chip badges
   useEffect(() => {

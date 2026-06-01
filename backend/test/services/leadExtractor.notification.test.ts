@@ -92,7 +92,8 @@ describe('leadExtractor — new_lead notification firing', () => {
             'ws-1',
             'new_lead',
             expect.objectContaining({ senderName: 'Ali', phone: PHONE }),
-            expect.objectContaining({ leadId: 'lead-1', pageId: 'page-1', deepLink: '/leads' }),
+            // Deep-link targets the exact lead so the bell opens that customer's card directly.
+            expect.objectContaining({ leadId: 'lead-1', pageId: 'page-1', deepLink: '/leads?leadId=lead-1' }),
             { gatePushBySetting: 'newLeadAlertsEnabled' },
         );
     });
