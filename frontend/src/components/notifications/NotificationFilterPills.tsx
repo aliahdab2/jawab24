@@ -27,7 +27,10 @@ export function NotificationFilterPills({
 
     return (
         <div
-            className="flex items-center gap-1.5 px-5 py-2 overflow-x-auto"
+            // Fixed set of 4 filters → a segmented control that always fits the
+            // row (each pill flex-1), never a horizontal scroll that hides the
+            // Leads tab off-screen.
+            className="flex items-center gap-1.5 px-4 py-2"
             role="tablist"
             aria-label={t('filterLabel')}
         >
@@ -42,16 +45,16 @@ export function NotificationFilterPills({
                         aria-selected={isActive}
                         onClick={() => onChange(value)}
                         className={clsx(
-                            'flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors',
+                            'flex-1 min-w-0 flex items-center justify-center gap-1 px-2 py-1.5 rounded-full text-xs font-medium transition-colors',
                             isActive
                                 ? 'bg-brand-600 text-white shadow-sm'
                                 : 'bg-muted text-muted-foreground hover:bg-surface-200 dark:hover:bg-surface-300 hover:text-foreground/80',
                         )}
                     >
-                        {t(`filter.${value}` as Parameters<typeof t>[0])}
+                        <span className="truncate">{t(`filter.${value}` as Parameters<typeof t>[0])}</span>
                         {count !== undefined && count > 0 && (
                             <span className={clsx(
-                                'min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full',
+                                'shrink-0 min-w-[18px] h-[18px] px-1 flex items-center justify-center text-[10px] font-bold rounded-full',
                                 isActive
                                     ? 'bg-white/20 text-white'
                                     : 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-400',
