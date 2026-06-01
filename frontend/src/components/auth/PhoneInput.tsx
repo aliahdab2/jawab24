@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { isValidPhoneNumber, parsePhoneNumber } from 'libphonenumber-js';
 import type { CountryCode } from 'libphonenumber-js';
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
+import { isSmsBlockedPhone } from '@jawab24/shared';
 import { isRTLLocale } from '@/utils/locale';
 
 const COUNTRY_OPTIONS = [
@@ -36,7 +37,12 @@ const TIMEZONE_TO_COUNTRY: Record<string, CountryCode> = {
 const getDefaultCountry = (): CountryCode => {
     try {
         const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        return TIMEZONE_TO_COUNTRY[tz] ?? 'SA';
+        const candidate = TIMEZONE_TO_COUNTRY[tz] ?? 'SA';
+        // Never auto-default into a region the OTP provider can't deliver to
+        // (e.g. Syria) — that funnels the user straight into a guaranteed failure.
+        const option = COUNTRY_OPTIONS.find(c => c.code === candidate);
+        if (option && isSmsBlockedPhone(option.dial)) return 'SA';
+        return candidate;
     } catch {
         return 'SA';
     }
@@ -59,6 +65,7 @@ export function PhoneInput({
 }: PhoneInputProps) {
     const locale = useLocale();
     const isRTL = isRTLLocale(locale);
+    const t = useTranslations('auth');
 
     const [selectedCountry, setSelectedCountry] = useState(
         () => COUNTRY_OPTIONS.find(c => c.code === getDefaultCountry()) ?? COUNTRY_OPTIONS[0]
@@ -89,7 +96,11 @@ export function PhoneInput({
         const withDial = `${country.dial}${digits}`;
         if (isValidPhoneNumber(withDial, country.code)) {
             const parsed = parsePhoneNumber(withDial, country.code);
-            return { e164: parsed.format('E.164'), valid: true };
+            const e164 = parsed.format('E.164');
+            // A well-formed number in a provider-blocked region (Syria) is reported
+            // invalid so the parent disables submit — we never fire a request the
+            // backend is guaranteed to reject with country_blocked.
+            return { e164, valid: !isSmsBlockedPhone(e164) };
         }
         return { e164: withDial, valid: false };
     };
@@ -180,6 +191,12 @@ export function PhoneInput({
                     aria-describedby={ariaDescribedBy}
                 />
             </div>
+
+            {isSmsBlockedPhone(selectedCountry.dial) && (
+                <p className="mt-1.5 text-xs text-muted-foreground" role="status">
+                    {t('smsUnsupportedCountry')}
+                </p>
+            )}
 
             {/* Country dropdown */}
             {showDropdown && (

@@ -15,7 +15,6 @@ import { auditLog } from '../services/auditLog';
 import { workspaceService } from '../services/workspace';
 import { otpService, OtpRateLimitError, OtpVerifyResult } from '../services/otp';
 import { SmsCountryUnsupportedError } from '../services/sms';
-import { config } from '../config';
 import { isValidPhone, isValidEmail, normalizeArabic } from '@jawab24/shared';
 
 function replyOtpError(result: Exclude<OtpVerifyResult, 'valid'>, reply: FastifyReply) {
@@ -102,13 +101,12 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 9. Build response — include requiresPhone if PHONE_AUTH_ENABLED and user has no phone yet
-            const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
-            request.log.info({ userId: user.id, phone: user.phone, requiresPhone: !!requiresPhone }, 'facebookLogin: phone check');
+            // 9. Build response. Phone collection is intentionally NOT forced during
+            // onboarding — see decoupling note in src/services/sms.ts / WHATSAPP_PLAN.md.
             const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, requiresPhone, defaultWorkspaceId);
+            }, workspaces, defaultWorkspaceId);
 
             // 10. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -194,11 +192,9 @@ export class AuthController {
             // TODO: include a refresh token in the deep-link payload so this can drop to ACCESS_TOKEN_EXPIRY.
             const token = authService.generateToken(user, MOBILE_DEEP_LINK_TOKEN_EXPIRY);
 
-            // 6. Fetch settings + workspaces
-            const [userSettings, workspaces] = await Promise.all([
-                settingsService.getSettings(user.id),
-                workspaceService.getUserWorkspaces(user.id),
-            ]);
+            // 6. Fetch workspaces (settings no longer needed here — onboarding
+            // no longer forces a phone-collect detour)
+            const workspaces = await workspaceService.getUserWorkspaces(user.id);
 
             // 7. Sync pages
             const syncWorkspaceId = workspaces.find(w => w.role === 'owner')?.id;
@@ -211,7 +207,6 @@ export class AuthController {
             }
 
             // 8. Build user payload for deep link
-            const requiresPhone = config.phoneAuthEnabled && !user.phone;
             const userPayload = {
                 id: user.id,
                 name: user.name || '',
@@ -222,14 +217,9 @@ export class AuthController {
                 isAdmin: user.isAdmin || false,
             };
 
-            // 9. Determine where the app should navigate after auth
-            let redirectTarget = safeReturn;
-            if (requiresPhone) {
-                redirectTarget = `/auth/phone-collect?redirect=${encodeURIComponent(safeReturn)}`;
-            } else if (userSettings.dashboardLanguage) {
-                // Apply server-side language preference by embedding it in the redirect
-                redirectTarget = safeReturn;
-            }
+            // 9. Determine where the app should navigate after auth.
+            // Phone collection is no longer forced during onboarding.
+            const redirectTarget = safeReturn;
 
             // 10. HTTP 302 → Universal/App Link on jawab24.com — Android (assetlinks.json)
             //     and iOS (apple-app-site-association) both verify ownership and open the
@@ -338,12 +328,11 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 11. Build response — include requiresPhone if PHONE_AUTH_ENABLED and user has no phone yet
-            const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
+            // 11. Build response. Phone collection is not forced during onboarding.
             const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
             const response: AuthResponse = authService.createAuthResponse(user, token, longLivedToken, {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, requiresPhone, defaultWorkspaceId);
+            }, workspaces, defaultWorkspaceId);
 
             // 12. Check for pending e-commerce integration installs
             for (const integration of integrationRegistry.getEnabled()) {
@@ -653,7 +642,7 @@ export class AuthController {
             const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(user.id);
             const response: AuthResponse = authService.createAuthResponse(user, token, '', {
                 dashboardLanguage: userSettings.dashboardLanguage,
-            }, workspaces, undefined, defaultWorkspaceId);
+            }, workspaces, defaultWorkspaceId);
 
             return reply.send(response);
         } catch (error) {
@@ -722,7 +711,7 @@ export class AuthController {
             cookiesService.setAuthCookies(reply, newToken);
 
             const defaultWorkspaceId = await workspaceService.resolveDefaultWorkspaceId(updatedUser.id);
-            const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, workspaces, undefined, defaultWorkspaceId);
+            const response = authService.createAuthResponse(updatedUser, newToken, longLivedToken, undefined, workspaces, defaultWorkspaceId);
             return reply.send(response);
 
         } catch (error) {

@@ -227,23 +227,10 @@ export default function AuthCallback() {
         return;
       }
 
-      // Check if phone is required (PHONE_AUTH_ENABLED and user has no phone yet)
-      if (data.requiresPhone) {
-        const collectUrl = `/auth/phone-collect?redirect=${encodeURIComponent(safeUrl)}`;
-        if (platform === 'mobile') {
-          // Deep-link back to the native app with phone-collect as the redirect target.
-          // This closes Chrome Custom Tab and lets the native app handle the phone step.
-          const tokenStr = encodeURIComponent(data.token);
-          const fbTokenStr = encodeURIComponent(data.fbAccessToken || '');
-          const userStr = encodeURIComponent(JSON.stringify(data.user));
-          window.location.href = `https://jawab24.com/auth/app-sync?token=${tokenStr}&fbToken=${fbTokenStr}&redirect=${encodeURIComponent(collectUrl)}&user=${userStr}`;
-          return;
-        }
-        // Use preferredLocale (login page locale) not finalLocale (dashboard language) —
-        // phone-collect is part of the auth flow, not the dashboard.
-        routerRef.current.replace(collectUrl, collectUrl, { locale: preferredLocale });
-        return;
-      }
+      // Phone collection is intentionally NOT forced during onboarding. Phone/OTP
+      // verification (Vonage SMS today, WhatsApp Cloud API next) can't deliver to
+      // sanctions-blocked regions like Syria, so making it mandatory walled out
+      // whole segments. Phone remains an optional, opt-in feature — never a gate.
 
       // Check if user has email - if not, redirect to complete profile
       if (!data.user.email) {

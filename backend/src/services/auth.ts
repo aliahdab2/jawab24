@@ -383,7 +383,6 @@ export class AuthService {
         fbAccessToken: string,
         settings?: { dashboardLanguage: string },
         workspaces: AuthResponse['workspaces'] = [],
-        requiresPhone?: boolean,
         defaultWorkspaceId: string | null = null,
     ): AuthResponse {
         return {
@@ -401,7 +400,6 @@ export class AuthService {
             settings,
             workspaces,
             defaultWorkspaceId,
-            requiresPhone,
         };
     }
 

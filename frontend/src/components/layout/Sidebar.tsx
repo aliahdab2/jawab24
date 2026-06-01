@@ -27,6 +27,7 @@ import { BrandLogo, NotificationBell, ThemeToggleButton } from '@/components/ui'
 import { useIsDemoUser } from '@/features/demo';
 import { api } from '@/lib/api';
 import { isNativePlatform } from '@/lib/capacitor';
+import { PHONE_AUTH_ENABLED } from '@/lib/featureFlags';
 
 /**
  * Global cache of loaded image URLs - persists across component remounts
@@ -375,9 +376,12 @@ export const Sidebar = memo(function Sidebar() {
   }, [fbToken, user?.facebookId]);
 
   const userPicture = pictureOverride ?? user?.picture;
-  const userName = isDemoUser ? tAuth('demoUserName') : (user?.name || user?.phone || undefined);
+  // Phone auth is retired until WhatsApp OTP — don't surface a phone we treat as
+  // hidden. FB users always have a name, so this only affects (rare) phone-only rows.
+  const userPhone = PHONE_AUTH_ENABLED ? user?.phone : undefined;
+  const userName = isDemoUser ? tAuth('demoUserName') : (user?.name || userPhone || undefined);
   // Phone-only: no name set, phone is the only identifier — needs LTR direction
-  const isPhoneOnly = !isDemoUser && !user?.name && !!user?.phone;
+  const isPhoneOnly = !isDemoUser && !user?.name && !!userPhone;
 
   // Badge counts keyed by href for easy lookup in NavItem rendering
   const badgeCounts: Record<string, { count: number; color: 'red' | 'brand' }> = {

@@ -89,15 +89,13 @@ async function demoPlugin(fastify: FastifyInstance) {
             cookiesService.setAuthCookies(reply, token);
             cookiesService.setRefreshTokenCookie(reply, refreshToken);
 
-            // 8. Build response — mirror the real Facebook login (workspaces + requiresPhone)
-            const requiresPhone = config.phoneAuthEnabled && !user.phone ? true : undefined;
+            // 8. Build response — mirror the real Facebook login (workspaces)
             const response: AuthResponse = authService.createAuthResponse(
                 user,
                 token,
                 'demo_token',
                 { dashboardLanguage: userSettings.dashboardLanguage },
                 workspaces,
-                requiresPhone,
             );
 
             // 9. Claim any pending e-commerce integration installs (parity with real login)

@@ -24,6 +24,7 @@ import { handleOtpVerifyError } from '@/lib/otpErrors';
 import { PhoneInput } from '@/components/auth/PhoneInput';
 import { OtpInput, OTP_LENGTH } from '@/components/auth/OtpInput';
 import { useOtpRequest } from '@/hooks/useOtpRequest';
+import { PHONE_AUTH_ENABLED } from '@/lib/featureFlags';
 
 type Step = 'phone' | 'code';
 
@@ -52,9 +53,14 @@ export default function PhoneCollectPage() {
         onSuccess: () => { setStep('code'); setOtpCode(''); startExpiryTimer(5 * 60); },
     });
 
-    // Guard: if no authenticated user, redirect to login
+    // Guard: phone auth is disabled (SMS retired until WhatsApp OTP) → this page
+    // is dormant; never show it. Also bounce unauthenticated users to login.
     useEffect(() => {
         if (!_hasHydrated) return;
+        if (!PHONE_AUTH_ENABLED) {
+            router.replace('/dashboard');
+            return;
+        }
         if (!user) {
             router.replace('/login');
         }

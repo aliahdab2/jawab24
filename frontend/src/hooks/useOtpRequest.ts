@@ -40,14 +40,19 @@ export function useOtpRequest({ page, onSuccess }: UseOtpRequestOptions) {
             onSuccess();
             startCountdown(RESEND_COOLDOWN_SECONDS);
         } catch (err: unknown) {
-            captureError(err, 'OTP request failed', { tags: { page } });
             const axiosErr = err as ApiError;
             const errorCode = axiosErr.response?.data?.error;
             if (errorCode === 'country_blocked') {
+                // Expected business outcome (sanctions-blocked region), not an error —
+                // do NOT report to Sentry (it was inflating JAWAB24-FRONTEND-1R).
                 setError(t('smsUnsupportedCountry'));
+            } else if (errorCode === 'invalid_phone') {
+                setError(t('invalidPhone'));
             } else if (axiosErr.response?.status === 429) {
                 setError(t('tooManyAttempts'));
             } else {
+                // Genuine/unexpected failure — surface to Sentry.
+                captureError(err, 'OTP request failed', { tags: { page } });
                 setError(t('loginError'));
             }
         } finally {
