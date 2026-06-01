@@ -7,7 +7,7 @@ import { workspaceApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
-import { isValidContact } from '@jawab24/shared';
+import { isValidEmail } from '@jawab24/shared';
 import { BRAND_ASSETS } from '@/constants/brand';
 import type { WorkspaceRole } from '@jawab24/shared';
 
@@ -204,7 +204,9 @@ export function TeamPanel() {
 
   const handleInvite = async () => {
     const trimmed = contact.trim().toLowerCase();
-    if (!trimmed || !isValidContact(trimmed)) {
+    // Email-only invites: SMS can't reach our markets (Syria/KSA/Libya), so phone
+    // invites are retired until a WhatsApp-based flow replaces them.
+    if (!trimmed || !isValidEmail(trimmed)) {
       toast.error(t('invalidContact'));
       return;
     }

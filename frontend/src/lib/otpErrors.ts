@@ -16,9 +16,14 @@ export function handleOtpVerifyError(
 ) {
     const axiosErr = err as ApiError;
     const errCode = axiosErr.response?.data?.error;
+    // invalid_code / code_expired / too_many_attempts are expected user-facing
+    // outcomes — surface a message but do NOT report them to Sentry. Only genuine,
+    // unexpected failures are captured (otherwise they inflate Sentry noise).
     if (errCode === 'invalid_code') setError(t('invalidCode'));
     else if (errCode === 'code_expired') setError(t('codeExpired'));
     else if (errCode === 'too_many_attempts' || axiosErr.response?.status === 429) setError(t('tooManyAttempts'));
-    else setError(t('loginError'));
-    captureError(err, context, { tags });
+    else {
+        setError(t('loginError'));
+        captureError(err, context, { tags });
+    }
 }

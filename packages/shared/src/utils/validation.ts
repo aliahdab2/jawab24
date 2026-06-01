@@ -17,6 +17,24 @@ export function isValidContact(value: string): boolean {
   return isValidEmail(value) || isValidPhone(value);
 }
 
+/**
+ * E.164 dial-code prefixes the OTP provider cannot deliver to. Syria (+963) is
+ * sanctions-blocked at the provider level (Vonage errorCode 15, non-whitelisted
+ * destination — confirmed via dashboard CSV). Lives here (not just backend) so
+ * the frontend can pre-empt a doomed OTP request instead of funnelling users
+ * into a guaranteed failure.
+ *
+ * NOTE: WhatsApp Business Platform is ALSO sanctions-blocked for Syria, so +963
+ * stays blocked when OTP moves to WhatsApp. Changes are tracked with the
+ * WhatsApp Cloud API OTP work — see .planning/WHATSAPP_PLAN.md.
+ */
+export const SMS_BLOCKED_DIAL_PREFIXES = ['+963'] as const; // Syria
+
+/** True if an E.164 phone is in a region the OTP provider cannot deliver to. */
+export function isSmsBlockedPhone(phoneE164: string): boolean {
+  return SMS_BLOCKED_DIAL_PREFIXES.some(prefix => phoneE164.startsWith(prefix));
+}
+
 /** Splits a contact string into its email/phone components for storage. */
 export function detectContactType(contact: string): { email: string | null; phone: string | null } {
   if (isValidPhone(contact)) {

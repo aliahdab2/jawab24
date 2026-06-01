@@ -9,6 +9,21 @@
 
 ---
 
+## ⚠️ WhatsApp OTP must replace SMS OTP (auth)
+
+**Why:** Vonage **SMS** OTP can't reach our core markets — Syria is sanctions-blocked, Saudi Arabia/KSA denies foreign A2P SMS, Libya is unreliable. A mandatory phone-collect step churned Syrian trial signups with a 400 `country_blocked` (Sentry `JAWAB24-FRONTEND-1R`).
+
+**Current state (shipped on `fix/phone-optional-onboarding`):** SMS OTP is **retired** and all phone UI is hidden behind `PHONE_AUTH_ENABLED` / `NEXT_PUBLIC_PHONE_AUTH_ENABLED` (OFF). Facebook OAuth is the sole identity. Onboarding **never** asks for a phone (decoupled at the code level — `requiresPhone` removed from OAuth callbacks). Team invites are email-only. The OTP infra (`otpService`, `otp_codes`, `/auth/phone/*`) is preserved.
+
+**To re-enable phone OTP via WhatsApp (this is the tracked path for the `// TEMP` block in `backend/src/services/sms.ts`):**
+1. Add a WhatsApp Cloud API authentication-template sender and swap it in at the single seam `otpService.sendOtp()` → `smsService.send()` (or route by region).
+2. Flip `PHONE_AUTH_ENABLED=true` for deliverable regions. The login phone tab, phone-collect page, and (optionally) team phone invites re-appear automatically.
+3. **Syria (`+963`) stays permanently exempt** — WhatsApp Business Platform is *also* sanctions-blocked for Syria, so it can never receive OTP. The exemption list is `SMS_BLOCKED_DIAL_PREFIXES` / `isSmsBlockedPhone` in `@jawab24/shared`; `PhoneInput` already disables submit + shows a notice for blocked prefixes.
+
+This makes the "WhatsApp-only merchant → Phone OTP" row in the Merchant Types table below the trigger for re-enabling phone auth.
+
+---
+
 ## Completed
 
 ### Phase A: `platformMessageId` cleanup ✅

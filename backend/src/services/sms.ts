@@ -1,12 +1,15 @@
 import { config } from '../config';
+import { isSmsBlockedPhone } from '@jawab24/shared';
 import type { Logger } from '../types/logger';
 import { noopLogger } from '../types/logger';
 
-// TEMP: remove when WhatsApp OTP ships (replaces all SMS).
-// Vonage rejects sends to these prefixes with errorCode 15 (non-whitelisted destination)
-// — confirmed via dashboard CSV export. Block client-side to give users an actionable
-// error instead of waiting for a code that will never arrive.
-const SMS_BLOCKED_PREFIXES = ['+963']; // Syria
+// The provider-undeliverable prefix list (Syria +963) lives in @jawab24/shared
+// (SMS_BLOCKED_DIAL_PREFIXES) so the frontend can pre-empt a doomed OTP request
+// instead of funnelling users into a guaranteed failure. Vonage rejects Syria
+// with errorCode 15 (non-whitelisted destination), confirmed via dashboard CSV.
+// Removal/changes are tracked with the WhatsApp Cloud API OTP work
+// (see .planning/WHATSAPP_PLAN.md) — note WhatsApp is also sanctions-blocked for
+// Syria, so +963 stays blocked when OTP moves to WhatsApp.
 export class SmsCountryUnsupportedError extends Error {
     constructor(phone: string) {
         super(`SMS delivery not supported for ${phone}`);
@@ -27,7 +30,7 @@ export class SmsService {
     setLogger(l: Logger): void { this.logger = l; }
 
     async send(phone: string, message: string): Promise<void> {
-        if (SMS_BLOCKED_PREFIXES.some(prefix => phone.startsWith(prefix))) {
+        if (isSmsBlockedPhone(phone)) {
             throw new SmsCountryUnsupportedError(phone);
         }
 

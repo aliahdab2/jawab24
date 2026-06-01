@@ -4,6 +4,7 @@ import { PhoneInput } from './PhoneInput';
 
 vi.mock('next-intl', () => ({
     useLocale: () => 'en',
+    useTranslations: () => (key: string) => key,
 }));
 
 // Force a deterministic default country (SA) regardless of the host's timezone.
@@ -81,6 +82,15 @@ describe('PhoneInput — smart input normalization', () => {
         fireEvent.change(telInput(), { target: { value: '966123' } });
         // After leading-zero strip (no zeros), digits = "966123". computeE164("+966966123") → invalid.
         expect(lastCall()[0]).toBe('+966966123');
+        expect(lastCall()[1]).toBe(false);
+    });
+
+    it('reports a Syrian (+963) number as invalid so submit stays disabled', () => {
+        // Syria is sanctions-blocked for SMS/WhatsApp OTP — even a well-formed
+        // number must not be submittable, so we never fire a request the backend
+        // is guaranteed to reject with country_blocked.
+        const { telInput, lastCall } = renderPhone();
+        fireEvent.change(telInput(), { target: { value: '+963944123456' } });
         expect(lastCall()[1]).toBe(false);
     });
 });

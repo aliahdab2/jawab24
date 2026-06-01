@@ -74,7 +74,7 @@ Jawab24 is a **monorepo** with 3 services + 1 shared package:
 - Zid API (products + policies — Saudi Arabia)
 - OpenAI API (reply generation + embeddings + translation)
 - Stripe API (subscriptions + billing; Embedded Checkout with PaymentElement, monthly + yearly billing intervals, Billing Portal for plan changes)
-- Vonage SMS API (phone OTP authentication + team invites)
+- Vonage SMS API (e-commerce customer notifications only; phone-OTP auth + SMS team invites are retired/disabled — see Authentication Architecture)
 - Resend Email API (transactional emails — waitlist notifications, customer communications)
 
 ## عربي
@@ -96,7 +96,7 @@ Jawab24 هو **مستودع أحادي (monorepo)** يتكون من 3 خدمات
 - Zid API (المنتجات + السياسات — المملكة العربية السعودية)
 - OpenAI API (توليد الردود + التضمينات + الترجمة)
 - Stripe API (الاشتراكات + الفواتير؛ Embedded Checkout مع PaymentElement، دوري شهري وسنوي)
-- Vonage SMS API (رمز OTP عبر SMS + دعوة الفريق)
+- Vonage SMS API (إشعارات عملاء التجارة الإلكترونية فقط؛ مصادقة OTP عبر الهاتف ودعوات الفريق عبر SMS معطّلة)
 - Resend Email API (بريد إلكتروني للمعاملات — إشعارات قائمة الانتظار، تواصل العملاء)
 
 ---
@@ -2214,13 +2214,13 @@ Jawab24 يدعم **مساحات عمل متعددة المستأجرين** مع 
 
 ### Authentication Architecture
 
-**Identity model:** phone number = identity. Facebook/Instagram/WhatsApp = channels connected after login.
+**Identity model:** **Facebook OAuth is the primary, sole reliable identity.** Phone is optional and is **never collected during onboarding**. (The codebase was originally architected with phone as a co-primary identity for phone-OTP login; that path is **retired** — see below.)
 
 **Login methods:**
-- **Phone OTP (primary)** — E.164 phone → 6-digit SMS code via Vonage → JWT + 60-day refresh token
-- **Facebook OAuth (secondary)** — remains available; users prompted to add phone after login
+- **Facebook OAuth (primary, always on)** — the reliable identity for every user; never gated behind a phone step.
+- **Phone OTP (behind `PHONE_AUTH_ENABLED`, currently OFF — SMS retired)** — E.164 phone → 6-digit code → JWT + 60-day refresh token. **SMS delivery is broken across the core markets** (Syria is sanctions-blocked; Saudi Arabia/KSA denies foreign A2P SMS; Libya unreliable), so phone auth is disabled everywhere. The OTP infrastructure (`otpService`, `otp_codes`, `/auth/phone/*`) is **preserved** and will be re-enabled on a **WhatsApp Cloud API** channel for deliverable regions — **Syria stays permanently exempt** (no OTP channel, SMS or WhatsApp, can reach it). The undeliverable-region prefix list lives in `@jawab24/shared` (`SMS_BLOCKED_DIAL_PREFIXES` / `isSmsBlockedPhone`).
 
-**OTP security:**
+**OTP security:** (preserved for the WhatsApp rollout)
 - Codes bcrypt-hashed before storage (10 rounds)
 - Dummy bcrypt compare on missing record (timing attack prevention)
 - Max 3 attempts per OTP, 1 OTP per phone per 60s
@@ -2230,8 +2230,8 @@ Jawab24 يدعم **مساحات عمل متعددة المستأجرين** مع 
 - Access token: 15-minute JWT (HMAC-SHA256, RFC 7519 — exp in seconds)
 - Refresh token: 60-day opaque token, DB-stored, rotated on every use
 - Cookies: HttpOnly + Secure + SameSite:strict
-- Feature flag: `PHONE_AUTH_ENABLED` — phone routes hidden until enabled
-- **Team phone invites**: Workspace members can be invited via phone number (same OTP flow)
+- Feature flag: `PHONE_AUTH_ENABLED` / `NEXT_PUBLIC_PHONE_AUTH_ENABLED` — single switch gating **all** phone UI (login phone tab, the dormant phone-collect page, team phone invites, sidebar phone fallback) AND the `/auth/phone/*` routes. Currently OFF. Onboarding **never** forces a phone regardless of the flag (decoupled at the code level — `requiresPhone` removed from the OAuth callbacks).
+- **Team invites are email-only** while phone auth is off (phone invites depend on SMS, which is retired)
 
 ---
 

@@ -226,6 +226,27 @@ describe('Auth Service', () => {
 
             expect(response.user.picture).toBeUndefined();
         });
+
+        it('does NOT force phone collection — onboarding is decoupled from phone (regression)', () => {
+            // A user with no phone must NOT be flagged to collect one. Phone OTP
+            // can't reach our core markets (Syria sanctions, KSA A2P denial), so
+            // onboarding is decoupled from phone — the response carries no
+            // requiresPhone signal. Guards against re-introducing the gate that
+            // churned Syrian signups (Sentry JAWAB24-FRONTEND-1R).
+            const user = {
+                id: 'user_no_phone',
+                facebookId: 'fb_789',
+                name: 'No Phone User',
+                email: 'nophone@example.com',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            };
+
+            const response = service.createAuthResponse(user, 'tok', 'fbtok', undefined, [], 'ws_1');
+
+            expect('requiresPhone' in response).toBe(false);
+            expect(response.defaultWorkspaceId).toBe('ws_1');
+        });
     });
 
     describe('findOrCreateUser', () => {

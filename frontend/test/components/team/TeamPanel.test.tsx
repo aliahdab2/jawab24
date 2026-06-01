@@ -98,7 +98,7 @@ describe('TeamPanel', () => {
   // description live in the page's PageHeader, not in this component.
   it('renders the invite form and role explainer for an owner', async () => {
     renderTeamPanel();
-    expect(await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('Email address')).toBeInTheDocument();
     expect(await screen.findByText('Invite')).toBeInTheDocument();
     expect(await screen.findByText('What each role can do')).toBeInTheDocument();
   });
@@ -142,7 +142,7 @@ describe('TeamPanel', () => {
     mockCreateInvite.mockResolvedValue({ data: { id: 'inv-new' } });
     renderTeamPanel();
 
-    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    const input = await screen.findByPlaceholderText('Email address');
     fireEvent.change(input, { target: { value: 'new@test.com' } });
 
     const button = screen.getByText('Invite');
@@ -153,25 +153,24 @@ describe('TeamPanel', () => {
     });
   });
 
-  it('sends invite with phone number on button click', async () => {
-    mockCreateInvite.mockResolvedValue({ data: { id: 'inv-new', token: 'tok123' } });
+  it('rejects phone invite — invites are email-only (SMS retired until WhatsApp OTP)', async () => {
     renderTeamPanel();
 
-    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    const input = await screen.findByPlaceholderText('Email address');
     fireEvent.change(input, { target: { value: '+966501234567' } });
 
     const button = screen.getByText('Invite');
     fireEvent.click(button);
 
     await waitFor(() => {
-      expect(mockCreateInvite).toHaveBeenCalledWith('+966501234567');
+      expect(mockCreateInvite).not.toHaveBeenCalled();
     });
   });
 
   it('rejects invalid contact (no + prefix phone)', async () => {
     renderTeamPanel();
 
-    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    const input = await screen.findByPlaceholderText('Email address');
     fireEvent.change(input, { target: { value: '0501234567' } });
 
     const button = screen.getByText('Invite');
@@ -185,7 +184,7 @@ describe('TeamPanel', () => {
   it('rejects invalid contact (malformed string)', async () => {
     renderTeamPanel();
 
-    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    const input = await screen.findByPlaceholderText('Email address');
     fireEvent.change(input, { target: { value: 'not-valid' } });
 
     const button = screen.getByText('Invite');
@@ -272,7 +271,7 @@ describe('TeamPanel', () => {
     mockCreateInvite.mockResolvedValue({ data: { token } });
     renderTeamPanel();
 
-    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    const input = await screen.findByPlaceholderText('Email address');
     fireEvent.change(input, { target: { value: 'new@test.com' } });
     fireEvent.click(screen.getByText('Invite'));
 
@@ -290,7 +289,7 @@ describe('TeamPanel', () => {
     mockCreateInvite.mockResolvedValue({ data: { token: 'tok-email', emailSent: true } });
     renderTeamPanel();
 
-    const input = await screen.findByPlaceholderText('Email or phone (+966xxxxxxxxx)');
+    const input = await screen.findByPlaceholderText('Email address');
     fireEvent.change(input, { target: { value: 'new@test.com' } });
     fireEvent.click(screen.getByText('Invite'));
 
