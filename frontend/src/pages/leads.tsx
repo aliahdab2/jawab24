@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, type ReactElement } from 'react';
 import { useRouter } from 'next/router';
-import { usePageFilter, useUrlSelectedResource } from '@/hooks';
+import { usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver } from '@/hooks';
 import { toast } from 'sonner';
 import clsx from 'clsx';
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
@@ -489,23 +489,16 @@ const LeadsPage: NextPageWithLayout = () => {
     },
   });
 
-  // Auto-fetch next page when the sentinel scrolls into view. Same pattern as
-  // messages.tsx / comments.tsx — kept inline rather than extracted to a shared
-  // hook (out of scope for this PR; see follow-ups).
+  // Auto-fetch next page when the sentinel scrolls into view. Leads filters
+  // server-side (status goes through the query key), so the list isn't narrowed
+  // client-side and auto-load stays enabled.
   const loadMoreRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      { threshold: 0.1, rootMargin: '100px' },
-    );
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  useInfiniteScrollObserver({
+    targetRef: loadMoreRef,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+  });
 
   const statusMutation = useMutation({
     mutationFn: ({ lead, status }: { lead: Lead; status: LeadStatus }) =>

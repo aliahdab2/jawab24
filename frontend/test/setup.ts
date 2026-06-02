@@ -139,7 +139,8 @@ class IntersectionObserverMock {
   takeRecords = vi.fn().mockReturnValue([]);
   constructor(_cb: IntersectionObserverCallback, _opts?: IntersectionObserverInit) {}
 }
-Object.defineProperty(window, 'IntersectionObserver', { value: IntersectionObserverMock });
+// configurable so individual tests can swap in a callback-driving mock via vi.stubGlobal
+Object.defineProperty(window, 'IntersectionObserver', { value: IntersectionObserverMock, configurable: true });
 
 // Mock ResizeObserver (not available in jsdom)
 class ResizeObserverMock {

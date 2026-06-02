@@ -13,7 +13,7 @@ import { SwipeableCommentCard } from '@/components/comments';
 const CommentDetailModal = dynamic(() => import('@/components/comments').then(m => ({ default: m.CommentDetailModal })), { ssr: false });
 const PostTriggerModal = dynamic(() => import('@/components/comments/PostTriggerModal').then(m => ({ default: m.PostTriggerModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, usePageFilter, useUrlSelectedResource } from '@/hooks';
+import { useDebounce, usePageFilter, useUrlSelectedResource, useInfiniteScrollObserver } from '@/hooks';
 import { commentsApi, pagesApi, postsApi, type CommentsQueryParams } from '@/lib/api';
 import { invalidateInfiniteListFresh } from '@/lib/queryInvalidation';
 import {
@@ -217,22 +217,17 @@ const CommentsPage: NextPageWithLayout = () => {
     };
   }, [statsData]);
 
-  // Intersection Observer for infinite scroll
-  useEffect(() => {
-    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      { threshold: 0.1, rootMargin: '100px' }
-    );
-
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  // Infinite scroll — auto-load is paused while a search is active. Search filters
+  // the loaded list client-side, so a short filtered list leaves the sentinel in
+  // view; without this gate the observer would page through the entire dataset to
+  // feed a client-side filter, flooding the network/console. Manual "Load More" stays.
+  useInfiniteScrollObserver({
+    targetRef: loadMoreRef,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    enabled: debouncedSearch.trim().length === 0,
+  });
 
   // Sync Filter to URL
   const updateFilter = useCallback((newFilter: FilterType) => {

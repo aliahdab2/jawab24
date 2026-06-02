@@ -16,6 +16,7 @@ export { useBodyScrollLock } from './useBodyScrollLock';
 export { useModalBackHandler, dismissTopModal } from './useModalBackHandler';
 export { useSwipe } from './useSwipe';
 export { useDebounce } from './useDebounce';
+export { useInfiniteScrollObserver } from './useInfiniteScrollObserver';
 export { useSSE } from './useSSE';
 export { useTheme } from './useTheme';
 export { useConversationActions } from './useConversationActions';
