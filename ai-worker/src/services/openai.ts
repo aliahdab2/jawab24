@@ -902,51 +902,6 @@ When a customer asks "where can I buy", "give me the link", or wants to purchase
             }
         }
 
-        // Check 1b: Hallucinated phone numbers (Stage 2.6).
-        //   The Damascus institute "1234567" incident: AI invented a phone because peer
-        //   merchants had phones in similar patterns and the page itself had none in KB
-        //   and no merchant-confirmed phone in business_profile.merchant.
-        //
-        //   Detection: any 7-14-digit run in the reply (Latin OR Arabic-Indic digits)
-        //   that doesn't appear in the merged KB+business-info text is flagged.
-        //
-        //   Whitelisting: same patterns the price check strips first — times, dates,
-        //   percentages, order IDs — plus order/SKU prefixes. We deliberately do NOT
-        //   gate this on intent: a phone hallucination is wrong regardless of whether
-        //   the AI classified the message as QUESTION, COMPLIMENT, or GREETING.
-        if (reply) {
-            const kbText = this.getKBText(request);
-            const businessInfoText = request.context?.businessInfoBlock || '';
-            const haystack = `${kbText}\n${businessInfoText}`;
-
-            // Normalize Arabic-Indic digits in haystack so reply matching works either way.
-            const ARABIC_TO_LATIN_DIGITS: Record<string, string> = {
-                '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
-                '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
-            };
-            const normalize = (s: string) => s.replace(/[٠-٩]/g, (ch) => ARABIC_TO_LATIN_DIGITS[ch] ?? ch);
-
-            const sanitizedReply = normalize(reply)
-                .replace(/\d{1,2}[:/]\d{2}/g, '')                       // times (9:00)
-                .replace(/\d{1,2}[/-]\d{1,2}(?:[/-]\d{2,4})?/g, '')     // dates
-                .replace(/#\d+|ORD-?\d+|SKU-?\d+/gi, '')                 // order/SKU IDs
-                .replace(/\d+%/g, '');                                   // percentages
-
-            // 7-15 digit runs (with optional + prefix, internal separators stripped before length check).
-            // Pattern: digit, then 5-15 of {digit|space|.|-|()}, then digit → 7-17 chars, 7-15 digits.
-            const phoneCandidates = sanitizedReply.match(/\+?\d[\d\s.\-()]{5,15}\d/g) || [];
-            const haystackDigits = normalize(haystack).replace(/\D/g, '');
-
-            for (const candidate of phoneCandidates) {
-                const digits = candidate.replace(/\D/g, '');
-                if (digits.length < 7 || digits.length > 15) continue;
-                if (!haystackDigits.includes(digits)) {
-                    if (!flags.includes('phone_not_in_kb')) flags.push('phone_not_in_kb');
-                    break;
-                }
-            }
-        }
-
         // Check 2: Comment too long — public comments should be brief
         const channel = request.context?.channel
             || (request.context?.conversationHistory && request.context.conversationHistory.length > 0 ? 'dm' : 'comment');
