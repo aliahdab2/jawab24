@@ -11,7 +11,7 @@ import dynamic from 'next/dynamic';
 
 const MessageDetailModal = dynamic(() => import('@/components/messages/MessageDetailModal').then(m => ({ default: m.MessageDetailModal })), { ssr: false });
 import { useAuthStore, useUIStore } from '@/lib/store';
-import { useDebounce, useConversationActions, usePageFilter, useLoadConversation, useDeepLinkResource } from '@/hooks';
+import { useDebounce, useConversationActions, usePageFilter, useLoadConversation, useDeepLinkResource, useInfiniteScrollObserver } from '@/hooks';
 import { messagesApi, pagesApi, type MessagesQueryParams, type Message } from '@/lib/api';
 import type { Page } from '@jawab24/shared';
 import {
@@ -360,22 +360,17 @@ const MessagesPage: NextPageWithLayout = () => {
   }, [selectedPage, selectedConversation?.lastMessage.platform]);
   const selectedFacebookPageId = selectedPage?.facebookPageId ?? undefined;
 
-  // Intersection Observer
-  useEffect(() => {
-    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) {
-          fetchNextPage();
-        }
-      },
-      { threshold: 0.1, rootMargin: '100px' }
-    );
-
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+  // Infinite scroll — auto-load is paused while a search is active. Search filters
+  // the loaded list client-side, so a short filtered list leaves the sentinel in
+  // view; without this gate the observer would page through the entire dataset to
+  // feed a client-side filter, flooding the network/console. Manual "Load More" stays.
+  useInfiniteScrollObserver({
+    targetRef: loadMoreRef,
+    hasNextPage,
+    isFetchingNextPage,
+    fetchNextPage,
+    enabled: debouncedSearch.trim().length === 0,
+  });
 
   // (resolve handler provided by useConversationActions)
 
