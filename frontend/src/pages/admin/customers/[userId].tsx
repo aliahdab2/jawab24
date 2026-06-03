@@ -134,6 +134,16 @@ export default function AdminCustomerDetailPage() {
     const [topupExternalRef, setTopupExternalRef] = useState('');
     const [topupNote, setTopupNote] = useState('');
 
+    // Collect-payment form state — generate a Stripe link to bill a customer for
+    // an already-granted manual credit. Collect-only: never credits reply balance.
+    const [showPaymentForm, setShowPaymentForm] = useState(false);
+    const [paymentLoading, setPaymentLoading] = useState(false);
+    const [paymentError, setPaymentError] = useState<string | null>(null);
+    const [paymentAmount, setPaymentAmount] = useState('');
+    const [paymentDescription, setPaymentDescription] = useState('');
+    const [paymentLink, setPaymentLink] = useState<string | null>(null);
+    const [paymentRequests, setPaymentRequests] = useState<NonNullable<Awaited<ReturnType<typeof adminApi.listPaymentRequests>>['data']>>([]);
+
     // AI Model override — '' represents "use default" (settings.ai_model = NULL).
     const [selectedAiModel, setSelectedAiModel] = useState<string>('');
     const [aiModelSaving, setAiModelSaving] = useState(false);
@@ -180,6 +190,8 @@ export default function AdminCustomerDetailPage() {
         };
 
         loadData();
+        loadPaymentRequests();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userId]);
 
     // Load (and reload on period change) the AI cost by page report
@@ -319,6 +331,53 @@ export default function AdminCustomerDetailPage() {
             captureError(err, 'Failed to credit top-up', { tags: { page: 'admin-customer-detail', action: 'topup' } });
         } finally {
             setTopupLoading(false);
+        }
+    };
+
+    const loadPaymentRequests = async () => {
+        if (!userId || typeof userId !== 'string') return;
+        try {
+            const res = await adminApi.listPaymentRequests(userId);
+            if (res.success && res.data) setPaymentRequests(res.data);
+        } catch (err) {
+            captureError(err, 'Failed to load payment requests', { tags: { page: 'admin-customer-detail' } });
+        }
+    };
+
+    const handleCreatePaymentRequest = async () => {
+        if (!userId || typeof userId !== 'string') return;
+
+        // Parse the major-unit amount (e.g. "199" or "199.50") into integer cents.
+        const amount = Number(paymentAmount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+            setPaymentError(t('customer.paymentAmountInvalid'));
+            return;
+        }
+        const amountCents = Math.round(amount * 100);
+
+        setPaymentLoading(true);
+        setPaymentError(null);
+        setPaymentLink(null);
+
+        try {
+            const response = await adminApi.createPaymentRequest(userId, {
+                amountCents,
+                description: paymentDescription || undefined,
+            });
+
+            if (response.success && response.data) {
+                setPaymentLink(response.data.url);
+                setPaymentAmount('');
+                setPaymentDescription('');
+                await loadPaymentRequests();
+            } else {
+                setPaymentError(response.error || t('customer.paymentErrorGeneric'));
+            }
+        } catch (err) {
+            setPaymentError(t('customer.paymentErrorGeneric'));
+            captureError(err, 'Failed to create payment request', { tags: { page: 'admin-customer-detail', action: 'paymentRequest' } });
+        } finally {
+            setPaymentLoading(false);
         }
     };
 
@@ -882,6 +941,140 @@ export default function AdminCustomerDetailPage() {
                                         {t('customer.topupSubmit')}
                                     </Button>
                                 </div>
+                            </Card>
+                        )}
+
+                        {/* Collect Payment Card — generate a Stripe link to bill the
+                            customer for an already-granted manual credit. Collect-only. */}
+                        <Card>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-lg font-semibold text-foreground">
+                                    {t('customer.paymentTitle')}
+                                </h2>
+                                <ExternalLink className="w-5 h-5 text-brand-500" aria-hidden="true" />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                {t('customer.paymentSubtitle')}
+                            </p>
+                            <div className="mt-4 pt-4 border-t border-theme-border">
+                                <Button
+                                    onClick={() => {
+                                        setShowPaymentForm(!showPaymentForm);
+                                        setPaymentError(null);
+                                        setPaymentLink(null);
+                                    }}
+                                    className="w-full"
+                                    variant="secondary"
+                                >
+                                    {showPaymentForm ? t('customer.cancelUpgrade') : t('customer.paymentCreateButton')}
+                                </Button>
+                            </div>
+
+                            {/* History */}
+                            {paymentRequests.length > 0 && (
+                                <div className="mt-4 pt-4 border-t border-theme-border space-y-2">
+                                    <div className="text-xs font-medium text-muted-foreground">
+                                        {t('customer.paymentHistoryTitle')}
+                                    </div>
+                                    {paymentRequests.map((pr) => (
+                                        <div key={pr.id} className="flex items-center justify-between text-sm">
+                                            <span className="text-foreground">
+                                                {(pr.amountCents / 100).toLocaleString(intlLocale, { style: 'currency', currency: pr.currency.toUpperCase() })}
+                                            </span>
+                                            <span className={clsx(
+                                                'text-xs px-2 py-0.5 rounded-full',
+                                                pr.status === 'paid' && 'status-success',
+                                                pr.status === 'pending' && 'status-warning',
+                                                pr.status === 'expired' && 'text-muted-foreground',
+                                            )}>
+                                                {t(`customer.paymentStatus_${pr.status}`)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </Card>
+
+                        {/* Collect Payment Form */}
+                        {showPaymentForm && (
+                            <Card>
+                                <h3 className="text-lg font-semibold text-foreground mb-4">
+                                    {t('customer.paymentFormTitle')}
+                                </h3>
+
+                                {paymentError && (
+                                    <div role="alert" className="mb-4 alert-error border px-4 py-3 rounded-lg text-sm">
+                                        {paymentError}
+                                    </div>
+                                )}
+
+                                {paymentLink ? (
+                                    <div className="space-y-3">
+                                        <div className="alert-success border px-4 py-3 rounded-lg text-sm">
+                                            {t('customer.paymentLinkReady')}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                readOnly
+                                                value={paymentLink}
+                                                aria-label={t('customer.paymentLinkReady')}
+                                                className={FIELD_CLASS}
+                                                onFocus={(e) => e.target.select()}
+                                            />
+                                            <Button
+                                                variant="secondary"
+                                                onClick={() => {
+                                                    navigator.clipboard?.writeText(paymentLink);
+                                                    toast.success(t('customer.paymentLinkCopied'));
+                                                }}
+                                            >
+                                                {t('customer.paymentCopy')}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label htmlFor="pr-amount" className="block text-sm font-medium text-foreground/70 mb-1">
+                                                {t('customer.paymentAmount')} *
+                                            </label>
+                                            <input
+                                                id="pr-amount"
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                inputMode="decimal"
+                                                value={paymentAmount}
+                                                onChange={(e) => setPaymentAmount(e.target.value)}
+                                                placeholder={t('customer.paymentAmountPlaceholder')}
+                                                className={FIELD_CLASS}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label htmlFor="pr-desc" className="block text-sm font-medium text-foreground/70 mb-1">
+                                                {t('customer.paymentDescription')}
+                                            </label>
+                                            <input
+                                                id="pr-desc"
+                                                type="text"
+                                                dir="auto"
+                                                value={paymentDescription}
+                                                onChange={(e) => setPaymentDescription(e.target.value)}
+                                                placeholder={t('customer.paymentDescriptionPlaceholder')}
+                                                className={FIELD_CLASS}
+                                            />
+                                        </div>
+                                        <Button
+                                            onClick={handleCreatePaymentRequest}
+                                            loading={paymentLoading}
+                                            disabled={paymentLoading}
+                                            className="w-full"
+                                        >
+                                            {t('customer.paymentSubmit')}
+                                        </Button>
+                                    </div>
+                                )}
                             </Card>
                         )}
 

@@ -366,6 +366,34 @@ const start = async () => {
       }
     }, 6 * 60 * 60 * 1000); // Every 6 hours
 
+    // Payment-request reconciliation — every 15 min, recover `pending` admin
+    // "collect payment" rows whose checkout.session.completed webhook was
+    // missed/late (customer paid but the ledger still shows unpaid). markPaid is
+    // status='pending'-gated so this never re-flips a row, and it NEVER touches
+    // reply balance (collect-only). Safe to run alongside the live webhook.
+    const { paymentRequestService } = await import('./services/paymentRequest');
+    const PAYMENT_REQUEST_RECONCILE_INTERVAL_MS = 15 * 60 * 1000; // 15 min
+    const runPaymentRequestReconcile = (label: string) => {
+      paymentRequestService.reconcilePending()
+        .then(r => {
+          if (r.scanned > 0) server.log.info(r, `[PaymentRequestReconcile] ${label}`);
+          if (r.paid > 0) {
+            captureError(
+              new Error(`Payment-request reconciliation marked ${r.paid} request(s) paid a missed webhook should have`),
+              '[PaymentRequestReconcile] recovered missed webhook settlements',
+              { level: 'warning', tags: { cron: 'payment_request_reconcile' }, extra: { ...r } },
+            );
+          }
+        })
+        .catch(err => {
+          server.log.error(err, `[PaymentRequestReconcile] ${label} failed`);
+          captureError(err, `[PaymentRequestReconcile] ${label} failed`, { tags: { cron: 'payment_request_reconcile' }, level: 'error' });
+        });
+    };
+    setInterval(() => runPaymentRequestReconcile('scheduled sweep'), PAYMENT_REQUEST_RECONCILE_INTERVAL_MS);
+    // First run 3 min after boot (after the webhook's fair-chance window).
+    setTimeout(() => runPaymentRequestReconcile('initial sweep'), 3 * 60 * 1000);
+
     // Verify app-level webhook subscriptions with Meta on startup
     // This ensures the callback URL is verified after every deploy
     ensureMetaWebhookSubscriptions(config.webhookCallbackUrl, createRequestLogger(server.log)).then(ok => {

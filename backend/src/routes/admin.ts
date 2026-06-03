@@ -1,10 +1,13 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/auth';
 import { isAllowedAiModel } from '@jawab24/shared';
 import { clearAiModelCache } from '../services/aiModelResolver';
 import { db } from '../db';
 import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, emailUnsubscribes, leadDigestSends, emailSends, posts, instagramMedia, leads, workspaceMembers, settings } from '../db/schema';
+import { stripeService } from '../services/stripe';
+import { paymentRequestService } from '../services/paymentRequest';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
 import { auth } from '../utils/swagger';
 import { getIngestionService } from '../services/pages';
@@ -727,6 +730,151 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         success: false,
                         error: 'Failed to upgrade user',
                     });
+                }
+            }
+        );
+
+        /**
+         * POST /admin/users/:userId/payment-request — generate a hosted Stripe
+         * Checkout link for a CUSTOM amount and return its URL for the admin to
+         * send to the customer. Collect-only: paying it (handled by the
+         * checkout.session.completed webhook) marks the request 'paid' and NEVER
+         * credits reply balance — the replies were credited separately by hand.
+         */
+        adminProtected.post<{ Params: { userId: string }; Body: { amountCents: number; currency?: string; description?: string; topupPurchaseId?: string } }>(
+            '/users/:userId/payment-request',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'Generate a custom Stripe payment link to collect money for an already-granted credit',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                    body: {
+                        type: 'object',
+                        required: ['amountCents'],
+                        properties: {
+                            // Integer cents; positive. Upper bound mirrors Stripe's practical limit
+                            // and guards against an accidental extra-zero fat-finger.
+                            amountCents: { type: 'integer', minimum: 1, maximum: 99_999_99 },
+                            currency: { type: 'string', minLength: 3, maxLength: 3, default: 'usd' },
+                            description: { type: 'string', maxLength: 500 },
+                            // Optional link to the manual top-up this collects money for.
+                            topupPurchaseId: { type: 'string', format: 'uuid' },
+                        },
+                    },
+                },
+            },
+            async (request, reply) => {
+                const { userId } = request.params;
+                const { amountCents, currency = 'usd', description, topupPurchaseId } = request.body;
+                const adminUserId = (request as AuthenticatedRequest).user?.userId;
+
+                try {
+                    const [user] = await db
+                        .select({ id: users.id, email: users.email })
+                        .from(users)
+                        .where(eq(users.id, userId))
+                        .limit(1);
+
+                    if (!user) {
+                        return reply.status(404).send({ success: false, error: 'User not found' });
+                    }
+                    if (!user.email) {
+                        return reply.status(400).send({
+                            success: false,
+                            error: 'User has no email on file — Stripe Checkout requires one',
+                        });
+                    }
+
+                    // Mint the row id up front so it is BOTH the Stripe idempotency key
+                    // (a double-submit returns the same session) AND the session metadata
+                    // paymentRequestId (metadata id === row id — clean reconciliation). The
+                    // row carries the session id (unique, NOT NULL), so: id → session → row.
+                    const paymentRequestId = randomUUID();
+                    const normalizedCurrency = currency.toLowerCase();
+                    const session = await stripeService.createManualPaymentSession({
+                        userId,
+                        userEmail: user.email,
+                        amountCents,
+                        currency: normalizedCurrency,
+                        description: description ?? '',
+                        paymentRequestId,
+                        successUrl: `${config.frontendUrl}/payment/return?session_id={CHECKOUT_SESSION_ID}`,
+                        cancelUrl: `${config.frontendUrl}/payment/return?canceled=1`,
+                    });
+
+                    if (!session.url) {
+                        return reply.status(502).send({
+                            success: false,
+                            error: 'Stripe did not return a payment URL',
+                        });
+                    }
+
+                    const row = await paymentRequestService.create({
+                        id: paymentRequestId,
+                        userId,
+                        amountCents,
+                        currency: normalizedCurrency,
+                        description,
+                        stripeCheckoutSessionId: session.id,
+                        createdByAdminUserId: adminUserId ?? null,
+                        topupPurchaseId: topupPurchaseId ?? null,
+                    });
+
+                    await db.insert(adminAuditLogs).values({
+                        adminUserId,
+                        targetUserId: userId,
+                        action: 'payment_request_created',
+                        previousValue: null,
+                        newValue: {
+                            paymentRequestId: row.id,
+                            amountCents,
+                            currency: normalizedCurrency,
+                            description: description ?? null,
+                            stripeCheckoutSessionId: session.id,
+                            topupPurchaseId: topupPurchaseId ?? null,
+                        },
+                        note: description ?? null,
+                    });
+
+                    request.log.info(
+                        { adminUserId, targetUserId: userId, paymentRequestId: row.id, amountCents, currency: normalizedCurrency },
+                        'Admin payment request created'
+                    );
+
+                    return reply.send({
+                        success: true,
+                        data: { id: row.id, url: session.url, amountCents, currency: normalizedCurrency },
+                    });
+                } catch (error) {
+                    request.log.error(error, 'Admin payment request creation failed');
+                    return reply.status(500).send({ success: false, error: 'Failed to create payment request' });
+                }
+            }
+        );
+
+        /**
+         * GET /admin/users/:userId/payment-requests — history of collect-payment
+         * links for a customer (for the admin detail page).
+         */
+        adminProtected.get<{ Params: { userId: string } }>(
+            '/users/:userId/payment-requests',
+            {
+                schema: {
+                    tags: ['Admin'],
+                    summary: 'List a customer\'s collect-payment requests',
+                    security: auth,
+                    params: { type: 'object', properties: { userId: { type: 'string', format: 'uuid' } }, required: ['userId'] },
+                },
+            },
+            async (request, reply) => {
+                const { userId } = request.params;
+                try {
+                    const rows = await paymentRequestService.listForUser(userId);
+                    return reply.send({ success: true, data: rows });
+                } catch (error) {
+                    request.log.error(error, 'Admin payment request list failed');
+                    return reply.status(500).send({ success: false, error: 'Failed to list payment requests' });
                 }
             }
         );

@@ -424,8 +424,13 @@ Voice-to-text for KB content via microphone:
      - Sanctions check applied before portal creation
   6. Webhook at `POST /payment/webhook` receives `checkout.session.completed` → subscription record created
 
+  7. **Admin "collect payment" link** (hidden, admin-only — `feat/admin-collect-payment`):
+     - `POST /admin/users/:userId/payment-request` (behind `requireAdmin`) creates a HOSTED Stripe Checkout Session (`mode: 'payment'`, custom inline `price_data` amount, metadata `type: 'manual_payment'`) and returns its `url` for the admin to send to the customer. Backed by `paymentRequestService` + the `payment_requests` table.
+     - **Collect-only**: paying it marks the `payment_requests` row `paid` (via the same `checkout.session.completed` webhook, routed by `metadata.type` BEFORE the subscription path) and **never** touches `users.topup_balance` — it bills for replies credited separately by hand. Optional `topupPurchaseId` links a request to the grant it collects for ("granted but unpaid" reporting).
+     - Reconciliation backstop: a 15-min sweep (`paymentRequestService.reconcilePending`, wired in `index.ts`) re-queries Stripe for aged `pending` rows so a missed webhook still settles the ledger. Independent of the self-service top-up engine.
+
 - **Webhook Events**:
-  - `checkout.session.completed` - subscription started
+  - `checkout.session.completed` - subscription started, OR (when `metadata.type === 'manual_payment'`) marks an admin collect-payment request `paid`
   - `customer.subscription.created` - safety net for race with checkout
   - `customer.subscription.updated` - plan changed (also writes new `planId` resolved from `priceId`)
   - `customer.subscription.deleted` - canceled
