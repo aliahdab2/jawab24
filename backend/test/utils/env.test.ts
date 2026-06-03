@@ -87,6 +87,36 @@ describe('validateEnv', () => {
         expect(mod.env.STRIPE_PUBLISHABLE_KEY).toBeUndefined();
     });
 
+    // A production env that satisfies the other prod refines (so these tests
+    // isolate the STRIPE_WEBHOOK_SECRET guard).
+    const prodEnv: Record<string, string> = {
+        ...validEnv,
+        NODE_ENV: 'production',
+        REDIS_PASSWORD: 'a-strong-redis-password',
+        RESEND_API_KEY: 're_test_key',
+    };
+
+    it('should throw in production when Stripe is configured but STRIPE_WEBHOOK_SECRET is missing', async () => {
+        process.env = { ...prodEnv, STRIPE_SECRET_KEY: 'sk_live_123' };
+
+        await expect(import('../../src/utils/env')).rejects.toThrow('STRIPE_WEBHOOK_SECRET');
+    });
+
+    it('should accept production when both STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are set', async () => {
+        process.env = { ...prodEnv, STRIPE_SECRET_KEY: 'sk_live_123', STRIPE_WEBHOOK_SECRET: 'whsec_123' };
+
+        const mod = await import('../../src/utils/env');
+        expect(mod.env.STRIPE_WEBHOOK_SECRET).toBe('whsec_123');
+    });
+
+    it('should accept production without Stripe configured (no secret key, no webhook secret)', async () => {
+        process.env = { ...prodEnv };
+
+        const mod = await import('../../src/utils/env');
+        expect(mod.env.NODE_ENV).toBe('production');
+        expect(mod.env.STRIPE_WEBHOOK_SECRET).toBeUndefined();
+    });
+
     it('should default NODE_ENV to development', async () => {
         const { NODE_ENV, ...envWithout } = validEnv;
         process.env = { ...envWithout };
