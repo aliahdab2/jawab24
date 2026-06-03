@@ -234,7 +234,6 @@ function CheckoutPage() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
-  const [isNetworkError, setIsNetworkError] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [showMobileSummary, setShowMobileSummary] = useState(false);
 
@@ -288,7 +287,6 @@ function CheckoutPage() {
 
     setSessionLoading(true);
     setError('');
-    setIsNetworkError(false);
 
     try {
       const response = await api.post('/payment/create-subscription-intent', {
@@ -301,7 +299,7 @@ function CheckoutPage() {
     } catch (err: unknown) {
       captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session' } });
 
-      const axiosErr = err as { response?: { data?: { code?: string; error?: string; message?: string } } };
+      const axiosErr = err as { response?: { data?: { code?: string; error?: string | boolean; message?: string } } };
       const errorData = axiosErr.response?.data;
 
       if (errorData?.code === 'SANCTIONED_GEO_BLOCK' || errorData?.code === 'GEO_VERIFICATION_REQUIRED') {
@@ -317,8 +315,12 @@ function CheckoutPage() {
 
       const axiosCode = (err as { code?: string }).code;
       const isNetwork = axiosCode === 'ERR_NETWORK' || axiosCode === 'ECONNABORTED';
-      setError(isNetwork ? t('errorNetwork') : (errorData?.error || errorData?.message || t('errorInitiateCheckout')));
-      setIsNetworkError(isNetwork);
+      // The API error contract sometimes carries a boolean `error: true` flag
+      // alongside a string `message` (e.g. the rate limiter). Use `error` as the
+      // display string ONLY when it actually is a string, else fall back to
+      // `message` — otherwise setError(true) would render an empty banner.
+      const serverMessage = (typeof errorData?.error === 'string' ? errorData.error : undefined) ?? errorData?.message;
+      setError(isNetwork ? t('errorNetwork') : (serverMessage || t('errorInitiateCheckout')));
     } finally {
       setSessionLoading(false);
     }
@@ -423,24 +425,26 @@ function CheckoutPage() {
           {error && (
             <div className="max-w-4xl mx-auto mb-6 p-4 alert-error border rounded-2xl text-start text-sm">
               <p>{error}</p>
-              {isNetworkError && (
-                <div className="flex gap-3 mt-3">
-                  <Button
-                    size="sm"
-                    onClick={() => createSession()}
-                    disabled={sessionLoading}
-                  >
-                    {sessionLoading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : t('retry')}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => router.push('/pricing')}
-                  >
-                    {t('cancel')}
-                  </Button>
-                </div>
-              )}
+              {/* Manual retry for ALL errors (not just network): the auto-create
+                  fires once per config and never auto-retries, so without this a
+                  generic server error (500/429) would strand the user on a dead
+                  banner with no recovery but a full page reload. */}
+              <div className="flex gap-3 mt-3">
+                <Button
+                  size="sm"
+                  onClick={() => createSession()}
+                  disabled={sessionLoading}
+                >
+                  {sessionLoading ? <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" /> : t('retry')}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => router.push('/pricing')}
+                >
+                  {t('cancel')}
+                </Button>
+              </div>
             </div>
           )}
 

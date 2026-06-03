@@ -339,6 +339,39 @@ describe('CheckoutPage', () => {
     });
   });
 
+  // ─── Error-UX fast-follows (post-#240 review) ──────────
+  it('shows a working retry on a generic (non-network) server error', async () => {
+    // Regression: a generic 500 used to render no retry button (only network
+    // errors did), stranding the user on a dead banner. Retry must now show and
+    // re-issue the intent for any error.
+    mockApiPost.mockRejectedValueOnce({ response: { data: { error: 'Server error' } } });
+    mockApiPost.mockResolvedValueOnce({ data: { clientSecret: 'pi_test_123_secret', type: 'payment' } });
+
+    render(<CheckoutPage />);
+
+    const retryButton = await screen.findByText('Try Again');
+    expect(intentCallCount()).toBe(1);
+
+    fireEvent.click(retryButton);
+
+    await waitFor(() => expect(intentCallCount()).toBe(2));
+  });
+
+  it('renders the server message (not an empty banner) when the error uses a boolean error flag', async () => {
+    // Regression: `{ error: true, message }` (e.g. the rate limiter) used to make
+    // `errorData.error || errorData.message` resolve to boolean true → setError(true)
+    // → empty <p>. The message must be shown instead.
+    mockApiPost.mockRejectedValue({
+      response: { data: { error: true, message: 'Rate limit exceeded. Please try again later.', code: 'RATE_LIMIT_EXCEEDED' } },
+    });
+
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Rate limit exceeded. Please try again later.')).toBeInTheDocument();
+    });
+  });
+
   // ─── Every outcome fires the intent exactly once ───────
   // The loop bug meant a non-terminal outcome could re-fire createSession on
   // every render. Lock in the once-only invariant across all branches.
