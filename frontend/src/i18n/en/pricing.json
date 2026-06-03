@@ -99,7 +99,7 @@
   "faq4Q": "What payment methods do you accept?",
   "faq4A": "We accept all major credit and debit cards (Visa, Mastercard, American Express) through Stripe, our secure payment provider.",
   "faq5Q": "What happens when I reach my smart reply limit?",
-  "faq5A": "When you reach your monthly smart reply limit, preset replies continue working normally. Only AI-powered smart replies pause until your limit resets at the start of the next billing cycle. You can upgrade anytime for more replies.",
+  "faq5A": "When you reach your monthly smart reply limit, preset replies continue working normally. If you have a top-up balance, AI-powered smart replies also keep running — top-up replies never expire and are used automatically once your plan quota runs out. Without a top-up balance, smart replies pause until your limit resets at the start of the next billing cycle. You can add a top-up or upgrade anytime for more replies.",
   "planTabs": "Plan selection",
   "manageOnWeb": "Manage your subscription on our website",
   "downgradeToFreeTitle": "Cancel Subscription?",

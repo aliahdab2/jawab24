@@ -243,6 +243,8 @@ describe('getNotificationBucket', () => {
     expect(getNotificationBucket(notif({ id: 'a', type: 'payment_failed', createdAt: hoursAgo(0) }))).toBeNull();
     expect(getNotificationBucket(notif({ id: 'b', type: 'page_disconnected', createdAt: hoursAgo(0) }))).toBeNull();
     expect(getNotificationBucket(notif({ id: 'c', type: 'provider_failover', createdAt: hoursAgo(0) }))).toBeNull();
+    // The reassuring "now using your top-up balance" notice is account-health too.
+    expect(getNotificationBucket(notif({ id: 'd', type: 'ai_usage_on_topup', createdAt: hoursAgo(0) }))).toBeNull();
   });
 });
 
@@ -254,6 +256,14 @@ describe('pinAccountHealthFirst', () => {
       notif({ id: 'lead', type: 'new_lead', createdAt: hoursAgo(3) }),
     ];
     expect(pinAccountHealthFirst(items).map(n => n.id)).toEqual(['payment', 'comment', 'lead']);
+  });
+
+  it('pins the unread "on top-up" notice so the merchant sees that replies are still flowing', () => {
+    const items = [
+      notif({ id: 'comment', type: 'new_comment', createdAt: hoursAgo(0) }),
+      notif({ id: 'onTopup', type: 'ai_usage_on_topup', createdAt: hoursAgo(2), read: false }),
+    ];
+    expect(pinAccountHealthFirst(items).map(n => n.id)).toEqual(['onTopup', 'comment']);
   });
 
   it('does not pin a READ account-health alert — it keeps its chronological spot', () => {

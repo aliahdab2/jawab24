@@ -62,6 +62,7 @@
     "avgSpeed": "Avg Speed",
     "quotaWarning": "{percent}% of plan",
     "quotaExceeded": "Over limit",
+    "onTopup": "On top-up",
     "smartRepliesTooltip": "Replies sent in the last 30 days.",
     "planUsageTooltip": "Smart replies used this billing period. Resets at the start of your next cycle.",
     "resetsOn": "Resets {date}",

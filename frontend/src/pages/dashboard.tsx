@@ -535,6 +535,7 @@ const DashboardPage: NextPageWithLayout = () => {
           resetsAt={usage.currentPeriod?.end}
           planSlug={usage.subscription?.plan?.slug}
           userEmail={user?.email}
+          topupBalance={usage.topup?.balance}
         />
       )}
 
@@ -552,6 +553,7 @@ const DashboardPage: NextPageWithLayout = () => {
           used: usage.aiReplies.used,
           percentUsed: usage.aiReplies.percentUsed,
           limit: usage.aiReplies.limit,
+          topupBalance: usage.topup?.balance,
         } : undefined}
         quotaResetsAt={usage?.currentPeriod?.end}
       />

@@ -62,8 +62,8 @@ const CHANNEL_AWARE_TYPES = new Set<string>(['flagged_reply', 'skipped_reply']);
  */
 export const ACCOUNT_HEALTH_TYPES = new Set<string>([
     'payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed',
-    'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'auto_reply_paused_billing',
-    'page_disconnected', 'kb_gap', 'provider_failover',
+    'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'ai_usage_on_topup',
+    'auto_reply_paused_billing', 'page_disconnected', 'kb_gap', 'provider_failover',
 ]);
 
 /**
