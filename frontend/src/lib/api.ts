@@ -607,6 +607,42 @@ export const adminApi = {
     };
   },
 
+  // Generate a hosted Stripe payment link for a custom amount to collect money
+  // for an already-granted manual credit. Collect-only — paying it never credits
+  // reply balance. Returns the URL to send to the customer.
+  createPaymentRequest: async (userId: string, data: {
+    amountCents: number;
+    currency?: string;
+    description?: string;
+    topupPurchaseId?: string;
+  }) => {
+    const response = await api.post(`/admin/users/${userId}/payment-request`, data);
+    return response.data as {
+      success: boolean;
+      data?: { id: string; url: string; amountCents: number; currency: string };
+      error?: string;
+    };
+  },
+
+  // History of a customer's collect-payment requests.
+  listPaymentRequests: async (userId: string) => {
+    const response = await api.get(`/admin/users/${userId}/payment-requests`);
+    return response.data as {
+      success: boolean;
+      data?: Array<{
+        id: string;
+        amountCents: number;
+        currency: string;
+        description: string | null;
+        status: 'pending' | 'paid' | 'expired';
+        stripeCheckoutSessionId: string;
+        createdAt: string;
+        paidAt: string | null;
+      }>;
+      error?: string;
+    };
+  },
+
   // Get all plans (for admin dropdown)
   getPlans: async () => {
     const response = await api.get('/admin/plans');

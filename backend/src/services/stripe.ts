@@ -16,6 +16,17 @@ function requireStripe(): Stripe {
     return stripe;
 }
 
+/**
+ * Resolve a Stripe expandable reference (e.g. `payment_intent`, `customer`) to
+ * its id. Stripe returns these as either the id string or the expanded object;
+ * this collapses both to the id (or null). Avoids repeating the
+ * `typeof x === 'string' ? x : x?.id` idiom at every call site.
+ */
+export function stripeRefId(ref: string | { id: string } | null | undefined): string | null {
+    if (!ref) return null;
+    return typeof ref === 'string' ? ref : ref.id;
+}
+
 export class DemoUserStripeError extends Error {
     code = 'DEMO_USER_STRIPE_BLOCKED';
     constructor() {
@@ -96,6 +107,71 @@ export class StripeService {
         );
 
         return session;
+    }
+
+    /**
+     * Create a HOSTED Stripe Checkout Session for a one-time CUSTOM amount —
+     * the "collect payment" link an admin generates and sends to a customer to
+     * pay for replies already credited by hand. Returns the hosted `url`.
+     *
+     * `mode: 'payment'` (one-time, not a subscription) so the completion event
+     * is `checkout.session.completed` — already subscribed on the webhook
+     * endpoint — with no dependency on `payment_intent.succeeded`. The amount is
+     * inline `price_data` (no Stripe Product/Price needed). Metadata carries
+     * `type: 'manual_payment'` + `paymentRequestId` so the webhook routes it to
+     * the collect-only handler and NEVER credits reply balance.
+     *
+     * Sanctions: enforced by Stripe at payment time on the hosted page. The
+     * usual `request.geo` check doesn't apply here — this is admin-initiated, so
+     * the requester geo is the admin's, not the paying customer's.
+     */
+    async createManualPaymentSession(params: {
+        userId: string;
+        userEmail: string;
+        amountCents: number;
+        currency: string;
+        description: string;
+        paymentRequestId: string;
+        successUrl: string;
+        cancelUrl: string;
+    }): Promise<Stripe.Checkout.Session> {
+        assertNotDemoUser(params.userEmail);
+        const s = requireStripe();
+        const metadata = {
+            type: 'manual_payment',
+            userId: params.userId,
+            paymentRequestId: params.paymentRequestId,
+        };
+        return s.checkout.sessions.create(
+            {
+                customer_email: params.userEmail,
+                client_reference_id: params.userId,
+                mode: 'payment',
+                locale: 'auto',
+                billing_address_collection: 'auto',
+                line_items: [
+                    {
+                        quantity: 1,
+                        price_data: {
+                            currency: params.currency,
+                            unit_amount: params.amountCents,
+                            product_data: {
+                                name: params.description || 'Smart Reply credit',
+                            },
+                        },
+                    },
+                ],
+                success_url: params.successUrl,
+                cancel_url: params.cancelUrl,
+                // Mirror metadata onto the PaymentIntent so refund/audit tooling
+                // that inspects the charge can also see this is a manual payment.
+                payment_intent_data: { metadata },
+                metadata,
+            },
+            // One session per payment-request row — re-issuing the same request
+            // returns the same session instead of spawning duplicates.
+            { idempotencyKey: `manual_payment:${params.paymentRequestId}` }
+        );
     }
 
     /**

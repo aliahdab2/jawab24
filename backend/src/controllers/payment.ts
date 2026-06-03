@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { stripeService, DemoUserStripeError } from '../services/stripe';
+import { stripeService, stripeRefId, DemoUserStripeError } from '../services/stripe';
+import { paymentRequestService } from '../services/paymentRequest';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
 import { subscriptions, users, plans, settings, stripeWebhookEvents } from '../db/schema';
@@ -754,6 +755,15 @@ export class PaymentController {
         session: Stripe.Checkout.Session,
         request: FastifyRequest
     ) {
+        // Admin "collect payment" link (mode: 'payment', no plan/subscription).
+        // Route to the collect-only handler BEFORE the subscription path — it has
+        // no planId, so the guard below would otherwise reject it. It only marks
+        // the payment_requests row paid; it NEVER credits reply balance.
+        if (session.metadata?.type === 'manual_payment') {
+            await this.handleManualPaymentComplete(session, request);
+            return;
+        }
+
         const userId = session.client_reference_id || session.metadata?.userId;
         const planId = session.metadata?.planId;
         const stripeSubscriptionId = session.subscription as string;
@@ -840,6 +850,34 @@ export class PaymentController {
         if (insertedSub) {
             await this.sendSubscriptionWelcomeEmail(userId, planId, stripeSubscription, request);
         }
+    }
+
+    /**
+     * Collect-only completion for an admin-generated payment link. Marks the
+     * payment_requests row `paid` (status-gated → idempotent on webhook replay)
+     * and does NOTHING else — the replies it bills for were credited separately
+     * by hand, so this never touches users.topup_balance.
+     */
+    private async handleManualPaymentComplete(
+        session: Stripe.Checkout.Session,
+        request: FastifyRequest
+    ) {
+        // Only credit-collect on an actually-paid session (a 'complete' session can
+        // still be unpaid for async methods); reconciliation covers the rest.
+        if (session.payment_status !== 'paid') {
+            request.log.info(
+                { sessionId: session.id, paymentStatus: session.payment_status },
+                'Manual payment session completed but not yet paid — leaving pending'
+            );
+            return;
+        }
+        const paymentIntentId = stripeRefId(session.payment_intent);
+
+        const flipped = await paymentRequestService.markPaid(session.id, paymentIntentId);
+        request.log.info(
+            { sessionId: session.id, paymentIntentId, paymentRequestId: session.metadata?.paymentRequestId, flipped },
+            flipped ? 'Manual payment request marked paid' : 'Manual payment request already settled (webhook replay)'
+        );
     }
 
     /**

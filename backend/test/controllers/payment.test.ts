@@ -20,6 +20,8 @@ vi.mock('../../src/services/stripe', () => ({
             this.name = 'DemoUserStripeError';
         }
     },
+    stripeRefId: (ref: string | { id: string } | null | undefined) =>
+        !ref ? null : typeof ref === 'string' ? ref : ref.id,
 }));
 
 vi.mock('../../src/db', () => ({
@@ -79,6 +81,12 @@ vi.mock('../../src/services/notifications', () => ({
     },
 }));
 
+vi.mock('../../src/services/paymentRequest', () => ({
+    paymentRequestService: {
+        markPaid: vi.fn().mockResolvedValue(true),
+    },
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         frontendUrl: 'http://localhost:3001',
@@ -103,6 +111,7 @@ vi.mock('drizzle-orm', () => ({
 import { PaymentController } from '../../src/controllers/payment';
 import { stripeService } from '../../src/services/stripe';
 import { db } from '../../src/db';
+import { paymentRequestService } from '../../src/services/paymentRequest';
 
 describe('Payment Controller', () => {
     let paymentController: PaymentController;
@@ -1057,6 +1066,41 @@ describe('Payment Controller', () => {
                 expect.objectContaining({ amount: '15.00', currency: 'USD' }),
                 expect.any(Object)
             );
+        });
+    });
+
+    describe('handleCheckoutComplete — manual_payment routing (collect-only)', () => {
+        const request = { log: { info: vi.fn(), error: vi.fn() } } as unknown as FastifyRequest;
+
+        it('routes a paid manual_payment session to markPaid and skips subscription logic', async () => {
+            const session = {
+                id: 'cs_manual_1',
+                payment_status: 'paid',
+                payment_intent: 'pi_manual_1',
+                metadata: { type: 'manual_payment', userId: 'user_1', paymentRequestId: 'pr_1' },
+            } as unknown as Stripe.Checkout.Session;
+
+            // Private handler is the routing point under test.
+            await (paymentController as unknown as { handleCheckoutComplete(s: Stripe.Checkout.Session, r: FastifyRequest): Promise<void> })
+                .handleCheckoutComplete(session, request);
+
+            expect(paymentRequestService.markPaid).toHaveBeenCalledWith('cs_manual_1', 'pi_manual_1');
+            // Must NOT fall through to the subscription path.
+            expect(stripeService.getSubscription).not.toHaveBeenCalled();
+        });
+
+        it('does NOT mark paid when the manual_payment session is not yet paid', async () => {
+            const session = {
+                id: 'cs_manual_2',
+                payment_status: 'unpaid',
+                metadata: { type: 'manual_payment', userId: 'user_1', paymentRequestId: 'pr_2' },
+            } as unknown as Stripe.Checkout.Session;
+
+            await (paymentController as unknown as { handleCheckoutComplete(s: Stripe.Checkout.Session, r: FastifyRequest): Promise<void> })
+                .handleCheckoutComplete(session, request);
+
+            expect(paymentRequestService.markPaid).not.toHaveBeenCalled();
+            expect(stripeService.getSubscription).not.toHaveBeenCalled();
         });
     });
 });

@@ -715,6 +715,61 @@ export const topupPurchases = pgTable('topup_purchases', {
     };
 });
 
+// 12b. Payment Requests Table — admin-generated "collect payment" links.
+//
+// An admin generates a Stripe Checkout link for a CUSTOM amount and sends it to
+// a customer to collect money for replies that were ALREADY credited manually
+// (e.g. an urgent top-up granted by hand). This is collect-only and money-side
+// ONLY: paying a request marks it 'paid' and NEVER touches users.topup_balance
+// (the replies were credited separately). It is therefore independent of the
+// self-service top-up engine — no reply quantity, no crediting logic.
+//
+// Hosted Stripe Checkout (mode: 'payment') is used so the completion event is
+// `checkout.session.completed` — already subscribed on the webhook endpoint —
+// avoiding any dependency on `payment_intent.succeeded`.
+//
+// Status lifecycle: 'pending' (created with the Checkout Session)
+//   → 'paid' (checkout.session.completed webhook, status='pending'-gated)
+//   → 'expired' (optional future sweep for abandoned links).
+export const paymentRequests = pgTable('payment_requests', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull().default('usd'),
+    // What the customer is paying for — shown on the Stripe Checkout page and in
+    // the admin history (e.g. "10,000 Smart Replies granted 2026-06-03").
+    description: varchar('description', { length: 500 }),
+    // Hosted Checkout Session the customer pays through. Unique so a replayed
+    // checkout.session.completed webhook finds the row and no-ops.
+    stripeCheckoutSessionId: varchar('stripe_checkout_session_id', { length: 255 }).unique().notNull(),
+    // Resolved on completion — audit/reconciliation trail.
+    stripePaymentIntentId: varchar('stripe_payment_intent_id', { length: 255 }),
+    // Optional link to the manual top-up this request collects money for. Lets
+    // admins report "granted but unpaid" — a paid request reconciles against the
+    // grant it bills. Nullable: a freestanding "pay $X" request needn't link one.
+    topupPurchaseId: uuid('topup_purchase_id').references(() => topupPurchases.id, { onDelete: 'set null' }),
+    status: varchar('status', { length: 16 }).notNull().default('pending'),
+    // Admin who created the request (audit trail; complements admin_audit_logs).
+    createdByAdminUserId: uuid('created_by_admin_user_id').references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    paidAt: timestamp('paid_at'),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}, (table) => {
+    return {
+        userIdIdx: index('idx_payment_requests_user_id').on(table.userId),
+        statusIdx: index('idx_payment_requests_status').on(table.status),
+        statusCheck: check(
+            'payment_requests_status_check',
+            sql`${table.status} IN ('pending', 'paid', 'expired')`
+        ),
+        // Collect-only: a positive amount is always required.
+        amountPositiveCheck: check(
+            'payment_requests_amount_positive',
+            sql`${table.amountCents} > 0`
+        ),
+    };
+});
+
 // 13. Usage Logs Table - Detailed usage events for audit
 export const usageLogs = pgTable('usage_logs', {
     id: uuid('id').defaultRandom().primaryKey(),
