@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
@@ -324,10 +324,25 @@ function CheckoutPage() {
     }
   }, [plan, isAuthenticated, clientSecret, sessionLoading, isSanctioned, billingInterval, router, t]);
 
+  // Auto-create the payment intent once per (plan, interval) config. We gate on
+  // a ref keyed by that config instead of depending on the `createSession`
+  // callback: createSession's identity changes on every render (t, router and
+  // sessionLoading are in its deps), so an effect depending on it re-ran every
+  // render — and after any non-geo/non-email failure (429, 500, network) it
+  // retried instantly with no backoff, flooding /payment/create-*-intent until
+  // the rate limiter tripped. The key ref fires the auto-create exactly once per
+  // config; errors do not reset it. Retries are manual via the retry button.
+  const autoCreateKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || isSanctioned || clientSecret || !plan) return;
+    const key = `${plan.id}:${billingInterval}`;
+    if (autoCreateKeyRef.current === key) return;
+    autoCreateKeyRef.current = key;
     createSession();
-  }, [createSession, isAuthenticated]);
+    // createSession is intentionally omitted — auto-creation is gated by the
+    // config key above; depending on it would reintroduce the re-fire loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, isSanctioned, clientSecret, plan, billingInterval]);
 
   const handleLogin = () => {
     if (!plan) return;

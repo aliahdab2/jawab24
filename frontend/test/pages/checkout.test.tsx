@@ -286,6 +286,119 @@ describe('CheckoutPage', () => {
     });
   });
 
+  // ─── Runaway retry-loop regression ─────────────────────
+  // A non-geo / non-email failure used to re-fire the auto-create effect on
+  // every error: `sessionLoading` toggling changed createSession's identity,
+  // which re-ran the effect, which retried instantly with no backoff — flooding
+  // /payment/create-*-intent until the rate limiter (10/min) tripped. The fix
+  // moved the in-flight guard to a ref that's absent from the callback deps, so
+  // the auto-create fires exactly once and retries are manual.
+  it('does not auto-retry the intent after a generic error (regression)', async () => {
+    mockApiPost.mockRejectedValue({
+      response: { data: { error: 'Card declined' } },
+    });
+
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Card declined')).toBeInTheDocument();
+    });
+
+    // Give any erroneous re-fire loop room to manifest across async cycles.
+    for (let i = 0; i < 5; i++) {
+      await act(async () => { await Promise.resolve(); });
+    }
+
+    const intentCalls = mockApiPost.mock.calls.filter(
+      ([url]) => url === '/payment/create-subscription-intent'
+    );
+    expect(intentCalls).toHaveLength(1);
+  });
+
+  it('allows a manual retry via "Try Again" after a network error', async () => {
+    // Network errors surface a manual retry button; auto-retry stays suppressed
+    // but the explicit retry must issue a fresh intent request.
+    mockApiPost.mockRejectedValueOnce({ code: 'ERR_NETWORK' });
+    mockApiPost.mockResolvedValueOnce({
+      data: { clientSecret: 'pi_test_123_secret', type: 'payment' },
+    });
+
+    render(<CheckoutPage />);
+
+    const retryButton = await screen.findByText('Try Again');
+    expect(
+      mockApiPost.mock.calls.filter(([url]) => url === '/payment/create-subscription-intent')
+    ).toHaveLength(1);
+
+    fireEvent.click(retryButton);
+
+    await waitFor(() => {
+      expect(
+        mockApiPost.mock.calls.filter(([url]) => url === '/payment/create-subscription-intent')
+      ).toHaveLength(2);
+    });
+  });
+
+  // ─── Every outcome fires the intent exactly once ───────
+  // The loop bug meant a non-terminal outcome could re-fire createSession on
+  // every render. Lock in the once-only invariant across all branches.
+  const intentCallCount = () =>
+    mockApiPost.mock.calls.filter(([url]) => url === '/payment/create-subscription-intent').length;
+
+  const flushAsyncCycles = async () => {
+    for (let i = 0; i < 5; i++) {
+      await act(async () => { await Promise.resolve(); });
+    }
+  };
+
+  it('creates the intent exactly once on success (no double-fire)', async () => {
+    const { container } = render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(container.querySelector('[data-testid="payment-element"]')).toBeTruthy();
+    }, { timeout: 3000 });
+
+    await flushAsyncCycles();
+    expect(intentCallCount()).toBe(1);
+  });
+
+  it('blocks after exactly one attempt on backend SANCTIONED_GEO_BLOCK', async () => {
+    mockApiPost.mockRejectedValue({ response: { data: { code: 'SANCTIONED_GEO_BLOCK' } } });
+
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
+    });
+    await flushAsyncCycles();
+    expect(intentCallCount()).toBe(1);
+  });
+
+  it('blocks after exactly one attempt on backend GEO_VERIFICATION_REQUIRED', async () => {
+    mockApiPost.mockRejectedValue({ response: { data: { code: 'GEO_VERIFICATION_REQUIRED' } } });
+
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
+    });
+    await flushAsyncCycles();
+    expect(intentCallCount()).toBe(1);
+  });
+
+  it('redirects once and does not retry on EMAIL_REQUIRED', async () => {
+    mockApiPost.mockRejectedValue({ response: { data: { code: 'EMAIL_REQUIRED' } } });
+
+    render(<CheckoutPage />);
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('/complete-profile?redirect='));
+    });
+    await flushAsyncCycles();
+    expect(intentCallCount()).toBe(1);
+    expect(mockPush).toHaveBeenCalledTimes(1);
+  });
+
   it('should show loading state while session is being created', async () => {
     mockApiPost.mockImplementation(() => new Promise(() => {})); // never resolves
 

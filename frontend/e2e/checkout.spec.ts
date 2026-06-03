@@ -165,6 +165,43 @@ test.describe('Checkout Page', () => {
     await page.waitForTimeout(3000);
     await expect(page.locator('text=Something went wrong')).not.toBeVisible();
   });
+
+  test('does not retry the payment intent in a loop when it errors', async ({ page }) => {
+    // Regression guard for the runaway retry loop: a non-geo/non-email intent
+    // failure used to re-fire the auto-create effect on every render (its
+    // callback identity changed each render), hammering the endpoint with no
+    // backoff. We count hits on the intent endpoint and assert exactly one.
+    //
+    // Geo + plan are re-stubbed here with base-URL-agnostic globs so the test
+    // holds whether the API is same-origin (/api) or an absolute host. These
+    // are registered after the beforeEach catch-all, so they take precedence.
+    await page.route('**/geo/check', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ sanctioned: false, country: 'US' }) })
+    );
+    await page.route('**/plans/*', (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: MOCK_PLAN }) })
+    );
+
+    let intentCalls = 0;
+    await page.route('**/payment/create-subscription-intent', async (route) => {
+      intentCalls += 1;
+      await route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Temporary server error' }),
+      });
+    });
+
+    await page.goto('/en/checkout?planId=starter');
+
+    // One attempt completes and surfaces the error banner.
+    await expect(page.locator('[class*="alert-error"]').first()).toBeVisible({ timeout: 15000 });
+
+    // Give any runaway retry loop several seconds to manifest.
+    await page.waitForTimeout(4000);
+
+    expect(intentCalls).toBe(1);
+  });
 });
 
 test.describe('Checkout Page - unauthenticated user', () => {
