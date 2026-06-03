@@ -40,6 +40,8 @@ vi.mock('../../src/db/schema', () => ({
 const getCheckoutSession = vi.fn();
 vi.mock('../../src/services/stripe', () => ({
     stripeService: { getCheckoutSession: (...a: unknown[]) => getCheckoutSession(...a) },
+    stripeRefId: (ref: string | { id: string } | null | undefined) =>
+        !ref ? null : typeof ref === 'string' ? ref : ref.id,
 }));
 
 const captureError = vi.fn();
@@ -101,7 +103,7 @@ describe('paymentRequestService.reconcilePending', () => {
         expect(r.errors).toBe(0);
     });
 
-    it('counts a paid session the webhook already settled as stillPending, not paid', async () => {
+    it('counts a paid session the webhook already settled as alreadySettled, not paid', async () => {
         resultQueue = [
             [{ stripeCheckoutSessionId: 'cs_1' }],
             [], // markPaid → no row flipped (already paid by webhook)
@@ -110,13 +112,14 @@ describe('paymentRequestService.reconcilePending', () => {
 
         const r = await paymentRequestService.reconcilePending();
         expect(r.paid).toBe(0);
-        expect(r.stillPending).toBe(1);
+        expect(r.alreadySettled).toBe(1);
+        expect(r.stillPending).toBe(0);
     });
 
     it('marks an expired Stripe session expired', async () => {
         resultQueue = [
             [{ stripeCheckoutSessionId: 'cs_1' }],
-            undefined, // expired update().where() resolves (no returning)
+            [{ id: 'pr_1' }], // expired transition → status-gated update returns the flipped row
         ];
         getCheckoutSession.mockResolvedValueOnce({ payment_status: 'unpaid', status: 'expired' });
 

@@ -16,6 +16,17 @@ function requireStripe(): Stripe {
     return stripe;
 }
 
+/**
+ * Resolve a Stripe expandable reference (e.g. `payment_intent`, `customer`) to
+ * its id. Stripe returns these as either the id string or the expanded object;
+ * this collapses both to the id (or null). Avoids repeating the
+ * `typeof x === 'string' ? x : x?.id` idiom at every call site.
+ */
+export function stripeRefId(ref: string | { id: string } | null | undefined): string | null {
+    if (!ref) return null;
+    return typeof ref === 'string' ? ref : ref.id;
+}
+
 export class DemoUserStripeError extends Error {
     code = 'DEMO_USER_STRIPE_BLOCKED';
     constructor() {

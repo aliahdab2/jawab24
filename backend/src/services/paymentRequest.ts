@@ -1,8 +1,33 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import { db } from '../db';
 import { paymentRequests } from '../db/schema';
-import { stripeService } from './stripe';
+import { stripeService, stripeRefId } from './stripe';
 import { captureError } from '../utils/sentryHelpers';
+
+/**
+ * Status-gated terminal transition for a payment-request row, keyed by its
+ * Stripe Checkout Session id. The `status = 'pending'` gate is the load-bearing
+ * idempotency invariant: a webhook replay, or the reconcile sweep racing the
+ * webhook, matches 0 rows and no-ops — and an already-paid row is never
+ * reverted. Returns true only on the first (real) transition. Mirrors the
+ * sibling top-up service's `transitionPendingStripeTopup` pattern.
+ */
+async function transitionPending(
+    stripeCheckoutSessionId: string,
+    set: Partial<typeof paymentRequests.$inferInsert>,
+): Promise<boolean> {
+    const updated = await db
+        .update(paymentRequests)
+        .set({ ...set, updatedAt: new Date() })
+        .where(
+            and(
+                eq(paymentRequests.stripeCheckoutSessionId, stripeCheckoutSessionId),
+                eq(paymentRequests.status, 'pending'),
+            ),
+        )
+        .returning({ id: paymentRequests.id });
+    return updated.length > 0;
+}
 
 export interface CreatePaymentRequestInput {
     /** Caller supplies the id so it can double as the Stripe idempotency key + metadata. */
@@ -21,6 +46,8 @@ export interface ReconcilePaymentRequestsResult {
     scanned: number;
     /** rows marked paid because the session was paid but the webhook was missed */
     paid: number;
+    /** rows the webhook had already settled before the sweep reached them (expected, not an error) */
+    alreadySettled: number;
     /** rows marked expired (abandoned/expired Stripe session) */
     expired: number;
     /** rows still genuinely awaiting the customer */
@@ -80,22 +107,11 @@ export const paymentRequestService = {
         stripeCheckoutSessionId: string,
         stripePaymentIntentId: string | null,
     ): Promise<boolean> {
-        const updated = await db
-            .update(paymentRequests)
-            .set({
-                status: 'paid',
-                stripePaymentIntentId,
-                paidAt: new Date(),
-                updatedAt: new Date(),
-            })
-            .where(
-                and(
-                    eq(paymentRequests.stripeCheckoutSessionId, stripeCheckoutSessionId),
-                    eq(paymentRequests.status, 'pending'),
-                ),
-            )
-            .returning({ id: paymentRequests.id });
-        return updated.length > 0;
+        return transitionPending(stripeCheckoutSessionId, {
+            status: 'paid',
+            stripePaymentIntentId,
+            paidAt: new Date(),
+        });
     },
 
     /**
@@ -143,7 +159,7 @@ export const paymentRequestService = {
             .limit(limit);
 
         const result: ReconcilePaymentRequestsResult = {
-            scanned: rows.length, paid: 0, expired: 0, stillPending: 0, errors: 0,
+            scanned: rows.length, paid: 0, alreadySettled: 0, expired: 0, stillPending: 0, errors: 0,
         };
         const errorSamples: Array<{ sessionId: string; message: string }> = [];
 
@@ -152,22 +168,11 @@ export const paymentRequestService = {
             try {
                 const session = await stripeService.getCheckoutSession(sessionId);
                 if (session.payment_status === 'paid') {
-                    const pi = typeof session.payment_intent === 'string'
-                        ? session.payment_intent
-                        : session.payment_intent?.id ?? null;
-                    const flipped = await this.markPaid(sessionId, pi);
+                    const flipped = await this.markPaid(sessionId, stripeRefId(session.payment_intent));
                     if (flipped) result.paid++;
-                    else result.stillPending++; // webhook beat us to it (expected)
+                    else result.alreadySettled++; // webhook beat us to it (expected)
                 } else if (session.status === 'expired') {
-                    await db
-                        .update(paymentRequests)
-                        .set({ status: 'expired', updatedAt: new Date() })
-                        .where(
-                            and(
-                                eq(paymentRequests.stripeCheckoutSessionId, sessionId),
-                                eq(paymentRequests.status, 'pending'),
-                            ),
-                        );
+                    await transitionPending(sessionId, { status: 'expired' });
                     result.expired++;
                 } else {
                     result.stillPending++;

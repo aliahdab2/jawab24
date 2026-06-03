@@ -1,5 +1,5 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { stripeService, DemoUserStripeError } from '../services/stripe';
+import { stripeService, stripeRefId, DemoUserStripeError } from '../services/stripe';
 import { paymentRequestService } from '../services/paymentRequest';
 import { subscriptionsService } from '../services/subscriptions';
 import { db } from '../db';
@@ -871,9 +871,7 @@ export class PaymentController {
             );
             return;
         }
-        const paymentIntentId = typeof session.payment_intent === 'string'
-            ? session.payment_intent
-            : session.payment_intent?.id ?? null;
+        const paymentIntentId = stripeRefId(session.payment_intent);
 
         const flipped = await paymentRequestService.markPaid(session.id, paymentIntentId);
         request.log.info(

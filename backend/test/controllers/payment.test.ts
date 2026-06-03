@@ -20,6 +20,8 @@ vi.mock('../../src/services/stripe', () => ({
             this.name = 'DemoUserStripeError';
         }
     },
+    stripeRefId: (ref: string | { id: string } | null | undefined) =>
+        !ref ? null : typeof ref === 'string' ? ref : ref.id,
 }));
 
 vi.mock('../../src/db', () => ({
