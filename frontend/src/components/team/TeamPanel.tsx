@@ -9,6 +9,7 @@ import { captureError } from '@/lib/sentryHelpers';
 import { toast } from 'sonner';
 import { isValidEmail } from '@jawab24/shared';
 import { BRAND_ASSETS } from '@/constants/brand';
+import { getRoleBadgeColor } from '@/utils/workspaceRole';
 import type { WorkspaceRole } from '@jawab24/shared';
 
 interface MemberRow {
@@ -83,14 +84,6 @@ const ROLE_ICONS: Record<WorkspaceRole, typeof Crown> = {
   admin: Shield,
   member: User,
 };
-
-function getRoleColor(role: WorkspaceRole) {
-  switch (role) {
-    case 'owner': return 'status-warning';
-    case 'admin': return 'status-brand';
-    case 'member': return 'bg-surface-100 text-muted-foreground dark:bg-surface-800';
-  }
-}
 
 function hoursUntil(dateStr: string): number {
   const diff = new Date(dateStr).getTime() - Date.now();
@@ -437,7 +430,7 @@ export function TeamPanel() {
                   {canChangeRole ? (
                     <button
                       onClick={() => setRoleDropdown(roleDropdown === member.id ? null : member.id)}
-                      className={clsx('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-colors', getRoleColor(member.role))}
+                      className={clsx('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold transition-colors', getRoleBadgeColor(member.role))}
                       aria-label={t('changeRole')}
                     >
                       <RoleIcon className="w-3 h-3" aria-hidden="true" />
@@ -445,7 +438,7 @@ export function TeamPanel() {
                       <ChevronDown className="w-3 h-3" aria-hidden="true" />
                     </button>
                   ) : (
-                    <span className={clsx('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold', getRoleColor(member.role))}>
+                    <span className={clsx('inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold', getRoleBadgeColor(member.role))}>
                       <RoleIcon className="w-3 h-3" aria-hidden="true" />
                       {t(`role${member.role.charAt(0).toUpperCase() + member.role.slice(1)}` as 'roleOwner' | 'roleAdmin' | 'roleMember')}
                     </span>
@@ -554,7 +547,7 @@ export function TeamPanel() {
               const cap = r.charAt(0).toUpperCase() + r.slice(1);
               return (
                 <li key={r} className="flex items-start gap-3">
-                  <span className={clsx('inline-flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0', getRoleColor(r))}>
+                  <span className={clsx('inline-flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0', getRoleBadgeColor(r))}>
                     <RoleIcon className="w-3.5 h-3.5" aria-hidden="true" />
                   </span>
                   <div className="min-w-0 text-start">

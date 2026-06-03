@@ -140,7 +140,16 @@
     "leadsLast30d": "Last 30 days",
     "leadsStatusNew": "New",
     "leadsStatusContacted": "Contacted",
-    "leadsStatusConverted": "Converted"
+    "leadsStatusConverted": "Converted",
+    "membershipTitle": "Membership",
+    "noWorkspace": "No workspace",
+    "roleOwner": "Owner",
+    "roleAdmin": "Admin",
+    "roleMember": "Member",
+    "membershipOwnerLabel": "Owner of this workspace",
+    "membershipMemberOf": "Team member in {owner}'s workspace",
+    "membershipMemberCount": "{count, plural, one {# member} other {# members}}",
+    "membershipViewOwner": "View owner"
   },
   "playground": {
     "title": "Smart Reply Playground",
