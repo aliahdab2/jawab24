@@ -11,6 +11,7 @@ vi.mock('../../src/db', () => ({
         transaction: vi.fn(),
         insert: vi.fn(),
         update: vi.fn(),
+        select: vi.fn(),
     },
 }));
 
@@ -19,11 +20,21 @@ vi.mock('../../src/db/schema', () => ({
         userId: 'user_id',
         stripePaymentIntentId: 'stripe_payment_intent_id',
         status: 'status',
+        source: 'source',
+        createdAt: 'created_at',
     },
     users: {
         id: 'id',
         topupBalance: 'topup_balance',
     },
+}));
+
+vi.mock('../../src/services/stripe', () => ({
+    stripeService: { retrievePaymentIntent: vi.fn() },
+}));
+
+vi.mock('../../src/utils/sentryHelpers', () => ({
+    captureError: vi.fn(),
 }));
 
 vi.mock('../../src/config', () => ({
@@ -42,6 +53,8 @@ vi.mock('../../src/config', () => ({
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
     and: vi.fn((...conds) => ({ conds, op: 'and' })),
+    lt: vi.fn((field, value) => ({ field, value, op: 'lt' })),
+    isNotNull: vi.fn((field) => ({ field, op: 'isNotNull' })),
     sql: Object.assign(vi.fn(), { raw: vi.fn() }),
 }));
 
@@ -370,5 +383,259 @@ describe('topupService.markStripeTopupFailed', () => {
 
         expect(db.update).toHaveBeenCalledTimes(1);
         expect(set.mock.calls[0][0]).toMatchObject({ status: 'failed' });
+    });
+});
+
+describe('topupService.reverseStripeTopup', () => {
+    let db: { transaction: ReturnType<typeof vi.fn> };
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        db = (await import('../../src/db')).db as typeof db;
+    });
+
+    // update#0 = succeeded→refunded (returns creditedRow or []);
+    // then either the balance decrement (set().where() resolves, no returning)
+    // when credited, OR update#1 = pending→refunded (returns pendingRow or []).
+    function buildReverseTx(opts: { creditedRow?: { userId: string; repliesAdded: number }; pendingRow?: { id: string } }) {
+        let idx = 0;
+        return {
+            update: vi.fn(() => {
+                const i = idx++;
+                if (i === 0) {
+                    return { set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue(opts.creditedRow ? [opts.creditedRow] : []) })) })) };
+                }
+                if (opts.creditedRow) {
+                    // balance decrement: no .returning()
+                    return { set: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })) };
+                }
+                return { set: vi.fn(() => ({ where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue(opts.pendingRow ? [opts.pendingRow] : []) })) })) };
+            }),
+        };
+    }
+
+    it('claws back credits when the refunded row was already succeeded (decrement balance)', async () => {
+        const tx = buildReverseTx({ creditedRow: { userId: 'user_1', repliesAdded: 5000 } });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.reverseStripeTopup('pi_succeeded_then_refunded');
+
+        expect(result).toEqual({ reversed: true, decremented: true });
+        // flip succeeded→refunded + decrement balance
+        expect(tx.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('marks a still-pending refunded row refunded WITHOUT decrementing (never credited)', async () => {
+        const tx = buildReverseTx({ creditedRow: undefined, pendingRow: { id: 'row_1' } });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.reverseStripeTopup('pi_pending_then_refunded');
+
+        expect(result).toEqual({ reversed: true, decremented: false });
+        // succeeded-attempt (0 rows) + pending flip
+        expect(tx.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('is a no-op on replay (already refunded / no matching row) — never double-decrements', async () => {
+        const tx = buildReverseTx({ creditedRow: undefined, pendingRow: undefined });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.reverseStripeTopup('pi_already_refunded');
+
+        expect(result).toEqual({ reversed: false, decremented: false });
+    });
+});
+
+describe('topupService.findOpenPendingStripeTopups', () => {
+    let db: { select: ReturnType<typeof vi.fn> };
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        db = (await import('../../src/db')).db as unknown as typeof db;
+    });
+
+    it('returns the open pending stripe rows for the user', async () => {
+        const rows = [{ stripePaymentIntentId: 'pi_pending', createdAt: new Date() }];
+        const where = vi.fn().mockResolvedValue(rows);
+        db.select.mockReturnValue({ from: vi.fn(() => ({ where })) });
+
+        const result = await topupService.findOpenPendingStripeTopups('user_1');
+
+        expect(result).toEqual(rows);
+    });
+});
+
+describe('topupService.reconcileStripeTopups', () => {
+    let db: { select: ReturnType<typeof vi.fn> };
+    let stripeService: { retrievePaymentIntent: ReturnType<typeof vi.fn> };
+
+    // Make db.select(...).from().where().limit() resolve to the given rows.
+    function seedPendingRows(rows: unknown[]) {
+        db.select.mockReturnValue({
+            from: vi.fn(() => ({
+                where: vi.fn(() => ({
+                    limit: vi.fn().mockResolvedValue(rows),
+                })),
+            })),
+        });
+    }
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        db = (await import('../../src/db')).db as unknown as typeof db;
+        stripeService = (await import('../../src/services/stripe')).stripeService as unknown as typeof stripeService;
+    });
+
+    // A succeeded PaymentIntent whose money is still ours: latest_charge expanded
+    // and not refunded/disputed. retrievePaymentIntent expands latest_charge, and
+    // the sweep refuses to credit on pi.status alone — so the mock must carry it.
+    const cleanCharge = { refunded: false, amount_refunded: 0, disputed: false };
+
+    it('credits a pending row whose PaymentIntent already succeeded (missed webhook)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_1', createdAt: new Date() }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'succeeded', latest_charge: cleanCharge });
+        const settleSpy = vi.spyOn(topupService, 'settleStripeTopup').mockResolvedValue({ credited: true, alreadySettled: false });
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(stripeService.retrievePaymentIntent).toHaveBeenCalledWith('pi_1');
+        expect(settleSpy).toHaveBeenCalledWith('pi_1');
+        expect(r).toMatchObject({ scanned: 1, credited: 1, failed: 0, stillPending: 0, errors: 0 });
+        settleSpy.mockRestore();
+    });
+
+    it('does NOT double-credit when the webhook already settled it (settle → credited:false)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_2', createdAt: new Date() }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'succeeded', latest_charge: cleanCharge });
+        const settleSpy = vi.spyOn(topupService, 'settleStripeTopup').mockResolvedValue({ credited: false, alreadySettled: true });
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(r).toMatchObject({ scanned: 1, credited: 0, alreadySettled: 1, stillPending: 0, errors: 0 });
+        settleSpy.mockRestore();
+    });
+
+    it('does NOT credit a succeeded PaymentIntent whose charge was refunded while pending (money returned)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_refunded', createdAt: new Date() }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({
+            status: 'succeeded',
+            latest_charge: { refunded: true, amount_refunded: 4900, disputed: false },
+        });
+        const settleSpy = vi.spyOn(topupService, 'settleStripeTopup').mockResolvedValue({ credited: true, alreadySettled: false });
+        const refundSpy = vi.spyOn(topupService, 'markStripeTopupRefunded').mockResolvedValue(undefined);
+
+        const r = await topupService.reconcileStripeTopups();
+
+        // The whole point: NEVER call settle (which credits) for refunded money.
+        expect(settleSpy).not.toHaveBeenCalled();
+        expect(refundSpy).toHaveBeenCalledWith('pi_refunded');
+        expect(r).toMatchObject({ scanned: 1, credited: 0, refunded: 1, errors: 0 });
+        settleSpy.mockRestore();
+        refundSpy.mockRestore();
+    });
+
+    it('does NOT credit a succeeded PaymentIntent whose charge is disputed (chargeback)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_disputed', createdAt: new Date() }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({
+            status: 'succeeded',
+            latest_charge: { refunded: false, amount_refunded: 0, disputed: true },
+        });
+        const settleSpy = vi.spyOn(topupService, 'settleStripeTopup').mockResolvedValue({ credited: true, alreadySettled: false });
+        const refundSpy = vi.spyOn(topupService, 'markStripeTopupRefunded').mockResolvedValue(undefined);
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(settleSpy).not.toHaveBeenCalled();
+        expect(refundSpy).toHaveBeenCalledWith('pi_disputed');
+        expect(r).toMatchObject({ scanned: 1, credited: 0, refunded: 1, errors: 0 });
+        settleSpy.mockRestore();
+        refundSpy.mockRestore();
+    });
+
+    it('refuses to credit a succeeded PaymentIntent with no expanded charge (cannot verify money is ours)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_nocharge', createdAt: new Date() }]);
+        // latest_charge missing (or an unexpanded string id) → cannot verify refund state.
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'succeeded', latest_charge: null });
+        const settleSpy = vi.spyOn(topupService, 'settleStripeTopup').mockResolvedValue({ credited: true, alreadySettled: false });
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(settleSpy).not.toHaveBeenCalled();
+        expect(r).toMatchObject({ scanned: 1, credited: 0, errors: 1 });
+        settleSpy.mockRestore();
+    });
+
+    it('aborts the sweep early after consecutive Stripe failures (degraded Stripe) instead of hammering it', async () => {
+        // 7 aged rows, every Stripe call throws → should bail after 5 consecutive errors.
+        seedPendingRows(Array.from({ length: 7 }, (_, i) => ({ stripePaymentIntentId: `pi_x${i}`, createdAt: new Date() })));
+        stripeService.retrievePaymentIntent.mockRejectedValue(new Error('Stripe 503'));
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(r.abortedEarly).toBe(true);
+        expect(r.errors).toBe(5); // stopped at the threshold, did not process all 7
+        expect(stripeService.retrievePaymentIntent).toHaveBeenCalledTimes(5);
+    });
+
+    it('marks a canceled PaymentIntent as failed', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_3', createdAt: new Date() }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'canceled' });
+        const failSpy = vi.spyOn(topupService, 'markStripeTopupFailed').mockResolvedValue(undefined);
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(failSpy).toHaveBeenCalledWith('pi_3');
+        expect(r).toMatchObject({ scanned: 1, failed: 1, credited: 0 });
+        failSpy.mockRestore();
+    });
+
+    it('leaves a recent, not-yet-confirmed PaymentIntent pending (no churn on live attempts)', async () => {
+        seedPendingRows([{ stripePaymentIntentId: 'pi_4', createdAt: new Date() }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'requires_payment_method' });
+        const failSpy = vi.spyOn(topupService, 'markStripeTopupFailed').mockResolvedValue(undefined);
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(failSpy).not.toHaveBeenCalled();
+        expect(r).toMatchObject({ scanned: 1, stillPending: 1, failed: 0 });
+        failSpy.mockRestore();
+    });
+
+    it('expires an abandoned (old, never-confirmed) PaymentIntent as failed', async () => {
+        const old = new Date(Date.now() - 48 * 3600 * 1000); // 48h ago
+        seedPendingRows([{ stripePaymentIntentId: 'pi_5', createdAt: old }]);
+        stripeService.retrievePaymentIntent.mockResolvedValue({ status: 'requires_payment_method' });
+        const failSpy = vi.spyOn(topupService, 'markStripeTopupFailed').mockResolvedValue(undefined);
+
+        const r = await topupService.reconcileStripeTopups({ abandonAfterHours: 24 });
+
+        expect(failSpy).toHaveBeenCalledWith('pi_5');
+        expect(r).toMatchObject({ scanned: 1, failed: 1 });
+        failSpy.mockRestore();
+    });
+
+    it('isolates a per-row Stripe error and continues the sweep', async () => {
+        seedPendingRows([
+            { stripePaymentIntentId: 'pi_err', createdAt: new Date() },
+            { stripePaymentIntentId: 'pi_ok', createdAt: new Date() },
+        ]);
+        stripeService.retrievePaymentIntent
+            .mockRejectedValueOnce(new Error('Stripe unreachable'))
+            .mockResolvedValueOnce({ status: 'succeeded', latest_charge: cleanCharge });
+        const settleSpy = vi.spyOn(topupService, 'settleStripeTopup').mockResolvedValue({ credited: true, alreadySettled: false });
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(r).toMatchObject({ scanned: 2, credited: 1, errors: 1 });
+        settleSpy.mockRestore();
+    });
+
+    it('no-ops cleanly when there are no aged pending rows', async () => {
+        seedPendingRows([]);
+
+        const r = await topupService.reconcileStripeTopups();
+
+        expect(stripeService.retrievePaymentIntent).not.toHaveBeenCalled();
+        expect(r).toMatchObject({ scanned: 0, credited: 0, failed: 0, stillPending: 0, errors: 0 });
     });
 });

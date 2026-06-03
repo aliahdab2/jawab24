@@ -349,6 +349,34 @@ const start = async () => {
       });
     }, 60_000);
 
+    // Stripe top-up reconciliation — every 15 min, recover `pending` top-ups
+    // whose payment_intent.succeeded webhook was missed/misconfigured (money
+    // captured by Stripe but replies not yet credited). settleStripeTopup is
+    // idempotent (status='pending' guard), so this never double-credits even
+    // running alongside the live webhook.
+    const { topupService } = await import('./services/topup');
+    const TOPUP_RECONCILE_INTERVAL_MS = 15 * 60 * 1000; // 15 min
+    const runTopupReconcile = (label: string) => {
+      topupService.reconcileStripeTopups()
+        .then(r => {
+          if (r.scanned > 0) server.log.info(r, `[TopupReconcile] ${label}`);
+          if (r.credited > 0) {
+            captureError(
+              new Error(`Top-up reconciliation credited ${r.credited} purchase(s) a missed webhook should have`),
+              '[TopupReconcile] recovered missed webhook credits',
+              { level: 'warning', tags: { cron: 'topup_reconcile' }, extra: { ...r } },
+            );
+          }
+        })
+        .catch(err => {
+          server.log.error(err, `[TopupReconcile] ${label} failed`);
+          captureError(err, `[TopupReconcile] ${label} failed`, { tags: { cron: 'topup_reconcile' }, level: 'error' });
+        });
+    };
+    setInterval(() => runTopupReconcile('scheduled sweep'), TOPUP_RECONCILE_INTERVAL_MS);
+    // First run 3 min after boot (after the webhook's fair-chance window).
+    setTimeout(() => runTopupReconcile('initial sweep'), 3 * 60 * 1000);
+
     // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms
     // Catches stock changes from sales that webhooks don't cover (inventory_levels/update)
     const { getAllActiveStores } = await import('./services/ecommerce');

@@ -94,6 +94,7 @@ vi.mock('../../src/services/topup', () => ({
         createPendingStripeTopup: vi.fn().mockResolvedValue(undefined),
         settleStripeTopup: vi.fn(),
         markStripeTopupFailed: vi.fn().mockResolvedValue(undefined),
+        reverseStripeTopup: vi.fn().mockResolvedValue({ reversed: false, decremented: false }),
     },
     UnknownTopupPackError: class UnknownTopupPackError extends Error {
         constructor(pack: string) {
@@ -516,6 +517,57 @@ describe('Payment Controller', () => {
             expect(stripeService.verifyWebhookSignature).toHaveBeenCalled();
             expect(stripeService.getSubscription).toHaveBeenCalledWith('sub_123');
             expect(mockRequest.log?.info).toHaveBeenCalledWith('Webhook received: checkout.session.completed');
+            expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+
+        // Regression (finding 1b): a refund on a top-up charge must claw back the
+        // reply credits. The charge resolves to its top-up row by PaymentIntent and
+        // short-circuits the subscription path.
+        it('reverses a top-up on charge.refunded (claws back credits)', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                type: 'charge.refunded',
+                data: { object: { id: 'ch_1', payment_intent: 'pi_topup_1', customer: 'cus_1', amount_refunded: 4900, currency: 'usd' } as any },
+            };
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            vi.mocked(topupService.reverseStripeTopup).mockResolvedValue({ reversed: true, decremented: true });
+
+            const mockDb = vi.mocked(db);
+            mockDb.insert.mockReturnValueOnce({
+                values: vi.fn().mockReturnValue({
+                    onConflictDoNothing: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ eventId: 'evt_refund' }]) }),
+                }),
+            } as any);
+            // If the subscription path were (wrongly) reached, this would be consulted.
+            const subSelect = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue({ where: vi.fn().mockReturnValue({ orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }) }) }) });
+            mockDb.select.mockImplementation(subSelect as any);
+
+            await paymentController.handleWebhook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(topupService.reverseStripeTopup).toHaveBeenCalledWith('pi_topup_1');
+            // Short-circuited: subscription lookup never ran.
+            expect(subSelect).not.toHaveBeenCalled();
+            expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+
+        // Regression (finding 1b): a chargeback must also revoke top-up credits.
+        it('reverses a top-up on charge.dispute.created', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                type: 'charge.dispute.created',
+                data: { object: { id: 'dp_1', charge: 'ch_2', payment_intent: 'pi_topup_2' } as any },
+            };
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            vi.mocked(topupService.reverseStripeTopup).mockResolvedValue({ reversed: true, decremented: true });
+
+            const mockDb = vi.mocked(db);
+            mockDb.insert.mockReturnValueOnce({
+                values: vi.fn().mockReturnValue({
+                    onConflictDoNothing: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ eventId: 'evt_dispute' }]) }),
+                }),
+            } as any);
+
+            await paymentController.handleWebhook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(topupService.reverseStripeTopup).toHaveBeenCalledWith('pi_topup_2');
             expect(mockReply.send).toHaveBeenCalledWith({ received: true });
         });
 

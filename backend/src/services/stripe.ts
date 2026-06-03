@@ -304,6 +304,23 @@ export class StripeService {
     }
 
     /**
+     * Retrieve a PaymentIntent by ID — used by the top-up reconciliation sweep
+     * to check the authoritative payment status when a webhook may have been
+     * missed (money captured but reply credit not yet applied).
+     *
+     * `latest_charge` is expanded because PaymentIntent.status alone is NOT
+     * sufficient to decide whether to credit: a refund or dispute attaches to
+     * the Charge and does NOT flip pi.status away from 'succeeded'. The sweep
+     * must inspect the charge's refunded/amount_refunded/disputed flags before
+     * crediting, or it would grant reply credits for money that was returned.
+     */
+    async retrievePaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
+        return requireStripe().paymentIntents.retrieve(paymentIntentId, {
+            expand: ['latest_charge'],
+        });
+    }
+
+    /**
      * Get Stripe Customer by ID
      */
     async getCustomer(customerId: string): Promise<Stripe.Customer> {

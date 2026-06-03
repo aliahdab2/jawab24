@@ -181,6 +181,16 @@ vi.mock('../../src/utils/swagger', () => ({
     auth: [{ bearerAuth: [] }],
 }));
 
+vi.mock('../../src/services/topup', () => ({
+    topupService: {
+        creditTopup: vi.fn().mockResolvedValue({ purchaseId: 'p1', repliesAdded: 5000, newBalance: 5000 }),
+        findOpenPendingStripeTopups: vi.fn().mockResolvedValue([]),
+    },
+    TopupUserNotFoundError: class TopupUserNotFoundError extends Error {},
+    UnknownTopupPackError: class UnknownTopupPackError extends Error {},
+    DuplicateTopupError: class DuplicateTopupError extends Error {},
+}));
+
 describe('Admin Routes', () => {
     let app: FastifyInstance;
 
@@ -230,6 +240,62 @@ describe('Admin Routes', () => {
 
     afterEach(async () => {
         await app.close();
+    });
+
+    // ---------------------------------------------------------------
+    // POST /admin/topup — double-credit guard (finding 2)
+    // ---------------------------------------------------------------
+    describe('POST /admin/topup pending-Stripe guard', () => {
+        const authHeaders = { authorization: 'Bearer admin-token' };
+
+        it('blocks a manual credit (409) when the user has an open pending Stripe top-up', async () => {
+            const { topupService } = await import('../../src/services/topup');
+            vi.mocked(topupService.findOpenPendingStripeTopups).mockResolvedValue([
+                { stripePaymentIntentId: 'pi_stuck', createdAt: new Date() },
+            ]);
+            vi.mocked(topupService.creditTopup).mockResolvedValue({ purchaseId: 'p1', repliesAdded: 5000, newBalance: 5000 } as any);
+
+            const response = await app.inject({
+                method: 'POST', url: '/admin/topup', headers: authHeaders,
+                payload: { userId: TEST_USER_ID, pack: '5k' },
+            });
+
+            expect(response.statusCode).toBe(409);
+            expect(response.json().error).toBe('PENDING_STRIPE_TOPUP');
+            // The whole point: it must NOT credit while a sweep-eligible row exists.
+            expect(topupService.creditTopup).not.toHaveBeenCalled();
+        });
+
+        it('credits when force=true even with a pending Stripe top-up (explicit operator override)', async () => {
+            const { topupService } = await import('../../src/services/topup');
+            vi.mocked(topupService.findOpenPendingStripeTopups).mockResolvedValue([
+                { stripePaymentIntentId: 'pi_stuck', createdAt: new Date() },
+            ]);
+            vi.mocked(topupService.creditTopup).mockResolvedValue({ purchaseId: 'p1', repliesAdded: 5000, newBalance: 5000 } as any);
+
+            const response = await app.inject({
+                method: 'POST', url: '/admin/topup', headers: authHeaders,
+                payload: { userId: TEST_USER_ID, pack: '5k', force: true },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(topupService.creditTopup).toHaveBeenCalledOnce();
+        });
+
+        it('credits normally when the user has no pending Stripe top-up', async () => {
+            const { topupService } = await import('../../src/services/topup');
+            vi.mocked(topupService.findOpenPendingStripeTopups).mockResolvedValue([]);
+            vi.mocked(topupService.creditTopup).mockResolvedValue({ purchaseId: 'p1', repliesAdded: 5000, newBalance: 5000 } as any);
+
+            const response = await app.inject({
+                method: 'POST', url: '/admin/topup', headers: authHeaders,
+                payload: { userId: TEST_USER_ID, pack: '5k' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            expect(topupService.findOpenPendingStripeTopups).toHaveBeenCalledWith(TEST_USER_ID);
+            expect(topupService.creditTopup).toHaveBeenCalledOnce();
+        });
     });
 
     // ---------------------------------------------------------------

@@ -831,6 +831,13 @@ export class PaymentController {
                         );
                         break;
 
+                    case 'charge.dispute.created':
+                        await this.handleChargeDisputed(
+                            event.data.object as Stripe.Dispute,
+                            request
+                        );
+                        break;
+
                     default:
                         request.log.info({ eventType: event.type }, 'Unhandled webhook event type');
                 }
@@ -1353,6 +1360,12 @@ export class PaymentController {
      * separate `customer.subscription.deleted` event if applicable.
      */
     private async handleChargeRefunded(charge: Stripe.Charge, request: FastifyRequest) {
+        // A refunded charge may belong to a one-time top-up (not a subscription).
+        // Reverse it FIRST — clawing back the reply credits — and stop here if it
+        // matched a top-up row, so we don't also run the subscription path.
+        const refundedTopup = await this.reverseTopupForCharge(charge, request, 'refund');
+        if (refundedTopup) return;
+
         const stripeCustomerId = typeof charge.customer === 'string'
             ? charge.customer
             : charge.customer?.id;
@@ -1394,6 +1407,47 @@ export class PaymentController {
             },
             { deepLink: '/settings' }
         ).catch(err => request.log.error({ err, chargeId: charge.id }, 'Failed to send refund_processed notification'));
+    }
+
+    /**
+     * Dispute (chargeback) on a charge. The bank pulls the funds immediately
+     * pending resolution, so for a digital-credit product the money-safe move is
+     * to revoke the top-up credits now (same as a refund). If the dispute is
+     * later won, credits can be re-granted via /admin/topup.
+     */
+    private async handleChargeDisputed(dispute: Stripe.Dispute, request: FastifyRequest) {
+        const charge: Pick<Stripe.Charge, 'id' | 'payment_intent'> = {
+            id: typeof dispute.charge === 'string' ? dispute.charge : dispute.charge.id,
+            payment_intent: dispute.payment_intent ?? null,
+        };
+        await this.reverseTopupForCharge(charge, request, 'dispute');
+        // No subscription-side dispute handling today; nothing else to do.
+    }
+
+    /**
+     * Resolve a refunded/disputed charge to its top-up row (by PaymentIntent) and
+     * reverse it. Returns true if a top-up row matched (so the caller can stop),
+     * false otherwise (the charge wasn't a top-up — caller falls through). Shared
+     * by the refund and dispute webhook handlers.
+     */
+    private async reverseTopupForCharge(
+        charge: Pick<Stripe.Charge, 'id' | 'payment_intent'>,
+        request: FastifyRequest,
+        kind: 'refund' | 'dispute',
+    ): Promise<boolean> {
+        const paymentIntentId = typeof charge.payment_intent === 'string'
+            ? charge.payment_intent
+            : charge.payment_intent?.id;
+        if (!paymentIntentId) return false;
+
+        const { reversed, decremented } = await topupService.reverseStripeTopup(paymentIntentId);
+        if (!reversed) return false;
+
+        request.log.info(
+            { chargeId: charge.id, paymentIntentId, kind, creditsClawedBack: decremented },
+            'Top-up reversed from charge ' + kind
+        );
+        return true;
     }
 }
 
