@@ -140,7 +140,16 @@
     "leadsLast30d": "آخر 30 يوماً",
     "leadsStatusNew": "جديد",
     "leadsStatusContacted": "تم التواصل",
-    "leadsStatusConverted": "تحوّل لعميل"
+    "leadsStatusConverted": "تحوّل لعميل",
+    "membershipTitle": "العضوية",
+    "noWorkspace": "لا توجد مساحة عمل",
+    "roleOwner": "مالك",
+    "roleAdmin": "مشرف",
+    "roleMember": "عضو",
+    "membershipOwnerLabel": "مالك مساحة العمل هذه",
+    "membershipMemberOf": "عضو فريق في مساحة عمل {owner}",
+    "membershipMemberCount": "{count, plural, zero {لا أعضاء} one {عضو واحد} two {عضوان} few {# أعضاء} many {# عضواً} other {# عضو}}",
+    "membershipViewOwner": "عرض المالك"
   },
   "playground": {
     "title": "ساحة تجريب الذكاء الاصطناعي",

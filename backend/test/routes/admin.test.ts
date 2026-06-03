@@ -34,7 +34,9 @@ function createMockChain() {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
+        groupBy: vi.fn().mockResolvedValue([]),
         limit: vi.fn().mockResolvedValue([]),
     };
 }
@@ -44,7 +46,9 @@ vi.mock('../../src/db', () => {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         leftJoin: vi.fn().mockReturnThis(),
+        innerJoin: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockReturnThis(),
+        groupBy: vi.fn().mockResolvedValue([]),
         limit: vi.fn().mockResolvedValue([]),
     });
     const dbMock: any = {
@@ -77,6 +81,8 @@ vi.mock('drizzle-orm', () => ({
     sql: Object.assign(vi.fn(), {
         // tagged-template usage in admin.ts uses sql`...`
         raw: vi.fn(),
+        // sql.join(...) builds the workspace-id IN (...) fragment for lead stats
+        join: vi.fn(),
     }),
     isNotNull: vi.fn(),
     isNull: vi.fn(),
@@ -94,6 +100,7 @@ vi.mock('../../src/db/schema', () => ({
     instagramMedia: { pageId: 'pageId', triggerReply: 'triggerReply' },
     kbChunks: { pageId: 'pageId', kbVersion: 'kbVersion' },
     kbGaps: { id: 'id', pageId: 'pageId', queryText: 'qt', detectedIntent: 'di', occurrenceCount: 'oc', firstSeenAt: 'fsa', lastSeenAt: 'lsa', resolved: 'resolved' },
+    workspaces: { id: 'id', name: 'name', ownerId: 'ownerId', createdAt: 'createdAt' },
     workspaceMembers: { workspaceId: 'workspaceId', userId: 'userId', role: 'role' },
     leads: { id: 'id', pageId: 'pageId', status: 'status', createdAt: 'createdAt' },
     settings: { id: 'id', userId: 'userId', aiModel: 'aiModel' },
@@ -898,12 +905,26 @@ describe('Admin Routes', () => {
                 where: vi.fn().mockResolvedValue([{ count: 6 }]),
             };
 
-            // Seventh + eighth: lead stats — workspace memberships + owned pages.
-            // Empty owned-page set short-circuits the leads aggregation query.
-            const workspaceMembersChain = {
+            // Seventh: workspace memberships (joined to workspace + owner). The user owns this
+            // workspace, so isOwner is derived true. Member count comes from the grouped query next.
+            const membershipChain = {
                 from: vi.fn().mockReturnThis(),
-                where: vi.fn().mockResolvedValue([]),
+                innerJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockResolvedValue([
+                    {
+                        workspaceId: 'ws-1', workspaceName: 'Test Workspace', role: 'owner',
+                        ownerId: TEST_USER_ID, ownerName: 'Test User', ownerEmail: 'user@test.com',
+                    },
+                ]),
             };
+            // Eighth: member count per workspace (grouped).
+            const memberCountChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockResolvedValue([{ workspaceId: 'ws-1', count: 3 }]),
+            };
+            // Ninth: owned pages for lead stats. Empty set short-circuits the leads aggregation.
             const ownedPagesChain = {
                 from: vi.fn().mockReturnThis(),
                 where: vi.fn().mockResolvedValue([]),
@@ -917,7 +938,8 @@ describe('Admin Routes', () => {
                 .mockReturnValueOnce(usageChain as any)
                 .mockReturnValueOnce(fbPostsChain as any)
                 .mockReturnValueOnce(igMediaChain as any)
-                .mockReturnValueOnce(workspaceMembersChain as any)
+                .mockReturnValueOnce(membershipChain as any)
+                .mockReturnValueOnce(memberCountChain as any)
                 .mockReturnValueOnce(ownedPagesChain as any);
 
             const response = await app.inject({
@@ -936,6 +958,98 @@ describe('Admin Routes', () => {
             expect(body.data.usage.aiRepliesCount).toBe(42);
             expect(body.data.usage.postRepliesCount).toBe(10);
             expect(body.data.usage.limit).toBe(1000);
+            // Workspace membership: user owns this workspace.
+            expect(body.data.workspaces).toHaveLength(1);
+            expect(body.data.workspaces[0].name).toBe('Test Workspace');
+            expect(body.data.workspaces[0].role).toBe('owner');
+            expect(body.data.workspaces[0].isOwner).toBe(true);
+            expect(body.data.workspaces[0].memberCount).toBe(3);
+        });
+
+        it('marks a user who only joined someone else\'s workspace as a team member', async () => {
+            const { db } = await import('../../src/db');
+
+            const userChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([
+                    { id: TEST_USER_ID, email: 'member@test.com', name: 'Team Member', facebookId: null, createdAt: '2025-01-01' },
+                ]),
+            };
+            const settingsChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+            };
+            // No own subscription / pages — this is the confusing "empty customer" case.
+            const subChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+            };
+            const pagesChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([]),
+            };
+            const usageChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                leftJoin: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockReturnThis(),
+                limit: vi.fn().mockResolvedValue([]),
+            };
+            // Membership: belongs to a workspace owned by a DIFFERENT user → isOwner false.
+            const membershipChain = {
+                from: vi.fn().mockReturnThis(),
+                innerJoin: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                orderBy: vi.fn().mockResolvedValue([
+                    {
+                        workspaceId: 'ws-2', workspaceName: "Owner's Workspace", role: 'member',
+                        ownerId: TEST_PLAN_ID, ownerName: 'Workspace Owner', ownerEmail: 'owner@test.com',
+                    },
+                ]),
+            };
+            const memberCountChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockReturnThis(),
+                groupBy: vi.fn().mockResolvedValue([{ workspaceId: 'ws-2', count: 2 }]),
+            };
+            const ownedPagesChain = {
+                from: vi.fn().mockReturnThis(),
+                where: vi.fn().mockResolvedValue([]),
+            };
+
+            vi.mocked(db.select)
+                .mockReturnValueOnce(userChain as any)
+                .mockReturnValueOnce(settingsChain as any)
+                .mockReturnValueOnce(subChain as any)
+                .mockReturnValueOnce(pagesChain as any)
+                .mockReturnValueOnce(usageChain as any)
+                .mockReturnValueOnce(membershipChain as any)
+                .mockReturnValueOnce(memberCountChain as any)
+                .mockReturnValueOnce(ownedPagesChain as any);
+
+            const response = await app.inject({
+                method: 'GET',
+                url: `/admin/users/${TEST_USER_ID}`,
+                headers: { authorization: 'Bearer valid-token' },
+            });
+
+            expect(response.statusCode).toBe(200);
+            const body = JSON.parse(response.payload);
+            expect(body.data.pages).toHaveLength(0);
+            expect(body.data.workspaces).toHaveLength(1);
+            expect(body.data.workspaces[0].isOwner).toBe(false);
+            expect(body.data.workspaces[0].role).toBe('member');
+            expect(body.data.workspaces[0].ownerId).toBe(TEST_PLAN_ID);
+            expect(body.data.workspaces[0].ownerName).toBe('Workspace Owner');
         });
 
         it('returns 404 when user does not exist', async () => {

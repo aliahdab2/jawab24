@@ -5,7 +5,7 @@ import { authenticate, requireAdmin, AuthenticatedRequest } from '../middleware/
 import { isAllowedAiModel } from '@jawab24/shared';
 import { clearAiModelCache } from '../services/aiModelResolver';
 import { db } from '../db';
-import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, emailUnsubscribes, leadDigestSends, emailSends, posts, instagramMedia, leads, workspaceMembers, settings } from '../db/schema';
+import { users, subscriptions, plans, adminAuditLogs, pages, usage, kbChunks, kbGaps, waitlistEmails, waitlistEmailSends, emailUnsubscribes, leadDigestSends, emailSends, posts, instagramMedia, leads, workspaces, workspaceMembers, settings } from '../db/schema';
 import { stripeService } from '../services/stripe';
 import { paymentRequestService } from '../services/paymentRequest';
 import { eq, ilike, desc, and, gte, lte, sql, isNotNull, isNull, inArray } from 'drizzle-orm';
@@ -368,11 +368,55 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                         last30d: 0,
                         byStatus: { new: 0, contacted: 0, converted: 0 },
                     };
-                    const workspaceIdsRows = await db
-                        .select({ workspaceId: workspaceMembers.workspaceId })
+                    // Workspace memberships joined to each workspace + its owner, so the admin can
+                    // see which workspace(s) this user belongs to and whether they own one or merely
+                    // joined someone else's. The user being viewed is only referenced via the
+                    // WHERE on workspace_members, so `users` joins unambiguously as the owner here.
+                    // workspaceIds (below) also feeds the lead-stats query.
+                    const membershipRows = await db
+                        .select({
+                            workspaceId: workspaces.id,
+                            workspaceName: workspaces.name,
+                            role: workspaceMembers.role,
+                            ownerId: workspaces.ownerId,
+                            ownerName: users.name,
+                            ownerEmail: users.email,
+                        })
                         .from(workspaceMembers)
-                        .where(eq(workspaceMembers.userId, userId));
-                    const workspaceIds = workspaceIdsRows.map(r => r.workspaceId);
+                        .innerJoin(workspaces, eq(workspaceMembers.workspaceId, workspaces.id))
+                        .innerJoin(users, eq(workspaces.ownerId, users.id))
+                        .where(eq(workspaceMembers.userId, userId))
+                        .orderBy(workspaces.createdAt);
+                    const workspaceIds = membershipRows.map(r => r.workspaceId);
+
+                    // Member count per workspace — single grouped query, no N+1.
+                    const memberCounts = new Map<string, number>();
+                    if (workspaceIds.length > 0) {
+                        const countRows = await db
+                            .select({
+                                workspaceId: workspaceMembers.workspaceId,
+                                count: sql<number>`count(*)::int`,
+                            })
+                            .from(workspaceMembers)
+                            .where(inArray(workspaceMembers.workspaceId, workspaceIds))
+                            .groupBy(workspaceMembers.workspaceId);
+                        for (const r of countRows) {
+                            memberCounts.set(r.workspaceId, r.count);
+                        }
+                    }
+
+                    // isOwner is derived from the workspace's owner_id FK (authoritative), not the
+                    // membership role string, so the "owner vs team member" label can't drift.
+                    const workspacesPayload = membershipRows.map(r => ({
+                        id: r.workspaceId,
+                        name: r.workspaceName,
+                        role: r.role as 'owner' | 'admin' | 'member',
+                        ownerId: r.ownerId,
+                        ownerName: r.ownerName,
+                        ownerEmail: r.ownerEmail,
+                        isOwner: r.ownerId === userId,
+                        memberCount: memberCounts.get(r.workspaceId) ?? 1,
+                    }));
 
                     const ownedPageIdsRows = await db
                         .select({ id: pages.id })
@@ -437,6 +481,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                                 limit: subscription?.maxAiRepliesPerMonth || null,
                             },
                             leads: leadStats,
+                            workspaces: workspacesPayload,
                         },
                     });
                 } catch (error) {
