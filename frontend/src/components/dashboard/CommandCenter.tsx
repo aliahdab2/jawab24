@@ -19,6 +19,10 @@ interface CommandCenterProps {
     used: number;
     percentUsed: number;
     limit: number | null;
+    /** Non-expiring top-up balance. When the plan quota is maxed but this is
+     *  > 0, Smart Replies keep sending from it — so the badge reads "on top-up"
+     *  rather than the alarming red "over limit". */
+    topupBalance?: number;
   };
   /** ISO string — end of current billing period; shown as "resets {date}" under the
    *  primary tile so merchants understand the quota is per-period, not all-time. */
@@ -72,6 +76,10 @@ export function CommandCenter({
   // Determine quota severity for the Smart Replies metric
   const quotaPercent = quota?.limit ? quota.percentUsed : 0;
   const isOverLimit = quotaPercent >= 100;
+  // Past the plan wall but covered by top-up balance — Smart Replies still send,
+  // so treat it as a calm "on top-up" state, not a red "over limit" error.
+  const onTopup = isOverLimit && (quota?.topupBalance ?? 0) > 0;
+  const showOverLimit = isOverLimit && !onTopup;
   const isWarning = quotaPercent > 75 && !isOverLimit;
 
   // Primary tile shows plan usage when the merchant has a quota — that's the
@@ -104,18 +112,21 @@ export function CommandCenter({
       ? tDash('last30Days')
       : null;
 
-  // Quota badge: only when approaching / over limit. Overlimit takes precedence.
+  // Quota badge: only when approaching / over limit. On-top-up takes precedence
+  // over over-limit (replies are still flowing), which takes precedence over warning.
   let quotaBadge: React.ReactNode = null;
   if (hasQuota && quotaPercent > 75) {
     quotaBadge = (
       <Badge
-        variant={isOverLimit ? 'error' : 'warning'}
+        variant={onTopup ? 'info' : showOverLimit ? 'error' : 'warning'}
         size="sm"
         className="mt-1"
       >
-        {isOverLimit
-          ? tDash('commandCenter.quotaExceeded')
-          : tDash('commandCenter.quotaWarning', { percent: Math.round(quotaPercent) })}
+        {onTopup
+          ? tDash('commandCenter.onTopup')
+          : showOverLimit
+            ? tDash('commandCenter.quotaExceeded')
+            : tDash('commandCenter.quotaWarning', { percent: Math.round(quotaPercent) })}
       </Badge>
     );
   }
@@ -125,14 +136,14 @@ export function CommandCenter({
       label: primaryLabel,
       value: primaryValue,
       icon: Sparkles,
-      borderColor: isOverLimit ? 'border-s-red-500' : isWarning ? 'border-s-amber-500' : 'border-s-brand-500',
-      iconBg: isOverLimit ? 'icon-bg-red-light' : isWarning ? 'icon-bg-amber-light' : 'icon-bg-brand-light',
+      borderColor: showOverLimit ? 'border-s-red-500' : isWarning ? 'border-s-amber-500' : 'border-s-brand-500',
+      iconBg: showOverLimit ? 'icon-bg-red-light' : isWarning ? 'icon-bg-amber-light' : 'icon-bg-brand-light',
       iconColor: '',
       badge: quotaBadge,
       tooltip: primaryTooltip,
       subtext: primarySubtext ?? undefined,
       progressPercent: hasQuota ? Math.min(100, quotaPercent) : undefined,
-      progressBarClass: isOverLimit ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-brand-500',
+      progressBarClass: showOverLimit ? 'bg-red-500' : isWarning ? 'bg-amber-500' : 'bg-brand-500',
     },
     {
       label: tDash('commandCenter.repliedToday'),

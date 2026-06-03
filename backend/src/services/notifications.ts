@@ -71,6 +71,7 @@ export type NotificationType =
     | 'provider_failover'
     | 'ai_usage_warning_80'
     | 'ai_usage_limit_reached'
+    | 'ai_usage_on_topup'
     | 'auto_reply_paused_billing'
     | 'refund_processed'
     | 'new_lead';
@@ -204,6 +205,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'You\'ve hit your limit of {limit} Smart Replies this month. Post Replies and away/greeting messages keep working — but comments and DMs outside those rules now receive a generic fallback. Upgrade to resume Smart Replies.',
             ar: 'لقد وصلت إلى الحد الأقصى البالغ {limit} رد ذكي هذا الشهر. تستمر ردود البوست ورسائل الترحيب/الغياب في العمل — لكن التعليقات والرسائل خارج هذه القواعد ستتلقى رداً عاماً. قم بالترقية لاستئناف الردود الذكية.',
+        },
+    },
+    ai_usage_on_topup: {
+        titles: { en: 'You\'re now using your top-up balance', ar: 'ردودك مستمرة من رصيدك الإضافي' },
+        bodies: {
+            en: 'You\'ve used all {limit} Smart Replies in your monthly plan — no interruption. Smart Replies keep running from your top-up balance ({balance} left).',
+            ar: 'استهلكت كامل ردودك الذكية الـ{limit} في باقتك الشهرية، والخدمة مستمرة دون انقطاع — تتابع الردود الذكية العمل من رصيدك الإضافي (المتبقّي {balance} رد).',
         },
     },
     auto_reply_paused_billing: {

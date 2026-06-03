@@ -16,6 +16,12 @@ interface AiUsageWarningBannerProps {
     planSlug?: string;
     /** Current user's email — pre-fills the WhatsApp message in the top-up modal. */
     userEmail?: string;
+    /**
+     * Non-expiring top-up reply balance (usage.topup.balance). When the plan
+     * quota is exhausted but this is > 0, Smart Replies keep flowing from it —
+     * so the banner shows a calm "on top-up" notice instead of the red wall.
+     */
+    topupBalance?: number;
 }
 
 /**
@@ -24,35 +30,48 @@ interface AiUsageWarningBannerProps {
  *
  * - Hidden below 80% or for unlimited plans (limit === null).
  * - Amber warning at 80–99% — dismissible for 24h.
- * - Red critical banner at >=100% — not dismissible (auto-reply is paused).
+ * - Info banner at >=100% WITH a top-up balance — Smart Replies still send
+ *   from top-up, so this is reassuring, not alarming, and dismissible for 24h.
+ * - Red critical banner at >=100% with NO top-up balance — not dismissible
+ *   (Smart Replies are genuinely paused).
  */
-export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail }: AiUsageWarningBannerProps) {
+export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail, topupBalance }: AiUsageWarningBannerProps) {
     const tSub = useTranslations('subscription');
     const locale = useLocale();
 
     const { used, limit, percentUsed } = aiReplies;
-    const isLimitReached = limit !== null && percentUsed >= 100;
+    const limitReached = limit !== null && percentUsed >= 100;
+    // Top-up balance keeps Smart Replies running past the plan wall — a positive
+    // balance turns the "limit reached" state into a calm informational one.
+    const onTopup = limitReached && (topupBalance ?? 0) > 0;
+    const isCritical = limitReached && !onTopup;
     const isWarning = limit !== null && percentUsed >= 80 && percentUsed < 100;
 
-    // Separate dismiss key per severity so hitting the limit re-shows even if
-    // the user dismissed the 80% warning earlier in the period.
-    const { dismissed, dismiss } = useTimedDismiss({
-        key: 'aiUsageWarning80DismissedAt',
-        durationMs: 24 * 60 * 60 * 1000,
-    });
+    // Separate dismiss keys per state so each re-shows independently: hitting the
+    // limit re-shows even if the 80% warning was dismissed, and the top-up notice
+    // (no action needed) can be dismissed without affecting the warning.
+    const warning = useTimedDismiss({ key: 'aiUsageWarning80DismissedAt', durationMs: 24 * 60 * 60 * 1000 });
+    const topupNotice = useTimedDismiss({ key: 'aiUsageOnTopupDismissedAt', durationMs: 24 * 60 * 60 * 1000 });
 
-    if (limit === null || (!isWarning && !isLimitReached)) return null;
-    if (isWarning && dismissed) return null;
+    if (limit === null || (!isWarning && !limitReached)) return null;
+    if (isWarning && warning.dismissed) return null;
+    if (onTopup && topupNotice.dismissed) return null;
 
     const resetDate = formatQuotaResetDate(resetsAt, locale);
 
-    const palette = isLimitReached
+    const palette = isCritical
         ? 'bg-rose-50 text-rose-900 border-rose-200 border-s-rose-500 dark:bg-rose-900 dark:text-rose-200 dark:border-rose-700/60'
-        : 'bg-amber-50 text-amber-900 border-amber-200 border-s-amber-500 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700/60';
+        : onTopup
+            ? 'bg-sky-50 text-sky-900 border-sky-200 border-s-sky-500 dark:bg-sky-900/40 dark:text-sky-200 dark:border-sky-700/60'
+            : 'bg-amber-50 text-amber-900 border-amber-200 border-s-amber-500 dark:bg-amber-900/40 dark:text-amber-200 dark:border-amber-700/60';
 
-    const iconBg = isLimitReached
+    const iconBg = isCritical
         ? 'bg-rose-200/50 text-rose-600 dark:bg-rose-800/40 dark:text-rose-400'
-        : 'bg-amber-200/50 text-amber-700 dark:bg-amber-800/40 dark:text-amber-400';
+        : onTopup
+            ? 'bg-sky-200/50 text-sky-700 dark:bg-sky-800/40 dark:text-sky-400'
+            : 'bg-amber-200/50 text-amber-700 dark:bg-amber-800/40 dark:text-amber-400';
+
+    const StateIcon = onTopup ? Sparkles : AlertTriangle;
 
     return (
         <Card
@@ -62,23 +81,29 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail 
             )}
             padding="none"
             data-testid="ai-usage-warning-banner"
-            data-severity={isLimitReached ? 'critical' : 'warning'}
+            data-severity={isCritical ? 'critical' : onTopup ? 'topup' : 'warning'}
         >
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 p-4 sm:p-5">
                 <div className={clsx('w-10 h-10 rounded-lg flex items-center justify-center shrink-0', iconBg)}>
-                    <AlertTriangle className="w-5 h-5" aria-hidden="true" />
+                    <StateIcon className="w-5 h-5" aria-hidden="true" />
                 </div>
 
                 <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm sm:text-base leading-tight">
-                        {isLimitReached ? tSub('limitBanner.reachedTitle') : tSub('limitBanner.warningTitle')}
+                        {onTopup
+                            ? tSub('limitBanner.onTopupTitle')
+                            : isCritical
+                                ? tSub('limitBanner.reachedTitle')
+                                : tSub('limitBanner.warningTitle')}
                     </p>
                     <p className="text-xs sm:text-sm opacity-80 mt-1 inline-flex items-center gap-1 flex-wrap">
                         <span>
-                            {tSub('limitBanner.usage', {
-                                used: used.toLocaleString(locale),
-                                limit: limit.toLocaleString(locale),
-                            })}
+                            {onTopup
+                                ? tSub('limitBanner.onTopupUsage', { balance: (topupBalance ?? 0).toLocaleString(locale) })
+                                : tSub('limitBanner.usage', {
+                                    used: used.toLocaleString(locale),
+                                    limit: limit.toLocaleString(locale),
+                                })}
                             {resetDate && (
                                 <>
                                     {' · '}
@@ -96,10 +121,11 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail 
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                    {/* Customize-fallback shortcut surfaces only at the wall — at 80% the merchant
-                        should still upgrade rather than configure the post-limit message. Visible on
+                    {/* Customize-fallback shortcut surfaces only when Smart Replies are
+                        genuinely paused (no top-up). On top-up the fallback never fires,
+                        so prompting the merchant to configure it would mislead. Visible on
                         iOS too (informational, not a billing action). */}
-                    {isLimitReached && (
+                    {isCritical && (
                         <Link href="/settings#limit-fallback-message">
                             <Button
                                 variant="secondary"
@@ -122,19 +148,23 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail 
                         variant="primary"
                         size="sm"
                     />
-                    <UpgradeCTA className="block">
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={<Sparkles className="w-4 h-4" />}
-                        >
-                            {tSub('upgradePlan')}
-                        </Button>
-                    </UpgradeCTA>
-                    {isWarning && (
+                    {/* On top-up the merchant is covered — no upsell pressure; the plan
+                        upgrade only shows when approaching or genuinely past the wall. */}
+                    {!onTopup && (
+                        <UpgradeCTA className="block">
+                            <Button
+                                variant="secondary"
+                                size="sm"
+                                icon={<Sparkles className="w-4 h-4" />}
+                            >
+                                {tSub('upgradePlan')}
+                            </Button>
+                        </UpgradeCTA>
+                    )}
+                    {(isWarning || onTopup) && (
                         <button
                             type="button"
-                            onClick={dismiss}
+                            onClick={isWarning ? warning.dismiss : topupNotice.dismiss}
                             className="text-xs font-semibold opacity-70 hover:opacity-100 underline px-2 py-1"
                             aria-label={tSub('limitBanner.dismissLabel')}
                         >

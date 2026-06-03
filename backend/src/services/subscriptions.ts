@@ -5,6 +5,7 @@ import { plansService } from './plans';
 import { redis } from '../lib/redis';
 import { notificationService } from './notifications';
 import { captureError } from '../utils/sentryHelpers';
+import type { NotificationType } from './notifications';
 import type { Subscription, Plan, Usage, UsageSummary, SubscriptionStatus, LimitCheckResult } from '@jawab24/shared';
 
 /**
@@ -28,6 +29,28 @@ export function computeCrossedAiThresholds(
         const boundary = (t / 100) * limit;
         return oldUsed < boundary && newUsed >= boundary;
     });
+}
+
+/**
+ * Pick the notification to send for a newly-crossed AI-usage threshold.
+ *
+ * The 100% boundary is the plan-quota wall, NOT the point where replies stop.
+ * When the merchant holds a top-up balance, Smart Replies keep flowing from it
+ * (canUseAiReplies falls through to top-up), so the alarming "limit reached —
+ * upgrade to resume" message would be false. Send the reassuring
+ * `ai_usage_on_topup` instead. Only when there's no top-up balance does hitting
+ * 100% actually pause Smart Replies → `ai_usage_limit_reached`.
+ *
+ * Pure function — exported for unit testing.
+ */
+export function resolveAiUsageNotificationType(
+    threshold: AiUsageThreshold,
+    topupBalance: number,
+): NotificationType {
+    if (threshold === 100) {
+        return topupBalance > 0 ? 'ai_usage_on_topup' : 'ai_usage_limit_reached';
+    }
+    return 'ai_usage_warning_80';
 }
 
 /**
@@ -533,12 +556,14 @@ export const subscriptionsService = {
                 }
                 if (!firstCrossing) continue;
 
-                const type = threshold === 100 ? 'ai_usage_limit_reached' : 'ai_usage_warning_80';
-                await notificationService.sendTemplateNotification(userId, type, {
-                    used: String(newUsed),
-                    limit: String(limit),
-                    percent: String(threshold),
-                });
+                // At the 100% wall, the message depends on whether a top-up
+                // balance is keeping Smart Replies alive — read it only then.
+                const topupBalance = threshold === 100 ? await this.getTopupBalance(userId) : 0;
+                const type = resolveAiUsageNotificationType(threshold, topupBalance);
+                const variables: Record<string, string> = type === 'ai_usage_on_topup'
+                    ? { limit: limit.toLocaleString('en-US'), balance: topupBalance.toLocaleString('en-US') }
+                    : { used: String(newUsed), limit: String(limit), percent: String(threshold) };
+                await notificationService.sendTemplateNotification(userId, type, variables);
             }
         } catch (err) {
             captureError(err, 'Failed to dispatch AI usage threshold notification', {

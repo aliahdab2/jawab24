@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCrossedAiThresholds, AI_USAGE_THRESHOLDS } from '../../src/services/subscriptions';
+import { computeCrossedAiThresholds, resolveAiUsageNotificationType, AI_USAGE_THRESHOLDS } from '../../src/services/subscriptions';
 
 describe('computeCrossedAiThresholds', () => {
     it('returns empty when limit is null (unlimited plan)', () => {
@@ -61,5 +61,27 @@ describe('computeCrossedAiThresholds', () => {
 
     it('exposes the threshold constants in ascending order', () => {
         expect([...AI_USAGE_THRESHOLDS]).toEqual([80, 100]);
+    });
+});
+
+describe('resolveAiUsageNotificationType', () => {
+    it('sends the reassuring top-up notice at 100% when a top-up balance exists', () => {
+        // Replies keep flowing from top-up — the "limit reached / upgrade" copy would be false.
+        expect(resolveAiUsageNotificationType(100, 10000)).toBe('ai_usage_on_topup');
+        expect(resolveAiUsageNotificationType(100, 1)).toBe('ai_usage_on_topup');
+    });
+
+    it('sends the limit-reached notice at 100% when there is no top-up balance', () => {
+        expect(resolveAiUsageNotificationType(100, 0)).toBe('ai_usage_limit_reached');
+    });
+
+    it('treats a negative (refunded) top-up balance as no balance at 100%', () => {
+        // topup_balance may go negative after a partial-pack refund (anti-abuse design).
+        expect(resolveAiUsageNotificationType(100, -50)).toBe('ai_usage_limit_reached');
+    });
+
+    it('always sends the 80% warning regardless of top-up balance', () => {
+        expect(resolveAiUsageNotificationType(80, 0)).toBe('ai_usage_warning_80');
+        expect(resolveAiUsageNotificationType(80, 10000)).toBe('ai_usage_warning_80');
     });
 });
