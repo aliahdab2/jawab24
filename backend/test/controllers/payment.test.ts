@@ -12,6 +12,8 @@ vi.mock('../../src/services/stripe', () => ({
         cancelSubscriptionImmediately: vi.fn(),
         cancelSubscription: vi.fn(),
         updateSubscriptionPrice: vi.fn(),
+        findOrCreateCustomer: vi.fn(),
+        createTopupPaymentIntent: vi.fn(),
     },
     DemoUserStripeError: class DemoUserStripeError extends Error {
         code = 'DEMO_USER_STRIPE_BLOCKED';
@@ -87,11 +89,33 @@ vi.mock('../../src/services/paymentRequest', () => ({
     },
 }));
 
+vi.mock('../../src/services/topup', () => ({
+    topupService: {
+        createPendingStripeTopup: vi.fn().mockResolvedValue(undefined),
+        settleStripeTopup: vi.fn(),
+        markStripeTopupFailed: vi.fn().mockResolvedValue(undefined),
+    },
+    UnknownTopupPackError: class UnknownTopupPackError extends Error {
+        constructor(pack: string) {
+            super(`Unknown top-up pack: ${pack}`);
+            this.name = 'UnknownTopupPackError';
+        }
+    },
+}));
+
 vi.mock('../../src/config', () => ({
     config: {
         frontendUrl: 'http://localhost:3001',
         stripe: {
             webhookSecret: 'whsec_test',
+        },
+        topup: {
+            packs: {
+                '5k': { repliesAdded: 5000, priceCents: 4900 },
+                '10k': { repliesAdded: 10000, priceCents: 7900 },
+            },
+            currency: 'usd',
+            whatsappNumber: '',
         },
         demo: {
             enabled: false,
@@ -110,6 +134,7 @@ vi.mock('drizzle-orm', () => ({
 // Import after mocking
 import { PaymentController } from '../../src/controllers/payment';
 import { stripeService } from '../../src/services/stripe';
+import { topupService } from '../../src/services/topup';
 import { db } from '../../src/db';
 import { paymentRequestService } from '../../src/services/paymentRequest';
 
@@ -948,6 +973,177 @@ describe('Payment Controller', () => {
             expect(mockReply.send).toHaveBeenCalledWith(
                 expect.objectContaining({ code: 'SAME_PLAN' })
             );
+        });
+    });
+
+    // ── createTopupIntent ─────────────────────────────────────────────────────
+    describe('createTopupIntent', () => {
+        beforeEach(() => {
+            mockRequest = {
+                body: { pack: '5k' },
+                user: { userId: 'user_123' },
+                geo: { country: 'US' }, // allowed geo for the sanctions gate
+                log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+            };
+        });
+
+        it('returns 401 when not authenticated', async () => {
+            mockRequest.user = undefined;
+            await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
+            expect(mockReply.status).toHaveBeenCalledWith(401);
+        });
+
+        it('blocks a sanctioned jurisdiction with 403 before any Stripe call', async () => {
+            mockRequest.geo = { country: 'IR' }; // Iran — sanctioned
+            await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
+            expect(mockReply.status).toHaveBeenCalledWith(403);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'SANCTIONED_GEO_BLOCK' }));
+            expect(stripeService.createTopupPaymentIntent).not.toHaveBeenCalled();
+            expect(topupService.createPendingStripeTopup).not.toHaveBeenCalled();
+        });
+
+        it('rejects an unknown pack with 400 INVALID_PACK before any Stripe call', async () => {
+            mockRequest.body = { pack: 'bogus' };
+            await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'INVALID_PACK' }));
+            expect(stripeService.createTopupPaymentIntent).not.toHaveBeenCalled();
+        });
+
+        it('returns EMAIL_REQUIRED when the user has no email', async () => {
+            const mockDb = vi.mocked(db);
+            mockDb.select.mockReturnValueOnce({
+                from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ id: 'user_123', email: null }]) }),
+            } as any);
+
+            await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(mockReply.status).toHaveBeenCalledWith(400);
+            expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'EMAIL_REQUIRED' }));
+        });
+
+        it('creates a PaymentIntent + pending row and returns the clientSecret', async () => {
+            const mockDb = vi.mocked(db);
+            mockDb.select
+                // user lookup
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ id: 'user_123', email: 'u@example.com' }]) }) } as any)
+                // existing subscriptions (no Stripe customer yet)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([]) }) } as any);
+
+            vi.mocked(stripeService.findOrCreateCustomer).mockResolvedValue('cus_1');
+            vi.mocked(stripeService.createTopupPaymentIntent).mockResolvedValue({ id: 'pi_1', client_secret: 'pi_1_secret' } as any);
+            vi.mocked(topupService.createPendingStripeTopup).mockResolvedValue(undefined);
+
+            await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(stripeService.createTopupPaymentIntent).toHaveBeenCalledWith(expect.objectContaining({
+                customerId: 'cus_1',
+                amountCents: 4900, // 5k pack price from config
+                currency: 'usd',
+                userId: 'user_123',
+                pack: '5k',
+            }));
+            expect(topupService.createPendingStripeTopup).toHaveBeenCalledWith({
+                userId: 'user_123',
+                pack: '5k',
+                stripePaymentIntentId: 'pi_1',
+            });
+            expect(mockReply.send).toHaveBeenCalledWith({ clientSecret: 'pi_1_secret' });
+        });
+
+        it('reuses the existing Stripe customer from a subscription', async () => {
+            const mockDb = vi.mocked(db);
+            mockDb.select
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ id: 'user_123', email: 'u@example.com' }]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([{ stripeCustomerId: 'cus_existing' }]) }) } as any);
+
+            vi.mocked(stripeService.createTopupPaymentIntent).mockResolvedValue({ id: 'pi_2', client_secret: 'pi_2_secret' } as any);
+
+            await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            // Must NOT create a new customer when one already exists.
+            expect(stripeService.findOrCreateCustomer).not.toHaveBeenCalled();
+            expect(stripeService.createTopupPaymentIntent).toHaveBeenCalledWith(expect.objectContaining({ customerId: 'cus_existing' }));
+        });
+    });
+
+    // ── handleWebhook: top-up payment_intent.succeeded ─────────────────────────
+    describe('handleWebhook — top-up PaymentIntent', () => {
+        beforeEach(() => {
+            mockRequest = {
+                headers: { 'stripe-signature': 'sig_test' },
+                rawBody: Buffer.from('webhook_payload'),
+                log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
+            };
+        });
+
+        it('credits the balance on payment_intent.succeeded tagged type=topup', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                id: 'evt_pi_topup',
+                type: 'payment_intent.succeeded',
+                data: { object: { id: 'pi_topup_1', metadata: { type: 'topup', userId: 'user_123', pack: '5k' } } as any },
+            };
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            vi.mocked(topupService.settleStripeTopup).mockResolvedValue({
+                credited: true, alreadySettled: false, userId: 'user_123', repliesAdded: 5000, newBalance: 5000,
+            });
+
+            await paymentController.handleWebhook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(topupService.settleStripeTopup).toHaveBeenCalledWith('pi_topup_1');
+            const { notificationService } = await import('../../src/services/notifications');
+            expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith(
+                'user_123', 'topup_credited', expect.objectContaining({ replies: '5000' }), expect.any(Object)
+            );
+            expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+
+        it('ignores a payment_intent.succeeded that is NOT a top-up (subscription invoice PI)', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                id: 'evt_pi_sub',
+                type: 'payment_intent.succeeded',
+                data: { object: { id: 'pi_sub_1', metadata: {} } as any }, // no type=topup
+            };
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+
+            await paymentController.handleWebhook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            // The guard must short-circuit before touching the top-up service.
+            expect(topupService.settleStripeTopup).not.toHaveBeenCalled();
+            expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+
+        it('treats a replayed top-up succeeded event as a no-op (no double notification)', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                id: 'evt_pi_replay',
+                type: 'payment_intent.succeeded',
+                data: { object: { id: 'pi_topup_replay', metadata: { type: 'topup', userId: 'user_123', pack: '5k' } } as any },
+            };
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            vi.mocked(topupService.settleStripeTopup).mockResolvedValue({ credited: false, alreadySettled: true });
+
+            const { notificationService } = await import('../../src/services/notifications');
+            vi.mocked(notificationService.sendTemplateNotification).mockClear();
+
+            await paymentController.handleWebhook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(notificationService.sendTemplateNotification).not.toHaveBeenCalled();
+            expect(mockReply.send).toHaveBeenCalledWith({ received: true });
+        });
+
+        it('marks the pending row failed on payment_intent.payment_failed (type=topup)', async () => {
+            const mockEvent: Partial<Stripe.Event> = {
+                id: 'evt_pi_failed',
+                type: 'payment_intent.payment_failed',
+                data: { object: { id: 'pi_topup_failed', metadata: { type: 'topup', userId: 'user_123', pack: '5k' } } as any },
+            };
+            vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
+            vi.mocked(topupService.markStripeTopupFailed).mockResolvedValue(undefined);
+
+            await paymentController.handleWebhook(mockRequest as FastifyRequest, mockReply as FastifyReply);
+
+            expect(topupService.markStripeTopupFailed).toHaveBeenCalledWith('pi_topup_failed');
+            expect(mockReply.send).toHaveBeenCalledWith({ received: true });
         });
     });
 

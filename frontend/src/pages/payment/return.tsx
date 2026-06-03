@@ -3,22 +3,14 @@ import { useRouter } from 'next/router';
 import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { loadStripe } from '@stripe/stripe-js';
 import { Button } from '@/components/ui';
 import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { useIOSPaymentRedirect } from '@/hooks';
+import { getStripePromise } from '@/lib/stripeClient';
 
 type SessionStatus = 'loading' | 'complete' | 'open' | 'expired';
-
-let stripePromise: ReturnType<typeof loadStripe> | null = null;
-function getStripePromise() {
-  if (!stripePromise && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-    stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
-  }
-  return stripePromise;
-}
 
 export default function PaymentReturnPage() {
   const router = useRouter();

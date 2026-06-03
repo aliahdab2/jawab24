@@ -19,6 +19,7 @@ export { useDebounce } from './useDebounce';
 export { useInfiniteScrollObserver } from './useInfiniteScrollObserver';
 export { useSSE } from './useSSE';
 export { useTheme } from './useTheme';
+export { useIsDarkMode } from './useIsDarkMode';
 export { useConversationActions } from './useConversationActions';
 export { useMobileMessages } from './useMobileMessages';
 export { useWorkspaceRole } from './useWorkspaceRole';

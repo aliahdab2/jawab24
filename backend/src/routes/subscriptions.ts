@@ -18,6 +18,33 @@ import { authService } from '../services/auth';
  * and /payment/change-plan.
  */
 export default async function subscriptionsRoutes(fastify: FastifyInstance) {
+    /**
+     * GET /subscription/topup/config - Return packs + WhatsApp contact for the
+     * top-up purchase UI (modal pack picker + the /checkout?topup= page).
+     *
+     * PUBLIC (no auth) — mirrors the public /plans/:id endpoint. It returns only
+     * static pack pricing + the public support WhatsApp number, no user data. It
+     * must be reachable unauthenticated so /checkout?topup= can render its order
+     * summary + in-page login gate for a logged-out visitor (deep link, expired
+     * session, the iOS→web bounce), exactly like the subscription checkout does.
+     *
+     * Empty whatsappNumber means the manual path is disabled in the UI.
+     */
+    fastify.get(
+        '/topup/config',
+        { schema: { tags: ['Subscriptions'], summary: 'Get top-up packs and contact channels' } },
+        async (_request: FastifyRequest, reply: FastifyReply) => {
+            return reply.send({
+                success: true,
+                data: {
+                    packs: config.topup.packs,
+                    currency: config.topup.currency,
+                    whatsappNumber: config.topup.whatsappNumber,
+                },
+            });
+        }
+    );
+
     // All routes require authentication
     fastify.register(async (protectedRoutes) => {
         protectedRoutes.addHook('preHandler', authenticate);
@@ -120,29 +147,6 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
                 });
             }
         });
-
-        /**
-         * GET /subscription/topup/config - Return packs + WhatsApp contact for the
-         * top-up purchase UI. The frontend modal renders both:
-         *   - card payment options (PR 2b, not yet wired)
-         *   - WhatsApp deep link for manual / bank transfer payments
-         *
-         * Empty whatsappNumber means the manual path is disabled in the UI.
-         */
-        protectedRoutes.get(
-            '/topup/config',
-            { schema: { tags: ['Subscriptions'], summary: 'Get top-up packs and contact channels', security: auth } },
-            async (_request: FastifyRequest, reply: FastifyReply) => {
-                return reply.send({
-                    success: true,
-                    data: {
-                        packs: config.topup.packs,
-                        currency: config.topup.currency,
-                        whatsappNumber: config.topup.whatsappNumber,
-                    },
-                });
-            }
-        );
 
         /**
          * GET /subscription/limits/pages - Check page limits

@@ -6,12 +6,12 @@
         "addToKeepGoing": "Add more to keep going"
     },
     "modal": {
-        "title": "Add more AI replies",
+        "title": "Add more Smart Replies",
         "subtitle": "Choose how many extra replies you'd like to add to your account",
         "neverExpires": "Replies never expire — use them anytime",
-        "contactToBuy": "Contact us to buy",
-        "whatsappMessage": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# AI reply} other {# AI replies}} ({pack} pack, ${priceUsd}) to my account.",
-        "whatsappMessageWithEmail": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# AI reply} other {# AI replies}} ({pack} pack, ${priceUsd}) to my account.\n\nMy email: {email}",
+        "contactToBuy": "How would you like to pay?",
+        "whatsappMessage": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# Smart Reply} other {# Smart Replies}} ({pack} pack, ${priceUsd}) to my account.",
+        "whatsappMessageWithEmail": "Hi Jawab24 team, I'd like to add {repliesCount, plural, one {# Smart Reply} other {# Smart Replies}} ({pack} pack, ${priceUsd}) to my account.\n\nMy email: {email}",
         "selectPack": "Select a pack",
         "close": "Close"
     },
@@ -23,17 +23,16 @@
         "bestValue": "Best value"
     },
     "method": {
-        "card": "Pay with card (coming soon)",
-        "cardSubtitle": "Card payment will be available shortly",
+        "card": "Pay with card",
+        "cardSubtitle": "Visa, Mastercard, mada — credited instantly",
         "whatsapp": "Pay via bank transfer or other",
         "whatsappSubtitle": "We'll respond on WhatsApp within hours and credit your account once payment is confirmed"
     },
     "unavailable": {
-        "title": "Top-ups coming soon",
-        "message": "We're working on enabling additional reply purchases. In the meantime, message us on WhatsApp and we'll add them to your account manually.",
+        "title": "Top-up options unavailable",
         "whatsappButton": "Contact us on WhatsApp",
-        "whatsappMessage": "Hi Jawab24 team,\nI'd like to add extra AI replies to my account.",
-        "whatsappMessageWithEmail": "Hi Jawab24 team,\nI'd like to add extra AI replies to my account.\n\nMy email: {email}"
+        "whatsappMessage": "Hi Jawab24 team,\nI'd like to add extra Smart Replies to my account.",
+        "whatsappMessageWithEmail": "Hi Jawab24 team,\nI'd like to add extra Smart Replies to my account.\n\nMy email: {email}"
     },
     "errors": {
         "loadFailed": "Couldn't load top-up options. Check your connection and try again."

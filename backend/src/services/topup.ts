@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { topupPurchases, users } from '../db/schema';
 import { config } from '../config';
@@ -41,6 +41,22 @@ export interface CreditTopupResult {
     purchaseId: string;
     repliesAdded: number;
     newBalance: number;
+}
+
+export interface CreatePendingStripeTopupInput {
+    userId: string;
+    pack: TopupPack;
+    stripePaymentIntentId: string;
+}
+
+export interface SettleStripeTopupResult {
+    /** True only when this call flipped a pending row to succeeded AND credited the balance. */
+    credited: boolean;
+    /** True when the row was already succeeded (webhook replay) — a safe no-op, not an error. */
+    alreadySettled: boolean;
+    userId?: string;
+    repliesAdded?: number;
+    newBalance?: number;
 }
 
 export const topupService = {
@@ -119,5 +135,111 @@ export const topupService = {
                 newBalance: updated.topupBalance,
             };
         });
+    },
+
+    /**
+     * Record a `pending` Stripe top-up at PaymentIntent-creation time. The
+     * balance is NOT credited here — that happens in settleStripeTopup() when
+     * the payment_intent.succeeded webhook arrives. This row is what the
+     * webhook looks up by PaymentIntent id, and gives us a record of
+     * abandoned/failed checkout attempts for reconciliation.
+     *
+     * Idempotent: a double-clicked "Pay with card" dedupes to the same Stripe
+     * PaymentIntent (per-minute idempotency key), so onConflictDoNothing on the
+     * unique stripe_payment_intent_id makes the second insert a no-op rather
+     * than a constraint violation.
+     */
+    async createPendingStripeTopup(input: CreatePendingStripeTopupInput): Promise<void> {
+        const pack = config.topup.packs[input.pack];
+        if (!pack) throw new UnknownTopupPackError(input.pack);
+
+        await db
+            .insert(topupPurchases)
+            .values({
+                userId: input.userId,
+                pack: input.pack,
+                repliesAdded: pack.repliesAdded,
+                priceCents: pack.priceCents,
+                currency: config.topup.currency,
+                source: 'stripe',
+                stripePaymentIntentId: input.stripePaymentIntentId,
+                status: 'pending',
+                createdAt: new Date(),
+            })
+            .onConflictDoNothing({ target: topupPurchases.stripePaymentIntentId });
+    },
+
+    /**
+     * Settle a Stripe top-up on payment_intent.succeeded: flip the pending row
+     * to `succeeded` and credit users.topup_balance in one transaction.
+     *
+     * Idempotency is structural, not advisory: the status update is gated on
+     * `status = 'pending'`, so only the FIRST successful settlement of a given
+     * PaymentIntent updates a row. A webhook replay (or any later delivery)
+     * matches 0 rows and credits nothing — no double-credit is possible even
+     * before the stripeWebhookEvents dedup layer. Returns credited:false with
+     * alreadySettled to let the caller distinguish a replay (expected) from a
+     * genuinely missing row (which it should log for reconciliation).
+     */
+    async settleStripeTopup(stripePaymentIntentId: string): Promise<SettleStripeTopupResult> {
+        const now = new Date();
+
+        return db.transaction(async (tx) => {
+            const [settled] = await tx
+                .update(topupPurchases)
+                .set({ status: 'succeeded', succeededAt: now })
+                .where(
+                    and(
+                        eq(topupPurchases.stripePaymentIntentId, stripePaymentIntentId),
+                        eq(topupPurchases.status, 'pending'),
+                    ),
+                )
+                .returning({ userId: topupPurchases.userId, repliesAdded: topupPurchases.repliesAdded });
+
+            // 0 rows updated → either already succeeded (replay) or no such row.
+            // Disambiguate so the webhook handler logs the missing-row case loudly.
+            if (!settled) {
+                const [existing] = await tx
+                    .select({ status: topupPurchases.status })
+                    .from(topupPurchases)
+                    .where(eq(topupPurchases.stripePaymentIntentId, stripePaymentIntentId))
+                    .limit(1);
+                return { credited: false, alreadySettled: existing?.status === 'succeeded' };
+            }
+
+            const [updated] = await tx
+                .update(users)
+                .set({
+                    topupBalance: sql`${users.topupBalance} + ${settled.repliesAdded}`,
+                    updatedAt: now,
+                })
+                .where(eq(users.id, settled.userId))
+                .returning({ topupBalance: users.topupBalance });
+
+            return {
+                credited: true,
+                alreadySettled: false,
+                userId: settled.userId,
+                repliesAdded: settled.repliesAdded,
+                newBalance: updated.topupBalance,
+            };
+        });
+    },
+
+    /**
+     * Mark a pending Stripe top-up `failed` on payment_intent.payment_failed.
+     * Best-effort funnel hygiene — no balance change. Gated on `status =
+     * 'pending'` so it never clobbers a row that already succeeded.
+     */
+    async markStripeTopupFailed(stripePaymentIntentId: string): Promise<void> {
+        await db
+            .update(topupPurchases)
+            .set({ status: 'failed' })
+            .where(
+                and(
+                    eq(topupPurchases.stripePaymentIntentId, stripePaymentIntentId),
+                    eq(topupPurchases.status, 'pending'),
+                ),
+            );
     },
 };

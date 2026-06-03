@@ -23,6 +23,28 @@ export default async function paymentRoutes(fastify: FastifyInstance) {
         }
     );
 
+    // Create a one-time PaymentIntent for a Credit top-up pack (returns clientSecret for the modal PaymentElement)
+    fastify.post<{ Body: { pack?: string } }>(
+        '/create-topup-intent',
+        {
+            config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+            schema: {
+                tags: ['Payment'],
+                summary: 'Create a PaymentIntent for a Credit top-up pack',
+                security: auth,
+                body: {
+                    type: 'object',
+                    required: ['pack'],
+                    properties: { pack: { type: 'string', enum: ['5k', '10k'] } },
+                },
+            },
+            preHandler: [authenticate],
+        },
+        async (request, reply) => {
+            return paymentController.createTopupIntent(request, reply);
+        }
+    );
+
     // Get checkout session status (for embedded checkout return page)
     fastify.get<{ Querystring: { session_id: string } }>(
         '/checkout-session-status',

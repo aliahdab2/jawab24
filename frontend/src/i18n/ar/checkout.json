@@ -11,6 +11,7 @@
   "retry": "حاول مرة أخرى",
   "cancel": "إلغاء",
   "loginToCheckout": "سجّل دخولك لإتمام الاشتراك",
+  "loginToTopup": "سجّل دخولك لإضافة الردود",
   "loginButton": "تسجيل الدخول",
   "loadingPaymentForm": "جاري تحميل نموذج الدفع...",
   "submitPayment": "ادفع {amount}/شهر",
@@ -19,5 +20,10 @@
   "cancelAnytime": "إلغاء في أي وقت. بدون أسئلة.",
   "trialNote": "لن يتم خصم أي مبلغ حتى انتهاء الفترة التجريبية.",
   "showDetails": "عرض تفاصيل الطلب",
-  "hideDetails": "إخفاء تفاصيل الطلب"
+  "hideDetails": "إخفاء تفاصيل الطلب",
+  "backToDashboard": "العودة للوحة التحكم",
+  "topupSummaryTitle": "رصيد ردود إضافي",
+  "topupOneTime": "دفعة واحدة",
+  "submitTopup": "ادفع {amount}",
+  "topupTrustNote": "دفعة واحدة · يُضاف الرصيد فوراً"
 }

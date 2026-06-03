@@ -4,9 +4,9 @@ import Head from 'next/head';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import type { MessageKeys, NestedKeyOf } from 'use-intl';
-import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
-import type { Appearance, StripeElementLocale } from '@stripe/stripe-js';
+import type { StripeElementLocale } from '@stripe/stripe-js';
+import { getStripePromise, getStripeAppearance } from '@/lib/stripeClient';
 import { BRAND_ASSETS } from '@/constants/brand';
 import { isUserSanctioned } from '@/utils/geoCheck';
 import { PaymentsUnavailableNotice } from '@/components/PaymentsUnavailableNotice';
@@ -22,23 +22,28 @@ import {
 import { api, publicApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
 import { isNativePlatform } from '@/lib/capacitor';
-import { useIOSPaymentRedirect } from '@/hooks';
+import { useIOSPaymentRedirect, useIsDarkMode } from '@/hooks';
 import { openExternalUrl } from '@/lib/openExternalUrl';
 import { buildWebUrl } from '@/lib/webUrl';
 import type { Plan } from '@jawab24/shared';
 import { getDisplayPrice, getMonthlyEquivalent } from '@/utils/pricing';
 
+type TopupPack = '5k' | '10k';
+interface TopupInfo {
+  repliesAdded: number;
+  priceCents: number;
+}
+
 function isCheckoutMaintenance(): boolean {
   return process.env.NEXT_PUBLIC_CHECKOUT_MAINTENANCE === 'true';
 }
 
-function CheckoutHeader({ className }: { className?: string }) {
-  const t = useTranslations('checkout');
+function CheckoutHeader({ className, backHref, backLabel }: { className?: string; backHref: string; backLabel: string }) {
   return (
     <div className={`mx-auto w-full flex items-center justify-between mb-6 sm:mb-8 ${className ?? ''}`}>
-      <Link href="/pricing" className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors">
+      <Link href={backHref} className="inline-flex items-center gap-2 text-muted-foreground font-medium text-sm hover:text-brand-600 transition-colors">
         <ArrowLeft className="w-4 h-4 rtl:rotate-180" aria-hidden="true" />
-        {t('backToPricing')}
+        {backLabel}
       </Link>
       <Link href="/" className="inline-flex items-center gap-2 group">
         <span className="font-display font-bold text-lg text-foreground tracking-tight">{BRAND_ASSETS.meta.appName}</span>
@@ -56,62 +61,25 @@ function FullPageSpinner() {
   );
 }
 
-let stripePromise: ReturnType<typeof loadStripe> | null = null;
-function getStripePromise() {
-  if (!stripePromise && process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY) {
-    stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
-  }
-  return stripePromise;
-}
-
-function getStripeAppearance(isDark: boolean): Appearance {
-  return {
-    theme: isDark ? 'night' : 'stripe',
-    variables: {
-      colorPrimary: isDark ? '#3e877e' : '#0d9488',
-      colorBackground: isDark ? '#0e182a' : '#ffffff',
-      colorText: isDark ? '#ebf0f5' : '#121c1b',
-      colorDanger: '#f87171',
-      fontFamily: 'Inter, system-ui, sans-serif',
-      borderRadius: '12px',
-      spacingUnit: '4px',
-    },
-    rules: {
-      '.Input': {
-        backgroundColor: isDark ? '#060d18' : '#ffffff',
-        borderColor: isDark ? '#1c283c' : '#dae4e3',
-        color: isDark ? '#ebf0f5' : '#121c1b',
-      },
-      '.Input:focus': {
-        borderColor: isDark ? '#3e877e' : '#0d9488',
-        boxShadow: `0 0 0 1px ${isDark ? '#3e877e' : '#0d9488'}`,
-      },
-      '.Label': {
-        color: isDark ? '#788da0' : '#556361',
-      },
-      '.Tab': {
-        backgroundColor: isDark ? '#0e182a' : '#ffffff',
-        borderColor: isDark ? '#1c283c' : '#dae4e3',
-      },
-      '.Tab--selected': {
-        backgroundColor: isDark ? '#3e877e' : '#0d9488',
-        color: '#ffffff',
-      },
-    },
-  };
-}
-
-/** Inner form component — must be rendered inside <Elements> */
+/**
+ * Inner form component — must be rendered inside <Elements>. Presentational
+ * props only (no Plan coupling) so it serves both the subscription checkout
+ * and the one-time top-up checkout:
+ *  - subscription: type may be 'setup' (trial) or 'payment'; trialDays drives
+ *    the trial callout + button copy.
+ *  - top-up: type is always 'payment'; trialDays omitted; submitLabel is the
+ *    one-time "Pay $X" copy.
+ */
 function PaymentForm({
   type,
-  plan,
-  billingInterval,
-  displayPrice,
+  submitLabel,
+  trustNote,
+  trialDays,
 }: {
   type: 'payment' | 'setup';
-  plan: Plan;
-  billingInterval: 'month' | 'year';
-  displayPrice: string;
+  submitLabel: string;
+  trustNote: string;
+  trialDays?: number;
 }) {
   const stripe = useStripe();
   const elements = useElements();
@@ -121,7 +89,7 @@ function PaymentForm({
 
   const returnUrl = `${BRAND_ASSETS.urls.base}/payment/return`;
 
-  const hasTrial = plan.trialDays > 0 && type === 'setup';
+  const hasTrial = !!trialDays && trialDays > 0 && type === 'setup';
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -164,7 +132,7 @@ function PaymentForm({
           <Shield className="w-5 h-5 text-brand-600 flex-shrink-0 mt-0.5" aria-hidden="true" />
           <div>
             <p className="text-sm font-semibold text-brand-700 dark:text-brand-300">
-              {t('startTrial', { days: plan.trialDays })}
+              {t('startTrial', { days: trialDays! })}
             </p>
             <p className="text-xs text-brand-600/80 dark:text-brand-400/80 mt-0.5">
               {t('trialNote')}
@@ -185,16 +153,14 @@ function PaymentForm({
         ) : (
           <>
             <Lock className="w-4 h-4" aria-hidden="true" />
-            {hasTrial
-              ? t('startTrial', { days: plan.trialDays })
-              : t(billingInterval === 'year' ? 'submitPaymentYearly' : 'submitPayment', { amount: displayPrice })}
+            {hasTrial ? t('startTrial', { days: trialDays! }) : submitLabel}
           </>
         )}
       </Button>
 
       {/* Trust signal */}
       <p className="text-center text-xs text-muted-foreground mt-3">
-        {t('cancelAnytime')}
+        {trustNote}
       </p>
     </form>
   );
@@ -202,14 +168,28 @@ function PaymentForm({
 
 function CheckoutPage() {
   const router = useRouter();
-  const { planId, interval, theme: themeParam } = router.query;
+  const { planId, interval, theme: themeParam, topup } = router.query;
   const billingInterval = interval === 'year' ? 'year' : 'month';
+  const topupPack: TopupPack | null = topup === '5k' || topup === '10k' ? topup : null;
+  const isTopup = !!topupPack;
   const locale = useLocale();
   const t = useTranslations('checkout');
+  const tTopup = useTranslations('topup');
   const tPricing = useTranslations('pricing');
   const tPlans = useTranslations('plans');
   const tLanding = useTranslations('landing');
   const { isAuthenticated } = useAuthStore();
+
+  // Where the header "back" link goes — top-up buyers came from the dashboard
+  // modal, subscription buyers from pricing.
+  const backHref = isTopup ? '/dashboard' : '/pricing';
+  const backLabel = isTopup ? t('backToDashboard') : t('backToPricing');
+
+  // Browser tab title + meta must reflect the purchase type — a one-time top-up
+  // is not a subscription (the AR subscription title literally reads "complete
+  // the subscription", wrong for a credit top-up).
+  const pageTitle = isTopup ? t('topupSummaryTitle') : t('title');
+  const pageDescription = isTopup ? t('topupSummaryTitle') : t('subtitle');
 
   useEffect(() => {
     if (themeParam === 'dark' || themeParam === 'light') {
@@ -222,28 +202,29 @@ function CheckoutPage() {
   useEffect(() => {
     if (iosRedirecting) return;
     if (isNativePlatform()) {
-      openExternalUrl(buildWebUrl('/pricing', router.locale));
+      // Native apps can't show payment UI in-app (App Store Guideline 3.1.1) —
+      // bounce to the web. Preserve the top-up intent so the web flow resumes
+      // the same purchase rather than dropping to a generic page.
+      const webPath = isTopup ? `/checkout?topup=${topupPack}` : '/pricing';
+      openExternalUrl(buildWebUrl(webPath, router.locale));
     }
-  }, [router.locale, iosRedirecting]);
+  }, [router.locale, iosRedirecting, isTopup, topupPack]);
 
 
   const [error, setError] = useState('');
   const [plan, setPlan] = useState<Plan | null>(null);
+  const [topupInfo, setTopupInfo] = useState<TopupInfo | null>(null);
   const [fetchError, setFetchError] = useState(false);
   const [isSanctioned, setIsSanctioned] = useState<boolean | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [intentType, setIntentType] = useState<'payment' | 'setup' | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
-  const [isDark, setIsDark] = useState(false);
+  const isDark = useIsDarkMode();
   const [showMobileSummary, setShowMobileSummary] = useState(false);
 
-  useEffect(() => {
-    const check = () => setIsDark(document.documentElement.classList.contains('dark'));
-    check();
-    const observer = new MutationObserver(check);
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
-    return () => observer.disconnect();
-  }, []);
+  // "Loaded" gate differs by mode: subscription needs the plan, top-up needs
+  // the pack's price/replies from config.
+  const purchaseReady = isTopup ? !!topupInfo : !!plan;
 
   const errorLoadPlanMessage = t('errorLoadPlan');
 
@@ -256,7 +237,9 @@ function CheckoutPage() {
     checkGeo();
   }, []);
 
+  // Subscription mode: fetch the plan being purchased.
   useEffect(() => {
+    if (isTopup) return;
     if (plan || fetchError || !planId) return;
     if (isSanctioned === true) return;
     if (isSanctioned === null) return;
@@ -280,24 +263,56 @@ function CheckoutPage() {
     };
 
     fetchPlan();
-  }, [planId, plan, fetchError, errorLoadPlanMessage, isSanctioned, router, isAuthenticated]);
+  }, [isTopup, planId, plan, fetchError, errorLoadPlanMessage, isSanctioned, router, isAuthenticated]);
+
+  // Top-up mode: fetch the pack's authoritative price + reply count from config.
+  useEffect(() => {
+    if (!isTopup || topupInfo || fetchError) return;
+    if (isSanctioned !== false) return;
+
+    const fetchTopup = async () => {
+      try {
+        // Public endpoint (mirrors /plans/:id) so a logged-out visitor still
+        // gets the order summary + in-page login gate instead of an error.
+        const response = await publicApi.get('/subscription/topup/config');
+        const info = response.data.data.packs[topupPack!];
+        if (!info) {
+          setFetchError(true);
+          setError(errorLoadPlanMessage);
+          return;
+        }
+        setTopupInfo(info);
+      } catch (err) {
+        captureError(err, 'Failed to fetch top-up config', { tags: { page: 'checkout', action: 'fetch-topup' } });
+        setFetchError(true);
+        setError(errorLoadPlanMessage);
+      }
+    };
+
+    fetchTopup();
+  }, [isTopup, topupPack, topupInfo, fetchError, errorLoadPlanMessage, isSanctioned]);
 
   const createSession = useCallback(async () => {
-    if (!plan || !isAuthenticated || clientSecret || sessionLoading || isSanctioned) return;
+    if (!purchaseReady || !isAuthenticated || clientSecret || sessionLoading || isSanctioned) return;
 
     setSessionLoading(true);
     setError('');
 
     try {
-      const response = await api.post('/payment/create-subscription-intent', {
-        planId: plan.id,
-        billingInterval,
-      });
-
-      setClientSecret(response.data.clientSecret);
-      setIntentType(response.data.type);
+      if (isTopup) {
+        const response = await api.post('/payment/create-topup-intent', { pack: topupPack });
+        setClientSecret(response.data.clientSecret);
+        setIntentType('payment');
+      } else {
+        const response = await api.post('/payment/create-subscription-intent', {
+          planId: plan!.id,
+          billingInterval,
+        });
+        setClientSecret(response.data.clientSecret);
+        setIntentType(response.data.type);
+      }
     } catch (err: unknown) {
-      captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session' } });
+      captureError(err, 'Checkout error', { tags: { page: 'checkout', action: 'create-session', mode: isTopup ? 'topup' : 'subscription' } });
 
       const axiosErr = err as { response?: { data?: { code?: string; error?: string | boolean; message?: string } } };
       const errorData = axiosErr.response?.data;
@@ -308,7 +323,9 @@ function CheckoutPage() {
       }
 
       if (errorData?.code === 'EMAIL_REQUIRED') {
-        const returnUrl = `/checkout?planId=${plan.id}&interval=${billingInterval}`;
+        const returnUrl = isTopup
+          ? `/checkout?topup=${topupPack}`
+          : `/checkout?planId=${plan!.id}&interval=${billingInterval}`;
         router.push(`/complete-profile?redirect=${encodeURIComponent(returnUrl)}`);
         return;
       }
@@ -324,31 +341,36 @@ function CheckoutPage() {
     } finally {
       setSessionLoading(false);
     }
-  }, [plan, isAuthenticated, clientSecret, sessionLoading, isSanctioned, billingInterval, router, t]);
+  }, [purchaseReady, isTopup, topupPack, plan, isAuthenticated, clientSecret, sessionLoading, isSanctioned, billingInterval, router, t]);
 
-  // Auto-create the payment intent once per (plan, interval) config. We gate on
-  // a ref keyed by that config instead of depending on the `createSession`
-  // callback: createSession's identity changes on every render (t, router and
-  // sessionLoading are in its deps), so an effect depending on it re-ran every
-  // render — and after any non-geo/non-email failure (429, 500, network) it
-  // retried instantly with no backoff, flooding /payment/create-*-intent until
-  // the rate limiter tripped. The key ref fires the auto-create exactly once per
-  // config; errors do not reset it. Retries are manual via the retry button.
+  // Auto-create the payment intent once per purchase config (mode-aware: a
+  // top-up pack, or a plan+interval). We gate on a ref keyed by that config
+  // instead of depending on the `createSession` callback: createSession's
+  // identity changes on every render (t, router and sessionLoading are in its
+  // deps), so an effect depending on it re-ran every render — and after any
+  // non-geo/non-email failure (429, 500, network) it retried instantly with no
+  // backoff, flooding /payment/create-*-intent until the rate limiter tripped.
+  // The key ref fires the auto-create exactly once per config; errors do not
+  // reset it. Retries are manual via the retry button.
   const autoCreateKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!isAuthenticated || isSanctioned || clientSecret || !plan) return;
-    const key = `${plan.id}:${billingInterval}`;
+    if (!isAuthenticated || isSanctioned || clientSecret || !purchaseReady) return;
+    // Mode-aware key: top-up has no plan/interval, subscription has no pack.
+    // Gating on `plan` here would block top-up; a `${plan.id}` key would be
+    // `undefined:...` and collide across packs.
+    const key = isTopup ? `topup:${topupPack}` : `plan:${plan?.id}:${billingInterval}`;
     if (autoCreateKeyRef.current === key) return;
     autoCreateKeyRef.current = key;
     createSession();
     // createSession is intentionally omitted — auto-creation is gated by the
     // config key above; depending on it would reintroduce the re-fire loop.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, isSanctioned, clientSecret, plan, billingInterval]);
+  }, [isAuthenticated, isSanctioned, clientSecret, purchaseReady, isTopup, topupPack, plan, billingInterval]);
 
   const handleLogin = () => {
-    if (!plan) return;
-    const returnUrl = `/checkout?planId=${plan.id}&interval=${billingInterval}`;
+    const returnUrl = isTopup
+      ? `/checkout?topup=${topupPack}`
+      : (plan ? `/checkout?planId=${plan.id}&interval=${billingInterval}` : '/pricing');
     router.push(`/login?redirect=${encodeURIComponent(returnUrl)}`);
   };
 
@@ -381,15 +403,15 @@ function CheckoutPage() {
     return (
       <>
         <Head>
-          <title>{t('title')} - Jawab24</title>
+          <title>{pageTitle} - Jawab24</title>
           <meta name="robots" content="noindex, follow" />
         </Head>
         <div className="flex-1 flex flex-col overflow-y-auto bg-background">
           <div className="flex-1 px-5 sm:px-6 py-8 sm:py-12 px-safe-landscape">
             <div className="max-w-md mx-auto w-full">
-              <CheckoutHeader className="max-w-md mb-8 sm:mb-10" />
+              <CheckoutHeader className="max-w-md mb-8 sm:mb-10" backHref={backHref} backLabel={backLabel} />
               <div className="text-center mb-8 sm:mb-10">
-                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">{t('title')}</h1>
+                <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-2 tracking-tight font-display">{pageTitle}</h1>
               </div>
               <PaymentsUnavailableNotice />
             </div>
@@ -401,26 +423,39 @@ function CheckoutPage() {
 
   if (iosRedirecting) return null;
 
-  if (!plan && !error) {
+  if (!purchaseReady && !error) {
     return <FullPageSpinner />;
   }
 
-  const displayPrice = plan
-    ? `$${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}`
-    : '';
+  const topupName = topupPack === '5k' ? tTopup('pack5k.name') : topupPack === '10k' ? tTopup('pack10k.name') : '';
+
+  const displayPrice = isTopup
+    ? (topupInfo ? `$${(topupInfo.priceCents / 100).toFixed(2)}` : '')
+    : (plan ? `$${(getDisplayPrice(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` : '');
+
+  // Submit-button copy + trust line, computed per mode and passed into the
+  // shared PaymentForm so the form itself stays presentational.
+  const submitLabel = isTopup
+    ? t('submitTopup', { amount: displayPrice })
+    : t(billingInterval === 'year' ? 'submitPaymentYearly' : 'submitPayment', { amount: displayPrice });
+  const trustNote = isTopup ? t('topupTrustNote') : t('cancelAnytime');
+  const summaryHeading = isTopup ? topupName : (plan ? getPlanName(plan) : '');
+  const mobileSummaryPrice = isTopup
+    ? `${displayPrice} · ${t('topupOneTime')}`
+    : `${displayPrice}/${intervalLabel}`;
 
   return (
     <>
       <Head>
-        <title>{t('title')} - Jawab24</title>
-        <meta name="description" content={t('subtitle')} />
+        <title>{pageTitle} - Jawab24</title>
+        <meta name="description" content={pageDescription} />
         <meta name="robots" content="noindex, follow" />
       </Head>
 
       <div className="flex-1 flex flex-col overflow-y-auto bg-background">
         <div className="flex-1 px-5 sm:px-6 py-6 sm:py-10 px-safe-landscape">
 
-          <CheckoutHeader className="max-w-4xl" />
+          <CheckoutHeader className="max-w-4xl" backHref={backHref} backLabel={backLabel} />
 
           {error && (
             <div className="max-w-4xl mx-auto mb-6 p-4 alert-error border rounded-2xl text-start text-sm">
@@ -440,7 +475,7 @@ function CheckoutPage() {
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => router.push('/pricing')}
+                  onClick={() => router.push(backHref)}
                 >
                   {t('cancel')}
                 </Button>
@@ -448,7 +483,7 @@ function CheckoutPage() {
             </div>
           )}
 
-          {plan && (
+          {purchaseReady && (
             <div className="max-w-4xl mx-auto w-full">
 
               {maintenanceMode && (
@@ -473,7 +508,7 @@ function CheckoutPage() {
                     >
                       <div className="flex items-center gap-3">
                         <span className="text-sm font-medium text-muted-foreground">{t('orderSummary')}</span>
-                        <span className="text-sm font-bold text-foreground">{getPlanName(plan)} &middot; {displayPrice}/{intervalLabel}</span>
+                        <span className="text-sm font-bold text-foreground">{summaryHeading} &middot; {mobileSummaryPrice}</span>
                       </div>
                       {showMobileSummary
                         ? <ChevronUp className="w-4 h-4 text-muted-foreground" aria-hidden="true" />
@@ -486,10 +521,10 @@ function CheckoutPage() {
                         {t('orderSummary')}
                       </p>
                       <h2 className="text-lg font-bold text-foreground mb-0.5 text-start">
-                        {getPlanName(plan)}
+                        {summaryHeading}
                       </h2>
                       <p className="text-muted-foreground text-xs mb-4 text-start">
-                        {getPlanDesc(plan)}
+                        {isTopup ? t('topupSummaryTitle') : (plan ? getPlanDesc(plan) : '')}
                       </p>
 
                       <div className="border-t border-theme-border pt-4 mb-4">
@@ -499,10 +534,10 @@ function CheckoutPage() {
                             <span className="text-xl opacity-70">.{displayPrice.split('.')[1]}</span>
                           </span>
                           <span className="text-muted-foreground text-sm font-medium">
-                            / {intervalLabel}
+                            {isTopup ? t('topupOneTime') : `/ ${intervalLabel}`}
                           </span>
                         </div>
-                        {billingInterval === 'year' && (
+                        {!isTopup && billingInterval === 'year' && plan && (
                           <p className="text-xs text-muted-foreground mt-1">
                             {tPlans('perMonthEquivalent', { amount: `$${(getMonthlyEquivalent(plan.price, billingInterval, plan.yearlyPrice) / 100).toFixed(2)}` })} &middot; {tPlans('billedAnnually')}
                           </p>
@@ -510,25 +545,44 @@ function CheckoutPage() {
                       </div>
 
                       <div className="space-y-2.5">
-                        <div className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
-                          <span className="text-foreground/80 text-sm text-start">
-                            {plan.maxPages === null ? tPricing('unlimited') : plan.maxPages} {tPlans('pages')}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2.5">
-                          <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
-                          <span className="text-foreground/80 text-sm text-start">
-                            {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
-                          </span>
-                        </div>
-                        {plan.trialDays > 0 && (
-                          <div className="flex items-center gap-2.5">
-                            <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
-                            <span className="text-foreground/80 text-sm text-start">
-                              {tPricing('trialDays', { days: plan.trialDays })}
-                            </span>
-                          </div>
+                        {isTopup ? (
+                          <>
+                            <div className="flex items-center gap-2.5">
+                              <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                              <span className="text-foreground/80 text-sm text-start">
+                                {topupInfo ? topupInfo.repliesAdded.toLocaleString() : ''} {tPlans('aiReplies')}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2.5">
+                              <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                              <span className="text-foreground/80 text-sm text-start">
+                                {tTopup('modal.neverExpires')}
+                              </span>
+                            </div>
+                          </>
+                        ) : plan && (
+                          <>
+                            <div className="flex items-center gap-2.5">
+                              <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                              <span className="text-foreground/80 text-sm text-start">
+                                {plan.maxPages === null ? tPricing('unlimited') : plan.maxPages} {tPlans('pages')}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2.5">
+                              <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                              <span className="text-foreground/80 text-sm text-start">
+                                {plan.maxAiRepliesPerMonth === null ? tPricing('unlimited') : plan.maxAiRepliesPerMonth.toLocaleString()} {tPlans('aiReplies')}
+                              </span>
+                            </div>
+                            {plan.trialDays > 0 && (
+                              <div className="flex items-center gap-2.5">
+                                <CheckCircle2 className="w-4 h-4 text-brand-600 flex-shrink-0" aria-hidden="true" />
+                                <span className="text-foreground/80 text-sm text-start">
+                                  {tPricing('trialDays', { days: plan.trialDays })}
+                                </span>
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -546,14 +600,14 @@ function CheckoutPage() {
                     {t('paymentDetails')}
                   </h1>
                   <p className="text-muted-foreground text-sm mb-6">
-                    {t('subtitle')}
+                    {isTopup ? t('topupSummaryTitle') : t('subtitle')}
                   </p>
 
                   {!maintenanceMode && (
                     <>
                       {!isAuthenticated ? (
                         <div className="bg-card rounded-2xl p-6 sm:p-8 border border-theme-border text-center">
-                          <p className="text-muted-foreground mb-4">{t('loginToCheckout')}</p>
+                          <p className="text-muted-foreground mb-4">{isTopup ? t('loginToTopup') : t('loginToCheckout')}</p>
                           <Button
                             size="lg"
                             className="w-full h-14 shadow-lg shadow-brand-600/20 hover:shadow-xl hover:shadow-brand-600/25 flex items-center justify-center gap-2 text-base font-bold rounded-2xl"
@@ -575,9 +629,9 @@ function CheckoutPage() {
                           >
                             <PaymentForm
                               type={intentType}
-                              plan={plan}
-                              billingInterval={billingInterval}
-                              displayPrice={displayPrice}
+                              submitLabel={submitLabel}
+                              trustNote={trustNote}
+                              trialDays={isTopup ? undefined : plan?.trialDays}
                             />
                           </Elements>
                         </div>

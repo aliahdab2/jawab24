@@ -9,6 +9,8 @@ import {
 vi.mock('../../src/db', () => ({
     db: {
         transaction: vi.fn(),
+        insert: vi.fn(),
+        update: vi.fn(),
     },
 }));
 
@@ -39,6 +41,7 @@ vi.mock('../../src/config', () => ({
 
 vi.mock('drizzle-orm', () => ({
     eq: vi.fn((field, value) => ({ field, value, op: 'eq' })),
+    and: vi.fn((...conds) => ({ conds, op: 'and' })),
     sql: Object.assign(vi.fn(), { raw: vi.fn() }),
 }));
 
@@ -214,5 +217,158 @@ describe('topupService.creditTopup', () => {
         expect(result.repliesAdded).toBe(10000);
         expect(result.newBalance).toBe(10000);
         expect(tx.insert).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('topupService.createPendingStripeTopup', () => {
+    let db: { insert: ReturnType<typeof vi.fn> };
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        db = (await import('../../src/db')).db as typeof db;
+    });
+
+    it('rejects unknown pack without inserting', async () => {
+        await expect(
+            topupService.createPendingStripeTopup({
+                userId: 'user_1',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                pack: 'bogus' as any,
+                stripePaymentIntentId: 'pi_1',
+            })
+        ).rejects.toThrow(UnknownTopupPackError);
+        expect(db.insert).not.toHaveBeenCalled();
+    });
+
+    it('inserts a pending stripe row and dedupes on payment intent id', async () => {
+        const onConflictDoNothing = vi.fn().mockResolvedValue(undefined);
+        const values = vi.fn(() => ({ onConflictDoNothing }));
+        db.insert.mockReturnValue({ values });
+
+        await topupService.createPendingStripeTopup({
+            userId: 'user_1',
+            pack: '5k',
+            stripePaymentIntentId: 'pi_pending_1',
+        });
+
+        expect(db.insert).toHaveBeenCalledTimes(1);
+        const inserted = values.mock.calls[0][0];
+        expect(inserted).toMatchObject({
+            userId: 'user_1',
+            pack: '5k',
+            repliesAdded: 5000,
+            priceCents: 4900,
+            source: 'stripe',
+            status: 'pending',
+            stripePaymentIntentId: 'pi_pending_1',
+        });
+        // Idempotency: webhook/double-click replays must no-op, not 500.
+        expect(onConflictDoNothing).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('topupService.settleStripeTopup', () => {
+    let db: { transaction: ReturnType<typeof vi.fn> };
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        db = (await import('../../src/db')).db as typeof db;
+    });
+
+    function buildSettleTx(opts: {
+        settledRow?: { userId: string; repliesAdded: number };
+        existingStatus?: string;
+        newBalance?: number;
+    }) {
+        let updateIdx = 0;
+        return {
+            update: vi.fn(() => {
+                const idx = updateIdx++;
+                return {
+                    set: vi.fn(() => ({
+                        where: vi.fn(() => ({
+                            returning: vi.fn().mockResolvedValue(
+                                idx === 0
+                                    ? (opts.settledRow ? [opts.settledRow] : [])
+                                    : [{ topupBalance: opts.newBalance ?? 0 }]
+                            ),
+                        })),
+                    })),
+                };
+            }),
+            select: vi.fn(() => ({
+                from: vi.fn(() => ({
+                    where: vi.fn(() => ({
+                        limit: vi.fn().mockResolvedValue(
+                            opts.existingStatus ? [{ status: opts.existingStatus }] : []
+                        ),
+                    })),
+                })),
+            })),
+        };
+    }
+
+    it('flips the pending row to succeeded and credits the balance', async () => {
+        const tx = buildSettleTx({
+            settledRow: { userId: 'user_1', repliesAdded: 5000 },
+            newBalance: 5000,
+        });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.settleStripeTopup('pi_succeeded_1');
+
+        expect(result).toEqual({
+            credited: true,
+            alreadySettled: false,
+            userId: 'user_1',
+            repliesAdded: 5000,
+            newBalance: 5000,
+        });
+        // Two updates: the conditional status flip + the balance increment.
+        expect(tx.update).toHaveBeenCalledTimes(2);
+        // No disambiguation select needed when the conditional update matched.
+        expect(tx.select).not.toHaveBeenCalled();
+    });
+
+    it('treats a webhook replay (already succeeded) as a no-op, not a re-credit', async () => {
+        const tx = buildSettleTx({ settledRow: undefined, existingStatus: 'succeeded' });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.settleStripeTopup('pi_replay');
+
+        expect(result).toEqual({ credited: false, alreadySettled: true });
+        // Only the conditional status update ran (0 rows); balance untouched.
+        expect(tx.update).toHaveBeenCalledTimes(1);
+        expect(tx.select).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports a missing row distinctly so the caller can reconcile', async () => {
+        const tx = buildSettleTx({ settledRow: undefined, existingStatus: undefined });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.settleStripeTopup('pi_orphan');
+
+        expect(result).toEqual({ credited: false, alreadySettled: false });
+        expect(tx.update).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('topupService.markStripeTopupFailed', () => {
+    let db: { update: ReturnType<typeof vi.fn> };
+
+    beforeEach(async () => {
+        vi.clearAllMocks();
+        db = (await import('../../src/db')).db as typeof db;
+    });
+
+    it('marks the pending row failed (no balance change)', async () => {
+        const where = vi.fn().mockResolvedValue(undefined);
+        const set = vi.fn(() => ({ where }));
+        db.update.mockReturnValue({ set });
+
+        await topupService.markStripeTopupFailed('pi_failed_1');
+
+        expect(db.update).toHaveBeenCalledTimes(1);
+        expect(set.mock.calls[0][0]).toMatchObject({ status: 'failed' });
     });
 });

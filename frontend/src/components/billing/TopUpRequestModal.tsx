@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import clsx from 'clsx';
-import { Check, MessageCircle, CreditCard, AlertCircle } from 'lucide-react';
+import { Check, MessageCircle, CreditCard, AlertCircle, ChevronRight } from 'lucide-react';
 import { Modal, Button } from '@/components/ui';
 import { subscriptionApi } from '@/lib/api';
 import { captureError } from '@/lib/sentryHelpers';
@@ -25,20 +26,22 @@ interface TopUpRequestModalProps {
 const PACKS_ORDER: Pack[] = ['5k', '10k'];
 
 /**
- * Modal that lets a paying user request a top-up pack.
+ * Modal that lets a paying user buy a top-up pack.
  *
- * Three render states keep the UX honest about what's actually possible:
+ * The modal is only a PACK PICKER + payment-method launcher — it does not host
+ * the Stripe form. Card payment links to the shared /checkout page (the same
+ * flow pricing uses), which enforces every payment rule in one place: sanctions
+ * block, iOS→web redirect, login gate, and the branded Stripe PaymentElement.
+ * Keeping the payment UI on /checkout (instead of re-embedding Stripe here)
+ * avoids duplicating those rules.
  *
- *  - loading: skeleton placeholders, no actionable elements
- *  - available: pack picker + WhatsApp purchase path (the happy path)
- *  - unavailable: clean "coming soon" message with a working email fallback —
- *    never shows pack pricing or "select your pack" UI when there's no way to
- *    buy, since that mismatch was confusing users on the prod degraded state
- *    (whatsappNumber unset → pack picker visible but no purchase path)
- *
- * v0 ships ONLY the manual / WhatsApp purchase path. Card payment is stubbed
- * visually as "coming soon" so users see the future direction. PR 2b will wire
- * the actual Stripe PaymentElement here.
+ * Render states:
+ *  - loading: skeleton placeholders
+ *  - available: pack picker + "Pay with card" link + (WhatsApp manual path when
+ *    a support number is configured — the MENA bank-transfer / USDT / cash
+ *    fallback)
+ *  - unavailable: config failed to load — shows a WhatsApp fallback so the user
+ *    always has an actionable next step
  */
 export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestModalProps) {
     const t = useTranslations('topup');
@@ -60,9 +63,6 @@ export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestMo
             });
     }, [isOpen]);
 
-    // Inline the channel check below rather than computing a derived boolean
-    // so TypeScript can narrow `config` and `config.whatsappNumber` through
-    // the guard without needing a non-null assertion in the happy path.
     const isLoading = !config && !loadError;
 
     // Loading state: skeleton inside the same modal shell so the user sees the
@@ -81,42 +81,42 @@ export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestMo
         );
     }
 
-    // Unavailable state: config failed OR loaded but no purchase channel
-    // configured. Render a coherent "coming soon" card with an actual fallback
-    // contact instead of mixing pack pricing with a "service unavailable" error.
-    if (loadError || !config || !config.whatsappNumber) {
+    // Unavailable state: config failed to load, so we can't show pack prices.
+    // Card payment lives on /checkout regardless, but without prices the picker
+    // is meaningless — fall back to a WhatsApp contact path.
+    if (loadError || !config) {
         return (
             <Modal isOpen={isOpen} onClose={onClose} title={t('unavailable.title')} size="md">
-                <UnavailableState onClose={onClose} userEmail={userEmail} loadError={loadError} />
+                <UnavailableState onClose={onClose} userEmail={userEmail} />
             </Modal>
         );
     }
 
-    // Available state — TS now narrows `config` and `config.whatsappNumber`
-    // through the guard above. We still need to guard on `pack` because the
-    // backend response could theoretically omit a known pack id (defensive).
+    // TS now narrows `config`. Guard `pack` defensively in case the backend
+    // response omits a known pack id.
     const pack = config.packs[selectedPack];
     if (!pack) {
         return (
             <Modal isOpen={isOpen} onClose={onClose} title={t('unavailable.title')} size="md">
-                <UnavailableState onClose={onClose} userEmail={userEmail} loadError={true} />
+                <UnavailableState onClose={onClose} userEmail={userEmail} />
             </Modal>
         );
     }
 
+    const whatsappAvailable = !!config.whatsappNumber;
     // Two i18n keys (with/without email line) keep translator-facing strings
-    // simple — no embedded select syntax — and let phone-only users (no email
-    // on file) avoid a dangling "My email: " line in the prefilled message.
-    const messageKey = userEmail ? 'modal.whatsappMessageWithEmail' : 'modal.whatsappMessage';
-    const whatsappUrl = buildWhatsAppUrl(
-        config.whatsappNumber,
-        t(messageKey, {
-            repliesCount: pack.repliesAdded,
-            pack: selectedPack,
-            priceUsd: pack.priceCents / 100,
-            email: userEmail ?? '',
-        }),
-    );
+    // simple and let phone-only users avoid a dangling "My email: " line.
+    const whatsappUrl = whatsappAvailable
+        ? buildWhatsAppUrl(
+            config.whatsappNumber,
+            t(userEmail ? 'modal.whatsappMessageWithEmail' : 'modal.whatsappMessage', {
+                repliesCount: pack.repliesAdded,
+                pack: selectedPack,
+                priceUsd: pack.priceCents / 100,
+                email: userEmail ?? '',
+            }),
+        )
+        : null;
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={t('modal.title')} size="md">
@@ -153,31 +153,36 @@ export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestMo
                         {t('modal.contactToBuy')}
                     </p>
 
-                    {/* Card payment — disabled stub (PR 2b will enable) */}
-                    <div
-                        className="flex items-start gap-3 p-3 rounded-lg border border-surface-200 dark:border-surface-700 opacity-60"
-                        aria-disabled="true"
+                    {/* Card payment — links to the shared /checkout flow (same rules
+                        as pricing: sanctions, login, native→web, Stripe form). */}
+                    <Link
+                        href={`/checkout?topup=${selectedPack}`}
+                        onClick={onClose}
+                        className="flex items-center gap-3 p-3 rounded-lg border border-brand-300 hover:border-brand-500 hover:bg-brand-50 dark:border-brand-700 dark:hover:bg-brand-900/30 transition-colors"
                     >
-                        <CreditCard className="w-5 h-5 text-icon-muted shrink-0 mt-0.5" aria-hidden="true" />
+                        <CreditCard className="w-5 h-5 text-brand-600 dark:text-brand-400 shrink-0" aria-hidden="true" />
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold">{t('method.card')}</p>
                             <p className="text-xs text-muted-foreground mt-0.5">{t('method.cardSubtitle')}</p>
                         </div>
-                    </div>
+                        <ChevronRight className="w-4 h-4 text-icon-muted shrink-0 rtl:rotate-180" aria-hidden="true" />
+                    </Link>
 
-                    {/* WhatsApp manual path */}
-                    <a
-                        href={whatsappUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-start gap-3 p-3 rounded-lg border border-emerald-300 hover:border-emerald-400 hover:bg-emerald-50 dark:border-emerald-700 dark:hover:bg-emerald-900/30 transition-colors"
-                    >
-                        <MessageCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold">{t('method.whatsapp')}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{t('method.whatsappSubtitle')}</p>
-                        </div>
-                    </a>
+                    {/* WhatsApp manual path — bank transfer / USDT / cash */}
+                    {whatsappUrl && (
+                        <a
+                            href={whatsappUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-start gap-3 p-3 rounded-lg border border-emerald-300 hover:border-emerald-400 hover:bg-emerald-50 dark:border-emerald-700 dark:hover:bg-emerald-900/30 transition-colors"
+                        >
+                            <MessageCircle className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold">{t('method.whatsapp')}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">{t('method.whatsappSubtitle')}</p>
+                            </div>
+                        </a>
+                    )}
                 </div>
 
                 <div className="flex justify-end pt-2">
@@ -193,32 +198,24 @@ export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestMo
 interface UnavailableStateProps {
     onClose: () => void;
     userEmail?: string;
-    /** True when config fetch failed outright vs. config loaded but no channel configured. */
-    loadError: boolean;
 }
 
 /**
- * Coherent fallback when no purchase channel is available. Shows a clean
- * "coming soon" card and a mailto fallback so the user always has an
- * actionable next step — never just a vague "contact support" string.
- *
- * Emits a Sentry breadcrumb on mount so the team knows the unavailable state
- * is firing in prod (typically means `JAWAB24_SUPPORT_WHATSAPP` got unset, an
- * ops issue we should not learn about from customer complaints).
+ * Fallback when the top-up config fails to load (so pack prices are unknown).
+ * Shows a WhatsApp contact path so the user always has an actionable next step.
+ * Emits a Sentry breadcrumb on mount so the team learns about the failure from
+ * monitoring rather than customer complaints.
  */
-function UnavailableState({ onClose, userEmail, loadError }: UnavailableStateProps) {
+function UnavailableState({ onClose, userEmail }: UnavailableStateProps) {
     const t = useTranslations('topup');
 
-    // Telemetry: surface the unavailable state to monitoring. The two causes
-    // (load failure vs. missing channel config) have different remediation —
-    // one is transient/client-side, the other is an ops misconfiguration.
     useEffect(() => {
         captureError(
-            new Error(loadError ? 'topup_config_load_failed' : 'topup_no_whatsapp_configured'),
+            new Error('topup_config_load_failed'),
             'Top-up modal rendered unavailable state',
-            { tags: { feature: 'topup', cause: loadError ? 'load_failed' : 'no_channel' } },
+            { tags: { feature: 'topup', cause: 'load_failed' } },
         );
-    }, [loadError]);
+    }, []);
 
     const messageKey = userEmail ? 'unavailable.whatsappMessageWithEmail' : 'unavailable.whatsappMessage';
     const whatsappUrl = buildWhatsAppUrl(
@@ -234,7 +231,7 @@ function UnavailableState({ onClose, userEmail, loadError }: UnavailableStatePro
                     aria-hidden="true"
                 />
                 <p className="text-sm leading-relaxed">
-                    {loadError ? t('errors.loadFailed') : t('unavailable.message')}
+                    {t('errors.loadFailed')}
                 </p>
             </div>
 
