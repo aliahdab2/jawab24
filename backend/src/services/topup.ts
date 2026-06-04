@@ -1,4 +1,4 @@
-import { and, eq, lt, sql, isNotNull } from 'drizzle-orm';
+import { and, eq, lt, sql, isNotNull, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { topupPurchases, users } from '../db/schema';
 import { config } from '../config';
@@ -213,16 +213,25 @@ export const topupService = {
     },
 
     /**
-     * Settle a Stripe top-up on payment_intent.succeeded: flip the pending row
-     * to `succeeded` and credit users.topup_balance in one transaction.
+     * Settle a Stripe top-up on payment_intent.succeeded: flip the open row to
+     * `succeeded` and credit users.topup_balance in one transaction.
      *
-     * Idempotency is structural, not advisory: the status update is gated on
-     * `status = 'pending'`, so only the FIRST successful settlement of a given
-     * PaymentIntent updates a row. A webhook replay (or any later delivery)
-     * matches 0 rows and credits nothing — no double-credit is possible even
-     * before the stripeWebhookEvents dedup layer. Returns credited:false with
-     * alreadySettled to let the caller distinguish a replay (expected) from a
-     * genuinely missing row (which it should log for reconciliation).
+     * The settle is gated on `status IN ('pending', 'failed')`, NOT `'pending'`
+     * alone. `payment_intent.succeeded` is authoritative proof the money was
+     * captured, so it MUST win over a prior failed *attempt*: a single
+     * PaymentIntent can fire `payment_intent.payment_failed` (declined attempt)
+     * and then `payment_intent.succeeded` (successful retry on the same PI). If
+     * an earlier event left the row `failed`, success still credits it here —
+     * otherwise the customer would be charged with no replies and the
+     * pending-only reconcile sweep couldn't self-heal it.
+     *
+     * Idempotency is still structural: a `succeeded` row is excluded from the
+     * gate, so a webhook replay (or any later delivery) matches 0 rows and
+     * credits nothing — no double-credit is possible even before the
+     * stripeWebhookEvents dedup layer. A `refunded` row is also excluded (money
+     * already returned). Returns credited:false with alreadySettled to let the
+     * caller distinguish a replay (expected) from a genuinely missing row (which
+     * it should log for reconciliation).
      */
     async settleStripeTopup(stripePaymentIntentId: string): Promise<SettleStripeTopupResult> {
         const now = new Date();
@@ -234,12 +243,12 @@ export const topupService = {
                 .where(
                     and(
                         eq(topupPurchases.stripePaymentIntentId, stripePaymentIntentId),
-                        eq(topupPurchases.status, 'pending'),
+                        inArray(topupPurchases.status, ['pending', 'failed']),
                     ),
                 )
                 .returning({ userId: topupPurchases.userId, repliesAdded: topupPurchases.repliesAdded });
 
-            // 0 rows updated → either already succeeded (replay) or no such row.
+            // 0 rows updated → already succeeded (replay), refunded, or no such row.
             // Disambiguate so the webhook handler logs the missing-row case loudly.
             if (!settled) {
                 const [existing] = await tx
