@@ -295,6 +295,13 @@ export class PaymentController {
                 return reply.status(401).send({ error: 'Unauthorized' });
             }
 
+            // KILL-SWITCH — authoritative gate. When top-up is disabled no
+            // PaymentIntent is ever created, so charging is off the instant the
+            // flag flips (env change + recreate), independent of any frontend.
+            if (!config.topup.enabled) {
+                return reply.status(403).send({ error: 'Top-ups are temporarily unavailable', code: 'TOPUP_DISABLED' });
+            }
+
             // SANCTIONS CHECK — identical to createSubscriptionIntent. A Stripe
             // charge for a sanctioned jurisdiction is the same legal exposure
             // whether it's a subscription or a one-time top-up.

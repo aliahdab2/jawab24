@@ -37,6 +37,10 @@ export default async function subscriptionsRoutes(fastify: FastifyInstance) {
             return reply.send({
                 success: true,
                 data: {
+                    // Card top-up kill-switch — the UI uses this to hide the
+                    // "Pay with card" path and gate the /checkout?topup= page.
+                    // The manual WhatsApp path stays available independently.
+                    enabled: config.topup.enabled,
                     packs: config.topup.packs,
                     currency: config.topup.currency,
                     whatsappNumber: config.topup.whatsappNumber,

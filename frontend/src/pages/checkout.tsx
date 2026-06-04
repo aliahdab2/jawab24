@@ -227,6 +227,9 @@ function CheckoutPage() {
   const purchaseReady = isTopup ? !!topupInfo : !!plan;
 
   const errorLoadPlanMessage = t('errorLoadPlan');
+  // Shown when the card top-up kill-switch is off (config says disabled, or the
+  // create-topup-intent endpoint returns 403 TOPUP_DISABLED for a stale link).
+  const topupUnavailableMessage = tTopup('unavailable.checkoutMessage');
 
   useEffect(() => {
     if (isNativePlatform()) return;
@@ -275,7 +278,15 @@ function CheckoutPage() {
         // Public endpoint (mirrors /plans/:id) so a logged-out visitor still
         // gets the order summary + in-page login gate instead of an error.
         const response = await publicApi.get('/subscription/topup/config');
-        const info = response.data.data.packs[topupPack!];
+        const data = response.data.data;
+        // Kill-switch: card top-up disabled server-side (e.g. flag off, or a
+        // stale deep link after it was turned off) → graceful unavailable state.
+        if (!data.enabled) {
+          setFetchError(true);
+          setError(topupUnavailableMessage);
+          return;
+        }
+        const info = data.packs[topupPack!];
         if (!info) {
           setFetchError(true);
           setError(errorLoadPlanMessage);
@@ -290,7 +301,7 @@ function CheckoutPage() {
     };
 
     fetchTopup();
-  }, [isTopup, topupPack, topupInfo, fetchError, errorLoadPlanMessage, isSanctioned]);
+  }, [isTopup, topupPack, topupInfo, fetchError, errorLoadPlanMessage, topupUnavailableMessage, isSanctioned]);
 
   const createSession = useCallback(async () => {
     if (!purchaseReady || !isAuthenticated || clientSecret || sessionLoading || isSanctioned) return;
@@ -322,6 +333,12 @@ function CheckoutPage() {
         return;
       }
 
+      // Kill-switch tripped between page load and pay (or a stale deep link).
+      if (errorData?.code === 'TOPUP_DISABLED') {
+        setError(topupUnavailableMessage);
+        return;
+      }
+
       if (errorData?.code === 'EMAIL_REQUIRED') {
         const returnUrl = isTopup
           ? `/checkout?topup=${topupPack}`
@@ -341,7 +358,7 @@ function CheckoutPage() {
     } finally {
       setSessionLoading(false);
     }
-  }, [purchaseReady, isTopup, topupPack, plan, isAuthenticated, clientSecret, sessionLoading, isSanctioned, billingInterval, router, t]);
+  }, [purchaseReady, isTopup, topupPack, plan, isAuthenticated, clientSecret, sessionLoading, isSanctioned, billingInterval, router, t, topupUnavailableMessage]);
 
   // Auto-create the payment intent once per purchase config (mode-aware: a
   // top-up pack, or a plan+interval). We gate on a ref keyed by that config

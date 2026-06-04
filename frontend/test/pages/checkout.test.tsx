@@ -447,6 +447,7 @@ describe('CheckoutPage', () => {
     const topupConfigResponse = {
       data: {
         data: {
+          enabled: true,
           packs: {
             '5k': { repliesAdded: 5000, priceCents: 4900 },
             '10k': { repliesAdded: 10000, priceCents: 7900 },
@@ -498,6 +499,20 @@ describe('CheckoutPage', () => {
         expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
       });
       expect(mockPublicApiGet).not.toHaveBeenCalled();
+      expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    it('shows the unavailable message and creates no intent when the kill-switch is off', async () => {
+      mockPublicApiGet.mockResolvedValue({
+        data: { data: { ...topupConfigResponse.data.data, enabled: false } },
+      });
+
+      render(<CheckoutPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument();
+      });
+      // Kill-switch: never attempt to create a PaymentIntent.
       expect(mockApiPost).not.toHaveBeenCalled();
     });
 

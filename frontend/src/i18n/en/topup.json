@@ -30,6 +30,7 @@
     },
     "unavailable": {
         "title": "Top-up options unavailable",
+        "checkoutMessage": "Top-ups are temporarily unavailable. Please check back soon.",
         "whatsappButton": "Contact us on WhatsApp",
         "whatsappMessage": "Hi Jawab24 team,\nI'd like to add extra Smart Replies to my account.",
         "whatsappMessageWithEmail": "Hi Jawab24 team,\nI'd like to add extra Smart Replies to my account.\n\nMy email: {email}"

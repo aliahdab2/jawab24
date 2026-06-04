@@ -31,6 +31,7 @@ vi.mock('@/hooks/useModalBackHandler', () => ({ useModalBackHandler: vi.fn() }))
 vi.mock('@/hooks/useFocusTrap', () => ({ useFocusTrap: () => ({ current: null }) }));
 
 const VALID_CONFIG = {
+    enabled: true,
     packs: {
         '5k': { repliesAdded: 5000, priceCents: 4900 },
         '10k': { repliesAdded: 10000, priceCents: 7900 },
@@ -151,6 +152,31 @@ describe('TopUpRequestModal', () => {
             // No WhatsApp number → no manual path, but the modal is still usable.
             expect(screen.queryByRole('link', { name: /pay via bank transfer/i })).not.toBeInTheDocument();
             expect(screen.queryByText(/Top-up options unavailable/i)).not.toBeInTheDocument();
+        });
+    });
+
+    describe('card top-up kill-switch (enabled: false)', () => {
+        it('hides the "Pay with card" link but keeps the WhatsApp manual path', async () => {
+            mockGetTopupConfig.mockReturnValue(configResponse({ enabled: false }));
+
+            render(<TopUpRequestModal isOpen onClose={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByText('5,000 replies')).toBeInTheDocument();
+            });
+            expect(screen.queryByRole('link', { name: /pay with card/i })).not.toBeInTheDocument();
+            expect(screen.getByRole('link', { name: /pay via bank transfer/i })).toBeInTheDocument();
+        });
+
+        it('shows the unavailable state when card is off AND no WhatsApp channel', async () => {
+            mockGetTopupConfig.mockReturnValue(configResponse({ enabled: false, whatsappNumber: '' }));
+
+            render(<TopUpRequestModal isOpen onClose={vi.fn()} />);
+
+            await waitFor(() => {
+                expect(screen.getByText(/Top-up options unavailable/i)).toBeInTheDocument();
+            });
+            expect(screen.queryByRole('link', { name: /pay with card/i })).not.toBeInTheDocument();
         });
     });
 

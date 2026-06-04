@@ -59,6 +59,20 @@ describe('validateEnv', () => {
         expect(mod.env.AI_ENABLED).toBe(false);
     });
 
+    it('should default TOPUP_ENABLED to false (card top-up off unless explicitly enabled)', async () => {
+        process.env = { ...validEnv };
+
+        const mod = await import('../../src/utils/env');
+        expect(mod.env.TOPUP_ENABLED).toBe(false);
+    });
+
+    it('should transform TOPUP_ENABLED string "true" to boolean', async () => {
+        process.env = { ...validEnv, TOPUP_ENABLED: 'true' };
+
+        const mod = await import('../../src/utils/env');
+        expect(mod.env.TOPUP_ENABLED).toBe(true);
+    });
+
     it('should throw with clear message when DATABASE_URL is missing', async () => {
         const { DATABASE_URL, ...envWithout } = validEnv;
         process.env = { ...envWithout };

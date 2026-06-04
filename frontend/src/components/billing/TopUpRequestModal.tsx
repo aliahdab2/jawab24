@@ -11,6 +11,8 @@ import { buildWhatsAppUrl, DEFAULT_SUPPORT_WHATSAPP_NUMBER } from '@/lib/whatsap
 type Pack = '5k' | '10k';
 
 interface TopupConfig {
+    /** Card top-up kill-switch. When false, only the manual WhatsApp path shows. */
+    enabled: boolean;
     packs: Record<string, { repliesAdded: number; priceCents: number }>;
     currency: string;
     whatsappNumber: string;
@@ -103,7 +105,17 @@ export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestMo
         );
     }
 
+    const cardAvailable = config.enabled;
     const whatsappAvailable = !!config.whatsappNumber;
+
+    // No purchase path at all (card killed AND no manual channel) → unavailable.
+    if (!cardAvailable && !whatsappAvailable) {
+        return (
+            <Modal isOpen={isOpen} onClose={onClose} title={t('unavailable.title')} size="md">
+                <UnavailableState onClose={onClose} userEmail={userEmail} />
+            </Modal>
+        );
+    }
     // Two i18n keys (with/without email line) keep translator-facing strings
     // simple and let phone-only users avoid a dangling "My email: " line.
     const whatsappUrl = whatsappAvailable
@@ -154,19 +166,22 @@ export function TopUpRequestModal({ isOpen, onClose, userEmail }: TopUpRequestMo
                     </p>
 
                     {/* Card payment — links to the shared /checkout flow (same rules
-                        as pricing: sanctions, login, native→web, Stripe form). */}
-                    <Link
-                        href={`/checkout?topup=${selectedPack}`}
-                        onClick={onClose}
-                        className="flex items-center gap-3 p-3 rounded-lg border border-brand-300 hover:border-brand-500 hover:bg-brand-50 dark:border-brand-700 dark:hover:bg-brand-900/30 transition-colors"
-                    >
-                        <CreditCard className="w-5 h-5 text-brand-600 dark:text-brand-400 shrink-0" aria-hidden="true" />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold">{t('method.card')}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{t('method.cardSubtitle')}</p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-icon-muted shrink-0 rtl:rotate-180" aria-hidden="true" />
-                    </Link>
+                        as pricing: sanctions, login, native→web, Stripe form).
+                        Hidden when the card top-up kill-switch is off. */}
+                    {cardAvailable && (
+                        <Link
+                            href={`/checkout?topup=${selectedPack}`}
+                            onClick={onClose}
+                            className="flex items-center gap-3 p-3 rounded-lg border border-brand-300 hover:border-brand-500 hover:bg-brand-50 dark:border-brand-700 dark:hover:bg-brand-900/30 transition-colors"
+                        >
+                            <CreditCard className="w-5 h-5 text-brand-600 dark:text-brand-400 shrink-0" aria-hidden="true" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold">{t('method.card')}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">{t('method.cardSubtitle')}</p>
+                            </div>
+                            <ChevronRight className="w-4 h-4 text-icon-muted shrink-0 rtl:rotate-180" aria-hidden="true" />
+                        </Link>
+                    )}
 
                     {/* WhatsApp manual path — bank transfer / USDT / cash */}
                     {whatsappUrl && (

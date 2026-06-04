@@ -111,6 +111,7 @@ vi.mock('../../src/config', () => ({
             webhookSecret: 'whsec_test',
         },
         topup: {
+            enabled: true,
             packs: {
                 '5k': { repliesAdded: 5000, priceCents: 4900 },
                 '10k': { repliesAdded: 10000, priceCents: 7900 },
@@ -138,6 +139,7 @@ import { stripeService } from '../../src/services/stripe';
 import { topupService } from '../../src/services/topup';
 import { db } from '../../src/db';
 import { paymentRequestService } from '../../src/services/paymentRequest';
+import { config } from '../../src/config';
 
 describe('Payment Controller', () => {
     let paymentController: PaymentController;
@@ -1043,6 +1045,19 @@ describe('Payment Controller', () => {
             mockRequest.user = undefined;
             await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
             expect(mockReply.status).toHaveBeenCalledWith(401);
+        });
+
+        it('returns 403 TOPUP_DISABLED (kill-switch) before any Stripe call', async () => {
+            config.topup.enabled = false;
+            try {
+                await paymentController.createTopupIntent(mockRequest as FastifyRequest, mockReply as FastifyReply);
+                expect(mockReply.status).toHaveBeenCalledWith(403);
+                expect(mockReply.send).toHaveBeenCalledWith(expect.objectContaining({ code: 'TOPUP_DISABLED' }));
+                expect(stripeService.createTopupPaymentIntent).not.toHaveBeenCalled();
+                expect(topupService.createPendingStripeTopup).not.toHaveBeenCalled();
+            } finally {
+                config.topup.enabled = true;
+            }
         });
 
         it('blocks a sanctioned jurisdiction with 403 before any Stripe call', async () => {

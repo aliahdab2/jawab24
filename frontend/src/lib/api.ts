@@ -438,6 +438,7 @@ export const subscriptionApi = {
   getTopupConfig: () => api.get<{
     success: boolean;
     data: {
+      enabled: boolean;
       packs: Record<string, { repliesAdded: number; priceCents: number }>;
       currency: string;
       whatsappNumber: string;

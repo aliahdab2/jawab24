@@ -357,6 +357,10 @@ const start = async () => {
     const { topupService } = await import('./services/topup');
     const TOPUP_RECONCILE_INTERVAL_MS = 15 * 60 * 1000; // 15 min
     const runTopupReconcile = (label: string) => {
+      // Kill-switch: nothing to reconcile while top-up charging is disabled (no
+      // pending rows are created), and we don't want sweep noise. Re-evaluated on
+      // restart, which is when the flag flips anyway (env change + recreate).
+      if (!config.topup.enabled) return;
       topupService.reconcileStripeTopups()
         .then(r => {
           if (r.scanned > 0) server.log.info(r, `[TopupReconcile] ${label}`);
