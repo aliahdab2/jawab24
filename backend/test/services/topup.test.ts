@@ -387,6 +387,24 @@ describe('topupService.settleStripeTopup', () => {
         expect(result).toEqual({ credited: false, alreadySettled: false });
         expect(tx.update).toHaveBeenCalledTimes(1);
     });
+
+    it('does NOT credit a row that was already refunded (claw-back must not be reversed)', async () => {
+        // Money-safety invariant: once a charge is refunded/disputed, reverseStripeTopup
+        // sets the row 'refunded'. A later or replayed payment_intent.succeeded must NOT
+        // re-credit it — 'refunded' is excluded from the settle gate (pending/failed only),
+        // so the conditional update matches 0 rows and the balance is never touched.
+        const tx = buildSettleTx({ settledRow: undefined, existingStatus: 'refunded' });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.settleStripeTopup('pi_refunded_then_succeeded');
+
+        // Not credited, and not "alreadySettled" (that's reserved for an already-succeeded
+        // replay) — so the webhook handler surfaces it for reconciliation rather than
+        // silently re-crediting refunded money.
+        expect(result).toEqual({ credited: false, alreadySettled: false });
+        expect(tx.update).toHaveBeenCalledTimes(1);
+        expect(tx.select).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('topupService.markStripeTopupFailed', () => {
