@@ -442,6 +442,107 @@ describe('CheckoutPage', () => {
     });
   });
 
+  // ─── Top-up mode (?topup=5k) ─────────────────────────────
+  describe('top-up checkout (?topup=5k)', () => {
+    const topupConfigResponse = {
+      data: {
+        data: {
+          enabled: true,
+          packs: {
+            '5k': { repliesAdded: 5000, priceCents: 4900 },
+            '10k': { repliesAdded: 10000, priceCents: 7900 },
+          },
+          currency: 'usd',
+          whatsappNumber: '',
+        },
+      },
+    };
+
+    beforeEach(() => {
+      (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+        query: { topup: '5k' },
+        push: mockPush,
+        pathname: '/checkout',
+        locale: 'en',
+      });
+      // Top-up config is fetched via the PUBLIC endpoint (like /plans/:id), so it
+      // flows through publicApi.get — not the authenticated api instance.
+      mockPublicApiGet.mockResolvedValue(topupConfigResponse);
+    });
+
+    it('fetches the pack via the public config endpoint, creates a top-up intent, and renders the form', async () => {
+      const { container } = render(<CheckoutPage />);
+
+      // Pack summary (price from topup config). The price big number is split
+      // into "$49" + ".00" spans, so match the integer part.
+      await waitFor(() => {
+        expect(screen.getByText('$49')).toBeInTheDocument();
+      });
+      // Config came from the PUBLIC endpoint, not a plan fetch.
+      expect(mockPublicApiGet).toHaveBeenCalledWith('/subscription/topup/config');
+
+      await waitFor(() => {
+        expect(mockApiPost).toHaveBeenCalledWith('/payment/create-topup-intent', { pack: '5k' });
+      }, { timeout: 3000 });
+
+      await waitFor(() => {
+        expect(container.querySelector('[data-testid="payment-element"]')).toBeTruthy();
+      }, { timeout: 3000 });
+    });
+
+    it('blocks sanctioned geos before any top-up call', async () => {
+      mockGeoCheck.mockResolvedValue(true);
+
+      render(<CheckoutPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sanctions-notice')).toBeInTheDocument();
+      });
+      expect(mockPublicApiGet).not.toHaveBeenCalled();
+      expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    it('shows the unavailable message and creates no intent when the kill-switch is off', async () => {
+      mockPublicApiGet.mockResolvedValue({
+        data: { data: { ...topupConfigResponse.data.data, enabled: false } },
+      });
+
+      render(<CheckoutPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText(/temporarily unavailable/i)).toBeInTheDocument();
+      });
+      // Kill-switch: never attempt to create a PaymentIntent.
+      expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    it('shows the login gate (not an error) for an unauthenticated top-up arrival, with no intent call', async () => {
+      // Parity with the subscription flow: a logged-out visitor at
+      // /checkout?topup=5k (deep link, expired session, iOS→web bounce) must get
+      // the in-page login CTA, not a hard error / logout. The public config
+      // endpoint makes the order summary + gate renderable while logged out.
+      (useAuthStore as unknown as ReturnType<typeof vi.fn>).mockReturnValue({ isAuthenticated: false });
+
+      render(<CheckoutPage />);
+
+      await waitFor(() => {
+        expect(screen.getByText('Log in to add replies')).toBeInTheDocument();
+      });
+      // No payment intent is created until the user logs in.
+      expect(mockApiPost).not.toHaveBeenCalled();
+    });
+
+    it('redirects to complete-profile (preserving the top-up) when EMAIL_REQUIRED', async () => {
+      mockApiPost.mockRejectedValue({ response: { data: { code: 'EMAIL_REQUIRED' } } });
+
+      render(<CheckoutPage />);
+
+      await waitFor(() => {
+        expect(mockPush).toHaveBeenCalledWith(expect.stringContaining('topup%3D5k'));
+      });
+    });
+  });
+
   // ─── Missing planId ──────────────────────────────────────
   it('should not crash when planId is missing', async () => {
     (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({

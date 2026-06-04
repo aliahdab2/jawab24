@@ -42,7 +42,7 @@ export const PAGE_NAMESPACES = {
   phoneCollect:       ['auth'],
 
   // ── Payment flow ──────────────────────────────────────────────
-  checkout:           ['checkout', 'payment', 'plans', 'pricing', 'landing'],
+  checkout:           ['checkout', 'payment', 'plans', 'pricing', 'landing', 'topup'],
   paymentSuccess:     ['payment'],
   paymentCancel:      ['payment'],
   paymentReturn:      ['payment'],

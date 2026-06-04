@@ -1735,6 +1735,7 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                 source?: Exclude<TopupSource, 'stripe'>;
                 externalRef?: string;
                 note?: string;
+                force?: boolean;
             };
         }>(
             '/topup',
@@ -1752,13 +1753,36 @@ export default async function adminRoutes(fastify: FastifyInstance) {
                             source: { type: 'string', enum: ['manual', 'admin'], default: 'manual' },
                             externalRef: { type: 'string', maxLength: 255 },
                             note: { type: 'string', maxLength: 1000 },
+                            // Override the open-pending-Stripe-top-up guard below.
+                            force: { type: 'boolean', default: false },
                         },
                     },
                 },
             },
             async (request, reply) => {
-                const { userId, pack, source = 'manual', externalRef, note } = request.body;
+                const { userId, pack, source = 'manual', externalRef, note, force = false } = request.body;
                 const adminUserId = (request as AuthenticatedRequest).user?.userId;
+
+                // Guard against double-crediting a stuck Stripe top-up: if the user has an
+                // open pending Stripe row, the reconciliation sweep will auto-credit it
+                // within ~15 min, so a manual credit on top would double-credit. Surface
+                // it and require an explicit force override for a genuinely-unrelated comp.
+                if (!force) {
+                    const pendingStripe = await topupService.findOpenPendingStripeTopups(userId);
+                    if (pendingStripe.length > 0) {
+                        return reply.status(409).send({
+                            success: false,
+                            error: 'PENDING_STRIPE_TOPUP',
+                            message: `User has ${pendingStripe.length} pending Stripe top-up(s). The reconciliation sweep auto-credits stuck Stripe payments within ~15 min — manual crediting now risks a double-credit. Resend with force=true only if this credit is unrelated to those payments.`,
+                            pendingPaymentIntentIds: pendingStripe.map(p => p.stripePaymentIntentId),
+                        });
+                    }
+                } else {
+                    request.log.warn(
+                        { userId, adminUserId, pack },
+                        'manual_topup forced past the pending-Stripe-top-up guard'
+                    );
+                }
 
                 try {
                     const result = await topupService.creditTopup({

@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { stripeService, stripeRefId, DemoUserStripeError } from '../services/stripe';
 import { paymentRequestService } from '../services/paymentRequest';
 import { subscriptionsService } from '../services/subscriptions';
+import { topupService, UnknownTopupPackError, type TopupPack } from '../services/topup';
 import { db } from '../db';
 import { subscriptions, users, plans, settings, stripeWebhookEvents } from '../db/schema';
 import { eq, desc, or } from 'drizzle-orm';
@@ -271,6 +272,109 @@ export class PaymentController {
             }
             request.log.error({ err: error }, 'Create subscription intent error');
             return reply.status(500).send({ error: 'Failed to create subscription' });
+        }
+    }
+
+    /**
+     * Create a one-time PaymentIntent for a Credit top-up pack (self-service
+     * card payment). Returns clientSecret for the modal's Stripe PaymentElement.
+     * POST /api/payment/create-topup-intent
+     *
+     * Mirrors createSubscriptionIntent: identical sanctions gate, same
+     * find-or-reuse Stripe customer, same demo-user block. A `pending` row is
+     * recorded now; the balance is credited only when payment_intent.succeeded
+     * arrives (see handleTopupPaymentSucceeded).
+     */
+    async createTopupIntent(
+        request: FastifyRequest<{ Body: { pack?: string } }>,
+        reply: FastifyReply
+    ) {
+        try {
+            const userId = (request as AuthenticatedRequest).user?.userId;
+            if (!userId) {
+                return reply.status(401).send({ error: 'Unauthorized' });
+            }
+
+            // KILL-SWITCH — authoritative gate. When top-up is disabled no
+            // PaymentIntent is ever created, so charging is off the instant the
+            // flag flips (env change + recreate), independent of any frontend.
+            if (!config.topup.enabled) {
+                return reply.status(403).send({ error: 'Top-ups are temporarily unavailable', code: 'TOPUP_DISABLED' });
+            }
+
+            // SANCTIONS CHECK — identical to createSubscriptionIntent. A Stripe
+            // charge for a sanctioned jurisdiction is the same legal exposure
+            // whether it's a subscription or a one-time top-up.
+            if (request.geo && isSanctionedGeo(request.geo)) {
+                request.log.warn({ userId, geo: request.geo }, 'Top-up blocked: sanctioned jurisdiction');
+                return reply.status(403).send({ error: 'Payments are not available in your region', code: 'SANCTIONED_GEO_BLOCK' });
+            }
+            if (shouldBlockUnknownGeo(request.geo)) {
+                request.log.warn({ userId, geo: request.geo }, 'Top-up blocked: unknown geo');
+                return reply.status(403).send({ error: 'Unable to process payment at this time', code: 'GEO_VERIFICATION_REQUIRED' });
+            }
+
+            const pack = request.body.pack;
+            const packConfig = pack ? config.topup.packs[pack as TopupPack] : undefined;
+            if (!pack || !packConfig) {
+                return reply.status(400).send({
+                    error: 'Invalid top-up pack',
+                    code: 'INVALID_PACK',
+                    message: `Valid packs: ${Object.keys(config.topup.packs).join(', ')}`,
+                });
+            }
+
+            const [user] = await db.select().from(users).where(eq(users.id, userId));
+            if (!user) return reply.status(404).send({ error: 'User not found' });
+            if (!user.email) {
+                return reply.status(400).send({ error: 'Email required', message: 'Please add your email address to complete the purchase', code: 'EMAIL_REQUIRED' });
+            }
+
+            // Reuse the user's existing Stripe customer (from a subscription) so
+            // top-ups and subscriptions share one customer — saved cards, the
+            // billing portal, and invoice history stay unified.
+            const existingSubscriptions = await db
+                .select({ stripeCustomerId: subscriptions.stripeCustomerId })
+                .from(subscriptions)
+                .where(eq(subscriptions.userId, userId));
+
+            let stripeCustomerId = existingSubscriptions.find(s => s.stripeCustomerId)?.stripeCustomerId;
+            if (!stripeCustomerId) {
+                stripeCustomerId = await stripeService.findOrCreateCustomer(user.email, userId);
+            }
+
+            const paymentIntent = await stripeService.createTopupPaymentIntent({
+                customerId: stripeCustomerId,
+                amountCents: packConfig.priceCents,
+                currency: config.topup.currency,
+                userId,
+                pack,
+            });
+
+            if (!paymentIntent.client_secret) {
+                request.log.error({ paymentIntentId: paymentIntent.id }, 'Top-up PaymentIntent missing client_secret');
+                return reply.status(500).send({ error: 'Failed to start top-up payment' });
+            }
+
+            // Record the pending purchase before returning. By the time the user
+            // enters card details and the payment succeeds, this row is long
+            // committed, so the webhook always finds it.
+            await topupService.createPendingStripeTopup({
+                userId,
+                pack: pack as TopupPack,
+                stripePaymentIntentId: paymentIntent.id,
+            });
+
+            return reply.send({ clientSecret: paymentIntent.client_secret });
+        } catch (error) {
+            if (error instanceof DemoUserStripeError) {
+                return reply.status(403).send({ error: error.message, code: error.code });
+            }
+            if (error instanceof UnknownTopupPackError) {
+                return reply.status(400).send({ error: error.message, code: 'INVALID_PACK' });
+            }
+            request.log.error({ err: error }, 'Create top-up intent error');
+            return reply.status(500).send({ error: 'Failed to start top-up payment' });
         }
     }
 
@@ -706,6 +810,20 @@ export class PaymentController {
                         );
                         break;
 
+                    case 'payment_intent.succeeded':
+                        await this.handleTopupPaymentSucceeded(
+                            event.data.object as Stripe.PaymentIntent,
+                            request
+                        );
+                        break;
+
+                    case 'payment_intent.payment_failed':
+                        await this.handleTopupPaymentFailed(
+                            event.data.object as Stripe.PaymentIntent,
+                            request
+                        );
+                        break;
+
                     case 'invoice.payment_failed':
                         await this.handlePaymentFailed(
                             event.data.object as Stripe.Invoice,
@@ -716,6 +834,13 @@ export class PaymentController {
                     case 'charge.refunded':
                         await this.handleChargeRefunded(
                             event.data.object as Stripe.Charge,
+                            request
+                        );
+                        break;
+
+                    case 'charge.dispute.created':
+                        await this.handleChargeDisputed(
+                            event.data.object as Stripe.Dispute,
                             request
                         );
                         break;
@@ -1140,6 +1265,68 @@ export class PaymentController {
     }
 
     /**
+     * Handle a successful one-time PaymentIntent — credit a Credit top-up pack.
+     *
+     * GUARD: subscription invoices ALSO emit payment_intent.succeeded. Only
+     * PaymentIntents we tagged `metadata.type = 'topup'` are top-ups; everything
+     * else (subscription first-invoice PIs, etc.) is ignored here and handled by
+     * the invoice.* events. This metadata gate is what makes adding this event
+     * to the shared webhook safe — it cannot touch subscription state.
+     */
+    private async handleTopupPaymentSucceeded(paymentIntent: Stripe.PaymentIntent, request: FastifyRequest) {
+        if (paymentIntent.metadata?.type !== 'topup') {
+            request.log.info({ paymentIntentId: paymentIntent.id }, 'payment_intent.succeeded is not a top-up, skipping');
+            return;
+        }
+
+        const result = await topupService.settleStripeTopup(paymentIntent.id);
+
+        if (result.credited) {
+            request.log.info(
+                { paymentIntentId: paymentIntent.id, userId: result.userId, repliesAdded: result.repliesAdded, newBalance: result.newBalance },
+                'Top-up credited'
+            );
+            // Best-effort notification — failure must not break the webhook.
+            if (result.userId) {
+                notificationService.sendTemplateNotification(
+                    result.userId,
+                    'topup_credited',
+                    { replies: String(result.repliesAdded ?? '') },
+                    { deepLink: '/dashboard' }
+                ).catch(err => request.log.error({ err, paymentIntentId: paymentIntent.id }, 'Failed to send topup_credited notification'));
+            }
+            return;
+        }
+
+        if (result.alreadySettled) {
+            request.log.info({ paymentIntentId: paymentIntent.id }, 'Top-up already settled (webhook replay), skipping');
+            return;
+        }
+
+        // No pending row matched a top-up-tagged PaymentIntent. The pending row
+        // is written before the client can pay, so this is near-impossible —
+        // surface it loudly for manual reconciliation rather than silently
+        // dropping a paid-for top-up.
+        captureError(new Error('topup_settle_no_pending_row'), 'Top-up PaymentIntent succeeded but no pending row found', {
+            tags: { service: 'payment', flow: 'topup_settle' },
+            extra: { paymentIntentId: paymentIntent.id, metadata: paymentIntent.metadata },
+        });
+    }
+
+    /**
+     * Handle a failed top-up PaymentIntent — mark the pending row `failed` for
+     * funnel hygiene. Ignores non-top-up PaymentIntents (subscription invoice
+     * failures flow through invoice.payment_failed instead).
+     */
+    private async handleTopupPaymentFailed(paymentIntent: Stripe.PaymentIntent, request: FastifyRequest) {
+        if (paymentIntent.metadata?.type !== 'topup') {
+            return;
+        }
+        await topupService.markStripeTopupFailed(paymentIntent.id);
+        request.log.info({ paymentIntentId: paymentIntent.id }, 'Top-up payment failed, pending row marked failed');
+    }
+
+    /**
      * Handle failed payment
      */
     private async handlePaymentFailed(invoice: Stripe.Invoice, request: FastifyRequest) {
@@ -1180,6 +1367,12 @@ export class PaymentController {
      * separate `customer.subscription.deleted` event if applicable.
      */
     private async handleChargeRefunded(charge: Stripe.Charge, request: FastifyRequest) {
+        // A refunded charge may belong to a one-time top-up (not a subscription).
+        // Reverse it FIRST — clawing back the reply credits — and stop here if it
+        // matched a top-up row, so we don't also run the subscription path.
+        const refundedTopup = await this.reverseTopupForCharge(charge, request, 'refund');
+        if (refundedTopup) return;
+
         const stripeCustomerId = typeof charge.customer === 'string'
             ? charge.customer
             : charge.customer?.id;
@@ -1221,6 +1414,47 @@ export class PaymentController {
             },
             { deepLink: '/settings' }
         ).catch(err => request.log.error({ err, chargeId: charge.id }, 'Failed to send refund_processed notification'));
+    }
+
+    /**
+     * Dispute (chargeback) on a charge. The bank pulls the funds immediately
+     * pending resolution, so for a digital-credit product the money-safe move is
+     * to revoke the top-up credits now (same as a refund). If the dispute is
+     * later won, credits can be re-granted via /admin/topup.
+     */
+    private async handleChargeDisputed(dispute: Stripe.Dispute, request: FastifyRequest) {
+        const charge: Pick<Stripe.Charge, 'id' | 'payment_intent'> = {
+            id: typeof dispute.charge === 'string' ? dispute.charge : dispute.charge.id,
+            payment_intent: dispute.payment_intent ?? null,
+        };
+        await this.reverseTopupForCharge(charge, request, 'dispute');
+        // No subscription-side dispute handling today; nothing else to do.
+    }
+
+    /**
+     * Resolve a refunded/disputed charge to its top-up row (by PaymentIntent) and
+     * reverse it. Returns true if a top-up row matched (so the caller can stop),
+     * false otherwise (the charge wasn't a top-up — caller falls through). Shared
+     * by the refund and dispute webhook handlers.
+     */
+    private async reverseTopupForCharge(
+        charge: Pick<Stripe.Charge, 'id' | 'payment_intent'>,
+        request: FastifyRequest,
+        kind: 'refund' | 'dispute',
+    ): Promise<boolean> {
+        const paymentIntentId = typeof charge.payment_intent === 'string'
+            ? charge.payment_intent
+            : charge.payment_intent?.id;
+        if (!paymentIntentId) return false;
+
+        const { reversed, decremented } = await topupService.reverseStripeTopup(paymentIntentId);
+        if (!reversed) return false;
+
+        request.log.info(
+            { chargeId: charge.id, paymentIntentId, kind, creditsClawedBack: decremented },
+            'Top-up reversed from charge ' + kind
+        );
+        return true;
     }
 }
 

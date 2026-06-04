@@ -260,10 +260,64 @@ export class StripeService {
     }
 
     /**
+     * Create a one-time PaymentIntent for a Credit top-up pack.
+     *
+     * Unlike subscriptions, this is a single charge — no recurring item. The
+     * `metadata.type = 'topup'` tag is load-bearing: the webhook handler keys
+     * off it to tell a top-up PaymentIntent apart from the PaymentIntents
+     * Stripe also emits for subscription invoices (both fire
+     * `payment_intent.succeeded`). Without the tag the webhook ignores the
+     * event, so subscription PIs are never mistaken for top-ups.
+     *
+     * `payment_method_types: ['card']` keeps Link off (matching the
+     * subscription PaymentElement) and the per-minute idempotency bucket
+     * dedupes a double-clicked "Pay with card" to a single PaymentIntent while
+     * still allowing a deliberate retry next minute.
+     */
+    async createTopupPaymentIntent(params: {
+        customerId: string;
+        amountCents: number;
+        currency: string;
+        userId: string;
+        pack: string;
+    }): Promise<Stripe.PaymentIntent> {
+        const s = requireStripe();
+        const bucket = Math.floor(Date.now() / 60_000);
+        const idempotencyKey = `topup:${params.userId}:${params.pack}:${bucket}`;
+        return s.paymentIntents.create(
+            {
+                amount: params.amountCents,
+                currency: params.currency,
+                customer: params.customerId,
+                payment_method_types: ['card'],
+                metadata: { type: 'topup', userId: params.userId, pack: params.pack },
+            },
+            { idempotencyKey }
+        );
+    }
+
+    /**
      * Retrieve a Checkout Session by ID (for checking completion status)
      */
     async getCheckoutSession(sessionId: string): Promise<Stripe.Checkout.Session> {
         return requireStripe().checkout.sessions.retrieve(sessionId);
+    }
+
+    /**
+     * Retrieve a PaymentIntent by ID — used by the top-up reconciliation sweep
+     * to check the authoritative payment status when a webhook may have been
+     * missed (money captured but reply credit not yet applied).
+     *
+     * `latest_charge` is expanded because PaymentIntent.status alone is NOT
+     * sufficient to decide whether to credit: a refund or dispute attaches to
+     * the Charge and does NOT flip pi.status away from 'succeeded'. The sweep
+     * must inspect the charge's refunded/amount_refunded/disputed flags before
+     * crediting, or it would grant reply credits for money that was returned.
+     */
+    async retrievePaymentIntent(paymentIntentId: string): Promise<Stripe.PaymentIntent> {
+        return requireStripe().paymentIntents.retrieve(paymentIntentId, {
+            expand: ['latest_charge'],
+        });
     }
 
     /**

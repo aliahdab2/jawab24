@@ -37,6 +37,11 @@ const EnvSchema = z.object({
     AI_SERVICE_URL: z.string().url('AI_SERVICE_URL must be a valid URL').default('http://localhost:3002'),
     AI_ENABLED: z.string().transform(val => val === 'true').default('false'),
     AI_CACHE_ENABLED: z.string().transform(val => val !== 'false').default('true'),
+    // Kill-switch for self-service card top-ups. Defaults OFF so the feature +
+    // its safety infra can deploy dark and be flipped on only after the Stripe
+    // test-mode proof — and flipped back off instantly if anything misbehaves,
+    // with no revert/redeploy.
+    TOPUP_ENABLED: z.string().transform(val => val === 'true').default('false'),
 
     // OpenAI (optional — required for auto-translation, KB embedding, and RAG)
     OPENAI_API_KEY: z.string().optional(),
@@ -105,6 +110,17 @@ const EnvSchema = z.object({
     {
         message: 'RESEND_API_KEY must be set in production — the lead digest cron cannot deliver emails without it',
         path: ['RESEND_API_KEY'],
+    },
+).refine(
+    // When Stripe is configured in production, the webhook secret is mandatory.
+    // Without it, stripe.webhooks.constructEvent throws on every event, the
+    // webhook handler returns 400, Stripe treats it as permanent and stops
+    // retrying — so payments (subscription invoices AND top-ups) get captured
+    // but are never confirmed/credited. Fail fast at startup instead.
+    data => data.NODE_ENV !== 'production' || !data.STRIPE_SECRET_KEY || !!data.STRIPE_WEBHOOK_SECRET,
+    {
+        message: 'STRIPE_WEBHOOK_SECRET must be set in production when STRIPE_SECRET_KEY is configured — webhook signature verification (and all payment confirmation/crediting) fails without it',
+        path: ['STRIPE_WEBHOOK_SECRET'],
     },
 );
 

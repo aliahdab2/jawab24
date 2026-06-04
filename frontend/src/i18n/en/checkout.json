@@ -11,6 +11,7 @@
   "retry": "Try Again",
   "cancel": "Cancel",
   "loginToCheckout": "Log in to complete your subscription",
+  "loginToTopup": "Log in to add replies",
   "loginButton": "Log In",
   "loadingPaymentForm": "Loading payment form...",
   "submitPayment": "Pay {amount}/month",
@@ -19,5 +20,10 @@
   "cancelAnytime": "Cancel anytime. No questions asked.",
   "trialNote": "You won't be charged until your trial ends.",
   "showDetails": "Show order details",
-  "hideDetails": "Hide order details"
+  "hideDetails": "Hide order details",
+  "backToDashboard": "Back to dashboard",
+  "topupSummaryTitle": "Credit top-up",
+  "topupOneTime": "one-time",
+  "submitTopup": "Pay {amount}",
+  "topupTrustNote": "One-time payment · replies credited instantly"
 }

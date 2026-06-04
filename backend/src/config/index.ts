@@ -101,6 +101,12 @@ export const config = {
     // Prices in cents; overridable via env so they can be tuned without redeploy.
     // repliesAdded is the credit applied on successful purchase.
     topup: {
+        // Kill-switch for self-service CARD top-ups (TOPUP_ENABLED). Off by
+        // default: deploy the feature + safety infra dark, flip on after the
+        // Stripe test-mode proof, flip off instantly to stop charging without a
+        // redeploy. Gates create-topup-intent and the reconciliation sweep; the
+        // manual WhatsApp flow is independent (gated by whatsappNumber).
+        enabled: process.env.TOPUP_ENABLED === 'true',
         packs: {
             '5k': {
                 repliesAdded: 5000,
