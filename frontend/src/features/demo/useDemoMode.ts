@@ -24,19 +24,24 @@ export function useDemoMode() {
   const [isChecking, setIsChecking] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Check if demo mode is enabled on mount
+  // Check if demo mode is enabled on mount. Guard the post-await state updates
+  // with a mounted flag: if the component unmounts before the request resolves
+  // (route change, or jsdom teardown in tests), setState-after-unmount throws an
+  // unhandled rejection (e.g. "window is not defined" once the test env is gone).
   useEffect(() => {
+    let mounted = true;
     const checkDemoStatus = async () => {
       try {
         const response = await publicApi.get('/auth/demo/status');
-        setIsEnabled(response.data?.enabled === true);
+        if (mounted) setIsEnabled(response.data?.enabled === true);
       } catch {
-        setIsEnabled(false);
+        if (mounted) setIsEnabled(false);
       } finally {
-        setIsChecking(false);
+        if (mounted) setIsChecking(false);
       }
     };
     checkDemoStatus();
+    return () => { mounted = false; };
   }, []);
 
   // Handle demo login
