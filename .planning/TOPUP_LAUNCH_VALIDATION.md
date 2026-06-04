@@ -139,7 +139,15 @@ Restore the full `stripe listen` (all events) afterward.
 
 ## Production webhook endpoint config (when going live)
 
-In the Stripe **live** Dashboard → Developers → Webhooks, the `https://jawab24.com/payment/webhook`
+> ⚠️ **PROD path is `/api/payment/webhook`, NOT `/payment/webhook`.** nginx has no
+> `/payment` location; the `location /api/` block rewrites `^/api/(.*)$` → backend.
+> A bare `https://jawab24.com/payment/webhook` falls through to the Next.js
+> frontend (404) and never reaches the backend — every event would fail. This is
+> the same endpoint live subscriptions already use. (Local dev is different: the
+> Stripe CLI forwards straight to the backend at `localhost:3000/payment/webhook`,
+> bypassing nginx — that's why the local commands above use the un-prefixed path.)
+
+In the Stripe **live** Dashboard → Developers → Webhooks, the **`https://jawab24.com/api/payment/webhook`**
 endpoint must subscribe to (top-up adds the last two):
 - `checkout.session.completed`
 - `customer.subscription.created` / `.updated` / `.deleted`
@@ -154,10 +162,17 @@ Copy the endpoint's **live** signing secret into the server's `STRIPE_WEBHOOK_SE
 
 ## Go-live checklist
 
-- [ ] Scenarios A–F all pass in TEST mode.
-- [ ] Live webhook endpoint subscribes to all events above (incl. refund + dispute).
-- [ ] Live `STRIPE_WEBHOOK_SECRET` set on the server (backend boots — proves it's present).
-- [ ] Deploy with `TOPUP_ENABLED=false` (feature dark, safety infra live).
-- [ ] Flip `TOPUP_ENABLED=true` via env + `docker-compose up -d --force-recreate` (per the env-reload rule); verify the reconcile cron logs start and `credited>0` Sentry telemetry is wired.
+**Step 1 — Deploy DARK (safe now, no charging):**
+- [ ] Merge `test23` → main and deploy with `TOPUP_ENABLED` unset/false. Safety infra goes live; charging stays off (`createTopupIntent` returns 403, reconcile cron skips).
+
+**Step 2 — Verify BEFORE flipping on (the NO-GO gates):**
+- [ ] **Webhook routable:** the live Stripe endpoint is **`https://jawab24.com/api/payment/webhook`** (NOT `/payment/webhook`).
+- [ ] **Three events subscribed** on that endpoint: `payment_intent.succeeded` **AND** `charge.refunded` **AND** `charge.dispute.created` (the last two are the *only* claw-back path once a row is credited — reconcile won't catch post-credit refunds).
+- [ ] **Canary:** after the dark deploy, create a **test-mode** top-up against prod; confirm the raw event arrives (backend logs / `stripe_webhook_events` table) and routes correctly. Run Scenario B (refund) + C (dispute) against the prod endpoint and confirm `reverseStripeTopup` decrements the balance.
+- [ ] **Browser PaymentElement:** one real `stripe.confirmPayment()` run end-to-end (this client→Stripe path is mocked in all CI tests) → `payment_intent.succeeded` credits once; repeat for idempotency.
+- [ ] **Prod env pre-flight:** confirm the server env has BOTH `STRIPE_SECRET_KEY` and a non-empty `STRIPE_WEBHOOK_SECRET` (else the prod fail-fast guard crashes the container on the flip restart).
+
+**Step 3 — Flip on:**
+- [ ] Set `TOPUP_ENABLED=true` via env + `docker-compose up -d --force-recreate jawab24-backend` (per the env-reload rule). Verify: clean boot, `[TopupReconcile]` cron starts, `create-topup-intent` no longer 403s, `credited>0` Sentry telemetry wired.
 - [ ] Restore prod Stripe creds + `SHOPIFY_HOST_NAME=jawab24.com` etc. if you swapped any local env.
-- [ ] Kill-switch rehearsed: flipping `TOPUP_ENABLED=false` stops charging with no redeploy.
+- [ ] **Kill-switch rehearsed:** flipping `TOPUP_ENABLED=false` stops charging with no redeploy.
