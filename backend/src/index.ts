@@ -349,37 +349,56 @@ const start = async () => {
       });
     }, 60_000);
 
-    // Stripe top-up reconciliation — every 15 min, recover `pending` top-ups
-    // whose payment_intent.succeeded webhook was missed/misconfigured (money
-    // captured by Stripe but replies not yet credited). settleStripeTopup is
-    // idempotent (status='pending' guard), so this never double-credits even
-    // running alongside the live webhook.
-    const { topupService } = await import('./services/topup');
-    const TOPUP_RECONCILE_INTERVAL_MS = 15 * 60 * 1000; // 15 min
-    const runTopupReconcile = (label: string) => {
-      // Kill-switch: nothing to reconcile while top-up charging is disabled (no
-      // pending rows are created), and we don't want sweep noise. Re-evaluated on
-      // restart, which is when the flag flips anyway (env change + recreate).
-      if (!config.topup.enabled) return;
-      topupService.reconcileStripeTopups()
-        .then(r => {
-          if (r.scanned > 0) server.log.info(r, `[TopupReconcile] ${label}`);
-          if (r.credited > 0) {
-            captureError(
-              new Error(`Top-up reconciliation credited ${r.credited} purchase(s) a missed webhook should have`),
-              '[TopupReconcile] recovered missed webhook credits',
-              { level: 'warning', tags: { cron: 'topup_reconcile' }, extra: { ...r } },
-            );
-          }
-        })
-        .catch(err => {
-          server.log.error(err, `[TopupReconcile] ${label} failed`);
-          captureError(err, `[TopupReconcile] ${label} failed`, { tags: { cron: 'topup_reconcile' }, level: 'error' });
-        });
+    // Shared scaffold for the Stripe reconciliation sweeps (top-up credits +
+    // admin collect-payment). Both poll Stripe every 15 min to recover rows a
+    // missed webhook left `pending`, log only when something was scanned, raise
+    // ONE Sentry warning when a sweep recovered work a webhook should have done,
+    // and isolate failures. First run 3 min after boot (the webhook's
+    // fair-chance window). Generic so a third sweep can't drift from the pattern.
+    const RECONCILE_INTERVAL_MS = 15 * 60 * 1000; // 15 min
+    const scheduleReconcileCron = <R extends { scanned: number }>(opts: {
+      label: string;
+      tag: string;
+      run: () => Promise<R>;
+      recovered: (r: R) => { count: number; message: string };
+      enabled?: () => boolean;
+    }) => {
+      const tick = (phase: string) => {
+        if (opts.enabled && !opts.enabled()) return; // kill-switch / feature gate
+        opts.run()
+          .then(r => {
+            // Cast to a concrete object: pino's overload can't resolve our bare
+            // generic R, but every sweep result is a flat record.
+            if (r.scanned > 0) server.log.info(r as Record<string, unknown>, `[${opts.label}] ${phase}`);
+            const rec = opts.recovered(r);
+            if (rec.count > 0) {
+              captureError(new Error(rec.message), `[${opts.label}] recovered missed webhook work`, {
+                level: 'warning', tags: { cron: opts.tag }, extra: { ...r },
+              });
+            }
+          })
+          .catch(err => {
+            server.log.error(err, `[${opts.label}] ${phase} failed`);
+            captureError(err, `[${opts.label}] ${phase} failed`, { tags: { cron: opts.tag }, level: 'error' });
+          });
+      };
+      setInterval(() => tick('scheduled sweep'), RECONCILE_INTERVAL_MS);
+      setTimeout(() => tick('initial sweep'), 3 * 60 * 1000);
     };
-    setInterval(() => runTopupReconcile('scheduled sweep'), TOPUP_RECONCILE_INTERVAL_MS);
-    // First run 3 min after boot (after the webhook's fair-chance window).
-    setTimeout(() => runTopupReconcile('initial sweep'), 3 * 60 * 1000);
+
+    // Stripe top-up reconciliation — recover `pending` top-ups whose
+    // payment_intent.succeeded webhook was missed (money captured, replies not
+    // yet credited). settleStripeTopup is status='pending'-gated so this never
+    // double-credits alongside the live webhook. Gated by the kill-switch (no
+    // pending rows exist while disabled, and we don't want sweep noise).
+    const { topupService } = await import('./services/topup');
+    scheduleReconcileCron({
+      label: 'TopupReconcile',
+      tag: 'topup_reconcile',
+      enabled: () => config.topup.enabled,
+      run: () => topupService.reconcileStripeTopups(),
+      recovered: r => ({ count: r.credited, message: `Top-up reconciliation credited ${r.credited} purchase(s) a missed webhook should have` }),
+    });
 
     // E-commerce scheduled sync — refreshes inventory every 6 hours across all platforms
     // Catches stock changes from sales that webhooks don't cover (inventory_levels/update)
@@ -398,33 +417,16 @@ const start = async () => {
       }
     }, 6 * 60 * 60 * 1000); // Every 6 hours
 
-    // Payment-request reconciliation — every 15 min, recover `pending` admin
-    // "collect payment" rows whose checkout.session.completed webhook was
-    // missed/late (customer paid but the ledger still shows unpaid). markPaid is
-    // status='pending'-gated so this never re-flips a row, and it NEVER touches
-    // reply balance (collect-only). Safe to run alongside the live webhook.
+    // Payment-request reconciliation — recover `pending` admin "collect payment"
+    // rows whose checkout.session.completed webhook was missed/late. markPaid is
+    // status='pending'-gated and NEVER touches reply balance (collect-only).
     const { paymentRequestService } = await import('./services/paymentRequest');
-    const PAYMENT_REQUEST_RECONCILE_INTERVAL_MS = 15 * 60 * 1000; // 15 min
-    const runPaymentRequestReconcile = (label: string) => {
-      paymentRequestService.reconcilePending()
-        .then(r => {
-          if (r.scanned > 0) server.log.info(r, `[PaymentRequestReconcile] ${label}`);
-          if (r.paid > 0) {
-            captureError(
-              new Error(`Payment-request reconciliation marked ${r.paid} request(s) paid a missed webhook should have`),
-              '[PaymentRequestReconcile] recovered missed webhook settlements',
-              { level: 'warning', tags: { cron: 'payment_request_reconcile' }, extra: { ...r } },
-            );
-          }
-        })
-        .catch(err => {
-          server.log.error(err, `[PaymentRequestReconcile] ${label} failed`);
-          captureError(err, `[PaymentRequestReconcile] ${label} failed`, { tags: { cron: 'payment_request_reconcile' }, level: 'error' });
-        });
-    };
-    setInterval(() => runPaymentRequestReconcile('scheduled sweep'), PAYMENT_REQUEST_RECONCILE_INTERVAL_MS);
-    // First run 3 min after boot (after the webhook's fair-chance window).
-    setTimeout(() => runPaymentRequestReconcile('initial sweep'), 3 * 60 * 1000);
+    scheduleReconcileCron({
+      label: 'PaymentRequestReconcile',
+      tag: 'payment_request_reconcile',
+      run: () => paymentRequestService.reconcilePending(),
+      recovered: r => ({ count: r.paid, message: `Payment-request reconciliation marked ${r.paid} request(s) paid a missed webhook should have` }),
+    });
 
     // Verify app-level webhook subscriptions with Meta on startup
     // This ensures the callback URL is verified after every deploy
