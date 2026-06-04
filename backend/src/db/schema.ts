@@ -578,6 +578,7 @@ export const plans = pgTable('plans', {
 
     // Status
     isActive: boolean('is_active').default(true),
+    isPublic: boolean('is_public').notNull().default(true), // false = hidden from public /pricing grid but still purchasable via direct link (high-volume plans)
     isDefault: boolean('is_default').default(false), // Default plan for new users
     sortOrder: integer('sort_order').default(0), // For display ordering
 

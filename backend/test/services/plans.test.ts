@@ -19,6 +19,7 @@ vi.mock('../../src/db/schema', () => ({
         id: 'id',
         slug: 'slug',
         isActive: 'is_active',
+        isPublic: 'is_public',
         isDefault: 'is_default',
         sortOrder: 'sort_order',
     },
@@ -231,6 +232,19 @@ describe('Plans Service', () => {
             mockSelect([]);
             const result = await plansService.getActivePlans();
             expect(result).toEqual([]);
+        });
+
+        it('filters to active AND public plans (hidden high-volume plans excluded)', async () => {
+            const { where } = mockSelect([makeDbRow()]);
+            await plansService.getActivePlans();
+            // The public grid must request only is_active = true AND is_public = true,
+            // so isPublic:false plans (e.g. scale-20k/scale-30k) never surface on /pricing.
+            expect(where).toHaveBeenCalledWith(
+                expect.arrayContaining([
+                    { field: 'is_active', value: true, op: 'eq' },
+                    { field: 'is_public', value: true, op: 'eq' },
+                ]),
+            );
         });
     });
 

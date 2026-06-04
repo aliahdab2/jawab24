@@ -420,6 +420,7 @@ export interface Plan {
   regionalPricing?: Record<string, number>;
   // Status
   isActive: boolean;
+  isPublic: boolean; // false = hidden from the public /pricing grid, still purchasable via direct link
   isDefault: boolean;
   sortOrder: number;
 }

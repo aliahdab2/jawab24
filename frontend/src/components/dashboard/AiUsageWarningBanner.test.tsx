@@ -143,4 +143,35 @@ describe('AiUsageWarningBanner', () => {
         expect(screen.queryByRole('link', { name: /upgrade/i })).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /upgrade/i })).not.toBeInTheDocument();
     });
+
+    it('routes Pro customers at their limit to the hidden high-volume plans', () => {
+        render(
+            <AiUsageWarningBanner
+                planSlug="pro"
+                aiReplies={makeAiReplies({ used: 500, remaining: 0, percentUsed: 100 })}
+            />,
+        );
+        const link = screen.getByRole('link', { name: /high-volume/i });
+        expect(link).toHaveAttribute('href', '/pricing/scale');
+        // Pro is the top public tier — the generic /pricing upgrade isn't offered.
+        expect(screen.queryByText('Upgrade Plan')).not.toBeInTheDocument();
+    });
+
+    it('routes Scale customers at their limit to the high-volume plans too', () => {
+        render(
+            <AiUsageWarningBanner
+                planSlug="scale-20k"
+                aiReplies={makeAiReplies({ used: 20000, limit: 20000, remaining: 0, percentUsed: 100 })}
+            />,
+        );
+        expect(screen.getByRole('link', { name: /high-volume/i })).toHaveAttribute('href', '/pricing/scale');
+    });
+
+    it('shows the generic /pricing upgrade (not high-volume) for lower tiers', () => {
+        render(
+            <AiUsageWarningBanner planSlug="starter" aiReplies={makeAiReplies({ percentUsed: 85 })} />,
+        );
+        expect(screen.getByRole('link', { name: /upgrade/i })).toHaveAttribute('href', '/pricing');
+        expect(screen.queryByText(/high-volume/i)).not.toBeInTheDocument();
+    });
 });

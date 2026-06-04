@@ -27,6 +27,7 @@
     "resetsOn": "resets on {date}",
     "dismiss": "Dismiss",
     "dismissLabel": "Dismiss usage warning",
-    "customizeFallback": "Customize fallback reply"
+    "customizeFallback": "Customize fallback reply",
+    "highVolumeLink": "See high-volume plans"
   }
 }

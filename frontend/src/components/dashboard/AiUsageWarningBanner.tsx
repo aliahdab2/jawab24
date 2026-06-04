@@ -46,6 +46,9 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
     const onTopup = limitReached && (topupBalance ?? 0) > 0;
     const isCritical = limitReached && !onTopup;
     const isWarning = limit !== null && percentUsed >= 80 && percentUsed < 100;
+    // Pro is the top public tier, and Scale plans sit above it — both should be
+    // pointed at the hidden high-volume plans rather than the public /pricing grid.
+    const atTopPublicTier = planSlug === 'pro' || (planSlug?.startsWith('scale-') ?? false);
 
     // Separate dismiss keys per state so each re-shows independently: hitting the
     // limit re-shows even if the 80% warning was dismissed, and the top-up notice
@@ -149,15 +152,18 @@ export function AiUsageWarningBanner({ aiReplies, resetsAt, planSlug, userEmail,
                         size="sm"
                     />
                     {/* On top-up the merchant is covered — no upsell pressure; the plan
-                        upgrade only shows when approaching or genuinely past the wall. */}
+                        upgrade only shows when approaching or genuinely past the wall.
+                        Pro (and Scale) customers are already at the top of the public
+                        grid, so they're routed to the hidden high-volume plans instead
+                        of the regular /pricing page. */}
                     {!onTopup && (
-                        <UpgradeCTA className="block">
+                        <UpgradeCTA href={atTopPublicTier ? '/pricing/scale' : '/pricing'} className="block">
                             <Button
                                 variant="secondary"
                                 size="sm"
                                 icon={<Sparkles className="w-4 h-4" />}
                             >
-                                {tSub('upgradePlan')}
+                                {tSub(atTopPublicTier ? 'limitBanner.highVolumeLink' : 'upgradePlan')}
                             </Button>
                         </UpgradeCTA>
                     )}

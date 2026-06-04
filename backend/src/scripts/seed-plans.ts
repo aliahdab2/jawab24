@@ -59,6 +59,7 @@ async function seedPlans() {
                     prioritySupport: plan.prioritySupport,
                     trialDays: plan.trialDays,
                     isActive: plan.isActive,
+                    isPublic: plan.isPublic,
                     isDefault: plan.isDefault,
                     sortOrder: plan.sortOrder,
                 })
@@ -81,6 +82,7 @@ async function seedPlans() {
                         prioritySupport: plan.prioritySupport,
                         trialDays: plan.trialDays,
                         isActive: plan.isActive,
+                        isPublic: plan.isPublic,
                         isDefault: plan.isDefault,
                         sortOrder: plan.sortOrder,
                         updatedAt: sql`NOW()`,

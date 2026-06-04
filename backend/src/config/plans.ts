@@ -14,7 +14,7 @@ export interface PlanSeed {
     name: string;
     description: string;
     price: number;
-    yearlyPrice: number;
+    yearlyPrice: number | null;
     currency: string;
     interval: 'month' | 'year';
     maxPages: number | null;
@@ -27,6 +27,7 @@ export interface PlanSeed {
     prioritySupport: boolean;
     trialDays: number;
     isActive: boolean;
+    isPublic: boolean;
     isDefault: boolean;
     sortOrder: number;
 }
@@ -41,7 +42,7 @@ export const PLANS: PlanSeed[] = [
         currency: 'USD',
         interval: 'month',
         maxPages: 1,
-        maxAiRepliesPerMonth: 1000,
+        maxAiRepliesPerMonth: 1500,
         facebookEnabled: true,
         instagramEnabled: true,
         whatsappEnabled: false,
@@ -50,6 +51,7 @@ export const PLANS: PlanSeed[] = [
         prioritySupport: false,
         trialDays: 30,
         isActive: true,
+        isPublic: true,
         isDefault: true,
         sortOrder: 1,
     },
@@ -62,7 +64,7 @@ export const PLANS: PlanSeed[] = [
         currency: 'USD',
         interval: 'month',
         maxPages: 2,
-        maxAiRepliesPerMonth: 3000,
+        maxAiRepliesPerMonth: 4500,
         facebookEnabled: true,
         instagramEnabled: true,
         whatsappEnabled: false,
@@ -71,6 +73,7 @@ export const PLANS: PlanSeed[] = [
         prioritySupport: false,
         trialDays: 0,
         isActive: true,
+        isPublic: true,
         isDefault: false,
         sortOrder: 2,
     },
@@ -92,7 +95,56 @@ export const PLANS: PlanSeed[] = [
         prioritySupport: true,
         trialDays: 0,
         isActive: true,
+        isPublic: true,
         isDefault: false,
         sortOrder: 3,
+    },
+    {
+        // Hidden high-volume plan — not shown on the public /pricing grid
+        // (isPublic: false). Surfaced to Pro customers at their limit and
+        // purchasable via the private /pricing/scale page or a direct link.
+        slug: 'scale-20k',
+        name: 'Scale 20K',
+        description: 'High volume — for busy stores',
+        price: 14900,
+        yearlyPrice: null,
+        currency: 'USD',
+        interval: 'month',
+        maxPages: 5,
+        maxAiRepliesPerMonth: 20000,
+        facebookEnabled: true,
+        instagramEnabled: true,
+        whatsappEnabled: false,
+        ecommerceEnabled: true,
+        showBranding: false,
+        prioritySupport: true,
+        trialDays: 0,
+        isActive: true,
+        isPublic: false,
+        isDefault: false,
+        sortOrder: 4,
+    },
+    {
+        // Hidden high-volume plan — see scale-20k note above.
+        slug: 'scale-30k',
+        name: 'Scale 30K',
+        description: 'High volume — for very busy stores',
+        price: 19900,
+        yearlyPrice: null,
+        currency: 'USD',
+        interval: 'month',
+        maxPages: 5,
+        maxAiRepliesPerMonth: 30000,
+        facebookEnabled: true,
+        instagramEnabled: true,
+        whatsappEnabled: false,
+        ecommerceEnabled: true,
+        showBranding: false,
+        prioritySupport: true,
+        trialDays: 0,
+        isActive: true,
+        isPublic: false,
+        isDefault: false,
+        sortOrder: 5,
     },
 ];
