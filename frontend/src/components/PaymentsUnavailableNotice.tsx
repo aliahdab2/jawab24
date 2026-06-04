@@ -33,16 +33,16 @@ export function PaymentsUnavailableNotice() {
     const whatsappUrl = buildWhatsAppUrl(DEFAULT_SUPPORT_WHATSAPP_NUMBER, whatsappMessage);
 
     return (
-        <div className="max-w-md mx-auto p-6 bg-slate-800/50 border border-slate-700 rounded-2xl">
+        <div className="max-w-md mx-auto p-6 bg-card border border-theme-border rounded-2xl shadow-sm">
             <div className="flex items-start gap-4">
                 <div className="flex-shrink-0">
-                    <AlertCircle className="w-6 h-6 text-slate-400" />
+                    <AlertCircle className="w-6 h-6 text-muted-foreground" />
                 </div>
                 <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-white mb-2">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
                         {t('unavailable.title')}
                     </h3>
-                    <p className="text-slate-300 text-sm leading-relaxed mb-4">
+                    <p className="text-muted-foreground text-sm leading-relaxed mb-4">
                         {t('unavailable.message')}
                     </p>
                     
@@ -57,7 +57,7 @@ export function PaymentsUnavailableNotice() {
                         {t('unavailable.contactWhatsApp')}
                     </a>
                     
-                    <p className="text-slate-400 text-xs mt-4">
+                    <p className="text-subtle text-xs mt-4">
                         {t('unavailable.support')}
                     </p>
                 </div>

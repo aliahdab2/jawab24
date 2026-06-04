@@ -1198,18 +1198,24 @@ describe('Payment Controller', () => {
             expect(mockReply.send).toHaveBeenCalledWith({ received: true });
         });
 
-        it('marks the pending row failed on payment_intent.payment_failed (type=topup)', async () => {
+        it('does NOT mark the row failed on payment_intent.payment_failed — the PI is retryable (type=topup)', async () => {
+            // Regression: a single PaymentIntent fires payment_intent.payment_failed
+            // on a declined attempt and then payment_intent.succeeded when the
+            // customer retries on the SAME PI. Marking the row 'failed' here would
+            // block settleStripeTopup from crediting the retry — money captured, no
+            // replies, and reconcile (pending-only) can't self-heal. So this event
+            // must be non-destructive: leave the row open for the retry/reconcile.
             const mockEvent: Partial<Stripe.Event> = {
                 id: 'evt_pi_failed',
                 type: 'payment_intent.payment_failed',
                 data: { object: { id: 'pi_topup_failed', metadata: { type: 'topup', userId: 'user_123', pack: '5k' } } as any },
             };
             vi.mocked(stripeService.verifyWebhookSignature).mockReturnValue(mockEvent as any);
-            vi.mocked(topupService.markStripeTopupFailed).mockResolvedValue(undefined);
 
             await paymentController.handleWebhook(mockRequest as FastifyRequest, mockReply as FastifyReply);
 
-            expect(topupService.markStripeTopupFailed).toHaveBeenCalledWith('pi_topup_failed');
+            expect(topupService.markStripeTopupFailed).not.toHaveBeenCalled();
+            expect(topupService.settleStripeTopup).not.toHaveBeenCalled();
             expect(mockReply.send).toHaveBeenCalledWith({ received: true });
         });
     });

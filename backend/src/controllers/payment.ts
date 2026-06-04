@@ -1314,16 +1314,29 @@ export class PaymentController {
     }
 
     /**
-     * Handle a failed top-up PaymentIntent — mark the pending row `failed` for
-     * funnel hygiene. Ignores non-top-up PaymentIntents (subscription invoice
-     * failures flow through invoice.payment_failed instead).
+     * Handle a failed top-up PaymentIntent attempt. Ignores non-top-up
+     * PaymentIntents (subscription invoice failures flow through
+     * invoice.payment_failed instead).
+     *
+     * IMPORTANT: `payment_intent.payment_failed` marks a single FAILED ATTEMPT,
+     * not a dead PaymentIntent. The PI stays at `requires_payment_method` and the
+     * customer can retry on the same client secret (the checkout reuses the same
+     * intent) — Stripe then fires `payment_intent.succeeded` for the SAME PI. So
+     * we must NOT flip the row to a terminal `failed` here: that would block
+     * settleStripeTopup from crediting the retry, leaving money captured with no
+     * replies — and reconcileStripeTopups only sweeps `pending`, so it wouldn't
+     * self-heal. Leave the row open and just log the attempt; genuine
+     * abandonment/cancellation is terminal-ized by reconcileStripeTopups, which
+     * re-queries Stripe before marking a row failed.
      */
     private async handleTopupPaymentFailed(paymentIntent: Stripe.PaymentIntent, request: FastifyRequest) {
         if (paymentIntent.metadata?.type !== 'topup') {
             return;
         }
-        await topupService.markStripeTopupFailed(paymentIntent.id);
-        request.log.info({ paymentIntentId: paymentIntent.id }, 'Top-up payment failed, pending row marked failed');
+        request.log.info(
+            { paymentIntentId: paymentIntent.id },
+            'Top-up payment attempt failed (non-terminal); leaving row open for retry/reconcile',
+        );
     }
 
     /**

@@ -55,6 +55,7 @@ vi.mock('drizzle-orm', () => ({
     and: vi.fn((...conds) => ({ conds, op: 'and' })),
     lt: vi.fn((field, value) => ({ field, value, op: 'lt' })),
     isNotNull: vi.fn((field) => ({ field, op: 'isNotNull' })),
+    inArray: vi.fn((field, values) => ({ field, values, op: 'inArray' })),
     sql: Object.assign(vi.fn(), { raw: vi.fn() }),
 }));
 
@@ -343,6 +344,28 @@ describe('topupService.settleStripeTopup', () => {
         expect(tx.select).not.toHaveBeenCalled();
     });
 
+    it('credits a row left FAILED by an earlier declined attempt (fail-then-retry on same PI)', async () => {
+        // Regression: a single PaymentIntent can fire payment_intent.payment_failed
+        // (declined attempt) and then payment_intent.succeeded (retry on the same
+        // PI). The settle gate must accept a 'failed' row, not only 'pending' —
+        // success is authoritative that the money was captured. Gating on 'pending'
+        // alone left money captured with no replies, and reconcile (pending-only)
+        // could not self-heal. We assert the status gate spans BOTH statuses.
+        const tx = buildSettleTx({
+            settledRow: { userId: 'user_1', repliesAdded: 5000 },
+            newBalance: 5000,
+        });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+        const { inArray } = await import('drizzle-orm');
+
+        const result = await topupService.settleStripeTopup('pi_failed_then_succeeded');
+
+        // The conditional flip must allow 'pending' OR 'failed'.
+        expect(inArray).toHaveBeenCalledWith(expect.anything(), ['pending', 'failed']);
+        expect(result).toMatchObject({ credited: true, alreadySettled: false, repliesAdded: 5000, newBalance: 5000 });
+        expect(tx.update).toHaveBeenCalledTimes(2);
+    });
+
     it('treats a webhook replay (already succeeded) as a no-op, not a re-credit', async () => {
         const tx = buildSettleTx({ settledRow: undefined, existingStatus: 'succeeded' });
         db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
@@ -363,6 +386,24 @@ describe('topupService.settleStripeTopup', () => {
 
         expect(result).toEqual({ credited: false, alreadySettled: false });
         expect(tx.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('does NOT credit a row that was already refunded (claw-back must not be reversed)', async () => {
+        // Money-safety invariant: once a charge is refunded/disputed, reverseStripeTopup
+        // sets the row 'refunded'. A later or replayed payment_intent.succeeded must NOT
+        // re-credit it — 'refunded' is excluded from the settle gate (pending/failed only),
+        // so the conditional update matches 0 rows and the balance is never touched.
+        const tx = buildSettleTx({ settledRow: undefined, existingStatus: 'refunded' });
+        db.transaction.mockImplementation(async (cb: (tx: typeof tx) => Promise<unknown>) => cb(tx));
+
+        const result = await topupService.settleStripeTopup('pi_refunded_then_succeeded');
+
+        // Not credited, and not "alreadySettled" (that's reserved for an already-succeeded
+        // replay) — so the webhook handler surfaces it for reconciliation rather than
+        // silently re-crediting refunded money.
+        expect(result).toEqual({ credited: false, alreadySettled: false });
+        expect(tx.update).toHaveBeenCalledTimes(1);
+        expect(tx.select).toHaveBeenCalledTimes(1);
     });
 });
 
