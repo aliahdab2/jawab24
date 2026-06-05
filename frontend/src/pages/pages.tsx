@@ -118,6 +118,7 @@ const PagesPage: NextPageWithLayout = () => {
       type SyncResponse = {
         takenCount?: number;
         alreadyMemberOf?: { workspaceId: string; workspaceName: string; role: string; pageName: string }[];
+        trialBlockedCount?: number;
       };
       const { data } = await api.post<SyncResponse>('/pages/sync', { accessToken: fbToken });
 
@@ -143,6 +144,12 @@ const PagesPage: NextPageWithLayout = () => {
         });
       } else if (data?.takenCount && data.takenCount > 0) {
         toast.warning(t('pageTakenWarning', { count: data.takenCount }), { duration: Infinity });
+      }
+
+      // Page(s) connected but auto-reply kept off because the channel already
+      // used its free trial under another account. Prompt the user to subscribe.
+      if (data?.trialBlockedCount && data.trialBlockedCount > 0) {
+        toast.warning(t('pageTrialUsedWarning', { count: data.trialBlockedCount }), { duration: Infinity });
       }
 
       // Refresh list
@@ -234,6 +241,8 @@ const PagesPage: NextPageWithLayout = () => {
         toast.error(t('reconnectRequired'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
+      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
+        toast.error(t('pageTrialUsedBlocked'));
       } else {
         captureError(error, 'Failed to toggle auto-reply', { tags: { page: 'pages', action: 'toggle' } });
         toast.error(tc('error'));
@@ -257,6 +266,8 @@ const PagesPage: NextPageWithLayout = () => {
         toast.error(t('reconnectRequired'));
       } else if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('pageLimitReachedIOS', 'pageLimitReached')));
+      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
+        toast.error(t('pageTrialUsedBlocked'));
       } else {
         captureError(error, 'Failed to toggle Instagram auto-reply', { tags: { page: 'pages', action: 'instagram-toggle' } });
         toast.error(tc('error'));

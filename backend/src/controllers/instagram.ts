@@ -3,6 +3,7 @@ import type { ResolvedWorkspaceRequest } from '../middleware/workspace';
 import { pagesService } from '../services/pages';
 import { instagramService } from '../services/instagram';
 import { subscriptionsService } from '../services/subscriptions';
+import { channelTrialService } from '../services/channelTrial';
 import { db } from '../db';
 import { instagramMedia, instagramComments } from '../db/schema';
 import { eq, desc, inArray, sql } from 'drizzle-orm';
@@ -224,11 +225,37 @@ export class InstagramController {
                         used: limitCheck.used,
                     });
                 }
+
+                // Anti free-trial-abuse: a channel gets one free trial across the
+                // platform. If this channel already used it under another account
+                // and this account isn't paying, keep auto-reply off until they
+                // subscribe (paying unlocks it instantly).
+                const existingPage = await pagesService.getPage(workspaceId, id);
+                if (existingPage) {
+                    const trialCheck = await channelTrialService.evaluate(
+                        workspaceOwnerId,
+                        channelTrialService.channelsForPage(existingPage),
+                    );
+                    if (trialCheck.blocked) {
+                        return reply.status(402).send({
+                            error: 'This account has already used its free trial. Subscribe to enable auto-reply.',
+                            code: 'TRIAL_ALREADY_USED',
+                        });
+                    }
+                }
             }
 
             const page = await pagesService.toggleInstagramAutoReply(workspaceId, id, enabled);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
+            }
+            // Claim the channels for the billing account (first writer wins).
+            if (enabled) {
+                await channelTrialService.record(
+                    channelTrialService.channelsForPage(page),
+                    workspaceOwnerId,
+                    workspaceId,
+                );
             }
             return reply.send(page);
         } catch (error) {

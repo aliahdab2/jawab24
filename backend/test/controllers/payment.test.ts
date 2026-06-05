@@ -855,10 +855,44 @@ describe('Payment Controller', () => {
                 0 // No trial for existing subscriber
             );
 
-            // Verify logging indicates existing subscriber
+            // Verify logging indicates an existing/returning subscriber
             expect(mockRequest.log?.info).toHaveBeenCalledWith(
-                expect.objectContaining({ existingPlanId: 'plan_starter' }),
-                'Existing subscriber - no trial on plan change'
+                expect.objectContaining({ priorSubscriptions: 1 }),
+                'Existing/returning subscriber - no trial on checkout'
+            );
+        });
+
+        it('should skip trial for a returning subscriber whose only prior sub is CANCELED (closes re-trial loophole)', async () => {
+            const mockUser = { id: 'user_ret', email: 'ret@example.com' };
+            const mockPlan = { id: 'plan_starter', name: 'Starter', stripePriceId: 'price_start', trialDays: 30 };
+            // A previously-canceled trial — under the old logic this user would have
+            // been handed a fresh trial again. Must now be denied.
+            const canceledSub = { id: 'sub_old', status: 'canceled', planId: 'plan_starter', externalSubscriptionId: null };
+
+            mockRequest.user = { userId: 'user_ret' };
+            mockRequest.body = { planId: 'plan_starter' };
+            mockRequest.geo = { country: 'US' };
+
+            const mockDb = vi.mocked(db);
+            mockDb.select
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockUser]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([mockPlan]) }) } as any)
+                .mockReturnValueOnce({ from: vi.fn().mockReturnValue({ where: vi.fn().mockResolvedValue([canceledSub]) }) } as any);
+
+            vi.mocked(stripeService.createCheckoutSession).mockResolvedValue({ id: 'cs_test', client_secret: 'cs_test_secret' } as any);
+
+            await paymentController.createCheckoutSession(
+                mockRequest as FastifyRequest,
+                mockReply as FastifyReply
+            );
+
+            expect(stripeService.createCheckoutSession).toHaveBeenCalledWith(
+                'user_ret',
+                'ret@example.com',
+                'plan_starter',
+                'price_start',
+                expect.any(String),
+                0 // No fresh trial — they already had one on this account
             );
         });
 

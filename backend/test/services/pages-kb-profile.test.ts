@@ -34,6 +34,14 @@ vi.mock('../../src/services/subscriptions', () => ({
     }
 }));
 
+vi.mock('../../src/services/channelTrial', () => ({
+    channelTrialService: {
+        channelsForPage: vi.fn(() => []),
+        evaluate: vi.fn().mockResolvedValue({ blocked: false }),
+        record: vi.fn().mockResolvedValue(undefined),
+    }
+}));
+
 vi.mock('../../src/lib/redis', () => ({
     redis: {
         get: vi.fn().mockResolvedValue(null),

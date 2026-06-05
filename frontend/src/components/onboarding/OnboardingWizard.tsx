@@ -153,6 +153,8 @@ export function OnboardingWizard({ onComplete, onSkip }: OnboardingWizardProps) 
       const axiosErr = error as { response?: { status?: number; data?: { code?: string } } };
       if (axiosErr.response?.status === 403 && axiosErr.response?.data?.code === 'PAGE_LIMIT_REACHED') {
         toast.error(t(iosOr('onboarding.pageLimitReachedIOS', 'onboarding.pageLimitReached'), { limit: pageLimit ?? 1 }));
+      } else if (axiosErr.response?.status === 402 && axiosErr.response?.data?.code === 'TRIAL_ALREADY_USED') {
+        toast.error(t('pages.pageTrialUsedBlocked'));
       } else {
         toast.error(t('errors.somethingWentWrong'));
       }

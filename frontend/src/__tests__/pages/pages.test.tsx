@@ -176,6 +176,30 @@ describe('PagesPage - Toggle Error Handling', () => {
         });
     });
 
+    it('should show toast when Facebook toggle ON fails with TRIAL_ALREADY_USED (402)', async () => {
+        mockedPagesApi.toggle.mockRejectedValue({
+            response: {
+                status: 402,
+                data: { code: 'TRIAL_ALREADY_USED', error: 'This page has already used its free trial.' },
+            },
+        });
+
+        renderPage(<PagesPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByText('Second Page')[0]).toBeInTheDocument();
+        });
+
+        const allSwitches = screen.getAllByRole('switch');
+        await act(async () => {
+            fireEvent.click(allSwitches[2]); // page_2 FB toggle (OFF -> ON)
+        });
+
+        await waitFor(() => {
+            expect(mockToastError).toHaveBeenCalledWith('This page has already used its free trial. Subscribe to enable auto-reply.');
+        });
+    });
+
     it('should show generic error toast on Facebook toggle failure (non-403)', async () => {
         mockedPagesApi.toggle.mockRejectedValue({
             response: { status: 500, data: {} },
