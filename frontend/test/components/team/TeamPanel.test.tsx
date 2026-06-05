@@ -1,4 +1,4 @@
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { render } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -106,10 +106,11 @@ describe('TeamPanel', () => {
   it('renders member list with owner badge', async () => {
     renderTeamPanel();
     expect(await screen.findByText('Ahmad')).toBeInTheDocument();
-    // "Owner" appears both as the member's role badge (a <span>) and in the
-    // "What each role can do" legend (a <p>). Scope to the badge span so this
-    // assertion still verifies the member row specifically.
-    expect(await screen.findByText('Owner', { selector: 'span' })).toBeInTheDocument();
+    // "Owner" appears both as the member's role badge and in the "What each
+    // role can do" legend (both are now badge <span>s). Scope to the Members
+    // section so this assertion verifies the member row, not the legend.
+    const membersSection = (await screen.findByRole('heading', { name: 'Members' })).closest('section')!;
+    expect(within(membersSection).getByText('Owner')).toBeInTheDocument();
     expect(await screen.findByText('(You)')).toBeInTheDocument();
   });
 
@@ -219,7 +220,8 @@ describe('TeamPanel', () => {
     mockMembers.mockResolvedValue({ data: [ownerMember, regularMember] });
     renderTeamPanel();
 
-    const removeButtons = await screen.findAllByText('Remove');
+    // The remove control is an icon button labelled via aria-label, not text.
+    const removeButtons = await screen.findAllByLabelText('Remove');
     expect(removeButtons).toHaveLength(1);
   });
 
@@ -228,7 +230,7 @@ describe('TeamPanel', () => {
     renderTeamPanel();
 
     await screen.findByText('Ahmad');
-    const removeButtons = screen.getAllByText('Remove');
+    const removeButtons = screen.getAllByLabelText('Remove');
     // Only admin gets a remove button, not owner
     expect(removeButtons).toHaveLength(1);
   });
