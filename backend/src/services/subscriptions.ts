@@ -54,6 +54,28 @@ export function resolveAiUsageNotificationType(
 }
 
 /**
+ * Is this subscription row a real billing relationship (paying or admin-comp),
+ * as opposed to a free-trial-only account?
+ *
+ * Status is intentionally NOT required to be 'active' for Stripe rows: a
+ * card-on-file customer mid Stripe-managed trial (status='trialing' with an
+ * externalSubscriptionId) is a real customer, not a free-trial farmer. Only the
+ * 'manual' comp path requires status='active' so a canceled comp doesn't count.
+ *
+ * Pure function — exported for unit testing.
+ */
+export function isPayingCustomer(row: {
+    status: string | null;
+    externalSubscriptionId: string | null;
+    stripeCustomerId: string | null;
+    paymentMethod: string | null;
+}): boolean {
+    if (row.externalSubscriptionId || row.stripeCustomerId) return true;
+    if (row.paymentMethod === 'manual' && row.status === 'active') return true;
+    return false;
+}
+
+/**
  * Thrown by incrementAiReplies when both the plan quota AND the topup balance
  * are insufficient to absorb the requested count. Rare in practice — callers
  * gate with canUseAiReplies first — but possible under concurrent increments
@@ -800,6 +822,27 @@ export const subscriptionsService = {
             used,
             remaining: limit - used,
         };
+    },
+
+    /**
+     * Does this user have a real billing relationship (i.e. NOT a free-trial-only
+     * account)? Used by the channel-trial anti-abuse gate to decide whether a user
+     * reconnecting a channel that already consumed its free trial may enable
+     * auto-reply. Free-trial farmers — the abuse we block — have none of these
+     * artifacts: signup creates status='trialing' with no Stripe ids and no
+     * paymentMethod. A user with any prior paying/comp subscription is trusted.
+     */
+    async hasPaidSubscription(userId: string): Promise<boolean> {
+        const rows = await db
+            .select({
+                status: subscriptions.status,
+                externalSubscriptionId: subscriptions.externalSubscriptionId,
+                stripeCustomerId: subscriptions.stripeCustomerId,
+                paymentMethod: subscriptions.paymentMethod,
+            })
+            .from(subscriptions)
+            .where(eq(subscriptions.userId, userId));
+        return rows.some(isPayingCustomer);
     },
 
     /**

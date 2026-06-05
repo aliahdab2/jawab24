@@ -73,6 +73,8 @@
   "pageTakenWarning": "{count, plural, one {# page is} other {# pages are}} already connected to another Jawab24 account. Ask that account's owner to invite you as a team member.",
   "pageTakenInWorkspace": "{count, plural, one {# page is} other {# pages are}} already in workspace ‹{workspaceName}› where you're already a member. Switch to that workspace to manage them.",
   "switchWorkspaceCta": "Switch to {workspaceName}",
+  "pageTrialUsedWarning": "{count, plural, one {# page} other {# pages}} connected, but auto-reply stays off because the free trial has already been used on {count, plural, one {it} other {them}}. Subscribe to enable auto-reply.",
+  "pageTrialUsedBlocked": "This page has already used its free trial. Subscribe to enable auto-reply.",
   "loadFailed": "Failed to load your pages. Please try again.",
   "autoPausedSendRejected": "Facebook kept rejecting our replies on this page, so auto-reply was paused to protect your quota. Check the page on Facebook — it may be restricted, unpublished, or missing a permission — then turn auto-reply back on."
 }

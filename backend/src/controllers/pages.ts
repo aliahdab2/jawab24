@@ -2,6 +2,8 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { pagesService, isPageDisconnected } from '../services/pages';
 import { facebookService } from '../services/facebook';
 import { subscriptionsService } from '../services/subscriptions';
+import { channelTrialService } from '../services/channelTrial';
+import { notificationService } from '../services/notifications';
 import { gapDetectorService } from '../services/kb/gap-detector';
 import { detectCatalogLikePatterns } from '../services/kb/content-classifier';
 import { CreatePageDTO, UpdatePageDTO, createRequestLogger } from '../types';
@@ -206,11 +208,37 @@ export class PagesController {
                         used: limitCheck.used,
                     });
                 }
+
+                // Anti free-trial-abuse: a channel gets one free trial across the
+                // platform. If this channel already used it under another account
+                // and this account isn't paying, keep auto-reply off until they
+                // subscribe (paying unlocks it instantly).
+                if (existingPage) {
+                    const trialCheck = await channelTrialService.evaluate(
+                        workspaceOwnerId,
+                        channelTrialService.channelsForPage(existingPage),
+                    );
+                    if (trialCheck.blocked) {
+                        return reply.status(402).send({
+                            error: 'This page has already used its free trial. Subscribe to enable auto-reply.',
+                            code: 'TRIAL_ALREADY_USED',
+                        });
+                    }
+                }
             }
 
             const page = await pagesService.toggleAutoReply(workspaceId, id, enabled);
             if (!page) {
                 return reply.status(404).send({ error: 'Page not found' });
+            }
+            // Claim the channels for the billing account (first writer wins) so this
+            // page's free trial can't later be farmed by a different account.
+            if (enabled) {
+                await channelTrialService.record(
+                    channelTrialService.channelsForPage(page),
+                    workspaceOwnerId,
+                    workspaceId,
+                );
             }
             return reply.send(serializePage(page));
         } catch (error) {
@@ -248,9 +276,9 @@ export class PagesController {
 
         try {
             request.log.info(`[Pages] Sync requested for workspace ${workspaceId}`);
-            const { syncedPages, skippedCount, takenCount, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
+            const { syncedPages, skippedCount, takenCount, trialBlockedCount, trialBlockedPages, revokedCount, alreadyMemberOf } = await pagesService.syncFromFacebook(workspaceId, userId, accessToken, workspaceOwnerId, createRequestLogger(request.log));
 
-            if (syncedPages.length === 0 && takenCount === 0) {
+            if (syncedPages.length === 0 && takenCount === 0 && (trialBlockedCount ?? 0) === 0) {
                 return reply.send({
                     synced: 0,
                     pages: [],
@@ -267,6 +295,27 @@ export class PagesController {
 
             if (takenCount > 0) {
                 response.takenCount = takenCount;
+            }
+
+            // Pages connected but auto-reply kept OFF because the channel already
+            // used its free trial under another account (and this account isn't
+            // paying). The client surfaces a "subscribe to enable" notice.
+            if ((trialBlockedCount ?? 0) > 0) {
+                response.trialBlockedCount = trialBlockedCount;
+                response.trialBlockedPages = trialBlockedPages;
+
+                // Best-effort persistent bell notification (the toast is transient).
+                // Sent to the billing owner — one per blocked page, capped at a few
+                // so a large sweep can't flood the bell. Failure must not break sync.
+                // No deepLink — the client resolves an iOS-safe route by type
+                // (App Store 3.1.1: iOS taps must not lead to /pricing).
+                for (const blocked of (trialBlockedPages ?? []).slice(0, 5)) {
+                    notificationService.sendTemplateNotification(
+                        workspaceOwnerId,
+                        'page_trial_used',
+                        { pageName: blocked.pageName }
+                    ).catch(err => request.log.error({ err }, 'Failed to send page_trial_used notification'));
+                }
             }
 
             // Pages whose holding workspace the user is already a member of — the

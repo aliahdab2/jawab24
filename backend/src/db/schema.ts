@@ -185,6 +185,34 @@ export const pages = pgTable('pages', {
     };
 });
 
+// 2b. Channel Trials Table — anti-abuse ledger
+//
+// A connected channel (Facebook page, its linked Instagram business account, or
+// a WhatsApp number) gets exactly ONE free trial across all of Jawab24, bound to
+// the first account that auto-enabled it. This stops the "farm endless free
+// trials by recreating accounts" abuse: a new login is cheap, but the business's
+// channel is not. A different, non-paying account that reconnects the same
+// channel may connect it, but cannot enable auto-reply for free — it must
+// subscribe. The (channelType, channelId) pair is unique so the FIRST writer
+// wins; subsequent enables by the same owner are no-ops (ON CONFLICT DO NOTHING).
+export const channelTrials = pgTable('channel_trials', {
+    id: uuid('id').defaultRandom().primaryKey(),
+    // 'facebook' (facebookPageId) | 'instagram' (instagramAccountId) | 'whatsapp' (whatsappPhoneNumberId)
+    channelType: varchar('channel_type', { length: 20 }).notNull(),
+    channelId: varchar('channel_id', { length: 255 }).notNull(),
+    // The account that first claimed the channel's free trial. SET NULL on user
+    // delete so the claim survives (a deleted user must not free up the channel
+    // for a fresh trial); firstUserId === null then reads as "claimed, owner gone".
+    firstUserId: uuid('first_user_id').references(() => users.id, { onDelete: 'set null' }),
+    firstWorkspaceId: uuid('first_workspace_id').references(() => workspaces.id, { onDelete: 'set null' }),
+    firstTrialedAt: timestamp('first_trialed_at').defaultNow(),
+}, (table) => {
+    return {
+        channelUnique: uniqueIndex('idx_channel_trials_type_id').on(table.channelType, table.channelId),
+        firstUserIdIdx: index('idx_channel_trials_first_user_id').on(table.firstUserId),
+    };
+});
+
 // 3. Posts Table (Facebook Posts)
 export const posts = pgTable('posts', {
     id: uuid('id').defaultRandom().primaryKey(),

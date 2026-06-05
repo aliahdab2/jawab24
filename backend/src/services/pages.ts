@@ -6,6 +6,7 @@ import { unwrapBusinessProfile, applyFbSyncToMerchant, applyMerchantEdit, type B
 import { facebookService } from './facebook';
 import { instagramService } from './instagram';
 import { subscriptionsService } from './subscriptions';
+import { channelTrialService } from './channelTrial';
 import { captureError } from '../utils/sentryHelpers';
 import { config } from '../config';
 import { BusinessProfileSchema } from '../utils/validation';
@@ -661,7 +662,7 @@ export class PagesService {
 
         if (!fbPages.data || fbPages.data.length === 0) {
             logger.info('[Pages] No pages returned from Facebook API');
-            return { syncedPages: [], skippedCount: 0, takenCount: 0, alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
+            return { syncedPages: [], skippedCount: 0, takenCount: 0, trialBlockedCount: 0, trialBlockedPages: [] as { pageName: string }[], alreadyMemberOf: [] as AlreadyMemberOfEntry[] };
         }
 
         logger.info(`[Pages] Processing ${fbPages.data.length} pages from Facebook`);
@@ -705,7 +706,10 @@ export class PagesService {
         const results = await Promise.all(processPromises);
 
         // 3. Determine how many more pages can be auto-enabled
-        const enableCheck = await subscriptionsService.canEnablePage(billingUserId ?? userId, workspaceId);
+        // The trial / channel claim belongs to the BILLING account (workspace owner
+        // with the subscription), not necessarily the team member running the sync.
+        const billing = billingUserId ?? userId;
+        const enableCheck = await subscriptionsService.canEnablePage(billing, workspaceId);
         let remainingSlots: number | null = null; // null = unlimited
         if (enableCheck.allowed && enableCheck.remaining !== undefined) {
             remainingSlots = enableCheck.remaining;
@@ -714,6 +718,10 @@ export class PagesService {
         }
         let skippedCount = 0;
         let takenCount = 0;
+        // Pages connected but kept OFF because the channel already used its free
+        // trial under another account and this account isn't paying (abuse guard).
+        let trialBlockedCount = 0;
+        const trialBlockedPages: { pageName: string }[] = [];
         // Pages we couldn't attach because they already belong to another workspace
         // AND the current user is a member of that workspace. Surfaced to the client
         // so the UI can offer "Switch to ‹X›" instead of the generic "ask the owner".
@@ -770,7 +778,19 @@ export class PagesService {
                     .where(eq(pages.facebookPageId, fbPage.id));
                 const globalExisting = globalResults[0];
 
-                const shouldAutoEnable = remainingSlots === null || remainingSlots > 0;
+                // Anti free-trial-abuse: a channel gets one free trial across the
+                // platform, bound to the first account that enabled it. Check the
+                // page's full channel identity (FB page + linked IG + any prior
+                // WhatsApp) so reconnecting under a fresh account — or swapping the
+                // FB page but keeping the same IG — can't farm another free trial.
+                const pageChannels = channelTrialService.channelsForPage({
+                    facebookPageId: fbPage.id,
+                    instagramAccountId,
+                    whatsappPhoneNumberId: globalExisting?.whatsappPhoneNumberId ?? null,
+                });
+                const { blocked: trialBlocked } = await channelTrialService.evaluate(billing, pageChannels);
+                const slotAvailable = remainingSlots === null || remainingSlots > 0;
+                const shouldAutoEnable = slotAvailable && !trialBlocked;
                 // Pass globalExisting's profile so a reclaim/disconnect-recover
                 // preserves the merchant half if any (otherwise undefined → fresh).
                 const businessProfile = buildBusinessProfileContainer(fbPage, globalExisting?.businessProfile as StoredBusinessProfile);
@@ -882,10 +902,20 @@ export class PagesService {
                     await facebookService.subscribePageToWebhooks(fbPage.id, fbPage.access_token);
                 }
 
-                if (shouldAutoEnable && remainingSlots !== null) {
-                    remainingSlots--;
-                }
-                if (!shouldAutoEnable) {
+                if (shouldAutoEnable) {
+                    // Claim the channels for the billing account so this trial can't
+                    // be re-used by a different account later (first writer wins).
+                    await channelTrialService.record(pageChannels, billing, workspaceId);
+                    if (remainingSlots !== null) {
+                        remainingSlots--;
+                    }
+                } else if (trialBlocked) {
+                    // Connected, but auto-reply stays OFF — channel already used its
+                    // free trial. Surfaced so the UI can prompt the user to subscribe.
+                    trialBlockedCount++;
+                    trialBlockedPages.push({ pageName: fbPage.name });
+                } else {
+                    // Plan page-limit reached (slot unavailable).
                     skippedCount++;
                 }
             }
@@ -915,8 +945,8 @@ export class PagesService {
             logger.info(`[Pages] Disabled ${revokedPages.length} page(s) that user revoked access to in Facebook`);
         }
 
-        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit), ${revokedPages.length} disabled (access revoked).`);
-        return { syncedPages, skippedCount, takenCount, revokedCount: revokedPages.length, alreadyMemberOf };
+        logger.info(`[Pages] Sync complete. ${syncedPages.length} pages synced, ${skippedCount} created with auto-reply disabled (plan limit), ${trialBlockedCount} blocked (free trial already used on channel), ${revokedPages.length} disabled (access revoked).`);
+        return { syncedPages, skippedCount, takenCount, trialBlockedCount, trialBlockedPages, revokedCount: revokedPages.length, alreadyMemberOf };
     }
 
     /**

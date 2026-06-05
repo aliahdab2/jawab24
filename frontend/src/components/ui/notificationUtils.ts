@@ -63,7 +63,7 @@ const CHANNEL_AWARE_TYPES = new Set<string>(['flagged_reply', 'skipped_reply']);
 export const ACCOUNT_HEALTH_TYPES = new Set<string>([
     'payment_failed', 'subscription_expiring', 'trial_ending', 'subscription_renewed',
     'refund_processed', 'ai_usage_warning_80', 'ai_usage_limit_reached', 'ai_usage_on_topup',
-    'auto_reply_paused_billing', 'page_disconnected', 'kb_gap', 'provider_failover',
+    'auto_reply_paused_billing', 'page_disconnected', 'page_trial_used', 'kb_gap', 'provider_failover',
 ]);
 
 /**
@@ -94,6 +94,7 @@ export const NOTIFICATION_STYLES: Record<string, NotificationStyle> = {
     trial_ending:          { icon: Clock,         iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
     subscription_renewed:  { icon: CheckCircle,   iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
     page_disconnected:     { icon: Unplug,        iconColor: 'text-slate-600 dark:text-slate-400',     bgColor: 'bg-slate-100 dark:bg-slate-900/30',    ringColor: 'notif-ring-slate' },
+    page_trial_used:       { icon: CreditCard,    iconColor: 'text-orange-600 dark:text-orange-400',   bgColor: 'bg-orange-50 dark:bg-orange-900/30',   ringColor: 'notif-ring-orange' },
     kb_gap:                { icon: BookOpen,       iconColor: 'text-amber-600 dark:text-amber-400',     bgColor: 'bg-amber-50 dark:bg-amber-900/30',     ringColor: 'notif-ring-amber' },
     provider_failover:     { icon: AlertTriangle, iconColor: 'text-red-600 dark:text-red-400',         bgColor: 'bg-red-50 dark:bg-red-900/30',         ringColor: 'notif-ring-red' },
     new_lead:              { icon: UserPlus,      iconColor: 'text-emerald-600 dark:text-emerald-400', bgColor: 'bg-emerald-50 dark:bg-emerald-900/30', ringColor: 'notif-ring-emerald' },
@@ -167,6 +168,7 @@ export function resolveNotificationRoute(
         case 'subscription_expiring':
         case 'subscription_renewed':
         case 'trial_ending':
+        case 'page_trial_used':
             // App Store Guideline 3.1.1: iOS reader-app — no taps lead to /pricing.
             return isIOSNative() ? '/dashboard' : '/pricing';
         case 'page_disconnected':

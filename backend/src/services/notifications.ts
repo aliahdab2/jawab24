@@ -60,6 +60,7 @@ export type NotificationType =
     | 'payment_failed'
     | 'subscription_expiring'
     | 'page_disconnected'
+    | 'page_trial_used'
     | 'subscription_renewed'
     | 'trial_ending'
     | 'flagged_reply'
@@ -135,6 +136,13 @@ export const NOTIFICATION_TEMPLATES: Record<NotificationType, Pick<NotificationP
         bodies: {
             en: 'Your page \'{pageName}\' has been disconnected. Please reconnect to resume auto-replies.',
             ar: 'تم فصل صفحتك \'{pageName}\'. يرجى إعادة الاتصال لاستئناف الرد التلقائي.',
+        },
+    },
+    page_trial_used: {
+        titles: { en: 'Subscribe to Enable Auto-Reply', ar: 'اشترك لتفعيل الرد التلقائي' },
+        bodies: {
+            en: 'Your page \'{pageName}\' is connected, but its free trial was already used. Subscribe to turn on auto-reply.',
+            ar: 'تم ربط صفحتك \'{pageName}\'، لكن فترتها التجريبية المجانية استُخدمت من قبل. اشترك لتفعيل الرد التلقائي.',
         },
     },
     subscription_renewed: {

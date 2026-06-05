@@ -119,7 +119,7 @@ export class PaymentController {
                 return reply.status(400).send({ error: 'Plan does not have a Stripe Price ID configured' });
             }
 
-            // Check if user already has an active/trialing subscription
+            // Look at the user's full subscription history (any status).
             const existingSubscriptions = await db
                 .select({
                     id: subscriptions.id,
@@ -130,23 +130,20 @@ export class PaymentController {
                 .from(subscriptions)
                 .where(eq(subscriptions.userId, userId));
 
-            const activeSubscription = existingSubscriptions.find(
-                s => s.status === 'active' || s.status === 'trialing'
-            );
-
             // Determine trial days:
-            // - No trial if user already has ANY paid subscription (upgrading/downgrading)
-            // - Use plan's trial_days only for completely new users
+            // - Trial only for an account with NO prior subscription history of any
+            //   kind. A user who already consumed a trial on this account (now
+            //   canceled/past_due) must not get fresh Stripe trial days — that was a
+            //   re-trial loophole. Upgrade/downgrade from an active/trialing sub also
+            //   gets no trial.
             let trialDays = 0;
-            if (!activeSubscription && plan.trialDays && plan.trialDays > 0) {
-                // New user on a plan with trial - give them the trial
+            if (existingSubscriptions.length === 0 && plan.trialDays && plan.trialDays > 0) {
                 trialDays = plan.trialDays;
                 request.log.info({ userId, planId, trialDays }, 'New user eligible for trial');
-            } else if (activeSubscription) {
-                // Existing subscriber - no trial (upgrade/downgrade)
+            } else if (existingSubscriptions.length > 0) {
                 request.log.info(
-                    { userId, planId, existingPlanId: activeSubscription.planId },
-                    'Existing subscriber - no trial on plan change'
+                    { userId, planId, priorSubscriptions: existingSubscriptions.length },
+                    'Existing/returning subscriber - no trial on checkout'
                 );
             }
 
@@ -235,14 +232,15 @@ export class PaymentController {
                 .from(subscriptions)
                 .where(eq(subscriptions.userId, userId));
 
-            const activeSubscription = existingSubscriptions.find(s => s.status === 'active' || s.status === 'trialing');
-
+            // Trial only for an account with NO prior subscription history of any
+            // kind — a user who already consumed a trial (now canceled/past_due)
+            // must not get fresh Stripe trial days (re-trial loophole).
             let trialDays = 0;
-            if (!activeSubscription && plan.trialDays && plan.trialDays > 0) {
+            if (existingSubscriptions.length === 0 && plan.trialDays && plan.trialDays > 0) {
                 trialDays = plan.trialDays;
                 request.log.info({ userId, planId, trialDays }, 'New user eligible for trial');
-            } else if (activeSubscription) {
-                request.log.info({ userId, planId, existingPlanId: activeSubscription.planId }, 'Existing subscriber - no trial on plan change');
+            } else if (existingSubscriptions.length > 0) {
+                request.log.info({ userId, planId, priorSubscriptions: existingSubscriptions.length }, 'Existing/returning subscriber - no trial on checkout');
             }
 
             // Find or create Stripe Customer (check existing subscriptions first)

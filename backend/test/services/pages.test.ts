@@ -3,6 +3,7 @@ import { pagesService } from '../../src/services/pages';
 import { db } from '../../src/db';
 import { facebookService } from '../../src/services/facebook';
 import { instagramService } from '../../src/services/instagram';
+import { channelTrialService } from '../../src/services/channelTrial';
 
 vi.mock('../../src/db', () => ({
     db: {
@@ -30,6 +31,14 @@ vi.mock('../../src/services/instagram', () => ({
 vi.mock('../../src/services/subscriptions', () => ({
     subscriptionsService: {
         canEnablePage: vi.fn().mockResolvedValue({ allowed: true, remaining: null }),
+    }
+}));
+
+vi.mock('../../src/services/channelTrial', () => ({
+    channelTrialService: {
+        channelsForPage: vi.fn(() => []),
+        evaluate: vi.fn().mockResolvedValue({ blocked: false }),
+        record: vi.fn().mockResolvedValue(undefined),
     }
 }));
 
@@ -192,6 +201,55 @@ describe('PagesService', () => {
 
             // knowledgeBase should be auto-applied from Facebook data
             expect(insertedValues.knowledgeBase).toBe(insertedValues.suggestedKnowledgeBase);
+        });
+
+        // Anti free-trial-abuse: when the channel-trial gate reports a page's
+        // channel already consumed its free trial under another account, the page
+        // is still connected but auto-reply must stay OFF, it must NOT be claimed
+        // again, and the result must surface trialBlockedCount/trialBlockedPages so
+        // the client can prompt the user to subscribe.
+        it('connects a trial-blocked page with auto-reply OFF and reports it', async () => {
+            const workspaceId = 'workspace-123';
+            const userId = 'user-123';
+            const accessToken = 'token-123';
+
+            vi.mocked(facebookService.getUserPages).mockResolvedValue({
+                data: [{ id: 'fb-page-1', name: 'Reused Business', access_token: 'pt-1' }],
+            });
+
+            // No existing pages in this workspace; globalResults resolves to a
+            // non-array object → globalExisting undefined → brand-new insert path.
+            vi.mocked(db.select).mockReturnValue({
+                from: vi.fn().mockReturnValue({
+                    where: vi.fn().mockReturnValue({
+                        orderBy: vi.fn().mockReturnValue({ limit: vi.fn().mockResolvedValue([]) }),
+                    }),
+                }),
+            } as any);
+
+            vi.mocked(instagramService.getLinkedInstagramAccount).mockResolvedValue(null);
+
+            // The channel already used its free trial under another, non-paying account.
+            vi.mocked(channelTrialService.evaluate).mockResolvedValueOnce({ blocked: true });
+
+            let insertedValues: any = null;
+            vi.mocked(db.insert).mockReturnValue({
+                values: vi.fn().mockImplementation((values) => {
+                    insertedValues = values;
+                    return { returning: vi.fn().mockResolvedValue([{ id: 'new-page-id', ...values }]) };
+                }),
+            } as any);
+
+            const result = await pagesService.syncFromFacebook(workspaceId, userId, accessToken);
+
+            // Page connected but auto-reply OFF
+            expect(insertedValues).toBeDefined();
+            expect(insertedValues.autoReplyEnabled).toBe(false);
+            // Reported so the UI can prompt a subscribe
+            expect(result.trialBlockedCount).toBe(1);
+            expect(result.trialBlockedPages).toEqual([{ pageName: 'Reused Business' }]);
+            // Must NOT claim the channel (it belongs to the original account)
+            expect(channelTrialService.record).not.toHaveBeenCalled();
         });
 
         it('should disable pages revoked in Facebook', async () => {
