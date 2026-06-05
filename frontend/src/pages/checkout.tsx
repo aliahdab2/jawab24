@@ -120,6 +120,18 @@ function PaymentForm({
           PaymentElement's wallets option only supports applePay/googlePay — `link` is
           not a valid wallet key here. */}
       <PaymentElement />
+
+      {/* Trust cue — lock + label placed within the card-field area. Baymard finds
+          a security cue encapsulating the sensitive fields best reinforces perceived
+          security (and ~18% of users abandon over trust concerns); icon + text
+          together outperforms either alone. Stripe handles inline field validation,
+          so the submit button stays always-enabled (disabling-until-valid is a known
+          anti-pattern that breaks autofill/paste on mobile). */}
+      <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+        <Lock className="w-3.5 h-3.5" aria-hidden="true" />
+        {t('securePayment')}
+      </p>
+
       {errorMessage && (
         <div className="mt-4 p-3 alert-error border rounded-xl text-sm text-start">
           {errorMessage}
@@ -602,10 +614,9 @@ function CheckoutPage() {
                           </>
                         )}
                       </div>
-
-                      <p className="text-center text-xs text-muted-foreground mt-4 pt-4 border-t border-theme-border">
-                        {t('securePayment')}
-                      </p>
+                      {/* Trust cue lives once, within the card-field area (see PaymentForm) —
+                          Baymard: a single security cue encapsulating the sensitive fields
+                          beats repeating identical copy across regions. */}
                     </div>
                   </div>
                 </div>
