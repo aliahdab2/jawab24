@@ -137,4 +137,51 @@ describe('ScalePage (/pricing/scale)', () => {
         // Surfaces once usage confirms an active (non-free) subscription.
         expect(await screen.findByRole('button', { name: /add replies/i })).toBeInTheDocument();
     });
+
+    // --- Mobile tab selector (shared PlanTabSelector, only with ≥2 plans) -------
+    describe('mobile tab selector', () => {
+        const twoPlans = [
+            makeScalePlan({ id: 'plan-scale-20k', slug: 'scale-20k', name: 'Scale 20K', price: 9900, maxAiRepliesPerMonth: 20000 }),
+            makeScalePlan({ id: 'plan-scale-30k', slug: 'scale-30k', name: 'Scale 30K', price: 19900, maxAiRepliesPerMonth: 30000 }),
+        ];
+
+        it('renders one tab per plan, defaulting to the first', async () => {
+            render(<ScalePage plans={twoPlans} />);
+
+            const tabs = await screen.findAllByRole('tab');
+            expect(tabs).toHaveLength(2);
+            expect(screen.getByRole('tab', { name: 'Scale 20K' })).toBeInTheDocument();
+            expect(screen.getByRole('tab', { name: 'Scale 30K' })).toBeInTheDocument();
+            expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+            expect(tabs[1]).toHaveAttribute('aria-selected', 'false');
+        });
+
+        it('completes the WAI-ARIA tabs pattern (tab id ↔ panel aria-labelledby)', async () => {
+            render(<ScalePage plans={twoPlans} />);
+
+            const panels = await screen.findAllByRole('tabpanel');
+            expect(panels).toHaveLength(2);
+            const firstTab = screen.getByRole('tab', { name: 'Scale 20K' });
+            expect(firstTab).toHaveAttribute('id', 'plan-tab-scale-20k');
+            expect(firstTab).toHaveAttribute('aria-controls', 'plan-panel-scale-20k');
+            expect(panels[0]).toHaveAttribute('id', 'plan-panel-scale-20k');
+            expect(panels[0]).toHaveAttribute('aria-labelledby', 'plan-tab-scale-20k');
+        });
+
+        it('switches the active tab on click', async () => {
+            render(<ScalePage plans={twoPlans} />);
+
+            const secondTab = await screen.findByRole('tab', { name: 'Scale 30K' });
+            fireEvent.click(secondTab);
+
+            await waitFor(() => expect(secondTab).toHaveAttribute('aria-selected', 'true'));
+            expect(screen.getByRole('tab', { name: 'Scale 20K' })).toHaveAttribute('aria-selected', 'false');
+        });
+
+        it('omits the tab bar when only one plan loaded (degraded state)', async () => {
+            render(<ScalePage plans={[makeScalePlan()]} />);
+            await screen.findByText('30,000');
+            expect(screen.queryByRole('tab')).not.toBeInTheDocument();
+        });
+    });
 });

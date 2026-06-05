@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, type ReactElement, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, type ReactElement, type ReactNode } from 'react';
 import Head from 'next/head';
 import type { GetStaticProps } from 'next';
 import clsx from 'clsx';
@@ -16,10 +16,10 @@ import { isUserSanctionedNonBlocking } from '@/utils/geoCheck';
 import { FALLBACK_PLANS } from '@/data/fallbackPlans';
 import { captureError } from '@/lib/sentryHelpers';
 import type { NextPageWithLayout } from './_app';
-import { isRTLLocale } from '@/utils/locale';
 import { ShopifyIcon, SallaIcon, ZidIcon } from '@/components/landing/LandingHero';
 import { getDisplayPrice, getMonthlyEquivalent, getAnnualSavings, formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
+import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
 
 interface PricingPageProps {
   plans: Plan[];
@@ -406,8 +406,7 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
     [activePlans, currentPlanSlug]
   );
 
-  // --- Mobile tab state ---
-  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  // --- Mobile tab state --- (tab bar + keyboard nav live in the shared PlanTabSelector)
   const [activeTab, setActiveTab] = useState(0);
 
   const popularIndex = useMemo(
@@ -420,23 +419,6 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
 
   // Default to popular plan tab on mount
   useEffect(() => { setActiveTab(popularIndex); }, [popularIndex]);
-
-  // Keyboard navigation for tab bar (RTL-aware)
-  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    const isRTL = isRTLLocale(locale);
-    const forward = isRTL ? 'ArrowLeft' : 'ArrowRight';
-    const backward = isRTL ? 'ArrowRight' : 'ArrowLeft';
-    let next = activeTab;
-
-    if (e.key === forward) { e.preventDefault(); next = (activeTab + 1) % activePlans.length; }
-    else if (e.key === backward) { e.preventDefault(); next = (activeTab - 1 + activePlans.length) % activePlans.length; }
-    else if (e.key === 'Home') { e.preventDefault(); next = 0; }
-    else if (e.key === 'End') { e.preventDefault(); next = activePlans.length - 1; }
-    else return;
-
-    setActiveTab(next);
-    tabRefs.current[next]?.focus();
-  };
 
   if (iosRedirecting) return null;
 
@@ -566,39 +548,13 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
         </div>
 
         {/* Plan tabs — mobile only (Shopify-style segmented control) */}
-        <div
-          className="grid mx-4 mb-8 border border-theme-border rounded-lg overflow-hidden md:hidden"
-          style={{ gridTemplateColumns: `repeat(${activePlans.length}, 1fr)` }}
-          role="tablist"
-          aria-label={t('pricing.planTabs')}
-          onKeyDown={handleTabKeyDown}
-        >
-          {activePlans.map((plan, index) => {
-            const tabLabel = tPricing(plan.slug);
-            return (
-              <button
-                key={plan.id}
-                ref={(el) => { tabRefs.current[index] = el; }}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === index}
-                aria-controls={`plan-panel-${plan.slug}`}
-                tabIndex={activeTab === index ? 0 : -1}
-                onClick={() => setActiveTab(index)}
-                className={clsx(
-                  'py-3 text-sm font-semibold text-center transition-all duration-200 whitespace-nowrap',
-                  'border-theme-border',
-                  index > 0 && 'border-s',
-                  activeTab === index
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'bg-background text-muted-foreground hover:text-foreground/70 hover:bg-muted',
-                )}
-              >
-                {tabLabel}
-              </button>
-            );
-          })}
-        </div>
+        <PlanTabSelector
+          tabs={activePlans.map((plan) => ({ key: plan.slug, label: tPricing(plan.slug) }))}
+          activeIndex={activeTab}
+          onChange={setActiveTab}
+          locale={locale}
+          ariaLabel={t('pricing.planTabs')}
+        />
 
         {/* Plans — single container: stacked grid on mobile, multi-col grid on md+ */}
         <div
@@ -616,6 +572,12 @@ const PricingPage: NextPageWithLayout<PricingPageProps> = ({ plans: serverPlans 
             <div
               key={plan.id}
               id={`plan-panel-${plan.slug}`}
+              // Pairs with the mobile tab (role="tab", id plan-tab-<slug>) in
+              // PlanTabSelector to complete the WAI-ARIA tabs pattern. On md+ the
+              // tablist is hidden and these are just grid cards; the labelledby
+              // still gives each card an accessible name from the (hidden) tab text.
+              role="tabpanel"
+              aria-labelledby={`plan-tab-${plan.slug}`}
               className={clsx(
                 // Mobile: all cards in same cell, only active one visible
                 'col-start-1 row-start-1 md:col-auto md:row-auto',

@@ -502,6 +502,37 @@ describe('CheckoutPage', () => {
       expect(mockApiPost).not.toHaveBeenCalled();
     });
 
+    // Regression for the package-selection handoff: arriving with ?topup=10k must
+    // resolve the 10k pack's price ($79) + reply count and create a 10k intent —
+    // NOT silently fall back to 5k/$49. Pairs with the modal-side test in
+    // TopUpRequestModal.test.tsx ("card link reflects the selected pack") to lock
+    // the full select-pack → checkout handoff end to end.
+    it('uses the 10k pack price + intent when arriving with ?topup=10k', async () => {
+      (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({
+        query: { topup: '10k' },
+        push: mockPush,
+        pathname: '/checkout',
+        locale: 'en',
+      });
+
+      render(<CheckoutPage />);
+
+      // Summary shows the 10k pack price ($79), not the 5k price ($49).
+      await waitFor(() => {
+        expect(screen.getByText('$79')).toBeInTheDocument();
+      });
+      expect(screen.queryByText('$49')).not.toBeInTheDocument();
+      // 10,000 reply count is surfaced in the summary (rendered in both the
+      // mobile collapsed header and the desktop summary, so match all).
+      expect(screen.getAllByText(/10,000/).length).toBeGreaterThan(0);
+
+      // The created intent carries the 10k pack — the server prices off this, so a
+      // wrong pack here would charge the wrong amount.
+      await waitFor(() => {
+        expect(mockApiPost).toHaveBeenCalledWith('/payment/create-topup-intent', { pack: '10k' });
+      }, { timeout: 3000 });
+    });
+
     it('shows the unavailable message and creates no intent when the kill-switch is off', async () => {
       mockPublicApiGet.mockResolvedValue({
         data: { data: { ...topupConfigResponse.data.data, enabled: false } },

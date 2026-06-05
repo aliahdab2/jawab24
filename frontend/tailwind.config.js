@@ -5,6 +5,11 @@ module.exports = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    // Plain .ts utilities that build Tailwind class strings (e.g. utils/pricing.ts's
+    // planAccentClasses / planBadgeGradient). Without this glob, classes referenced
+    // ONLY here (from-blue-500, ring-blue-500, ring-amber-400, ring-emerald-400) are
+    // purged from the build, silently breaking the plan-card badge gradient + ring identity.
+    './src/utils/**/*.{js,ts}',
   ],
   theme: {
     extend: {

@@ -6,6 +6,7 @@ import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, Button } from '@/components/ui';
 import { BuyTopUpCTA } from '@/components/billing/BuyTopUpCTA';
 import { SanctionedCtaFallback } from '@/components/billing/SanctionedCtaFallback';
+import { PlanTabSelector } from '@/components/billing/PlanTabSelector';
 import { formatUsd, planAccentClasses, planBadgeGradient } from '@/utils/pricing';
 import { subscriptionApi } from '@/lib/api';
 import { extractObjectData } from '@/lib/api-utils';
@@ -172,6 +173,10 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
 
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [isSanctioned, setIsSanctioned] = useState(false);
+  // Mobile tab state — one card visible at a time, matching the public /pricing
+  // page's segmented control (shared PlanTabSelector). Defaults to the first
+  // (lower-volume) plan; desktop shows both side by side.
+  const [activeTab, setActiveTab] = useState(0);
 
   // Shared plan-selection flow (same hook as /pricing); scale plans are paid + monthly,
   // so the hook's free-plan / downgrade branches stay dormant here.
@@ -216,19 +221,46 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
             <p className="text-sm sm:text-base text-muted-foreground mt-2 max-w-xl mx-auto">{tPricing('scaleSubtitle')}</p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl mx-auto">
-            {plans.map((plan) => (
-              <ScalePlanCard
+          {/* Plan tabs — mobile only, shared with /pricing. Hidden when only one
+              plan loaded (degraded state) — a single tab adds no value. */}
+          {plans.length > 1 && (
+            <PlanTabSelector
+              tabs={plans.map((plan) => ({ key: plan.slug, label: tPricing(plan.slug) }))}
+              activeIndex={activeTab}
+              onChange={setActiveTab}
+              locale={locale}
+              ariaLabel={tPricing('planTabs')}
+            />
+          )}
+
+          {/* Single container: stacked single-cell on mobile (only active card
+              visible), side-by-side grid on md+ — same structure as /pricing. */}
+          <div className="grid max-w-3xl mx-auto md:grid-cols-2 md:gap-6 md:items-stretch">
+            {plans.map((plan, index) => (
+              <div
                 key={plan.id}
-                plan={plan}
-                isCurrentPlan={plan.slug === currentPlanSlug}
-                hasActiveSubscription={hasActiveSubscription}
-                currentPlanPrice={currentPlanPrice}
-                isSanctioned={isSanctioned}
-                loading={changingPlan === plan.id}
-                onSelect={() => handleSelectPlan(plan.id)}
-                locale={locale}
-              />
+                id={`plan-panel-${plan.slug}`}
+                // Completes the WAI-ARIA tabs pattern with the mobile tab in
+                // PlanTabSelector (same as /pricing). On md+ the tablist is hidden
+                // and these render as plain grid cards.
+                role="tabpanel"
+                aria-labelledby={`plan-tab-${plan.slug}`}
+                className={clsx(
+                  'col-start-1 row-start-1 md:col-auto md:row-auto',
+                  index !== activeTab && 'hidden md:block',
+                )}
+              >
+                <ScalePlanCard
+                  plan={plan}
+                  isCurrentPlan={plan.slug === currentPlanSlug}
+                  hasActiveSubscription={hasActiveSubscription}
+                  currentPlanPrice={currentPlanPrice}
+                  isSanctioned={isSanctioned}
+                  loading={changingPlan === plan.id}
+                  onSelect={() => handleSelectPlan(plan.id)}
+                  locale={locale}
+                />
+              </div>
             ))}
           </div>
 
@@ -262,7 +294,7 @@ const ScalePage: NextPageWithLayout<ScalePageProps> = ({ plans }) => {
 };
 
 ScalePage.getLayout = (page: ReactElement) => (
-  <DashboardLayout title="High-volume plans" isPublic skipTitle>{page}</DashboardLayout>
+  <DashboardLayout title="Scale plans" isPublic skipTitle>{page}</DashboardLayout>
 );
 
 export default ScalePage;
