@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import clsx from 'clsx';
-import { Card, Button, Input, ConfirmationModal } from '@/components/ui';
-import { Users, Mail, Phone, Crown, Shield, User, X, ChevronDown, Copy, Check, Link, UserPlus, RefreshCw } from 'lucide-react';
+import { Card, Button, ConfirmationModal } from '@/components/ui';
+import { Users, Mail, Phone, Crown, Shield, User, X, ChevronDown, Copy, Check, Link, UserPlus, UserMinus, RefreshCw } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { workspaceApi } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
@@ -299,26 +299,31 @@ export function TeamPanel() {
 
             {remaining > 0 ? (
               <>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <Input
+                {/* Unified action bar: input + invite button read as one pill so
+                    the button stays anchored to the field in both RTL and LTR
+                    instead of detaching to the far edge. focus-within lifts the
+                    whole bar with a brand-colored ring. */}
+                <div className="flex items-stretch rounded-2xl border border-theme-border bg-card shadow-sm overflow-hidden transition-all duration-300 focus-within:border-brand-500 focus-within:ring-4 focus-within:ring-brand-500/20">
+                  <input
                     type="text"
                     dir="auto"
                     placeholder={t('invitePlaceholder')}
                     value={contact}
                     onChange={(e) => setContact(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleInvite(); }}
-                    className="flex-1"
+                    className="flex-1 min-w-0 bg-transparent px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none"
                     aria-label={t('invitePlaceholder')}
                   />
-                  <Button
+                  <button
                     onClick={handleInvite}
                     disabled={sending || !contact.trim()}
-                    size="sm"
-                    className="px-4 whitespace-nowrap justify-center"
+                    className="flex items-center gap-1.5 px-4 sm:px-5 bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm whitespace-nowrap transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white/70 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <UserPlus className="w-4 h-4 me-1.5" aria-hidden="true" />
+                    {sending
+                      ? <RefreshCw className="w-4 h-4 animate-spin" aria-hidden="true" />
+                      : <UserPlus className="w-4 h-4" aria-hidden="true" />}
                     {t('sendInvite')}
-                  </Button>
+                  </button>
                 </div>
                 {remaining <= 2 && (
                   <p className="text-xs text-muted-foreground mt-2">{t('limitHint', { remaining })}</p>
@@ -379,9 +384,14 @@ export function TeamPanel() {
 
         {/* ── Members ── */}
         <section>
-          <div className="flex items-center justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 mb-3">
             <h2 className="text-base font-bold text-foreground">{t('membersTitle')}</h2>
+            {/* Usage counter sits right beside the title so "3 / 5" reads as
+                context for the section. dir="ltr" keeps the count in numeric
+                order — in an RTL container the bare "3 / 5" renders flipped as
+                "5 / 3". */}
             <span
+              dir="ltr"
               className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-surface-100 dark:bg-surface-800 rounded-full px-2.5 py-1 flex-shrink-0"
               aria-label={`${totalCount} / ${MAX_MEMBERS}`}
             >
@@ -462,13 +472,16 @@ export function TeamPanel() {
                   )}
                 </div>
 
-                {/* Remove button */}
+                {/* Remove button — icon affordance with a destructive red
+                    hover, consistent with the invite revoke control below. */}
                 {canRemove && (
                   <button
                     onClick={() => setRemoveTarget(member)}
-                    className="text-xs text-muted-foreground hover:text-red-500 dark:hover:text-red-400 transition-colors flex-shrink-0"
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-colors flex-shrink-0"
+                    aria-label={t('removeMember')}
+                    title={t('removeMember')}
                   >
-                    {t('removeMember')}
+                    <UserMinus className="w-4 h-4" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -521,8 +534,9 @@ export function TeamPanel() {
                   {isAdmin && (
                     <button
                       onClick={() => handleRevoke(invite.id)}
-                      className="p-1 text-muted-foreground hover:text-red-500 dark:hover:text-red-400 transition-colors"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/20 transition-colors"
                       aria-label={t('revokeInvite')}
+                      title={t('revokeInvite')}
                     >
                       <X className="w-4 h-4" aria-hidden="true" />
                     </button>
@@ -541,23 +555,19 @@ export function TeamPanel() {
           <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide mb-3">
             {t('rolesExplainerTitle')}
           </p>
-          <ul className="grid gap-4 sm:grid-cols-3">
+          <ul className="grid gap-3 sm:grid-cols-3">
             {(['owner', 'admin', 'member'] as WorkspaceRole[]).map((r) => {
               const RoleIcon = ROLE_ICONS[r];
               const cap = r.charAt(0).toUpperCase() + r.slice(1);
               return (
-                <li key={r} className="flex items-start gap-3">
-                  <span className={clsx('inline-flex items-center justify-center w-7 h-7 rounded-full flex-shrink-0', getRoleBadgeColor(r))}>
-                    <RoleIcon className="w-3.5 h-3.5" aria-hidden="true" />
+                <li key={r} className="flex flex-col gap-2 rounded-xl border border-theme-border bg-surface-50 dark:bg-surface-800/40 p-3 text-start">
+                  <span className={clsx('inline-flex items-center gap-1.5 self-start px-2.5 py-1 rounded-full text-xs font-bold', getRoleBadgeColor(r))}>
+                    <RoleIcon className="w-3 h-3" aria-hidden="true" />
+                    {t(`role${cap}` as 'roleOwner' | 'roleAdmin' | 'roleMember')}
                   </span>
-                  <div className="min-w-0 text-start">
-                    <p className="text-sm font-bold text-foreground">
-                      {t(`role${cap}` as 'roleOwner' | 'roleAdmin' | 'roleMember')}
-                    </p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      {t(`roleDesc${cap}` as 'roleDescOwner' | 'roleDescAdmin' | 'roleDescMember')}
-                    </p>
-                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {t(`roleDesc${cap}` as 'roleDescOwner' | 'roleDescAdmin' | 'roleDescMember')}
+                  </p>
                 </li>
               );
             })}
