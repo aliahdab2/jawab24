@@ -119,5 +119,9 @@
   "scaleContactLink": "تواصل معنا",
   "needMoreThanProTitle": "تحتاج أكثر من 10,000 رد شهرياً؟",
   "needMoreThanProLink": "اطّلع على باقات الحجم الكبير",
-  "scaleOneTimeQuestion": "تحتاج زيادة لمرة واحدة هذا الشهر فقط؟"
+  "scaleOneTimeQuestion": "تحتاج زيادة لمرة واحدة؟ لا تنتهي صلاحيتها.",
+  "scale-20k": "الحجم الكبير 20K",
+  "scale-20kDesc": "20,000 رد ذكي شهرياً",
+  "scale-30k": "الحجم الكبير 30K",
+  "scale-30kDesc": "30,000 رد ذكي شهرياً"
 }

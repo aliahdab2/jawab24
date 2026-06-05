@@ -275,7 +275,9 @@ export default ScalePage;
 export const getStaticProps: GetStaticProps<ScalePageProps> = async (ctx) => {
   const { getI18nProps } = await import('@/i18n/getMessages');
   const { PAGE_NAMESPACES } = await import('@/i18n/namespaces');
-  const i18nProps = await getI18nProps(ctx, [...PAGE_NAMESPACES.pricing]);
+  // 'topup' is required for the BuyTopUpCTA / TopUpRequestModal rendered on this page;
+  // the shared `pricing` namespace set doesn't include it (the public /pricing has no top-up).
+  const i18nProps = await getI18nProps(ctx, [...PAGE_NAMESPACES.pricing, 'topup']);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://jawab24.com/api';
   const slugs = ['scale-20k', 'scale-30k'];

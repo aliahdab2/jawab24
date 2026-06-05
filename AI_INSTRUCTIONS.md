@@ -84,6 +84,19 @@ t('title');  tc('save');
 
 > Step 2 is easy to forget because tests use `import.meta.glob` (auto-discovers files) but production uses static imports. Missing it causes raw keys to show instead of translated text — and tests won't catch it.
 
+**Adding a page (or putting a shared component on a page) — load EVERY namespace it renders.**
+A page's `getStaticProps` / `makeGetStaticProps` must list a namespace for **every** component it renders, not just the page's own text. Walk each child component's `useTranslations('<ns>')` and include all of them:
+- `BuyTopUpCTA` / `TopUpRequestModal` → `topup`
+- `SanctionedCtaFallback` and any plan card's sanctioned state → `payment` + `landing`
+- a page reusing dashboard widgets → whatever those widgets call
+
+Miss one and **only that page** shows raw keys (e.g. `topup.modal.title`). `translation:validate` will **NOT** catch it — it checks en/ar key parity, not per-page namespace loading.
+
+**Adding a new plan/tier (slug) — add the slug-keyed display strings.**
+Checkout (`getPlanName`/`getPlanDesc` in `pages/checkout.tsx`) and `PlanCard` resolve a plan's name/description from `pricing.<slug>` and `pricing.<slug>Desc`. A new slug (e.g. `scale-20k`) needs `pricing.scale-20k` **and** `pricing.scale-20kDesc` in **both** `en` and `ar`, or checkout/cards render raw `pricing.<slug>` keys. `translation:validate` won't flag this either.
+
+> **The recurring lesson:** `translation:validate` passing is necessary but NOT sufficient. After adding a page, a component-on-a-page, or a plan, **load the actual rendered page in BOTH locales (`/en/…` and `/ar/…`) and confirm no raw keys / no missing cards** before calling it done.
+
 **Before committing:** run `npm run translation:validate`. See `frontend/docs/TRANSLATION_GUIDE.md` for full rules.
 
 ### 6. Product Terminology
