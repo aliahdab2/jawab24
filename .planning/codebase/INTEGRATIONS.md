@@ -424,6 +424,10 @@ Voice-to-text for KB content via microphone:
      - Sanctions check applied before portal creation
   6. Webhook at `POST /payment/webhook` receives `checkout.session.completed` → subscription record created
 
+  6b. **Hidden high-volume plans** (`plans.is_public = false`):
+     - `getActivePlans()` (the public `GET /plans` grid) filters `is_active AND is_public`, so plans flagged `is_public: false` never appear on `/pricing`. The single-plan lookup (`GET /plans/:slug`) and `changePlan`/checkout do NOT filter, so a hidden plan stays purchasable by slug/ID via a direct link.
+     - Used for the **Scale** plans (`scale-20k` $149/mo·20k replies, `scale-30k` $199/mo·30k replies, seeded from `config/plans.ts`). Surfaced only to Pro/Scale customers at their reply limit via the `AiUsageWarningBanner` nudge and the discreet `/pricing` link, both pointing to the hidden `/pricing/scale` page. Existing Pro subscribers upgrade in place via `POST /payment/change-plan` (proration); the higher quota applies immediately since it's read live from the plan. Stripe recurring Price IDs for the Scale plans must be set manually per env (the seed never touches `stripe_price_id`).
+
   7. **Admin "collect payment" link** (hidden, admin-only — `feat/admin-collect-payment`):
      - `POST /admin/users/:userId/payment-request` (behind `requireAdmin`) creates a HOSTED Stripe Checkout Session (`mode: 'payment'`, custom inline `price_data` amount, metadata `type: 'manual_payment'`) and returns its `url` for the admin to send to the customer. Backed by `paymentRequestService` + the `payment_requests` table.
      - **Collect-only**: paying it marks the `payment_requests` row `paid` (via the same `checkout.session.completed` webhook, routed by `metadata.type` BEFORE the subscription path) and **never** touches `users.topup_balance` — it bills for replies credited separately by hand. Optional `topupPurchaseId` links a request to the grant it collects for ("granted but unpaid" reporting).

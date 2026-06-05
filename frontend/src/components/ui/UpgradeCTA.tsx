@@ -8,6 +8,9 @@ import { buildWebUrl } from '@/lib/webUrl';
 interface UpgradeCTAProps {
   children: React.ReactNode;
   className?: string;
+  /** Destination pricing route. Defaults to the public /pricing grid; pass
+   *  '/pricing/scale' to route high-volume customers to the hidden plans. */
+  href?: string;
 }
 
 /**
@@ -26,7 +29,7 @@ interface UpgradeCTAProps {
  * `<button>` inside a `<button>` is invalid HTML. Keyboard handling
  * (Enter / Space) is preserved.
  */
-export function UpgradeCTA({ children, className }: UpgradeCTAProps) {
+export function UpgradeCTA({ children, className, href = '/pricing' }: UpgradeCTAProps) {
   const locale = useLocale();
 
   // App Store Guideline 3.1.1: iOS reader-app model — no upgrade UI in-app.
@@ -43,7 +46,7 @@ export function UpgradeCTA({ children, className }: UpgradeCTAProps) {
       const isDark = document.documentElement.classList.contains('dark');
       const theme = isDark ? 'dark' : 'light';
       void openExternalUrl(
-        buildWebUrl(`/pricing?embedded=1&theme=${theme}`, locale),
+        buildWebUrl(`${href}?embedded=1&theme=${theme}`, locale),
       );
     };
     return (
@@ -65,7 +68,7 @@ export function UpgradeCTA({ children, className }: UpgradeCTAProps) {
   }
 
   return (
-    <Link href="/pricing" className={className}>
+    <Link href={href} className={className}>
       {children}
     </Link>
   );

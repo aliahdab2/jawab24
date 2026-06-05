@@ -14,9 +14,9 @@ export const plansService = {
         const result = await db
             .select()
             .from(plans)
-            .where(eq(plans.isActive, true))
+            .where(and(eq(plans.isActive, true), eq(plans.isPublic, true)))
             .orderBy(asc(plans.sortOrder));
-        
+
         return result.map(this.mapToPlan);
     },
 
@@ -101,6 +101,7 @@ export const plansService = {
                 trialDays: data.trialDays ?? 0,
                 regionalPricing: data.regionalPricing ?? {},
                 isActive: data.isActive ?? true,
+                isPublic: data.isPublic ?? true,
                 isDefault: data.isDefault ?? false,
                 sortOrder: data.sortOrder ?? 0,
             })
@@ -133,6 +134,7 @@ export const plansService = {
                 ...(data.trialDays !== undefined && { trialDays: data.trialDays }),
                 ...(data.regionalPricing !== undefined && { regionalPricing: data.regionalPricing }),
                 ...(data.isActive !== undefined && { isActive: data.isActive }),
+                ...(data.isPublic !== undefined && { isPublic: data.isPublic }),
                 ...(data.isDefault !== undefined && { isDefault: data.isDefault }),
                 ...(data.sortOrder !== undefined && { sortOrder: data.sortOrder }),
                 updatedAt: new Date(),
@@ -220,6 +222,7 @@ export const plansService = {
             trialDays: row.trialDays ?? 0,
             regionalPricing: (row.regionalPricing as Record<string, number>) ?? {},
             isActive: row.isActive ?? true,
+            isPublic: row.isPublic ?? true,
             isDefault: row.isDefault ?? false,
             sortOrder: row.sortOrder ?? 0,
         };

@@ -30,6 +30,7 @@ export const CreatePlanSchema = z.object({
     trialDays: z.number().int().min(0).default(0),
     regionalPricing: z.record(z.string(), z.number()).optional(),
     isActive: z.boolean().default(true),
+    isPublic: z.boolean().default(true),
     isDefault: z.boolean().default(false),
     sortOrder: z.number().int().default(0),
 });

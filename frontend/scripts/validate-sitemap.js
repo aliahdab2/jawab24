@@ -57,6 +57,7 @@ const EXCLUDED_ROUTES = new Map([
   ['payment/cancel', 'transactional (noindex)'],
   ['payment/return', 'transactional (noindex)'],
   ['payment/success', 'transactional (noindex)'],
+  ['pricing/scale', 'private high-volume plans (noindex — reachable only via the at-limit nudge / direct link)'],
   ['salla/onboarding', 'merchant onboarding (auth-gated)'],
   ['settings', 'app workspace (auth-gated)'],
   ['shopify/onboarding', 'merchant onboarding (auth-gated)'],

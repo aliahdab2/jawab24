@@ -27,6 +27,7 @@
     "resetsOn": "يتجدد في {date}",
     "dismiss": "تجاهل",
     "dismissLabel": "تجاهل تنبيه الاستهلاك",
-    "customizeFallback": "خصّص الرد الاحتياطي"
+    "customizeFallback": "خصّص الرد الاحتياطي",
+    "highVolumeLink": "باقات الحجم الكبير"
   }
 }
