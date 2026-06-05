@@ -1,7 +1,7 @@
 import OpenAI from 'openai';
 import * as Sentry from '@sentry/node';
 import { config } from '../config';
-import { PROMPT_VERSION } from '@jawab24/shared';
+import { PROMPT_VERSION, MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import {
     AiClientNotConfiguredError,
     AiTimeoutError,
@@ -672,7 +672,7 @@ ${isDM
             const voiceHeader = isDM && request.context?.conversationHistory?.length
                 ? 'guidelines from the business owner — incorporate naturally. CRITICAL: Do NOT repeat any point, offer, or promotion already stated in the conversation history — this overrides any "always mention" instructions in the brand voice notes below'
                 : 'follow these additional guidelines from the business owner';
-            prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, 500)}`;
+            prompt += `\n\nBRAND VOICE NOTES (${voiceHeader}):\n${request.context.brandVoiceNotes.replace(/[<>]/g, '').slice(0, MAX_BRAND_VOICE_LENGTH)}`;
         }
 
         // Stage 2.6 structured BUSINESS_INFO block — merchant-confirmed only.

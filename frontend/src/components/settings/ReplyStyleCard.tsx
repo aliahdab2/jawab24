@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import clsx from 'clsx';
-import { MAX_TEMPLATE_MESSAGE_LENGTH } from '@jawab24/shared';
+import { MAX_BRAND_VOICE_LENGTH } from '@jawab24/shared';
 import type { Page } from '@jawab24/shared';
 import { Card, InputFieldWrapper, CharCounter } from '@/components/ui';
 import { Sparkles, MessageSquare, ArrowRight, X, ChevronDown } from 'lucide-react';
@@ -77,7 +77,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
 
   const insertExample = (example: string) => {
     const next = value.trim() ? `${value.trimEnd()}\n${example}` : example;
-    updateValue(next.slice(0, MAX_TEMPLATE_MESSAGE_LENGTH));
+    updateValue(next.slice(0, MAX_BRAND_VOICE_LENGTH));
     requestAnimationFrame(() => textareaRef.current?.focus());
   };
 
@@ -228,8 +228,8 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
         <InputFieldWrapper
           className="border border-theme-border hover:border-brand-300 dark:hover:border-brand-700 transition-colors"
           trailing={
-            value.length >= MAX_TEMPLATE_MESSAGE_LENGTH * 0.8
-              ? <CharCounter value={value.length} max={MAX_TEMPLATE_MESSAGE_LENGTH} />
+            value.length >= MAX_BRAND_VOICE_LENGTH * 0.8
+              ? <CharCounter value={value.length} max={MAX_BRAND_VOICE_LENGTH} />
               : null
           }
         >
@@ -245,7 +245,7 @@ export function ReplyStyleCard({ settings, setSettings, hasChanges, onScrollToAd
               currentLang === 'ar' && 'italic-arabic',
             )}
             dir={value ? 'auto' : getLocaleDirection(currentLang)}
-            maxLength={MAX_TEMPLATE_MESSAGE_LENGTH}
+            maxLength={MAX_BRAND_VOICE_LENGTH}
             rows={5}
             placeholder={t('replyStyle.brandVoicePlaceholder')}
             value={value}

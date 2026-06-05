@@ -2307,6 +2307,42 @@ describe('Brand Voice Notes — DM prompt differentiation', () => {
         expect(systemPrompt).toContain('follow these additional guidelines from the business owner');
         expect(systemPrompt).not.toContain('Do NOT repeat any point');
     });
+
+    it('injects a structured persona beyond 500 chars (up to MAX_BRAND_VOICE_LENGTH) — no silent truncation', async () => {
+        // A structured persona's goal/closing often sits at the END (e.g. Nourva's 583-char
+        // note). The old 500-char injection cap silently dropped that tail; the cap now
+        // matches the editor field so the whole persona reaches the model.
+        const head = 'You are Sara, a friendly assistant. '.repeat(13); // ~480 chars of filler
+        const tail = 'GOAL_MARKER: ask for the customer name and phone.'; // lands past char 500
+        const note = head + tail;
+        expect(note.length).toBeGreaterThan(500);
+
+        const mockCreate = vi.fn().mockResolvedValue({
+            choices: [{ message: { content: JSON.stringify({ reply: 'Hi', intent: 'GREETING', confidence: 'high', flags: [] }) } }],
+            usage: { total_tokens: 50 },
+        });
+        vi.doMock('openai', () => ({
+            default: vi.fn().mockImplementation(() => ({
+                chat: { completions: { create: mockCreate } },
+            })),
+        }));
+        vi.doMock('../src/config', () => ({
+            config: {
+                openai: { apiKey: 'test-key', model: 'gpt-4.1-mini', maxTokens: 150, temperature: 0.7, timeoutMs: 30000 },
+            },
+        }));
+
+        const { OpenAIService: FreshService } = await import('../src/services/openai');
+        const service = new FreshService();
+        await service.generateReply({
+            comment: 'hi',
+            context: { channel: 'dm', brandVoiceNotes: note },
+        });
+
+        const systemPrompt = mockCreate.mock.calls[0][0].messages[0].content;
+        // The tail (past char 500) must survive — old slice(0,500) would have dropped it.
+        expect(systemPrompt).toContain('GOAL_MARKER: ask for the customer name and phone.');
+    });
 });
 
 describe('Prompt cache token reporting', () => {
