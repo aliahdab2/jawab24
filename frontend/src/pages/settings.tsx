@@ -64,7 +64,7 @@ const INITIAL_SETTINGS: SettingsState = {
   awayMessage: '',
   greetingMessage: '',
   greetingMessageEnabled: false,
-  replyDelay: 0,
+  replyDelay: 3,
   dualReplyNudge: '',
   commentEscalationMinutes: 60,
   messageEscalationMinutes: 30,

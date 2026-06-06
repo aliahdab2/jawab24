@@ -12,6 +12,7 @@ import { Logger, noopLogger, CommentResult } from '../../types';
 import type { CommentPlatformAdapter } from '../../interfaces';
 import { truncateAtSentence } from '../../utils/text';
 import { enrichPageContext } from './contextEnricher';
+import { computeHumanDelayMs } from './humanDelay';
 import { publishSSEEvent } from '../../lib/eventBus';
 import { invalidateWorkspaceStatsCache } from '../pages';
 import { subscriptionsService } from '../subscriptions';
@@ -397,10 +398,11 @@ export class CommentProcessor {
                 this.logger.debug(`[${platform}] Rate limit skipped — no fromId`, { platformCommentId });
             }
 
-            // 7. Reply delay
+            // 7. Reply delay (jittered 0.5×–1.5× so replies don't land at a constant
+            //    time — see computeHumanDelayMs and the ReplyDelayCard copy it matches)
             const replyDelay = userSettings.replyDelay;
             if (replyDelay > 0) {
-                await this.delay(replyDelay * 1000);
+                await this.delay(computeHumanDelayMs(replyDelay));
             }
 
             // 8. Generate reply (enrich KB with e-commerce data if linked)

@@ -35,7 +35,7 @@ const DEFAULTS: WorkspaceSettings = {
     limitFallbackMessageMulti: {},
     dualReplyNudgeMulti: {},
     dualReplyNudgeVariations: {},
-    replyDelay: 0,
+    replyDelay: 3,
     commentEscalationMinutes: 60,
     messageEscalationMinutes: 30,
     handoffPauseDurationMinutes: DEFAULT_HANDOFF_PAUSE_MINUTES,

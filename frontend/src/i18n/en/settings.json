@@ -171,7 +171,7 @@
     "tip": "We recommend 2-5 seconds for the most natural feel",
     "example": "The actual wait varies slightly each time so it feels natural",
     "learnMore": "How does it work?",
-    "formula": "Each reply waits between half and 1.5× your set time"
+    "formula": "Replies never come sooner than the time you set — they arrive a little later, and the timing shifts each time so it feels natural"
   },
   "dashboardLanguage": {
     "desc": "System interface language"
