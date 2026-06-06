@@ -581,6 +581,7 @@ export const DEFAULT_HANDOFF_PAUSE_MINUTES = 15;
 // circular imports back into this module.
 export {
     MAX_TEMPLATE_MESSAGE_LENGTH,
+    MAX_BRAND_VOICE_LENGTH,
     DEFAULT_AI_MODEL,
     ALLOWED_AI_MODELS,
     isAllowedAiModel,

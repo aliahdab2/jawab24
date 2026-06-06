@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_TEMPLATE_MESSAGE_LENGTH } from '../constants';
+import { MAX_TEMPLATE_MESSAGE_LENGTH, MAX_BRAND_VOICE_LENGTH } from '../constants';
 
 /**
  * Single source of truth for the `PUT /api/settings` payload shape.
@@ -77,9 +77,9 @@ export const UpdateSettingsSchema = z.object({
     replyStyle: z.enum(['professional', 'casual', 'enthusiastic']).optional(),
     brandVoiceNotes: z
         .string()
-        .max(MAX_TEMPLATE_MESSAGE_LENGTH, `Brand voice notes must be ${MAX_TEMPLATE_MESSAGE_LENGTH} characters or fewer`)
+        .max(MAX_BRAND_VOICE_LENGTH, `Brand voice notes must be ${MAX_BRAND_VOICE_LENGTH} characters or fewer`)
         .optional(),
-    brandVoiceNotesMulti: z.record(z.string()).optional(),
+    brandVoiceNotesMulti: z.record(z.string().max(MAX_BRAND_VOICE_LENGTH)).optional(),
     holdLowConfidence: z.boolean().optional(),
     onboardingCompletedAt: z.string().datetime().nullable().optional(),
 }).strict();

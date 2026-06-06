@@ -1,10 +1,21 @@
 /**
  * Max length for customer-facing message templates (greeting, away message,
- * limit-fallback, brand voice notes). Tied to Instagram DM limit (1000 chars)
- * — the strictest platform we send to. Anything longer would be rejected by
- * Meta when delivering to IG threads.
+ * limit-fallback). Tied to Instagram DM limit (1000 chars) — the strictest
+ * platform we send to. Anything longer would be rejected by Meta when
+ * delivering to IG threads.
  */
 export const MAX_TEMPLATE_MESSAGE_LENGTH = 1000;
+
+/**
+ * Max length for the Reply Personality / brand-voice note. Unlike the template
+ * messages above, this is NOT sent to customers — it's injected into the AI
+ * system prompt. This single value is the source of truth for BOTH the editor
+ * field's max length AND the prompt-injection slice, so a merchant's full
+ * persona always reaches the model (no silent truncation). Sized to fit a
+ * structured persona — identity, voice, signature phrases, style, and goal —
+ * with headroom, while bounding prompt cost.
+ */
+export const MAX_BRAND_VOICE_LENGTH = 800;
 
 /** Default AI model used across backend and ai-worker services */
 export const DEFAULT_AI_MODEL = 'gpt-4.1-mini';
