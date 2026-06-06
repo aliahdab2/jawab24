@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 import type { FastifyRequest } from 'fastify';
 import type Stripe from 'stripe';
 
@@ -66,12 +66,14 @@ import { notificationService } from '../../src/services/notifications';
 import { captureError } from '../../src/utils/sentryHelpers';
 
 // Flexible Drizzle query mock: resolves to `rows`, and every builder method
-// (from/where/limit/orderBy/set/returning/...) returns another such thenable
-// resolving to the same rows. Lets one mock satisfy any chain shape a handler uses.
-function q(rows: unknown[]) {
-    const p = Promise.resolve(rows) as Promise<unknown[]> & Record<string, () => unknown>;
-    for (const m of ['from', 'where', 'limit', 'orderBy', 'set', 'returning', 'values']) {
-        p[m] = () => q(rows);
+// (from/where/limit/orderBy/set/returning/...) is a spy returning another such
+// thenable resolving to the same rows. One mock satisfies any chain shape, and
+// the builder spies (e.g. `.set`) are inspectable so tests can assert payloads.
+type QueryMock = Promise<unknown[]> & { from: Mock; where: Mock; limit: Mock; orderBy: Mock; set: Mock; returning: Mock; values: Mock };
+function q(rows: unknown[]): QueryMock {
+    const p = Promise.resolve(rows) as QueryMock;
+    for (const m of ['from', 'where', 'limit', 'orderBy', 'set', 'returning', 'values'] as const) {
+        p[m] = vi.fn(() => q(rows));
     }
     return p;
 }
@@ -85,9 +87,10 @@ beforeEach(() => {
 
 describe('handleSubscriptionDeleted', () => {
     it('marks the subscription canceled and invalidates the status cache', async () => {
-        vi.mocked(db.update).mockReturnValue(q([{ userId: 'u1' }]) as never);
+        const chain = q([{ userId: 'u1' }]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
         await handleSubscriptionDeleted({ id: 'sub_1' } as Stripe.Subscription, mkReq());
-        expect(db.update).toHaveBeenCalled();
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'canceled', canceledAt: expect.any(Date) }));
         expect(subscriptionsService.invalidateStatusCache).toHaveBeenCalledWith('u1');
     });
 
@@ -100,10 +103,11 @@ describe('handleSubscriptionDeleted', () => {
 
 describe('handleSubscriptionCreated (backup path)', () => {
     it('corrects status to active when DB lags Stripe', async () => {
+        const chain = q([]);
         vi.mocked(db.select).mockReturnValue(q([{ id: 's1', status: 'past_due' }]) as never);
-        vi.mocked(db.update).mockReturnValue(q([]) as never);
+        vi.mocked(db.update).mockReturnValue(chain as never);
         await handleSubscriptionCreated({ id: 'sub_1', status: 'active' } as Stripe.Subscription, mkReq());
-        expect(db.update).toHaveBeenCalled();
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'active' }));
     });
 
     it('does not update when the existing row is already active', async () => {
@@ -132,10 +136,12 @@ describe('handleSubscriptionUpdated', () => {
     } as unknown as Stripe.Subscription;
 
     it('resolves the plan by price, updates, and invalidates the cache', async () => {
-        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);        // plan lookup
-        vi.mocked(db.update).mockReturnValue(q([{ id: 's1', userId: 'u1' }]) as never);  // update returning
+        const chain = q([{ id: 's1', userId: 'u1' }]);
+        vi.mocked(db.select).mockReturnValue(q([{ id: 'plan_pro' }]) as never);  // plan lookup by price
+        vi.mocked(db.update).mockReturnValue(chain as never);                    // update returning
         await handleSubscriptionUpdated(sub, mkReq());
-        expect(db.update).toHaveBeenCalled();
+        // Verifies the resolved planId actually flows into the update, not just that update ran.
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'active', planId: 'plan_pro' }));
         expect(subscriptionsService.invalidateStatusCache).toHaveBeenCalledWith('u1');
     });
 
@@ -161,7 +167,8 @@ describe('handleTopupPaymentSucceeded (credits money)', () => {
         vi.mocked(topupService.settleStripeTopup).mockResolvedValue({ credited: true, userId: 'u1', repliesAdded: 5000, newBalance: 5000 } as never);
         await handleTopupPaymentSucceeded(topupPi, mkReq());
         expect(topupService.settleStripeTopup).toHaveBeenCalledWith('pi_topup');
-        expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith('u1', 'topup_credited', expect.anything(), expect.anything());
+        // Assert the credited amount actually reaches the notification, not just that one was sent.
+        expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith('u1', 'topup_credited', { replies: '5000' }, { deepLink: '/dashboard' });
     });
 
     it('is idempotent on replay (already settled → no notification, no error)', async () => {
@@ -194,9 +201,10 @@ describe('handleTopupPaymentFailed', () => {
 
 describe('handlePaymentFailed', () => {
     it('marks the subscription past_due and notifies the user', async () => {
-        vi.mocked(db.update).mockReturnValue(q([{ userId: 'u1' }]) as never);
+        const chain = q([{ userId: 'u1' }]);
+        vi.mocked(db.update).mockReturnValue(chain as never);
         await handlePaymentFailed({ id: 'in_1', subscription: 'sub_1' } as unknown as Stripe.Invoice, mkReq());
-        expect(db.update).toHaveBeenCalled();
+        expect(chain.set).toHaveBeenCalledWith(expect.objectContaining({ status: 'past_due' }));
         expect(subscriptionsService.invalidateStatusCache).toHaveBeenCalledWith('u1');
         expect(notificationService.sendTemplateNotification).toHaveBeenCalledWith('u1', 'payment_failed', expect.anything(), expect.anything());
     });
