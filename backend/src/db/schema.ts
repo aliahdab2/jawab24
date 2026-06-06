@@ -392,7 +392,7 @@ export const settings = pgTable('settings', {
     limitFallbackMessageMulti: jsonb('limit_fallback_message_multi').$type<Record<string, string>>().default({}),
     dualReplyNudgeMulti: jsonb('dual_reply_nudge_multi').$type<Record<string, string>>().default({}),
     dualReplyNudgeVariations: jsonb('dual_reply_nudge_variations').$type<Record<string, string[]>>().default({}),
-    replyDelay: integer('reply_delay').default(0), // seconds
+    replyDelay: integer('reply_delay').default(3), // seconds — defaults to the "Natural" preset so new merchants feel human out of the box
     // SLA escalation thresholds (minutes) - auto-flag unreplied items as needsAttention
     commentEscalationMinutes: integer('comment_escalation_minutes').default(60),
     messageEscalationMinutes: integer('message_escalation_minutes').default(30),

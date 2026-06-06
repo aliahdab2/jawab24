@@ -1,0 +1,1 @@
+ALTER TABLE "settings" ALTER COLUMN "reply_delay" SET DEFAULT 3;

@@ -9,6 +9,7 @@ import { detectLanguageCode } from '../../utils/language';
 import { pipelineMetrics, Pipeline } from '../../lib/pipelineMetrics';
 import { acquireReplyLock, releaseReplyLock } from '../../lib/replyLock';
 import * as typingIndicator from './typingIndicator';
+import { computeHumanDelayMs } from './humanDelay';
 import { Logger, noopLogger } from '../../types';
 import { db } from '../../db';
 import { posts, instagramMedia, messages } from '../../db/schema';
@@ -460,9 +461,11 @@ export class MessageProcessor {
                 // greetingPrefix stays null and we fall through to the AI exactly as before.
             }
 
-            // 10. Reply delay (doubles as consolidation window when > 0)
+            // 10. Reply delay (doubles as consolidation window when > 0). Jittered
+            //     0.5×–1.5× so replies don't land at a constant time (see
+            //     computeHumanDelayMs and the ReplyDelayCard copy it matches).
             if (replyDelay > 0) {
-                await this.delay(replyDelay * 1000);
+                await this.delay(computeHumanDelayMs(replyDelay));
             }
             lap('10-replyDelay');
 
