@@ -17,7 +17,8 @@ ai-worker/
 │   ├── index.ts       # Main entry point
 │   ├── config.ts      # Configuration
 │   └── services/
-│       └── openai.ts  # OpenAI integration
+│       ├── openai.ts  # LLM orchestrator (API call, token counting, buildMessages)
+│       └── reply/     # Prompt building, post-reply validation, shared helpers, types
 ├── test/              # Test files
 └── Dockerfile         # Production container
 ```
