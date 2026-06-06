@@ -160,14 +160,6 @@ jobs:
           path: ai-worker/dist
           retention-days: 1
 
-      - name: Upload frontend build
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: frontend-build
-          path: frontend/.next
-          retention-days: 1
-
   # ==========================================
   # Step 3a: Lighthouse CI (parallel with Docker)
   # Audits public pages for accessibility, CLS, and performance.
@@ -193,15 +185,32 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Download frontend build
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-build
-          path: frontend/.next
+      # Build here rather than reuse a cross-job artifact: output:'standalone'
+      # relocates the runnable build under .next/standalone, so uploading
+      # frontend/.next produced an empty artifact. Self-building keeps the job
+      # reliable and self-contained.
+      - name: Build frontend (standalone)
+        working-directory: frontend
+        run: npx next build
+        env:
+          CI: 'true'
+          NEXT_PUBLIC_API_URL: https://jawab24.com/api
+          NEXT_PUBLIC_FACEBOOK_APP_ID: ${{ secrets.FACEBOOK_APP_ID }}
+          # Placeholder is fine — Lighthouse only renders public pages; the key is
+          # baked into the client bundle, not validated at build time.
+          NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: pk_test_placeholder
+
+      - name: Assemble standalone server assets
+        working-directory: frontend
+        # output:'standalone' emits server.js but not static/ or public/ — copy them in (same as the E2E setup).
+        run: |
+          cp -r .next/static .next/standalone/frontend/.next/static
+          cp -r public .next/standalone/frontend/public
 
       - name: Start frontend server
         working-directory: frontend
-        run: npx next start -p 3001 &
+        # `next start` does NOT support output:'standalone' — run the emitted server.js (same as Playwright E2E).
+        run: PORT=3001 node .next/standalone/frontend/server.js &
         env:
           PORT: 3001
           NEXT_PUBLIC_API_URL: https://jawab24.com/api
