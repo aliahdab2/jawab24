@@ -298,10 +298,16 @@ Each service is independently deployable but shares:
    - Handles job failures with Sentry capture
 
 5. **Services** (`src/services/`):
-   - `openai.ts` — gpt-4.1-mini reply generation
-     - Prompt engineering (system role, user prompt)
-     - Token counting, cost estimation
-     - Retry logic for API failures
+   - `openai.ts` — gpt-4.1-mini reply generation (thin orchestrator: the API
+     call, token counting/cost estimation, retry logic, and `buildMessages`).
+     Prompt construction and post-reply validation are split into the
+     `src/services/reply/` module (see below).
+   - `reply/` — reply-pipeline internals extracted from `openai.ts`:
+     `systemPrompt.ts` (static cached prefix), `promptBuilder.ts` (system/user
+     prompt construction), `replyValidator.ts` (6 post-reply safety checks as
+     pure, unit-tested functions), `replyContext.ts` (shared `getKBText` /
+     `resolveLanguage` / `resolveChannel`), `types.ts` (request/response contract,
+     re-exported by `openai.ts` for backward compatibility).
    - `anthropic.ts` — Anthropic Claude integration (alternative provider)
    - Providers (`src/services/providers/`) — provider abstraction layer
 
@@ -355,8 +361,9 @@ Each service is independently deployable but shares:
 | Entry point | `src/index.ts` |
 | Server setup | `src/server.ts` |
 | Worker processor | `src/worker.ts` |
-| OpenAI service | `src/services/openai.ts` |
-| Prompt building | `src/services/openai.ts` (lines 80–150) |
+| OpenAI service (orchestrator) | `src/services/openai.ts` |
+| Prompt building | `src/services/reply/promptBuilder.ts` + `reply/systemPrompt.ts` |
+| Post-reply validation | `src/services/reply/replyValidator.ts` |
 | Config | `src/config/` |
 | Types | `src/types/` |
 

@@ -2099,7 +2099,7 @@ These are the **actual production defaults** from the codebase (`workspaceSettin
 | **Default Reply Language** | `ar` | `workspaceSettings.ts` |
 | **Rate Limit (Comments)** | `5/min` per sender per page | `rate-limiter.ts` |
 | **Rate Limit (Messages)** | `10/min` per sender per page | `rate-limiter.ts` |
-| **Comment Flag Threshold** | `> 50 words` → `comment_too_long` flag | `ai-worker/openai.ts` |
+| **Comment Flag Threshold** | `> 50 words` → `comment_too_long` flag | `ai-worker/src/services/reply/replyValidator.ts` |
 | **Comment Hard Truncate** | `> 280 chars` → truncate at sentence (public mode only) | `commentProcessor.ts` |
 | **Cache TTL** | `30 days` | `ai.ts` |
 | **Reply Lock TTL** | `60 seconds` | `replyLock.ts` |

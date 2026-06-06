@@ -3,6 +3,13 @@ import fastify, { FastifyInstance } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { createTestUser, testDb } from './setup';
 import * as schema from '../../src/db/schema';
+import {
+    handleCheckoutComplete,
+    handleSubscriptionUpdated,
+    handleSubscriptionDeleted,
+    handlePaymentSucceeded,
+    handlePaymentFailed,
+} from '../../src/controllers/paymentWebhookHandlers';
 
 // Import setup to ensure DATABASE_URL points at the test DB
 import './setup';
@@ -453,10 +460,9 @@ describe('Payment — webhook DB mutations', () => {
         const newPeriodEnd = new Date('2026-04-01');
 
         // Call the controller method directly (simulates Stripe webhook)
-        const { paymentController } = await import('../../src/controllers/payment');
         const mockRequest = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
 
-        await (paymentController as any).handleSubscriptionUpdated(
+        await handleSubscriptionUpdated(
             {
                 id: 'sub_upd_test',
                 status: 'active',
@@ -484,10 +490,9 @@ describe('Payment — webhook DB mutations', () => {
             externalSubscriptionId: 'sub_del_test',
         });
 
-        const { paymentController } = await import('../../src/controllers/payment');
         const mockRequest = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
 
-        await (paymentController as any).handleSubscriptionDeleted(
+        await handleSubscriptionDeleted(
             { id: 'sub_del_test' },
             mockRequest,
         );
@@ -507,10 +512,9 @@ describe('Payment — webhook DB mutations', () => {
             externalSubscriptionId: 'sub_pay_ok',
         });
 
-        const { paymentController } = await import('../../src/controllers/payment');
         const mockRequest = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
 
-        await (paymentController as any).handlePaymentSucceeded(
+        await handlePaymentSucceeded(
             { id: 'in_test_123', subscription: 'sub_pay_ok' },
             mockRequest,
         );
@@ -532,10 +536,9 @@ describe('Payment — webhook DB mutations', () => {
             externalSubscriptionId: 'sub_pay_fail',
         });
 
-        const { paymentController } = await import('../../src/controllers/payment');
         const mockRequest = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
 
-        await (paymentController as any).handlePaymentFailed(
+        await handlePaymentFailed(
             { id: 'in_fail_123', subscription: 'sub_pay_fail' },
             mockRequest,
         );
@@ -565,10 +568,9 @@ describe('Payment — webhook DB mutations', () => {
 
         const newPlan = await createTestPlan({ slug: `new-plan-${Date.now()}` });
 
-        const { paymentController } = await import('../../src/controllers/payment');
         const mockRequest = { log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } } as any;
 
-        await (paymentController as any).handleCheckoutComplete(
+        await handleCheckoutComplete(
             {
                 id: 'cs_new_123',
                 client_reference_id: userId,

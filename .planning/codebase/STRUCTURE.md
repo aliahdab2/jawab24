@@ -233,7 +233,8 @@ backend/
 │   │   ├── templates.ts        # Template CRUD
 │   │   ├── settings.ts         # Workspace settings
 │   │   ├── auth.ts             # OAuth, login, logout
-│   │   ├── payment.ts          # Stripe integration
+│   │   ├── payment.ts          # Stripe REST endpoints + handleWebhook entry
+│   │   ├── paymentWebhookHandlers.ts # Stripe event processing (dispatchStripeEvent)
 │   │   ├── admin.ts            # Admin panel
 │   │   └── [15+ more controllers]
 │   ├── db/
@@ -412,11 +413,14 @@ ai-worker/
 │   │   ├── redis.ts            # Redis client
 │   │   └── [other utilities]
 │   ├── services/               # Business logic
-│   │   ├── openai.ts           # Primary LLM service (gpt-4.1-mini)
-│   │   │                        # - Prompt building (v21 system + user prompt)
-│   │   │                        # - Token counting + structured JSON response
-│   │   │                        # - Retry logic + fallback reply
-│   │   │                        # - Cache key generation
+│   │   ├── openai.ts           # LLM orchestrator (gpt-4.1-mini): API call,
+│   │   │                        # token counting, structured JSON, buildMessages
+│   │   ├── reply/              # Reply-pipeline internals (extracted from openai.ts)
+│   │   │   ├── systemPrompt.ts   # Static cached system prefix (prompt-cache safe)
+│   │   │   ├── promptBuilder.ts  # System + user prompt construction
+│   │   │   ├── replyValidator.ts # Post-reply safety checks (price/lang/self-id/...)
+│   │   │   ├── replyContext.ts   # Shared getKBText / resolveLanguage / resolveChannel
+│   │   │   └── types.ts          # Request/response contract (re-exported by openai.ts)
 │   │   ├── ecommerceToolHandler.ts # AI agent tools for order/inventory lookup
 │   │   ├── translation.ts      # AI-powered translation service
 │   │   └── providers/          # Provider abstraction layer (adapter pattern)

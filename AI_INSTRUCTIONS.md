@@ -237,6 +237,13 @@ cd frontend && npm run test:e2e          # E2E tests (Playwright)
 npm run translation:validate             # Check i18n files (from frontend/)
 ```
 
+> **Backend integration tests:** run `cd backend && npm run test:integration:local`. It
+> forces `DATABASE_URL` at the dedicated local test DB (`localhost:5433/autoreply_test`,
+> override with `TEST_DATABASE_URL`) so a stray `DATABASE_URL` from your shell or
+> `backend/.env` (which points at the dev DB on 5432) can't make the suite migrate/mutate
+> the wrong database. Plain `npm run test:integration` is the CI variant and trusts the
+> ambient `DATABASE_URL`.
+
 For Shopify integration tests, AI eval, mobile builds, and Android releases — see the `/shopify-dev`, `/eval`, `/build-mobile`, and `/release-android` skills.
 
 ### Releasing a new Android version

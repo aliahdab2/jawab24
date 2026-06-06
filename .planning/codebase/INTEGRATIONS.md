@@ -470,7 +470,8 @@ Voice-to-text for KB content via microphone:
   - Service: `/backend/src/services/stripe.ts`
   - Controller: `/backend/src/controllers/payment.ts`
   - Routes: `/backend/src/routes/payment.ts`
-  - Webhook Handler: `/backend/src/controllers/payment.ts` (`handleWebhook` method — Stripe webhook processing)
+  - Webhook entry: `/backend/src/controllers/payment.ts` (`handleWebhook` — signature verification, idempotency, completed/processing status transitions)
+  - Webhook event processing: `/backend/src/controllers/paymentWebhookHandlers.ts` (`dispatchStripeEvent` + per-event handlers)
 
 ---
 
